@@ -1,32 +1,32 @@
 
 ---
-# pychemsmart - Chemistry Simulation and Modeling Automation Toolkit
+# chemsmart - Chemistry Simulation and Modeling Automation Toolkit
 
-[![codecov](https://codecov.io/gh/xinglong-zhang/pychemsmart/branch/main/graph/badge.svg?token=pychemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/pychemsmart)
-[![CI](https://github.com/xinglong-zhang/pychemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/pychemsmart/actions/workflows/main.yml)
+[![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
+[![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
 
-Awesome pychemsmart created by xinglong-zhang
+Awesome chemsmart created by xinglong-zhang
 
 ## Install it from PyPI
 
 ```bash
-pip install pychemsmart
+pip install chemsmart
 ```
 
 ## Usage
 
 ```py
-from pychemsmart import BaseClass
-from pychemsmart import base_function
+from chemsmart import BaseClass
+from chemsmart import base_function
 
 BaseClass().base_method()
 base_function()
 ```
 
 ```bash
-$ python -m pychemsmart
+$ python -m chemsmart
 #or
-$ pychemsmart
+$ chemsmart
 ```
 
 ## Development
