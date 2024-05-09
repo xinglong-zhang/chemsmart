@@ -40,7 +40,7 @@ See also
 - ✅ Code linting using [flake8](https://flake8.pycqa.org/en/latest/)
 - 📊 Code coverage reports using [codecov](https://about.codecov.io/sign-up/)
 - 🛳️ Automatic release to [PyPI](https://pypi.org) using [twine](https://twine.readthedocs.io/en/latest/) and github actions.
-- 🎯 Entry points to execute your program using `python -m <chemsmart>` or `$ chemsmart` with basic CLI argument parsing.
+- 🎯 Entry points to execute your program using `python -m <pychemsmart>` or `$ pychemsmart` with basic CLI argument parsing.
 - 🔄 Continuous integration using [Github Actions](.github/workflows/) with jobs to lint, test and release your project on Linux, Mac and Windows environments.
 
 > Curious about architectural decisions on this template? read [ABOUT_THIS_TEMPLATE.md](ABOUT_THIS_TEMPLATE.md)  
@@ -51,33 +51,33 @@ See also
 <!--  DELETE THE LINES ABOVE THIS AND WRITE YOUR PROJECT README BELOW -->
 
 ---
-# chemsmart - Chemistry Simulation and Modeling Automation Toolkit
+# pychemsmart - Chemistry Simulation and Modeling Automation Toolkit
 
-[![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
-[![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
+[![codecov](https://codecov.io/gh/xinglong-zhang/pychemsmart/branch/main/graph/badge.svg?token=pychemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/pychemsmart)
+[![CI](https://github.com/xinglong-zhang/pychemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/pychemsmart/actions/workflows/main.yml)
 
-Awesome chemsmart created by xinglong-zhang
+Awesome pychemsmart created by xinglong-zhang
 
 ## Install it from PyPI
 
 ```bash
-pip install chemsmart
+pip install pychemsmart
 ```
 
 ## Usage
 
 ```py
-from chemsmart import BaseClass
-from chemsmart import base_function
+from pychemsmart import BaseClass
+from pychemsmart import base_function
 
 BaseClass().base_method()
 base_function()
 ```
 
 ```bash
-$ python -m chemsmart
+$ python -m pychemsmart
 #or
-$ chemsmart
+$ pychemsmart
 ```
 
 ## Development
