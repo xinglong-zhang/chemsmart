@@ -51,7 +51,7 @@ See also
 <!--  DELETE THE LINES ABOVE THIS AND WRITE YOUR PROJECT README BELOW -->
 
 ---
-# chemsmart
+# chemsmart - Chemistry Simulation and Modeling Automation Toolkit
 
 [![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
 [![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
