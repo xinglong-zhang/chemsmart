@@ -1,4 +1,5 @@
 from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.periodictable import PeriodicTable as p
 
 class GaussianCubeFile(FileMixin):
     def __init__(self, filename):
@@ -28,4 +29,10 @@ class GaussianCubeFile(FileMixin):
         z = float(line_elements[3])
         return (x, y, z)
 
-    
+    @property
+    def structure(self):
+        pass
+
+
+
+

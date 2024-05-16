@@ -1,5 +1,10 @@
+from ase.symbols import Symbols, symbols2numbers
+
 class Molecule:
-    """ Class to represent a molcular structure."""
+    """ Class to represent a molcular structure.
+    Follows from :class:`ase.symbols.Symbols` str (formula) or list of str
+    Can be a string formula, a list of symbols or a list of Atom objects.
+    Examples: 'H2O', 'COPt12', ['H', 'H', 'O'], [Atom('Ne', (x, y, z)), ...]. """
     def __init__(
             self, symbols=None, positions=None, charge=None, multiplicity=None, constraint=None, energy=None,
             forces=None, velocities=None, info=None
