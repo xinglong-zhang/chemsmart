@@ -8,7 +8,7 @@ class PeriodicTable:
         return element_str.upper() if len(element_str) == 1 else f'{element_str[0].upper()}{element_str[1:]}'
 
     def sorted_periodic_table_list(self, list_of_elements):
-        return sorted(list_of_elements, key=lambda x: PERIODIC_TABLE.index(x))
+        return sorted(list_of_elements, key=lambda x: self.PERIODIC_TABLE.index(x))
 
     def to_atomic_number(self, symbol):
         return self.PERIODIC_TABLE.index(symbol)

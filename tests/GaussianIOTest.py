@@ -22,6 +22,4 @@ class TestGaussianCubeFile:
         assert spin_cube.num_atoms == 2
         assert spin_cube.coordinate_origin == (-5.483229, -5.483229, -6.522947)
         assert type(spin_cube.coordinate_origin) is tuple
-        from periodictable import elements
-        print(elements)
 
