@@ -25,13 +25,28 @@ def test_data_directory():
 def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, 'GaussianTests')
 
+# Gaussian output file from TDDFT
 @pytest.fixture()
 def tddft_test_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, 'tddft')
 
-# Gaussian output file from TDDFT
 @pytest.fixture()
 def td_outputfile(tddft_test_directory):
     td_outputfile = os.path.join(tddft_test_directory, 'tddft_r1s50_gas.log')
     return td_outputfile
 
+
+# Gaussian cube files
+@pytest.fixture()
+def cube_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, 'cubes')
+
+@pytest.fixture()
+def spin_cube_file(cube_test_directory):
+    spin_cube_file = os.path.join(cube_test_directory, 'n2_dens.cube')
+    return spin_cube_file
+
+@pytest.fixture()
+def esp_cube_file(cube_test_directory):
+    esp_cube_file = os.path.join(cube_test_directory, 'n2_esp.cube')
+    return esp_cube_file
