@@ -1,14 +1,8 @@
 import os
 from functools import cached_property
-class GaussianFileMixin:
-    """Mixin class for files that can be supplied to prepare Gaussian input files.
 
-    Args:
-        file to be given to be parsed.
-    """
-
-    def __init__(self, filename):
-        self.filename = filename
+class FileMixin:
+    """Mixin class for files that can be opened and read"""
 
     @property
     def filepath(self):

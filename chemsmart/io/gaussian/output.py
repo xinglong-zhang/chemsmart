@@ -1,8 +1,8 @@
 from pymatgen.io.gaussian import GaussianOutput
-from chemsmart.io.gaussian.utils import GaussianFileMixin
+from chemsmart.utils.mixins import FileMixin
 from functools import cached_property
 
-class Gaussian16Output(GaussianFileMixin):
+class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename
         self.gaussian_object = GaussianOutput(filename=filename)  # Gaussian output object from pymatgen
