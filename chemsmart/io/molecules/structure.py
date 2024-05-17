@@ -1,4 +1,3 @@
-from ase.symbols import Symbols, symbols2numbers
 
 class Molecule:
     """ Class to represent a molcular structure.

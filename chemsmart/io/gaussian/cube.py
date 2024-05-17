@@ -87,11 +87,16 @@ class CubeFileOperator:
     Args: cubefile1: file path for cube file 1.
           cubefile2: file path for cube file 2.
     """
-    def __init__(self, cubefile1, cubefile2):
+    def __init__(self, cubefile1, cubefile2, operation='subtract', output_cubefile=None):
         self.cubefile1 = cubefile1
         self.cubefile2 = cubefile2
         self.cube1 = GaussianCubeFile(filename=self.cubefile1)
         self.cube2 = GaussianCubeFile(filename=self.cubefile2)
+        self.operation = operation
+        if output_cubefile is None:
+            output_cubefile = os.path.join(self.cube1.filepath_directory,
+                                  f'{self.cube1.base_filename_with_extension}_{operation}.cube')
+        self.output_cubefile = output_cubefile
 
     def _check_natoms_matched(self):
         return self.cube1.num_atoms == self.cube2.num_atoms
@@ -106,11 +111,14 @@ class CubeFileOperator:
 
     def _check_geometries_matched(self):
         """ Method to check that the geometries given in the two cube files are the same."""
-        cube1_contents = self.cube1.contents
-        cube2_contents = self.cube2.contents
-        for i, line in enumerate(cube1_contents[6:]):
-            #TODO
-            pass
+        symbols_matched = self.cube1.chemical_symbols == self.cube2.chemical_symbols
+        positions_are_close = np.isclose(self.cube1.positions, self.cube2.positions, atol=1e-3)
+        positions_all_close = np.all(positions_are_close)
+
+        if symbols_matched and positions_all_close:
+            return True
+        else:
+            return False
 
     def _all_checked(self):
         return (self._check_natoms_matched() and self._check_coordinate_origin_matched()
@@ -128,30 +136,52 @@ class CubeFileOperator:
         resultant_values_by_lines = np.subtract(cube1_values_by_lines, cube2_values_by_lines)  # Element-wise subtraction
         return resultant_values_by_lines
 
-    def write_results(self, operation='subtract', output_cubefile=None):
-        if output_cubefile is None:
-            output_cubefile = os.path.join(self.cube1.filepath_directory,
-                                  f'{self.cube1.base_filename_with_extension}_{operation}.cube')
-        if operation.lower() == 'subtract':
+    def write_results(self):
+        if not self._all_checked():
+            raise ValueError('The geometries of the two cube files are different, please check carefully!')
+        if self.operation.lower() == 'subtract':
             resultant_values = self.subtract_values()
-        elif operation.lower() == 'add':
+        elif self.operation.lower() == 'add':
             resultant_values = self.add_values()
 
-        with open(output_cubefile, 'w') as f:
-            self._write_header()  # 2 lines
-            self._write_num_atoms()  # next 1 line
-            self._write_grids()  # next 3 lines
-            self._write_geometry()
-            self._write_values_by_line(resultant_values)
+        with open(self.output_cubefile, 'w') as f:
+            self._write_header(f)  # 2 lines
+            self._write_num_atoms(f)  # next 1 line
+            self._write_grids(f)  # next 3 lines
+            self._write_geometry(f)
+            self._write_values_by_line(f, resultant_values)
         f.close()
 
-    def _write_header(self):
+    def _write_header(self, f):
         # write the first two lines
+        f.write(self.cube1.cube_job_title +'\n')
+        f.write(self.cube1.cube_job_description + '\n')
 
-        pass
+    def _write_num_atoms(self, f):
+        # write the third line
+        assert self._check_natoms_matched() and self._check_coordinate_origin_matched(), \
+            'Number of atoms and coordinate of the origin should be the same!'
+        # f.write(f'{self.cube1.num_atoms:5} '
+        #         f'{self.cube1.coordinate_origin[0]:12.6f} '
+        #         f'{self.cube1.coordinate_origin[1]:12.6f} '
+        #         f'{self.cube1.coordinate_origin[2]:12.6f} \n' )
+        # instead of reconstructing as above, just write the 3rd line
+        f.write(self.cube1.contents[2] + '\n')
 
-    def _write_geometry(self):
+    def _write_grids(self, f):
+        assert self._check_grid_points_matched(), 'Grid points should be the same for both cubes but are different!'
+        for line in self.cube1.contents[3:6]:
+            f.write(line + '\n')
+
+    def _write_geometry(self, f):
         """ Write the geometry that is the same. Instead of using structure.write(), we will simply write
         the geometry from the input cube file. This is due to the non-standard geometry specification in
         cube file, where the atomic_number is repeated as a float in the second element."""
-        pass
+        assert self._check_geometries_matched(), 'Geometries should be the same for both cubes but are different!'
+        for line in self.cube1.contents[6:6+self.cube1.num_atoms]:
+            f.write(line + '\n')
+
+    def _write_values_by_line(self, f, resultant_values):
+        for line in resultant_values:
+            string = '    '.join([str(x) for x in line])
+            f.write(f'{string}\n')
