@@ -1,3 +1,5 @@
+import os
+import numpy as np
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as p
 
@@ -51,6 +53,17 @@ class GaussianCubeFile(FileMixin):
     def structure(self):
         pass
 
+    @property
+    def values_by_lines(self):
+        """ Return a numpy array of list of lists where each member list is a list of floats
+        corresponding to the line of values"""
+        lines_of_values = []
+        for line in self.contents[6+self.num_atoms:]:
+            # skip first 2 header lines + next 1 num atoms line + 3 grid vectors lines
+            line_of_floats_as_list = [float(x) for x in line.split()]
+            lines_of_values.append(line_of_floats_as_list)
+        return np.array(lines_of_values)
+
 
 class CubeFileOperator:
     """ Class to operate on two cube files.
@@ -69,9 +82,39 @@ class CubeFileOperator:
     def _check_coordinate_origin_matched(self):
         return self.cube1.coordinate_origin == self.cube2.coordinate_origin
 
+    def _check_grid_points_matched(self):
+        grid_points_matched = self.cube1.grid_points == self.cube2.grid_points
+        grid_increment_vectors_matched = self.cube1.grid_increment_vector == self.cube2.grid_increment_vector
+        return grid_points_matched and grid_increment_vectors_matched
 
+    def _all_checked(self):
+        return self._check_natoms_matched() and self._check_coordinate_origin_matched() and self._check_grid_points_matched()
 
+    def add_values(self):
+        cube1_values_by_lines = self.cube1.values_by_lines
+        cube2_values_by_lines = self.cube2.values_by_lines
+        resultant_values_by_lines = np.add(cube1_values_by_lines, cube2_values_by_lines)  # Element-wise addition
+        return resultant_values_by_lines
 
+    def subtract_values(self):
+        cube1_values_by_lines = self.cube1.values_by_lines
+        cube2_values_by_lines = self.cube2.values_by_lines
+        resultant_values_by_lines = np.subtract(cube1_values_by_lines, cube2_values_by_lines)  # Element-wise subtraction
+        return resultant_values_by_lines
 
+    def write_results(self, operation='subtract', output_cubefile=None):
+        if output_cubefile is None:
+            output_cubefile = os.path.join(self.cube1.filepath_directory,
+                                  f'{self.cube1.base_filename_with_extension}_{operation}.cube')
+        if operation.lower() == 'subtract':
+            resultant_values = self.subtract_values()
+        elif operation.lower() == 'add':
+            resultant_values = self.add_values()
 
-
+        with open(output_cubefile, 'w') as f:
+            self._write_header()  # 2 lines
+            self._write_num_atoms()  # next 1 line
+            self._write_grids()  # next 3 lines
+            self._write_geometry()
+            self._write_values_by_line(resultant_values)
+        f.close()

@@ -9,8 +9,12 @@ class FileMixin:
         return os.path.abspath(self.filename)
 
     @property
+    def filepath_directory(self):
+        return os.path.split(self.filepath)[0]
+
+    @property
     def base_filename_with_extension(self):
-        return self.filepath.split('/')[-1]
+        return os.path.split(self.filepath)[1]
 
     @property
     def basename(self):
