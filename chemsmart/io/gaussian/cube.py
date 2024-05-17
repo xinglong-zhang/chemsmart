@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.periodictable import PeriodicTable as p
 
 class GaussianCubeFile(FileMixin):
     def __init__(self, filename):
@@ -19,12 +18,12 @@ class GaussianCubeFile(FileMixin):
 
     @property
     def num_atoms(self):
-        """ Get number of atoms for the system."""
+        """ Third line: Get number of atoms for the system."""
         return int(self.contents[2].split()[0])
 
     @property
     def coordinate_origin(self):
-        """ Get the  x-,y-,z-coordinates of origin."""
+        """ Third line: Get the  x-,y-,z-coordinates of origin."""
         line_elements = self.contents[2].split()
         x = float(line_elements[1])
         y = float(line_elements[2])
@@ -33,7 +32,7 @@ class GaussianCubeFile(FileMixin):
 
     @property
     def grid_points(self):
-        """ Get grid points information."""
+        """ Fourth to sixth line: Get grid points information."""
         # gridpoints information will be specified before molecular structure
         grid_points_data = []
         for line in self.contents[3:6]:
@@ -42,7 +41,7 @@ class GaussianCubeFile(FileMixin):
 
     @property
     def grid_increment_vector(self):
-        """ Get increment vector of the grids."""
+        """ Fourth to sixth line: Get increment vector of the grids."""
         grid_vectors = []
         for line in self.contents[3:6]:
             grid_vector = (float(line.split()[1]), float(line.split()[2]), float(line.split()[3]))
@@ -50,19 +49,37 @@ class GaussianCubeFile(FileMixin):
         return tuple(grid_vectors)
 
     @property
+    def coordinate_block_as_list(self):
+        """ 7th to (7+num_atoms)th line: coordinate block."""
+        return self.contents[6:6+self.num_atoms]
+
+    @property
+    def coordinate_block_object(self):
+        from chemsmart.utils.utils import CoordinateBlock
+        return CoordinateBlock(coordinate_block=self.coordinate_block_as_list)
+
+    @property
+    def chemical_symbols(self):
+        return self.coordinate_block_object.chemical_symbols
+
+    @property
+    def positions(self):
+        return self.coordinate_block_object.positions
+
+    @property
     def structure(self):
-        pass
+        return self.coordinate_block_object.molecule
 
     @property
     def values_by_lines(self):
-        """ Return a numpy array of list of lists where each member list is a list of floats
+        """ Return a list of lists where each member list is a list of floats
         corresponding to the line of values"""
         lines_of_values = []
         for line in self.contents[6+self.num_atoms:]:
             # skip first 2 header lines + next 1 num atoms line + 3 grid vectors lines
             line_of_floats_as_list = [float(x) for x in line.split()]
             lines_of_values.append(line_of_floats_as_list)
-        return np.array(lines_of_values)
+        return lines_of_values
 
 
 class CubeFileOperator:
@@ -87,8 +104,17 @@ class CubeFileOperator:
         grid_increment_vectors_matched = self.cube1.grid_increment_vector == self.cube2.grid_increment_vector
         return grid_points_matched and grid_increment_vectors_matched
 
+    def _check_geometries_matched(self):
+        """ Method to check that the geometries given in the two cube files are the same."""
+        cube1_contents = self.cube1.contents
+        cube2_contents = self.cube2.contents
+        for i, line in enumerate(cube1_contents[6:]):
+            #TODO
+            pass
+
     def _all_checked(self):
-        return self._check_natoms_matched() and self._check_coordinate_origin_matched() and self._check_grid_points_matched()
+        return (self._check_natoms_matched() and self._check_coordinate_origin_matched()
+                and self._check_grid_points_matched() and self._check_geometries_matched())
 
     def add_values(self):
         cube1_values_by_lines = self.cube1.values_by_lines
@@ -118,3 +144,14 @@ class CubeFileOperator:
             self._write_geometry()
             self._write_values_by_line(resultant_values)
         f.close()
+
+    def _write_header(self):
+        # write the first two lines
+
+        pass
+
+    def _write_geometry(self):
+        """ Write the geometry that is the same. Instead of using structure.write(), we will simply write
+        the geometry from the input cube file. This is due to the non-standard geometry specification in
+        cube file, where the atomic_number is repeated as a float in the second element."""
+        pass

@@ -19,3 +19,6 @@ class Molecule:
         self.velocities = velocities
         self.info = info
 
+    def write(self, f):
+        pass
+
