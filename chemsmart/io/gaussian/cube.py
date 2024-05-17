@@ -30,8 +30,47 @@ class GaussianCubeFile(FileMixin):
         return (x, y, z)
 
     @property
+    def grid_points(self):
+        """ Get grid points information."""
+        # gridpoints information will be specified before molecular structure
+        grid_points_data = []
+        for line in self.contents[3:6]:
+            grid_points_data.append(int(line.split()[0]))
+        return tuple(grid_points_data)
+
+    @property
+    def grid_increment_vector(self):
+        """ Get increment vector of the grids."""
+        grid_vectors = []
+        for line in self.contents[3:6]:
+            grid_vector = (float(line.split()[1]), float(line.split()[2]), float(line.split()[3]))
+            grid_vectors.append(grid_vector)
+        return tuple(grid_vectors)
+
+    @property
     def structure(self):
         pass
+
+
+class CubeFileOperator:
+    """ Class to operate on two cube files.
+    Args: cubefile1: file path for cube file 1.
+          cubefile2: file path for cube file 2.
+    """
+    def __init__(self, cubefile1, cubefile2):
+        self.cubefile1 = cubefile1
+        self.cubefile2 = cubefile2
+        self.cube1 = GaussianCubeFile(filename=self.cubefile1)
+        self.cube2 = GaussianCubeFile(filename=self.cubefile2)
+
+    def _check_natoms_matched(self):
+        return self.cube1.num_atoms == self.cube2.num_atoms
+
+    def _check_coordinate_origin_matched(self):
+        return self.cube1.coordinate_origin == self.cube2.coordinate_origin
+
+
+
 
 
 
