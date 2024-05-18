@@ -74,7 +74,9 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+                atomic_number = p.to_atomic_number(
+                    p.to_element(str(line_elements[0]))
+                )
 
             second_value = float(line_elements[1])
             if np.isclose(atomic_number, second_value, atol=10e-6):
