@@ -19,14 +19,14 @@ class FileMixin:
 
     @property
     def basename(self):
-        return self.base_filename_with_extension.split('.')[0]
+        return self.base_filename_with_extension.split(".")[0]
 
     @cached_property
     def contents(self):
-        with open(self.filepath, 'r') as f:
+        with open(self.filepath, "r") as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
     def content_lines_string(self):
-        with open(self.filepath, 'r') as f:
+        with open(self.filepath, "r") as f:
             return f.read()

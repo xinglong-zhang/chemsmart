@@ -1,42 +1,46 @@
 import numpy as np
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.periodictable import PeriodicTable as pt
+
 p = pt()
 
 
 class CoordinateBlock:
-    """ Class to create coordinate block object to abstract the geometry."""
+    """Class to create coordinate block object to abstract the geometry."""
+
     def __init__(self, coordinate_block):
-        """ Accepts a coordinate block either as text string or as a list of lines.
+        """Accepts a coordinate block either as text string or as a list of lines.
         If former, then convert to the latter before future usage."""
         coordinate_block_list = []
         if isinstance(coordinate_block, str):
-            for line in coordinate_block.split('\n'):
+            for line in coordinate_block.split("\n"):
                 coordinate_block_list.append(line.strip())
         elif isinstance(coordinate_block, list):
             coordinate_block_list = coordinate_block
         else:
-            raise TypeError(f'The given coordinate block should be str or list '
-                            f'but is {type(coordinate_block)} instead!')
+            raise TypeError(
+                f"The given coordinate block should be str or list "
+                f"but is {type(coordinate_block)} instead!"
+            )
         self.coordinate_block = coordinate_block_list
 
     @property
     def chemical_symbols(self):
-        """ Returns a list of chemical symbols for the molecule."""
+        """Returns a list of chemical symbols for the molecule."""
         return self._get_symbols()
 
     @property
     def positions(self):
-        """ Returns a list of positions for the molecule."""
+        """Returns a list of positions for the molecule."""
         return self._get_positions()
 
     @property
     def molecule(self):
-        """ Returns a molecule object."""
+        """Returns a molecule object."""
         return self.convert_coordinate_block_to_molecule()
 
     def convert_coordinate_block_list_to_molecule(self):
-        """ Function to convert coordinate block supplied as text or as a list of lines into
+        """Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class."""
         symbols = self._get_symbols(self.coordinate_block)
         positions = self._get_positions(self.coordinate_block)
@@ -69,7 +73,9 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+                atomic_number = p.to_atomic_number(
+                    p.to_element(str(line_elements[0]))
+                )
 
             second_value = float(line_elements[1])
             if np.isclose(atomic_number, second_value, atol=10e-6):
