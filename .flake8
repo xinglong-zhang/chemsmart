@@ -1,12 +1,12 @@
 [flake8]
 ignore =
-    E203, E226, W503, W504,
-    # Whitespace before ':' - see https://github.com/psf/black/issues/1323 and https://github.com/psf/black/tree/7e4c6bf71fffc36ead970afde46a726144515e87#slices
+    E226, W503, W504,
     # E266 too many leading '#' for block comment
     # line break before binary operator
     # line break after binary operator
 
 extend-ignore = 
     E203,
+    # Whitespace before ':' - see https://github.com/psf/black/issues/1323 and https://github.com/psf/black/tree/7e4c6bf71fffc36ead970afde46a726144515e87#slices
 
 max-line-length=121
