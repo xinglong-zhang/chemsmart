@@ -12,7 +12,7 @@ os.environ['OMP_NUM_THREADS'] = '1'
 @click.command()
 @click.option('-c1', '--cube1', required=True, default=None, type=str, help='Cube file 1.')
 @click.option('-c2', '--cube2', required=True, default=None, type=str, help='Cube file 2.')
-@click.option('-x', '--operation', default='subtract', type=click.Choice(['subtract','add']),
+@click.option('-x', '--operation', default='subtract', type=click.Choice(['subtract', 'add']),
               help='Operation type. Defaults to subtract.')
 @click.option('-o', '--outputname', default=None, type=str, help='outputname of the operated cube file.')
 def entry_point(cube1, cube2, operation, outputname):

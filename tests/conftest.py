@@ -19,15 +19,18 @@ import pytest
 def test_data_directory():
     return os.path.abspath('data')
 
+
 # master gaussian test directory
 @pytest.fixture()
 def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, 'GaussianTests')
 
+
 # Gaussian output file from TDDFT
 @pytest.fixture()
 def tddft_test_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, 'tddft')
+
 
 @pytest.fixture()
 def td_outputfile(tddft_test_directory):
@@ -40,10 +43,12 @@ def td_outputfile(tddft_test_directory):
 def cube_test_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, 'cubes')
 
+
 @pytest.fixture()
 def spin_cube_file(cube_test_directory):
     spin_cube_file = os.path.join(cube_test_directory, 'n2_dens.cube')
     return spin_cube_file
+
 
 @pytest.fixture()
 def esp_cube_file(cube_test_directory):
