@@ -102,7 +102,7 @@ class CubeFileOperator:
         return self.cube1.num_atoms == self.cube2.num_atoms
 
     def _check_coordinate_origin_matched(self):
-        return self.cube1.coordinate_origin == self.cube2.coordinate_origin
+        return all(np.isclose(self.cube1.coordinate_origin, self.cube2.coordinate_origin, atol=1e-4))
 
     def _check_grid_points_matched(self):
         grid_points_matched = self.cube1.grid_points == self.cube2.grid_points
@@ -135,6 +135,7 @@ class CubeFileOperator:
     def add_values(self):
         cube1_values_by_lines = self.cube1.values_by_lines
         cube2_values_by_lines = self.cube2.values_by_lines
+        print(cube1_values_by_lines)
 
         # Ensure both lists have the same structure
         self._check_value_lines()
