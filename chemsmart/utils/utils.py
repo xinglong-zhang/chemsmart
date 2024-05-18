@@ -3,6 +3,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.periodictable import PeriodicTable as pt
 p = pt()
 
+
 class CoordinateBlock:
     """ Class to create coordinate block object to abstract the geometry."""
     def __init__(self, coordinate_block):

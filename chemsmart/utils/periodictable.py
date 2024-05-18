@@ -1,5 +1,6 @@
 from ase.data import chemical_symbols as elements
 
+
 class PeriodicTable:
     PERIODIC_TABLE = [str(element) for element in elements]
 

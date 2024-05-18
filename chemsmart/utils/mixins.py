@@ -1,6 +1,7 @@
 import os
 from functools import cached_property
 
+
 class FileMixin:
     """Mixin class for files that can be opened and read"""
 

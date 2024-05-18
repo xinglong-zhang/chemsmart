@@ -2,6 +2,7 @@ from pymatgen.io.gaussian import GaussianOutput
 from chemsmart.utils.mixins import FileMixin
 from functools import cached_property
 
+
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename
@@ -27,6 +28,3 @@ class Gaussian16Output(FileMixin):
         for i in self.tddft_transitions:
             excitation_energies_eV.append(i[0])
         return excitation_energies_eV
-
-
-

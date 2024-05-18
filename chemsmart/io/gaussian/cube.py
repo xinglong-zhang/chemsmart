@@ -2,6 +2,7 @@ import os
 import numpy as np
 from chemsmart.utils.mixins import FileMixin
 
+
 class GaussianCubeFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
@@ -95,7 +96,7 @@ class CubeFileOperator:
         self.operation = operation
         if output_cubefile is None:
             output_cubefile = os.path.join(self.cube1.filepath_directory,
-                                  f'{self.cube1.basename}_{operation}.cube')
+                                           f'{self.cube1.basename}_{operation}.cube')
         self.output_cubefile = output_cubefile
 
     def _check_natoms_matched(self):
@@ -182,7 +183,7 @@ class CubeFileOperator:
 
     def _write_header(self, f):
         # write the first two lines
-        f.write(self.cube1.cube_job_title +'\n')
+        f.write(self.cube1.cube_job_title + '\n')
         f.write(self.cube1.cube_job_description + '\n')
 
     def _write_num_atoms(self, f):

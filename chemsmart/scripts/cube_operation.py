@@ -21,5 +21,6 @@ def entry_point(cube1, cube2, operation, outputname):
     logger.info(f'Writing results to {outputname}')
     cube_operator.write_results()
 
+
 if __name__ == '__main__':
     entry_point()
