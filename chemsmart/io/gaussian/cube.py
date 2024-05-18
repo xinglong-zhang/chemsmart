@@ -143,6 +143,8 @@ class CubeFileOperator:
             resultant_values = self.subtract_values()
         elif self.operation.lower() == 'add':
             resultant_values = self.add_values()
+        else:
+            raise ValueError(f'Unknown operation given: {self.operation}!')
 
         with open(self.output_cubefile, 'w') as f:
             self._write_header(f)  # 2 lines
