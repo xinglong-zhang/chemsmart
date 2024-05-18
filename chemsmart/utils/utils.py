@@ -51,8 +51,9 @@ class CoordinateBlock:
         symbols = []
         for line in self.coordinate_block:
             line_elements = line.split()
-            # assert len(line_elements) == 4, (f'The geometry specification, `Symbol x y z` line should have 4 members \n'
-            #                                  f'but is {len(line_elements)} instead!')
+            # assert len(line_elements) == 4, (
+            # f'The geometry specification, `Symbol x y z` line should have 4 members \n'
+            # f'but is {len(line_elements)} instead!')
             # not true for some cubes where the atomic number is repeated as a float:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is indicated at the end of the line
