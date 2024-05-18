@@ -56,7 +56,7 @@ class GaussianCubeFile(FileMixin):
     @property
     def coordinate_block_as_list(self):
         """7th to (7+num_atoms)th line: coordinate block."""
-        return self.contents[6:6 + self.num_atoms]
+        return self.contents[6 : 6 + self.num_atoms]
 
     @property
     def coordinate_block_object(self):
@@ -81,7 +81,7 @@ class GaussianCubeFile(FileMixin):
         """Return a list of lists where each member list is a list of floats
         corresponding to the line of values"""
         lines_of_values = []
-        for line in self.contents[6 + self.num_atoms:]:
+        for line in self.contents[6 + self.num_atoms :]:
             # skip first 2 header lines + next 1 num atoms line + 3 grid vectors lines
             line_of_floats_as_list = [float(x) for x in line.split()]
             lines_of_values.append(line_of_floats_as_list)
@@ -243,7 +243,7 @@ class CubeFileOperator:
         assert (
             self._check_geometries_matched()
         ), "Geometries should be the same for both cubes but are different!"
-        for line in self.cube1.contents[6:6 + self.cube1.num_atoms]:
+        for line in self.cube1.contents[6 : 6 + self.cube1.num_atoms]:
             f.write(line + "\n")
 
     def _write_values_by_line(self, f, resultant_values):
