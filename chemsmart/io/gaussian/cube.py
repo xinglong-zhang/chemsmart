@@ -126,7 +126,9 @@ class CubeFileOperator:
 
     def _check_value_lines(self):
         if len(self.cube1.values_by_lines) != len(self.cube2.values_by_lines):
-            raise ValueError("The two cube files do not have the same number of lines.")
+            raise ValueError(f"The two cube files do not have the same number of lines.\n"
+                             f"Cube 1 has {len(self.cube1.values_by_lines)} lines and"
+                             f"Cube 2 has {len(self.cube2.values_by_lines)} lines.")
 
         for line1, line2 in zip(self.cube1.values_by_lines, self.cube2.values_by_lines):
             if len(line1) != len(line2):

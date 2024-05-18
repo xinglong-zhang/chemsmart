@@ -22,10 +22,10 @@ class FileMixin:
 
     @cached_property
     def contents(self):
-        with open(self.filepath) as f:
+        with open(self.filepath, 'r') as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
     def content_lines_string(self):
-        with open(self.filepath) as f:
+        with open(self.filepath, 'r') as f:
             return f.read()
