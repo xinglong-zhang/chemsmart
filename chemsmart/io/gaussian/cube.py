@@ -95,7 +95,7 @@ class CubeFileOperator:
         self.operation = operation
         if output_cubefile is None:
             output_cubefile = os.path.join(self.cube1.filepath_directory,
-                                  f'{self.cube1.base_filename_with_extension}_{operation}.cube')
+                                  f'{self.cube1.basename}_{operation}.cube')
         self.output_cubefile = output_cubefile
 
     def _check_natoms_matched(self):
@@ -124,16 +124,39 @@ class CubeFileOperator:
         return (self._check_natoms_matched() and self._check_coordinate_origin_matched()
                 and self._check_grid_points_matched() and self._check_geometries_matched())
 
+    def _check_value_lines(self):
+        if len(self.cube1.values_by_lines) != len(self.cube2.values_by_lines):
+            raise ValueError("The two cube files do not have the same number of lines.")
+
+        for line1, line2 in zip(self.cube1.values_by_lines, self.cube2.values_by_lines):
+            if len(line1) != len(line2):
+                raise ValueError("The two cube files have lines with different lengths.")
+
     def add_values(self):
         cube1_values_by_lines = self.cube1.values_by_lines
         cube2_values_by_lines = self.cube2.values_by_lines
-        resultant_values_by_lines = np.add(cube1_values_by_lines, cube2_values_by_lines)  # Element-wise addition
+
+        # Ensure both lists have the same structure
+        self._check_value_lines()
+        resultant_values_by_lines = [
+            [val1 + val2 for val1, val2 in zip(line1, line2)]
+            for line1, line2 in zip(cube1_values_by_lines, cube2_values_by_lines)
+        ]
+
         return resultant_values_by_lines
 
     def subtract_values(self):
         cube1_values_by_lines = self.cube1.values_by_lines
         cube2_values_by_lines = self.cube2.values_by_lines
-        resultant_values_by_lines = np.subtract(cube1_values_by_lines, cube2_values_by_lines)  # Element-wise subtraction
+
+        # Ensure both lists have the same structure
+        self._check_value_lines()
+
+        resultant_values_by_lines = [
+            [val1 - val2 for val1, val2 in zip(line1, line2)]
+            for line1, line2 in zip(cube1_values_by_lines, cube2_values_by_lines)
+        ]
+
         return resultant_values_by_lines
 
     def write_results(self):
@@ -185,5 +208,8 @@ class CubeFileOperator:
 
     def _write_values_by_line(self, f, resultant_values):
         for line in resultant_values:
-            string = '    '.join([str(x) for x in line])
+            string = ''
+            for x in line:
+                string += f'{x:12.6}'.upper()
+                string += '  '
             f.write(f'{string}\n')

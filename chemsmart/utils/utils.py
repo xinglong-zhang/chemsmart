@@ -1,7 +1,7 @@
 import numpy as np
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.periodictable import PeriodicTable as p
-periodic_table = p()
+from chemsmart.utils.periodictable import PeriodicTable as pt
+p = pt()
 
 class CoordinateBlock:
     """ Class to create coordinate block object to abstract the geometry."""
@@ -70,8 +70,8 @@ class CoordinateBlock:
             except ValueError:
                 atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
 
-            second_value = int(line_elements[1])
-            if second_value == atomic_number:
+            second_value = float(line_elements[1])
+            if np.isclose(atomic_number, second_value, atol=10e-6):
                 # happens in cube file, where the second value is the same as the atomic number but in float format
                 x_coordinate = float(line_elements[2])
                 y_coordinate = float(line_elements[3])
@@ -90,13 +90,3 @@ class CoordinateBlock:
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
         return np.array(positions)
-
-
-
-
-
-
-
-
-
-
