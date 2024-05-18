@@ -27,14 +27,14 @@ install:          ## Install the project in dev mode.
 .PHONY: fmt
 fmt:              ## Format code using black & isort.
 	$(ENV_PREFIX)isort chemsmart/
-	$(ENV_PREFIX)black -l 88 chemsmart/
-	$(ENV_PREFIX)black -l 88 tests/
+	$(ENV_PREFIX)black -l 121 chemsmart/
+	$(ENV_PREFIX)black -l 121 tests/
 
 .PHONY: lint
 lint:             ## Run pep8, black, mypy linters.
 	$(ENV_PREFIX)flake8 chemsmart/
-	$(ENV_PREFIX)black -l 88 --check chemsmart/
-	$(ENV_PREFIX)black -l 88 --check tests/
+	$(ENV_PREFIX)black -l 121 --check chemsmart/
+	$(ENV_PREFIX)black -l 121 --check tests/
 	$(ENV_PREFIX)mypy --ignore-missing-imports chemsmart/
 
 .PHONY: test
