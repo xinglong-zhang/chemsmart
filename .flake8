@@ -1,3 +1,7 @@
 [flake8]
 ignore =
-    E501, # Lot of lines too long right now
+    E501, E226, W503, W504
+    # Lot of lines too long right now
+    # line break after binary operator
+    # line break before binary operator
+    # line break after binary operator

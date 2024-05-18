@@ -20,4 +20,3 @@ class Molecule:
 
     def write(self, f):
         pass
-
