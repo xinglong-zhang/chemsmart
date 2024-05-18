@@ -6,9 +6,7 @@ from functools import cached_property
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename
-        self.gaussian_object = GaussianOutput(
-            filename=filename
-        )  # Gaussian output object from pymatgen
+        self.gaussian_object = GaussianOutput(filename=filename)  # Gaussian output object from pymatgen
 
     @cached_property
     def tddft_transitions(self):

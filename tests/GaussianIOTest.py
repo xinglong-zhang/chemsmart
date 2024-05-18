@@ -19,9 +19,7 @@ class TestGaussianCubeFile:
         print(spin_cube.filepath)
 
         assert spin_cube.cube_job_title == "Gaussian job density"
-        assert (
-            spin_cube.cube_job_description == "Electron density from Total SCF Density"
-        )
+        assert spin_cube.cube_job_description == "Electron density from Total SCF Density"
         assert spin_cube.num_atoms == 2
         assert spin_cube.coordinate_origin == (-5.483229, -5.483229, -6.522947)
         assert type(spin_cube.coordinate_origin) is tuple

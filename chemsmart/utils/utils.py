@@ -19,8 +19,7 @@ class CoordinateBlock:
             coordinate_block_list = coordinate_block
         else:
             raise TypeError(
-                f"The given coordinate block should be str or list "
-                f"but is {type(coordinate_block)} instead!"
+                f"The given coordinate block should be str or list " f"but is {type(coordinate_block)} instead!"
             )
         self.coordinate_block = coordinate_block_list
 
@@ -74,9 +73,7 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
+                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
 
             second_value = float(line_elements[1])
             if np.isclose(atomic_number, second_value, atol=10e-6):
