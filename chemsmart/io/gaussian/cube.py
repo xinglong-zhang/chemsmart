@@ -94,7 +94,9 @@ class CubeFileOperator:
           cubefile2: file path for cube file 2.
     """
 
-    def __init__(self, cubefile1, cubefile2, operation="subtract", output_cubefile=None):
+    def __init__(
+        self, cubefile1, cubefile2, operation="subtract", output_cubefile=None
+    ):
         self.cubefile1 = cubefile1
         self.cubefile2 = cubefile2
         self.cube1 = GaussianCubeFile(filename=self.cubefile1)
@@ -121,13 +123,17 @@ class CubeFileOperator:
 
     def _check_grid_points_matched(self):
         grid_points_matched = self.cube1.grid_points == self.cube2.grid_points
-        grid_increment_vectors_matched = self.cube1.grid_increment_vector == self.cube2.grid_increment_vector
+        grid_increment_vectors_matched = (
+            self.cube1.grid_increment_vector == self.cube2.grid_increment_vector
+        )
         return grid_points_matched and grid_increment_vectors_matched
 
     def _check_geometries_matched(self):
         """Method to check that the geometries given in the two cube files are the same."""
         symbols_matched = self.cube1.chemical_symbols == self.cube2.chemical_symbols
-        positions_are_close = np.isclose(self.cube1.positions, self.cube2.positions, atol=1e-3)
+        positions_are_close = np.isclose(
+            self.cube1.positions, self.cube2.positions, atol=1e-3
+        )
         positions_all_close = np.all(positions_are_close)
 
         if symbols_matched and positions_all_close:
@@ -153,7 +159,9 @@ class CubeFileOperator:
 
         for line1, line2 in zip(self.cube1.values_by_lines, self.cube2.values_by_lines):
             if len(line1) != len(line2):
-                raise ValueError("The two cube files have lines with different lengths.")
+                raise ValueError(
+                    "The two cube files have lines with different lengths."
+                )
 
     def add_values(self):
         cube1_values_by_lines = self.cube1.values_by_lines
@@ -185,7 +193,9 @@ class CubeFileOperator:
 
     def write_results(self):
         if not self._all_checked():
-            raise ValueError("The geometries of the two cube files are different, please check carefully!")
+            raise ValueError(
+                "The geometries of the two cube files are different, please check carefully!"
+            )
         if self.operation.lower() == "subtract":
             resultant_values = self.subtract_values()
         elif self.operation.lower() == "add":
@@ -219,7 +229,9 @@ class CubeFileOperator:
         f.write(self.cube1.contents[2] + "\n")
 
     def _write_grids(self, f):
-        assert self._check_grid_points_matched(), "Grid points should be the same for both cubes but are different!"
+        assert (
+            self._check_grid_points_matched()
+        ), "Grid points should be the same for both cubes but are different!"
         for line in self.cube1.contents[3:6]:
             f.write(line + "\n")
 
@@ -228,7 +240,9 @@ class CubeFileOperator:
         the geometry from the input cube file. This is due to the non-standard geometry specification in
         cube file, where the atomic_number is repeated as a float in the second element.
         """
-        assert self._check_geometries_matched(), "Geometries should be the same for both cubes but are different!"
+        assert (
+            self._check_geometries_matched()
+        ), "Geometries should be the same for both cubes but are different!"
         for line in self.cube1.contents[6 : 6 + self.cube1.num_atoms]:
             f.write(line + "\n")
 
