@@ -36,9 +36,9 @@ class GenGenECPSection:
                 continue
 
             element = split_line[0]
-            if element in PERIODIC_TABLE and split_line[1] == "0":
+            if element in pt.PERIODIC_TABLE and split_line[1] == "0":
                 elements.append(element)
-        return sort_list_of_elements_according_to_atomic_number(elements)
+        return pt.sorted_periodic_table_list(elements)
 
     @property
     def light_elements(self):
@@ -56,7 +56,7 @@ class GenGenECPSection:
         elements = []
         for raw_element in split_line:
             element = raw_element.strip()
-            if element != "0" and element in PERIODIC_TABLE and element not in elements:
+            if element != "0" and element in pt.PERIODIC_TABLE and element not in elements:
                 elements.append(element)
         return pt.sorted_periodic_table_list(elements)
 
@@ -143,7 +143,7 @@ class GenGenECPSection:
                 "see https://github.com/MolSSI-BSE/basis_set_exchange for installation."
             ) from e
 
-        heavy_elements = sort_list_of_elements_according_to_atomic_number(
+        heavy_elements = pt.sorted_periodic_table_list(
             heavy_elements
         )
         heavy_elements_basis = heavy_elements_basis.lower()
@@ -157,7 +157,7 @@ class GenGenECPSection:
         if len(light_elements) == 0:
             pass
         else:
-            light_elements = sort_list_of_elements_according_to_atomic_number(
+            light_elements = pt.sorted_periodic_table_list(
                 light_elements
             )
             light_elements_basis = light_elements_basis.lower()
