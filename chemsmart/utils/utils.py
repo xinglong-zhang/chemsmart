@@ -19,8 +19,7 @@ class CoordinateBlock:
             coordinate_block_list = coordinate_block
         else:
             raise TypeError(
-                f"The given coordinate block should be str or list "
-                f"but is {type(coordinate_block)} instead!"
+                f"The given coordinate block should be str or list " f"but is {type(coordinate_block)} instead!"
             )
         self.coordinate_block = coordinate_block_list
 
