@@ -30,10 +30,3 @@ class FileMixin:
     def content_lines_string(self):
         with open(self.filepath, "r") as f:
             return f.read()
-
-
-# class BlockMixin:
-#     """Mixin class for files that can be opened and read"""
-#     def write(self, f):
-#         for line in self.contents:
-#             f.write(line)
