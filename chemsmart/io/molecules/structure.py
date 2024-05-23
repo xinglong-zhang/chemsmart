@@ -31,6 +31,7 @@ class Molecule:
         charge=None,
         multiplicity=None,
         constraint=None,
+        pbc_conditions=None,
         energy=None,
         forces=None,
         velocities=None,
@@ -62,8 +63,14 @@ class Molecule:
         return cls(symbols=c.symbols, positions=c.positions)
 
     @classmethod
-    def from_symbols_and_positions(cls, list_of_symbols, positions):
-        return cls(symbols=Symbols.fromsymbols(list_of_symbols), positions=positions)
+    def from_symbols_and_positions_and_pbc_conditions(
+        cls, list_of_symbols, positions, pbc_conditions=None
+    ):
+        return cls(
+            symbols=Symbols.fromsymbols(list_of_symbols),
+            positions=positions,
+            pbc_conditions=pbc_conditions,
+        )
 
     @classmethod
     def from_file(cls, **kwargs):
@@ -412,6 +419,6 @@ class SDFFile(FileMixin):
                 cart_coords.append((x, y, z))
 
         cart_coords = np.array(cart_coords)
-        return Molecule.from_symbols_and_positions(
+        return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
