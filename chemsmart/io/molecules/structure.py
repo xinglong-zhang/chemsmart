@@ -1,10 +1,12 @@
 import os
-import numpy as np
+import re
 import ase
+import numpy as np
 from ase.symbols import Symbols
 from ase.atoms import Atoms
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.utils import FileReadError
+from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 
 p = pt()
@@ -60,6 +62,10 @@ class Molecule:
         return cls(symbols=c.symbols, positions=c.positions)
 
     @classmethod
+    def from_symbols_and_positions(cls, list_of_symbols, positions):
+        return cls(symbols=Symbols.fromsymbols(list_of_symbols), positions=positions)
+
+    @classmethod
     def from_file(cls, **kwargs):
         return cls.from_filepath(**kwargs)
 
@@ -82,14 +88,14 @@ class Molecule:
     def _read_file(cls, filepath, index, **kwargs):
         basename = os.path.basename(filepath)
 
-        if basename.endswith(".db"):
-            return cls._read_database(filepath, index, **kwargs)
-
-        if basename.endswith(".log"):
-            return cls._read_gaussian_logfile(filepath, index, **kwargs)
+        if basename.endswith(".sdf"):
+            return cls._read_sdf_file(filepath)
 
         if basename.endswith((".com", ".gjf")):
             return cls._read_gaussian_comfile(filepath, **kwargs)
+
+        if basename.endswith(".log"):
+            return cls._read_gaussian_logfile(filepath, index, **kwargs)
 
         if basename.endswith(".inp"):
             return cls._read_orca_inputfile(filepath, **kwargs)
@@ -103,8 +109,8 @@ class Molecule:
         if basename.endswith(".trr"):
             return cls._read_gromacs_trr(filepath, index, **kwargs)
 
-        if basename.endswith(".traj"):
-            return cls._read_traj_file(filepath, index, **kwargs)
+        # if basename.endswith(".traj"):
+        #     return cls._read_traj_file(filepath, index, **kwargs)
 
         return cls._read_other(filepath, index, **kwargs)
 
@@ -116,48 +122,13 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_sdf_file(filepath):
-        # read the file content into a string
-        with open(filepath) as f:
-            content = f.read()
-        # convert to atoms object
-        from pyatoms.utils.utils import sdf2atoms
-
-        return sdf2atoms(content)
+        sdf_file = SDFFile(filepath)
+        return sdf_file.molecule
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_logfile(filepath, index, **kwargs):
-        try:
-            from pyatoms.io.gaussian.outputs import Gaussian16Output
-
-            g16_output = Gaussian16Output(logfile=filepath)
-            return g16_output.get_atoms(index=index, include_failed_logfile=True)
-        except ValueError:
-            from pyatoms.io.gaussian.outputs import Gaussian16OutputWithPBC
-
-            g16_output = Gaussian16OutputWithPBC(logfile=filepath)
-            return g16_output.get_atoms(index=index, include_failed_logfile=True)
-
-    @staticmethod
-    @file_cache()
-    def _read_gromacs_gro(filepath, index, **kwargs):
-        # TODO: add handling of index
-        from pyatoms.io.gromacs.outputs import GroGroOutput
-
-        gro_output = GroGroOutput(filename=filepath)
-        return gro_output.get_gro()
-
-    @staticmethod
-    @file_cache()
-    def _read_gromacs_trr(filepath, index, **kwargs):
-        from pyatoms.io.gromacs.outputs import GroTrrOutput
-
-        trr_output = GroTrrOutput(filename=filepath)
-        return trr_output.get_atoms(index=index)
-
-    @staticmethod
-    @file_cache()
-    def _read_gaussian_comfile(filepath, **kwargs):  # noqa: PLR0915
+    def _read_gaussian_comfile(filepath, **kwargs):
+        ## TODO
         from ase.constraints import FixAtoms
 
         from pyatoms.utils.periodictable import PERIODIC_TABLE
@@ -264,11 +235,17 @@ class Molecule:
 
     @staticmethod
     @file_cache()
-    def _read_orca_outfile(filepath, index, **kwargs):
-        from pyatoms.io.orca.outputs import ORCAOutput
+    def _read_gaussian_logfile(filepath, index, **kwargs):
+        try:
+            from chemsmart.io.gaussian.output import Gaussian16Output
 
-        orca_output = ORCAOutput(filename=filepath, **kwargs)
-        return orca_output.get_atoms(index=index, include_failed_file=True)
+            g16_output = Gaussian16Output(filename=filepath)
+            return g16_output.get_atoms(index=index, include_failed_logfile=True)
+        except ValueError:
+            from pyatoms.io.gaussian.outputs import Gaussian16OutputWithPBC
+
+            g16_output = Gaussian16OutputWithPBC(logfile=filepath)
+            return g16_output.get_atoms(index=index, include_failed_logfile=True)
 
     @staticmethod
     @file_cache()
@@ -277,6 +254,31 @@ class Molecule:
 
         orca_input = ORCAInput(inpfile=filepath, **kwargs)
         return orca_input.atoms
+
+    @staticmethod
+    @file_cache()
+    def _read_orca_outfile(filepath, index, **kwargs):
+        from pyatoms.io.orca.outputs import ORCAOutput
+
+        orca_output = ORCAOutput(filename=filepath, **kwargs)
+        return orca_output.get_atoms(index=index, include_failed_file=True)
+
+    @staticmethod
+    @file_cache()
+    def _read_gromacs_gro(filepath, index, **kwargs):
+        # TODO: add handling of index
+        from pyatoms.io.gromacs.outputs import GroGroOutput
+
+        gro_output = GroGroOutput(filename=filepath)
+        return gro_output.get_gro()
+
+    @staticmethod
+    @file_cache()
+    def _read_gromacs_trr(filepath, index, **kwargs):
+        from pyatoms.io.gromacs.outputs import GroTrrOutput
+
+        trr_output = GroTrrOutput(filename=filepath)
+        return trr_output.get_atoms(index=index)
 
     def write(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
@@ -327,9 +329,7 @@ class CoordinateBlock:
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class."""
-        symbols = self._get_symbols(self.coordinate_block)
-        positions = self._get_positions(self.coordinate_block)
-        return Molecule(symbols=symbols, positions=positions)
+        return Molecule(symbols=self.symbols, positions=self.positions)
 
     def _get_symbols(self):
         symbols = []
@@ -380,3 +380,38 @@ class CoordinateBlock:
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
         return np.array(positions)
+
+
+class SDFFile(FileMixin):
+    """SDF file object."""
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def molecule(self):
+        return self.get_molecule()
+
+    def get_molecule(self):
+        list_of_symbols = []
+        cart_coords = []
+        # sdf line pattern containing coordinates and element type
+        sdf_pattern = (
+            r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
+            r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
+        )
+
+        for line in self.contents:
+            match = re.match(sdf_pattern, line)
+            if match:
+                x = float(match.group(1))
+                y = float(match.group(2))
+                z = float(match.group(3))
+                atom_type = str(match.group(4))
+                list_of_symbols.append(atom_type)
+                cart_coords.append((x, y, z))
+
+        cart_coords = np.array(cart_coords)
+        return Molecule.from_symbols_and_positions(
+            list_of_symbols=list_of_symbols, positions=cart_coords
+        )

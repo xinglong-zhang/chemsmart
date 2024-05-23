@@ -3,6 +3,7 @@ import time
 import hashlib
 import copy
 from functools import lru_cache, wraps
+from itertools import groupby
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -77,3 +78,53 @@ def file_cache(copy_result=True, maxsize=64):
 
 class FileReadError(Exception):
     pass
+
+
+def is_float(string):
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
+
+def content_blocks_by_paragraph(string_list):
+    return [
+        list(group) for k, group in groupby(string_list, lambda x: x == "") if not k
+    ]
+
+
+def write_list_of_lists_as_a_string_with_empty_line_between_lists(list_of_lists):
+    string = ""
+    num_lists = len(list_of_lists)
+    for i in range(num_lists):
+        for line in list_of_lists[i]:
+            string += line + "\n"
+        if i < num_lists - 1:
+            # ensures that only empty line is written in between lists, but not after the last list
+            # as the empty line after each block is written in gaussian job settings.write_gaussian_input()
+            string += "\n"
+    return string
+
+
+def get_list_from_string_range(string_of_range):
+    """Converted to 0-indexed from 1-indexed input.
+
+    See pyatoms/tests/GaussianUtilsTest.py::GetListFromStringRangeTest::test_get_list_from_string_range
+    :param string_of_range: accepts string of range. e.g., s='[1-3,28-31,34-41]' or s='1-3,28-31,34-41'
+    :return: list of range.
+    """
+    if "[" in string_of_range:
+        string_of_range = string_of_range.replace("[", "")
+        string_of_range = string_of_range.replace("]", "")
+
+    string_ranges = string_of_range.split(",")
+    indices = []
+    for s in string_ranges:
+        if "-" in s:
+            each_range = s.split("-")
+            for i in range(int(each_range[0]), int(each_range[1]) + 1):
+                indices.append(i - 1)  # noqa: PERF401
+        else:
+            indices.append(int(s))
+    return indices
