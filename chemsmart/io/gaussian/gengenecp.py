@@ -36,9 +36,9 @@ class GenGenECPSection:
                 continue
 
             element = split_line[0]
-            if element in PERIODIC_TABLE and split_line[1] == "0":
+            if element in pt.PERIODIC_TABLE and split_line[1] == "0":
                 elements.append(element)
-        return sort_list_of_elements_according_to_atomic_number(elements)
+        return pt.sorted_periodic_table_list(elements)
 
     @property
     def light_elements(self):
@@ -48,15 +48,13 @@ class GenGenECPSection:
             return []
 
         if not line.endswith("0"):
-            logger.warning(
-                f"Line for light atoms should end with 0, but is {line} instead."
-            )
+            logger.warning(f"Line for light atoms should end with 0, but is {line} instead.")
 
         split_line = line.split()
         elements = []
         for raw_element in split_line:
             element = raw_element.strip()
-            if element != "0" and element in PERIODIC_TABLE and element not in elements:
+            if element != "0" and element in pt.PERIODIC_TABLE and element not in elements:
                 elements.append(element)
         return pt.sorted_periodic_table_list(elements)
 
@@ -89,9 +87,7 @@ class GenGenECPSection:
     @classmethod
     def from_genecp_path(cls, genecp_path):
         if not os.path.exists(genecp_path):
-            raise FileNotFoundError(
-                f'Given gen/genecp path at "{genecp_path}" is not found!'
-            )
+            raise FileNotFoundError(f'Given gen/genecp path at "{genecp_path}" is not found!')
 
         string = ""
         genecp_path = os.path.abspath(genecp_path)
@@ -113,17 +109,13 @@ class GenGenECPSection:
         genecp_string = ""
         num_groups = len(genecp_group)
         for i in range(num_groups):
-            for string in genecp_group[
-                i
-            ]:  # for each string in the list; so need to add end of line '\n' below
+            for string in genecp_group[i]:  # for each string in the list; so need to add end of line '\n' below
                 genecp_string += string + "\n"
             genecp_string += "\n"
         return cls(genecp_string)
 
     @classmethod
-    def from_bse_api(
-        cls, light_elements, light_elements_basis, heavy_elements, heavy_elements_basis
-    ):
+    def from_bse_api(cls, light_elements, light_elements_basis, heavy_elements, heavy_elements_basis):
         """Create ECP from basis set exchange api.
 
         :param light_elements: list of light atoms as elements in string
@@ -143,9 +135,7 @@ class GenGenECPSection:
                 "see https://github.com/MolSSI-BSE/basis_set_exchange for installation."
             ) from e
 
-        heavy_elements = sort_list_of_elements_according_to_atomic_number(
-            heavy_elements
-        )
+        heavy_elements = pt.sorted_periodic_table_list(heavy_elements)
         heavy_elements_basis = heavy_elements_basis.lower()
 
         genecp_string = ""
@@ -157,9 +147,7 @@ class GenGenECPSection:
         if len(light_elements) == 0:
             pass
         else:
-            light_elements = sort_list_of_elements_according_to_atomic_number(
-                light_elements
-            )
+            light_elements = pt.sorted_periodic_table_list(light_elements)
             light_elements_basis = light_elements_basis.lower()
             light_atoms_string = " ".join(light_elements) + " 0\n"
             genecp_string += light_atoms_string
@@ -186,9 +174,7 @@ class GenGenECPSection:
         )
 
         heavy_atoms_gengenecp_basis_list = heavy_atoms_gengenecp_basis.split("\n")
-        heavy_atoms_gengenecp_basis_blocks = content_blocks_by_paragraph(
-            string_list=heavy_atoms_gengenecp_basis_list
-        )
+        heavy_atoms_gengenecp_basis_blocks = content_blocks_by_paragraph(string_list=heavy_atoms_gengenecp_basis_list)
 
         # first block is header; write header info, which contains basis set name
         header_block = heavy_atoms_gengenecp_basis_blocks[0]
@@ -196,10 +182,8 @@ class GenGenECPSection:
             if line:
                 genecp_string += line + "\n"
 
-        heavy_atoms_gengenecp_basis_string = (
-            write_list_of_lists_as_a_string_with_empty_line_between_lists(
-                heavy_atoms_gengenecp_basis_blocks[1:]
-            )
+        heavy_atoms_gengenecp_basis_string = write_list_of_lists_as_a_string_with_empty_line_between_lists(
+            heavy_atoms_gengenecp_basis_blocks[1:]
         )
         genecp_string += heavy_atoms_gengenecp_basis_string
         return cls(string=genecp_string)
