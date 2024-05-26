@@ -15,9 +15,6 @@ class TestGaussian16Output:
 class TestGaussianCubeFile:
     def test_read_file_content(self, spin_cube_file):
         spin_cube = GaussianCubeFile(filename=spin_cube_file)
-
-        print(spin_cube.filepath)
-
         assert spin_cube.cube_job_title == "Gaussian job density"
         assert spin_cube.cube_job_description == "Electron density from Total SCF Density"
         assert spin_cube.num_atoms == 2
@@ -30,5 +27,3 @@ class TestGaussianCubeFile:
             (0.0, 1.2911, 0.0),
             (0.0, 0.0, 1.2911),
         )
-        print(type(spin_cube.grid_increment_vector[0]))
-        print(spin_cube.values_by_lines)

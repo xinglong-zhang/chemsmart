@@ -5,93 +5,114 @@ from chemsmart.utils.periodictable import PeriodicTable as pt
 p = pt()
 
 
-class CoordinateBlock:
-    """Class to create coordinate block object to abstract the geometry."""
+def file_cache(copy_result=True, maxsize=64):
+    """
+    Caches results of functions that take files as input.
 
-    def __init__(self, coordinate_block):
-        """Accepts a coordinate block either as text string or as a list of lines.
-        If former, then convert to the latter before future usage."""
-        coordinate_block_list = []
-        if isinstance(coordinate_block, str):
-            for line in coordinate_block.split("\n"):
-                coordinate_block_list.append(line.strip())
-        elif isinstance(coordinate_block, list):
-            coordinate_block_list = coordinate_block
-        else:
-            raise TypeError(
-                f"The given coordinate block should be str or list " f"but is {type(coordinate_block)} instead!"
-            )
-        self.coordinate_block = coordinate_block_list
+    Uses the modified time of the files to see if they changed or not.
+    If unchanged, will return the cached results of the function call.
 
-    @property
-    def chemical_symbols(self):
-        """Returns a list of chemical symbols for the molecule."""
-        return self._get_symbols()
+    Use before @classmethod or @staticmethod. For example:
 
-    @property
-    def positions(self):
-        """Returns a list of positions for the molecule."""
-        return self._get_positions()
+    @classmethod
+    @file_cache()
+    def my_class_method(cls, ...):
+        ...
 
-    @property
-    def molecule(self):
-        """Returns a molecule object."""
-        return self.convert_coordinate_block_to_molecule()
+    Args:
+        copy_result (bool): If true, will copy the result of the function call before caching.
+            This is to prevent changes to the result from polluting the cache.
+        maxsize (int): Maximum number of results to cache. Defaults to 64.
+    """
 
-    def convert_coordinate_block_list_to_molecule(self):
-        """Function to convert coordinate block supplied as text or as a list of lines into
-        Molecule class."""
-        symbols = self._get_symbols(self.coordinate_block)
-        positions = self._get_positions(self.coordinate_block)
-        molecule = Molecule(symbols=symbols, positions=positions)
-        return molecule
+    def decorator(func):
+        if isinstance(func, staticmethod):
+            func = func.__func__
+        elif isinstance(func, classmethod):
+            raise ValueError("Unable to use this with classmethod. Use a staticmethod instead.")
 
-    def _get_symbols(self):
-        symbols = []
-        for line in self.coordinate_block:
-            line_elements = line.split()
-            # assert len(line_elements) == 4, (
-            # f'The geometry specification, `Symbol x y z` line should have 4 members \n'
-            # f'but is {len(line_elements)} instead!')
-            # not true for some cubes where the atomic number is repeated as a float:
-            # 6    6.000000  -12.064399   -0.057172   -0.099010
-            # also not true for Gaussian QM/MM calculations where "H" or "L" is indicated at the end of the line
+        @lru_cache(maxsize=maxsize)
+        def func_with_modified_time_arg(modified_time, *args, **kwargs):
+            return func(*args, **kwargs)
 
-            try:
-                atomic_number = int(line_elements[0])
-                chemical_symbol = p.to_symbol(atomic_number=atomic_number)
-                symbols.append(chemical_symbol)
-            except ValueError:
-                symbols.append(p.to_element(element_str=str(line_elements[0])))
-        return symbols
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            filenames = []
+            for arg in args + tuple(kwargs.values()):
+                if isinstance(arg, (int, bool)):
+                    continue
+                if isinstance(arg, str) and os.path.isfile(arg):
+                    filenames.append(arg)
 
-    def _get_positions(self):
-        positions = []
-        for line in self.coordinate_block:
-            line_elements = line.split()
+            if not filenames:
+                return func(*args, **kwargs)
 
-            try:
-                atomic_number = int(line_elements[0])
-            except ValueError:
-                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+            modified_times = tuple(os.path.getmtime(filename) for filename in filenames)
 
-            second_value = float(line_elements[1])
-            if np.isclose(atomic_number, second_value, atol=10e-6):
-                # happens in cube file, where the second value is the same as the atomic number but in float format
-                x_coordinate = float(line_elements[2])
-                y_coordinate = float(line_elements[3])
-                z_coordinate = float(line_elements[4])
-            elif second_value == -1 or second_value == 0:
-                # this is the case in frozen coordinates e.g.,
-                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                # then ignore second value
-                x_coordinate = float(line_elements[2])
-                y_coordinate = float(line_elements[3])
-                z_coordinate = float(line_elements[4])
-            else:
-                x_coordinate = float(line_elements[1])
-                y_coordinate = float(line_elements[2])
-                z_coordinate = float(line_elements[3])
-            position = [x_coordinate, y_coordinate, z_coordinate]
-            positions.append(position)
-        return np.array(positions)
+            current_time = time.time()
+            time_diff = [current_time - t for t in modified_times]
+            max_time_diff = 1800
+            if any(t.is_integer() for t in modified_times) and any(t < max_time_diff for t in time_diff):
+                modified_times = []
+                for filename in filenames:
+                    with open(filename, "rb") as f:
+                        data = f.read()
+                    modified_times.append(hashlib.blake2b(data, digest_size=10).hexdigest())
+
+            result = func_with_modified_time_arg(tuple(modified_times), *args, **kwargs)
+            if copy_result:
+                return copy.copy(result)
+            return result
+
+        return wrapped
+
+    return decorator
+
+
+class FileReadError(Exception):
+    pass
+
+
+def is_float(string):
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
+
+def content_blocks_by_paragraph(string_list):
+    return [list(group) for k, group in groupby(string_list, lambda x: x == "") if not k]
+
+
+def write_list_of_lists_as_a_string_with_empty_line_between_lists(list_of_lists):
+    string = ""
+    num_lists = len(list_of_lists)
+    for i in range(num_lists):
+        for line in list_of_lists[i]:
+            string += line + "\n"
+        if i < num_lists - 1:
+            # ensures that only empty line is written in between lists, but not after the last list
+            # as the empty line after each block is written in gaussian job settings.write_gaussian_input()
+            string += "\n"
+    return string
+
+
+def get_list_from_string_range(string_of_range):
+    """Converted to 0-indexed from 1-indexed input.
+
+    See pyatoms/tests/GaussianUtilsTest.py::GetListFromStringRangeTest::test_get_list_from_string_range
+    :param string_of_range: accepts string of range. e.g., s='[1-3,28-31,34-41]' or s='1-3,28-31,34-41'
+    :return: list of range.
+    """
+    if "[" in string_of_range:
+        string_of_range = string_of_range.replace("[", "")
+        string_of_range = string_of_range.replace("]", "")
+
+    string_ranges = string_of_range.split(",")
+    indices = []
+    for s in string_ranges:
+        if "-" in s:
+            each_range = s.split("-")
+            for i in range(int(each_range[0]), int(each_range[1]) + 1):
+                indices.append(i - 1)
