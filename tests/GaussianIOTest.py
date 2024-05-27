@@ -1,4 +1,6 @@
 import os.path
+
+import numpy as np
 from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.gaussian.cube import GaussianCubeFile
@@ -28,7 +30,79 @@ class TestGaussian16Input:
         assert isinstance(g16_input.molecule.symbols, Symbols)
         assert g16_input.molecule.symbols.formula == "C6H4COHCl"
         assert g16_input.molecule.empirical_formula == "C7H5ClO"
+        assert all(
+            np.isclose(
+                g16_input.molecule.positions[0],
+                [-0.5448210000, -1.1694570000, 0.0001270000],
+                atol=10e-5,
+            )
+        )
+        print(g16_input.molecule.positions[0])
+        assert g16_input.additional_opt_options_in_route is None
         assert g16_input.additional_route_parameters is None
+        assert g16_input.job_type == "opt"
+        assert g16_input.functional == "m062x"
+        assert g16_input.basis == "def2svp"
+
+    def test_read_modred_inputfile(self, gaussian_modred_inputfile):
+        assert os.path.exists(gaussian_modred_inputfile)
+        g16_modred = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16_modred.molecule.chemical_symbols == [
+            "O",
+            "N",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "C",
+            "O",
+            "O",
+        ]  # list of chemical symbols
+        assert g16_modred.molecule.symbols.formula == "ONC2H7CO2"
+        assert g16_modred.molecule.empirical_formula == "C3H7NO3"
+        assert g16_modred.additional_opt_options_in_route is None
+        assert g16_modred.additional_route_parameters is None
+        assert g16_modred.job_type == "modred"
+        assert g16_modred.modredundant == [[2, 12], [9, 2]]
+        assert g16_modred.functional == "m062x"
+        assert g16_modred.basis == "def2svp"
+
+    def test_read_scan_inputfile(self, gaussian_scan_inputfile):
+        assert os.path.exists(gaussian_scan_inputfile)
+        g16_scan = Gaussian16Input(filename=gaussian_scan_inputfile)
+        assert g16_scan.molecule.chemical_symbols == [
+            "O",
+            "N",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "C",
+            "O",
+            "O",
+        ]  # list of chemical symbols
+        assert g16_scan.molecule.symbols.formula == "ONC2H7CO2"
+        assert g16_scan.molecule.empirical_formula == "C3H7NO3"
+        assert g16_scan.additional_opt_options_in_route is None
+        assert g16_scan.additional_route_parameters is None
+        assert g16_scan.job_type == "modred"
+        assert g16_scan.modredundant == {
+            "coords": [[2, 12], [9, 2]],
+            "num_steps": 10,
+            "step_size": 0.05,
+        }
+        assert g16_scan.functional == "m062x"
+        assert g16_scan.basis == "def2svp"
 
 
 class TestGaussian16Output:
@@ -122,7 +196,9 @@ class TestGaussianCubeFile:
     def test_read_file_content(self, spin_cube_file):
         spin_cube = GaussianCubeFile(filename=spin_cube_file)
         assert spin_cube.cube_job_title == "Gaussian job density"
-        assert spin_cube.cube_job_description == "Electron density from Total SCF Density"
+        assert (
+            spin_cube.cube_job_description == "Electron density from Total SCF Density"
+        )
         assert spin_cube.num_atoms == 2
         assert spin_cube.coordinate_origin == (-5.483229, -5.483229, -6.522947)
         assert type(spin_cube.coordinate_origin) is tuple

@@ -34,8 +34,26 @@ def gaussian_inputs_test_directory(gaussian_test_directory):
 
 @pytest.fixture()
 def gaussian_opt_inputfile(gaussian_inputs_test_directory):
-    gaussian_opt_input = os.path.join(gaussian_inputs_test_directory, "model_opt_input.com")
+    gaussian_opt_input = os.path.join(
+        gaussian_inputs_test_directory, "model_opt_input.com"
+    )
     return gaussian_opt_input
+
+
+@pytest.fixture()
+def gaussian_modred_inputfile(gaussian_inputs_test_directory):
+    gaussian_modred_inputfile = os.path.join(
+        gaussian_inputs_test_directory, "model_modred_input.com"
+    )
+    return gaussian_modred_inputfile
+
+
+@pytest.fixture()
+def gaussian_scan_inputfile(gaussian_inputs_test_directory):
+    gaussian_scan_inputfile = os.path.join(
+        gaussian_inputs_test_directory, "model_scan_input.com"
+    )
+    return gaussian_scan_inputfile
 
 
 # Gaussian output file from TDDFT
@@ -46,7 +64,9 @@ def tddft_test_directory(gaussian_test_directory):
 
 @pytest.fixture()
 def td_outputfile(tddft_test_directory):
-    td_outputfile = os.path.join(tddft_test_directory, "tddft_r1s50_gas_radical_anion.log")
+    td_outputfile = os.path.join(
+        tddft_test_directory, "tddft_r1s50_gas_radical_anion.log"
+    )
     return td_outputfile
 
 
