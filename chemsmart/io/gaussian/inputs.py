@@ -143,14 +143,10 @@ class Gaussian16Input(FileMixin):
         found_hash = False
         for line in self.content_groups[0]:
             if line.startswith("#"):
-                concatenated_string += (
-                    line.strip()
-                )  # Remove the '#' and any leading/trailing whitespace
+                concatenated_string += line.strip()  # Remove the '#' and any leading/trailing whitespace
                 found_hash = True
             elif found_hash:
-                concatenated_string += (
-                    " " + line.strip()
-                )  # Concatenate with a space separator
+                concatenated_string += " " + line.strip()  # Concatenate with a space separator
             else:
                 continue
             return concatenated_string.lower()
@@ -158,11 +154,7 @@ class Gaussian16Input(FileMixin):
     def _get_charge_and_multiplicity(self):
         for line in self.contents:
             line_elements = line.split()
-            if (
-                len(line_elements) == 2
-                and line_elements[0].replace("-", "").isdigit()
-                and line_elements[1].isdigit()
-            ):
+            if len(line_elements) == 2 and line_elements[0].replace("-", "").isdigit() and line_elements[1].isdigit():
                 charge = int(line_elements[0])
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity

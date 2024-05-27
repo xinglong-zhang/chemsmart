@@ -26,8 +26,8 @@ class TestGaussian16Input:
             "Cl",
         ]  # list of chemical symbols
         assert isinstance(g16_input.molecule.symbols, Symbols)
-        assert g16_input.molecule.symbols.formula == 'C6H4COHCl'
-        assert g16_input.molecule.empirical_formula == 'C7H5ClO'
+        assert g16_input.molecule.symbols.formula == "C6H4COHCl"
+        assert g16_input.molecule.empirical_formula == "C7H5ClO"
         assert g16_input.additional_route_parameters is None
 
 
