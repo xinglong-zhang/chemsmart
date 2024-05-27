@@ -7,7 +7,10 @@ from chemsmart.io.gaussian.route import GaussianRoute
 class Gaussian16Input(FileMixin):
     def __init__(self, filename):
         self.filename = filename
-        self.route_object = GaussianRoute(route_string=self.route_string)
+        try:
+            self.route_object = GaussianRoute(route_string=self.route_string)
+        except TypeError as err:
+            print(err)
 
     @property
     def num_content_blocks(self):
@@ -57,20 +60,7 @@ class Gaussian16Input(FileMixin):
 
     @property
     def route_string(self):
-        """Obtain route string that may span over multiple lines."""
-        concatenated_string = ""
-        found_hash = False
-        for line in self.content_groups[0]:
-            if line.startswith("#"):
-                concatenated_string += line.strip()  # Remove the '#' and any leading/trailing whitespace
-                found_hash = True
-            elif found_hash:
-                concatenated_string += " " + line.strip()  # Concatenate with a space separator
-            else:
-                continue
-            return concatenated_string.lower()
-
-        return None
+        return self._get_route()
 
     @property
     def dieze_tag(self):
@@ -148,12 +138,31 @@ class Gaussian16Input(FileMixin):
         return nproc
 
     def _get_route(self):
-        pass
+        """Obtain route string that may span over multiple lines."""
+        concatenated_string = ""
+        found_hash = False
+        for line in self.content_groups[0]:
+            if line.startswith("#"):
+                concatenated_string += (
+                    line.strip()
+                )  # Remove the '#' and any leading/trailing whitespace
+                found_hash = True
+            elif found_hash:
+                concatenated_string += (
+                    " " + line.strip()
+                )  # Concatenate with a space separator
+            else:
+                continue
+            return concatenated_string.lower()
 
     def _get_charge_and_multiplicity(self):
         for line in self.contents:
             line_elements = line.split()
-            if len(line_elements) == 2 and line_elements[0].replace("-", "").isdigit() and line_elements[1].isdigit():
+            if (
+                len(line_elements) == 2
+                and line_elements[0].replace("-", "").isdigit()
+                and line_elements[1].isdigit()
+            ):
                 charge = int(line_elements[0])
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity

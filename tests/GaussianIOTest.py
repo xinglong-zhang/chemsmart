@@ -1,7 +1,34 @@
 import os.path
-
+from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.gaussian.cube import GaussianCubeFile
+from ase.symbols import Symbols
+
+
+class TestGaussian16Input:
+    def test_read_gaussian_input(self, gaussian_opt_inputfile):
+        assert os.path.exists(gaussian_opt_inputfile)
+        g16_input = Gaussian16Input(filename=gaussian_opt_inputfile)
+        assert g16_input.molecule.chemical_symbols == [
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "C",
+            "O",
+            "H",
+            "Cl",
+        ]  # list of chemical symbols
+        assert isinstance(g16_input.molecule.symbols, Symbols)
+        assert g16_input.molecule.symbols.formula == 'C6H4COHCl'
+        assert g16_input.molecule.empirical_formula == 'C7H5ClO'
+        assert g16_input.additional_route_parameters is None
 
 
 class TestGaussian16Output:

@@ -26,6 +26,18 @@ def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "GaussianTests")
 
 
+# Gaussian input files
+@pytest.fixture()
+def gaussian_inputs_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "inputs")
+
+
+@pytest.fixture()
+def gaussian_opt_inputfile(gaussian_inputs_test_directory):
+    gaussian_opt_input = os.path.join(gaussian_inputs_test_directory, "model_opt_input.com")
+    return gaussian_opt_input
+
+
 # Gaussian output file from TDDFT
 @pytest.fixture()
 def tddft_test_directory(gaussian_test_directory):

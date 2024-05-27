@@ -51,6 +51,12 @@ class Molecule:
     def empirical_formula(self):
         return self.symbols.get_chemical_formula(mode="hill", empirical=True)
 
+    @property
+    def chemical_symbols(self):
+        """ Return a list of chemical symbols strings"""
+        if self.symbols is not None:
+            return list(self.symbols)
+
     def get_chemical_formula(self, mode, empirical):
         if self.symbols is not None:
             return self.symbols.get_chemical_formula(mode="hill", empirical=False)
@@ -63,7 +69,9 @@ class Molecule:
         return cls(symbols=c.symbols, positions=c.positions)
 
     @classmethod
-    def from_symbols_and_positions_and_pbc_conditions(cls, list_of_symbols, positions, pbc_conditions=None):
+    def from_symbols_and_positions_and_pbc_conditions(
+        cls, list_of_symbols, positions, pbc_conditions=None
+    ):
         return cls(
             symbols=Symbols.fromsymbols(list_of_symbols),
             positions=positions,
@@ -231,7 +239,9 @@ class Molecule:
                 frozen_coordinates_dict["frozen"].append(i)
 
         c = FixAtoms(indices=frozen_coordinates_list)
-        atoms = Atoms(symbols=symbols, positions=positions, pbc=pbc_conditions, cell=cells)
+        atoms = Atoms(
+            symbols=symbols, positions=positions, pbc=pbc_conditions, cell=cells
+        )
         atoms.set_constraint(c)
 
         return atoms
@@ -304,7 +314,8 @@ class CoordinateBlock:
             coordinate_block_list = coordinate_block
         else:
             raise TypeError(
-                f"The given coordinate block should be str or list " f"but is {type(coordinate_block)} instead!"
+                f"The given coordinate block should be str or list "
+                f"but is {type(coordinate_block)} instead!"
             )
         self.coordinate_block = coordinate_block_list
 
@@ -344,6 +355,11 @@ class CoordinateBlock:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is indicated at the end of the line
 
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+
             try:
                 atomic_number = int(line_elements[0])
                 chemical_symbol = p.to_symbol(atomic_number=atomic_number)
@@ -356,6 +372,10 @@ class CoordinateBlock:
         positions = []
         for line in self.coordinate_block:
             line_elements = line.split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
 
             try:
                 atomic_number = int(line_elements[0])
