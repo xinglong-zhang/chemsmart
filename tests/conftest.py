@@ -41,6 +41,14 @@ def gaussian_opt_inputfile(gaussian_inputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_frozen_opt_inputfile(gaussian_inputs_test_directory):
+    gaussian_frozen_opt_inputfile = os.path.join(
+        gaussian_inputs_test_directory, "frozen_coordinates_opt.com"
+    )
+    return gaussian_frozen_opt_inputfile
+
+
+@pytest.fixture()
 def gaussian_modred_inputfile(gaussian_inputs_test_directory):
     gaussian_modred_inputfile = os.path.join(
         gaussian_inputs_test_directory, "model_modred_input.com"
@@ -54,6 +62,25 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
         gaussian_inputs_test_directory, "model_scan_input.com"
     )
     return gaussian_scan_inputfile
+
+
+# Gaussian pbc input files
+@pytest.fixture()
+def gaussian_pbc_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "pbc")
+
+
+@pytest.fixture()
+def gaussian_pbc_inputs_test_directory(gaussian_pbc_test_directory):
+    return os.path.join(gaussian_pbc_test_directory, "com")
+
+
+@pytest.fixture()
+def gaussian_pbc_1d_inputfile(gaussian_pbc_inputs_test_directory):
+    gaussian_pbc_1d_inputfile = os.path.join(
+        gaussian_pbc_inputs_test_directory, "neoprene_1d.com"
+    )
+    return gaussian_pbc_1d_inputfile
 
 
 # Gaussian output file from TDDFT

@@ -37,12 +37,21 @@ class TestGaussian16Input:
                 atol=10e-5,
             )
         )
-        print(g16_input.molecule.positions[0])
         assert g16_input.additional_opt_options_in_route is None
         assert g16_input.additional_route_parameters is None
         assert g16_input.job_type == "opt"
         assert g16_input.functional == "m062x"
         assert g16_input.basis == "def2svp"
+        assert g16_input.molecule.constraint is None
+
+    def test_read_frozen_coords(self, gaussian_frozen_opt_inputfile):
+        assert os.path.exists(gaussian_frozen_opt_inputfile)
+        g16_frozen = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16_frozen.molecule.symbols.formula == "C6H4COHCl"
+        assert g16_frozen.molecule.empirical_formula == "C7H5ClO"
+        assert g16_frozen.additional_opt_options_in_route is None
+        assert g16_frozen.additional_route_parameters is None
+        assert g16_frozen.job_type == "opt"
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
@@ -103,6 +112,25 @@ class TestGaussian16Input:
         }
         assert g16_scan.functional == "m062x"
         assert g16_scan.basis == "def2svp"
+
+    def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
+        assert os.path.exists(gaussian_pbc_1d_inputfile)
+        g16_pbc_1d = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
+        assert g16_pbc_1d.molecule.symbols.formula == "CH2CHC2H2Cl"
+        assert g16_pbc_1d.molecule.empirical_formula == "C4H5Cl"
+        assert all(
+            np.isclose(
+                g16_pbc_1d.molecule.positions[-1],
+                [0.62098257, 0.98609446, -1.78763987],
+                atol=1e-5,
+            )
+        )
+        assert g16_pbc_1d.additional_opt_options_in_route is None
+        assert g16_pbc_1d.additional_route_parameters is None
+        assert g16_pbc_1d.job_type == "sp"
+        assert g16_pbc_1d.modredundant is None
+        assert g16_pbc_1d.functional == "pbepbe"
+        assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
 
 
 class TestGaussian16Output:

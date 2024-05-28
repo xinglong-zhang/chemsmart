@@ -6,6 +6,8 @@ class PeriodicTable:
 
     def to_element(self, element_str):
         """Function to convert lower case element to element with proper caps in periodic table."""
+        # if element_str.upper() == "TV":
+        #     pass
         return (
             element_str.upper()
             if len(element_str) == 1
@@ -16,6 +18,8 @@ class PeriodicTable:
         return sorted(list_of_elements, key=lambda x: self.PERIODIC_TABLE.index(x))
 
     def to_atomic_number(self, symbol):
+        # if symbol.upper() == 'TV':
+        #     pass
         return self.PERIODIC_TABLE.index(symbol)
 
     def to_symbol(self, atomic_number):

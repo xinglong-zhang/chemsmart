@@ -22,6 +22,7 @@ class Molecule:
         Can be a string formula, a list of symbols or a list of
         Atom objects.  Examples: 'H2O', 'COPt12', ['H', 'H', 'O'],
         [Atom('Ne', (x, y, z)), ...].
+    constaint: list of constraints to freeze atoms in the molecule.
     """
 
     def __init__(
@@ -32,6 +33,7 @@ class Molecule:
         multiplicity=None,
         constraint=None,
         pbc_conditions=None,
+        translation_vectors=None,
         energy=None,
         forces=None,
         velocities=None,
@@ -42,6 +44,8 @@ class Molecule:
         self.charge = charge
         self.multiplicity = multiplicity
         self.constraint = constraint
+        self.pbc_conditions = pbc_conditions
+        self.translation_vectors = translation_vectors
         self.energy = energy
         self.forces = forces
         self.velocities = velocities
@@ -63,10 +67,13 @@ class Molecule:
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
-        from chemsmart.utils.utils import CoordinateBlock
-
         c = CoordinateBlock(coordinate_block=coordinate_block)
-        return cls(symbols=c.symbols, positions=c.positions)
+        return cls(
+            symbols=c.symbols,
+            positions=c.positions,
+            constraint=c.constrained_atoms,
+            translation_vectors=c.translation_vectors,
+        )
 
     @classmethod
     def from_symbols_and_positions_and_pbc_conditions(
@@ -330,6 +337,11 @@ class CoordinateBlock:
         return self._get_positions()
 
     @property
+    def translation_vectors(self):
+        """Return a list of translation vectors for systems with pbc."""
+        return self._get_translation_vectors()
+
+    @property
     def symbols(self) -> Symbols:
         """Returns a Symbols object."""
         return Symbols.fromsymbols(symbols=self.chemical_symbols)
@@ -338,6 +350,10 @@ class CoordinateBlock:
     def molecule(self) -> Molecule:
         """Returns a molecule object."""
         return self.convert_coordinate_block_list_to_molecule()
+
+    @property
+    def constrained_atoms(self):
+        return self._get_constraints()
 
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
@@ -360,6 +376,11 @@ class CoordinateBlock:
             ):  # skip lines that do not contain coordinates
                 continue
 
+            if (
+                line_elements[0].upper() == "TV"
+            ):  # cases where PBC system occurs in Gaussian
+                continue
+
             try:
                 atomic_number = int(line_elements[0])
                 chemical_symbol = p.to_symbol(atomic_number=atomic_number)
@@ -371,6 +392,8 @@ class CoordinateBlock:
     def _get_positions(self):
         positions = []
         for line in self.coordinate_block:
+            if line.startswith("TV"):  # cases where PBC system occurs in Gaussian
+                continue
             line_elements = line.split()
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
@@ -402,6 +425,48 @@ class CoordinateBlock:
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
         return np.array(positions)
+
+    def _get_constraints(self):
+        """Obtain a list of contraints on the atoms in a molecule."""
+        constrained_atoms = []
+        for line in self.coordinate_block:
+            line_elements = line.split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+
+            try:
+                atomic_number = int(line_elements[0])
+            except ValueError:
+                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+
+            second_value = float(line_elements[1])
+            if np.isclose(atomic_number, second_value, atol=10e-6):
+                continue
+            elif second_value == -1 or second_value == 0:
+                # this is the case in frozen coordinates e.g.,
+                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
+                # then append these values
+                constrained_atoms.append(int(second_value))
+        return constrained_atoms
+
+    def _get_translation_vectors(self):
+        tvs = []
+        for line in self.coordinate_block:
+            if line.startswith("TV"):  # cases where PBC system occurs in Gaussian
+                line_elements = line.split()
+                if len(line_elements) == 4:
+                    x_coordinate = float(line_elements[1])
+                    y_coordinate = float(line_elements[2])
+                    z_coordinate = float(line_elements[3])
+                else:
+                    x_coordinate = float(line_elements[-3])
+                    y_coordinate = float(line_elements[-2])
+                    z_coordinate = float(line_elements[-1])
+                tv = [x_coordinate, y_coordinate, z_coordinate]
+                tvs.append()
+            return tvs
 
 
 class SDFFile(FileMixin):

@@ -12,6 +12,11 @@ class Gaussian16Input(FileMixin):
         except TypeError as err:
             print(err)
 
+        from chemsmart.io.molecules.structure import CoordinateBlock
+
+        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
+        self.cb = cb
+
     @property
     def num_content_blocks(self):
         return len(content_blocks_by_paragraph(string_list=self.contents))
@@ -47,6 +52,10 @@ class Gaussian16Input(FileMixin):
             if len(line_elements) == 4 and line_elements[0].upper() == "TV":
                 return True
         return False
+
+    @property
+    def translation_vectors(self):
+        return self.cb.translation_vectors
 
     @property
     def chk(self):
@@ -128,10 +137,15 @@ class Gaussian16Input(FileMixin):
 
     @property
     def molecule(self):
-        from chemsmart.io.molecules.structure import CoordinateBlock
+        return self.cb.molecule
 
-        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
-        return cb.molecule
+    @property
+    def constrained_atoms(self):
+        self.cb.constrained_atoms
+
+    @constrained_atoms.setter
+    def constrained_atoms(self, value):
+        self.cb.constrained_atoms = value
 
     def _get_chk(self):
         for line in self.contents:
