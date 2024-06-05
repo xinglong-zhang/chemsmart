@@ -42,7 +42,7 @@ class TestGaussian16Input:
         assert g16_input.job_type == "opt"
         assert g16_input.functional == "m062x"
         assert g16_input.basis == "def2svp"
-        assert g16_input.molecule.constraint is None
+        assert g16_input.molecule.frozen_atoms is None
 
     def test_read_frozen_coords(self, gaussian_frozen_opt_inputfile):
         assert os.path.exists(gaussian_frozen_opt_inputfile)

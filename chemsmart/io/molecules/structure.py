@@ -16,13 +16,15 @@ class Molecule:
     """Class to represent a molcular structure.
 
     Parameters:
-
     symbols: follows from :class:`ase.symbols.Symbols`
         str (formula) or list of str
         Can be a string formula, a list of symbols or a list of
         Atom objects.  Examples: 'H2O', 'COPt12', ['H', 'H', 'O'],
         [Atom('Ne', (x, y, z)), ...].
-    constaint: list of constraints to freeze atoms in the molecule.
+    frozen_atoms: list of integers to freeze atoms in the molecule.
+        Follows Gaussian input file format where -1 denotes frozen atoms
+        and 0 denotes relaxed atoms.
+
     """
 
     def __init__(
@@ -31,7 +33,7 @@ class Molecule:
         positions=None,
         charge=None,
         multiplicity=None,
-        constraint=None,
+        frozen_atoms=None,
         pbc_conditions=None,
         translation_vectors=None,
         energy=None,
@@ -43,7 +45,7 @@ class Molecule:
         self.positions = positions
         self.charge = charge
         self.multiplicity = multiplicity
-        self.constraint = constraint
+        self.frozen_atoms = frozen_atoms
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self.energy = energy
@@ -71,7 +73,7 @@ class Molecule:
         return cls(
             symbols=c.symbols,
             positions=c.positions,
-            constraint=c.constrained_atoms,
+            frozen_atoms=c.constrained_atoms,
             translation_vectors=c.translation_vectors,
         )
 
@@ -427,7 +429,9 @@ class CoordinateBlock:
         return np.array(positions)
 
     def _get_constraints(self):
-        """Obtain a list of contraints on the atoms in a molecule."""
+        """Obtain a list of contraints on the atoms in a molecule.
+        This returns a list of integers of value that is either -1 (frozen)
+        or 0 (relaxed)."""
         constrained_atoms = []
         for line in self.coordinate_block:
             line_elements = line.split()
