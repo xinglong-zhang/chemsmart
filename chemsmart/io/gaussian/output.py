@@ -1,18 +1,36 @@
 import re
+import logging
 from itertools import islice
 from functools import cached_property
 from chemsmart.utils.mixins import FileMixin
 
+logger = logging.getLogger(__name__)
 
 # patterns for searching
 eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
+float_pattern = r"[-]?\d*\.\d+|\d+"
 
 
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename
+
+    @property
+    def normal_termination(self):
+        """Check for termination of gaussian file by checking the last line of the output file."""
+        contents = self.contents
+        if len(contents) == 0:
+            return False
+
+        last_line = contents[-1]
+        if "Normal termination of Gaussian" in last_line:
+            logger.info(f"File {self.filename} terminated normally.")
+            return True
+
+        logger.info(f"File {self.filename} has error termination.")
+        return False
 
     @cached_property
     def tddft_transitions(self):
@@ -107,3 +125,140 @@ class Gaussian16Output(FileMixin):
                 contribution_coefficients.append(each_state_contribution_coefficients)
 
         return transitions, contribution_coefficients
+
+    @cached_property
+    def alpha_occ_eigenvalues(self):
+        """Obtain all eigenenergies of the alpha occuplied orbitals."""
+        alpha_occ_eigenvalues = []
+
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Alpha  occ. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+            return last_block_values
+
+    @cached_property
+    def alpha_virtual_eigenvalues(self):
+        """Obtain all eigenenergies of the alpha unoccuplied orbitals."""
+
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Alpha virt. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            # print(len(eigenvalue_blocks))  # number of eigenvalue blocks in the file
+
+            return last_block_values
+
+    @cached_property
+    def beta_occ_eigenvalues(self):
+        """Obtain all eigenenergies of the beta occuplied orbitals."""
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Beta  occ. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            return last_block_values
+
+    @cached_property
+    def beta_virtual_eigenvalues(self):
+        """Obtain all eigenenergies of the beta unoccuplied orbitals."""
+
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Beta virt. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            return last_block_values

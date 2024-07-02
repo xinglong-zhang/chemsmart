@@ -64,6 +64,28 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
     return gaussian_scan_inputfile
 
 
+# Gaussian output files
+@pytest.fixture()
+def gaussian_outputs_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "outputs")
+
+
+@pytest.fixture()
+def gaussian_singlet_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_singlet_opt_output = os.path.join(
+        gaussian_outputs_test_directory, "nhc_neutral_singlet.log"
+    )
+    return gaussian_singlet_opt_output
+
+
+@pytest.fixture()
+def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_quintet_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "iron_neutral_quintet.log"
+    )
+    return gaussian_quintet_opt_outfile
+
+
 # Gaussian pbc input files
 @pytest.fixture()
 def gaussian_pbc_test_directory(gaussian_test_directory):

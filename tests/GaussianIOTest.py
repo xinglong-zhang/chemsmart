@@ -219,6 +219,36 @@ class TestGaussian16Output:
             0.17825,
         ]
 
+    def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
+        assert os.path.exists(gaussian_singlet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.tddft_transitions == []  # no tddft calcs
+        assert len(g16_output.alpha_occ_eigenvalues) == 116
+        assert g16_output.alpha_occ_eigenvalues[0] == -25.29096
+        assert g16_output.alpha_occ_eigenvalues[-1] == -0.29814
+        assert len(g16_output.alpha_virtual_eigenvalues) == 378
+        assert g16_output.alpha_virtual_eigenvalues[0] == -0.02917
+        assert g16_output.alpha_virtual_eigenvalues[-1] == 56.20437
+        assert g16_output.beta_occ_eigenvalues is None
+        assert g16_output.beta_virtual_eigenvalues is None
+
+    def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
+        assert os.path.exists(gaussian_quintet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        assert g16_output.tddft_transitions == []  # no tddft calcs
+        assert len(g16_output.alpha_occ_eigenvalues) == 216
+        assert g16_output.alpha_occ_eigenvalues[0] == -482.71572
+        assert g16_output.alpha_occ_eigenvalues[-1] == -0.18764
+        assert len(g16_output.alpha_virtual_eigenvalues) == 749
+        assert g16_output.alpha_virtual_eigenvalues[0] == -0.03881
+        assert g16_output.alpha_virtual_eigenvalues[-1] == 4.23318
+        assert len(g16_output.beta_occ_eigenvalues) == 212
+        assert g16_output.beta_occ_eigenvalues[0] == -482.71538
+        assert g16_output.beta_occ_eigenvalues[-1] == -0.19564
+        assert len(g16_output.beta_virtual_eigenvalues) == 753
+        assert g16_output.beta_virtual_eigenvalues[0] == -0.06116
+        assert g16_output.beta_virtual_eigenvalues[-1] == 4.23626
+
 
 class TestGaussianCubeFile:
     def test_read_file_content(self, spin_cube_file):
