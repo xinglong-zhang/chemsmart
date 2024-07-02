@@ -79,6 +79,14 @@ def gaussian_singlet_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_triplet_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_triplet_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "iron_neutral_triplet.log"
+    )
+    return gaussian_triplet_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
     gaussian_quintet_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "iron_neutral_quintet.log"

@@ -32,6 +32,130 @@ class Gaussian16Output(FileMixin):
         logger.info(f"File {self.filename} has error termination.")
         return False
 
+    @property
+    def num_atoms(self):
+        """Number of atoms in the molecule."""
+        for line in self.contents:
+            if line.startswith("NAtoms="):
+                return int(line.split()[1])
+
+    @property
+    def charge(self):
+        for line in self.contents:
+            if "Charge" in line and "Multiplicity" in line:
+                line_elem = line.split()
+                return int(line_elem[2])
+
+    @property
+    def multiplicity(self):
+        for line in self.contents:
+            if "Charge" in line and "Multiplicity" in line:
+                line_elem = line.split()
+                return int(line_elem[-1])
+
+    @property
+    def spin(self):
+        """Spin restricted vs spin unrestricted calculations."""
+        for line in self.contents:
+            if "SCF Done:" in line:
+                line_elem = line.split("E(")
+                theory = line_elem[1].split(")")[0].lower()
+                # determine if the job is restricted or unrestricted
+                if theory.startswith("r"):
+                    spin = "restricted"
+                elif theory.startswith("u"):
+                    spin = "unrestricted"
+                else:
+                    spin = None
+                return spin
+
+    @property
+    def num_basis_functions(self):
+        for line in self.contents:
+            if "basis functions," in line:
+                line_elem = line.split(",")
+                num_basis_functions = line_elem[0].strip().split()[0]
+                return int(num_basis_functions)
+        return None
+
+    @property
+    def num_primitive_gaussians(self):
+        for line in self.contents:
+            if "primitive gaussians," in line:
+                line_elem = line.split(",")
+                primitives = line_elem[1].strip().split()[0]
+                return int(primitives)
+        return None
+
+    @property
+    def num_cartesian_basis_functions(self):
+        for line in self.contents:
+            if (
+                "cartesian basis functions" in line
+                and "basis functions," in line
+                and "primitive gaussians," in line
+            ):
+                line_elem = line.split(",")
+                num_cartesian_basis_functions = line_elem[2].strip().split()[0]
+                return int(num_cartesian_basis_functions)
+        return None
+
+    # Below gives computing time/resources used
+    @property
+    def cpu_runtime_by_jobs_core_hours(self):
+        cpu_runtime = []
+        for line in self.contents:
+            if line.startswith("Job cpu time:"):
+                n_days = float(line.split("days")[0].strip().split()[-1])
+                n_hours = float(line.split("hours")[0].strip().split()[-1])
+                n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                n_seconds = float(line.split("seconds")[0].strip().split()[-1])
+                total_seconds = (
+                    n_days * 24 * 60 * 60
+                    + n_hours * 60 * 60
+                    + n_minutes * 60
+                    + n_seconds
+                )
+                total_hours = round(total_seconds / 3600, 4)  # round to 1 nearest hour
+                cpu_runtime.append(total_hours)
+        return cpu_runtime
+
+    @property
+    def service_units_by_jobs(self):
+        """SUs defined as the JOB CPU time in hours."""
+        return self.cpu_runtime_by_jobs_core_hours
+
+    @property
+    def total_core_hours(self):
+        return round(sum(self.cpu_runtime_by_jobs_core_hours), 4)
+
+    @property
+    def total_service_unit(self):
+        return self.total_core_hours
+
+    @property
+    def elapsed_walltime_by_jobs(self):
+        elapsed_walltime = []
+        for line in self.contents:
+            if line.startswith("Elapsed time:"):
+                n_days = float(line.split("days")[0].strip().split()[-1])
+                n_hours = float(line.split("hours")[0].strip().split()[-1])
+                n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                n_seconds = float(line.split("seconds")[0].strip().split()[-1])
+                total_seconds = (
+                    n_days * 24 * 60 * 60
+                    + n_hours * 60 * 60
+                    + n_minutes * 60
+                    + n_seconds
+                )
+                total_hours = round(total_seconds / 3600, 4)
+                elapsed_walltime.append(total_hours)
+        return elapsed_walltime
+
+    @property
+    def total_elapsed_walltime(self):
+        return round(sum(self.elapsed_walltime_by_jobs), 4)
+
     @cached_property
     def tddft_transitions(self):
         """
@@ -262,3 +386,49 @@ class Gaussian16Output(FileMixin):
                 last_block_values.extend(map(float, values))
 
             return last_block_values
+
+    @cached_property
+    def homo_energy(self):
+        if self.multiplicity == 1:
+            assert (
+                self.beta_occ_eigenvalues is None
+                and self.beta_virtual_eigenvalues is None
+            )
+            return self.alpha_occ_eigenvalues[-1]
+
+    @cached_property
+    def num_unpaired_electrons(self):
+        if self.multiplicity != 1:
+            # the multiplicity is the number of unpaired electrons + 1
+            assert (
+                len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues) + 1
+                == self.multiplicity
+            )
+            return len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues)
+
+    @cached_property
+    def somo_energy(self):
+        if self.multiplicity != 1:
+            # the multiplicity is the number of unpaired electrons + 1
+            assert (
+                len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues) + 1
+                == self.multiplicity
+            )
+            return self.alpha_occ_eigenvalues[-1]
+
+    @cached_property
+    def lumo_energy(self):
+        if self.multiplicity == 1:
+            assert (
+                self.beta_occ_eigenvalues is None
+                and self.beta_virtual_eigenvalues is None
+            )
+            return self.alpha_virtual_eigenvalues[0]
+
+    @cached_property
+    def fmo_gap(self):
+        if self.multiplicity == 1:
+            return self.homo_energy - self.lumo_energy
+        else:
+            # to implement for radical systems
+            pass

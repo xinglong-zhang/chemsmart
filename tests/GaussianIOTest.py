@@ -222,6 +222,7 @@ class TestGaussian16Output:
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.normal_termination
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116
         assert g16_output.alpha_occ_eigenvalues[0] == -25.29096
@@ -231,6 +232,29 @@ class TestGaussian16Output:
         assert g16_output.alpha_virtual_eigenvalues[-1] == 56.20437
         assert g16_output.beta_occ_eigenvalues is None
         assert g16_output.beta_virtual_eigenvalues is None
+        assert g16_output.homo_energy == -0.29814
+        assert g16_output.lumo_energy == -0.02917
+
+    def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
+        assert os.path.exists(gaussian_triplet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_triplet_opt_outfile)
+        assert g16_output.normal_termination
+        assert g16_output.tddft_transitions == []  # no tddft calcs
+        assert len(g16_output.alpha_occ_eigenvalues) == 215
+        assert g16_output.alpha_occ_eigenvalues[0] == -482.71377
+        assert g16_output.alpha_occ_eigenvalues[-1] == -0.15673
+        assert len(g16_output.alpha_virtual_eigenvalues) == 750
+        assert g16_output.alpha_virtual_eigenvalues[0] == -0.07423
+        assert g16_output.alpha_virtual_eigenvalues[-1] == 4.23682
+        assert len(g16_output.beta_occ_eigenvalues) == 213
+        assert g16_output.beta_occ_eigenvalues[0] == -482.71362
+        assert g16_output.beta_occ_eigenvalues[-1] == -0.18923
+        assert len(g16_output.beta_virtual_eigenvalues) == 752
+        assert g16_output.beta_virtual_eigenvalues[0] == -0.05025
+        assert g16_output.beta_virtual_eigenvalues[-1] == 4.26643
+        assert g16_output.homo_energy is None
+        assert g16_output.lumo_energy is None
+        assert g16_output.somo_energy == -0.15673
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -248,6 +272,8 @@ class TestGaussian16Output:
         assert len(g16_output.beta_virtual_eigenvalues) == 753
         assert g16_output.beta_virtual_eigenvalues[0] == -0.06116
         assert g16_output.beta_virtual_eigenvalues[-1] == 4.23626
+        assert g16_output.somo_energy == -0.18764
+        print(g16_output.fmo_gap)
 
 
 class TestGaussianCubeFile:
