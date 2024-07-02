@@ -1,7 +1,9 @@
 import os
+import sys
 import time
 import hashlib
 import copy
+import logging
 from functools import lru_cache, wraps
 from itertools import groupby
 
@@ -131,3 +133,43 @@ def get_list_from_string_range(string_of_range):
         else:
             indices.append(int(s))
     return indices
+
+def create_logger(debug=True, folder='.', logfile=None, errfile=None, stream=True, disable=None):
+    if disable is None:
+        disable = []
+
+    for module in disable:
+        logging.getLogger(module).disabled = True
+
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    logger = logging.getLogger()
+
+    # Stream
+    level = logging.INFO
+    if debug:
+        level = logging.DEBUG
+
+    logger.setLevel(level)
+    logger.handlers = []
+
+    # Stream errors always
+    err_stream_handler = logging.StreamHandler(stream=sys.stderr)
+    err_stream_handler.setLevel(logging.ERROR)
+    logger.addHandler(err_stream_handler)
+
+    # Stream other info only if required
+    if stream:
+        stream_handler = logging.StreamHandler(stream=sys.stdout)
+        logger.addHandler(stream_handler)
+
+    # logfile
+    if logfile is not None:
+        infofile_handler = logging.FileHandler(filename=os.path.join(folder, logfile))
+        infofile_handler.setLevel(level)
+        logger.addHandler(infofile_handler)
+
+    # errfile
+    if errfile is not None:
+        errfile_handler = logging.FileHandler(filename=os.path.join(folder, errfile))
+        errfile_handler.setLevel(logging.WARNING)
+        logger.addHandler(errfile_handler)
