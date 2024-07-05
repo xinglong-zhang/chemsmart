@@ -134,14 +134,17 @@ def get_list_from_string_range(string_of_range):
             indices.append(int(s))
     return indices
 
-def create_logger(debug=True, folder='.', logfile=None, errfile=None, stream=True, disable=None):
+
+def create_logger(
+    debug=True, folder=".", logfile=None, errfile=None, stream=True, disable=None
+):
     if disable is None:
         disable = []
 
     for module in disable:
         logging.getLogger(module).disabled = True
 
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logger = logging.getLogger()
 
     # Stream
