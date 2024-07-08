@@ -148,9 +148,8 @@ def esp_cube_file(cube_test_directory):
 ############ Orca Fixtures ##################
 # master orca test directory
 @pytest.fixture()
-def orca_test_directory():
-    orca_test_directory = "data/OrcaTest"
-    return os.path.abspath(orca_test_directory)
+def orca_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "ORCATests")
 
 
 # orca input files path and associated files

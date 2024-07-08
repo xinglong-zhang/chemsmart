@@ -1,5 +1,6 @@
 import os
 from functools import cached_property
+from chemsmart.io.orca.route import ORCARoute
 
 
 class FileMixin:
@@ -32,7 +33,7 @@ class FileMixin:
             return f.read()
 
 
-class ORCAFileMixin(FileMixin):
+class ORCAFileMixin:
     """Mixin class for ORCA files."""
 
     @cached_property

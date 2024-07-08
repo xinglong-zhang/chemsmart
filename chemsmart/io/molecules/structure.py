@@ -63,6 +63,11 @@ class Molecule:
         if self.symbols is not None:
             return list(self.symbols)
 
+    @property
+    def natoms(self):
+        """Return the number of atoms in the molecule."""
+        return len(self.chemical_symbols)
+
     def get_chemical_formula(self, mode, empirical):
         if self.symbols is not None:
             return self.symbols.get_chemical_formula(mode="hill", empirical=False)

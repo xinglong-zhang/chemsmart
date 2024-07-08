@@ -1,25 +1,26 @@
-from functools import cached_property
-from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.utils import content_blocks_by_paragraph
-from chemsmart.io.orca.route import ORCARoute
-from chemsmart.utils.mixins import ORCAFileMixin
-
-
 import logging
+import re
 
 import numpy as np
 
-from chemsmart.io.molecules.structure import Molecule
-from pyatoms.io.orca.utils import ORCAFile
-from pyatoms.utils.periodictable import to_element
-from pyatoms.utils.utils import is_float
+from functools import cached_property
+from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
+from chemsmart.utils.utils import content_blocks_by_paragraph
+from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.molecules.structure import Molecule, CoordinateBlock
+from chemsmart.utils.repattern import coord_pattern
+
+# from pyatoms.io.orca.utils import ORCAFile
+# from pyatoms.utils.periodictable import to_element
+# from pyatoms.utils.utils import is_float
 
 logger = logging.getLogger(__name__)
 
 
-class ORCAInput(ORCAFile, ORCAFileMixin):
-    def __init__(self, inpfile):
-        super().__init__(filename=inpfile)
+class ORCAInput(FileMixin, ORCAFileMixin):
+    def __init__(self, filename):
+        self.filename = filename
+        self.coordinate_block = CoordinateBlock(coordinate_block=self.coordinate_lines)
 
     @property
     def route_string(self):
@@ -59,16 +60,10 @@ class ORCAInput(ORCAFile, ORCAFileMixin):
 
     @property
     def coordinate_lines(self):
+        pattern = re.compile(coord_pattern)
         coordinate_lines = []
         for line in self.contents:
-            line_elem = line.split()
-            if (
-                len(line_elem) == 4
-                and line_elem[0].isalpha()
-                and is_float(line_elem[1])
-                and is_float(line_elem[2])
-                and is_float(line_elem[3])
-            ):
+            if pattern.match(line):
                 coordinate_lines.append(line)
         return coordinate_lines
 

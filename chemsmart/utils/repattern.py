@@ -1,0 +1,5 @@
+eV_pattern = r"([\d\.]+) eV"
+nm_pattern = r"([\d\.]+) nm"
+f_pattern = r"f=([\d\.]+)"
+float_pattern = r"[-]?\d*\.\d+|\d+"
+coord_pattern = r"^\s*[A-Z][a-z]?\s+-?\d+\.\d+\s+-?\d+\.\d+\s+-?\d+\.\d+\s*$"

@@ -29,6 +29,7 @@ class TestGaussian16Input:
         ]  # list of chemical symbols
         assert isinstance(g16_input.molecule.symbols, Symbols)
         assert g16_input.molecule.symbols.formula == "C6H4COHCl"
+        assert g16_input.molecule.natoms == 14
         assert g16_input.molecule.empirical_formula == "C7H5ClO"
         assert all(
             np.isclose(

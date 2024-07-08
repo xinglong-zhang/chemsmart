@@ -1,4 +1,5 @@
 import math
+import os
 import numpy as np
 import pytest
 
@@ -7,8 +8,9 @@ import pytest
 # from pyatoms.io.orca.inputs import ORCAInput
 # from pyatoms.io.orca.outputs import ORCAEngradFile, ORCAOutput
 # from pyatoms.io.orca.route import ORCARoute
-
+from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.orca.inputs import ORCAInput
 
 
 
@@ -102,7 +104,8 @@ class TestORCABasis:
 
 class TestORCAInput:
     def test_read_water_sp_input(self, water_sp_input_path):
-        orca_inp = ORCAInput(inpfile=water_sp_input_path)
+        assert os.path.exists(water_sp_input_path)
+        orca_inp = ORCAInput(filename=water_sp_input_path)
         assert orca_inp.route_string == "! hf def2-svp"
         assert orca_inp.route_keywords == ["hf", "def2-svp"]
         assert orca_inp.functional is None
@@ -112,6 +115,7 @@ class TestORCAInput:
         assert orca_inp.charge == 0
         assert orca_inp.multiplicity == 1
         assert orca_inp.natoms == 3
+        print(orca_inp.coordinate_lines)
         assert orca_inp.list_of_symbols == ["O", "H", "H"]
         assert isinstance(orca_inp.atoms, AtomsWrapper)
         assert all(orca_inp.atoms.symbols == ["O", "H", "H"])
@@ -143,7 +147,7 @@ class TestORCAInput:
         assert orca_inp.solvent_id == "water"
 
     def test_orca_faulty_solvent(self, orca_faulty_solv):
-        orca_inp = ORCAInput(inpfile=orca_faulty_solv)
+        orca_inp = ORCAInput(filename=orca_faulty_solv)
         assert orca_inp.functional == "b3lyp"
         assert orca_inp.basis == "6-311++g(2d,2p)"
         assert orca_inp.aux_basis == "def2/jk"
