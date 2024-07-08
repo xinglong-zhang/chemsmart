@@ -1,6 +1,6 @@
 import logging
 
-from pyatoms.io.orca import (
+from chemsmart.io.orca import (
     ORCA_ALL_AB_INITIO,
     ORCA_ALL_AUXILIARY_BASIS_SETS,
     ORCA_ALL_BASIS_SETS,

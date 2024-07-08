@@ -1,0 +1,26 @@
+# Default ORCA settings for calculations 
+ab_initio: Null
+functional: Null  # default value; will get updated by project settings
+basis : Null  # default value; will get updated by project settings
+aux_basis: Null
+extrapolation_basis: Null
+defgrid: Null  # 'DEFGRID2' by default when Null
+scf_maxiter: NNull
+scf_convergence: Null 
+charge : Null  # default value; will get updated by user at runtime
+multiplicity : Null  # default value; will get updated by user at runtime
+gbw: True
+job_type: Null
+freq: True
+numfreq: False
+solvent_model : Null  # default value
+solvent_id : Null  # default value
+additional_route_parameters : Null
+route_to_be_written : Null  # user-defined route
+modred: Null
+gen_genecp: Null
+heavy_elements: Null
+heavy_elements_basis: Null
+light_elements_basis: Null
+custom_solvent: Null
+forces : False

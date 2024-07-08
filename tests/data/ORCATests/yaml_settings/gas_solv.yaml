@@ -1,0 +1,12 @@
+# Default ORCA settings for calculations 
+gas:
+  functional: m062x  # quotes required for string with spaces
+  basis: def2-svp
+  defgrid: DEFGRID3
+solv: 
+  functional: m062x
+  basis: def2-tzvp
+  defgrid: DEFGRID3
+  freq: False
+  solvent_model: smd
+  solvent_id: cyclohexane

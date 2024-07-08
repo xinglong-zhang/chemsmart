@@ -1,8 +1,15 @@
+from functools import cached_property
+from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.utils import content_blocks_by_paragraph
+from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.mixins import ORCAFileMixin
+
+
 import logging
 
 import numpy as np
 
-from pyatoms.io.ase.atoms import AtomsWrapper
+from chemsmart.io.molecules.structure import Molecule
 from pyatoms.io.orca.utils import ORCAFile
 from pyatoms.utils.periodictable import to_element
 from pyatoms.utils.utils import is_float
@@ -10,7 +17,7 @@ from pyatoms.utils.utils import is_float
 logger = logging.getLogger(__name__)
 
 
-class ORCAInput(ORCAFile):
+class ORCAInput(ORCAFile, ORCAFileMixin):
     def __init__(self, inpfile):
         super().__init__(filename=inpfile)
 

@@ -143,3 +143,125 @@ def spin_cube_file(cube_test_directory):
 def esp_cube_file(cube_test_directory):
     esp_cube_file = os.path.join(cube_test_directory, "n2_esp.cube")
     return esp_cube_file
+
+
+############ Orca Fixtures ##################
+# master orca test directory
+@pytest.fixture()
+def orca_test_directory():
+    orca_test_directory = "data/OrcaTest"
+    return os.path.abspath(orca_test_directory)
+
+
+# orca input files path and associated files
+@pytest.fixture()
+def inpfile_path(orca_test_directory):
+    test_inpfile_path = os.path.join(orca_test_directory, "orca_inputs")
+    return os.path.abspath(test_inpfile_path)
+
+
+# specific input files
+@pytest.fixture()
+def water_sp_input_path(inpfile_path):
+    return os.path.join(inpfile_path, "water_sp.inp")
+
+
+@pytest.fixture()
+def water_opt_input_path(inpfile_path):
+    return os.path.join(inpfile_path, "water_opt.inp")
+
+
+@pytest.fixture()
+def sdf_file(test_data_directory):
+    return os.path.join(test_data_directory, "AtomsWrapperTest", "structure.sdf")
+
+
+# orca input files path and associated files
+@pytest.fixture()
+def orca_inputs_directory(orca_test_directory):
+    orca_inputs_directory = os.path.join(orca_test_directory, "orca_inputs")
+    return os.path.abspath(orca_inputs_directory)
+
+
+@pytest.fixture()
+def orca_dias_directory(orca_test_directory):
+    orca_dias_directory = os.path.join(orca_test_directory, "orca_dias")
+    return os.path.abspath(orca_dias_directory)
+
+
+@pytest.fixture()
+def water_sp_gas_input_path(orca_inputs_directory):
+    return os.path.join(orca_inputs_directory, "water_dlpno_ccsdt_sp.inp")
+
+
+@pytest.fixture()
+def water_sp_solv_input_path(orca_inputs_directory):
+    return os.path.join(orca_inputs_directory, "water_dlpno_ccsdt_sp_solv.inp")
+
+
+@pytest.fixture()
+def orca_epr_solv(orca_inputs_directory):
+    return os.path.join(orca_inputs_directory, "ORCA_Test_0829.inp")
+
+
+@pytest.fixture()
+def orca_faulty_solv(orca_inputs_directory):
+    return os.path.join(orca_inputs_directory, "faulty_solv.inp")
+
+
+@pytest.fixture()
+def orca_outputs_directory(orca_test_directory):
+    orca_outputs_directory = os.path.join(orca_test_directory, "orca_outputs")
+    return os.path.abspath(orca_outputs_directory)
+
+
+@pytest.fixture()
+def water_sp_gas_path(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "water_dlpno_ccsdt_sp.out")
+
+
+@pytest.fixture()
+def water_sp_solv_path(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "water_dlpno_ccsdt_sp_solv.out")
+
+
+@pytest.fixture()
+def water_output_gas_path(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "water_opt.out")
+
+
+@pytest.fixture()
+def water_engrad_path(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "water_opt.engrad")
+
+
+@pytest.fixture()
+def orca_errors_directory(orca_test_directory):
+    orca_errors_directory = os.path.join(orca_test_directory, "orca_error_files")
+    return os.path.abspath(orca_errors_directory)
+
+
+@pytest.fixture()
+def gtoint_errfile(orca_errors_directory):
+    return os.path.join(orca_errors_directory, "GTOInt_error.out")
+
+
+# orca yaml files
+@pytest.fixture()
+def orca_yaml_settings_directory(orca_test_directory):
+    return os.path.join(orca_test_directory, "yaml_settings")
+
+
+@pytest.fixture()
+def orca_yaml_settings_defaults(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "defaults.yaml")
+
+
+@pytest.fixture()
+def orca_yaml_settings_gas_solv(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "gas_solv.yaml")
+
+
+@pytest.fixture()
+def orca_yaml_settings_solv(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "solv.yaml")
