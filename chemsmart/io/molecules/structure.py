@@ -492,10 +492,7 @@ class SDFFile(FileMixin):
         list_of_symbols = []
         cart_coords = []
         # sdf line pattern containing coordinates and element type
-        sdf_pattern = (
-            r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
-            r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
-        )
+        from chemsmart.utils.repattern import sdf_pattern
 
         for line in self.contents:
             match = re.match(sdf_pattern, line)

@@ -3,15 +3,9 @@ import logging
 from itertools import islice
 from functools import cached_property
 from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.repattern import eV_pattern, nm_pattern, f_pattern, float_pattern
 
 logger = logging.getLogger(__name__)
-
-# patterns for searching
-eV_pattern = r"([\d\.]+) eV"
-nm_pattern = r"([\d\.]+) nm"
-f_pattern = r"f=([\d\.]+)"
-float_pattern = r"[-]?\d*\.\d+|\d+"
-
 
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
