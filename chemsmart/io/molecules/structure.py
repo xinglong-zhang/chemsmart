@@ -397,41 +397,8 @@ class CoordinateBlock:
         return symbols
 
     def _get_positions(self):
-        positions = []
-        for line in self.coordinate_block:
-            if line.startswith("TV"):  # cases where PBC system occurs in Gaussian
-                continue
-            line_elements = line.split()
-            if (
-                len(line_elements) < 4 or len(line_elements) == 0
-            ):  # skip lines that do not contain coordinates
-                continue
-
-            try:
-                atomic_number = int(line_elements[0])
-            except ValueError:
-                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
-
-            second_value = float(line_elements[1])
-            if np.isclose(atomic_number, second_value, atol=10e-6):
-                # happens in cube file, where the second value is the same as the atomic number but in float format
-                x_coordinate = float(line_elements[2])
-                y_coordinate = float(line_elements[3])
-                z_coordinate = float(line_elements[4])
-            elif second_value == -1 or second_value == 0:
-                # this is the case in frozen coordinates e.g.,
-                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                # then ignore second value
-                x_coordinate = float(line_elements[2])
-                y_coordinate = float(line_elements[3])
-                z_coordinate = float(line_elements[4])
-            else:
-                x_coordinate = float(line_elements[1])
-                y_coordinate = float(line_elements[2])
-                z_coordinate = float(line_elements[3])
-            position = [x_coordinate, y_coordinate, z_coordinate]
-            positions.append(position)
-        return np.array(positions)
+        # subclass to implement, as constraints format may be different for ORCA vs for Gaussian
+        raise NotImplementedError
 
     def _get_constraints(self):
         # subclass to implement, as constraints format may be different for ORCA vs for Gaussian
@@ -488,6 +455,43 @@ class SDFFile(FileMixin):
 
 
 class GaussianCoordinateBlock(CoordinateBlock):
+    def _get_positions(self):
+        positions = []
+        for line in self.coordinate_block:
+            if line.startswith("TV"):  # cases where PBC system occurs in Gaussian
+                continue
+            line_elements = line.split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+
+            try:
+                atomic_number = int(line_elements[0])
+            except ValueError:
+                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+
+            second_value = float(line_elements[1])
+            if np.isclose(atomic_number, second_value, atol=10e-6):
+                # happens in cube file, where the second value is the same as the atomic number but in float format
+                x_coordinate = float(line_elements[2])
+                y_coordinate = float(line_elements[3])
+                z_coordinate = float(line_elements[4])
+            elif second_value == -1 or second_value == 0:
+                # this is the case in frozen coordinates e.g.,
+                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
+                # then ignore second value
+                x_coordinate = float(line_elements[2])
+                y_coordinate = float(line_elements[3])
+                z_coordinate = float(line_elements[4])
+            else:
+                x_coordinate = float(line_elements[1])
+                y_coordinate = float(line_elements[2])
+                z_coordinate = float(line_elements[3])
+            position = [x_coordinate, y_coordinate, z_coordinate]
+            positions.append(position)
+        return np.array(positions)
+
     def _get_constraints(self):
         """Obtain a list of contraints on the atoms in a molecule.
         This returns a list of integers of value that is either -1 (frozen)
@@ -517,6 +521,22 @@ class GaussianCoordinateBlock(CoordinateBlock):
 
 
 class ORCACoordinateBlock(CoordinateBlock):
+
+    def _get_positions(self):
+        positions = []
+        for line in self.coordinate_block:
+            line_elements = line.split()
+            try:
+                atomic_number = int(line_elements[0])
+            except ValueError:
+                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+
+            x_coordinate = float(line_elements[1])
+            y_coordinate = float(line_elements[2])
+            z_coordinate = float(line_elements[3])
+            position = [x_coordinate, y_coordinate, z_coordinate]
+            positions.append(position)
+        return np.array(positions)
     def _get_constraints(self):
         # to implement
         pass

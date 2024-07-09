@@ -1,4 +1,5 @@
 import os
+import re
 from functools import cached_property
 from chemsmart.io.orca.route import ORCARoute
 

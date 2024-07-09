@@ -2,15 +2,10 @@ import math
 import os
 import numpy as np
 import pytest
-
-# from pyatoms.io.ase.atoms import AtomsWrapper
-# from pyatoms.io.orca import ORCARefs
-# from pyatoms.io.orca.inputs import ORCAInput
-# from pyatoms.io.orca.outputs import ORCAEngradFile, ORCAOutput
-# from pyatoms.io.orca.route import ORCARoute
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.inputs import ORCAInput
+from chemsmart.io.molecules.structure import Molecule
 
 
 
@@ -114,31 +109,30 @@ class TestORCAInput:
         assert orca_inp.coordinate_type == "xyz"
         assert orca_inp.charge == 0
         assert orca_inp.multiplicity == 1
-        assert orca_inp.natoms == 3
-        print(orca_inp.coordinate_lines)
-        assert orca_inp.list_of_symbols == ["O", "H", "H"]
-        assert isinstance(orca_inp.atoms, AtomsWrapper)
-        assert all(orca_inp.atoms.symbols == ["O", "H", "H"])
-        assert orca_inp.empirical_formula == "H2O"
+        assert orca_inp.molecule.natoms == 3
+        assert orca_inp.molecule.chemical_symbols == ["O", "H", "H"]
+        assert isinstance(orca_inp.molecule, Molecule)
+        assert all(orca_inp.molecule.symbols == ["O", "H", "H"])
+        assert orca_inp.molecule.empirical_formula == "H2O"
         assert orca_inp.scf_maxiter == 500
 
     def test_read_water_opt_input(self, water_opt_input_path):
-        orca_out = ORCAInput(inpfile=water_opt_input_path)
-        route_keywords = orca_out.route_keywords
+        orca_inp = ORCAInput(filename=water_opt_input_path)
+        route_keywords = orca_inp.route_keywords
         assert route_keywords == ["opt", "freq", "m062x", "def2-svp"]
-        assert orca_out.functional == "m062x"
-        assert orca_out.basis == "def2-svp"
-        assert orca_out.coordinate_type == "xyz"
-        assert orca_out.charge == 0
-        assert orca_out.multiplicity == 1
-        assert orca_out.natoms == 3
-        assert orca_out.list_of_symbols == ["O", "H", "H"]
-        assert isinstance(orca_out.atoms, AtomsWrapper)
-        assert all(orca_out.atoms.symbols == ["O", "H", "H"])
-        assert orca_out.empirical_formula == "H2O"
+        assert orca_inp.functional == "m062x"
+        assert orca_inp.basis == "def2-svp"
+        assert orca_inp.coordinate_type == "xyz"
+        assert orca_inp.charge == 0
+        assert orca_inp.multiplicity == 1
+        assert orca_inp.molecule.natoms == 3
+        assert orca_inp.molecule.chemical_symbols == ["O", "H", "H"]
+        assert isinstance(orca_inp.molecule, Molecule)
+        assert all(orca_inp.molecule.symbols == ["O", "H", "H"])
+        assert orca_inp.molecule.empirical_formula == "H2O"
 
     def test_read_solvent(self, orca_epr_solv):
-        orca_inp = ORCAInput(inpfile=orca_epr_solv)
+        orca_inp = ORCAInput(filename=orca_epr_solv)
         assert orca_inp.functional == "b3lyp"
         assert orca_inp.basis == "6-311++g(2d,2p)"
         assert orca_inp.aux_basis == "def2/jk"
