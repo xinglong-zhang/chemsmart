@@ -422,7 +422,7 @@ class Gaussian16Output(FileMixin):
     @cached_property
     def fmo_gap(self):
         if self.multiplicity == 1:
-            return self.homo_energy - self.lumo_energy
+            return self.lumo_energy - self.homo_energy
         else:
             # to implement for radical systems
             pass

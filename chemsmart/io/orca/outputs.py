@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class ORCAOutput(FileMixin, ORCAFileMixin):
     """ORCA output file with .out extension."""
+
     def __init__(self, filename):
         self.filename = filename
 
@@ -649,6 +650,16 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
 
     @property
     def orbital_occupancy(self):
+        _, orbital_occupancy = self._get_orbital_energies_and_occupancy()
+        return orbital_occupancy
+
+    @property
+    def orbital_energies(self):
+        orbital_energies, _ = self._get_orbital_energies_and_occupancy()
+        return orbital_energies
+
+    def _get_orbital_energies_and_occupancy(self):
+        orbital_energies = []
         orbital_occupancy = []
         for i, line_i in enumerate(self.optimized_output_lines):
             if "ORBITAL ENERGIES" in line_i:
@@ -657,23 +668,35 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 4:
-                        occ = float(line_j_elements[1])
-                        orbital_occupancy.append(int(occ))
-        return orbital_occupancy
-
-    @property
-    def orbital_energies(self):
-        orbital_energies = []
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "ORBITAL ENERGIES" in line_i:
-                for line_j in self.optimized_output_lines[i + 4 :]:
-                    if "******************************" in line_j:
-                        break
-                    line_j_elements = line_j.split()
-                    if len(line_j_elements) == 4:
+                        occ = int(float(line_j_elements[1]))
+                        orbital_occupancy.append(occ)
                         energy_in_hartree = float(line_j_elements[2])
                         orbital_energies.append(energy_in_hartree * units.Hartree)
-        return orbital_energies
+        return orbital_energies, orbital_occupancy
+
+    @property
+    def homo_energy(self):
+        # get all filled orbitals
+        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
+        occupied_energies = [energy for energy, occupancy in orbitals if occupancy == 2]
+        # return the highest occupied MO energy
+        return max(occupied_energies)
+
+    @property
+    def lumo_energy(self):
+        # get all empty orbitals
+        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
+        unoccupied_energies = [energy for energy, occupancy in orbitals if occupancy == 0]
+        # return the lowest unoccupied MO energy
+        return min(unoccupied_energies)
+
+    @cached_property
+    def fmo_gap(self):
+        if self.multiplicity == 1:
+            return self.lumo_energy - self.homo_energy
+        else:
+            # to implement for radical systems
+            pass
 
     @property
     def mulliken_atomic_charges(self):
@@ -1505,6 +1528,7 @@ class ORCAEngradFile(FileMixin):
 
     def _get_molecule(self):
         from chemsmart.utils.periodictable import PeriodicTable
+
         p = PeriodicTable()
 
         for i, line in enumerate(self.contents):
@@ -1518,9 +1542,7 @@ class ORCAEngradFile(FileMixin):
                     if content.startswith("#") or len(content) == 0:
                         pass
                     try:
-                        symbol = p.to_symbol(
-                            int(content.split()[0])
-                        )
+                        symbol = p.to_symbol(int(content.split()[0]))
                         symbols.append(symbol)
                         x_coord = (
                             float(content.split()[1]) * units.Bohr

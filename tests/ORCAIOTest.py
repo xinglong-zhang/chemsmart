@@ -284,6 +284,11 @@ class TestORCAOutput:
             ]
         )
         assert np.allclose(orca_out.orbital_energies, orbital_energies, rtol=1e-6)
+        assert orca_out.homo_energy == -10.252651603489042
+        assert orca_out.lumo_energy == 2.419962981919028
+        assert np.isclose(orca_out.fmo_gap, 12.6726145854, rtol=1e-6)
+
+        # test HOMO LUMO
 
         assert orca_out.mulliken_atomic_charges == {
             "O0": -0.32926,

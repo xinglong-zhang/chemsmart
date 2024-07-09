@@ -235,6 +235,7 @@ class TestGaussian16Output:
         assert g16_output.beta_virtual_eigenvalues is None
         assert g16_output.homo_energy == -0.29814
         assert g16_output.lumo_energy == -0.02917
+        assert np.isclose(g16_output.fmo_gap, 0.26897)
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
