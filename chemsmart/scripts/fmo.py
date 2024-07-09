@@ -28,9 +28,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 )
 def entry_point(filename, unit):
     create_logger()
-    if filename.endswith('.log'):
+    if filename.endswith(".log"):
         outputfile = Gaussian16Output(filename=filename)
-    elif filename.endswith('.out'):
+    elif filename.endswith(".out"):
         outputfile = ORCAOutput(filename=filename)
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")

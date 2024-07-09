@@ -7,6 +7,7 @@ from chemsmart.utils.repattern import eV_pattern, nm_pattern, f_pattern, float_p
 
 logger = logging.getLogger(__name__)
 
+
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename

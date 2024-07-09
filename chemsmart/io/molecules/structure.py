@@ -540,6 +540,7 @@ class ORCACoordinateBlock(CoordinateBlock):
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
         return np.array(positions)
+
     def _get_constraints(self):
         # to implement
         pass

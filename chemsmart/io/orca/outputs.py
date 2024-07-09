@@ -678,7 +678,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
     def lumo_energy(self):
         # get all empty orbitals
         orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        unoccupied_energies = [energy for energy, occupancy in orbitals if occupancy == 0]
+        unoccupied_energies = [
+            energy for energy, occupancy in orbitals if occupancy == 0
+        ]
         # return the lowest unoccupied MO energy
         return min(unoccupied_energies)
 

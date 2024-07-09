@@ -9,6 +9,7 @@ class Gaussian16Input(FileMixin):
         self.filename = filename
 
         from chemsmart.io.molecules.structure import GaussianCoordinateBlock
+
         cb = GaussianCoordinateBlock(coordinate_block=self.content_groups[2])
         self.cb = cb
 
