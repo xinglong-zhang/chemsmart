@@ -7,7 +7,7 @@ from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.inputs import ORCAInput
 from chemsmart.io.orca.outputs import ORCAOutput
 from chemsmart.io.molecules.structure import Molecule
-
+from chemsmart.io.orca.outputs import ORCAEngradFile
 
 
 class TestORCARoute:
@@ -672,7 +672,7 @@ class TestORCAOutput:
 
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
-        orca_engrad = ORCAEngradFile(engrad_file=water_engrad_path)
+        orca_engrad = ORCAEngradFile(filename=water_engrad_path)
         assert orca_engrad.natoms == 3
         assert math.isclose(
             orca_engrad.energy, -2076.86288, rel_tol=1e-4
@@ -685,8 +685,8 @@ class TestORCAEngrad:
             ]
         )
         assert np.allclose(orca_engrad.gradient, gradient, rtol=1e-6)
-        assert isinstance(orca_engrad.atoms, AtomsWrapper)
-        assert orca_engrad.atoms.chemical_symbols == ["O", "H", "H"]
+        assert isinstance(orca_engrad.molecule, Molecule)
+        assert orca_engrad.molecule.chemical_symbols == ["O", "H", "H"]
         coordinates = np.array(
             [
                 [-0.0, 0.0, 0.08734059],
@@ -694,4 +694,4 @@ class TestORCAEngrad:
                 [0.75520525, 0.0, -0.50967031],
             ]
         )
-        assert np.allclose(orca_engrad.atoms.positions, coordinates, rtol=1e-6)
+        assert np.allclose(orca_engrad.molecule.positions, coordinates, rtol=1e-6)

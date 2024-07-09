@@ -1455,14 +1455,14 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         )
 
 
-class ORCAEngradFile(ORCAFile):
-    def __init__(self, engrad_file, **kwargs):
-        super().__init__(filename=engrad_file, **kwargs)
+class ORCAEngradFile(FileMixin):
+    def __init__(self, filename):
+        self.filename = filename
         """ Obtain energy and gradient of ORCA calculation"""
         self.natoms = self._get_natoms()
         self.energy = self._get_energy()
         self.gradient = self._get_gradient()
-        self.atoms = self._get_atoms()
+        self.molecule = self._get_molecule()
 
     def _get_natoms(self):
         for i, line in enumerate(self.contents):
@@ -1503,8 +1503,9 @@ class ORCAEngradFile(ORCAFile):
                 return np.array(grad_data).reshape(self.natoms, 3)
         return None
 
-    def _get_atoms(self):
-        from pyatoms.utils.periodictable import atomic_number_to_chemical_symbol
+    def _get_molecule(self):
+        from chemsmart.utils.periodictable import PeriodicTable
+        p = PeriodicTable()
 
         for i, line in enumerate(self.contents):
             if (
@@ -1517,7 +1518,7 @@ class ORCAEngradFile(ORCAFile):
                     if content.startswith("#") or len(content) == 0:
                         pass
                     try:
-                        symbol = atomic_number_to_chemical_symbol(
+                        symbol = p.to_symbol(
                             int(content.split()[0])
                         )
                         symbols.append(symbol)
@@ -1533,7 +1534,7 @@ class ORCAEngradFile(ORCAFile):
                         coords_tuple.append((x_coord, y_coord, z_coord))
                     except ValueError:
                         pass
-                return AtomsWrapper.from_positions(
-                    symbols=symbols, positions=coords_tuple
+                return Molecule.from_symbols_and_positions_and_pbc_conditions(
+                    list_of_symbols=symbols, positions=coords_tuple
                 )
         return None
