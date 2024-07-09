@@ -7,14 +7,9 @@ from chemsmart.io.gaussian.route import GaussianRoute
 class Gaussian16Input(FileMixin):
     def __init__(self, filename):
         self.filename = filename
-        try:
-            self.route_object = GaussianRoute(route_string=self.route_string)
-        except TypeError as err:
-            print(err)
 
-        from chemsmart.io.molecules.structure import CoordinateBlock
-
-        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
+        from chemsmart.io.molecules.structure import GaussianCoordinateBlock
+        cb = GaussianCoordinateBlock(coordinate_block=self.content_groups[2])
         self.cb = cb
 
     @property
@@ -44,6 +39,14 @@ class Gaussian16Input(FileMixin):
     @property
     def modredundant(self):
         return self._get_modredundant_conditions()
+
+    @property
+    def route_object(self):
+        try:
+            route_object = GaussianRoute(route_string=self.route_string)
+            return route_object
+        except TypeError as err:
+            print(err)
 
     @property
     def is_pbc(self):

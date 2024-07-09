@@ -1,18 +1,11 @@
 import logging
 import re
-
 import numpy as np
-
 from functools import cached_property
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
-from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.io.molecules.structure import Molecule, CoordinateBlock
-from chemsmart.utils.repattern import coord_pattern
-
-# from pyatoms.io.orca.utils import ORCAFile
-# from pyatoms.utils.periodictable import to_element
-# from pyatoms.utils.utils import is_float
+from chemsmart.io.molecules.structure import Molecule, ORCACoordinateBlock
+from chemsmart.utils.repattern import standard_coord_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +13,9 @@ logger = logging.getLogger(__name__)
 class ORCAInput(FileMixin, ORCAFileMixin):
     def __init__(self, filename):
         self.filename = filename
-        self.coordinate_block = CoordinateBlock(coordinate_block=self.coordinate_lines)
+
+        cb = ORCACoordinateBlock(coordinate_block=self.coordinate_lines)
+        self.cb = cb
 
     @property
     def route_string(self):
@@ -35,12 +30,68 @@ class ORCAInput(FileMixin, ORCAFileMixin):
         return f"! {route_string}".lower()
 
     @property
+    def route_object(self):
+        try:
+            route_object = ORCARoute(route_string=self.route_string)
+            return route_object
+        except TypeError as err:
+            print(err)
+
+    @property
     def coordinate_type(self):
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:
                 line_elem = line.split()
                 return line_elem[1]
         return None
+
+    @property
+    def functional(self):
+        return self.route_object.functional
+
+    @property
+    def ab_initio(self):
+        return self.route_object.ab_initio
+
+    @property
+    def dispersion(self):
+        return self.route_object.dispersion
+
+    @property
+    def basis(self):
+        return self.route_object.basis
+
+    @property
+    def auxiliary_basis(self):
+        return self.route_object.auxiliary_basis
+
+    @property
+    def extrapolation_basis(self):
+        return self.route_object.extrapolation_basis
+
+    @property
+    def defgrid(self):
+        return self.route_object.defgrid
+
+    @property
+    def scf_tol(self):
+        return self.route_object.scf_tol
+
+    @property
+    def scf_algorithm(self):
+        return self.route_object.scf_algorithm
+
+    @property
+    def job_type(self):
+        return self.route_object.job_type
+
+    @property
+    def freq(self):
+        return self.route_object.freq
+
+    @property
+    def numfreq(self):
+        return self.route_object.numfreq
 
     @property
     def charge(self):
@@ -60,7 +111,7 @@ class ORCAInput(FileMixin, ORCAFileMixin):
 
     @property
     def coordinate_lines(self):
-        pattern = re.compile(coord_pattern)
+        pattern = re.compile(standard_coord_pattern)
         coordinate_lines = []
         for line in self.contents:
             if pattern.match(line):
@@ -68,38 +119,8 @@ class ORCAInput(FileMixin, ORCAFileMixin):
         return coordinate_lines
 
     @property
-    def natoms(self):
-        return len(self.coordinate_lines)
-
-    @property
-    def list_of_symbols(self):
-        """List of elements to follow periodic table with proper caps/cases."""
-        elements = []
-        for line in self.coordinate_lines:
-            element = line.split()[0]
-            element = to_element(element)
-            elements.append(element)
-        return elements
-
-    @property
-    def atoms(self):
-        positions = []
-        for line in self.coordinate_lines:
-            line_elements = line.split()
-            each_coord = [
-                float(line_elements[1]),
-                float(line_elements[2]),
-                float(line_elements[3]),
-            ]
-            positions.append(each_coord)
-        positions = np.array(positions)
-        return AtomsWrapper.from_positions(
-            symbols=self.list_of_symbols, positions=positions
-        )
-
-    @property
-    def empirical_formula(self):
-        return self.atoms.get_chemical_formula(empirical=True)
+    def molecule(self):
+        return self.cb.molecule
 
     @property
     def scf_maxiter(self):
@@ -163,41 +184,40 @@ class ORCAInput(FileMixin, ORCAFileMixin):
                 return line.split()[-1]
         return None
 
-    def read_settings(self):
-        from pyatoms.jobs.orca.settings import ORCAJobSettings
-
-        dv = ORCAJobSettings.default()
-        return ORCAJobSettings(
-            ab_initio=self.ab_initio,
-            functional=self.functional,
-            dispersion=self.dispersion,
-            basis=self.basis,
-            aux_basis=self.aux_basis,
-            extrapolation_basis=self.extrapolation_basis,
-            defgrid=self.defgrid,
-            scf_tol=self.scf_tol,
-            scf_algorithm=self.scf_algorithm,
-            scf_maxiter=self.scf_maxiter,
-            scf_convergence=self.scf_convergence,
-            charge=self.charge,
-            multiplicity=self.multiplicity,
-            gbw=dv.gbw,
-            freq=self.freq,
-            numfreq=self.numfreq,
-            dipole=self.dipole,
-            quadrupole=self.quadrupole,
-            mdci_cutoff=self.mdci_cutoff,
-            mdci_density=self.mdci_density,
-            job_type=self.job_type,
-            solvent_model=self.solvent_model,
-            solvent_id=self.solvent_id,
-            additional_route_parameters=dv.additional_route_parameters,
-            route_to_be_written=dv.route_to_be_written,
-            modred=dv.modred,
-            gen_genecp=dv.gen_genecp,
-            heavy_elements=dv.heavy_elements,
-            heavy_elements_basis=dv.heavy_elements_basis,
-            light_elements_basis=dv.light_elements_basis,
-            custom_solvent=dv.custom_solvent,
-            forces=dv.forces,
-        )
+    # def read_settings(self):
+    #     from chemsmart.jobs.orca.settings import ORCAJobSettings
+    #     dv = ORCAJobSettings.default()
+    #     return ORCAJobSettings(
+    #         ab_initio=self.ab_initio,
+    #         functional=self.functional,
+    #         dispersion=self.dispersion,
+    #         basis=self.basis,
+    #         aux_basis=self.aux_basis,
+    #         extrapolation_basis=self.extrapolation_basis,
+    #         defgrid=self.defgrid,
+    #         scf_tol=self.scf_tol,
+    #         scf_algorithm=self.scf_algorithm,
+    #         scf_maxiter=self.scf_maxiter,
+    #         scf_convergence=self.scf_convergence,
+    #         charge=self.charge,
+    #         multiplicity=self.multiplicity,
+    #         gbw=dv.gbw,
+    #         freq=self.freq,
+    #         numfreq=self.numfreq,
+    #         dipole=self.dipole,
+    #         quadrupole=self.quadrupole,
+    #         mdci_cutoff=self.mdci_cutoff,
+    #         mdci_density=self.mdci_density,
+    #         job_type=self.job_type,
+    #         solvent_model=self.solvent_model,
+    #         solvent_id=self.solvent_id,
+    #         additional_route_parameters=dv.additional_route_parameters,
+    #         route_to_be_written=dv.route_to_be_written,
+    #         modred=dv.modred,
+    #         gen_genecp=dv.gen_genecp,
+    #         heavy_elements=dv.heavy_elements,
+    #         heavy_elements_basis=dv.heavy_elements_basis,
+    #         light_elements_basis=dv.light_elements_basis,
+    #         custom_solvent=dv.custom_solvent,
+    #         forces=dv.forces,
+    #     )

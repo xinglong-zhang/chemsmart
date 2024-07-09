@@ -434,31 +434,8 @@ class CoordinateBlock:
         return np.array(positions)
 
     def _get_constraints(self):
-        """Obtain a list of contraints on the atoms in a molecule.
-        This returns a list of integers of value that is either -1 (frozen)
-        or 0 (relaxed)."""
-        constrained_atoms = []
-        for line in self.coordinate_block:
-            line_elements = line.split()
-            if (
-                len(line_elements) < 4 or len(line_elements) == 0
-            ):  # skip lines that do not contain coordinates
-                continue
-
-            try:
-                atomic_number = int(line_elements[0])
-            except ValueError:
-                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
-
-            second_value = float(line_elements[1])
-            if np.isclose(atomic_number, second_value, atol=10e-6):
-                continue
-            elif second_value == -1 or second_value == 0:
-                # this is the case in frozen coordinates e.g.,
-                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                # then append these values
-                constrained_atoms.append(int(second_value))
-        return constrained_atoms
+        # subclass to implement, as constraints format may be different for ORCA vs for Gaussian
+        raise NotImplementedError
 
     def _get_translation_vectors(self):
         tvs = []
@@ -508,3 +485,38 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+
+class GaussianCoordinateBlock(CoordinateBlock):
+    def _get_constraints(self):
+        """Obtain a list of contraints on the atoms in a molecule.
+        This returns a list of integers of value that is either -1 (frozen)
+        or 0 (relaxed)."""
+        constrained_atoms = []
+        for line in self.coordinate_block:
+            line_elements = line.split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+
+            try:
+                atomic_number = int(line_elements[0])
+            except ValueError:
+                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+
+            second_value = float(line_elements[1])
+            if np.isclose(atomic_number, second_value, atol=10e-6):
+                continue
+            elif second_value == -1 or second_value == 0:
+                # this is the case in frozen coordinates e.g.,
+                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
+                # then append these values
+                constrained_atoms.append(int(second_value))
+        return constrained_atoms
+
+
+class ORCACoordinateBlock(CoordinateBlock):
+    def _get_constraints(self):
+        # to implement
+        pass

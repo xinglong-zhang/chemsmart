@@ -1,9 +1,8 @@
 import logging
 import math
-import os.path
+import os
 import re
 from functools import cached_property
-
 import numpy as np
 from ase import units
 
