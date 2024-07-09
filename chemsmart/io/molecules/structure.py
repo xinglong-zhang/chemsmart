@@ -115,6 +115,9 @@ class Molecule:
     def _read_file(cls, filepath, index, **kwargs):
         basename = os.path.basename(filepath)
 
+        if basename.endswith(".xyz"):
+            return cls._read_xyz_file(filepath)
+
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 

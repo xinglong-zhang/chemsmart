@@ -5,6 +5,7 @@ import pytest
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.inputs import ORCAInput
+from chemsmart.io.orca.outputs import ORCAOutput
 from chemsmart.io.molecules.structure import Molecule
 
 
@@ -157,8 +158,8 @@ class TestORCAInput:
 
 class TestORCAOutput:
     def test_read_water_output(self, water_output_gas_path):
-        orca_out = ORCAOutput(outputfile=water_output_gas_path)
-        assert isinstance(orca_out.atoms, AtomsWrapper)
+        orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"
         assert orca_out.basis == "def2-svp"
@@ -195,17 +196,17 @@ class TestORCAOutput:
         assert orca_out.normal_termination is True
 
     def test_water_optimized_output(self, water_output_gas_path):  # noqa: PLR0915
-        orca_out = ORCAOutput(outputfile=water_output_gas_path)
+        orca_out = ORCAOutput(filename=water_output_gas_path)
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
             "B(H1,O0)": 0.9627,
             "B(H2,O0)": 0.9627,
             "A(H1,O0,H2)": 103.35,
         }
-        atoms = orca_out.final_structure
-        assert isinstance(atoms, AtomsWrapper)
-        assert all(atoms.symbols == ["O", "H", "H"])
-        assert orca_out.empirical_formula == "H2O"
+        molecule = orca_out.final_structure
+        assert isinstance(molecule, Molecule)
+        assert all(molecule.symbols == ["O", "H", "H"])
+        assert orca_out.molecule.empirical_formula == "H2O"
         assert np.allclose(
             orca_out.optimized_geometry,
             np.array(
@@ -612,11 +613,11 @@ class TestORCAOutput:
         assert math.isclose(
             orca_out.gibbs_free_energy, -2076.7559939028233202, rel_tol=1e-6
         )
-        assert isinstance(orca_out.atoms, AtomsWrapper)
+        assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_run_time_hours == 0.0028
 
     def test_read_sp_output(self, water_sp_gas_path):
-        orca_out = ORCAOutput(outputfile=water_sp_gas_path)
+        orca_out = ORCAOutput(filename=water_sp_gas_path)
         assert (
             orca_out.route_string
             == "!  DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
@@ -653,11 +654,11 @@ class TestORCAOutput:
         assert orca_out.diis_acceleration is False
         assert orca_out.scf_maxiter == 500
         assert orca_out.converged is None
-        assert isinstance(orca_out.atoms, AtomsWrapper)
+        assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.normal_termination is True
 
     def test_gtoint_errfile(self, gtoint_errfile):
-        orca_out = ORCAOutput(outputfile=gtoint_errfile)
+        orca_out = ORCAOutput(filename=gtoint_errfile)
         assert orca_out.route_string == "! m062x def2-svp opt freq defgrid3"
         assert orca_out.functional == "m062x"
         assert orca_out.basis == "def2-svp"

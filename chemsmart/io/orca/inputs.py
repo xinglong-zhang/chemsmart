@@ -46,54 +46,6 @@ class ORCAInput(FileMixin, ORCAFileMixin):
         return None
 
     @property
-    def functional(self):
-        return self.route_object.functional
-
-    @property
-    def ab_initio(self):
-        return self.route_object.ab_initio
-
-    @property
-    def dispersion(self):
-        return self.route_object.dispersion
-
-    @property
-    def basis(self):
-        return self.route_object.basis
-
-    @property
-    def auxiliary_basis(self):
-        return self.route_object.auxiliary_basis
-
-    @property
-    def extrapolation_basis(self):
-        return self.route_object.extrapolation_basis
-
-    @property
-    def defgrid(self):
-        return self.route_object.defgrid
-
-    @property
-    def scf_tol(self):
-        return self.route_object.scf_tol
-
-    @property
-    def scf_algorithm(self):
-        return self.route_object.scf_algorithm
-
-    @property
-    def job_type(self):
-        return self.route_object.job_type
-
-    @property
-    def freq(self):
-        return self.route_object.freq
-
-    @property
-    def numfreq(self):
-        return self.route_object.numfreq
-
-    @property
     def charge(self):
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:

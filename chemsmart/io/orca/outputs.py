@@ -5,6 +5,11 @@ import re
 from functools import cached_property
 import numpy as np
 from ase import units
+from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.molecules.structure import Molecule, ORCACoordinateBlock
+from chemsmart.utils.repattern import standard_coord_pattern
 
 from pyatoms.io.ase.atoms import AtomsWrapper
 from pyatoms.io.orca.utils import ORCAFile
@@ -14,11 +19,10 @@ from pyatoms.utils.utils import is_float
 logger = logging.getLogger(__name__)
 
 
-class ORCAOutput(ORCAFile):
+class ORCAOutput(FileMixin, ORCAFileMixin):
     """ORCA output file with .out extension."""
-
-    def __init__(self, outputfile):
-        super().__init__(filename=outputfile)
+    def __init__(self, filename):
+        self.filename = filename
 
     @property
     def normal_termination(self):
@@ -387,13 +391,14 @@ class ORCAOutput(ORCAFile):
                             each_coord = [x_coordinate, y_coordinate, z_coordinate]
                             final_positions.append(each_coord)
             final_positions = np.array(final_positions)
-            return AtomsWrapper.from_positions(
-                symbols=final_symbols, positions=final_positions
+
+            return Molecule.from_symbols_and_positions_and_pbc_conditions(
+                list_of_symbols=final_symbols, positions=final_positions
             )
         return None
 
     @property
-    def atoms(self):
+    def molecule(self):
         if self.final_structure is not None:
             return self.final_structure
         # Final structure is none as no "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" line appear if the job
@@ -401,7 +406,7 @@ class ORCAOutput(ORCAFile):
         return self._get_atoms_from_sp_output_file()
 
     def _get_atoms_from_sp_output_file(self):
-        atoms = None
+        molecule = None
 
         # if sp output file contains line read from .xyz
         for line in self.contents:
@@ -414,14 +419,14 @@ class ORCAOutput(ORCAFile):
                     xyz_filepath
                 ), f".xyz file read from {xyz_filepath} does not exist!"
                 if os.path.exists(xyz_filepath):
-                    atoms = AtomsWrapper.from_filepath(filepath=xyz_filepath)
+                    molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break
         # If atoms are not found, get them from the output file
-        if atoms is None:
-            atoms = self._get_input_structure_from_output()
-        return atoms
+        if molecule is None:
+            molecule = self._get_input_structure_in_output()
+        return molecule
 
-    def _get_input_structure_from_output(self):
+    def _get_input_structure_in_output(self):
         """In ORCA output file, the input structure is rewritten and for single points, is same as the output structure.
 
         An example of the relevant part of the output describing the structure is:
@@ -448,17 +453,17 @@ class ORCAOutput(ORCAFile):
         if len(final_symbols) == 0:
             raise ValueError("No structure found!")
 
-        return AtomsWrapper.from_positions(
-            symbols=final_symbols, positions=final_positions
+        return Molecule.from_symbols_and_positions_and_pbc_conditions(
+            list_of_symbols=final_symbols, positions=final_positions
         )
 
     @property
     def empirical_formula(self):
-        return self.atoms.get_chemical_formula(empirical=True)
+        return self.molecule.get_chemical_formula(empirical=True)
 
     @property
     def optimized_geometry(self):
-        return self.atoms.positions
+        return self.molecule.positions
 
     @property
     def optimized_final_energy(self):
