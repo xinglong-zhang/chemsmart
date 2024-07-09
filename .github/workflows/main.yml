@@ -44,6 +44,12 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: "3.10"
+      - name: Generate a token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AUTH_BOT_APP_ID }}
+          private-key: ${{ secrets.AUTH_BOT_APP_PRIVATE_KEY }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
