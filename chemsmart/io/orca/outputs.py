@@ -7,6 +7,10 @@ import numpy as np
 from ase import units
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.utils import is_float
+from chemsmart.utils.periodictable import PeriodicTable
+
+p = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +343,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
 
     @property
     def final_structure(self):
+        from chemsmart.utils.periodictable import PeriodicTable
+
+        p = PeriodicTable()
         """Obtain the final optimized structure from ORCA geometry optimization job.
 
         An example of the output for this portion will look like:
@@ -376,7 +383,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         match = pattern.match(line_j)
                         if match:
                             element_symbol = match.group(1)
-                            element = to_element(element_symbol)
+                            element = p.to_element(element_symbol)
                             final_symbols.append(element)
                             x_coordinate = float(match.group(2))
                             y_coordinate = float(match.group(3))
@@ -651,20 +658,31 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         return orbital_energies
 
     def _get_orbital_energies_and_occupancy(self):
-        orbital_energies = []
         orbital_occupancy = []
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "ORBITAL ENERGIES" in line_i:
-                for line_j in self.optimized_output_lines[i + 4 :]:
-                    if "******************************" in line_j:
-                        break
-                    line_j_elements = line_j.split()
-                    if len(line_j_elements) == 4:
-                        occ = int(float(line_j_elements[1]))
-                        orbital_occupancy.append(occ)
-                        energy_in_hartree = float(line_j_elements[2])
-                        orbital_energies.append(energy_in_hartree * units.Hartree)
+        orbital_energies = []
+        for line in self._get_last_orbital_energies_section()[2:]:
+            # ignore the lines '----------------' and one empty line that follows
+            line_elements = line.split()
+            if len(line_elements) == 0:
+                break
+            if len(line_elements) != 4 or line.startswith("NO"):
+                continue
+            else:
+                occ = int(float(line_elements[1]))
+                orbital_occupancy.append(occ)
+                energy_in_hartree = float(line_elements[2])
+                orbital_energies.append(energy_in_hartree * units.Hartree)
         return orbital_energies, orbital_occupancy
+
+    def _get_last_orbital_energies_section(self):
+        """Get the last section of orbital energies"""
+        reversed_lines = []
+        for line in reversed(self.contents):
+            if "ORBITAL ENERGIES" not in line:
+                reversed_lines.append(line)
+            else:
+                break
+        return reversed_lines[::-1]
 
     @property
     def homo_energy(self):
@@ -701,7 +719,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if "Sum of atomic charges" in line_j:
                         break
                     line_j_elements = line_j.split()
-                    element = to_element(line_j_elements[1])
+                    element = p.to_element(line_j_elements[1])
                     element_num = f"{element}{line_j_elements[0]}"
                     mulliken_atomic_charges[element_num] = float(line_j_elements[-1])
         return mulliken_atomic_charges
@@ -716,7 +734,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 4:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mulliken_atomic_charges[element_num] = float(
                             line_j_elements[-1]
@@ -736,7 +754,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 8:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_mulliken_gross_atomic_population[element_num] = float(
                             line_j_elements[2]
@@ -753,7 +771,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 8:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_total_nuclear_charge[element_num] = float(
                             line_j_elements[3]
@@ -770,7 +788,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 8:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_mulliken_gross_atomic_charge[element_num] = float(
                             line_j_elements[4]
@@ -787,7 +805,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 8:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_total_valence[element_num] = float(line_j_elements[5])
         return mayer_total_valence
@@ -802,7 +820,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 8:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_bonded_valence[element_num] = float(line_j_elements[6])
         return mayer_bonded_valence
@@ -817,7 +835,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 8:
-                        element = to_element(line_j_elements[1])
+                        element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_free_valence[element_num] = float(line_j_elements[-1])
         return mayer_free_valence
@@ -1521,10 +1539,6 @@ class ORCAEngradFile(FileMixin):
         return None
 
     def _get_molecule(self):
-        from chemsmart.utils.periodictable import PeriodicTable
-
-        p = PeriodicTable()
-
         for i, line in enumerate(self.contents):
             if (
                 "atomic numbers and current coordinates" in line

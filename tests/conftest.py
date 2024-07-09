@@ -230,6 +230,13 @@ def water_output_gas_path(orca_outputs_directory):
 
 
 @pytest.fixture()
+def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"
+    )
+
+
+@pytest.fixture()
 def water_engrad_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.engrad")
 

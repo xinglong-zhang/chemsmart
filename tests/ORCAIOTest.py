@@ -662,6 +662,50 @@ class TestORCAOutput:
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.normal_termination is True
 
+    def test_read_sp_full_print_output(self, dlpno_ccsdt_sp_full_print):
+        orca_out = ORCAOutput(filename=dlpno_ccsdt_sp_full_print)
+        assert (
+            orca_out.route_string
+            == "! CPCM DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
+        )
+        assert orca_out.functional is None
+        assert orca_out.basis is None
+        assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
+        assert orca_out.aux_basis == "AutoAux".lower()
+        assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()
+        assert orca_out.natoms == 78
+        assert orca_out.num_basis_functions == 1200
+        assert orca_out.num_shells == 720
+        assert orca_out.max_ang_mom == 2
+        assert orca_out.contraction_scheme == "PARTIAL GENERAL contraction"
+        assert orca_out.coulomb_range_seperation.lower() == "not used"
+        assert orca_out.exchange_range_seperation.lower() == "not used"
+        assert orca_out.finite_nucleus_model.lower() == "not used"
+        assert orca_out.aux_j_fitting_basis.lower() == "available"
+        assert orca_out.aux_j_num_basis_functions == 4518
+        assert orca_out.aux_j_num_shells == 1494
+        assert orca_out.aux_j_max_ang_mom == 4
+        assert orca_out.aux_jk_fitting_basis.lower() == "available"
+        assert orca_out.aux_k_fitting_basis.lower() == "available"
+        assert orca_out.aux_external_fitting_basis.lower() == "not available"
+        assert orca_out.integral_threshold == 2.5e-11
+        assert orca_out.primitive_cutoff == 2.5e-12
+        assert orca_out.primitive_pair_threshold == 2.5e-12
+        assert orca_out.ri_approx is None
+        assert orca_out.rij_cosx is None
+        assert orca_out.charge == 0
+        assert orca_out.multiplicity == 1
+        assert orca_out.num_electrons == 396
+        assert orca_out.basis_dim == 876
+        assert orca_out.diis_acceleration is False
+        assert orca_out.scf_maxiter == 500
+        assert orca_out.converged is None
+        assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.normal_termination is True
+        assert np.isclose(orca_out.homo_energy, -9.40597, rtol=1e-5)
+        assert np.isclose(orca_out.lumo_energy, 1.56267, rtol=1e-5)
+        assert np.isclose(orca_out.fmo_gap, 10.968637, rtol=1e-5)
+
     def test_gtoint_errfile(self, gtoint_errfile):
         orca_out = ORCAOutput(filename=gtoint_errfile)
         assert orca_out.route_string == "! m062x def2-svp opt freq defgrid3"
