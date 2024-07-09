@@ -7,14 +7,6 @@ import numpy as np
 from ase import units
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.orca.route import ORCARoute
-from chemsmart.io.molecules.structure import Molecule, ORCACoordinateBlock
-from chemsmart.utils.repattern import standard_coord_pattern
-
-from pyatoms.io.ase.atoms import AtomsWrapper
-from pyatoms.io.orca.utils import ORCAFile
-from pyatoms.utils.periodictable import to_element
-from pyatoms.utils.utils import is_float
 
 logger = logging.getLogger(__name__)
 
@@ -1438,44 +1430,44 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                 elapsed_walltime.append(total_hours)
         return sum(elapsed_walltime)
 
-    def read_settings(self):
-        from pyatoms.jobs.orca.settings import ORCAJobSettings
-
-        dv = ORCAJobSettings.default()
-        return ORCAJobSettings(
-            ab_initio=self.ab_initio,
-            functional=self.functional,
-            dispersion=self.dispersion,
-            basis=self.basis,
-            aux_basis=self.aux_basis,
-            extrapolation_basis=self.extrapolation_basis,
-            defgrid=self.defgrid,
-            scf_tol=self.scf_tol,
-            scf_algorithm=self.scf_algorithm,
-            scf_maxiter=self.scf_maxiter,
-            scf_convergence=self.scf_convergence,
-            charge=self.charge,
-            multiplicity=self.multiplicity,
-            gbw=dv.gbw,
-            freq=self.freq,
-            numfreq=self.numfreq,
-            dipole=self.dipole,
-            quadrupole=self.quadrupole,
-            mdci_cutoff=self.mdci_cutoff,
-            mdci_density=self.mdci_density,
-            job_type=self.job_type,
-            solvent_model=self.solvent_model,
-            solvent_id=self.solvent_id,
-            additional_route_parameters=dv.additional_route_parameters,
-            route_to_be_written=dv.route_to_be_written,
-            modred=dv.modred,
-            gen_genecp=dv.gen_genecp,
-            heavy_elements=dv.heavy_elements,
-            heavy_elements_basis=dv.heavy_elements_basis,
-            light_elements_basis=dv.light_elements_basis,
-            custom_solvent=dv.custom_solvent,
-            forces=dv.forces,
-        )
+    # def read_settings(self):
+    #     from chemsmart.jobs.orca.settings import ORCAJobSettings
+    #
+    #     dv = ORCAJobSettings.default()
+    #     return ORCAJobSettings(
+    #         ab_initio=self.ab_initio,
+    #         functional=self.functional,
+    #         dispersion=self.dispersion,
+    #         basis=self.basis,
+    #         aux_basis=self.aux_basis,
+    #         extrapolation_basis=self.extrapolation_basis,
+    #         defgrid=self.defgrid,
+    #         scf_tol=self.scf_tol,
+    #         scf_algorithm=self.scf_algorithm,
+    #         scf_maxiter=self.scf_maxiter,
+    #         scf_convergence=self.scf_convergence,
+    #         charge=self.charge,
+    #         multiplicity=self.multiplicity,
+    #         gbw=dv.gbw,
+    #         freq=self.freq,
+    #         numfreq=self.numfreq,
+    #         dipole=self.dipole,
+    #         quadrupole=self.quadrupole,
+    #         mdci_cutoff=self.mdci_cutoff,
+    #         mdci_density=self.mdci_density,
+    #         job_type=self.job_type,
+    #         solvent_model=self.solvent_model,
+    #         solvent_id=self.solvent_id,
+    #         additional_route_parameters=dv.additional_route_parameters,
+    #         route_to_be_written=dv.route_to_be_written,
+    #         modred=dv.modred,
+    #         gen_genecp=dv.gen_genecp,
+    #         heavy_elements=dv.heavy_elements,
+    #         heavy_elements_basis=dv.heavy_elements_basis,
+    #         light_elements_basis=dv.light_elements_basis,
+    #         custom_solvent=dv.custom_solvent,
+    #         forces=dv.forces,
+    #     )
 
 
 class ORCAEngradFile(FileMixin):

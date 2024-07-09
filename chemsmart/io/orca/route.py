@@ -78,7 +78,7 @@ class ORCARoute:
 
     @property
     def scf_tol(self):
-        from pyatoms.io.orca import ORCA_SCF_CONVERGENCE as convs
+        from chemsmart.io.orca import ORCA_SCF_CONVERGENCE as convs
 
         for route_input in self.route_inputs:
             if any(conv in route_input for conv in convs):
@@ -89,7 +89,7 @@ class ORCARoute:
 
     @property
     def scf_algorithm(self):
-        from pyatoms.io.orca import ORCA_ALL_SCF_ALGORITHMS as algs
+        from chemsmart.io.orca import ORCA_ALL_SCF_ALGORITHMS as algs
 
         for route_input in self.route_inputs:
             if any(alg in route_input for alg in algs):
@@ -98,7 +98,7 @@ class ORCARoute:
 
     @property
     def job_type(self):
-        from pyatoms.io.orca import ORCA_ALL_JOB_TYPES as ORCA_JOB_TYPES
+        from chemsmart.io.orca import ORCA_ALL_JOB_TYPES as ORCA_JOB_TYPES
 
         for route_input in self.route_inputs:
             if route_input in ORCA_JOB_TYPES:
