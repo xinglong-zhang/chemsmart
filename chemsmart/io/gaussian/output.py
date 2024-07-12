@@ -2,6 +2,7 @@ import re
 import logging
 from itertools import islice
 from functools import cached_property
+from ase import units
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.repattern import eV_pattern, nm_pattern, f_pattern, float_pattern
 
@@ -277,7 +278,9 @@ class Gaussian16Output(FileMixin):
                 # Find all floats in the line, including those without spaces
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
-            return last_block_values
+
+            alpha_occ_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            return alpha_occ_eigenvalues
 
     @cached_property
     def alpha_virtual_eigenvalues(self):
@@ -311,9 +314,8 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            # print(len(eigenvalue_blocks))  # number of eigenvalue blocks in the file
-
-            return last_block_values
+            alpha_virtual_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            return alpha_virtual_eigenvalues
 
     @cached_property
     def beta_occ_eigenvalues(self):
@@ -346,7 +348,8 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            return last_block_values
+            beta_occ_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            return beta_occ_eigenvalues
 
     @cached_property
     def beta_virtual_eigenvalues(self):
@@ -380,7 +383,8 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            return last_block_values
+            beta_virtual_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            return beta_virtual_eigenvalues
 
     @cached_property
     def homo_energy(self):
