@@ -279,7 +279,9 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            alpha_occ_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            alpha_occ_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
             return alpha_occ_eigenvalues
 
     @cached_property
@@ -314,7 +316,9 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            alpha_virtual_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            alpha_virtual_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
             return alpha_virtual_eigenvalues
 
     @cached_property
@@ -348,7 +352,9 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            beta_occ_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            beta_occ_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
             return beta_occ_eigenvalues
 
     @cached_property
@@ -383,7 +389,9 @@ class Gaussian16Output(FileMixin):
                 values = re.findall(float_pattern, line)
                 last_block_values.extend(map(float, values))
 
-            beta_virtual_eigenvalues = [ value * units.Hartree for value in last_block_values]
+            beta_virtual_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
             return beta_virtual_eigenvalues
 
     @cached_property
