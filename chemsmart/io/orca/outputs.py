@@ -7,9 +7,14 @@ import numpy as np
 from ase import units
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import ORCACoordinateBlock
 from chemsmart.utils.utils import is_float
-from chemsmart.utils.repattern import standard_coord_pattern
+from chemsmart.utils.repattern import (
+    standard_coord_pattern,
+    orca_input_coordinate_in_output,
+)
 from chemsmart.utils.periodictable import PeriodicTable
+
 
 p = PeriodicTable()
 
@@ -344,6 +349,11 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
 
     @property
     def final_structure(self):
+        if self.optimized_output_lines is not None:
+            return self._get_optimized_final_structure()
+        return self._get_sp_structure()
+
+    def _get_optimized_final_structure(self):
         from chemsmart.utils.periodictable import PeriodicTable
 
         p = PeriodicTable()
@@ -368,8 +378,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         0 O     8.0000    0    15.999   -0.000000    0.000000    0.165050
         """
         pattern = re.compile(standard_coord_pattern)
-        final_symbols = []
-        final_positions = []
+        coordinate_lines = []
         if len(self.optimized_output_lines) != 0:
             for i, line_i in enumerate(self.optimized_output_lines):
                 if "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in line_i:
@@ -379,22 +388,23 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                             # stop when an empty line appears, else it will continue parsing non-geometry
                             break
                         # start reading 4 lines after
-                        match = pattern.match(line_j)
-                        if match:
-                            line_elements = line_j.split()
-                            element = p.to_element(line_elements[0])
-                            final_symbols.append(element)
-                            x_coordinate = float(line_elements[1])
-                            y_coordinate = float(line_elements[2])
-                            z_coordinate = float(line_elements[3])
-                            each_coord = [x_coordinate, y_coordinate, z_coordinate]
-                            final_positions.append(each_coord)
-            final_positions = np.array(final_positions)
+                        if pattern.match(line_j):
+                            coordinate_lines.append(line_j)
+        cb = ORCACoordinateBlock(coordinate_block=coordinate_lines)
+        return cb.molecule
 
-            return Molecule.from_symbols_and_positions_and_pbc_conditions(
-                list_of_symbols=final_symbols, positions=final_positions
-            )
-        return None
+    def _get_sp_structure(self):
+        coordinate_lines = []
+        for i, line in enumerate(self.contents):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                for line_j in self.contents[i:]:
+                    pattern = re.compile(standard_coord_pattern)
+                    if len(line_j) == 0:
+                        break
+                    if pattern.match(line_j):
+                        coordinate_lines.append(line_j)
+        cb = ORCACoordinateBlock(coordinate_block=coordinate_lines)
+        return cb.molecule
 
     @property
     def molecule(self):
@@ -437,9 +447,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         """
         final_symbols = []
         final_positions = []
-        pattern = re.compile(
-            r"(?i)\|\s+(\d+)>\s+(\w+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)"
-        )
+        pattern = re.compile(orca_input_coordinate_in_output)
         for line in self.contents:
             match = pattern.match(line)
             if match:
@@ -465,7 +473,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         return self.molecule.positions
 
     @property
-    def optimized_final_energy(self):
+    def optimized_scf_energy(self):
         for i, line_i in enumerate(self.optimized_output_lines):
             if "TOTAL SCF ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -479,12 +487,32 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                             rel_tol=1e-4,
                         )
                         return energy_in_hartree * units.Hartree
-        return None
+
+    @property
+    def sp_scf_energy(self):
+        if self.optimized_output_lines is None:
+            for line in self.contents:
+                if "Total Energy       :" in line:
+                    line_elements = line.split()
+                    energy_in_hartree = float(line_elements[-4])
+                    energy_in_eV = float(line_elements[-2])
+                    assert math.isclose(
+                        energy_in_hartree * units.Hartree,
+                        energy_in_eV,
+                        rel_tol=1e-4,
+                    )
+                    return energy_in_hartree * units.Hartree
+
+    @property
+    def final_scf_energy(self):
+        if self.optimized_output_lines is not None:
+            return self.optimized_scf_energy
+        return self.sp_scf_energy
 
     @property
     def final_energy(self):
-        if self.optimized_final_energy is not None:
-            return self.optimized_final_energy
+        if self.optimized_scf_energy is not None:
+            return self.optimized_scf_energy
         return self.single_point_energy
 
     @property
@@ -494,7 +522,6 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                 sp_energy_in_hartree = float(line.split()[-1])
                 # convert hartree to eV
                 return sp_energy_in_hartree * units.Hartree
-        return None
 
     @property
     def final_nuclear_repulsion(self):
