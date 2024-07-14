@@ -8,6 +8,7 @@ from ase import units
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.utils import is_float
+from chemsmart.utils.repattern import standard_coord_pattern
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()
@@ -366,9 +367,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         NO LB      ZA    FRAG     MASS         X           Y           Z
         0 O     8.0000    0    15.999   -0.000000    0.000000    0.165050
         """
-        pattern = re.compile(
-            r"\b(\w+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)"
-        )
+        pattern = re.compile(standard_coord_pattern)
         final_symbols = []
         final_positions = []
         if len(self.optimized_output_lines) != 0:
@@ -382,12 +381,12 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         # start reading 4 lines after
                         match = pattern.match(line_j)
                         if match:
-                            element_symbol = match.group(1)
-                            element = p.to_element(element_symbol)
+                            line_elements = line_j.split()
+                            element = p.to_element(line_elements[0])
                             final_symbols.append(element)
-                            x_coordinate = float(match.group(2))
-                            y_coordinate = float(match.group(3))
-                            z_coordinate = float(match.group(4))
+                            x_coordinate = float(line_elements[1])
+                            y_coordinate = float(line_elements[2])
+                            z_coordinate = float(line_elements[3])
                             each_coord = [x_coordinate, y_coordinate, z_coordinate]
                             final_positions.append(each_coord)
             final_positions = np.array(final_positions)

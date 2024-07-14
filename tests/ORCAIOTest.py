@@ -746,6 +746,8 @@ class TestORCAOutput:
         assert np.isclose(orca_out.homo_energy, -9.382, rtol=1e-4)
         assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
         assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)
+        assert np.isclose(orca_out.final_energy, -82108.762658054809435, rtol=1e-4)
+        print(orca_out.optimized_output_lines)
 
     def test_gtoint_errfile(self, gtoint_errfile):
         orca_out = ORCAOutput(filename=gtoint_errfile)
