@@ -654,7 +654,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
             if "DFET-embed. en.    :" in line:
                 dfet_embed_energy_hartree.append(float(line.split()[-2]))
         if len(dfet_embed_energy_hartree) != 0:
-            dfet_embed_energy_eV = [value * units.Hartree for value in dfet_embed_energy_hartree]
+            dfet_embed_energy_eV = [
+                value * units.Hartree for value in dfet_embed_energy_hartree
+            ]
             return dfet_embed_energy_eV[-1]
 
     @property
@@ -722,44 +724,47 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
 
     @property
     def mulliken_atomic_charges(self):
-        mulliken_atomic_charges = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mulliken_atomic_charges = []
+        for i, line_i in enumerate(self.contents):
+            mulliken_atomic_charges = {}
             if "MULLIKEN ATOMIC CHARGES" in line_i:
-                for line_j in self.optimized_output_lines[i + 2 :]:
+                for line_j in self.contents[i + 2 :]:
                     if "Sum of atomic charges" in line_j:
                         break
                     line_j_elements = line_j.split()
                     element = p.to_element(line_j_elements[1])
                     element_num = f"{element}{line_j_elements[0]}"
                     mulliken_atomic_charges[element_num] = float(line_j_elements[-1])
-        return mulliken_atomic_charges
+                all_mulliken_atomic_charges.append(mulliken_atomic_charges)
+        return all_mulliken_atomic_charges[-1]
 
     @property
     def loewdin_atomic_charges(self):
-        mulliken_atomic_charges = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_loewdin_atomic_charges = []
+        for i, line_i in enumerate(self.contents):
+            loewdin_atomic_charges = {}
             if "LOEWDIN ATOMIC CHARGES" in line_i:
-                for line_j in self.optimized_output_lines[i + 2 :]:
+                for line_j in self.contents[i + 2 :]:
                     if "LOEWDIN REDUCED ORBITAL CHARGES" in line_j:
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 4:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mulliken_atomic_charges[element_num] = float(
-                            line_j_elements[-1]
-                        )
-        return mulliken_atomic_charges
+                        loewdin_atomic_charges[element_num] = float(line_j_elements[-1])
+                all_loewdin_atomic_charges.append(loewdin_atomic_charges)
+        return all_loewdin_atomic_charges[-1]
 
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # * MAYER POPULATION ANALYSIS *
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def mayer_mulliken_gross_atomic_population(self):
-        mayer_mulliken_gross_atomic_population = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mayer_mulliken_gross_atomic_population = []
+        for i, line_i in enumerate(self.contents):
+            mayer_mulliken_gross_atomic_population = {}
             if "MAYER POPULATION ANALYSIS" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
@@ -769,14 +774,18 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         mayer_mulliken_gross_atomic_population[element_num] = float(
                             line_j_elements[2]
                         )
-        return mayer_mulliken_gross_atomic_population
+                all_mayer_mulliken_gross_atomic_population.append(
+                    mayer_mulliken_gross_atomic_population
+                )
+        return all_mayer_mulliken_gross_atomic_population[-1]
 
     @property
     def mayer_total_nuclear_charge(self):
-        mayer_total_nuclear_charge = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mayer_total_nuclear_charge = []
+        for i, line_i in enumerate(self.contents):
+            mayer_total_nuclear_charge = {}
             if "MAYER POPULATION ANALYSIS" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
@@ -786,14 +795,16 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         mayer_total_nuclear_charge[element_num] = float(
                             line_j_elements[3]
                         )
-        return mayer_total_nuclear_charge
+                all_mayer_total_nuclear_charge.append(mayer_total_nuclear_charge)
+        return all_mayer_total_nuclear_charge[-1]
 
     @property
     def mayer_mulliken_gross_atomic_charge(self):
-        mayer_mulliken_gross_atomic_charge = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mayer_mulliken_gross_atomic_charge = []
+        for i, line_i in enumerate(self.contents):
+            mayer_mulliken_gross_atomic_charge = {}
             if "MAYER POPULATION ANALYSIS" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
@@ -803,14 +814,18 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         mayer_mulliken_gross_atomic_charge[element_num] = float(
                             line_j_elements[4]
                         )
-        return mayer_mulliken_gross_atomic_charge
+                all_mayer_mulliken_gross_atomic_charge.append(
+                    mayer_mulliken_gross_atomic_charge
+                )
+        return all_mayer_mulliken_gross_atomic_charge[-1]
 
     @property
     def mayer_total_valence(self):
-        mayer_total_valence = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mayer_total_valence = []
+        for i, line_i in enumerate(self.contents):
+            mayer_total_valence = {}
             if "MAYER POPULATION ANALYSIS" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
@@ -818,14 +833,16 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_total_valence[element_num] = float(line_j_elements[5])
-        return mayer_total_valence
+                all_mayer_total_valence.append(mayer_total_valence)
+        return all_mayer_total_valence[-1]
 
     @property
     def mayer_bonded_valence(self):
-        mayer_bonded_valence = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mayer_bonded_valence = []
+        for i, line_i in enumerate(self.contents):
+            mayer_bonded_valence = {}
             if "MAYER POPULATION ANALYSIS" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
@@ -833,14 +850,16 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_bonded_valence[element_num] = float(line_j_elements[6])
-        return mayer_bonded_valence
+                all_mayer_bonded_valence.append(mayer_bonded_valence)
+        return all_mayer_bonded_valence[-1]
 
     @property
     def mayer_free_valence(self):
-        mayer_free_valence = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_mayer_free_valence = []
+        for i, line_i in enumerate(self.contents):
+            mayer_free_valence = {}
             if "MAYER POPULATION ANALYSIS" in line_i:
-                for line_j in self.optimized_output_lines[i + 1 :]:
+                for line_j in self.contents[i + 1 :]:
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
@@ -848,7 +867,8 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         mayer_free_valence[element_num] = float(line_j_elements[-1])
-        return mayer_free_valence
+                all_mayer_free_valence.append(mayer_free_valence)
+        return all_mayer_free_valence[-1]
 
     @property
     def mayer_bond_orders_larger_than_zero_point_one(self):
@@ -858,131 +878,178 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
          Mayer bond orders larger than 0.100000
         B(  0-O ,  1-H ) :   0.9959 B(  0-O ,  2-H ) :   0.9959.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "Mayer bond orders larger than 0.100000" in line_i:
-                pattern = re.compile(
-                    r"B\(\s*(\d+)-(\w+)\s*,\s*(\d+)-(\w+)\s*\)\s*:\s*([\d.]+)"
-                )
 
-                for line_j in self.optimized_output_lines[i + 1 :]:
+        from chemsmart.utils.repattern import mayer_bond_order_segment_pattern
+
+        all_mayer_bond_orders_larger_than_zero_point_one = []
+
+        for i, line_i in enumerate(self.contents):
+            mayer_bond_orders_larger_than_zero_point_one = {}
+            if "Mayer bond orders larger than 0.100000" in line_i:
+                pattern = re.compile(mayer_bond_order_segment_pattern)
+
+                for line_j in self.contents[i + 1 :]:
                     if len(line_j) == 0:
                         break
                     matches = pattern.findall(line_j)
-                    return {
-                        f"B({match[1]}{match[0]},{match[3]}{match[2]})": float(match[4])
-                        for match in matches
-                    }
-        return None
+                    for match in matches:
+                        formatted_key = f"B({match[1]}{match[0]},{match[3]}{match[2]})"
+                        formatted_value = float(match[4])
+                        mayer_bond_orders_larger_than_zero_point_one[formatted_key] = (
+                            formatted_value
+                        )
+                all_mayer_bond_orders_larger_than_zero_point_one.append(
+                    mayer_bond_orders_larger_than_zero_point_one
+                )
+        return all_mayer_bond_orders_larger_than_zero_point_one[-1]
 
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # *     ORCA property calculations      *
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def dipole_moment_electric_contribution(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment_electric_contribution = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = np.zeros((3, 1))
             if line_i == "DIPOLE MOMENT":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Electronic contribution:" in line_j:
                         line_j_elements = line_j.split()
-                        return np.array(
+                        dipole_moment = np.array(
                             [
                                 float(line_j_elements[-3]),
                                 float(line_j_elements[-2]),
                                 float(line_j_elements[-1]),
                             ]
                         )
-        return None
+                all_dipole_moment_electric_contribution.append(dipole_moment)
+        return all_dipole_moment_electric_contribution[-1]
 
     @property
     def dipole_moment_nuclear_contribution(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment_nuclear_contribution = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = np.zeros((3, 1))
             if line_i == "DIPOLE MOMENT":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Nuclear contribution   :" in line_j:
                         line_j_elements = line_j.split()
-                        return np.array(
+                        dipole_moment = np.array(
                             [
                                 float(line_j_elements[-3]),
                                 float(line_j_elements[-2]),
                                 float(line_j_elements[-1]),
                             ]
                         )
-        return None
+                all_dipole_moment_nuclear_contribution.append(dipole_moment)
+        return all_dipole_moment_nuclear_contribution[-1]
 
     @property
     def total_dipole_moment(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = np.zeros((3, 1))
             if line_i == "DIPOLE MOMENT":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Total Dipole Moment    :" in line_j:
                         line_j_elements = line_j.split()
-                        return np.array(
+                        dipole_moment = np.array(
                             [
                                 float(line_j_elements[-3]),
                                 float(line_j_elements[-2]),
                                 float(line_j_elements[-1]),
                             ]
                         )
-        return None
+                all_dipole_moment.append(dipole_moment)
+        return all_dipole_moment[-1]
 
     @property
     def dipole_moment_in_au(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = 0.0
             if line_i == "DIPOLE MOMENT":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Magnitude (a.u.)       :" in line_j:
                         line_j_elements = line_j.split()
-                        return float(line_j_elements[-1])
-        return None
+                        dipole_moment = float(line_j_elements[-1])
+                all_dipole_moment.append(dipole_moment)
+        return all_dipole_moment[-1]
 
     @property
     def dipole_moment_in_debye(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = 0.0
             if line_i == "DIPOLE MOMENT":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Magnitude (Debye)      :" in line_j:
                         line_j_elements = line_j.split()
-                        return float(line_j_elements[-1])
-        return None
+                        dipole_moment = float(line_j_elements[-1])
+                all_dipole_moment.append(dipole_moment)
+        return all_dipole_moment[-1]
 
     @property
     def dipole_moment_along_axis_in_au(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = np.zeros((3, 1))
             if line_i == "Dipole components along the rotational axes:":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
+                    if len(line_j) == 0:
+                        break
                     if "x,y,z [a.u.] :" in line_j:
                         line_j_elements = line_j.split()
-                        return np.array(
+                        dipole_moment = np.array(
                             [
                                 float(line_j_elements[-3]),
                                 float(line_j_elements[-2]),
                                 float(line_j_elements[-1]),
                             ]
                         )
-        return None
+                all_dipole_moment.append(dipole_moment)
+        return all_dipole_moment[-1]
 
     @property
     def dipole_moment_along_axis_in_debye(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_dipole_moment = []
+        for i, line_i in enumerate(self.contents):
+            dipole_moment = np.zeros((3, 1))
             if line_i == "Dipole components along the rotational axes:":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
+                    if len(line_j) == 0:
+                        break
                     if "x,y,z [Debye]:" in line_j:
                         line_j_elements = line_j.split()
-                        return np.array(
+                        dipole_moment = np.array(
                             [
                                 float(line_j_elements[-3]),
                                 float(line_j_elements[-2]),
                                 float(line_j_elements[-1]),
                             ]
                         )
-        return None
+                all_dipole_moment.append(dipole_moment)
+        return all_dipole_moment[-1]
 
     @property
     def rotational_constants_in_wavenumbers(self):
-        rotational_constants_in_wavenumbers = []
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_rotational_constants_in_wavenumbers = []
+        for i, line_i in enumerate(self.contents):
+            rotational_constants_in_wavenumbers = []
             if line_i == "Rotational spectrum":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Rotational constants in cm-1:" in line_j:
                         line_j_elements = line_j.split()
                         for line_j_element in line_j_elements:
@@ -990,15 +1057,20 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                                 rotational_constants_in_wavenumbers.append(
                                     float(line_j_element)
                                 )  # noqa: PERF401
-                        return rotational_constants_in_wavenumbers
-        return None
+                        all_rotational_constants_in_wavenumbers.append(
+                            rotational_constants_in_wavenumbers
+                        )
+        return all_rotational_constants_in_wavenumbers[-1]
 
     @property
     def rotational_constants_in_MHz(self):
-        rotational_constants_in_MHz = []
-        for i, line_i in enumerate(self.optimized_output_lines):
+        all_rotational_constants_in_MHz = []
+        for i, line_i in enumerate(self.contents):
+            rotational_constants_in_MHz = []
             if line_i == "Rotational spectrum":
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
                     if "Rotational constants in MHz :" in line_j:
                         line_j_elements = line_j.split()
                         for line_j_element in line_j_elements:
@@ -1006,8 +1078,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                                 rotational_constants_in_MHz.append(
                                     float(line_j_element)
                                 )  # noqa: PERF401
-                        return rotational_constants_in_MHz
-        return None
+                        all_rotational_constants_in_MHz.append(
+                            rotational_constants_in_MHz
+                        )
+        return all_rotational_constants_in_MHz[-1]
 
     @property
     def vibrational_frequencies(self):

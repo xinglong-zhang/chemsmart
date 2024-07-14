@@ -16,6 +16,15 @@ orca_input_coordinate_in_output = (
     r"(?i)\|\s+(\d+)>\s+(\w+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)"
 )
 
+"""Given input example:
+        Mayer bond orders larger than 0.100000
+        B( 25-C , 27-C ) :   1.4263 B( 25-C , 29-H ) :   1.0007 B( 27-C , 58-C ) :   1.0067
+        B(  0-O ,  1-H ) :   0.9959 B(  0-O ,  2-H ) :   0.9959.
+"""
+mayer_bond_order_segment_pattern = (
+    r"B\(\s*(\d+)-([A-Z])\s*,\s*(\d+)-([A-Z])\s*\)\s*:\s*(\d+\.\d+)"
+)
+
 sdf_pattern = (
     r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
     r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
