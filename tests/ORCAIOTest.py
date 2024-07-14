@@ -743,6 +743,7 @@ class TestORCAOutput:
         assert orca_out.converged is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.normal_termination is True
+        assert orca_out.dfet_embed_energy is None
         assert np.isclose(orca_out.homo_energy, -9.382, rtol=1e-4)
         assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
         assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)

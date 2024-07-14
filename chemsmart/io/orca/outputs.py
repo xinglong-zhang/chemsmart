@@ -354,9 +354,6 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         return self._get_sp_structure()
 
     def _get_optimized_final_structure(self):
-        from chemsmart.utils.periodictable import PeriodicTable
-
-        p = PeriodicTable()
         """Obtain the final optimized structure from ORCA geometry optimization job.
 
         An example of the output for this portion will look like:
@@ -472,8 +469,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
     def optimized_geometry(self):
         return self.molecule.positions
 
-    @property
-    def optimized_scf_energy(self):
+    def _get_optimized_scf_energy(self):
         for i, line_i in enumerate(self.optimized_output_lines):
             if "TOTAL SCF ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -489,7 +485,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         return energy_in_hartree * units.Hartree
 
     @property
-    def sp_scf_energy(self):
+    def _get_sp_scf_energy(self):
         if self.optimized_output_lines is None:
             for line in self.contents:
                 if "Total Energy       :" in line:
@@ -506,13 +502,13 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
     @property
     def final_scf_energy(self):
         if self.optimized_output_lines is not None:
-            return self.optimized_scf_energy
-        return self.sp_scf_energy
+            return self._get_optimized_scf_energy()
+        return self._get_sp_scf_energy()
 
     @property
     def final_energy(self):
-        if self.optimized_scf_energy is not None:
-            return self.optimized_scf_energy
+        if self.final_scf_energy is not None:
+            return self.final_scf_energy
         return self.single_point_energy
 
     @property
@@ -525,153 +521,141 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
 
     @property
     def final_nuclear_repulsion(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Nuclear Repulsion  :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-4,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        final_nuclear_repulsion_hartree = []
+        final_nuclear_repulsion_eV = []
+        for line in self.contents:
+            if "Nuclear Repulsion  :" in line:
+                line_elements = line.split()
+                energy_in_hartree = float(line_elements[-4])
+                energy_in_eV = float(line_elements[-2])
+                assert np.isclose(
+                    energy_in_hartree * units.Hartree,
+                    energy_in_eV,
+                    rtol=1e-4,
+                )
+                final_nuclear_repulsion_hartree.append(energy_in_hartree)
+                final_nuclear_repulsion_eV.append(energy_in_eV)
+        return final_nuclear_repulsion_eV[-1]
 
     @property
     def final_electronic_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Electronic Energy  :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-4,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        final_electronic_energy_hartree = []
+        final_electronic_energy_eV = []
+        for line in self.contents:
+            if "Electronic Energy  :" in line:
+                line_elements = line.split()
+                energy_in_hartree = float(line_elements[-4])
+                energy_in_eV = float(line_elements[-2])
+                assert np.isclose(
+                    energy_in_hartree * units.Hartree,
+                    energy_in_eV,
+                    rtol=1e-4,
+                )
+                final_electronic_energy_hartree.append(energy_in_hartree)
+                final_electronic_energy_eV.append(energy_in_eV)
+        return final_electronic_energy_eV[-1]
 
     @property
     def one_electron_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "One Electron Energy:" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-4,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        one_electron_energy_hartree = []
+        one_electron_energy_eV = []
+        for line in self.contents:
+            if "One Electron Energy:" in line:
+                line_elements = line.split()
+                energy_in_hartree = float(line_elements[-4])
+                energy_in_eV = float(line_elements[-2])
+                assert np.isclose(
+                    energy_in_hartree * units.Hartree,
+                    energy_in_eV,
+                    rtol=1e-4,
+                )
+                one_electron_energy_hartree.append(energy_in_hartree)
+                one_electron_energy_eV.append(energy_in_eV)
+        return one_electron_energy_eV[-1]
 
     @property
     def two_electron_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Two Electron Energy:" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-4,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        two_electron_energy_hartree = []
+        two_electron_energy_eV = []
+        for line in self.contents:
+            if "Two Electron Energy:" in line:
+                line_elements = line.split()
+                energy_in_hartree = float(line_elements[-4])
+                energy_in_eV = float(line_elements[-2])
+                assert np.isclose(
+                    energy_in_hartree * units.Hartree,
+                    energy_in_eV,
+                    rtol=1e-4,
+                )
+                two_electron_energy_hartree.append(energy_in_hartree)
+                two_electron_energy_eV.append(energy_in_eV)
+        return two_electron_energy_eV[-1]
 
     @property
     def max_cosx_asymmetry_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Max COSX asymmetry :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-2,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        max_cosx_asymmetry_energy_hartree = []
+        for line in self.contents:
+            if "Max COSX asymmetry :" in line:
+                energy_in_hartree = float(line.split()[-4])
+                max_cosx_asymmetry_energy_hartree.append(energy_in_hartree)
+        if len(max_cosx_asymmetry_energy_hartree) != 0:
+            max_cosx_asymmetry_energy_eV = [
+                value * units.Hartree for value in max_cosx_asymmetry_energy_hartree
+            ]
+            return max_cosx_asymmetry_energy_eV[-1]
 
     @property
     def potential_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Potential Energy   :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-4,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        potential_energy_hartree = []
+        for line in self.contents:
+            if "Potential Energy   :" in line:
+                energy_in_hartree = float(line.split()[-4])
+                potential_energy_hartree.append(energy_in_hartree)
+        if len(potential_energy_hartree) != 0:
+            potential_energy_eV = [
+                value * units.Hartree for value in potential_energy_hartree
+            ]
+            return potential_energy_eV[-1]
 
     @property
     def kinetic_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Kinetic Energy     :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
-                        assert math.isclose(
-                            energy_in_hartree * units.Hartree,
-                            energy_in_eV,
-                            rel_tol=1e-4,
-                        )
-                        return energy_in_hartree * units.Hartree
-        return None
+        kinetic_energy_hartree = []
+        for line in self.contents:
+            if "Kinetic Energy     :" in line:
+                energy_in_hartree = float(line.split()[-4])
+                kinetic_energy_hartree.append(energy_in_hartree)
+        kinetic_energy_eV = [value * units.Hartree for value in kinetic_energy_hartree]
+        if len(kinetic_energy_eV) != 0:
+            return kinetic_energy_eV[-1]
 
     @property
     def virial_ratio(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "Virial Ratio       :" in line_j:
-                        return float(line_j.split()[-1])
-        return None
+        virial_ratios = []
+        for line in self.contents:
+            if "Virial Ratio       :" in line:
+                virial_ratios.append(float(line.split()[-1]))
+        if len(virial_ratios) != 0:
+            return virial_ratios[-1]
 
     @property
     def xc_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "E(XC)              :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-2])
-                        return energy_in_hartree * units.Hartree
-        return None
+        xc_energy_hartree = []
+        for line in self.contents:
+            if "E(XC)              :" in line:
+                xc_energy_hartree.append(float(line.split()[-2]))
+        if len(xc_energy_hartree) != 0:
+            xc_energy_eV = [value * units.Hartree for value in xc_energy_hartree]
+            return xc_energy_eV[-1]
 
     @property
     def dfet_embed_energy(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if "TOTAL SCF ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
-                    if "DFET-embed. en.    :" in line_j:
-                        line_j_elements = line_j.split()
-                        energy_in_hartree = float(line_j_elements[-2])
-                        return energy_in_hartree * units.Hartree
-        return None
+        dfet_embed_energy_hartree = []
+        for line in self.contents:
+            if "DFET-embed. en.    :" in line:
+                dfet_embed_energy_hartree.append(float(line.split()[-2]))
+        if len(dfet_embed_energy_hartree) != 0:
+            dfet_embed_energy_eV = [value * units.Hartree for value in dfet_embed_energy_hartree]
+            return dfet_embed_energy_eV[-1]
 
     @property
     def orbital_occupancy(self):
