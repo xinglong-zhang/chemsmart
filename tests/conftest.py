@@ -237,6 +237,11 @@ def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
 
 
 @pytest.fixture()
+def hirshfeld_full_print(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "udc3_ts1_c15_sp_hirshfeld.out")
+
+
+@pytest.fixture()
 def water_engrad_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.engrad")
 

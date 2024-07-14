@@ -706,6 +706,47 @@ class TestORCAOutput:
         assert np.isclose(orca_out.lumo_energy, 1.56267, rtol=1e-5)
         assert np.isclose(orca_out.fmo_gap, 10.968637, rtol=1e-5)
 
+    def test_read_hirshfelf_full_print_output(self, hirshfeld_full_print):
+        orca_out = ORCAOutput(filename=hirshfeld_full_print)
+        assert orca_out.route_string == "! Hirshfeld".lower()
+        assert orca_out.functional is None
+        assert orca_out.basis is None
+        assert orca_out.ab_initio is None
+        assert orca_out.aux_basis is None
+        assert orca_out.extrapolation_basis is None
+        assert orca_out.natoms == 78
+        assert orca_out.num_basis_functions == 876
+        assert orca_out.num_shells == 396
+        assert orca_out.max_ang_mom == 2
+        assert orca_out.contraction_scheme == "SEGMENTED contraction"
+        assert orca_out.coulomb_range_seperation.lower() == "not used"
+        assert orca_out.exchange_range_seperation.lower() == "not used"
+        assert orca_out.finite_nucleus_model.lower() == "not used"
+        assert orca_out.aux_j_fitting_basis.lower() == "not available"
+        assert orca_out.aux_j_num_basis_functions is None
+        assert orca_out.aux_j_num_shells is None
+        assert orca_out.aux_j_max_ang_mom is None
+        assert orca_out.aux_jk_fitting_basis.lower() == "not available"
+        assert orca_out.aux_k_fitting_basis.lower() == "not available"
+        assert orca_out.aux_external_fitting_basis.lower() == "not available"
+        assert orca_out.integral_threshold == 1e-10
+        assert orca_out.primitive_cutoff == 1e-11
+        assert orca_out.primitive_pair_threshold == 1e-11
+        assert orca_out.ri_approx is None
+        assert orca_out.rij_cosx is None
+        assert orca_out.charge == 0
+        assert orca_out.multiplicity == 1
+        assert orca_out.num_electrons == 396
+        assert orca_out.basis_dim == 876
+        assert orca_out.diis_acceleration is True
+        assert orca_out.scf_maxiter == 125
+        assert orca_out.converged is None
+        assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.normal_termination is True
+        assert np.isclose(orca_out.homo_energy, -9.382, rtol=1e-4)
+        assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
+        assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)
+
     def test_gtoint_errfile(self, gtoint_errfile):
         orca_out = ORCAOutput(filename=gtoint_errfile)
         assert orca_out.route_string == "! m062x def2-svp opt freq defgrid3"
