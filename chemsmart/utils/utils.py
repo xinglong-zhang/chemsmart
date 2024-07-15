@@ -176,3 +176,44 @@ def create_logger(
         errfile_handler = logging.FileHandler(filename=os.path.join(folder, errfile))
         errfile_handler.setLevel(logging.WARNING)
         logger.addHandler(errfile_handler)
+
+
+
+def get_value_by_number(num, data):
+    # Iterate through all keys in the dictionary
+    for key in data.keys():
+        # Extract the numeric part of the key
+        key_number = ''.join(filter(str.isdigit, key))
+        if key_number == str(num):
+            return data[key]
+
+def get_key_by_value(value, data):
+    # Iterate through all items in the dictionary
+    for key, val in data.items():
+        if val == value:
+            return key
+
+# Sample dictionary for demonstration purposes
+"""
+data = {
+    'O1': 'value1',
+    'O2': 'value2',
+    'O3': 'value3',
+    'C4': 'value4',
+    'C5': 'value5',
+    'O6': 'value6',
+    'O7': 'value7',
+    'O8': 'value8',
+    'C9': 'value9',
+    'C10': 'value10',
+    'C43': 'value43',
+    'F68': 'value68',
+    'H15': 'value15',
+    # ... (add all other key-value pairs)
+}
+# Example usage
+print(get_value_by_number(43, data))  # Should print 'value43'
+print(get_value_by_number(1, data))   # Should print 'value1'
+print(get_value_by_number(68, data))  # Should print 'value68'
+print(get_value_by_number(15, data))  # Should print 'value15'
+"""
