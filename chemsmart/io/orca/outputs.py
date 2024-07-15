@@ -904,6 +904,64 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         return all_mayer_bond_orders_larger_than_zero_point_one[-1]
 
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
+    # * HIRSHFELD ANALYSIS *
+    # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
+    @property
+    def total_integrated_alpha_density(self):
+        all_hirshfeld_alpha_density = []
+        for i, line_i in enumerate(self.contents):
+            if "HIRSHFELD ANALYSIS" in line_i:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
+                    if "Total integrated alpha density" in line_j:
+                        all_hirshfeld_alpha_density.append(float(line_j.split()[-1]))
+        return all_hirshfeld_alpha_density[-1]
+
+    @property
+    def total_integrated_beta_density(self):
+        all_hirshfeld_beta_density = []
+        for i, line_i in enumerate(self.contents):
+            if "HIRSHFELD ANALYSIS" in line_i:
+                for line_j in self.contents[i + 3 :]:
+                    if len(line_j) == 0:
+                        break
+                    if "Total integrated beta density" in line_j:
+                        all_hirshfeld_beta_density.append(float(line_j.split()[-1]))
+        return all_hirshfeld_beta_density[-1]
+
+    def _get_hirshfeld_charges_and_spins(self):
+        all_hirshfeld_charges = []
+        all_hirshfeld_spins = []
+        for i, line_i in enumerate(self.contents):
+            hirshfeld_charges = {}
+            hirshfeld_spins = {}
+            if "HIRSHFELD ANALYSIS" in line_i:
+                for line_j in self.contents[i + 6 :]:
+                    if len(line_j) == 0:
+                        break
+                    line_j_elements = line_j.split()
+                    if len(line_j_elements) == 4:
+                        dict_key = f"{line_j_elements[1]}{int(line_j_elements[0])+1}"
+                        charge_value = float(line_j_elements[2])
+                        spin_value = float(line_j_elements[3])
+                        hirshfeld_charges[dict_key] = charge_value
+                        hirshfeld_spins[dict_key] = spin_value
+                all_hirshfeld_charges.append(hirshfeld_charges)
+                all_hirshfeld_spins.append(hirshfeld_spins)
+        return all_hirshfeld_charges[-1], all_hirshfeld_spins[-1]
+
+    @property
+    def hirshfeld_charges(self):
+        hirshfeld_charges, _ = self._get_hirshfeld_charges_and_spins()
+        return hirshfeld_charges
+
+    @property
+    def hirshfeld_spins(self):
+        _, hirshfeld_spins = self._get_hirshfeld_charges_and_spins()
+        return hirshfeld_spins
+
+    # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # *     ORCA property calculations      *
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
