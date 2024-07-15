@@ -944,9 +944,11 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 4:
                         dict_key = f"{line_j_elements[1]}{int(line_j_elements[0])+1}"
                         charge_value = float(line_j_elements[2])
-                        spin_value = float(line_j_elements[3])
                         hirshfeld_charges[dict_key] = charge_value
+
+                        spin_value = float(line_j_elements[3])
                         hirshfeld_spins[dict_key] = spin_value
+
                 all_hirshfeld_charges.append(hirshfeld_charges)
                 all_hirshfeld_spins.append(hirshfeld_spins)
         return all_hirshfeld_charges[-1], all_hirshfeld_spins[-1]

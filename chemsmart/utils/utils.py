@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import time
 import hashlib
 import copy
@@ -178,20 +179,26 @@ def create_logger(
         logger.addHandler(errfile_handler)
 
 
-
 def get_value_by_number(num, data):
     # Iterate through all keys in the dictionary
     for key in data.keys():
         # Extract the numeric part of the key
-        key_number = ''.join(filter(str.isdigit, key))
+        key_number = "".join(filter(str.isdigit, key))
         if key_number == str(num):
             return data[key]
 
-def get_key_by_value(value, data):
+
+def get_key_by_value_and_number(value, number, data):
     # Iterate through all items in the dictionary
     for key, val in data.items():
-        if val == value:
-            return key
+        # Extract the numerical part of the key using regex
+        match = re.search(r"\d+$", key)
+        if match:
+            key_number = int(match.group())
+            # Check if both the value and the numerical part of the key match
+            if val == value and key_number == number:
+                return key
+
 
 # Sample dictionary for demonstration purposes
 """

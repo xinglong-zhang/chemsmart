@@ -5,7 +5,7 @@ import click
 from chemsmart.utils.utils import create_logger
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.outputs import ORCAOutput
-from chemsmart.utils.utils import get_value_by_number, get_key_by_value
+from chemsmart.utils.utils import get_value_by_number, get_key_by_value_and_number
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -21,13 +21,6 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Gaussian or ORCA output file.",
 )
 @click.option(
-    "-u",
-    "--unit",
-    default="eV",
-    type=click.Choice(["eV", "kcal/mol"], case_sensitive=False),
-    help="Unit of FMO energy.",
-)
-@click.option(
     "-n",
     "--numbers",
     default=None,
@@ -35,7 +28,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     multiple=True,
     help="Atom numbers from which to obtain Hirshfeld Charges and Spins. 1-indexed.",
 )
-def entry_point(filename, unit, numbers):
+def entry_point(filename, numbers):
     create_logger()
     if filename.endswith(".log"):
         outputfile = Gaussian16Output(filename=filename)
@@ -44,30 +37,29 @@ def entry_point(filename, unit, numbers):
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
     hirshfeld_charges = outputfile.hirshfeld_charges
-    hirshfeld_spins = outputfile.hirshfeld_spins
     logger.info(f"\nHirshfeld Charges:")
     for hkey, hvalue in hirshfeld_charges.items():
-        logger.info(f"{hkey}  :  {hvalue}")
+        logger.info(f"{hkey}  :  {hvalue:.3f}")
     logger.info(f"\n")
+
+    hirshfeld_spins = outputfile.hirshfeld_spins
     logger.info(f"\nHirshfeld Spins:")
     for hkey, hvalue in hirshfeld_spins.items():
-        logger.info(f"{hkey}  :  {hvalue}")
+        logger.info(f"{hkey}  :  {hvalue:.3f}")
     logger.info(f"\n")
 
-    hkeys = hirshfeld_charges.keys()
     if numbers is not None:
-        # print(numbers)
-        # print(type(numbers))
         for n in numbers:
             charge_value = get_value_by_number(n, hirshfeld_charges)
-            hk = get_key_by_value(charge_value, hirshfeld_charges)
-            logger.info(f"Hirshfeld Charge at {hk} is {charge_value}.")
+            hk = get_key_by_value_and_number(charge_value, n, hirshfeld_charges)
+            logger.info(f"Hirshfeld Charge at {hk} is {charge_value:.3f}.")
         logger.info(f"\n")
 
+    if numbers is not None:
         for n in numbers:
             spin_value = get_value_by_number(n, hirshfeld_spins)
-            hk = get_key_by_value(spin_value, hirshfeld_spins)
-            logger.info(f"Hirshfeld Spin at {hk} is {spin_value}.")
+            hk = get_key_by_value_and_number(spin_value, n, hirshfeld_spins)
+            logger.info(f"Hirshfeld Spin at {hk} is {spin_value:.3f}.")
         logger.info(f"\n")
 
 
