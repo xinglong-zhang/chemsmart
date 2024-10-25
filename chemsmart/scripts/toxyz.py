@@ -6,7 +6,6 @@ import os
 import click
 
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.io.orca.outputs import ORCAOutput
 from chemsmart.utils.utils import create_logger
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 import numpy as np
 from chemsmart.utils.utils import is_float
-from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 

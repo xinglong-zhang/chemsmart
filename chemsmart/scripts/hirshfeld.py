@@ -37,30 +37,30 @@ def entry_point(filename, numbers):
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
     hirshfeld_charges = outputfile.hirshfeld_charges
-    logger.info(f"\nHirshfeld Charges:")
+    logger.info("\nHirshfeld Charges:")
     for hkey, hvalue in hirshfeld_charges.items():
         logger.info(f"{hkey}  :  {hvalue:.3f}")
-    logger.info(f"\n")
+    logger.info("\n")
 
     hirshfeld_spins = outputfile.hirshfeld_spins
-    logger.info(f"\nHirshfeld Spins:")
+    logger.info("\nHirshfeld Spins:")
     for hkey, hvalue in hirshfeld_spins.items():
         logger.info(f"{hkey}  :  {hvalue:.3f}")
-    logger.info(f"\n")
+    logger.info("\n")
 
     if numbers is not None:
         for n in numbers:
             charge_value = get_value_by_number(n, hirshfeld_charges)
             hk = get_key_by_value_and_number(charge_value, n, hirshfeld_charges)
             logger.info(f"Hirshfeld Charge at {hk} is {charge_value:.3f}.")
-        logger.info(f"\n")
+        logger.info("\n")
 
     if numbers is not None:
         for n in numbers:
             spin_value = get_value_by_number(n, hirshfeld_spins)
             hk = get_key_by_value_and_number(spin_value, n, hirshfeld_spins)
             logger.info(f"Hirshfeld Spin at {hk} is {spin_value:.3f}.")
-        logger.info(f"\n")
+        logger.info("\n")
 
 
 if __name__ == "__main__":

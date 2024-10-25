@@ -1,10 +1,8 @@
 import logging
 import re
-import numpy as np
-from functools import cached_property
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.io.molecules.structure import Molecule, ORCACoordinateBlock
+from chemsmart.io.molecules.structure import ORCACoordinateBlock
 from chemsmart.utils.repattern import standard_coord_pattern
 
 logger = logging.getLogger(__name__)
