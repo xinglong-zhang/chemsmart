@@ -2,6 +2,7 @@ import os
 import re
 import ase
 import numpy as np
+from ase.data import atomic_numbers
 from ase.symbols import Symbols
 from ase.atoms import Atoms
 from chemsmart.utils.utils import file_cache
@@ -440,15 +441,68 @@ class CoordinateBlock:
                 symbols.append(p.to_element(element_str=str(line_elements[0])))
         return symbols
 
+    def _get_atomic_numbers_positions_and_constraints(self):
+        atomic_numbers = []
+        positions = []
+        constraints = []
+        for line in self.coordinate_block:
+            if line.startswith(
+                "TV"
+            ):  # cases where PBC system occurs in Gaussian
+                continue
+
+            line_elements = line.split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+
+            try:
+                atomic_number = int(line_elements[0])
+            except ValueError:
+                atomic_number = p.to_atomic_number(
+                    p.to_element(str(line_elements[0]))
+                )
+            atomic_numbers.append(atomic_number)
+
+            second_value = float(line_elements[1])
+            x_coordinate = 0.0; y_coordinate = 0.0; z_coordinate = 0.0
+            if len(line_elements) > 4:
+                if np.isclose(atomic_number, second_value, atol=10e-6):
+                    # happens in cube file, where the second value is the same as
+                    # the atomic number but in float format
+                    x_coordinate = float(line_elements[2])
+                    y_coordinate = float(line_elements[3])
+                    z_coordinate = float(line_elements[4])
+                elif np.isclose(second_value, -1, atol=10e-6) or np.isclose(second_value, 0, atol=10e-6):
+                    # this is the case in frozen coordinates e.g.,
+                    # C        -1      -0.5448210000   -1.1694570000    0.0001270000
+                    # then ignore second value
+                    constraints.append(int(second_value))
+                    x_coordinate = float(line_elements[2])
+                    y_coordinate = float(line_elements[3])
+                    z_coordinate = float(line_elements[4])
+            else:
+                x_coordinate = float(line_elements[1])
+                y_coordinate = float(line_elements[2])
+                z_coordinate = float(line_elements[3])
+            position = [x_coordinate, y_coordinate, z_coordinate]
+            positions.append(position)
+        return atomic_numbers, np.array(positions), constraints
+
+    def _get_atomic_numbers(self):
+        """Obtain a list of symbols as atomic numbers."""
+        atomic_numbers, _, _ = self._get_atomic_numbers_positions_and_constraints()
+        return atomic_numbers
+
     def _get_positions(self):
-        # subclass to implement, as constraints format may be different for
-        # ORCA vs for Gaussian
-        raise NotImplementedError
+        """Obtain the coordinates of the molecule as numpy array."""
+        _, positions, _ = self._get_atomic_numbers_positions_and_constraints()
+        return positions
 
     def _get_constraints(self):
-        # subclass to implement, as constraints format may be different for
-        # ORCA vs for Gaussian
-        raise NotImplementedError
+        _, _, constraints = self._get_atomic_numbers_positions_and_constraints()
+        return constraints
 
     def _get_translation_vectors(self):
         tvs = []
@@ -467,7 +521,7 @@ class CoordinateBlock:
                     z_coordinate = float(line_elements[-1])
                 tv = [x_coordinate, y_coordinate, z_coordinate]
                 tvs.append(tv)
-            return tvs
+        return tvs
 
 
 class SDFFile(FileMixin):
@@ -500,112 +554,3 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
-
-
-class GaussianCoordinateBlock(CoordinateBlock):
-    def _get_positions(self):
-        positions = []
-        for line in self.coordinate_block:
-            if line.startswith(
-                "TV"
-            ):  # cases where PBC system occurs in Gaussian
-                continue
-            line_elements = line.split()
-            if (
-                len(line_elements) < 4 or len(line_elements) == 0
-            ):  # skip lines that do not contain coordinates
-                continue
-
-            try:
-                atomic_number = int(line_elements[0])
-            except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
-
-            second_value = float(line_elements[1])
-            if np.isclose(atomic_number, second_value, atol=10e-6):
-                # happens in cube file, where the second value is the same as
-                # the atomic number but in float format
-                x_coordinate = float(line_elements[2])
-                y_coordinate = float(line_elements[3])
-                z_coordinate = float(line_elements[4])
-            elif second_value == -1 or second_value == 0:
-                # this is the case in frozen coordinates e.g.,
-                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                # then ignore second value
-                x_coordinate = float(line_elements[2])
-                y_coordinate = float(line_elements[3])
-                z_coordinate = float(line_elements[4])
-            else:
-                x_coordinate = float(line_elements[1])
-                y_coordinate = float(line_elements[2])
-                z_coordinate = float(line_elements[3])
-            position = [x_coordinate, y_coordinate, z_coordinate]
-            positions.append(position)
-        return np.array(positions)
-
-    def _get_constraints(self):
-        """Obtain a list of contraints on the atoms in a molecule.
-        This returns a list of integers of value that is either -1 (frozen)
-        or 0 (relaxed)."""
-        constrained_atoms = []
-        for line in self.coordinate_block:
-            line_elements = line.split()
-            if (
-                len(line_elements) < 4 or len(line_elements) == 0
-            ):  # skip lines that do not contain coordinates
-                continue
-
-            try:
-                atomic_number = int(line_elements[0])
-            except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
-
-            second_value = float(line_elements[1])
-            if np.isclose(atomic_number, second_value, atol=10e-6):
-                continue
-            elif second_value == -1 or second_value == 0:
-                # this is the case in frozen coordinates e.g.,
-                # C        -1      -0.5448210000   -1.1694570000    0.0001270000
-                # then append these values
-                constrained_atoms.append(int(second_value))
-        return constrained_atoms
-
-
-class ORCACoordinateBlock(CoordinateBlock):
-    def _get_atomic_numbers(self):
-        atomic_numbers, _ = self._get_positions_and_atomic_numbers()
-        return atomic_numbers
-
-    def _get_positions(self):
-        _, positions = self._get_positions_and_atomic_numbers()
-        return positions
-
-    def _get_positions_and_atomic_numbers(self):
-        atomic_numbers = []
-        positions = []
-        for line in self.coordinate_block:
-            line_elements = line.split()
-            try:
-                atomic_number = int(line_elements[0])
-            except ValueError:
-                atomic_number = p.to_atomic_number(
-                    p.to_element(str(line_elements[0]))
-                )
-            atomic_numbers.append(atomic_number)
-
-            x_coordinate = float(line_elements[1])
-            y_coordinate = float(line_elements[2])
-            z_coordinate = float(line_elements[3])
-            position = [x_coordinate, y_coordinate, z_coordinate]
-            positions.append(position)
-
-        return atomic_numbers, np.array(positions)
-
-    def _get_constraints(self):
-        # to implement
-
-        pass

@@ -7,7 +7,7 @@ import numpy as np
 from ase import units
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.molecules.structure import ORCACoordinateBlock
+from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.utils import is_float
 from chemsmart.utils.repattern import (
     standard_coord_pattern,
@@ -387,7 +387,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         # start reading 4 lines after
                         if pattern.match(line_j):
                             coordinate_lines.append(line_j)
-        cb = ORCACoordinateBlock(coordinate_block=coordinate_lines)
+        cb = CoordinateBlock(coordinate_block=coordinate_lines)
         return cb.molecule
 
     def _get_sp_structure(self):
@@ -400,7 +400,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     if pattern.match(line_j):
                         coordinate_lines.append(line_j)
-        cb = ORCACoordinateBlock(coordinate_block=coordinate_lines)
+        cb = CoordinateBlock(coordinate_block=coordinate_lines)
         return cb.molecule
 
     @property
