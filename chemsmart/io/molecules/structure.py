@@ -2,7 +2,6 @@ import os
 import re
 import ase
 import numpy as np
-from ase.data import atomic_numbers
 from ase.symbols import Symbols
 from ase.atoms import Atoms
 from chemsmart.utils.utils import file_cache
