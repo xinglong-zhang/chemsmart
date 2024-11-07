@@ -123,7 +123,7 @@ class Gaussian16WBIOutput(Gaussian16Output):
         for i, line in enumerate(self.contents):
             if "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy" in line:
                 for j_line in self.contents[i + 2:]:
-                    if "WARNING" in j_line:
+                    if "WARNING" in j_line or "Summary of Natural Population Analysis" in j_line:
                         break
                     if len(j_line) != 0:
                         columns = j_line.split()
@@ -157,6 +157,78 @@ class Gaussian16WBIOutput(Gaussian16Output):
                         }
         return nao
 
+    @cached_property
+    def natural_population_analysis(self):
+        """Parse the NBO natural population analysis."""
+        npa = {}
+        for i, line in enumerate(self.contents):
+            if "Atom  No    Charge         Core      Valence    Rydberg      Total" in line:
+                for j_line in self.contents[i + 2:]:
+                    if "=======================================================================" in j_line:
+                        break
+                    if len(j_line) != 0:
+                        columns = j_line.split()
+
+                        # Extract values from each column
+                        atom_type = columns[0]
+                        atom_number = columns[1]
+                        charge = float(columns[2])
+                        core = float(columns[3])
+                        valence = float(columns[4])
+                        rydberg = float(columns[5])
+                        total = float(columns[6])
+
+                        # Construct the atom key, e.g., "Ni1"
+                        atom_key = f"{atom_type}{atom_number}"
+
+                        # Initialize the atom dictionary if it doesn't exist
+                        if atom_key not in npa:
+                            npa[atom_key] = {}
+
+                        # Populate the nested dictionary for each NAO entry
+                        npa[atom_key] = {
+                            "natural_charge": charge,
+                            "core_electrons": core,
+                            "valence_electrons": valence,
+                            "rydberg_electrons": rydberg,
+                            "total_electrons": total
+                        }
+        return npa
+
+    @cached_property
+    def natural_charges(self):
+        """Get natural charges corresponding to each atom as a dictionary."""
+        natural_charges = {}
+        for atom_key, atom_data in self.natural_population_analysis.items():
+            natural_charges[atom_key] = atom_data['natural_charge']
+        return natural_charges
+
+    @cached_property
+    def total_electrons(self):
+        """Get the total number of electrons corresponding to each atom as a dictionary."""
+        total_electrons = {}
+        for atom_key, atom_data in self.natural_population_analysis.items():
+            total_electrons[atom_key] = atom_data['total_electrons']
+        return total_electrons
+
+    @cached_property
+    def electronic_configuration(self):
+        """Get electronic configuration for each atom and store results in a dictionary."""
+        electronic_configuration = {}
+        for i, line in enumerate(self.contents):
+            if "Natural Electron Configuration" in line:
+                for j_line in self.contents[i + 2:]:
+                    if "Wiberg bond index matrix" in j_line:
+                        break
+                    if len(j_line) != 0:
+                        columns = j_line.split()
+                        atom_type = columns[0]
+                        atom_number = columns[1]
+                        configuration = "".join(columns[2:])
+                        atom_key = f"{atom_type}{atom_number}"
+                        electronic_configuration[atom_key] = configuration
+        return electronic_configuration
+
     def get_num_naos(self, atom_key):
         """Get the number of NAOs for a given atom."""
         return len(self.natural_atomic_orbitals[atom_key])
@@ -165,3 +237,10 @@ class Gaussian16WBIOutput(Gaussian16Output):
         """Get the total electron occupancy for a given atom."""
         total_electron_occ = sum(entry['occupancy'] for entry in self.natural_atomic_orbitals[atom_key].values())
         return total_electron_occ
+
+    def get_electronic_configuration(self, atom_key):
+        """Get the electronic configuration for a given atom."""
+        return self.electronic_configuration[atom_key]
+
+    
+

@@ -110,7 +110,17 @@ class TestGaussianWBIOutput:
         assert np.isclose(g16_output.get_total_electron_occ('H17'), 0.78631, rtol=1e-4)
         # import pprint
         # pprint.pprint(g16_output.natural_atomic_orbitals['Ni1'])
-
+        assert len(g16_output.natural_population_analysis) == 128
+        assert g16_output.natural_population_analysis['Ni1']['natural_charge'] == 0.52827
+        assert g16_output.natural_population_analysis['C100']['natural_charge'] == -0.42062
+        assert g16_output.natural_charges['Ni1'] == 0.52827
+        assert g16_output.natural_charges['C100'] == -0.42062
+        assert g16_output.total_electrons['Ni1'] == 27.47173
+        assert g16_output.total_electrons['C100'] == 6.42062
+        assert g16_output.electronic_configuration['Ni1'] == '[core]4S(0.27)3d(8.70)4p(0.51)'
+        assert g16_output.electronic_configuration['C100'] == '[core]2S(0.95)2p(3.44)3S(0.01)3p(0.02)'
+        assert g16_output.electronic_configuration['H128'] == '1S(0.80)'
+        assert g16_output.get_electronic_configuration('Ni1') == '[core]4S(0.27)3d(8.70)4p(0.51)'
 
 
 class TestGaussianCubeFile:
