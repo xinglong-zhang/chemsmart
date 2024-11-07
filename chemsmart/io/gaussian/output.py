@@ -1,8 +1,8 @@
 import re
 from itertools import islice
 from functools import cached_property
+from collections import OrderedDict
 from chemsmart.utils.mixins import FileMixin
-
 
 # patterns for searching
 eV_pattern = r"([\d\.]+) eV"
@@ -13,6 +13,8 @@ f_pattern = r"f=([\d\.]+)"
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename
+
+class Gaussian16TDDFTOutput(Gaussian16Output):
 
     @cached_property
     def tddft_transitions(self):
@@ -114,32 +116,52 @@ class Gaussian16WBIOutput(Gaussian16Output):
             if "Gaussian NBO Version" in line:
                 return line.split()[-1].split('*')[0]
 
-    @property
+    @cached_property
     def natural_atomic_orbitals(self):
         """Parse the NBO natural atomic orbitals."""
         nao = {}
         for i, line in enumerate(self.contents):
             if "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy" in line:
                 for j_line in self.contents[i + 2:]:
-                    nao_atom = {}
                     if "WARNING" in j_line:
                         break
                     if len(j_line) != 0:
-                        j_line_elements = j_line.split()
+                        columns = j_line.split()
 
-                        nao_type = j_line_elements[5].split(')')[0]
-                        nao_type += j_line_elements[3][1:]
-                        electron_type = j_line_elements[4].split('(')[0]
+                        # Extract values from each column
+                        nao_number = int(columns[0])  # NAO Number (like 1, 2, etc.)
+                        atom_type = columns[1]  # Atom type (e.g., 'Ni')
+                        atom_number = columns[2]  # Atom number (e.g., '1')
+                        lang = columns[3]  # Lang (e.g., 'S', 'px', 'py')
+                        electron_type = columns[4].split('(')[0]  # Electron type (e.g., 'Cor', 'Val', 'Ryd')
+                        nao_type = columns[5].split(')')[0]  # NAO Type (e.g., '1S', '2S', etc.)
+                        nao_type += lang[1:]  # Append the lang to the NAO type
+                        occupancy = float(columns[6])  # Occupancy
+                        energy = float(columns[7])  # Energy
 
-                        nao_atom[f'{j_line_elements[1]}{j_line_elements[2]}'] = {
+                        # Construct the atom key, e.g., "Ni1"
+                        atom_key = f"{atom_type}{atom_number}"
+                        # Construct the sub-key for each NAO entry, e.g., "NAO1", "NAO2", etc.
+                        nao_key = f"NAO_{atom_type}{nao_number}"
+
+                        # Initialize the atom dictionary if it doesn't exist
+                        if atom_key not in nao:
+                            nao[atom_key] = {}
+
+                        # Populate the nested dictionary for each NAO entry
+                        nao[atom_key][nao_key] = {
                             "nao_type": nao_type,
                             "electron_type": electron_type,
-                            "occupancy": float(j_line_elements[6]),
-                            "energy": float(j_line_elements[7]),
+                            "occupancy": occupancy,
+                            "energy": energy
                         }
-
-                        nao[f'{j_line_elements[1]}{j_line_elements[0]}'] = nao_atom
-                    else:
-                        # reset nao_atom dictionary
-                        nao_atom = {}
         return nao
+
+    def get_num_naos(self, atom_key):
+        """Get the number of NAOs for a given atom."""
+        return len(self.natural_atomic_orbitals[atom_key])
+
+    def get_total_electron_occ(self, atom_key):
+        """Get the total electron occupancy for a given atom."""
+        total_electron_occ = sum(entry['occupancy'] for entry in self.natural_atomic_orbitals[atom_key].values())
+        return total_electron_occ

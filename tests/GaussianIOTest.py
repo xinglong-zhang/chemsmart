@@ -1,6 +1,6 @@
 import os.path
-
-from chemsmart.io.gaussian.output import Gaussian16Output
+import numpy as np
+from chemsmart.io.gaussian.output import Gaussian16TDDFTOutput
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 
@@ -8,7 +8,7 @@ from chemsmart.io.gaussian.cube import GaussianCubeFile
 class TestGaussian16Output:
     def test_normal_termination_with_forces_and_frequencies(self, td_outputfile):
         assert os.path.exists(td_outputfile)
-        g16_output = Gaussian16Output(filename=td_outputfile)
+        g16_output = Gaussian16TDDFTOutput(filename=td_outputfile)
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
         assert g16_output.excitation_energies_eV == [
@@ -97,12 +97,19 @@ class TestGaussianWBIOutput:
         assert os.path.exists(wbi_outputfile)
         g16_output = Gaussian16WBIOutput(filename=wbi_outputfile)
         assert g16_output.nbo_version == '3.1'
-        assert len(g16_output.natural_atomic_orbitals) == 1254
-        assert g16_output.natural_atomic_orbitals['C912']['C92']['nao_type'] == '3dz2'
-        assert g16_output.natural_atomic_orbitals['C912']['C92']['electron_type'] == 'Ryd'
-        assert g16_output.natural_atomic_orbitals['C912']['C92']['occupancy'] == 0.00105
-        assert g16_output.natural_atomic_orbitals['C912']['C92']['energy'] == 2.38396
-        # print(g16_output.natural_atomic_orbitals)
+        assert len(g16_output.natural_atomic_orbitals) == 128
+        assert len(g16_output.natural_atomic_orbitals['Ni1']) == 31
+        assert len(g16_output.natural_atomic_orbitals['P2']) == 18
+        assert len(g16_output.natural_atomic_orbitals['H128']) == 5
+        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['nao_type'] == '3py'
+        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['electron_type'] == 'Cor'
+        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['occupancy'] == 1.99858
+        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['energy'] == -2.68937
+        assert g16_output.get_num_naos('Ni1') == 31
+        assert np.isclose(g16_output.get_total_electron_occ('Ni1'), 27.47171, rtol=1e-4)
+        assert np.isclose(g16_output.get_total_electron_occ('H17'), 0.78631, rtol=1e-4)
+        # import pprint
+        # pprint.pprint(g16_output.natural_atomic_orbitals['Ni1'])
 
 
 
