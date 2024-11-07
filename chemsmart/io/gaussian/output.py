@@ -103,3 +103,43 @@ class Gaussian16Output(FileMixin):
                 contribution_coefficients.append(each_state_contribution_coefficients)
 
         return transitions, contribution_coefficients
+
+class Gaussian16WBIOutput(Gaussian16Output):
+    def __init__(self, filename):
+        super().__init__(filename)
+
+    @property
+    def nbo_version(self):
+        for line in self.contents:
+            if "Gaussian NBO Version" in line:
+                return line.split()[-1].split('*')[0]
+
+    @property
+    def natural_atomic_orbitals(self):
+        """Parse the NBO natural atomic orbitals."""
+        nao = {}
+        for i, line in enumerate(self.contents):
+            if "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy" in line:
+                for j_line in self.contents[i + 2:]:
+                    nao_atom = {}
+                    if "WARNING" in j_line:
+                        break
+                    if len(j_line) != 0:
+                        j_line_elements = j_line.split()
+
+                        nao_type = j_line_elements[5].split(')')[0]
+                        nao_type += j_line_elements[3][1:]
+                        electron_type = j_line_elements[4].split('(')[0]
+
+                        nao_atom[f'{j_line_elements[1]}{j_line_elements[2]}'] = {
+                            "nao_type": nao_type,
+                            "electron_type": electron_type,
+                            "occupancy": float(j_line_elements[6]),
+                            "energy": float(j_line_elements[7]),
+                        }
+
+                        nao[f'{j_line_elements[1]}{j_line_elements[0]}'] = nao_atom
+                    else:
+                        # reset nao_atom dictionary
+                        nao_atom = {}
+        return nao

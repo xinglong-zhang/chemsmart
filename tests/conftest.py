@@ -25,6 +25,16 @@ def test_data_directory():
 def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "GaussianTests")
 
+# Gaussian output file from outputs folder
+@pytest.fixture()
+def outputs_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "outputs")
+
+@pytest.fixture()
+def wbi_outputfile(outputs_test_directory):
+    wbi_outputfile = os.path.join(outputs_test_directory, "TS_5coord_XIII_wbi.log")
+    return wbi_outputfile
+
 
 # Gaussian output file from TDDFT
 @pytest.fixture()

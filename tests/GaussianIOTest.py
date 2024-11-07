@@ -1,6 +1,7 @@
 import os.path
 
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 
 
@@ -89,6 +90,20 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+
+
+class TestGaussianWBIOutput:
+    def test_normal_termination_with_forces_and_frequencies(self, wbi_outputfile):
+        assert os.path.exists(wbi_outputfile)
+        g16_output = Gaussian16WBIOutput(filename=wbi_outputfile)
+        assert g16_output.nbo_version == '3.1'
+        assert len(g16_output.natural_atomic_orbitals) == 1254
+        assert g16_output.natural_atomic_orbitals['C912']['C92']['nao_type'] == '3dz2'
+        assert g16_output.natural_atomic_orbitals['C912']['C92']['electron_type'] == 'Ryd'
+        assert g16_output.natural_atomic_orbitals['C912']['C92']['occupancy'] == 0.00105
+        assert g16_output.natural_atomic_orbitals['C912']['C92']['energy'] == 2.38396
+        # print(g16_output.natural_atomic_orbitals)
+
 
 
 class TestGaussianCubeFile:
