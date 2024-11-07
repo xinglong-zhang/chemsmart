@@ -86,6 +86,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install Pip
         run: pip install --user --upgrade pip
+        run: python.exe -m pip install --upgrade pip
       - name: Install project
         run: pip install -e .[test]
       - name: run tests
