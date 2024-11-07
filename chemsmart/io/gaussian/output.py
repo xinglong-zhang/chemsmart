@@ -1,7 +1,6 @@
 import re
 from itertools import islice
 from functools import cached_property
-from collections import OrderedDict
 from chemsmart.utils.mixins import FileMixin
 
 # patterns for searching
