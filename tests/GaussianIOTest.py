@@ -96,38 +96,63 @@ class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(self, wbi_outputfile):
         assert os.path.exists(wbi_outputfile)
         g16_output = Gaussian16WBIOutput(filename=wbi_outputfile)
-        assert g16_output.nbo_version == '3.1'
+        assert g16_output.nbo_version == "3.1"
         assert len(g16_output.natural_atomic_orbitals) == 128
-        assert len(g16_output.natural_atomic_orbitals['Ni1']) == 31
-        assert len(g16_output.natural_atomic_orbitals['P2']) == 18
-        assert len(g16_output.natural_atomic_orbitals['H128']) == 5
-        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['nao_type'] == '3py'
-        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['electron_type'] == 'Cor'
-        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['occupancy'] == 1.99858
-        assert g16_output.natural_atomic_orbitals['Ni1']['NAO_Ni10']['energy'] == -2.68937
-        assert g16_output.get_num_naos('Ni1') == 31
-        assert np.isclose(g16_output.get_total_electron_occ('Ni1'), 27.47171, rtol=1e-4)
-        assert np.isclose(g16_output.get_total_electron_occ('H17'), 0.78631, rtol=1e-4)
+        assert len(g16_output.natural_atomic_orbitals["Ni1"]) == 31
+        assert len(g16_output.natural_atomic_orbitals["P2"]) == 18
+        assert len(g16_output.natural_atomic_orbitals["H128"]) == 5
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["nao_type"] == "3py"
+        )
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["electron_type"]
+            == "Cor"
+        )
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["occupancy"]
+            == 1.99858
+        )
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["energy"] == -2.68937
+        )
+        assert g16_output.get_num_naos("Ni1") == 31
+        assert np.isclose(g16_output.get_total_electron_occ("Ni1"), 27.47171, rtol=1e-4)
+        assert np.isclose(g16_output.get_total_electron_occ("H17"), 0.78631, rtol=1e-4)
         # import pprint
         # pprint.pprint(g16_output.natural_atomic_orbitals['Ni1'])
         assert len(g16_output.natural_population_analysis) == 128
-        assert g16_output.natural_population_analysis['Ni1']['natural_charge'] == 0.52827
-        assert g16_output.natural_population_analysis['C100']['natural_charge'] == -0.42062
-        assert g16_output.natural_charges['Ni1'] == 0.52827
-        assert g16_output.natural_charges['C100'] == -0.42062
-        assert g16_output.total_electrons['Ni1'] == 27.47173
-        assert g16_output.total_electrons['C100'] == 6.42062
-        assert g16_output.electronic_configuration['Ni1'] == '[core]4S(0.27)3d(8.70)4p(0.51)'
-        assert g16_output.electronic_configuration['C100'] == '[core]2S(0.95)2p(3.44)3S(0.01)3p(0.02)'
-        assert g16_output.electronic_configuration['H128'] == '1S(0.80)'
-        assert g16_output.get_electronic_configuration('Ni1') == '[core]4S(0.27)3d(8.70)4p(0.51)'
+        assert (
+            g16_output.natural_population_analysis["Ni1"]["natural_charge"] == 0.52827
+        )
+        assert (
+            g16_output.natural_population_analysis["C100"]["natural_charge"] == -0.42062
+        )
+        assert g16_output.natural_charges["Ni1"] == 0.52827
+        assert g16_output.natural_charges["C100"] == -0.42062
+        assert g16_output.total_electrons["Ni1"] == 27.47173
+        assert g16_output.total_electrons["C100"] == 6.42062
+        assert (
+            g16_output.electronic_configuration["Ni1"]
+            == "[core]4S(0.27)3d(8.70)4p(0.51)"
+        )
+        assert (
+            g16_output.electronic_configuration["C100"]
+            == "[core]2S(0.95)2p(3.44)3S(0.01)3p(0.02)"
+        )
+        assert g16_output.electronic_configuration["H128"] == "1S(0.80)"
+        assert (
+            g16_output.get_electronic_configuration("Ni1")
+            == "[core]4S(0.27)3d(8.70)4p(0.51)"
+        )
 
 
 class TestGaussianCubeFile:
     def test_read_file_content(self, spin_cube_file):
         spin_cube = GaussianCubeFile(filename=spin_cube_file)
         assert spin_cube.cube_job_title == "Gaussian job density"
-        assert spin_cube.cube_job_description == "Electron density from Total SCF Density"
+        assert (
+            spin_cube.cube_job_description == "Electron density from Total SCF Density"
+        )
         assert spin_cube.num_atoms == 2
         assert spin_cube.coordinate_origin == (-5.483229, -5.483229, -6.522947)
         assert type(spin_cube.coordinate_origin) is tuple

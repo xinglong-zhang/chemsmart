@@ -6,7 +6,9 @@ gaussian_ab_initio = GaussianRefs().gaussian_ab_initio
 gaussian_functionals = GaussianRefs().gaussian_dft_fuctionals
 gaussian_bases = GaussianRefs().gaussian_basis_sets
 gaussian_solvation_models = GaussianRefs().gaussian_solvation_models
-gaussian_additional_route_parameters = GaussianRefs().gaussian_additional_route_parameters
+gaussian_additional_route_parameters = (
+    GaussianRefs().gaussian_additional_route_parameters
+)
 gaussian_additional_opt_options = GaussianRefs().gaussian_additional_opt_options
 gaussian_dieze_tags = GaussianRefs().gaussian_dieze_tags
 
@@ -73,7 +75,9 @@ class GaussianRoute:
     def get_dieze_tag(self):
         dieze_tag = None
         # dieze_tag '# ', '#N', '#P' '#T'
-        if "#" in self.route_string and any(self.route_string.startswith(tag) for tag in gaussian_dieze_tags):
+        if "#" in self.route_string and any(
+            self.route_string.startswith(tag) for tag in gaussian_dieze_tags
+        ):
             dieze_tag = self.route_string[0:2]
         return dieze_tag
 
@@ -81,7 +85,11 @@ class GaussianRoute:
         # get job type: opt/ts/sp/ircf/ircr
         if "ts" in self.route_string:
             job_type = "ts"
-        elif "opt" in self.route_string and "ts" not in self.route_string and "modred" not in self.route_string:
+        elif (
+            "opt" in self.route_string
+            and "ts" not in self.route_string
+            and "modred" not in self.route_string
+        ):
             job_type = "opt"
         elif "opt=modred" in self.route_string:
             job_type = "modred"  # would include scan jobs too
@@ -118,7 +126,9 @@ class GaussianRoute:
         for each_input in self.route_inputs:
             # obtain functional and basis
             if "/" in each_input:
-                func_basis = each_input.split("/")  # TODO # not necessarily for non-standard route e.g.
+                func_basis = each_input.split(
+                    "/"
+                )  # TODO # not necessarily for non-standard route e.g.
                 # pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly'
                 if len(func_basis) == 2:
                     functional = func_basis[0]
@@ -134,7 +144,10 @@ class GaussianRoute:
                     dispersion = each_input
                     functional_with_dispersion = functional + " " + dispersion
                     functional = functional_with_dispersion
-                if any(basisset in each_input for basisset in gaussian_bases) and "generic" not in each_input:
+                if (
+                    any(basisset in each_input for basisset in gaussian_bases)
+                    and "generic" not in each_input
+                ):
                     basis = each_input
 
         # non standard input by user e.g., `#wb897xd` without space
@@ -147,7 +160,10 @@ class GaussianRoute:
         additional_route = [
             each_input
             for each_input in self.route_inputs
-            if any(route_parameter in each_input for route_parameter in gaussian_additional_route_parameters)
+            if any(
+                route_parameter in each_input
+                for route_parameter in gaussian_additional_route_parameters
+            )
         ]
 
         return " ".join(additional_route) if len(additional_route) != 0 else None
@@ -156,17 +172,29 @@ class GaussianRoute:
         additional_opt_options = []
         for each_input in self.route_inputs:
             if "opt" in each_input:
-                opt_route = each_input.replace("opt=", "opt").split("opt")[-1].replace("(", "").replace(")", "")
+                opt_route = (
+                    each_input.replace("opt=", "opt")
+                    .split("opt")[-1]
+                    .replace("(", "")
+                    .replace(")", "")
+                )
                 if len(opt_route) != 0:
                     opt_options = opt_route.split(",")
                     for opt_option in opt_options:
                         # if 'eigentest' in opt_option and 'ts' in route_input:
                         #     additional_opt_options.append(opt_option)   # add `no/eigentest` only for ts jobs
                         # <-- `eigentest` already included in writing in GaussianSettings.write_gaussian_input()
-                        if any(option in opt_option for option in gaussian_additional_opt_options):
+                        if any(
+                            option in opt_option
+                            for option in gaussian_additional_opt_options
+                        ):
                             additional_opt_options.append(opt_option)  # noqa: PERF401
 
-        return ",".join(additional_opt_options) if len(additional_opt_options) != 0 else None
+        return (
+            ",".join(additional_opt_options)
+            if len(additional_opt_options) != 0
+            else None
+        )
 
     def get_solvent_model(self):
         if "scrf" in self.route_string:
@@ -181,7 +209,9 @@ class GaussianRoute:
                 solvent_model = "pcm"
             else:
                 # some model is present, then parse route_input
-                solvent_model = scrf_string.strip().split("(")[-1].strip().split(",")[0].strip()
+                solvent_model = (
+                    scrf_string.strip().split("(")[-1].strip().split(",")[0].strip()
+                )
             return solvent_model
         return None
 
@@ -194,7 +224,12 @@ class GaussianRoute:
 
                     # get solvent identity
                     if "solvent" in scrf_string:
-                        solvent_id = scrf_string.strip().split("solvent=")[-1].split(",")[0].split(")")[0]
+                        solvent_id = (
+                            scrf_string.strip()
+                            .split("solvent=")[-1]
+                            .split(",")[0]
+                            .split(")")[0]
+                        )
                         if "read" in each_input:
                             solvent_id = f"{solvent_id},read"
                         return solvent_id
