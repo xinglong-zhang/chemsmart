@@ -96,14 +96,10 @@ class Gaussian16TDDFTOutput(Gaussian16Output):
                 while len(self.contents[i + j]) != 0:
                     line_element = self.contents[i + j].split()
                     if len(line_element) <= 4:
-                        mo_transition = " ".join(
-                            list(islice(line_element, len(line_element) - 1))
-                        )
+                        mo_transition = " ".join(list(islice(line_element, len(line_element) - 1)))
                         contribution_coefficient = float(line_element[-1])
                         each_state_transitions.append(mo_transition)
-                        each_state_contribution_coefficients.append(
-                            contribution_coefficient
-                        )
+                        each_state_contribution_coefficients.append(contribution_coefficient)
                     j += 1
                 transitions.append(each_state_transitions)
                 contribution_coefficients.append(each_state_contribution_coefficients)
@@ -128,10 +124,7 @@ class Gaussian16WBIOutput(Gaussian16Output):
         for i, line in enumerate(self.contents):
             if "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy" in line:
                 for j_line in self.contents[i + 2 :]:
-                    if (
-                        "WARNING" in j_line
-                        or "Summary of Natural Population Analysis" in j_line
-                    ):
+                    if "WARNING" in j_line or "Summary of Natural Population Analysis" in j_line:
                         break
                     if len(j_line) != 0:
                         columns = j_line.split()
@@ -141,12 +134,8 @@ class Gaussian16WBIOutput(Gaussian16Output):
                         atom_type = columns[1]  # Atom type (e.g., 'Ni')
                         atom_number = columns[2]  # Atom number (e.g., '1')
                         lang = columns[3]  # Lang (e.g., 'S', 'px', 'py')
-                        electron_type = columns[4].split("(")[
-                            0
-                        ]  # Electron type (e.g., 'Cor', 'Val', 'Ryd')
-                        nao_type = columns[5].split(")")[
-                            0
-                        ]  # NAO Type (e.g., '1S', '2S', etc.)
+                        electron_type = columns[4].split("(")[0]  # Electron type (e.g., 'Cor', 'Val', 'Ryd')
+                        nao_type = columns[5].split(")")[0]  # NAO Type (e.g., '1S', '2S', etc.)
                         nao_type += lang[1:]  # Append the lang to the NAO type
                         occupancy = float(columns[6])  # Occupancy
                         energy = float(columns[7])  # Energy
@@ -174,15 +163,9 @@ class Gaussian16WBIOutput(Gaussian16Output):
         """Parse the NBO natural population analysis."""
         npa = {}
         for i, line in enumerate(self.contents):
-            if (
-                "Atom  No    Charge         Core      Valence    Rydberg      Total"
-                in line
-            ):
+            if "Atom  No    Charge         Core      Valence    Rydberg      Total" in line:
                 for j_line in self.contents[i + 2 :]:
-                    if (
-                        "======================================================================="
-                        in j_line
-                    ):
+                    if "=======================================================================" in j_line:
                         break
                     if len(j_line) != 0:
                         columns = j_line.split()
@@ -253,10 +236,7 @@ class Gaussian16WBIOutput(Gaussian16Output):
 
     def get_total_electron_occ(self, atom_key):
         """Get the total electron occupancy for a given atom."""
-        total_electron_occ = sum(
-            entry["occupancy"]
-            for entry in self.natural_atomic_orbitals[atom_key].values()
-        )
+        total_electron_occ = sum(entry["occupancy"] for entry in self.natural_atomic_orbitals[atom_key].values())
         return total_electron_occ
 
     def get_electronic_configuration(self, atom_key):

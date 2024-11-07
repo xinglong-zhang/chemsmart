@@ -30,9 +30,7 @@ def file_cache(copy_result=True, maxsize=64):
         if isinstance(func, staticmethod):
             func = func.__func__
         elif isinstance(func, classmethod):
-            raise ValueError(
-                "Unable to use this with classmethod. Use a staticmethod instead."
-            )
+            raise ValueError("Unable to use this with classmethod. Use a staticmethod instead.")
 
         @lru_cache(maxsize=maxsize)
         def func_with_modified_time_arg(modified_time, *args, **kwargs):
@@ -55,16 +53,12 @@ def file_cache(copy_result=True, maxsize=64):
             current_time = time.time()
             time_diff = [current_time - t for t in modified_times]
             max_time_diff = 1800
-            if any(t.is_integer() for t in modified_times) and any(
-                t < max_time_diff for t in time_diff
-            ):
+            if any(t.is_integer() for t in modified_times) and any(t < max_time_diff for t in time_diff):
                 modified_times = []
                 for filename in filenames:
                     with open(filename, "rb") as f:
                         data = f.read()
-                    modified_times.append(
-                        hashlib.blake2b(data, digest_size=10).hexdigest()
-                    )
+                    modified_times.append(hashlib.blake2b(data, digest_size=10).hexdigest())
 
             result = func_with_modified_time_arg(tuple(modified_times), *args, **kwargs)
             if copy_result:
@@ -89,9 +83,7 @@ def is_float(string):
 
 
 def content_blocks_by_paragraph(string_list):
-    return [
-        list(group) for k, group in groupby(string_list, lambda x: x == "") if not k
-    ]
+    return [list(group) for k, group in groupby(string_list, lambda x: x == "") if not k]
 
 
 def write_list_of_lists_as_a_string_with_empty_line_between_lists(list_of_lists):
