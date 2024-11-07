@@ -10,4 +10,4 @@ extend-ignore =
     # Whitespace before ':' - see https://github.com/psf/black/issues/1323 and https://github.com/psf/black/tree/7e4c6bf71fffc36ead970afde46a726144515e87#slices
     # extend-ignore doesn't seem to solve it: https://stackoverflow.com/questions/68161741/python-black-formatter-conflict-with-rule-flake8-w503-in-vscode/68172142#68172142 and https://github.com/psf/black/blob/06ccb88bf2bd35a4dc5d591bb296b5b299d07323/docs/guides/using_black_with_other_tools.md#flake8
 
-max-line-length=79
+max-line-length=121
