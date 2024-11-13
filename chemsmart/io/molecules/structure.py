@@ -465,7 +465,9 @@ class CoordinateBlock:
             atomic_numbers.append(atomic_number)
 
             second_value = float(line_elements[1])
-            x_coordinate = 0.0; y_coordinate = 0.0; z_coordinate = 0.0
+            x_coordinate = 0.0
+            y_coordinate = 0.0
+            z_coordinate = 0.0
             if len(line_elements) > 4:
                 if np.isclose(atomic_number, second_value, atol=10e-6):
                     # happens in cube file, where the second value is the same as
@@ -473,7 +475,9 @@ class CoordinateBlock:
                     x_coordinate = float(line_elements[2])
                     y_coordinate = float(line_elements[3])
                     z_coordinate = float(line_elements[4])
-                elif np.isclose(second_value, -1, atol=10e-6) or np.isclose(second_value, 0, atol=10e-6):
+                elif np.isclose(second_value, -1, atol=10e-6) or np.isclose(
+                    second_value, 0, atol=10e-6
+                ):
                     # this is the case in frozen coordinates e.g.,
                     # C        -1      -0.5448210000   -1.1694570000    0.0001270000
                     # then ignore second value
@@ -491,7 +495,9 @@ class CoordinateBlock:
 
     def _get_atomic_numbers(self):
         """Obtain a list of symbols as atomic numbers."""
-        atomic_numbers, _, _ = self._get_atomic_numbers_positions_and_constraints()
+        atomic_numbers, _, _ = (
+            self._get_atomic_numbers_positions_and_constraints()
+        )
         return atomic_numbers
 
     def _get_positions(self):
@@ -500,7 +506,9 @@ class CoordinateBlock:
         return positions
 
     def _get_constraints(self):
-        _, _, constraints = self._get_atomic_numbers_positions_and_constraints()
+        _, _, constraints = (
+            self._get_atomic_numbers_positions_and_constraints()
+        )
         return constraints
 
     def _get_translation_vectors(self):

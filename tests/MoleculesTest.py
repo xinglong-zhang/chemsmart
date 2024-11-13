@@ -38,7 +38,7 @@ TV                -1.219952    2.133447    0.000000
         assert cb.symbols.get_chemical_formula() == "C2"
         assert cb.translation_vectors == [
             [2.475315, 0.000000, 0.000000],
-            [-1.219952, 2.133447, 0.000000]
+            [-1.219952, 2.133447, 0.000000],
         ]
 
     def test_read_gaussian_cb_frozen_atoms(self):
@@ -60,4 +60,3 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 """
         cb = CoordinateBlock(coordinate_block=coordinates_string)
         assert cb.symbols.get_chemical_formula() == "C7H5ClO"
-

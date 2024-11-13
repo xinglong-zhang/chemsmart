@@ -25,7 +25,15 @@ class GaussianRefs:
         "mn15",
     ]
     g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen"]
-    g_solvation_models = ["smd", "cpcm", "iefpcm", "pcm", "scipcm", "ipcm", "dipole"]
+    g_solvation_models = [
+        "smd",
+        "cpcm",
+        "iefpcm",
+        "pcm",
+        "scipcm",
+        "ipcm",
+        "dipole",
+    ]
     g_additional_route_parameters = ["force", "nosymm", "guess"]
     g_additional_opt_options = [
         "maxstep",

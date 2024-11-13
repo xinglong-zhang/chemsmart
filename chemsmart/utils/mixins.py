@@ -97,7 +97,9 @@ class ORCAFileMixin:
 
     @property
     def solvent_id(self):
-        pattern = re.compile(r'"([^"]*)"')  # pattern to find text between double quotes
+        pattern = re.compile(
+            r'"([^"]*)"'
+        )  # pattern to find text between double quotes
         for line in self.contents:
             line_lower = line.lower()
             if "solvent" in line_lower:

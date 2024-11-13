@@ -21,6 +21,8 @@ class TestUtils:
         assert cb.molecule.translation_vectors is None
         assert all(
             np.isclose(
-                cb.molecule.positions[0], [-0.544821, -1.169457, 0.000127], atol=1e-4
+                cb.molecule.positions[0],
+                [-0.544821, -1.169457, 0.000127],
+                atol=1e-4,
             )
         )

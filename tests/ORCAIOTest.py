@@ -195,7 +195,9 @@ class TestORCAOutput:
         assert orca_out.converged is True
         assert orca_out.normal_termination is True
 
-    def test_water_optimized_output(self, water_output_gas_path):  # noqa: PLR0915
+    def test_water_optimized_output(
+        self, water_output_gas_path
+    ):  # noqa: PLR0915
         orca_out = ORCAOutput(filename=water_output_gas_path)
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
@@ -219,12 +221,24 @@ class TestORCAOutput:
             rtol=1e-03,
         )
         assert math.isclose(orca_out.final_energy, -2076.86288, rel_tol=1e-4)
-        assert math.isclose(orca_out.final_nuclear_repulsion, 248.85900, rel_tol=1e-4)
-        assert math.isclose(orca_out.final_electronic_energy, -2325.72188, rel_tol=1e-4)
-        assert math.isclose(orca_out.one_electron_energy, -3346.95900, rel_tol=1e-4)
-        assert math.isclose(orca_out.two_electron_energy, 1021.23712, rel_tol=1e-4)
-        assert math.isclose(orca_out.max_cosx_asymmetry_energy, 0.00023, rel_tol=1e-2)
-        assert math.isclose(orca_out.potential_energy, -4140.24210, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.final_nuclear_repulsion, 248.85900, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.final_electronic_energy, -2325.72188, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.one_electron_energy, -3346.95900, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.two_electron_energy, 1021.23712, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.max_cosx_asymmetry_energy, 0.00023, rel_tol=1e-2
+        )
+        assert math.isclose(
+            orca_out.potential_energy, -4140.24210, rel_tol=1e-4
+        )
         assert math.isclose(orca_out.kinetic_energy, 2063.37922, rel_tol=1e-4)
         assert math.isclose(orca_out.virial_ratio, 2.00653475, rel_tol=1e-4)
         assert math.isclose(orca_out.xc_energy, -121.97818321, rel_tol=1e-4)
@@ -283,7 +297,9 @@ class TestORCAOutput:
                 105.15657812830358,
             ]
         )
-        assert np.allclose(orca_out.orbital_energies, orbital_energies, rtol=1e-6)
+        assert np.allclose(
+            orca_out.orbital_energies, orbital_energies, rtol=1e-6
+        )
         assert orca_out.homo_energy == -10.252651603489042
         assert orca_out.lumo_energy == 2.419962981919028
         assert np.isclose(orca_out.fmo_gap, 12.6726145854, rtol=1e-6)
@@ -305,7 +321,11 @@ class TestORCAOutput:
             "H1": 0.8354,
             "H2": 0.8354,
         }
-        assert orca_out.mayer_total_nuclear_charge == {"O0": 8.0, "H1": 1.0, "H2": 1.0}
+        assert orca_out.mayer_total_nuclear_charge == {
+            "O0": 8.0,
+            "H1": 1.0,
+            "H2": 1.0,
+        }
         assert orca_out.mayer_mulliken_gross_atomic_charge == {
             "O0": -0.3293,
             "H1": 0.1646,
@@ -337,7 +357,9 @@ class TestORCAOutput:
             rtol=1e-4,
         )
         assert np.allclose(
-            orca_out.total_dipole_moment, np.array([0.0, 0.0, -0.8092]), rtol=1e-4
+            orca_out.total_dipole_moment,
+            np.array([0.0, 0.0, -0.8092]),
+            rtol=1e-4,
         )
         assert orca_out.dipole_moment_in_au == 0.80920
         assert orca_out.dipole_moment_in_debye == 2.05682
@@ -411,30 +433,50 @@ class TestORCAOutput:
         assert orca_out.temperature_in_K == 298.15
         assert orca_out.pressure_in_atm == 1.0
         assert orca_out.total_mass_in_amu == 18.02
-        assert math.isclose(orca_out.internal_energy, -2076.198522987, rel_tol=1e-4)
-        assert math.isclose(orca_out.electronic_energy, -2076.8629218525, rel_tol=1e-4)
-        assert math.isclose(orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4)
         assert math.isclose(
-            orca_out.thermal_vibration_correction, 7.91851273564e-5, rel_tol=1e-6
+            orca_out.internal_energy, -2076.198522987, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.electronic_energy, -2076.8629218525, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.thermal_vibration_correction,
+            7.91851273564e-5,
+            rel_tol=1e-6,
         )
         assert math.isclose(
             orca_out.thermal_rotation_correction, 0.038538666777, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.thermal_translation_correction, 0.038538666777, rel_tol=1e-4
+            orca_out.thermal_translation_correction,
+            0.038538666777,
+            rel_tol=1e-4,
         )
-        assert math.isclose(orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4)
-        assert math.isclose(orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+        )
         assert math.isclose(orca_out.enthalpy, -2076.1728297262, rel_tol=1e-4)
         assert math.isclose(
-            orca_out.thermal_enthalpy_correction, 0.02569326085952, rel_tol=1e-4
+            orca_out.thermal_enthalpy_correction,
+            0.02569326085952,
+            rel_tol=1e-4,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
         assert math.isclose(
-            orca_out.vibrational_entropy_no_temperature_in_SI, 0.028883578, rel_tol=1e-4
+            orca_out.vibrational_entropy_no_temperature_in_SI,
+            0.028883578,
+            rel_tol=1e-4,
         )
         assert math.isclose(
-            orca_out.rotational_entropy_no_temperature_in_SI, 43.887276051, rel_tol=1e-4
+            orca_out.rotational_entropy_no_temperature_in_SI,
+            43.887276051,
+            rel_tol=1e-4,
         )
         assert math.isclose(
             orca_out.translational_entropy_no_temperature_in_SI,
@@ -458,7 +500,11 @@ class TestORCAOutput:
             "H1": 0.8354,
             "H2": 0.8354,
         }
-        assert orca_out.mayer_total_nuclear_charge == {"O0": 8.0, "H1": 1.0, "H2": 1.0}
+        assert orca_out.mayer_total_nuclear_charge == {
+            "O0": 8.0,
+            "H1": 1.0,
+            "H2": 1.0,
+        }
         assert orca_out.mayer_mulliken_gross_atomic_charge == {
             "O0": -0.3293,
             "H1": 0.1646,
@@ -490,7 +536,9 @@ class TestORCAOutput:
             rtol=1e-4,
         )
         assert np.allclose(
-            orca_out.total_dipole_moment, np.array([0.0, 0.0, -0.8092]), rtol=1e-4
+            orca_out.total_dipole_moment,
+            np.array([0.0, 0.0, -0.8092]),
+            rtol=1e-4,
         )
         assert orca_out.dipole_moment_in_au == 0.80920
         assert orca_out.dipole_moment_in_debye == 2.05682
@@ -564,30 +612,50 @@ class TestORCAOutput:
         assert orca_out.temperature_in_K == 298.15
         assert orca_out.pressure_in_atm == 1.0
         assert orca_out.total_mass_in_amu == 18.02
-        assert math.isclose(orca_out.internal_energy, -2076.198522987, rel_tol=1e-4)
-        assert math.isclose(orca_out.electronic_energy, -2076.8629218525, rel_tol=1e-4)
-        assert math.isclose(orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4)
         assert math.isclose(
-            orca_out.thermal_vibration_correction, 7.91851273564e-5, rel_tol=1e-6
+            orca_out.internal_energy, -2076.198522987, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.electronic_energy, -2076.8629218525, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.thermal_vibration_correction,
+            7.91851273564e-5,
+            rel_tol=1e-6,
         )
         assert math.isclose(
             orca_out.thermal_rotation_correction, 0.038538666777, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.thermal_translation_correction, 0.038538666777, rel_tol=1e-4
+            orca_out.thermal_translation_correction,
+            0.038538666777,
+            rel_tol=1e-4,
         )
-        assert math.isclose(orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4)
-        assert math.isclose(orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+        )
         assert math.isclose(orca_out.enthalpy, -2076.1728297262, rel_tol=1e-4)
         assert math.isclose(
-            orca_out.thermal_enthalpy_correction, 0.02569326085952, rel_tol=1e-4
+            orca_out.thermal_enthalpy_correction,
+            0.02569326085952,
+            rel_tol=1e-4,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
         assert math.isclose(
-            orca_out.vibrational_entropy_no_temperature_in_SI, 0.028883578, rel_tol=1e-4
+            orca_out.vibrational_entropy_no_temperature_in_SI,
+            0.028883578,
+            rel_tol=1e-4,
         )
         assert math.isclose(
-            orca_out.rotational_entropy_no_temperature_in_SI, 43.887276051, rel_tol=1e-4
+            orca_out.rotational_entropy_no_temperature_in_SI,
+            43.887276051,
+            rel_tol=1e-4,
         )
         assert math.isclose(
             orca_out.translational_entropy_no_temperature_in_SI,
@@ -600,20 +668,23 @@ class TestORCAOutput:
         TS = orca_out.entropy_in_J_per_mol_per_K * 298.15  # 56266.794 J/mol
         # converted to 13.448 kcal/mol, as expected from output
         assert math.isclose(entropy_TS_in_J_per_mol, TS, rel_tol=1e-4)
-        assert orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K == {
-            1: 49.65043,
-            2: 43.887276,
-            3: 40.516087,
-            4: 38.124122,
-            5: 36.268792,
-            6: 34.752933,
-            7: 33.471224,
-            8: 32.361055,
-            9: 31.381743,
-            10: 30.505726,
-            11: 29.713277,
-            12: 28.989778,
-        }
+        assert (
+            orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K
+            == {
+                1: 49.65043,
+                2: 43.887276,
+                3: 40.516087,
+                4: 38.124122,
+                5: 36.268792,
+                6: 34.752933,
+                7: 33.471224,
+                8: 32.361055,
+                9: 31.381743,
+                10: 30.505726,
+                11: 29.713277,
+                12: 28.989778,
+            }
+        )
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -2076.7559939028233202, rel_tol=1e-6
@@ -747,7 +818,9 @@ class TestORCAOutput:
         assert np.isclose(orca_out.homo_energy, -9.382, rtol=1e-4)
         assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
         assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)
-        assert np.isclose(orca_out.final_energy, -82108.762658054809435, rtol=1e-4)
+        assert np.isclose(
+            orca_out.final_energy, -82108.762658054809435, rtol=1e-4
+        )
         assert orca_out.mulliken_atomic_charges == {
             "O0": -0.544377,
             "O1": -0.409137,
@@ -1661,4 +1734,6 @@ class TestORCAEngrad:
                 [0.75520525, 0.0, -0.50967031],
             ]
         )
-        assert np.allclose(orca_engrad.molecule.positions, coordinates, rtol=1e-6)
+        assert np.allclose(
+            orca_engrad.molecule.positions, coordinates, rtol=1e-6
+        )

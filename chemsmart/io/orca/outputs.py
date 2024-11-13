@@ -42,7 +42,8 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
             return any(indicator in line for indicator in success_indicators)
 
         return any(
-            _line_contains_success_indicators(line) for line in self.contents[::-1]
+            _line_contains_success_indicators(line)
+            for line in self.contents[::-1]
         )
 
     @cached_property
@@ -332,9 +333,7 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_elements = line_j.split()
                     if line_elements[1].lower().startswith("b"):  # bond
-                        parameter = (
-                            f"{line_elements[1]}{line_elements[2]}{line_elements[3]}"
-                        )
+                        parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}"
                     if line_elements[1].lower().startswith("a"):  # angle
                         parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
                     if line_elements[1].lower().startswith("d"):  # dihedral
@@ -600,7 +599,8 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                 max_cosx_asymmetry_energy_hartree.append(energy_in_hartree)
         if len(max_cosx_asymmetry_energy_hartree) != 0:
             max_cosx_asymmetry_energy_eV = [
-                value * units.Hartree for value in max_cosx_asymmetry_energy_hartree
+                value * units.Hartree
+                for value in max_cosx_asymmetry_energy_hartree
             ]
             return max_cosx_asymmetry_energy_eV[-1]
 
@@ -624,7 +624,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
             if "Kinetic Energy     :" in line:
                 energy_in_hartree = float(line.split()[-4])
                 kinetic_energy_hartree.append(energy_in_hartree)
-        kinetic_energy_eV = [value * units.Hartree for value in kinetic_energy_hartree]
+        kinetic_energy_eV = [
+            value * units.Hartree for value in kinetic_energy_hartree
+        ]
         if len(kinetic_energy_eV) != 0:
             return kinetic_energy_eV[-1]
 
@@ -644,7 +646,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
             if "E(XC)              :" in line:
                 xc_energy_hartree.append(float(line.split()[-2]))
         if len(xc_energy_hartree) != 0:
-            xc_energy_eV = [value * units.Hartree for value in xc_energy_hartree]
+            xc_energy_eV = [
+                value * units.Hartree for value in xc_energy_hartree
+            ]
             return xc_energy_eV[-1]
 
     @property
@@ -700,7 +704,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
     def homo_energy(self):
         # get all filled orbitals
         orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        occupied_energies = [energy for energy, occupancy in orbitals if occupancy == 2]
+        occupied_energies = [
+            energy for energy, occupancy in orbitals if occupancy == 2
+        ]
         # return the highest occupied MO energy
         return max(occupied_energies)
 
@@ -734,7 +740,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     line_j_elements = line_j.split()
                     element = p.to_element(line_j_elements[1])
                     element_num = f"{element}{line_j_elements[0]}"
-                    mulliken_atomic_charges[element_num] = float(line_j_elements[-1])
+                    mulliken_atomic_charges[element_num] = float(
+                        line_j_elements[-1]
+                    )
                 all_mulliken_atomic_charges.append(mulliken_atomic_charges)
         return all_mulliken_atomic_charges[-1]
 
@@ -751,7 +759,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 4:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        loewdin_atomic_charges[element_num] = float(line_j_elements[-1])
+                        loewdin_atomic_charges[element_num] = float(
+                            line_j_elements[-1]
+                        )
                 all_loewdin_atomic_charges.append(loewdin_atomic_charges)
         return all_loewdin_atomic_charges[-1]
 
@@ -771,8 +781,8 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_mulliken_gross_atomic_population[element_num] = float(
-                            line_j_elements[2]
+                        mayer_mulliken_gross_atomic_population[element_num] = (
+                            float(line_j_elements[2])
                         )
                 all_mayer_mulliken_gross_atomic_population.append(
                     mayer_mulliken_gross_atomic_population
@@ -795,7 +805,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         mayer_total_nuclear_charge[element_num] = float(
                             line_j_elements[3]
                         )
-                all_mayer_total_nuclear_charge.append(mayer_total_nuclear_charge)
+                all_mayer_total_nuclear_charge.append(
+                    mayer_total_nuclear_charge
+                )
         return all_mayer_total_nuclear_charge[-1]
 
     @property
@@ -811,8 +823,8 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_mulliken_gross_atomic_charge[element_num] = float(
-                            line_j_elements[4]
+                        mayer_mulliken_gross_atomic_charge[element_num] = (
+                            float(line_j_elements[4])
                         )
                 all_mayer_mulliken_gross_atomic_charge.append(
                     mayer_mulliken_gross_atomic_charge
@@ -832,7 +844,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_total_valence[element_num] = float(line_j_elements[5])
+                        mayer_total_valence[element_num] = float(
+                            line_j_elements[5]
+                        )
                 all_mayer_total_valence.append(mayer_total_valence)
         return all_mayer_total_valence[-1]
 
@@ -849,7 +863,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_bonded_valence[element_num] = float(line_j_elements[6])
+                        mayer_bonded_valence[element_num] = float(
+                            line_j_elements[6]
+                        )
                 all_mayer_bonded_valence.append(mayer_bonded_valence)
         return all_mayer_bonded_valence[-1]
 
@@ -866,7 +882,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_free_valence[element_num] = float(line_j_elements[-1])
+                        mayer_free_valence[element_num] = float(
+                            line_j_elements[-1]
+                        )
                 all_mayer_free_valence.append(mayer_free_valence)
         return all_mayer_free_valence[-1]
 
@@ -893,11 +911,13 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     matches = pattern.findall(line_j)
                     for match in matches:
-                        formatted_key = f"B({match[1]}{match[0]},{match[3]}{match[2]})"
-                        formatted_value = float(match[4])
-                        mayer_bond_orders_larger_than_zero_point_one[formatted_key] = (
-                            formatted_value
+                        formatted_key = (
+                            f"B({match[1]}{match[0]},{match[3]}{match[2]})"
                         )
+                        formatted_value = float(match[4])
+                        mayer_bond_orders_larger_than_zero_point_one[
+                            formatted_key
+                        ] = formatted_value
                 all_mayer_bond_orders_larger_than_zero_point_one.append(
                     mayer_bond_orders_larger_than_zero_point_one
                 )
@@ -915,7 +935,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j) == 0:
                         break
                     if "Total integrated alpha density" in line_j:
-                        all_hirshfeld_alpha_density.append(float(line_j.split()[-1]))
+                        all_hirshfeld_alpha_density.append(
+                            float(line_j.split()[-1])
+                        )
         return all_hirshfeld_alpha_density[-1]
 
     @property
@@ -927,7 +949,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     if len(line_j) == 0:
                         break
                     if "Total integrated beta density" in line_j:
-                        all_hirshfeld_beta_density.append(float(line_j.split()[-1]))
+                        all_hirshfeld_beta_density.append(
+                            float(line_j.split()[-1])
+                        )
         return all_hirshfeld_beta_density[-1]
 
     def _get_hirshfeld_charges_and_spins(self):
@@ -942,7 +966,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) == 4:
-                        dict_key = f"{line_j_elements[1]}{int(line_j_elements[0])+1}"
+                        dict_key = (
+                            f"{line_j_elements[1]}{int(line_j_elements[0])+1}"
+                        )
                         charge_value = float(line_j_elements[2])
                         hirshfeld_charges[dict_key] = charge_value
 
@@ -1154,7 +1180,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                     # if 'Rotational constants in MHz :' in line_j:
                     line_j_elements = line_j.split()
                     if len(line_j_elements) != 0:
-                        vibrational_frequencies.append(float(line_j_elements[1]))
+                        vibrational_frequencies.append(
+                            float(line_j_elements[1])
+                        )
                 return vibrational_frequencies
         return None
 
@@ -1190,7 +1218,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) != 0:
-                        molar_absorption_coefficients.append(float(line_j_elements[2]))
+                        molar_absorption_coefficients.append(
+                            float(line_j_elements[2])
+                        )
                 return molar_absorption_coefficients
         return None
 
@@ -1240,7 +1270,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         break
                     line_j_elements = line_j.split()
                     if len(line_j_elements) != 0:
-                        transition_dipole_deriv_norm.append(float(line_j_elements[4]))
+                        transition_dipole_deriv_norm.append(
+                            float(line_j_elements[4])
+                        )
                 return transition_dipole_deriv_norm
         return None
 
@@ -1249,7 +1281,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "IR SPECTRUM":
                 for line_j in self.optimized_output_lines[i + 6 :]:
-                    if "The first frequency considered to be a vibration is" in line_j:
+                    if (
+                        "The first frequency considered to be a vibration is"
+                        in line_j
+                    ):
                         line_j_elements = line_j.split()
                         return int(line_j_elements[-1])
         return None
@@ -1259,7 +1294,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "IR SPECTRUM":
                 for line_j in self.optimized_output_lines[i + 6 :]:
-                    if "The total number of vibrations considered is" in line_j:
+                    if (
+                        "The total number of vibrations considered is"
+                        in line_j
+                    ):
                         line_j_elements = line_j.split()
                         return int(line_j_elements[-1])
         return None
@@ -1328,7 +1366,9 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                 for line_j in self.optimized_output_lines[i:]:
                     if "Electronic energy" in line_j:
                         line_j_elements = line_j.split()
-                        electronic_energy_in_Hartree = float(line_j_elements[-2])
+                        electronic_energy_in_Hartree = float(
+                            line_j_elements[-2]
+                        )
                         return electronic_energy_in_Hartree * units.Hartree
         return None
 
@@ -1355,7 +1395,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         thermal_vibration_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return thermal_vibration_correction_in_Hartree * units.Hartree
+                        return (
+                            thermal_vibration_correction_in_Hartree
+                            * units.Hartree
+                        )
         return None
 
     @property
@@ -1386,7 +1429,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         thermal_translation_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return thermal_translation_correction_in_Hartree * units.Hartree
+                        return (
+                            thermal_translation_correction_in_Hartree
+                            * units.Hartree
+                        )
         return None
 
     @property
@@ -1436,7 +1482,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                         thermal_enthalpy_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return thermal_enthalpy_correction_in_Hartree * units.Hartree
+                        return (
+                            thermal_enthalpy_correction_in_Hartree
+                            * units.Hartree
+                        )
         return None
 
     @property
@@ -1454,7 +1503,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                             * units.mol
                             / units.J
                         )
-                        return electronic_entropy_J_per_mol / self.temperature_in_K
+                        return (
+                            electronic_entropy_J_per_mol
+                            / self.temperature_in_K
+                        )
         return None
 
     @property
@@ -1465,14 +1517,19 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                 for line_j in self.optimized_output_lines[i + 10 :]:
                     if "Vibrational entropy" in line_j:
                         line_j_elements = line_j.split()
-                        vibrational_entropy_hartree = float(line_j_elements[-4])
+                        vibrational_entropy_hartree = float(
+                            line_j_elements[-4]
+                        )
                         vibrational_entropy_J_per_mol = (
                             vibrational_entropy_hartree
                             * units.Hartree
                             * units.mol
                             / units.J
                         )
-                        return vibrational_entropy_J_per_mol / self.temperature_in_K
+                        return (
+                            vibrational_entropy_J_per_mol
+                            / self.temperature_in_K
+                        )
         return None
 
     @property
@@ -1490,7 +1547,10 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                             * units.mol
                             / units.J
                         )
-                        return rotational_entropy_J_per_mol / self.temperature_in_K
+                        return (
+                            rotational_entropy_J_per_mol
+                            / self.temperature_in_K
+                        )
         return None
 
     @property
@@ -1501,14 +1561,19 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
                 for line_j in self.optimized_output_lines[i + 10 :]:
                     if "Translational entropy" in line_j:
                         line_j_elements = line_j.split()
-                        translational_entropy_hartree = float(line_j_elements[-4])
+                        translational_entropy_hartree = float(
+                            line_j_elements[-4]
+                        )
                         translational_entropy_J_per_mol = (
                             translational_entropy_hartree
                             * units.Hartree
                             * units.mol
                             / units.J
                         )
-                        return translational_entropy_J_per_mol / self.temperature_in_K
+                        return (
+                            translational_entropy_J_per_mol
+                            / self.temperature_in_K
+                        )
         return None
 
     @property
@@ -1542,14 +1607,19 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
         for i, line_i in enumerate(self.optimized_output_lines):
             if "rotational entropy values for sn=1,12 :" in line_i:
-                for line_j in self.optimized_output_lines[i + 2 :]:  # i+2 onwards
+                for line_j in self.optimized_output_lines[
+                    i + 2 :
+                ]:  # i+2 onwards
                     if "-------------------" in line_j:
                         break
                     new_line = line_j.replace("=", " ")
                     line_j_elements = new_line.split()
                     rotational_entropy_hartree = float(line_j_elements[-4])
                     rotational_entropy_J_per_mol = (
-                        rotational_entropy_hartree * units.Hartree * units.mol / units.J
+                        rotational_entropy_hartree
+                        * units.Hartree
+                        * units.mol
+                        / units.J
                     )
                     rotational_entropy_J_per_mol_per_K = (
                         rotational_entropy_J_per_mol / self.temperature_in_K
@@ -1580,10 +1650,18 @@ class ORCAOutput(FileMixin, ORCAFileMixin):
         for line in self.contents:
             elapsed_walltime = []
             if line.startswith("TOTAL RUN TIME:"):
-                n_days = float(line.lower().split("days")[0].strip().split()[-1])
-                n_hours = float(line.lower().split("hours")[0].strip().split()[-1])
-                n_minutes = float(line.lower().split("minutes")[0].strip().split()[-1])
-                n_seconds = float(line.lower().split("seconds")[0].strip().split()[-1])
+                n_days = float(
+                    line.lower().split("days")[0].strip().split()[-1]
+                )
+                n_hours = float(
+                    line.lower().split("hours")[0].strip().split()[-1]
+                )
+                n_minutes = float(
+                    line.lower().split("minutes")[0].strip().split()[-1]
+                )
+                n_seconds = float(
+                    line.lower().split("seconds")[0].strip().split()[-1]
+                )
                 total_seconds = (
                     n_days * 24 * 60 * 60
                     + n_hours * 60 * 60
@@ -1656,7 +1734,9 @@ class ORCAEngradFile(FileMixin):
 
     def _get_energy(self):
         for i, line in enumerate(self.contents):
-            if "current total energy" in line:  # in engrad file (all lower case)
+            if (
+                "current total energy" in line
+            ):  # in engrad file (all lower case)
                 # check 3 lines following the match
                 for content in self.contents[i + 1 : i + 4]:
                     try:
@@ -1674,9 +1754,13 @@ class ORCAEngradFile(FileMixin):
                 grad_data = []
                 for content in self.contents[i + 1 : i + 3 * self.natoms + 4]:
                     try:
-                        grad_value = float(content.split()[0])  # in Hartree/Bohr
+                        grad_value = float(
+                            content.split()[0]
+                        )  # in Hartree/Bohr
                         # convert to eV/Angstrom
-                        grad_data.append(grad_value * units.Hartree / units.Bohr)
+                        grad_data.append(
+                            grad_value * units.Hartree / units.Bohr
+                        )
                     except ValueError:
                         pass
                 return np.array(grad_data).reshape(self.natoms, 3)

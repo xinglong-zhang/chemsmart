@@ -53,7 +53,9 @@ def file_cache(copy_result=True, maxsize=64):
             if not filenames:
                 return func(*args, **kwargs)
 
-            modified_times = tuple(os.path.getmtime(filename) for filename in filenames)
+            modified_times = tuple(
+                os.path.getmtime(filename) for filename in filenames
+            )
 
             current_time = time.time()
             time_diff = [current_time - t for t in modified_times]
@@ -69,7 +71,9 @@ def file_cache(copy_result=True, maxsize=64):
                         hashlib.blake2b(data, digest_size=10).hexdigest()
                     )
 
-            result = func_with_modified_time_arg(tuple(modified_times), *args, **kwargs)
+            result = func_with_modified_time_arg(
+                tuple(modified_times), *args, **kwargs
+            )
             if copy_result:
                 return copy.copy(result)
             return result
@@ -96,11 +100,15 @@ def is_float(string):
 
 def content_blocks_by_paragraph(string_list):
     return [
-        list(group) for k, group in groupby(string_list, lambda x: x == "") if not k
+        list(group)
+        for k, group in groupby(string_list, lambda x: x == "")
+        if not k
     ]
 
 
-def write_list_of_lists_as_a_string_with_empty_line_between_lists(list_of_lists):
+def write_list_of_lists_as_a_string_with_empty_line_between_lists(
+    list_of_lists,
+):
     string = ""
     num_lists = len(list_of_lists)
     for i in range(num_lists):
@@ -137,7 +145,12 @@ def get_list_from_string_range(string_of_range):
 
 
 def create_logger(
-    debug=True, folder=".", logfile=None, errfile=None, stream=True, disable=None
+    debug=True,
+    folder=".",
+    logfile=None,
+    errfile=None,
+    stream=True,
+    disable=None,
 ):
     if disable is None:
         disable = []
@@ -168,13 +181,17 @@ def create_logger(
 
     # logfile
     if logfile is not None:
-        infofile_handler = logging.FileHandler(filename=os.path.join(folder, logfile))
+        infofile_handler = logging.FileHandler(
+            filename=os.path.join(folder, logfile)
+        )
         infofile_handler.setLevel(level)
         logger.addHandler(infofile_handler)
 
     # errfile
     if errfile is not None:
-        errfile_handler = logging.FileHandler(filename=os.path.join(folder, errfile))
+        errfile_handler = logging.FileHandler(
+            filename=os.path.join(folder, errfile)
+        )
         errfile_handler.setLevel(logging.WARNING)
         logger.addHandler(errfile_handler)
 

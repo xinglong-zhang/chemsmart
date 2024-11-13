@@ -4,7 +4,12 @@ from itertools import islice
 from functools import cached_property
 from ase import units
 from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.repattern import eV_pattern, nm_pattern, f_pattern, float_pattern
+from chemsmart.utils.repattern import (
+    eV_pattern,
+    nm_pattern,
+    f_pattern,
+    float_pattern,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +117,9 @@ class Gaussian16Output(FileMixin):
                     + n_minutes * 60
                     + n_seconds
                 )
-                total_hours = round(total_seconds / 3600, 4)  # round to 1 nearest hour
+                total_hours = round(
+                    total_seconds / 3600, 4
+                )  # round to 1 nearest hour
                 cpu_runtime.append(total_hours)
         return cpu_runtime
 
@@ -242,7 +249,9 @@ class Gaussian16Output(FileMixin):
                         )
                     j += 1
                 transitions.append(each_state_transitions)
-                contribution_coefficients.append(each_state_contribution_coefficients)
+                contribution_coefficients.append(
+                    each_state_contribution_coefficients
+                )
 
         return transitions, contribution_coefficients
 
@@ -408,17 +417,23 @@ class Gaussian16Output(FileMixin):
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
             assert (
-                len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues) + 1
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
                 == self.multiplicity
             )
-            return len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues)
+            return len(self.alpha_occ_eigenvalues) - len(
+                self.beta_occ_eigenvalues
+            )
 
     @cached_property
     def somo_energy(self):
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
             assert (
-                len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues) + 1
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
                 == self.multiplicity
             )
             return self.alpha_occ_eigenvalues[-1]

@@ -26,7 +26,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Single Gaussian/ORCA file to be converted to xyz.",
 )
 @click.option(
-    "-a/", "--append/--no-append", default=False, help="append to already existing file"
+    "-a/",
+    "--append/--no-append",
+    default=False,
+    help="append to already existing file",
 )
 def entry_point(directory, filename, append):
     """Script to write Gaussian .log files or ORCA .out files to .xyz files, while keeping the same folder structure."""
@@ -60,7 +63,9 @@ def entry_point(directory, filename, append):
             logger.info(f"No readable structure from file {logpath}")
             continue
 
-        log_empirical_formula = log_final_atoms.get_chemical_formula(empirical=True)
+        log_empirical_formula = log_final_atoms.get_chemical_formula(
+            empirical=True
+        )
         log_final_energy_in_Hartree = round(
             logoutput.final_energy, 6
         )  # this is in Hartree from pymatgen

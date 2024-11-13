@@ -5,7 +5,10 @@ import click
 from chemsmart.utils.utils import create_logger
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.outputs import ORCAOutput
-from chemsmart.utils.utils import get_value_by_number, get_key_by_value_and_number
+from chemsmart.utils.utils import (
+    get_value_by_number,
+    get_key_by_value_and_number,
+)
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -51,7 +54,9 @@ def entry_point(filename, numbers):
     if numbers is not None:
         for n in numbers:
             charge_value = get_value_by_number(n, hirshfeld_charges)
-            hk = get_key_by_value_and_number(charge_value, n, hirshfeld_charges)
+            hk = get_key_by_value_and_number(
+                charge_value, n, hirshfeld_charges
+            )
             logger.info(f"Hirshfeld Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 

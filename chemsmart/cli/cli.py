@@ -12,13 +12,15 @@ import click
 import logging
 from .run import entry_point as run
 
+
 @click.group()
 @click.pass_context
-@click.option('--verbose', is_flag=True, default=False)
+@click.option("--verbose", is_flag=True, default=False)
 def entry_point(ctx, verbose):
     if verbose:
         logging.basicConfig(level=logging.INFO)
         logging.info("Verbose mode activated.")
+
 
 entry_point.add_command(run)
 
@@ -43,5 +45,5 @@ def main():  # pragma: no cover
     entry_point(obj=obj)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
