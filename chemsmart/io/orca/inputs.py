@@ -2,7 +2,7 @@ import logging
 import re
 from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.io.molecules.structure import ORCACoordinateBlock
+from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.repattern import standard_coord_pattern
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ class ORCAInput(FileMixin, ORCAFileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-        cb = ORCACoordinateBlock(coordinate_block=self.coordinate_lines)
+        cb = CoordinateBlock(coordinate_block=self.coordinate_lines)
         self.cb = cb
 
     @property

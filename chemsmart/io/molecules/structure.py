@@ -75,8 +75,6 @@ class Molecule:
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
-        from chemsmart.utils.utils import CoordinateBlock
-
         c = CoordinateBlock(coordinate_block=coordinate_block)
         return cls(
             symbols=c.symbols,

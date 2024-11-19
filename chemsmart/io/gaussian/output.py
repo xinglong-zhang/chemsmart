@@ -159,9 +159,6 @@ class Gaussian16Output(FileMixin):
     def total_elapsed_walltime(self):
         return round(sum(self.elapsed_walltime_by_jobs), 4)
 
-
-class Gaussian16TDDFTOutput(Gaussian16Output):
-
     @cached_property
     def tddft_transitions(self):
         """
