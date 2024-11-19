@@ -1,14 +1,8 @@
-import ast
 import contextlib
 import logging
-import os
 import platform
 from multiprocessing import set_start_method
-
 import click
-
-from pyatoms.cli.defaults import use_server_defaults
-from pyatoms.cli.jobrunner import create_jobrunner, jobrunner_options
 from chemsmart.cli.subcommands import subcommands
 
 system_type = platform.system()
@@ -16,7 +10,6 @@ system_type = platform.system()
 if system_type in ("Darwin", "Windows"):
     with contextlib.suppress(RuntimeError):
         set_start_method("fork")
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +23,13 @@ logger = logging.getLogger(__name__)
     default=1,
     help="runs jobs in parallel with specified number of processes",
 )
+@click.option('-d', '--debug/--no-debug', default=False, help='turns on debug logging')
+@click.option('--test/--no-test', default=False, help='If true, fake jobrunners will be used')
 def entry_point(
     ctx,
     num_processes,
+    debug,
+    test,
 ):
 
     logger.info("Entering main program")
