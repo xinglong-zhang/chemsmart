@@ -1,0 +1,44 @@
+! CPCM(Water) DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS
+# Number of processors
+%pal nprocs 2 end
+# Memory per core
+%maxcore 360
+%cpcm
+  SMD true
+  SMDsolvent "water"
+end
+%scf 
+  maxiter 500
+end
+% mdci
+# Loose cut-off
+#  TCutPairs 1e-3
+#  TCutPNO 1e-6
+#  TCutMKN 1e-3
+# Normal cut-off
+TCutPairs 1e-4
+TCutPNO 3.33e-7
+TCutMKN 1e-3
+# Tight cut-off
+#TCutPairs 1e-5
+#TCutPNO 1e-7
+#TCutMKN 1e-4
+# Faster/less disk-IO for large jobs
+#LocalTrafo 3
+Density None
+end
+% output
+printlevel mini
+print[ P_SCFInfo ] 1
+print[ P_SCFIterInfo ] 1
+print[ P_OrbEn ] 0
+print[ P_Cartesian ] 0
+end
+% elprop
+Dipole False
+end
+* xyz 0 1
+  O   -0.00000000323406      0.00000000000000      0.08734060152197
+  H   -0.75520523910536      0.00000000000000     -0.50967029975151
+  H   0.75520524233942      0.00000000000000     -0.50967030177046
+*

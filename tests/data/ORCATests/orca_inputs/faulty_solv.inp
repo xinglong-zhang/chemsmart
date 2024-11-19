@@ -1,0 +1,18 @@
+!B3LYP 6-311++G(2d,2p) ExtremeSCF NMR NoRI def2/JK
+
+%CPCM   
+  SMD        True        # turn on SMD
+  SMDsolvent water       # ORCA job will not run without quotes on the solvent (ORCA v5.0.4)
+  SurfaceType gepol_ses
+End  
+
+%EPRNMR 
+  Tol 1e-14 
+End
+
+* xyz 0 1   
+  O   0.00000000000000     -0.00000000000000      0.10672233201899
+  H   0.00000000000000      0.75076075307912     -0.46391116600949
+  H   0.00000000000000     -0.75076075307913     -0.46391116600949
+*
+

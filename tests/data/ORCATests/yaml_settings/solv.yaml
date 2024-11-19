@@ -1,0 +1,8 @@
+# Default Gaussian settings for calculations 
+gas: Null
+solv: 
+  functional: m062x
+  basis: def2-tzvp
+  defgrid: DEFGRID3
+  solvent_model: smd
+  solvent_id: cyclohexane

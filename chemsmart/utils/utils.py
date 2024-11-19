@@ -1,7 +1,10 @@
 import os
+import sys
+import re
 import time
 import hashlib
 import copy
+import logging
 from functools import lru_cache, wraps
 from itertools import groupby
 
@@ -50,7 +53,9 @@ def file_cache(copy_result=True, maxsize=64):
             if not filenames:
                 return func(*args, **kwargs)
 
-            modified_times = tuple(os.path.getmtime(filename) for filename in filenames)
+            modified_times = tuple(
+                os.path.getmtime(filename) for filename in filenames
+            )
 
             current_time = time.time()
             time_diff = [current_time - t for t in modified_times]
@@ -66,7 +71,9 @@ def file_cache(copy_result=True, maxsize=64):
                         hashlib.blake2b(data, digest_size=10).hexdigest()
                     )
 
-            result = func_with_modified_time_arg(tuple(modified_times), *args, **kwargs)
+            result = func_with_modified_time_arg(
+                tuple(modified_times), *args, **kwargs
+            )
             if copy_result:
                 return copy.copy(result)
             return result
@@ -81,6 +88,9 @@ class FileReadError(Exception):
 
 
 def is_float(string):
+    """Function to test if a given string is float or not. This should exclude string that is a digit."""
+    if string.replace("-", "").isdigit():
+        return False  # if test string is a digit, then it is not a float
     try:
         float(string)
         return True
@@ -94,7 +104,9 @@ def content_blocks_by_paragraph(string_list):
     ]
 
 
-def write_list_of_lists_as_a_string_with_empty_line_between_lists(list_of_lists):
+def write_list_of_lists_as_a_string_with_empty_line_between_lists(
+    list_of_lists,
+):
     string = ""
     num_lists = len(list_of_lists)
     for i in range(num_lists):
@@ -128,3 +140,76 @@ def get_list_from_string_range(string_of_range):
         else:
             indices.append(int(s))
     return indices
+
+
+def create_logger(
+    debug=True,
+    folder=".",
+    logfile=None,
+    errfile=None,
+    stream=True,
+    disable=None,
+):
+    if disable is None:
+        disable = []
+
+    for module in disable:
+        logging.getLogger(module).disabled = True
+
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logger = logging.getLogger()
+
+    # Stream
+    level = logging.INFO
+    if debug:
+        level = logging.DEBUG
+
+    logger.setLevel(level)
+    logger.handlers = []
+
+    # Stream errors always
+    err_stream_handler = logging.StreamHandler(stream=sys.stderr)
+    err_stream_handler.setLevel(logging.ERROR)
+    logger.addHandler(err_stream_handler)
+
+    # Stream other info only if required
+    if stream:
+        stream_handler = logging.StreamHandler(stream=sys.stdout)
+        logger.addHandler(stream_handler)
+
+    # logfile
+    if logfile is not None:
+        infofile_handler = logging.FileHandler(
+            filename=os.path.join(folder, logfile)
+        )
+        infofile_handler.setLevel(level)
+        logger.addHandler(infofile_handler)
+
+    # errfile
+    if errfile is not None:
+        errfile_handler = logging.FileHandler(
+            filename=os.path.join(folder, errfile)
+        )
+        errfile_handler.setLevel(logging.WARNING)
+        logger.addHandler(errfile_handler)
+
+
+def get_value_by_number(num, data):
+    # Iterate through all keys in the dictionary
+    for key in data.keys():
+        # Extract the numeric part of the key
+        key_number = "".join(filter(str.isdigit, key))
+        if key_number == str(num):
+            return data[key]
+
+
+def get_key_by_value_and_number(value, number, data):
+    # Iterate through all items in the dictionary
+    for key, val in data.items():
+        # Extract the numerical part of the key using regex
+        match = re.search(r"\d+$", key)
+        if match:
+            key_number = int(match.group())
+            # Check if both the value and the numerical part of the key match
+            if val == value and key_number == number:
+                return key

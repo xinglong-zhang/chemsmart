@@ -8,6 +8,22 @@ Be creative! do whatever you want!
 - Import things from your .base module
 """
 
+import click
+import logging
+from .run import entry_point as run
+
+
+@click.group()
+@click.pass_context
+@click.option("--verbose", is_flag=True, default=False)
+def entry_point(ctx, verbose):
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+        logging.info("Verbose mode activated.")
+
+
+entry_point.add_command(run)
+
 
 def main():  # pragma: no cover
     """
@@ -25,4 +41,9 @@ def main():  # pragma: no cover
         * List all available tasks
         * Run an application (Flask, FastAPI, Django, etc.)
     """
-    print("This will do something")
+    obj = {}
+    entry_point(obj=obj)
+
+
+if __name__ == "__main__":
+    main()

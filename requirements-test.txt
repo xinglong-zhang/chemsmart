@@ -2,6 +2,7 @@
 pytest
 coverage
 flake8
+ruff
 black
 isort
 pytest-cov

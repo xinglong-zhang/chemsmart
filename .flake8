@@ -1,6 +1,6 @@
 [flake8]
 ignore =
-    E266, W503, W504,
+    E226, W503, W504,
     # E266 too many leading '#' for block comment
     # line break before binary operator
     # line break after binary operator

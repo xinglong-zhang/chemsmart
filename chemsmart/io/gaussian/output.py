@@ -2,14 +2,17 @@ import re
 import logging
 from itertools import islice
 from functools import cached_property
+from ase import units
 from chemsmart.utils.mixins import FileMixin
-
-# patterns for searching
-eV_pattern = r"([\d\.]+) eV"
-nm_pattern = r"([\d\.]+) nm"
-f_pattern = r"f=([\d\.]+)"
+from chemsmart.utils.repattern import (
+    eV_pattern,
+    nm_pattern,
+    f_pattern,
+    float_pattern,
+)
 
 logger = logging.getLogger(__name__)
+
 
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
@@ -252,6 +255,206 @@ class Gaussian16TDDFTOutput(Gaussian16Output):
                 contribution_coefficients.append(each_state_contribution_coefficients)
 
         return transitions, contribution_coefficients
+
+    @cached_property
+    def alpha_occ_eigenvalues(self):
+        """Obtain all eigenenergies of the alpha occuplied orbitals."""
+        alpha_occ_eigenvalues = []
+
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Alpha  occ. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            alpha_occ_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
+            return alpha_occ_eigenvalues
+
+    @cached_property
+    def alpha_virtual_eigenvalues(self):
+        """Obtain all eigenenergies of the alpha unoccuplied orbitals."""
+
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Alpha virt. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            alpha_virtual_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
+            return alpha_virtual_eigenvalues
+
+    @cached_property
+    def beta_occ_eigenvalues(self):
+        """Obtain all eigenenergies of the beta occuplied orbitals."""
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Beta  occ. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            beta_occ_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
+            return beta_occ_eigenvalues
+
+    @cached_property
+    def beta_virtual_eigenvalues(self):
+        """Obtain all eigenenergies of the beta unoccuplied orbitals."""
+
+        # Iterate through lines in reverse to find the last block of eigenvalues
+        eigenvalue_blocks = []
+        current_block = []
+        found_first_block = False
+
+        for line in reversed(self.contents):
+            if line.startswith("Beta virt. eigenvalues"):
+                # Add the line to the current block
+                current_block.append(line)
+                found_first_block = True
+            elif found_first_block:
+                # We've reached the end of the last block
+                eigenvalue_blocks.append(current_block)
+                current_block = []
+                found_first_block = False
+
+        if eigenvalue_blocks:
+            # Extract the last block and process it
+            last_block = eigenvalue_blocks[0]
+            last_block.reverse()  # Reverse to original order
+
+            # Flatten the last block and convert to list of floats
+            last_block_values = []
+            for line in last_block:
+                # Find all floats in the line, including those without spaces
+                values = re.findall(float_pattern, line)
+                last_block_values.extend(map(float, values))
+
+            beta_virtual_eigenvalues = [
+                value * units.Hartree for value in last_block_values
+            ]
+            return beta_virtual_eigenvalues
+
+    @cached_property
+    def homo_energy(self):
+        if self.multiplicity == 1:
+            assert (
+                self.beta_occ_eigenvalues is None
+                and self.beta_virtual_eigenvalues is None
+            )
+            return self.alpha_occ_eigenvalues[-1]
+
+    @cached_property
+    def num_unpaired_electrons(self):
+        if self.multiplicity != 1:
+            # the multiplicity is the number of unpaired electrons + 1
+            assert (
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
+                == self.multiplicity
+            )
+            return len(self.alpha_occ_eigenvalues) - len(
+                self.beta_occ_eigenvalues
+            )
+
+    @cached_property
+    def somo_energy(self):
+        if self.multiplicity != 1:
+            # the multiplicity is the number of unpaired electrons + 1
+            assert (
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
+                == self.multiplicity
+            )
+            return self.alpha_occ_eigenvalues[-1]
+
+    @cached_property
+    def lumo_energy(self):
+        if self.multiplicity == 1:
+            assert (
+                self.beta_occ_eigenvalues is None
+                and self.beta_virtual_eigenvalues is None
+            )
+            return self.alpha_virtual_eigenvalues[0]
+
+    @cached_property
+    def fmo_gap(self):
+        if self.multiplicity == 1:
+            return self.lumo_energy - self.homo_energy
+        else:
+            # to implement for radical systems
+            pass
 
 
 class Gaussian16WBIOutput(Gaussian16Output):

@@ -1,12 +1,145 @@
 import os.path
 import numpy as np
+from chemsmart.io.gaussian.inputs import Gaussian16Input
+from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.gaussian.output import Gaussian16TDDFTOutput
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
+from ase.symbols import Symbols
+from ase import units
+
+
+class TestGaussian16Input:
+    def test_read_gaussian_input(self, gaussian_opt_inputfile):
+        assert os.path.exists(gaussian_opt_inputfile)
+        g16_input = Gaussian16Input(filename=gaussian_opt_inputfile)
+        assert g16_input.molecule.chemical_symbols == [
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "C",
+            "O",
+            "H",
+            "Cl",
+        ]  # list of chemical symbols
+        assert isinstance(g16_input.molecule.symbols, Symbols)
+        assert g16_input.molecule.symbols.formula == "C6H4COHCl"
+        assert g16_input.molecule.natoms == 14
+        assert g16_input.molecule.empirical_formula == "C7H5ClO"
+        assert all(
+            np.isclose(
+                g16_input.molecule.positions[0],
+                [-0.5448210000, -1.1694570000, 0.0001270000],
+                atol=10e-5,
+            )
+        )
+        assert g16_input.additional_opt_options_in_route is None
+        assert g16_input.additional_route_parameters is None
+        assert g16_input.job_type == "opt"
+        assert g16_input.functional == "m062x"
+        assert g16_input.basis == "def2svp"
+        assert g16_input.molecule.frozen_atoms is None
+
+    def test_read_frozen_coords(self, gaussian_frozen_opt_inputfile):
+        assert os.path.exists(gaussian_frozen_opt_inputfile)
+        g16_frozen = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16_frozen.molecule.symbols.formula == "C6H4COHCl"
+        assert g16_frozen.molecule.empirical_formula == "C7H5ClO"
+        assert g16_frozen.additional_opt_options_in_route is None
+        assert g16_frozen.additional_route_parameters is None
+        assert g16_frozen.job_type == "opt"
+
+    def test_read_modred_inputfile(self, gaussian_modred_inputfile):
+        assert os.path.exists(gaussian_modred_inputfile)
+        g16_modred = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16_modred.molecule.chemical_symbols == [
+            "O",
+            "N",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "C",
+            "O",
+            "O",
+        ]  # list of chemical symbols
+        assert g16_modred.molecule.symbols.formula == "ONC2H7CO2"
+        assert g16_modred.molecule.empirical_formula == "C3H7NO3"
+        assert g16_modred.additional_opt_options_in_route is None
+        assert g16_modred.additional_route_parameters is None
+        assert g16_modred.job_type == "modred"
+        assert g16_modred.modredundant == [[2, 12], [9, 2]]
+        assert g16_modred.functional == "m062x"
+        assert g16_modred.basis == "def2svp"
+
+    def test_read_scan_inputfile(self, gaussian_scan_inputfile):
+        assert os.path.exists(gaussian_scan_inputfile)
+        g16_scan = Gaussian16Input(filename=gaussian_scan_inputfile)
+        assert g16_scan.molecule.chemical_symbols == [
+            "O",
+            "N",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "C",
+            "O",
+            "O",
+        ]  # list of chemical symbols
+        assert g16_scan.molecule.symbols.formula == "ONC2H7CO2"
+        assert g16_scan.molecule.empirical_formula == "C3H7NO3"
+        assert g16_scan.additional_opt_options_in_route is None
+        assert g16_scan.additional_route_parameters is None
+        assert g16_scan.job_type == "modred"
+        assert g16_scan.modredundant == {
+            "coords": [[2, 12], [9, 2]],
+            "num_steps": 10,
+            "step_size": 0.05,
+        }
+        assert g16_scan.functional == "m062x"
+        assert g16_scan.basis == "def2svp"
+
+    def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
+        assert os.path.exists(gaussian_pbc_1d_inputfile)
+        g16_pbc_1d = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
+        assert g16_pbc_1d.molecule.symbols.formula == "CH2CHC2H2Cl"
+        assert g16_pbc_1d.molecule.empirical_formula == "C4H5Cl"
+        assert all(
+            np.isclose(
+                g16_pbc_1d.molecule.positions[-1],
+                [0.62098257, 0.98609446, -1.78763987],
+                atol=1e-5,
+            )
+        )
+        assert g16_pbc_1d.additional_opt_options_in_route is None
+        assert g16_pbc_1d.additional_route_parameters is None
+        assert g16_pbc_1d.job_type == "sp"
+        assert g16_pbc_1d.modredundant is None
+        assert g16_pbc_1d.functional == "pbepbe"
+        assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
 
 
 class TestGaussian16Output:
-    def test_normal_termination_with_forces_and_frequencies(self, td_outputfile):
+    def test_normal_termination_with_forces_and_frequencies(
+        self, td_outputfile
+    ):
         assert os.path.exists(td_outputfile)
         g16_output = Gaussian16TDDFTOutput(filename=td_outputfile)
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
@@ -90,6 +223,88 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+
+    def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
+        assert os.path.exists(gaussian_singlet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.normal_termination
+        assert g16_output.tddft_transitions == []  # no tddft calcs
+        assert len(g16_output.alpha_occ_eigenvalues) == 116
+        assert g16_output.alpha_occ_eigenvalues[0] == -25.29096 * units.Hartree
+        assert g16_output.alpha_occ_eigenvalues[-1] == -0.29814 * units.Hartree
+        assert len(g16_output.alpha_virtual_eigenvalues) == 378
+        assert (
+            g16_output.alpha_virtual_eigenvalues[0] == -0.02917 * units.Hartree
+        )
+        assert (
+            g16_output.alpha_virtual_eigenvalues[-1]
+            == 56.20437 * units.Hartree
+        )
+        assert g16_output.beta_occ_eigenvalues is None
+        assert g16_output.beta_virtual_eigenvalues is None
+        assert g16_output.homo_energy == -0.29814 * units.Hartree
+        assert g16_output.lumo_energy == -0.02917 * units.Hartree
+        assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+
+    def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
+        assert os.path.exists(gaussian_triplet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_triplet_opt_outfile)
+        assert g16_output.normal_termination
+        assert g16_output.tddft_transitions == []  # no tddft calcs
+        assert len(g16_output.alpha_occ_eigenvalues) == 215
+        assert (
+            g16_output.alpha_occ_eigenvalues[0] == -482.71377 * units.Hartree
+        )
+        assert g16_output.alpha_occ_eigenvalues[-1] == -0.15673 * units.Hartree
+        assert len(g16_output.alpha_virtual_eigenvalues) == 750
+        assert (
+            g16_output.alpha_virtual_eigenvalues[0] == -0.07423 * units.Hartree
+        )
+        assert (
+            g16_output.alpha_virtual_eigenvalues[-1] == 4.23682 * units.Hartree
+        )
+        assert len(g16_output.beta_occ_eigenvalues) == 213
+        assert g16_output.beta_occ_eigenvalues[0] == -482.71362 * units.Hartree
+        assert g16_output.beta_occ_eigenvalues[-1] == -0.18923 * units.Hartree
+        assert len(g16_output.beta_virtual_eigenvalues) == 752
+        assert (
+            g16_output.beta_virtual_eigenvalues[0] == -0.05025 * units.Hartree
+        )
+        assert (
+            g16_output.beta_virtual_eigenvalues[-1] == 4.26643 * units.Hartree
+        )
+        assert g16_output.homo_energy is None
+        assert g16_output.lumo_energy is None
+        assert g16_output.somo_energy == -0.15673 * units.Hartree
+
+    def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
+        assert os.path.exists(gaussian_quintet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        assert g16_output.tddft_transitions == []  # no tddft calcs
+        assert len(g16_output.alpha_occ_eigenvalues) == 216
+        assert (
+            g16_output.alpha_occ_eigenvalues[0] == -482.71572 * units.Hartree
+        )
+        assert g16_output.alpha_occ_eigenvalues[-1] == -0.18764 * units.Hartree
+        assert len(g16_output.alpha_virtual_eigenvalues) == 749
+        assert (
+            g16_output.alpha_virtual_eigenvalues[0] == -0.03881 * units.Hartree
+        )
+        assert (
+            g16_output.alpha_virtual_eigenvalues[-1] == 4.23318 * units.Hartree
+        )
+        assert len(g16_output.beta_occ_eigenvalues) == 212
+        assert g16_output.beta_occ_eigenvalues[0] == -482.71538 * units.Hartree
+        assert g16_output.beta_occ_eigenvalues[-1] == -0.19564 * units.Hartree
+        assert len(g16_output.beta_virtual_eigenvalues) == 753
+        assert (
+            g16_output.beta_virtual_eigenvalues[0] == -0.06116 * units.Hartree
+        )
+        assert (
+            g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
+        )
+        assert g16_output.somo_energy == -0.18764 * units.Hartree
+        assert g16_output.fmo_gap is None
 
 
 class TestGaussianWBIOutput:
