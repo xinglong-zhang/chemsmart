@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-# TODO
 import logging
 import os
-
 import click
 
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.gaussian.logfolder import GaussianLogFolder
 from chemsmart.utils.utils import create_logger
 
 logger = logging.getLogger(__name__)
@@ -43,8 +42,7 @@ def entry_point(directory, filename, append):
 
     # if input file is given, write only that file to .xyz
     if filename is not None:
-        input_filepath = os.path.join(directory, filename)
-        all_logpaths = os.path.abspath(input_filepath)
+        all_logpaths = os.path.abspath(filename)
         all_logpaths = [all_logpaths]
 
     # if input file is not given
@@ -56,9 +54,8 @@ def entry_point(directory, filename, append):
         xyzfile = f"{basename}.xyz"
         xyzpath = os.path.join(logdir, xyzfile)
 
-        logoutput = Gaussian16Output(logfile=logpath)
+        logoutput = Gaussian16Output(filename=logpath)
         log_final_atoms = logoutput.get_atoms(include_failed_logfile=True)
-
         if log_final_atoms is None:
             logger.info(f"No readable structure from file {logpath}")
             continue
