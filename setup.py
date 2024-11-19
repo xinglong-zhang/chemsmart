@@ -23,7 +23,11 @@ def read(*paths, **kwargs):
 
 
 def read_requirements(path):
-    return [line.strip() for line in read(path).split("\n") if not line.startswith(('"', "#", "-", "git+"))]
+    return [
+        line.strip()
+        for line in read(path).split("\n")
+        if not line.startswith(('"', "#", "-", "git+"))
+    ]
 
 
 setup(

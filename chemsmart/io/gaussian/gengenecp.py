@@ -48,13 +48,19 @@ class GenGenECPSection:
             return []
 
         if not line.endswith("0"):
-            logger.warning(f"Line for light atoms should end with 0, but is {line} instead.")
+            logger.warning(
+                f"Line for light atoms should end with 0, but is {line} instead."
+            )
 
         split_line = line.split()
         elements = []
         for raw_element in split_line:
             element = raw_element.strip()
-            if element != "0" and element in pt.PERIODIC_TABLE and element not in elements:
+            if (
+                element != "0"
+                and element in pt.PERIODIC_TABLE
+                and element not in elements
+            ):
                 elements.append(element)
         return pt.sorted_periodic_table_list(elements)
 
@@ -87,7 +93,9 @@ class GenGenECPSection:
     @classmethod
     def from_genecp_path(cls, genecp_path):
         if not os.path.exists(genecp_path):
-            raise FileNotFoundError(f'Given gen/genecp path at "{genecp_path}" is not found!')
+            raise FileNotFoundError(
+                f'Given gen/genecp path at "{genecp_path}" is not found!'
+            )
 
         string = ""
         genecp_path = os.path.abspath(genecp_path)
@@ -109,13 +117,17 @@ class GenGenECPSection:
         genecp_string = ""
         num_groups = len(genecp_group)
         for i in range(num_groups):
-            for string in genecp_group[i]:  # for each string in the list; so need to add end of line '\n' below
+            for string in genecp_group[
+                i
+            ]:  # for each string in the list; so need to add end of line '\n' below
                 genecp_string += string + "\n"
             genecp_string += "\n"
         return cls(genecp_string)
 
     @classmethod
-    def from_bse_api(cls, light_elements, light_elements_basis, heavy_elements, heavy_elements_basis):
+    def from_bse_api(
+        cls, light_elements, light_elements_basis, heavy_elements, heavy_elements_basis
+    ):
         """Create ECP from basis set exchange api.
 
         :param light_elements: list of light atoms as elements in string
@@ -174,7 +186,9 @@ class GenGenECPSection:
         )
 
         heavy_atoms_gengenecp_basis_list = heavy_atoms_gengenecp_basis.split("\n")
-        heavy_atoms_gengenecp_basis_blocks = content_blocks_by_paragraph(string_list=heavy_atoms_gengenecp_basis_list)
+        heavy_atoms_gengenecp_basis_blocks = content_blocks_by_paragraph(
+            string_list=heavy_atoms_gengenecp_basis_list
+        )
 
         # first block is header; write header info, which contains basis set name
         header_block = heavy_atoms_gengenecp_basis_blocks[0]
@@ -182,8 +196,10 @@ class GenGenECPSection:
             if line:
                 genecp_string += line + "\n"
 
-        heavy_atoms_gengenecp_basis_string = write_list_of_lists_as_a_string_with_empty_line_between_lists(
-            heavy_atoms_gengenecp_basis_blocks[1:]
+        heavy_atoms_gengenecp_basis_string = (
+            write_list_of_lists_as_a_string_with_empty_line_between_lists(
+                heavy_atoms_gengenecp_basis_blocks[1:]
+            )
         )
         genecp_string += heavy_atoms_gengenecp_basis_string
         return cls(string=genecp_string)

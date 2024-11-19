@@ -46,7 +46,9 @@ def tddft_test_directory(gaussian_test_directory):
 
 @pytest.fixture()
 def td_outputfile(tddft_test_directory):
-    td_outputfile = os.path.join(tddft_test_directory, "tddft_r1s50_gas_radical_anion.log")
+    td_outputfile = os.path.join(
+        tddft_test_directory, "tddft_r1s50_gas_radical_anion.log"
+    )
     return td_outputfile
 
 
