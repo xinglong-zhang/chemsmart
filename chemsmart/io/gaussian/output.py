@@ -1,4 +1,5 @@
 import re
+import logging
 from itertools import islice
 from functools import cached_property
 from chemsmart.utils.mixins import FileMixin
@@ -8,10 +9,152 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 
+logger = logging.getLogger(__name__)
 
 class Gaussian16Output(FileMixin):
     def __init__(self, filename):
         self.filename = filename
+
+    @property
+    def normal_termination(self):
+        """Check for termination of gaussian file by checking the last line of the output file."""
+        contents = self.contents
+        if len(contents) == 0:
+            return False
+
+        last_line = contents[-1]
+        if "Normal termination of Gaussian" in last_line:
+            logger.info(f"File {self.filename} terminated normally.")
+            return True
+
+        logger.info(f"File {self.filename} has error termination.")
+        return False
+
+    @property
+    def num_atoms(self):
+        """Number of atoms in the molecule."""
+        for line in self.contents:
+            if line.startswith("NAtoms="):
+                return int(line.split()[1])
+
+    @property
+    def charge(self):
+        for line in self.contents:
+            if "Charge" in line and "Multiplicity" in line:
+                line_elem = line.split()
+                return int(line_elem[2])
+
+    @property
+    def multiplicity(self):
+        for line in self.contents:
+            if "Charge" in line and "Multiplicity" in line:
+                line_elem = line.split()
+                return int(line_elem[-1])
+
+    @property
+    def spin(self):
+        """Spin restricted vs spin unrestricted calculations."""
+        for line in self.contents:
+            if "SCF Done:" in line:
+                line_elem = line.split("E(")
+                theory = line_elem[1].split(")")[0].lower()
+                # determine if the job is restricted or unrestricted
+                if theory.startswith("r"):
+                    spin = "restricted"
+                elif theory.startswith("u"):
+                    spin = "unrestricted"
+                else:
+                    spin = None
+                return spin
+
+    @property
+    def num_basis_functions(self):
+        for line in self.contents:
+            if "basis functions," in line:
+                line_elem = line.split(",")
+                num_basis_functions = line_elem[0].strip().split()[0]
+                return int(num_basis_functions)
+        return None
+
+    @property
+    def num_primitive_gaussians(self):
+        for line in self.contents:
+            if "primitive gaussians," in line:
+                line_elem = line.split(",")
+                primitives = line_elem[1].strip().split()[0]
+                return int(primitives)
+        return None
+
+    @property
+    def num_cartesian_basis_functions(self):
+        for line in self.contents:
+            if (
+                "cartesian basis functions" in line
+                and "basis functions," in line
+                and "primitive gaussians," in line
+            ):
+                line_elem = line.split(",")
+                num_cartesian_basis_functions = line_elem[2].strip().split()[0]
+                return int(num_cartesian_basis_functions)
+        return None
+
+    # Below gives computing time/resources used
+    @property
+    def cpu_runtime_by_jobs_core_hours(self):
+        cpu_runtime = []
+        for line in self.contents:
+            if line.startswith("Job cpu time:"):
+                n_days = float(line.split("days")[0].strip().split()[-1])
+                n_hours = float(line.split("hours")[0].strip().split()[-1])
+                n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                n_seconds = float(line.split("seconds")[0].strip().split()[-1])
+                total_seconds = (
+                    n_days * 24 * 60 * 60
+                    + n_hours * 60 * 60
+                    + n_minutes * 60
+                    + n_seconds
+                )
+                total_hours = round(
+                    total_seconds / 3600, 4
+                )  # round to 1 nearest hour
+                cpu_runtime.append(total_hours)
+        return cpu_runtime
+
+    @property
+    def service_units_by_jobs(self):
+        """SUs defined as the JOB CPU time in hours."""
+        return self.cpu_runtime_by_jobs_core_hours
+
+    @property
+    def total_core_hours(self):
+        return round(sum(self.cpu_runtime_by_jobs_core_hours), 4)
+
+    @property
+    def total_service_unit(self):
+        return self.total_core_hours
+
+    @property
+    def elapsed_walltime_by_jobs(self):
+        elapsed_walltime = []
+        for line in self.contents:
+            if line.startswith("Elapsed time:"):
+                n_days = float(line.split("days")[0].strip().split()[-1])
+                n_hours = float(line.split("hours")[0].strip().split()[-1])
+                n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                n_seconds = float(line.split("seconds")[0].strip().split()[-1])
+                total_seconds = (
+                    n_days * 24 * 60 * 60
+                    + n_hours * 60 * 60
+                    + n_minutes * 60
+                    + n_seconds
+                )
+                total_hours = round(total_seconds / 3600, 4)
+                elapsed_walltime.append(total_hours)
+        return elapsed_walltime
+
+    @property
+    def total_elapsed_walltime(self):
+        return round(sum(self.elapsed_walltime_by_jobs), 4)
 
 
 class Gaussian16TDDFTOutput(Gaussian16Output):
