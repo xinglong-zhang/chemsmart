@@ -45,27 +45,27 @@ class Hashabledict(dict):
 class DatabaseFile:
     def __init__(self, filename):
         if not os.path.exists(filename):
-            raise FileNotFoundError(f'{filename} could not be found')
+            raise FileNotFoundError(f"{filename} could not be found")
         self.filename = filename
 
     def delete_entries(self, ids):
         if any(id < 1 for id in ids):
-            raise ValueError('ids must be greater than 0. (1-indexed)')
+            raise ValueError("ids must be greater than 0. (1-indexed)")
 
         if any(id > self.num_images for id in ids):
             raise ValueError(
-                f'ids must be less than or equal to the number of images in the database ({self.num_images})'
+                f"ids must be less than or equal to the number of images in the database ({self.num_images})"
             )
 
         with connect(self.filename) as db:
             db.delete(ids)
-            logger.info(f'id={ids} deleted from {self.filename}')
+            logger.info(f"id={ids} deleted from {self.filename}")
 
     @property
     def _lockfile(self):
         dirname = os.path.dirname(self.filename)
         basename = os.path.basename(self.filename)
-        return os.path.join(dirname, f'.{basename}.lock')
+        return os.path.join(dirname, f".{basename}.lock")
 
     def to_dataset(self):
         return Dataset._from_database_file(self.filename)
@@ -77,8 +77,8 @@ class DatabaseFile:
 
     def backup(self, filename, timestamp=False):
         if timestamp:
-            ts = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            filename = f'{filename}.{ts}'
+            ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"{filename}.{ts}"
 
         with FileLock(self._lockfile):
             shutil.copy(src=self.filename, dst=filename)
@@ -89,12 +89,14 @@ class DatabaseFile:
             self.num_images  # noqa: B018 - needed to check if reading database triggers exception
             return False
         except (sqlite3.DatabaseError, sqlite3.OperationalError):
-            logger.info('Encountered sqlite3 error while reading dataset. Dataset is likely corrupted')
+            logger.info(
+                "Encountered sqlite3 error while reading dataset. Dataset is likely corrupted"
+            )
             return True
         except (TypeError, OSError):
             logger.exception(
-                'Encountered TypeError/OSError while reading dataset. Dataset is likely corrupted '
-                '- check carefully the error message!'
+                "Encountered TypeError/OSError while reading dataset. Dataset is likely corrupted "
+                "- check carefully the error message!"
             )
             return True
         except Exception as e:
@@ -102,7 +104,14 @@ class DatabaseFile:
 
 
 class Dataset(Sequence, IterableMixin):
-    def __init__(self, images=None, key_value_pairs=None, datas=None, metadata=None, ase_db_attributes=None):
+    def __init__(
+        self,
+        images=None,
+        key_value_pairs=None,
+        datas=None,
+        metadata=None,
+        ase_db_attributes=None,
+    ):
         if images is None:
             images = []
 
@@ -120,14 +129,16 @@ class Dataset(Sequence, IterableMixin):
 
         if len(images) != len(key_value_pairs):
             raise ValueError(
-                f'Number of images and key_value_pairs not equal [{len(images)} != {len(key_value_pairs)}]'
+                f"Number of images and key_value_pairs not equal [{len(images)} != {len(key_value_pairs)}]"
             )
 
         if len(images) != len(datas):
-            raise ValueError('Length of images and datas have to be equal')
+            raise ValueError("Length of images and datas have to be equal")
 
         if len(images) != len(ase_db_attributes):
-            raise ValueError('Length of images and ase_db_attributes have to be equal')
+            raise ValueError(
+                "Length of images and ase_db_attributes have to be equal"
+            )
 
         images = [self._copy_atoms(image) for image in images]
 
@@ -140,14 +151,14 @@ class Dataset(Sequence, IterableMixin):
 
     def _iterables(self):
         return {
-            'images': self._images,
-            'key_value_pairs': self._key_value_pairs,
-            'datas': self._datas,
-            'ase_db_attributes': self._ase_db_attributes,
+            "images": self._images,
+            "key_value_pairs": self._key_value_pairs,
+            "datas": self._datas,
+            "ase_db_attributes": self._ase_db_attributes,
         }
 
     def __repr__(self):
-        return f'<{self.__class__.__qualname__}(num_images={len(self)})>'
+        return f"<{self.__class__.__qualname__}(num_images={len(self)})>"
 
     def __delitem__(self, key):
         del self._images[key]
@@ -157,13 +168,16 @@ class Dataset(Sequence, IterableMixin):
 
     def __add__(self, other):
         if self.__class__ != other.__class__:
-            raise NotImplementedError(f'Cannot add {self.__class__} to {other.__class__}')
+            raise NotImplementedError(
+                f"Cannot add {self.__class__} to {other.__class__}"
+            )
 
         return self.from_images(
             images=self._images + other._images,
             key_value_pairs=self._key_value_pairs + other._key_value_pairs,
             datas=self._datas + other._datas,
-            ase_db_attributes=self._ase_db_attributes + other._ase_db_attributes,
+            ase_db_attributes=self._ase_db_attributes
+            + other._ase_db_attributes,
         )
 
     def __len__(self):
@@ -174,7 +188,9 @@ class Dataset(Sequence, IterableMixin):
         if self._is_int(key):
             return self._images[int(key)]
 
-        new_iterables = {k: self._index(v, key) for k, v in self._iterables().items()}
+        new_iterables = {
+            k: self._index(v, key) for k, v in self._iterables().items()
+        }
         return type(self)(**new_iterables, metadata=self.metadata)
 
     def rattle(self, **kwargs):
@@ -185,7 +201,10 @@ class Dataset(Sequence, IterableMixin):
 
     @property
     def ase_ids(self):
-        return [ase_db_attribute['id'] for ase_db_attribute in self.ase_db_attributes]
+        return [
+            ase_db_attribute["id"]
+            for ase_db_attribute in self.ase_db_attributes
+        ]
 
     def average_num_atoms(self):
         return np.mean([len(image) for image in self._images])
@@ -193,10 +212,14 @@ class Dataset(Sequence, IterableMixin):
     def evaluate_errors(self, calculator, **kwargs):
         from pyatoms.analysis.dataset import DatasetErrors
 
-        return DatasetErrors.from_calculator_and_dataset(calculator=calculator, dataset=self, **kwargs)
+        return DatasetErrors.from_calculator_and_dataset(
+            calculator=calculator, dataset=self, **kwargs
+        )
 
     def remove_calculators(self):
-        new_images = [image.copy() for image in self._images]  # copying removes calculators
+        new_images = [
+            image.copy() for image in self._images
+        ]  # copying removes calculators
         return Dataset.from_images(
             images=new_images,
             key_value_pairs=self.key_value_pairs,
@@ -213,7 +236,14 @@ class Dataset(Sequence, IterableMixin):
     def remove_duplicates(self):
         hashable_kvps = [Hashabledict(pair) for pair in self._key_value_pairs]
         hashable_datas = [Hashabledict(pair) for pair in self._datas]
-        tups = list(zip(self._immutable_images(), hashable_kvps, hashable_datas, strict=False))
+        tups = list(
+            zip(
+                self._immutable_images(),
+                hashable_kvps,
+                hashable_datas,
+                strict=False,
+            )
+        )
 
         unique_indices = [tups.index(i) for i in set(tups)]
 
@@ -226,18 +256,21 @@ class Dataset(Sequence, IterableMixin):
         except PropertyNotImplementedError:
             return False
         except RuntimeError as e:
-            if 'Atoms object has no calculator' in str(e):
+            if "Atoms object has no calculator" in str(e):
                 return False
         return True
 
     def has_energy(self, force_consistent=False):
         """Returns True if all images have energies."""
         try:
-            [image.get_potential_energy(force_consistent=force_consistent) for image in self._images]
+            [
+                image.get_potential_energy(force_consistent=force_consistent)
+                for image in self._images
+            ]
         except PropertyNotImplementedError:
             return False
         except RuntimeError as e:
-            if 'Atoms object has no calculator' in str(e):
+            if "Atoms object has no calculator" in str(e):
                 return False
         return True
 
@@ -248,23 +281,25 @@ class Dataset(Sequence, IterableMixin):
         except PropertyNotImplementedError:
             return False
         except RuntimeError as e:
-            if 'Atoms object has no calculator' in str(e):
+            if "Atoms object has no calculator" in str(e):
                 return False
         return True
 
     def write_to_poscars(self, folder):
         if os.path.exists(folder):
-            raise ValueError(f'{folder} already exists')
+            raise ValueError(f"{folder} already exists")
 
         os.mkdir(folder)
         for idx, image in enumerate(self._images):
-            subfolder = os.path.join(folder, f'{idx}')
-            poscar = os.path.join(subfolder, 'POSCAR')
+            subfolder = os.path.join(folder, f"{idx}")
+            poscar = os.path.join(subfolder, "POSCAR")
 
             os.mkdir(subfolder)
             image.write(poscar, vasp5=True, direct=True)
 
-    def write(self, filename, append=False, format=None, overwrite=False, **kwargs) -> None:
+    def write(
+        self, filename, append=False, format=None, overwrite=False, **kwargs
+    ) -> None:
         """Writes the dataset to a file.
 
         Args:
@@ -275,24 +310,39 @@ class Dataset(Sequence, IterableMixin):
             **kwargs (dict): Keyword arguments for ase.io.write.
         """
         if (not append and not overwrite) and os.path.exists(filename):
-            raise FileExistsError(f'{filename} already exists!')
+            raise FileExistsError(f"{filename} already exists!")
 
         # Note: If we reach here, then the database file will be overwritten. Therefore,
         # we do not need to explicitly remove the database even if overwrite=True.
-        if filename.endswith('.h5'):
-            self._write_to_hdf(filename=filename, force_consistent=False, **kwargs)
-        elif filename.endswith('.db'):
-            self._write_to_sqlite3_database(filename=filename, append=append, **kwargs)
-        elif filename.startswith('mysql://'):
-            self._write_to_mysql_database(filename=filename, append=append, **kwargs)
+        if filename.endswith(".h5"):
+            self._write_to_hdf(
+                filename=filename, force_consistent=False, **kwargs
+            )
+        elif filename.endswith(".db"):
+            self._write_to_sqlite3_database(
+                filename=filename, append=append, **kwargs
+            )
+        elif filename.startswith("mysql://"):
+            self._write_to_mysql_database(
+                filename=filename, append=append, **kwargs
+            )
         else:
-            ase.io.write(filename=filename, images=self._images, append=append, format=format)
+            ase.io.write(
+                filename=filename,
+                images=self._images,
+                append=append,
+                format=format,
+            )
 
-    def _write_to_mysql_database(self, filename, append=True, write_metadata=True):
+    def _write_to_mysql_database(
+        self, filename, append=True, write_metadata=True
+    ):
         database = MySQLDatabase.from_path(filename)
 
         if database.exists and not append:
-            raise ValueError('append cannot be False as database already exists')
+            raise ValueError(
+                "append cannot be False as database already exists"
+            )
 
         if not database.exists:
             database = database.create()
@@ -300,20 +350,30 @@ class Dataset(Sequence, IterableMixin):
         metadata = self.metadata if write_metadata else None
 
         writer = DatabaseWriter(
-            images=self._images, key_value_pairs=self._key_value_pairs, datas=self._datas, metadata=metadata
+            images=self._images,
+            key_value_pairs=self._key_value_pairs,
+            datas=self._datas,
+            metadata=metadata,
         )
         writer.write(filename=filename, append=append)
 
-    def _write_to_sqlite3_database(self, filename, append=True, write_metadata=True):
+    def _write_to_sqlite3_database(
+        self, filename, append=True, write_metadata=True
+    ):
         metadata = self.metadata if write_metadata else None
 
         writer = DatabaseWriter(
-            images=self._images, key_value_pairs=self._key_value_pairs, datas=self._datas, metadata=metadata
+            images=self._images,
+            key_value_pairs=self._key_value_pairs,
+            datas=self._datas,
+            metadata=metadata,
         )
         writer.write(filename=filename, append=append)
 
     def _write_to_hdf(self, filename, force_consistent=False):
-        writer = HDFWriter(images=self._images, force_consistent=force_consistent)
+        writer = HDFWriter(
+            images=self._images, force_consistent=force_consistent
+        )
         writer.write(filename=filename)
 
     def unique_chemical_symbols(self):
@@ -335,7 +395,10 @@ class Dataset(Sequence, IterableMixin):
 
     @property
     def pymatgen_structures(self):
-        return [AseAtomsAdaptor.get_structure(atoms=image) for image in self._images]
+        return [
+            AseAtomsAdaptor.get_structure(atoms=image)
+            for image in self._images
+        ]
 
     @property
     def key_value_pairs(self):
@@ -344,7 +407,9 @@ class Dataset(Sequence, IterableMixin):
     @key_value_pairs.setter
     def key_value_pairs(self, key_value_pairs):
         if (num_kvps := len(key_value_pairs)) != len(self):
-            raise ValueError(f'Length of key value pairs ({num_kvps}) not equal to length of {self}')
+            raise ValueError(
+                f"Length of key value pairs ({num_kvps}) not equal to length of {self}"
+            )
 
         self._key_value_pairs = key_value_pairs
 
@@ -357,7 +422,12 @@ class Dataset(Sequence, IterableMixin):
         return self._ase_db_attributes.copy()
 
     def energies(self, force_consistent=False):
-        return np.array([a.get_potential_energy(force_consistent=force_consistent) for a in self._images])
+        return np.array(
+            [
+                a.get_potential_energy(force_consistent=force_consistent)
+                for a in self._images
+            ]
+        )
 
     @timed(log_threshold=1)
     def find(self, atoms, return_none=True):
@@ -366,9 +436,9 @@ class Dataset(Sequence, IterableMixin):
             idx = self._images.index(atoms)
             return self._images[idx]
         except ValueError as e:
-            if 'is not in list' in str(e) and return_none:
+            if "is not in list" in str(e) and return_none:
                 return None
-            raise ValueError('Could not find atoms in dataset') from e
+            raise ValueError("Could not find atoms in dataset") from e
 
     def with_new_calculator(self, calculator):
         """Apply a new calculator to all images in the dataset."""
@@ -378,10 +448,19 @@ class Dataset(Sequence, IterableMixin):
             image.calc = calculator
             images.append(image)
         return Dataset.from_images(
-            images, key_value_pairs=self.key_value_pairs, datas=self.datas, ase_db_attributes=self.ase_db_attributes
+            images,
+            key_value_pairs=self.key_value_pairs,
+            datas=self.datas,
+            ase_db_attributes=self.ase_db_attributes,
         )
 
-    def energetic_outliers(self, calculator=None, value_threshold=None, zscore_threshold=3.5, force_consistent=False):
+    def energetic_outliers(
+        self,
+        calculator=None,
+        value_threshold=None,
+        zscore_threshold=3.5,
+        force_consistent=False,
+    ):
         if calculator is not None:
             new_images = []
             for _image in self._images:
@@ -389,18 +468,31 @@ class Dataset(Sequence, IterableMixin):
                 image.set_calculator(calculator)
                 new_images += [image]
 
-            calc_energies = [image.get_potential_energy(force_consistent=force_consistent) for image in new_images]
+            calc_energies = [
+                image.get_potential_energy(force_consistent=force_consistent)
+                for image in new_images
+            ]
             calc_energies = np.array(calc_energies)
 
-            saved_energies = np.array(self.energies(force_consistent=force_consistent))
+            saved_energies = np.array(
+                self.energies(force_consistent=force_consistent)
+            )
             energetic_diff = np.abs(calc_energies - saved_energies)
-            logger.info(f'Diff: {energetic_diff}')
+            logger.info(f"Diff: {energetic_diff}")
         else:
-            energetic_diff = np.array(self.energies(force_consistent=force_consistent))
+            energetic_diff = np.array(
+                self.energies(force_consistent=force_consistent)
+            )
 
-        is_outlier = isoutlier(energetic_diff, value_threshold=value_threshold, zscore_threshold=zscore_threshold)
+        is_outlier = isoutlier(
+            energetic_diff,
+            value_threshold=value_threshold,
+            zscore_threshold=zscore_threshold,
+        )
         idx_outliers = np.where(is_outlier)[0]
-        logger.info(f'Images {idx_outliers} are outliers (energetic_diff: {energetic_diff[is_outlier]})')
+        logger.info(
+            f"Images {idx_outliers} are outliers (energetic_diff: {energetic_diff[is_outlier]})"
+        )
         return is_outlier
 
     def finalize_results(self):
@@ -415,16 +507,25 @@ class Dataset(Sequence, IterableMixin):
             calc = SinglePointCalculator(atoms=image, **results)
             image.calc = calc
         return Dataset.from_images(
-            images, key_value_pairs=self.key_value_pairs, datas=self.datas, ase_db_attributes=self.ase_db_attributes
+            images,
+            key_value_pairs=self.key_value_pairs,
+            datas=self.datas,
+            ase_db_attributes=self.ase_db_attributes,
         )
 
-    def remove_energetic_outliers(self, calculator=None, value_threshold=None, zscore_threshold=3.5):
+    def remove_energetic_outliers(
+        self, calculator=None, value_threshold=None, zscore_threshold=3.5
+    ):
         is_outlier = self.energetic_outliers(
-            calculator=calculator, value_threshold=value_threshold, zscore_threshold=zscore_threshold
+            calculator=calculator,
+            value_threshold=value_threshold,
+            zscore_threshold=zscore_threshold,
         )
         return self[~is_outlier]
 
-    def plot_energies_histogram(self, bins=None, binwidth=None, density=True, ax=None, label=None):
+    def plot_energies_histogram(
+        self, bins=None, binwidth=None, density=True, ax=None, label=None
+    ):
         from pyatoms.utils.plot import histogram
 
         histogram(
@@ -434,14 +535,26 @@ class Dataset(Sequence, IterableMixin):
             density=density,
             ax=ax,
             label=label,
-            xlabel='Energies / eV',
+            xlabel="Energies / eV",
         )
 
     def forces(self, apply_constraint=False, ravel=False):
-        forces = [a.get_forces(apply_constraint=apply_constraint) for a in self._images]
-        return np.hstack([f.ravel() for f in forces]) if ravel else np.array(forces, dtype=object)
+        forces = [
+            a.get_forces(apply_constraint=apply_constraint)
+            for a in self._images
+        ]
+        return (
+            np.hstack([f.ravel() for f in forces])
+            if ravel
+            else np.array(forces, dtype=object)
+        )
 
-    def stress(self, apply_constraint=False, voigt=True, suppress_not_implemented_error=False):
+    def stress(
+        self,
+        apply_constraint=False,
+        voigt=True,
+        suppress_not_implemented_error=False,
+    ):
         """Returns the stress for each image in the dataset.
 
         Args:
@@ -451,17 +564,29 @@ class Dataset(Sequence, IterableMixin):
             voigt (bool): Whether to return the stress in Voigt notation.
         """
         try:
-            stress = np.array([a.get_stress(apply_constraint=apply_constraint, voigt=voigt) for a in self._images])
+            stress = np.array(
+                [
+                    a.get_stress(
+                        apply_constraint=apply_constraint, voigt=voigt
+                    )
+                    for a in self._images
+                ]
+            )
         except ase.calculators.calculator.PropertyNotImplementedError as e:
             if suppress_not_implemented_error:
-                logger.info('Calculator does not support stress')
+                logger.info("Calculator does not support stress")
                 stress = np.array([[np.nan] * 6] * len(self))
             else:
                 raise e
         return stress
 
     def max_forces(self, apply_constraint=False):
-        return np.array([a.max_force(apply_constraint=apply_constraint) for a in self._images])
+        return np.array(
+            [
+                a.max_force(apply_constraint=apply_constraint)
+                for a in self._images
+            ]
+        )
 
     def copy(self):
         return self.from_images(
@@ -485,9 +610,13 @@ class Dataset(Sequence, IterableMixin):
         self._images = [self._images[i] for i in indices]
         self._key_value_pairs = list(np.array(self._key_value_pairs)[indices])
         self._datas = list(np.array(self._datas)[indices])
-        self._ase_db_attributes = list(np.array(self._ase_db_attributes)[indices])
+        self._ase_db_attributes = list(
+            np.array(self._ase_db_attributes)[indices]
+        )
 
-    def extend(self, images, key_value_pairs=None, datas=None, ase_db_attributes=None):
+    def extend(
+        self, images, key_value_pairs=None, datas=None, ase_db_attributes=None
+    ):
         """Perform in-place extension of the dataset."""
         if key_value_pairs is None:
             key_value_pairs = [{}] * len(images)
@@ -499,16 +628,20 @@ class Dataset(Sequence, IterableMixin):
             ase_db_attributes = [{}] * len(images)
 
         if len(images) != len(key_value_pairs):
-            raise ValueError('Length of images and key_value_pairs have to be equal')
+            raise ValueError(
+                "Length of images and key_value_pairs have to be equal"
+            )
 
         if len(images) != len(datas):
-            raise ValueError('Length of images and datas have to be equal')
+            raise ValueError("Length of images and datas have to be equal")
 
         if len(images) != len(ase_db_attributes):
-            raise ValueError('Length of images and ase_db_attributes have to be equal')
+            raise ValueError(
+                "Length of images and ase_db_attributes have to be equal"
+            )
 
         images = [self._copy_atoms(image) for image in images]
-        logger.info(f'Extending {self} by {len(images)} images')
+        logger.info(f"Extending {self} by {len(images)} images")
         self._images.extend(images)
         self._key_value_pairs.extend(key_value_pairs)
         self._datas.extend(datas)
@@ -527,7 +660,7 @@ class Dataset(Sequence, IterableMixin):
 
     def chunks(self, chunk_size=None, num_chunks=None):
         if chunk_size is not None and num_chunks is not None:
-            raise ValueError('Can only choose chunk_size or num_chunks')
+            raise ValueError("Can only choose chunk_size or num_chunks")
 
         if num_chunks is None:
             num_chunks = int(np.ceil(len(self) / chunk_size))
@@ -537,7 +670,9 @@ class Dataset(Sequence, IterableMixin):
 
         chunks = []
         for i in range(num_chunks):
-            indices = range(i * chunk_size, min((i + 1) * chunk_size, len(self)))
+            indices = range(
+                i * chunk_size, min((i + 1) * chunk_size, len(self))
+            )
             chunk = self[indices]
             chunks.append(chunk)
         return chunks
@@ -545,7 +680,9 @@ class Dataset(Sequence, IterableMixin):
     def split_into_two(self, fraction=None, num_datapoints=None):
         """Split into two or datasets."""
         if fraction is not None and num_datapoints is not None:
-            raise ValueError('Specify either fraction or num_datapoints, not both.')
+            raise ValueError(
+                "Specify either fraction or num_datapoints, not both."
+            )
 
         if num_datapoints is not None:
             num_datapoints = [num_datapoints, len(self) - num_datapoints]
@@ -559,10 +696,14 @@ class Dataset(Sequence, IterableMixin):
     def split(self, fraction=None, num_datapoints=None):
         """Split into two or more datasets."""
         if fraction is not None and num_datapoints is not None:
-            raise ValueError('Specify either fraction or num_datapoints, not both.')
+            raise ValueError(
+                "Specify either fraction or num_datapoints, not both."
+            )
 
         if fraction is not None and (sum_fractions := sum(fraction)) != 1:
-            raise ValueError(f'Sum of fractions {sum_fractions} is not equal to 1.')
+            raise ValueError(
+                f"Sum of fractions {sum_fractions} is not equal to 1."
+            )
 
         if fraction is not None:
             num_datapoints = [int(f * len(self)) for f in fraction]
@@ -572,7 +713,7 @@ class Dataset(Sequence, IterableMixin):
 
         if (sum_datapoints := sum(num_datapoints)) != len(self):
             raise ValueError(
-                f'Sum of num_datapoints {sum_datapoints} not equal to the number of images in the dataset {len(self)}.'
+                f"Sum of num_datapoints {sum_datapoints} not equal to the number of images in the dataset {len(self)}."
             )
 
         def _split_once(start, stop):
@@ -582,7 +723,9 @@ class Dataset(Sequence, IterableMixin):
         return [_split_once(start, stop) for start, stop in pairwise(cumsum)]
 
     def split_into_groups_by_chemical_formula(self):
-        chemical_formulas = [image.get_chemical_formula() for image in self._images]
+        chemical_formulas = [
+            image.get_chemical_formula() for image in self._images
+        ]
         unique_chemical_formulas = list(set(chemical_formulas))
 
         subdatasets = []
@@ -602,11 +745,28 @@ class Dataset(Sequence, IterableMixin):
 
     @classmethod
     def combine(cls, datasets):
-        images = list(chain.from_iterable([dataset.images for dataset in datasets]))
-        kvps = list(chain.from_iterable([dataset.key_value_pairs for dataset in datasets]))
-        datas = list(chain.from_iterable([dataset.datas for dataset in datasets]))
-        ase_db_attributes = list(chain.from_iterable([dataset.ase_db_attributes for dataset in datasets]))
-        return cls(images=images, key_value_pairs=kvps, datas=datas, ase_db_attributes=ase_db_attributes)
+        images = list(
+            chain.from_iterable([dataset.images for dataset in datasets])
+        )
+        kvps = list(
+            chain.from_iterable(
+                [dataset.key_value_pairs for dataset in datasets]
+            )
+        )
+        datas = list(
+            chain.from_iterable([dataset.datas for dataset in datasets])
+        )
+        ase_db_attributes = list(
+            chain.from_iterable(
+                [dataset.ase_db_attributes for dataset in datasets]
+            )
+        )
+        return cls(
+            images=images,
+            key_value_pairs=kvps,
+            datas=datas,
+            ase_db_attributes=ase_db_attributes,
+        )
 
     @classmethod
     def empty_dataset(cls, metadata=None):
@@ -630,10 +790,12 @@ class Dataset(Sequence, IterableMixin):
             string (str): String with format [filename]@[index].
             kwargs (dict): Keyword arguments for Dataset.from_files method.
         """
-        if '@' not in string:
-            raise ValueError('String has to be in the format [filename]@[index]')
+        if "@" not in string:
+            raise ValueError(
+                "String has to be in the format [filename]@[index]"
+            )
 
-        filename, index = string.split('@')
+        filename, index = string.split("@")
         return cls.from_file(filename=filename, index=index, **kwargs)
 
     @classmethod
@@ -647,14 +809,20 @@ class Dataset(Sequence, IterableMixin):
         )
 
         if parallel:
-            datasets = cls.from_file(dataset_files, parallel=parallel, **kwargs)
+            datasets = cls.from_file(
+                dataset_files, parallel=parallel, **kwargs
+            )
         else:
-            datasets = [cls.from_file(filename, **kwargs) for filename in dataset_files]
+            datasets = [
+                cls.from_file(filename, **kwargs) for filename in dataset_files
+            ]
 
         dataset = cls.combine(datasets)
 
         if len(dataset) == 0:
-            raise AssertionError(f'Dataset from {regex_filenames} has no images!')
+            raise AssertionError(
+                f"Dataset from {regex_filenames} has no images!"
+            )
         return dataset
 
     @parallelizable(progress_bar=True)
@@ -662,21 +830,21 @@ class Dataset(Sequence, IterableMixin):
     def from_file(cls, filename, **kwargs):
         """Reads images from a file."""
         # TODO: change to use AtomsWrapper.from_filepath for all
-        if '@' in filename and not filename.startswith('mysql://'):
+        if "@" in filename and not filename.startswith("mysql://"):
             return cls._from_ase_string(filename, **kwargs)
-        if '.db' in filename:
+        if ".db" in filename:
             return cls._from_database_file(filename, **kwargs)
-        if '.cfg' in filename:
+        if ".cfg" in filename:
             return cls._from_mtp_config_file(filename, **kwargs)
-        if '.h5' in filename:
+        if ".h5" in filename:
             return cls._from_h5_file(filename, **kwargs)
-        if 'mysql://' in filename:
+        if "mysql://" in filename:
             return cls.from_mysql_path(filename, **kwargs)
 
         return cls._from_ase_readable_file(filename, **kwargs)
 
     @classmethod
-    def _from_ase_readable_file(cls, filename, index=':', **kwargs):
+    def _from_ase_readable_file(cls, filename, index=":", **kwargs):
         images = ase.io.read(filename, index=index)
         if isinstance(images, Atoms):
             images = [images]
@@ -740,16 +908,18 @@ class Dataset(Sequence, IterableMixin):
         # filter_keyword is supplied
         if filter_keywords is None:
             logger.info(
-                f'No keyword for filtering is supplied. Dataset is not filtered.\n'
-                f'Available keywords in the database are {db_keywords} '
+                f"No keyword for filtering is supplied. Dataset is not filtered.\n"
+                f"Available keywords in the database are {db_keywords} "
             )
             return None
 
         # check if filter_keywords is a string (e.g. 'functional, basis') or a list (e.g., ['functional', 'basis']
         if isinstance(filter_keywords, str):
-            keywords_for_filtering = filter_keywords.split(',')
+            keywords_for_filtering = filter_keywords.split(",")
             # 'functional, basis' --> ['functional', ' basis'] --> ['functional', 'basis']
-            keywords_for_filtering = [string.strip() for string in keywords_for_filtering]
+            keywords_for_filtering = [
+                string.strip() for string in keywords_for_filtering
+            ]
         elif isinstance(filter_keywords, list):
             keywords_for_filtering = filter_keywords
 
@@ -795,7 +965,7 @@ class Dataset(Sequence, IterableMixin):
         try:
             from schnetpack.data import AtomsData as SchnetAtomsData
         except ImportError as e:
-            raise ImportError('Schnetpack needed.') from e
+            raise ImportError("Schnetpack needed.") from e
         # makes use of AtomsData()._deprecation_update() from schnetpack.data.atoms.py to read ase db directly
         property_list = []
         available_properties = []
@@ -803,21 +973,32 @@ class Dataset(Sequence, IterableMixin):
             # All properties need to be stored as numpy arrays.
             # Note: The shape for scalars should be (1,), not ()
             # Note: GPUs work best with float32 data
-            energy = np.array([float(at.get_potential_energy(force_consistent=force_consistent))], dtype=np.float32)
+            energy = np.array(
+                [
+                    float(
+                        at.get_potential_energy(
+                            force_consistent=force_consistent
+                        )
+                    )
+                ],
+                dtype=np.float32,
+            )
             try:
                 forces = at.get_forces(apply_constraint=False)
-                property_list.append({'energy': energy, 'forces': forces})
-                available_properties = ['energy', 'forces']
+                property_list.append({"energy": energy, "forces": forces})
+                available_properties = ["energy", "forces"]
             except Exception:
-                property_list.append({'energy': energy})
-                available_properties = ['energy']
+                property_list.append({"energy": energy})
+                available_properties = ["energy"]
 
         import tempfile
 
         new_db_temp_dir = tempfile.mkdtemp()
-        new_db_path = os.path.join(new_db_temp_dir, 'temp.db')
+        new_db_path = os.path.join(new_db_temp_dir, "temp.db")
 
-        new_dataset = SchnetAtomsData(new_db_path, available_properties=available_properties)
+        new_dataset = SchnetAtomsData(
+            new_db_path, available_properties=available_properties
+        )
         new_dataset.add_systems(self.images, property_list)
         return new_dataset
 
@@ -825,7 +1006,9 @@ class Dataset(Sequence, IterableMixin):
     def from_lasp_files(cls, structure_file, forces_file):
         from atomistic_ml.io.lasp import LASPAtomsBuilder
 
-        builder = LASPAtomsBuilder(structure_file=structure_file, forces_file=forces_file)
+        builder = LASPAtomsBuilder(
+            structure_file=structure_file, forces_file=forces_file
+        )
         images = builder.build()
         return cls.from_images(images)
 
@@ -839,20 +1022,22 @@ class Dataset(Sequence, IterableMixin):
         import torchani
 
         h5_dir = tempfile.mkdtemp()
-        h5_path = os.path.join(h5_dir, 'temp.h5')
+        h5_path = os.path.join(h5_dir, "temp.h5")
         self.write(h5_path)
 
         additional_properties = []
         if self.has_forces():
-            additional_properties += ['forces']
+            additional_properties += ["forces"]
 
-        return torchani.data.load(h5_path, additional_properties=additional_properties)
+        return torchani.data.load(
+            h5_path, additional_properties=additional_properties
+        )
 
 
 class LazyDataset:
     def __init__(self, filename, **kwargs):
         if not os.path.exists(filename):
-            raise FileNotFoundError(f'{filename} could not be found')
+            raise FileNotFoundError(f"{filename} could not be found")
 
         filename = os.path.abspath(filename)
 
@@ -880,7 +1065,7 @@ class LazyDataset:
         return len(self._dataset)
 
     def __getattr__(self, attr):
-        if attr == '__setstate__':
+        if attr == "__setstate__":
             raise AttributeError(attr)
         return self._dataset.__getattribute__(attr)
 
@@ -897,23 +1082,38 @@ class HDFWriter:
 
     def write(self, filename):
         if os.path.exists(filename):
-            raise FileExistsError(f'Filename {filename} already exists')
+            raise FileExistsError(f"Filename {filename} already exists")
 
         import h5py
 
         # in h5py version >3 need to explicitly specify "w"
-        with h5py.File(filename, 'w') as f:
-            chemical_formulas = [image.get_chemical_formula() for image in self.images]
+        with h5py.File(filename, "w") as f:
+            chemical_formulas = [
+                image.get_chemical_formula() for image in self.images
+            ]
             unique_chemical_formulas = list(set(chemical_formulas))
             for uf in unique_chemical_formulas:
                 self._write_group(f=f, formula=uf)
 
     def _write_group(self, f, formula):
-        images = [image for image in self.images if image.get_chemical_formula() == formula]
+        images = [
+            image
+            for image in self.images
+            if image.get_chemical_formula() == formula
+        ]
         images = [image.sorted_by_elements() for image in images]
         coordinates = np.array([image.get_positions() for image in images])
-        energies = np.array([image.get_potential_energy(force_consistent=self.force_consistent) for image in images])
-        forces = np.array([image.get_forces(apply_constraint=False) for image in images])
+        energies = np.array(
+            [
+                image.get_potential_energy(
+                    force_consistent=self.force_consistent
+                )
+                for image in images
+            ]
+        )
+        forces = np.array(
+            [image.get_forces(apply_constraint=False) for image in images]
+        )
         cells = np.array([image.cell for image in images])
         # may need to get volume too?
         # volumes = np.array([image.get_volume() for image in images])
@@ -921,14 +1121,17 @@ class HDFWriter:
 
         dt = string_dtype()
         # species = np.array(images[0].get_chemical_symbols(), dtype=dt)
-        species = [np.array(image.get_chemical_symbols(), dtype=dt) for image in images]
+        species = [
+            np.array(image.get_chemical_symbols(), dtype=dt)
+            for image in images
+        ]
 
         group = f.create_group(name=formula)
-        group.create_dataset(name='coordinates', data=coordinates)
-        group.create_dataset(name='energies', data=energies)
-        group.create_dataset(name='forces', data=forces)
-        group.create_dataset(name='species', data=species)
-        group.create_dataset(name='cells', data=cells)
+        group.create_dataset(name="coordinates", data=coordinates)
+        group.create_dataset(name="energies", data=energies)
+        group.create_dataset(name="forces", data=forces)
+        group.create_dataset(name="species", data=species)
+        group.create_dataset(name="cells", data=cells)
         # added volumes from the data images
         # group.create_dataset(name='volumes', data=volumes)
         # may need to write cell and pbc too?
@@ -946,17 +1149,17 @@ class HDFReader:
     @property
     def group_keys(self):
         """:return: group keys of .h5 file, keys here are formula of atoms from HDFWriter above"""
-        with h5py.File(self.filename, 'r') as f:
+        with h5py.File(self.filename, "r") as f:
             return list(f.keys())
 
     @property
     def base_items(self):
-        with h5py.File(self.filename, 'r') as f:
+        with h5py.File(self.filename, "r") as f:
             return list(f.items())
 
     def get_all_atoms(self):
         images = []
-        with h5py.File(self.filename, 'r') as f:
+        with h5py.File(self.filename, "r") as f:
             for key in self.group_keys:
                 key_item = list(f.get(key).items())
                 images += self._item_to_atoms(key_item)
@@ -970,31 +1173,37 @@ class HDFReader:
         """
         all_data = {}
         for each_tuple in item:
-            all_data[each_tuple[0]] = each_tuple[1][()]  # each_tuple[1].value is deprecated
+            all_data[each_tuple[0]] = each_tuple[1][
+                ()
+            ]  # each_tuple[1].value is deprecated
         return all_data
 
     def _item_to_atoms(self, item):
         cells = None
         all_data = self._item_to_dict(item)
         all_data_keys = list(all_data.keys())
-        if 'species' in all_data_keys:
-            species = all_data['species']
-        if 'coordinates' in all_data_keys:
-            coordinates = all_data['coordinates']
-        if 'energies' in all_data_keys:
-            energies = all_data['energies']
+        if "species" in all_data_keys:
+            species = all_data["species"]
+        if "coordinates" in all_data_keys:
+            coordinates = all_data["coordinates"]
+        if "energies" in all_data_keys:
+            energies = all_data["energies"]
             len_images = len(energies)
-        if 'forces' in all_data_keys:
-            forces = all_data['forces']
-        if 'cells' in all_data_keys:
-            cells = all_data['cells']
+        if "forces" in all_data_keys:
+            forces = all_data["forces"]
+        if "cells" in all_data_keys:
+            cells = all_data["cells"]
 
         # assemble ase Atoms object
         all_atoms_in_item = []
         for i in range(len_images):
             specie = [s.decode() for s in species[i]]
             if cells is not None:
-                atoms = Atoms(symbols=specie, positions=coordinates[i, :, :], cell=cells[i, :, :])
+                atoms = Atoms(
+                    symbols=specie,
+                    positions=coordinates[i, :, :],
+                    cell=cells[i, :, :],
+                )
             else:
                 atoms = Atoms(symbols=specie, positions=coordinates[i, :, :])
             atoms.calc = SinglePointCalculator(
@@ -1012,34 +1221,42 @@ class HDFReader:
 
 class DatabaseReader:
     def __init__(self, filename):
-        if '.db' in filename:
+        if ".db" in filename:
             filename = os.path.abspath(filename)
-        elif 'mysql://' in filename:
+        elif "mysql://" in filename:
             pass
         else:
-            raise ValueError(f'DatabaseReader can only handle .db or mysql:// paths. Got {filename}')
+            raise ValueError(
+                f"DatabaseReader can only handle .db or mysql:// paths. Got {filename}"
+            )
         self.filename = filename
 
-    def read(self, index=':', copy_to_tmp_if_fail=True):
+    def read(self, index=":", copy_to_tmp_if_fail=True):
         try:
             return self._read(index=index)
         except sqlite3.OperationalError as e:
             # File system may not support writing/reading of sqlite files, so try different filesystem
             if not self.copy_to_tmp_if_fail:
-                raise ValueError('Could not read database file due to sqlite3 error') from e
+                raise ValueError(
+                    "Could not read database file due to sqlite3 error"
+                ) from e
 
-            logger.info(f'sqlite3 disk I/O error in reading {self.filename}. Copying to tmp and read it there.')
+            logger.info(
+                f"sqlite3 disk I/O error in reading {self.filename}. Copying to tmp and read it there."
+            )
             with TemporaryDirectory() as tempdir:
-                tempdb = os.path.join(tempdir, 'tmp.db')
+                tempdb = os.path.join(tempdir, "tmp.db")
                 shutil.copy(src=self.filename, dst=tempdb)
                 reader = DatabaseReader(tempdb)
                 return reader.read(index=index, copy_to_tmp_if_fail=False)
 
-    def _read(self, index=':'):
+    def _read(self, index=":"):
         metadata = self._read_metadata()
         ids = self.get_ids(index)
         rows = self._read_rows(ids)
-        atoms, key_value_pairs, datas, ase_db_attributes = self._rows_to_atoms(rows)
+        atoms, key_value_pairs, datas, ase_db_attributes = self._rows_to_atoms(
+            rows
+        )
 
         return Dataset(
             images=atoms,
@@ -1049,15 +1266,17 @@ class DatabaseReader:
             ase_db_attributes=ase_db_attributes,
         )
 
-    def get_ids(self, index=':'):
+    def get_ids(self, index=":"):
         """Get the ids of the images to read from the database.
 
         Cannot assume that the ids are sequential (holes can be left behind via deletion etc.),
         so need to get all ids and then select the ones to read.
         """
-        with ase.db.connect(self.filename) as db, db.managed_connection() as con:
+        with ase.db.connect(
+            self.filename
+        ) as db, db.managed_connection() as con:
             cur = con.cursor()
-            cur.execute('SELECT id FROM systems')
+            cur.execute("SELECT id FROM systems")
             ids = [result[0] for result in cur.fetchall()]
 
         return ids[string2index(index, return_iterable=True)]
@@ -1068,7 +1287,7 @@ class DatabaseReader:
 
     @property
     def is_mysql_database(self):
-        return 'mysql://' in self.filename
+        return "mysql://" in self.filename
 
     @property
     def num_images(self):
@@ -1085,9 +1304,11 @@ class DatabaseReader:
             cur = con.cursor()
 
             # placeholder is '?' for sqlite3 and '%s' for mysql
-            placeholder = '?' if not self.is_mysql_database else '%s'
-            placeholders = ','.join([placeholder] * len(ids))
-            cur.execute(f'SELECT * FROM systems WHERE id IN ({placeholders})', ids)
+            placeholder = "?" if not self.is_mysql_database else "%s"
+            placeholders = ",".join([placeholder] * len(ids))
+            cur.execute(
+                f"SELECT * FROM systems WHERE id IN ({placeholders})", ids
+            )
             values = cur.fetchall()
 
         return [db._convert_tuple_to_row(v) for v in values]
@@ -1104,11 +1325,11 @@ class DatabaseReader:
             datas.append(atom_row.data)
             ase_db_attributes.append(
                 {
-                    'id': atom_row.id,
-                    'unique_id': atom_row.unique_id,
-                    'ctime': atom_row.ctime,
-                    'mtime': atom_row.mtime,
-                    'user': atom_row.user,
+                    "id": atom_row.id,
+                    "unique_id": atom_row.unique_id,
+                    "ctime": atom_row.ctime,
+                    "mtime": atom_row.mtime,
+                    "user": atom_row.user,
                 }
             )
         return atoms, kvps, datas, ase_db_attributes
@@ -1124,7 +1345,9 @@ class DatabaseWriter:
         datas (list[dict]): List of dictionaries corresponding to the datas of each image
     """
 
-    def __init__(self, images=None, key_value_pairs=None, datas=None, metadata=None):
+    def __init__(
+        self, images=None, key_value_pairs=None, datas=None, metadata=None
+    ):
         if images is None:
             images = []
 
@@ -1139,23 +1362,30 @@ class DatabaseWriter:
         self.datas = datas
         self.metadata = metadata
 
-    def write(self, filename, append=True, tmp_staging=True, overwrite_metadata=False) -> list:
+    def write(
+        self, filename, append=True, tmp_staging=True, overwrite_metadata=False
+    ) -> list:
         def _write_metadata(db, overwrite_metadata):
             if self.metadata is None:
                 # None indicates no writing of metadata
                 return
 
-            if db.metadata not in ({}, self.metadata) and not overwrite_metadata:
+            if (
+                db.metadata not in ({}, self.metadata)
+                and not overwrite_metadata
+            ):
                 raise ValueError(
-                    f'self.metadata ({self.metadata} does not match that in database ({db.metadata}). '
-                    f'Set overwrite_metadata=True to overwrite'
+                    f"self.metadata ({self.metadata} does not match that in database ({db.metadata}). "
+                    f"Set overwrite_metadata=True to overwrite"
                 )
 
             db.metadata = self.metadata
 
         def _write_images(db):
             ids = []
-            for image, pairs, data in zip(self.images, self.key_value_pairs, self.datas, strict=False):
+            for image, pairs, data in zip(
+                self.images, self.key_value_pairs, self.datas, strict=False
+            ):
                 self._remove_pyatoms_constraints(image)
                 id = db.write(image, key_value_pairs=pairs, data=data)
                 ids.append(id)
@@ -1180,32 +1410,38 @@ class DatabaseWriter:
             if tmp_staging:
                 ids = self._stage_using_tmp_and_copy(filename, append)
             else:
-                logger.exception(f'Failed to write to {filename}')
+                logger.exception(f"Failed to write to {filename}")
                 raise
         except pymysql.err.OperationalError as e:
-            is_unknown_db_error = re.search(r'1049, "Unknown database.*?', str(e))
+            is_unknown_db_error = re.search(
+                r'1049, "Unknown database.*?', str(e)
+            )
             if not is_unknown_db_error:
                 raise
 
             # Database does not exist, so create one and try again
             MySQLDatabase.create_from_path(filename)
-            ids = self.write(filename=filename, append=append, tmp_staging=tmp_staging)
+            ids = self.write(
+                filename=filename, append=append, tmp_staging=tmp_staging
+            )
         return ids
 
     def _get_filelock_path(self, filename):
-        if 'mysql://' in filename:
+        if "mysql://" in filename:
             return None
 
         dirname = os.path.dirname(filename)
         basename = os.path.basename(filename)
-        return os.path.join(dirname, f'.{basename}.filelock')
+        return os.path.join(dirname, f".{basename}.filelock")
 
     def _remove_pyatoms_constraints(self, image):
         """Remove pyatoms constraints from an image. Because pyatoms constraints cannot be written to db."""
         from pyatoms.io.ase.constraints import HookeanPyatoms
 
         constraints = image.constraints
-        constraints = [c for c in constraints if not isinstance(c, HookeanPyatoms)]
+        constraints = [
+            c for c in constraints if not isinstance(c, HookeanPyatoms)
+        ]
         image.set_constraint(constraints)
 
     def _stage_using_tmp_and_copy(self, filename, append):
@@ -1214,23 +1450,27 @@ class DatabaseWriter:
         This is under the assumption that the tempdir is likely to have a different filesystem.
         Useful if filesystem of original path may not support writing/reading of sqlite files.
         """
-        logger.info('Encountered sqlite3 disk I/O error. Trying to write to tmp and copy back')
+        logger.info(
+            "Encountered sqlite3 disk I/O error. Trying to write to tmp and copy back"
+        )
         with TemporaryDirectory() as tempdir:
-            tmp_filename = os.path.join(tempdir, 'tmp.db')
+            tmp_filename = os.path.join(tempdir, "tmp.db")
             if filename == tmp_filename:
                 raise ValueError
 
             if append and os.path.exists(filename):
                 shutil.copy(src=filename, dst=tmp_filename)
 
-            ids = self.write(filename=tmp_filename, tmp_staging=False, append=append)
+            ids = self.write(
+                filename=tmp_filename, tmp_staging=False, append=append
+            )
             shutil.move(tmp_filename, filename)
         return ids
 
     def _remove_old_lock_files(self, filename, age_threshold=300):
         """Remove old lock files that might be left behind after database is deleted."""
-        lockfile = filename + '.lock'
-        journal_file = filename + '-journal'
+        lockfile = filename + ".lock"
+        journal_file = filename + "-journal"
         files = [lockfile, journal_file, filename]
         if not os.path.exists(lockfile) and not os.path.exists(journal_file):
             return
@@ -1246,17 +1486,19 @@ class DatabaseWriter:
         while True:
             try:
                 st = os.stat(lockfile)
-                logger.info(f'Lock file {lockfile} exists.')
+                logger.info(f"Lock file {lockfile} exists.")
             except FileNotFoundError:
                 # Could be that we caught the DB when it was writing something. If so, lockfile will
                 # disappear, and we don't need to do anything
-                logger.info('Lock file is gone')
+                logger.info("Lock file is gone")
                 break
 
             age = time.time() - st.st_mtime
-            logger.info(f'Lock file age {age}, threshold: {age_threshold}')
+            logger.info(f"Lock file age {age}, threshold: {age_threshold}")
             if age > age_threshold:
-                logger.info(f'Lock file age {age} s > {age_threshold} s. Removing lock and other files.')
+                logger.info(
+                    f"Lock file age {age} s > {age_threshold} s. Removing lock and other files."
+                )
 
                 for f in files:
                     with suppress(FileNotFoundError):

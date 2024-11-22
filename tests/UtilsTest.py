@@ -4,6 +4,7 @@ from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.utils import content_blocks_by_paragraph
 
+
 class TestUtils:
     def test_is_float(self):
         assert is_float("-1.0")

@@ -23,8 +23,14 @@ logger = logging.getLogger(__name__)
     default=1,
     help="runs jobs in parallel with specified number of processes",
 )
-@click.option('-d', '--debug/--no-debug', default=False, help='turns on debug logging')
-@click.option('--test/--no-test', default=False, help='If true, fake jobrunners will be used')
+@click.option(
+    "-d", "--debug/--no-debug", default=False, help="turns on debug logging"
+)
+@click.option(
+    "--test/--no-test",
+    default=False,
+    help="If true, fake jobrunners will be used",
+)
 def entry_point(
     ctx,
     num_processes,

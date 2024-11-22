@@ -100,7 +100,9 @@ def is_float(string):
 
 def content_blocks_by_paragraph(string_list):
     return [
-        list(group) for k, group in groupby(string_list, lambda x: x == "") if not k
+        list(group)
+        for k, group in groupby(string_list, lambda x: x == "")
+        if not k
     ]
 
 

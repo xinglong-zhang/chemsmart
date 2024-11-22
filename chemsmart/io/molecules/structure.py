@@ -71,7 +71,9 @@ class Molecule:
 
     def get_chemical_formula(self, mode, empirical):
         if self.symbols is not None:
-            return self.symbols.get_chemical_formula(mode="hill", empirical=False)
+            return self.symbols.get_chemical_formula(
+                mode="hill", empirical=False
+            )
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
@@ -370,7 +372,8 @@ class CoordinateBlock:
             coordinate_block_list = coordinate_block
         else:
             raise TypeError(
-                f"The given coordinate block should be str or list " f"but is {type(coordinate_block)} instead!"
+                f"The given coordinate block should be str or list "
+                f"but is {type(coordinate_block)} instead!"
             )
         self.coordinate_block = coordinate_block_list
 

@@ -6,6 +6,7 @@ from chemsmart.io.gaussian.route import GaussianRoute
 
 class XTBInput(FileMixin):
     """XTB input file."""
+
     def __init__(self, filename):
         self.filename = filename
 
@@ -13,8 +14,6 @@ class XTBInput(FileMixin):
 
         cb = CoordinateBlock(coordinate_block=self.content_groups[2])
         self.cb = cb
-
-
 
     @property
     def num_content_blocks(self):

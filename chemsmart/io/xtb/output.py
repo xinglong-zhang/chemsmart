@@ -248,7 +248,9 @@ class XTBOutput(FileMixin):
                         )
                     j += 1
                 transitions.append(each_state_transitions)
-                contribution_coefficients.append(each_state_contribution_coefficients)
+                contribution_coefficients.append(
+                    each_state_contribution_coefficients
+                )
 
         return transitions, contribution_coefficients
 
@@ -461,7 +463,7 @@ class XTBOutput(FileMixin):
         # get data for key_value_pairs in Atoms
         # data = self.get_settings()
         data = self.get_logfile_data()
-        all_atoms = self.get_atoms(':', **kwargs)
+        all_atoms = self.get_atoms(":", **kwargs)
         if all_atoms is None:
             return None
 
@@ -469,6 +471,7 @@ class XTBOutput(FileMixin):
         # duplicate data for len(all_atoms) times since they are the same in the same gaussian log file
         key_value_pairs = [data for _ in range(len(all_atoms))]
         return Dataset(images=all_atoms, key_value_pairs=key_value_pairs)
+
 
 class Gaussian16WBIOutput(Gaussian16Output):
     def __init__(self, filename):
@@ -485,7 +488,10 @@ class Gaussian16WBIOutput(Gaussian16Output):
         """Parse the NBO natural atomic orbitals."""
         nao = {}
         for i, line in enumerate(self.contents):
-            if "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy" in line:
+            if (
+                "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy"
+                in line
+            ):
                 for j_line in self.contents[i + 2 :]:
                     if (
                         "WARNING" in j_line
@@ -496,7 +502,9 @@ class Gaussian16WBIOutput(Gaussian16Output):
                         columns = j_line.split()
 
                         # Extract values from each column
-                        nao_number = int(columns[0])  # NAO Number (like 1, 2, etc.)
+                        nao_number = int(
+                            columns[0]
+                        )  # NAO Number (like 1, 2, etc.)
                         atom_type = columns[1]  # Atom type (e.g., 'Ni')
                         atom_number = columns[2]  # Atom number (e.g., '1')
                         lang = columns[3]  # Lang (e.g., 'S', 'px', 'py')

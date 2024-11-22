@@ -34,7 +34,9 @@ def outputs_test_directory(gaussian_test_directory):
 
 @pytest.fixture()
 def wbi_outputfile(outputs_test_directory):
-    wbi_outputfile = os.path.join(outputs_test_directory, "TS_5coord_XIII_wbi.log")
+    wbi_outputfile = os.path.join(
+        outputs_test_directory, "TS_5coord_XIII_wbi.log"
+    )
     return wbi_outputfile
 
 
