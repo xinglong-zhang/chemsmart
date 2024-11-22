@@ -141,6 +141,7 @@ class TestGaussian16Output:
     ):
         assert os.path.exists(td_outputfile)
         g16_output = Gaussian16Output(filename=td_outputfile)
+        assert g16_output.num_atoms == 49
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
         assert g16_output.excitation_energies_eV == [
