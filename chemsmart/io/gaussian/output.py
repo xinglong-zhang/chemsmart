@@ -94,10 +94,14 @@ class Gaussian16Output(FileMixin):
                 while len(self.contents[i + j]) != 0:
                     line_element = self.contents[i + j].split()
                     if len(line_element) <= 4:
-                        mo_transition = " ".join(list(islice(line_element, len(line_element) - 1)))
+                        mo_transition = " ".join(
+                            list(islice(line_element, len(line_element) - 1))
+                        )
                         contribution_coefficient = float(line_element[-1])
                         each_state_transitions.append(mo_transition)
-                        each_state_contribution_coefficients.append(contribution_coefficient)
+                        each_state_contribution_coefficients.append(
+                            contribution_coefficient
+                        )
                     j += 1
                 transitions.append(each_state_transitions)
                 contribution_coefficients.append(each_state_contribution_coefficients)

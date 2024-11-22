@@ -63,7 +63,9 @@ class Molecule:
         return cls(symbols=c.symbols, positions=c.positions)
 
     @classmethod
-    def from_symbols_and_positions_and_pbc_conditions(cls, list_of_symbols, positions, pbc_conditions=None):
+    def from_symbols_and_positions_and_pbc_conditions(
+        cls, list_of_symbols, positions, pbc_conditions=None
+    ):
         return cls(
             symbols=Symbols.fromsymbols(list_of_symbols),
             positions=positions,
@@ -231,7 +233,9 @@ class Molecule:
                 frozen_coordinates_dict["frozen"].append(i)
 
         c = FixAtoms(indices=frozen_coordinates_list)
-        atoms = Atoms(symbols=symbols, positions=positions, pbc=pbc_conditions, cell=cells)
+        atoms = Atoms(
+            symbols=symbols, positions=positions, pbc=pbc_conditions, cell=cells
+        )
         atoms.set_constraint(c)
 
         return atoms
@@ -304,7 +308,8 @@ class CoordinateBlock:
             coordinate_block_list = coordinate_block
         else:
             raise TypeError(
-                f"The given coordinate block should be str or list " f"but is {type(coordinate_block)} instead!"
+                f"The given coordinate block should be str or list "
+                f"but is {type(coordinate_block)} instead!"
             )
         self.coordinate_block = coordinate_block_list
 
