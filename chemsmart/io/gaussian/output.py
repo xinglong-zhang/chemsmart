@@ -70,6 +70,12 @@ class Gaussian16Output(FileMixin):
             oscillatory_strengths.append(i[2])
         return oscillatory_strengths
 
+    def get_homo_lumo_gap(self):
+        homo_energy = self._get_homo_energy()
+        lumo_energy = self._get_lumo_energy()
+        gap = lumo_energy - homo_energy
+        return gap
+
     @cached_property
     def transitions(self):
         """Read TDDFT transitions and return the MO transitions."""
