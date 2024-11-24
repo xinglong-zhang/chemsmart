@@ -1,0 +1,14 @@
+name: chemsmart
+channels:
+  - main
+  - conda-forge
+dependencies:
+  - python
+  - scipy
+  - pip
+  - coverage
+  - ase==3.22.*
+  - click>=8
+  - numpy 
+  - pip:
+          - periodictable

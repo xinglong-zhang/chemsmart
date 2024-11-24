@@ -1,6 +1,6 @@
 .ONESHELL:
-ENV_PREFIX=$(shell python -c "if __import__('pathlib').Path('.venv/bin/pip').exists(): print('.venv/bin/')")
-USING_POETRY=$(shell grep "tool.poetry" pyproject.toml && echo "yes")
+ENV_PREFIX=$(shell conda run -n chemsmart which python 2>/dev/null || echo "not_found")
+CONDA_ENV_NAME=chemsmart
 
 .PHONY: help
 help:             ## Show the help.
@@ -9,43 +9,44 @@ help:             ## Show the help.
 	@echo "Targets:"
 	@fgrep "##" Makefile | fgrep -v fgrep
 
-
 .PHONY: show
 show:             ## Show the current environment.
 	@echo "Current environment:"
-	@if [ "$(USING_POETRY)" ]; then poetry env info && exit; fi
-	@echo "Running using $(ENV_PREFIX)"
-	@$(ENV_PREFIX)python -V
-	@$(ENV_PREFIX)python -m site
+	@if [ "$(ENV_PREFIX)" != "not_found" ]; then \
+		echo "Using Conda environment '$(CONDA_ENV_NAME)'"; \
+		$(ENV_PREFIX) --version; \
+		$(ENV_PREFIX) -m site; \
+	else \
+		echo "Conda environment '$(CONDA_ENV_NAME)' is not active or doesn't exist."; \
+	fi
 
 .PHONY: install
 install:          ## Install the project in dev mode.
-	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
-	@echo "Don't forget to run 'make virtualenv' if you got errors."
-	$(ENV_PREFIX)pip install -e .[test]
+	@echo "Installing the project in editable mode..."
+	@$(ENV_PREFIX) -m pip install -e .[test]
 
 .PHONY: fmt
 fmt:              ## Format code using black & isort.
-	$(ENV_PREFIX)isort chemsmart/
-	$(ENV_PREFIX)black -l 121 chemsmart/
-	$(ENV_PREFIX)black -l 121 tests/
+	$(ENV_PREFIX) -m isort chemsmart/
+	$(ENV_PREFIX) -m black -l 79 chemsmart/
+	$(ENV_PREFIX) -m black -l 79 tests/
 
 .PHONY: lint
 lint:             ## Run pep8, black, mypy linters.
-	$(ENV_PREFIX)flake8 chemsmart/
-	$(ENV_PREFIX)black -l 121 --check chemsmart/
-	$(ENV_PREFIX)black -l 121 --check tests/
-	$(ENV_PREFIX)mypy --ignore-missing-imports chemsmart/
+	$(ENV_PREFIX) -m flake8 chemsmart/
+	$(ENV_PREFIX) -m black -l 79 --check chemsmart/
+	$(ENV_PREFIX) -m black -l 79 --check tests/
+	$(ENV_PREFIX) -m mypy --ignore-missing-imports chemsmart/
 
 .PHONY: test
 test: lint        ## Run tests and generate coverage report.
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart -l --tb=short --maxfail=1 tests/
-	$(ENV_PREFIX)coverage xml
-	$(ENV_PREFIX)coverage html
+	$(ENV_PREFIX) -m pytest -v --cov-config .coveragerc --cov=chemsmart -l --tb=short --maxfail=1 tests/
+	$(ENV_PREFIX) -m coverage xml
+	$(ENV_PREFIX) -m coverage html
 
 .PHONY: watch
 watch:            ## Run tests on every change.
-	ls **/**.py | entr $(ENV_PREFIX)pytest -s -vvv -l --tb=long --maxfail=1 tests/
+	ls **/**.py | entr $(ENV_PREFIX) -m pytest -s -vvv -l --tb=long --maxfail=1 tests/
 
 .PHONY: clean
 clean:            ## Clean unused files.
@@ -64,59 +65,35 @@ clean:            ## Clean unused files.
 	@rm -rf docs/_build
 
 .PHONY: virtualenv
-virtualenv:       ## Create a virtual environment.
-	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
-	@echo "creating virtualenv ..."
-	@rm -rf .venv
-	@python3 -m venv .venv
-	@./.venv/bin/pip install -U pip
-	@./.venv/bin/pip install -e .[test]
+virtualenv:       ## Create or update the Conda environment from environment.yml.
+	@echo "Creating or updating the Conda environment '$(CONDA_ENV_NAME)' from environment.yml..."
+	conda env create --name $(CONDA_ENV_NAME) --file environment.yml || \
+	conda env update --name $(CONDA_ENV_NAME) --file environment.yml --prune
 	@echo
-	@echo "!!! Please run 'source .venv/bin/activate' to enable the environment !!!"
+	@echo "Environment '$(CONDA_ENV_NAME)' is ready."
+	@echo "Activate it with: conda activate $(CONDA_ENV_NAME)"
+	@echo "Run 'conda activate $(CONDA_ENV_NAME)' to use the environment."
 
 .PHONY: release
 release:          ## Create a new tag for release.
-	@echo "WARNING: This operation will create s version tag and push to github"
+	@echo "WARNING: This operation will create a version tag and push to GitHub"
 	@read -p "Version? (provide the next x.y.z semver) : " TAG
 	@echo "$${TAG}" > chemsmart/VERSION
-	@$(ENV_PREFIX)gitchangelog > HISTORY.md
+	@$(ENV_PREFIX) -m gitchangelog > HISTORY.md
 	@git add chemsmart/VERSION HISTORY.md
 	@git commit -m "release: version $${TAG} 🚀"
-	@echo "creating git tag : $${TAG}"
+	@echo "Creating git tag : $${TAG}"
 	@git tag $${TAG}
 	@git push -u origin HEAD --tags
-	@echo "Github Actions will detect the new tag and release the new version."
+	@echo "GitHub Actions will detect the new tag and release the new version."
 
 .PHONY: docs
 docs:             ## Build the documentation.
-	@echo "building documentation ..."
-	@$(ENV_PREFIX)mkdocs build
+	@echo "Building documentation..."
+	@$(ENV_PREFIX) -m mkdocs build
 	URL="site/index.html"; xdg-open $$URL || sensible-browser $$URL || x-www-browser $$URL || gnome-open $$URL || open $$URL
-
-.PHONY: switch-to-poetry
-switch-to-poetry: ## Switch to poetry package manager.
-	@echo "Switching to poetry ..."
-	@if ! poetry --version > /dev/null; then echo 'poetry is required, install from https://python-poetry.org/'; exit 1; fi
-	@rm -rf .venv
-	@poetry init --no-interaction --name=a_flask_test --author=rochacbruno
-	@echo "" >> pyproject.toml
-	@echo "[tool.poetry.scripts]" >> pyproject.toml
-	@echo "chemsmart = 'chemsmart.__main__:main'" >> pyproject.toml
-	@cat requirements.txt | while read in; do poetry add --no-interaction "$${in}"; done
-	@cat requirements-test.txt | while read in; do poetry add --no-interaction "$${in}" --dev; done
-	@poetry install --no-interaction
-	@mkdir -p .github/backup
-	@mv requirements* .github/backup
-	@mv setup.py .github/backup
-	@echo "You have switched to https://python-poetry.org/ package manager."
-	@echo "Please run 'poetry shell' or 'poetry run chemsmart'"
 
 .PHONY: init
 init:             ## Initialize the project based on an application template.
 	@./.github/init.sh
 
-
-# This project has been generated from rochacbruno/python-project-template
-# __author__ = 'rochacbruno'
-# __repo__ = https://github.com/rochacbruno/python-project-template
-# __sponsor__ = https://github.com/sponsors/rochacbruno/
