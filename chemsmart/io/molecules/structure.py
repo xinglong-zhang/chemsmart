@@ -71,7 +71,9 @@ class Molecule:
 
     def get_chemical_formula(self, mode, empirical):
         if self.symbols is not None:
-            return self.symbols.get_chemical_formula(mode="hill", empirical=False)
+            return self.symbols.get_chemical_formula(
+                mode="hill", empirical=False
+            )
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
@@ -109,7 +111,9 @@ class Molecule:
         try:
             molecule = cls._read_file(filepath, index=index, **kwargs)
         except Exception as e:
-            raise FileReadError(f"Failed to create molecule from {filepath}.") from e
+            raise FileReadError(
+                f"Failed to create molecule from {filepath}."
+            ) from e
         return molecule
 
     @classmethod
@@ -180,7 +184,9 @@ class Molecule:
                 line_elements = line.strip().split()
 
                 # read charge and multiplicity from Gaussian .com file
-                if len(line_elements) == 2 and all(i.isdigit for i in line_elements):
+                if len(line_elements) == 2 and all(
+                    i.isdigit for i in line_elements
+                ):
                     line_elements[0]
                     line_elements[1]
 
@@ -216,7 +222,10 @@ class Molecule:
                     coordinates_frozen_status.append(int(line_elements[1]))
 
                 # to be able to read PBC files
-                if len(line_elements) == 4 and line_elements[0].upper() == "TV":
+                if (
+                    len(line_elements) == 4
+                    and line_elements[0].upper() == "TV"
+                ):
                     pbc_conditions.append(1)
                     tv = [
                         float(line_elements[1]),
@@ -224,7 +233,10 @@ class Molecule:
                         float(line_elements[3]),
                     ]
                     translation_vectors.append(tv)
-                elif len(line_elements) == 5 and line_elements[0].upper() == "TV":
+                elif (
+                    len(line_elements) == 5
+                    and line_elements[0].upper() == "TV"
+                ):
                     pbc_conditions.append(1)
                     tv = [
                         float(line_elements[2]),
@@ -274,12 +286,16 @@ class Molecule:
             from chemsmart.io.gaussian.output import Gaussian16Output
 
             g16_output = Gaussian16Output(filename=filepath)
-            return g16_output.get_atoms(index=index, include_failed_logfile=True)
+            return g16_output.get_atoms(
+                index=index, include_failed_logfile=True
+            )
         except ValueError:
             from pyatoms.io.gaussian.outputs import Gaussian16OutputWithPBC
 
             g16_output = Gaussian16OutputWithPBC(logfile=filepath)
-            return g16_output.get_atoms(index=index, include_failed_logfile=True)
+            return g16_output.get_atoms(
+                index=index, include_failed_logfile=True
+            )
 
     @staticmethod
     @file_cache()
@@ -316,7 +332,9 @@ class Molecule:
 
     def write(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
-        assert self.positions is not None, "Positions to write should not be None!"
+        assert (
+            self.positions is not None
+        ), "Positions to write should not be None!"
 
         pass
 
@@ -428,7 +446,9 @@ class CoordinateBlock:
         positions = []
         constraints = []
         for line in self.coordinate_block:
-            if line.startswith("TV"):  # cases where PBC system occurs in Gaussian
+            if line.startswith(
+                "TV"
+            ):  # cases where PBC system occurs in Gaussian
                 continue
 
             line_elements = line.split()
@@ -440,7 +460,9 @@ class CoordinateBlock:
             try:
                 atomic_number = int(line_elements[0])
             except ValueError:
-                atomic_number = p.to_atomic_number(p.to_element(str(line_elements[0])))
+                atomic_number = p.to_atomic_number(
+                    p.to_element(str(line_elements[0]))
+                )
             atomic_numbers.append(atomic_number)
 
             second_value = float(line_elements[1])
@@ -474,7 +496,9 @@ class CoordinateBlock:
 
     def _get_atomic_numbers(self):
         """Obtain a list of symbols as atomic numbers."""
-        atomic_numbers, _, _ = self._get_atomic_numbers_positions_and_constraints()
+        atomic_numbers, _, _ = (
+            self._get_atomic_numbers_positions_and_constraints()
+        )
         return atomic_numbers
 
     def _get_positions(self):
@@ -483,13 +507,17 @@ class CoordinateBlock:
         return positions
 
     def _get_constraints(self):
-        _, _, constraints = self._get_atomic_numbers_positions_and_constraints()
+        _, _, constraints = (
+            self._get_atomic_numbers_positions_and_constraints()
+        )
         return constraints
 
     def _get_translation_vectors(self):
         tvs = []
         for line in self.coordinate_block:
-            if line.startswith("TV"):  # cases where PBC system occurs in Gaussian
+            if line.startswith(
+                "TV"
+            ):  # cases where PBC system occurs in Gaussian
                 line_elements = line.split()
                 if len(line_elements) == 4:
                     x_coordinate = float(line_elements[1])

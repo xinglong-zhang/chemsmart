@@ -124,13 +124,16 @@ class CubeFileOperator:
     def _check_grid_points_matched(self):
         grid_points_matched = self.cube1.grid_points == self.cube2.grid_points
         grid_increment_vectors_matched = (
-            self.cube1.grid_increment_vector == self.cube2.grid_increment_vector
+            self.cube1.grid_increment_vector
+            == self.cube2.grid_increment_vector
         )
         return grid_points_matched and grid_increment_vectors_matched
 
     def _check_geometries_matched(self):
         """Method to check that the geometries given in the two cube files are the same."""
-        symbols_matched = self.cube1.chemical_symbols == self.cube2.chemical_symbols
+        symbols_matched = (
+            self.cube1.chemical_symbols == self.cube2.chemical_symbols
+        )
         positions_are_close = np.isclose(
             self.cube1.positions, self.cube2.positions, atol=1e-3
         )
@@ -157,7 +160,9 @@ class CubeFileOperator:
                 f"Cube 2 has {len(self.cube2.values_by_lines)} lines."
             )
 
-        for line1, line2 in zip(self.cube1.values_by_lines, self.cube2.values_by_lines):
+        for line1, line2 in zip(
+            self.cube1.values_by_lines, self.cube2.values_by_lines
+        ):
             if len(line1) != len(line2):
                 raise ValueError(
                     "The two cube files have lines with different lengths."
@@ -172,7 +177,9 @@ class CubeFileOperator:
         self._check_value_lines()
         resultant_values_by_lines = [
             [val1 + val2 for val1, val2 in zip(line1, line2)]
-            for line1, line2 in zip(cube1_values_by_lines, cube2_values_by_lines)
+            for line1, line2 in zip(
+                cube1_values_by_lines, cube2_values_by_lines
+            )
         ]
 
         return resultant_values_by_lines
@@ -186,7 +193,9 @@ class CubeFileOperator:
 
         resultant_values_by_lines = [
             [val1 - val2 for val1, val2 in zip(line1, line2)]
-            for line1, line2 in zip(cube1_values_by_lines, cube2_values_by_lines)
+            for line1, line2 in zip(
+                cube1_values_by_lines, cube2_values_by_lines
+            )
         ]
 
         return resultant_values_by_lines
@@ -219,7 +228,8 @@ class CubeFileOperator:
     def _write_num_atoms(self, f):
         # write the third line
         assert (
-            self._check_natoms_matched() and self._check_coordinate_origin_matched()
+            self._check_natoms_matched()
+            and self._check_coordinate_origin_matched()
         ), "Number of atoms and coordinate of the origin should be the same!"
         # f.write(f'{self.cube1.num_atoms:5} '
         #         f'{self.cube1.coordinate_origin[0]:12.6f} '

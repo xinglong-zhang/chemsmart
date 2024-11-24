@@ -9,7 +9,9 @@ gaussian_solvation_models = GaussianRefs().gaussian_solvation_models
 gaussian_additional_route_parameters = (
     GaussianRefs().gaussian_additional_route_parameters
 )
-gaussian_additional_opt_options = GaussianRefs().gaussian_additional_opt_options
+gaussian_additional_opt_options = (
+    GaussianRefs().gaussian_additional_opt_options
+)
 gaussian_dieze_tags = GaussianRefs().gaussian_dieze_tags
 
 logger = logging.getLogger(__name__)
@@ -103,7 +105,10 @@ class GaussianRoute:
             job_type = "ircr"
         elif "output=wfn" in self.route_string:
             job_type = "nci"
-        elif "Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)".lower() in self.route_string:
+        elif (
+            "Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)".lower()
+            in self.route_string
+        ):
             job_type = "resp"
         else:
             job_type = "sp"
@@ -142,7 +147,10 @@ class GaussianRoute:
                     basis = f"{func_basis[1]}/{func_basis[2]}"  # note if the basis set for density fitting is written
                     # as 'def2tzvp fit', then the job fails to run
             else:  # '/' not in route
-                if any(functional in each_input for functional in gaussian_functionals):
+                if any(
+                    functional in each_input
+                    for functional in gaussian_functionals
+                ):
                     functional = each_input
                 if "empiricaldispersion" in each_input:
                     dispersion = each_input
@@ -170,7 +178,9 @@ class GaussianRoute:
             )
         ]
 
-        return " ".join(additional_route) if len(additional_route) != 0 else None
+        return (
+            " ".join(additional_route) if len(additional_route) != 0 else None
+        )
 
     def get_additional_opt_options(self):
         additional_opt_options = []
@@ -192,7 +202,9 @@ class GaussianRoute:
                             option in opt_option
                             for option in gaussian_additional_opt_options
                         ):
-                            additional_opt_options.append(opt_option)  # noqa: PERF401
+                            additional_opt_options.append(
+                                opt_option
+                            )  # noqa: PERF401
 
         return (
             ",".join(additional_opt_options)
@@ -209,12 +221,18 @@ class GaussianRoute:
 
             # get solvation model e.g., scrf=(cpcm,solvent=toluene)
             # if none of the models are present, set default model to pcm as in Gaussian
-            if all(model not in scrf_string for model in gaussian_solvation_models):
+            if all(
+                model not in scrf_string for model in gaussian_solvation_models
+            ):
                 solvent_model = "pcm"
             else:
                 # some model is present, then parse route_input
                 solvent_model = (
-                    scrf_string.strip().split("(")[-1].strip().split(",")[0].strip()
+                    scrf_string.strip()
+                    .split("(")[-1]
+                    .strip()
+                    .split(",")[0]
+                    .strip()
                 )
             return solvent_model
         return None

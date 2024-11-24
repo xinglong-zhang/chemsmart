@@ -136,7 +136,9 @@ class TestGaussian16Input:
 
 
 class TestGaussian16Output:
-    def test_normal_termination_with_forces_and_frequencies(self, td_outputfile):
+    def test_normal_termination_with_forces_and_frequencies(
+        self, td_outputfile
+    ):
         assert os.path.exists(td_outputfile)
         g16_output = Gaussian16Output(filename=td_outputfile)
         assert g16_output.num_atoms == 49
@@ -231,8 +233,13 @@ class TestGaussian16Output:
         assert g16_output.alpha_occ_eigenvalues[0] == -25.29096 * units.Hartree
         assert g16_output.alpha_occ_eigenvalues[-1] == -0.29814 * units.Hartree
         assert len(g16_output.alpha_virtual_eigenvalues) == 378
-        assert g16_output.alpha_virtual_eigenvalues[0] == -0.02917 * units.Hartree
-        assert g16_output.alpha_virtual_eigenvalues[-1] == 56.20437 * units.Hartree
+        assert (
+            g16_output.alpha_virtual_eigenvalues[0] == -0.02917 * units.Hartree
+        )
+        assert (
+            g16_output.alpha_virtual_eigenvalues[-1]
+            == 56.20437 * units.Hartree
+        )
         assert g16_output.beta_occ_eigenvalues is None
         assert g16_output.beta_virtual_eigenvalues is None
         assert g16_output.homo_energy == -0.29814 * units.Hartree
@@ -245,17 +252,27 @@ class TestGaussian16Output:
         assert g16_output.normal_termination
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 215
-        assert g16_output.alpha_occ_eigenvalues[0] == -482.71377 * units.Hartree
+        assert (
+            g16_output.alpha_occ_eigenvalues[0] == -482.71377 * units.Hartree
+        )
         assert g16_output.alpha_occ_eigenvalues[-1] == -0.15673 * units.Hartree
         assert len(g16_output.alpha_virtual_eigenvalues) == 750
-        assert g16_output.alpha_virtual_eigenvalues[0] == -0.07423 * units.Hartree
-        assert g16_output.alpha_virtual_eigenvalues[-1] == 4.23682 * units.Hartree
+        assert (
+            g16_output.alpha_virtual_eigenvalues[0] == -0.07423 * units.Hartree
+        )
+        assert (
+            g16_output.alpha_virtual_eigenvalues[-1] == 4.23682 * units.Hartree
+        )
         assert len(g16_output.beta_occ_eigenvalues) == 213
         assert g16_output.beta_occ_eigenvalues[0] == -482.71362 * units.Hartree
         assert g16_output.beta_occ_eigenvalues[-1] == -0.18923 * units.Hartree
         assert len(g16_output.beta_virtual_eigenvalues) == 752
-        assert g16_output.beta_virtual_eigenvalues[0] == -0.05025 * units.Hartree
-        assert g16_output.beta_virtual_eigenvalues[-1] == 4.26643 * units.Hartree
+        assert (
+            g16_output.beta_virtual_eigenvalues[0] == -0.05025 * units.Hartree
+        )
+        assert (
+            g16_output.beta_virtual_eigenvalues[-1] == 4.26643 * units.Hartree
+        )
         assert g16_output.homo_energy is None
         assert g16_output.lumo_energy is None
         assert g16_output.somo_energy == -0.15673 * units.Hartree
@@ -265,23 +282,35 @@ class TestGaussian16Output:
         g16_output = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 216
-        assert g16_output.alpha_occ_eigenvalues[0] == -482.71572 * units.Hartree
+        assert (
+            g16_output.alpha_occ_eigenvalues[0] == -482.71572 * units.Hartree
+        )
         assert g16_output.alpha_occ_eigenvalues[-1] == -0.18764 * units.Hartree
         assert len(g16_output.alpha_virtual_eigenvalues) == 749
-        assert g16_output.alpha_virtual_eigenvalues[0] == -0.03881 * units.Hartree
-        assert g16_output.alpha_virtual_eigenvalues[-1] == 4.23318 * units.Hartree
+        assert (
+            g16_output.alpha_virtual_eigenvalues[0] == -0.03881 * units.Hartree
+        )
+        assert (
+            g16_output.alpha_virtual_eigenvalues[-1] == 4.23318 * units.Hartree
+        )
         assert len(g16_output.beta_occ_eigenvalues) == 212
         assert g16_output.beta_occ_eigenvalues[0] == -482.71538 * units.Hartree
         assert g16_output.beta_occ_eigenvalues[-1] == -0.19564 * units.Hartree
         assert len(g16_output.beta_virtual_eigenvalues) == 753
-        assert g16_output.beta_virtual_eigenvalues[0] == -0.06116 * units.Hartree
-        assert g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
+        assert (
+            g16_output.beta_virtual_eigenvalues[0] == -0.06116 * units.Hartree
+        )
+        assert (
+            g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
+        )
         assert g16_output.somo_energy == -0.18764 * units.Hartree
         assert g16_output.fmo_gap is None
 
 
 class TestGaussianWBIOutput:
-    def test_normal_termination_with_forces_and_frequencies(self, wbi_outputfile):
+    def test_normal_termination_with_forces_and_frequencies(
+        self, wbi_outputfile
+    ):
         assert os.path.exists(wbi_outputfile)
         g16_output = Gaussian16WBIOutput(filename=wbi_outputfile)
         assert g16_output.nbo_version == "3.1"
@@ -290,10 +319,13 @@ class TestGaussianWBIOutput:
         assert len(g16_output.natural_atomic_orbitals["P2"]) == 18
         assert len(g16_output.natural_atomic_orbitals["H128"]) == 5
         assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["nao_type"] == "3py"
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["nao_type"]
+            == "3py"
         )
         assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["electron_type"]
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"][
+                "electron_type"
+            ]
             == "Cor"
         )
         assert (
@@ -301,19 +333,26 @@ class TestGaussianWBIOutput:
             == 1.99858
         )
         assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["energy"] == -2.68937
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["energy"]
+            == -2.68937
         )
         assert g16_output.get_num_naos("Ni1") == 31
-        assert np.isclose(g16_output.get_total_electron_occ("Ni1"), 27.47171, rtol=1e-4)
-        assert np.isclose(g16_output.get_total_electron_occ("H17"), 0.78631, rtol=1e-4)
+        assert np.isclose(
+            g16_output.get_total_electron_occ("Ni1"), 27.47171, rtol=1e-4
+        )
+        assert np.isclose(
+            g16_output.get_total_electron_occ("H17"), 0.78631, rtol=1e-4
+        )
         # import pprint
         # pprint.pprint(g16_output.natural_atomic_orbitals['Ni1'])
         assert len(g16_output.natural_population_analysis) == 128
         assert (
-            g16_output.natural_population_analysis["Ni1"]["natural_charge"] == 0.52827
+            g16_output.natural_population_analysis["Ni1"]["natural_charge"]
+            == 0.52827
         )
         assert (
-            g16_output.natural_population_analysis["C100"]["natural_charge"] == -0.42062
+            g16_output.natural_population_analysis["C100"]["natural_charge"]
+            == -0.42062
         )
         assert g16_output.natural_charges["Ni1"] == 0.52827
         assert g16_output.natural_charges["C100"] == -0.42062
@@ -339,7 +378,8 @@ class TestGaussianCubeFile:
         spin_cube = GaussianCubeFile(filename=spin_cube_file)
         assert spin_cube.cube_job_title == "Gaussian job density"
         assert (
-            spin_cube.cube_job_description == "Electron density from Total SCF Density"
+            spin_cube.cube_job_description
+            == "Electron density from Total SCF Density"
         )
         assert spin_cube.num_atoms == 2
         assert spin_cube.coordinate_origin == (-5.483229, -5.483229, -6.522947)

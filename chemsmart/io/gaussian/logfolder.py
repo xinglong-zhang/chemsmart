@@ -38,7 +38,9 @@ class GaussianLogFolder:
                 dataset = dataset.remove_duplicates()
                 dataset.write(db_path, append=True)
 
-            logger.info(f"Done assembling all structures into dataset: {dataset}")
+            logger.info(
+                f"Done assembling all structures into dataset: {dataset}"
+            )
 
         deduplicated_db = Dataset.from_file(db_path).remove_duplicates()
         # append = False to write over itself so that duplicates are removed
@@ -54,7 +56,9 @@ class GaussianLogFolder:
                 output_file = Gaussian16Output(file)
                 core_hous = output_file.total_core_hours
                 total_core_hours_in_folder += core_hous
-                f.write(f"Job: {file:<130} Total time: {core_hous:6.1f} core-hours\n")
+                f.write(
+                    f"Job: {file:<130} Total time: {core_hous:6.1f} core-hours\n"
+                )
             total_core_hours_in_folder = round(total_core_hours_in_folder, 1)
             f.write(
                 f"TOTAL core-hours in folder {self.folder} is: {total_core_hours_in_folder}\n"

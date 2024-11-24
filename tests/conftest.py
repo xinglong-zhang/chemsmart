@@ -34,7 +34,9 @@ def outputs_test_directory(gaussian_test_directory):
 
 @pytest.fixture()
 def wbi_outputfile(outputs_test_directory):
-    wbi_outputfile = os.path.join(outputs_test_directory, "TS_5coord_XIII_wbi.log")
+    wbi_outputfile = os.path.join(
+        outputs_test_directory, "TS_5coord_XIII_wbi.log"
+    )
     return wbi_outputfile
 
 
@@ -184,7 +186,9 @@ def water_opt_input_path(inpfile_path):
 
 @pytest.fixture()
 def sdf_file(test_data_directory):
-    return os.path.join(test_data_directory, "AtomsWrapperTest", "structure.sdf")
+    return os.path.join(
+        test_data_directory, "AtomsWrapperTest", "structure.sdf"
+    )
 
 
 # orca input files path and associated files
@@ -233,7 +237,9 @@ def water_sp_gas_path(orca_outputs_directory):
 
 @pytest.fixture()
 def water_sp_solv_path(orca_outputs_directory):
-    return os.path.join(orca_outputs_directory, "water_dlpno_ccsdt_sp_solv.out")
+    return os.path.join(
+        orca_outputs_directory, "water_dlpno_ccsdt_sp_solv.out"
+    )
 
 
 @pytest.fixture()
@@ -250,7 +256,9 @@ def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
 
 @pytest.fixture()
 def hirshfeld_full_print(orca_outputs_directory):
-    return os.path.join(orca_outputs_directory, "udc3_ts1_c15_sp_hirshfeld.out")
+    return os.path.join(
+        orca_outputs_directory, "udc3_ts1_c15_sp_hirshfeld.out"
+    )
 
 
 @pytest.fixture()
@@ -260,7 +268,9 @@ def water_engrad_path(orca_outputs_directory):
 
 @pytest.fixture()
 def orca_errors_directory(orca_test_directory):
-    orca_errors_directory = os.path.join(orca_test_directory, "orca_error_files")
+    orca_errors_directory = os.path.join(
+        orca_test_directory, "orca_error_files"
+    )
     return os.path.abspath(orca_errors_directory)
 
 

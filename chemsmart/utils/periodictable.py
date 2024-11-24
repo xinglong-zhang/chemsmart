@@ -15,7 +15,9 @@ class PeriodicTable:
         )
 
     def sorted_periodic_table_list(self, list_of_elements):
-        return sorted(list_of_elements, key=lambda x: self.PERIODIC_TABLE.index(x))
+        return sorted(
+            list_of_elements, key=lambda x: self.PERIODIC_TABLE.index(x)
+        )
 
     def to_atomic_number(self, symbol):
         # if symbol.upper() == 'TV':

@@ -116,7 +116,9 @@ class XTBOutput(FileMixin):
                     + n_minutes * 60
                     + n_seconds
                 )
-                total_hours = round(total_seconds / 3600, 4)  # round to 1 nearest hour
+                total_hours = round(
+                    total_seconds / 3600, 4
+                )  # round to 1 nearest hour
                 cpu_runtime.append(total_hours)
         return cpu_runtime
 
@@ -246,7 +248,9 @@ class XTBOutput(FileMixin):
                         )
                     j += 1
                 transitions.append(each_state_transitions)
-                contribution_coefficients.append(each_state_contribution_coefficients)
+                contribution_coefficients.append(
+                    each_state_contribution_coefficients
+                )
 
         return transitions, contribution_coefficients
 
@@ -412,17 +416,23 @@ class XTBOutput(FileMixin):
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
             assert (
-                len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues) + 1
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
                 == self.multiplicity
             )
-            return len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues)
+            return len(self.alpha_occ_eigenvalues) - len(
+                self.beta_occ_eigenvalues
+            )
 
     @cached_property
     def somo_energy(self):
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
             assert (
-                len(self.alpha_occ_eigenvalues) - len(self.beta_occ_eigenvalues) + 1
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
                 == self.multiplicity
             )
             return self.alpha_occ_eigenvalues[-1]
@@ -478,7 +488,10 @@ class Gaussian16WBIOutput(Gaussian16Output):
         """Parse the NBO natural atomic orbitals."""
         nao = {}
         for i, line in enumerate(self.contents):
-            if "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy" in line:
+            if (
+                "NAO  Atom  No  lang   Type(AO)    Occupancy      Energy"
+                in line
+            ):
                 for j_line in self.contents[i + 2 :]:
                     if (
                         "WARNING" in j_line
@@ -489,7 +502,9 @@ class Gaussian16WBIOutput(Gaussian16Output):
                         columns = j_line.split()
 
                         # Extract values from each column
-                        nao_number = int(columns[0])  # NAO Number (like 1, 2, etc.)
+                        nao_number = int(
+                            columns[0]
+                        )  # NAO Number (like 1, 2, etc.)
                         atom_type = columns[1]  # Atom type (e.g., 'Ni')
                         atom_number = columns[2]  # Atom number (e.g., '1')
                         lang = columns[3]  # Lang (e.g., 'S', 'px', 'py')
