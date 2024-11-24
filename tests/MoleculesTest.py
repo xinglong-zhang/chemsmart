@@ -1,0 +1,62 @@
+import os.path
+
+import numpy as np
+from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.io.molecules.structure import Molecule
+from torchgen.gen import cpp_string
+
+
+class TestCoordinateBlock:
+    def test_read_coordinate_block(self):
+        coordinates_string = """
+C       -0.5448210000   -1.1694570000    0.0001270000
+C        0.8378780000   -1.0476350000    0.0001900000
+C        1.4329940000    0.2194290000    0.0001440000
+C        0.6358350000    1.3657650000   -0.0000040000
+C       -0.7521390000    1.2582750000    0.0000710000
+C       -1.3283680000   -0.0113420000    0.0001560000
+H       -1.0298620000   -2.1454490000    0.0001020000
+H        1.4853190000   -1.9262430000    0.0002620000
+H        1.1050940000    2.3527070000    0.0000530000
+H       -1.3913950000    2.1406100000   -0.0000130000
+C        2.9142600000    0.3363820000    0.0000140000
+O        3.6625230000   -0.6037690000   -0.0002940000
+H        3.3025560000    1.3842410000    0.0001510000
+Cl      -3.0556310000   -0.1578960000   -0.0001400000
+"""
+        cb = CoordinateBlock(coordinate_block=coordinates_string)
+        assert cb.symbols.get_chemical_formula() == "C7H5ClO"
+
+    def test_read_gaussian_cb_with_tv(self):
+        coordinates_string = """
+C                  0.000000    0.000000    0.000000
+C                  0.000000    1.429118    0.000000
+TV                 2.475315    0.000000    0.000000
+TV                -1.219952    2.133447    0.000000
+"""
+        cb = CoordinateBlock(coordinate_block=coordinates_string)
+        assert cb.symbols.get_chemical_formula() == "C2"
+        assert cb.translation_vectors == [
+            [2.475315, 0.000000, 0.000000],
+            [-1.219952, 2.133447, 0.000000],
+        ]
+
+    def test_read_gaussian_cb_frozen_atoms(self):
+        coordinates_string = """
+C        -1      -0.5448210000   -1.1694570000    0.0001270000
+C        -1       0.8378780000   -1.0476350000    0.0001900000
+C        -1       1.4329940000    0.2194290000    0.0001440000
+C        -1       0.6358350000    1.3657650000   -0.0000040000
+C        -1      -0.7521390000    1.2582750000    0.0000710000
+C        -1      -1.3283680000   -0.0113420000    0.0001560000
+H        -1      -1.0298620000   -2.1454490000    0.0001020000
+H        -1       1.4853190000   -1.9262430000    0.0002620000
+H        -1       1.1050940000    2.3527070000    0.0000530000
+H        -1      -1.3913950000    2.1406100000   -0.0000130000
+C        0       2.9142600000    0.3363820000    0.0000140000
+O        0       3.6625230000   -0.6037690000   -0.0002940000
+H        0       3.3025560000    1.3842410000    0.0001510000
+Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
+"""
+        cb = CoordinateBlock(coordinate_block=coordinates_string)
+        assert cb.symbols.get_chemical_formula() == "C7H5ClO"

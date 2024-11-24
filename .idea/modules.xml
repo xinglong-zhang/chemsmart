@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/chemsmart.iml" filepath="$PROJECT_DIR$/.idea/chemsmart.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../pyatoms/.idea/pyatoms.iml" filepath="$PROJECT_DIR$/../pyatoms/.idea/pyatoms.iml" />
     </modules>
   </component>
 </project>

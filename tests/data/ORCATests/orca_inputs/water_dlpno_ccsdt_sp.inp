@@ -1,0 +1,24 @@
+!  DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS
+# Number of processors
+%pal nprocs 2 end
+# Memory per core
+%maxcore 4000
+%scf
+  maxiter 500
+end
+%mdci
+  # normal cutoff
+  TCutPairs 1e-4
+  TCutPNO 3.33e-7
+  TCutMKN 1e-3
+  Density None  # no density
+end
+%elprop
+  Dipole False
+  Quadrupole False
+end
+* xyz 0 1
+  O   -0.00000000323406      0.00000000000000      0.08734060152197
+  H   -0.75520523910536      0.00000000000000     -0.50967029975151
+  H   0.75520524233942      0.00000000000000     -0.50967030177046
+*

@@ -7,7 +7,11 @@ from chemsmart.io.gaussian.route import GaussianRoute
 class Gaussian16Input(FileMixin):
     def __init__(self, filename):
         self.filename = filename
-        self.route_object = GaussianRoute(route_string=self.route_string)
+
+        from chemsmart.io.molecules.structure import CoordinateBlock
+
+        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
+        self.cb = cb
 
     @property
     def num_content_blocks(self):
@@ -26,12 +30,36 @@ class Gaussian16Input(FileMixin):
         return content_blocks_by_paragraph(string_list=self.contents)
 
     @property
+    def modredundant_group(self):
+        if (
+            "modred" in self.route_string and self.num_content_blocks > 3
+        ):  # in case the input .com file has opt=modredundant
+            # in route but no modredundant section at the end
+            return self.content_groups[3]
+
+    @property
+    def modredundant(self):
+        return self._get_modredundant_conditions()
+
+    @property
+    def route_object(self):
+        try:
+            route_object = GaussianRoute(route_string=self.route_string)
+            return route_object
+        except TypeError as err:
+            print(err)
+
+    @property
     def is_pbc(self):
         for line in self.contents:
             line_elements = line.split()
             if len(line_elements) == 4 and line_elements[0].upper() == "TV":
                 return True
         return False
+
+    @property
+    def translation_vectors(self):
+        return self.cb.translation_vectors
 
     @property
     def chk(self):
@@ -57,20 +85,7 @@ class Gaussian16Input(FileMixin):
 
     @property
     def route_string(self):
-        """Obtain route string that may span over multiple lines."""
-        concatenated_string = ""
-        found_hash = False
-        for line in self.content_groups[0]:
-            if line.startswith("#"):
-                concatenated_string += line.strip()  # Remove the '#' and any leading/trailing whitespace
-                found_hash = True
-            elif found_hash:
-                concatenated_string += " " + line.strip()  # Concatenate with a space separator
-            else:
-                continue
-            return concatenated_string.lower()
-
-        return None
+        return self._get_route()
 
     @property
     def dieze_tag(self):
@@ -79,6 +94,10 @@ class Gaussian16Input(FileMixin):
     @property
     def job_type(self):
         return self.route_object.job_type
+
+    @job_type.setter
+    def job_type(self, value):
+        self.route_object.job_type = value
 
     @property
     def freq(self):
@@ -122,10 +141,15 @@ class Gaussian16Input(FileMixin):
 
     @property
     def molecule(self):
-        from chemsmart.io.molecules.structure import CoordinateBlock
+        return self.cb.molecule
 
-        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
-        return cb.molecule
+    @property
+    def constrained_atoms(self):
+        self.cb.constrained_atoms
+
+    @constrained_atoms.setter
+    def constrained_atoms(self, value):
+        self.cb.constrained_atoms = value
 
     def _get_chk(self):
         for line in self.contents:
@@ -148,12 +172,92 @@ class Gaussian16Input(FileMixin):
         return nproc
 
     def _get_route(self):
-        pass
+        """Obtain route string that may span over multiple lines."""
+        concatenated_string = ""
+        found_hash = False
+        for line in self.content_groups[0]:
+            if line.startswith("#"):
+                concatenated_string += (
+                    line.strip()
+                )  # Remove the '#' and any leading/trailing whitespace
+                found_hash = True
+            elif found_hash:
+                concatenated_string += (
+                    " " + line.strip()
+                )  # Concatenate with a space separator
+            else:
+                continue
+            return concatenated_string.lower()
 
     def _get_charge_and_multiplicity(self):
         for line in self.contents:
             line_elements = line.split()
-            if len(line_elements) == 2 and line_elements[0].replace("-", "").isdigit() and line_elements[1].isdigit():
+            if (
+                len(line_elements) == 2
+                and line_elements[0].replace("-", "").isdigit()
+                and line_elements[1].isdigit()
+            ):
                 charge = int(line_elements[0])
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity
+
+    def _get_modredundant_conditions(self):
+        modred = None
+        if (
+            "modred" in self.route_string
+            and self.modredundant_group is not None
+        ):
+            for line in self.modredundant_group:
+                if "F" in line or "f" in line:
+                    modred = self._get_modred_frozen_coords(
+                        self.modredundant_group
+                    )
+                    self.job_type = "modred"
+                elif "S" in line or "s" in line:
+                    modred = self._get_modred_scan_coords(
+                        self.modredundant_group
+                    )
+                    self.job_type = "scan"
+                return modred
+
+    def _get_modred_frozen_coords(self, modred_list_of_string):
+        modred = []
+        for raw_line in modred_list_of_string:
+            line = raw_line[2:-2]
+            line_elems = line.split()
+            assert all(
+                line_elem.isdigit() for line_elem in line_elems
+            ), f"modredundant coordinates should be integers, but is {line_elems} instead."
+            each_modred_list = [int(line_elem) for line_elem in line_elems]
+            modred.append(each_modred_list)
+        return modred
+
+    def _get_modred_scan_coords(self, modred_list_of_string):
+        modred = {}
+        coords = []
+        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        for raw_line in modred_list_of_string:
+            line = raw_line.strip()[2:]
+            line_elems = line.split("S")
+
+            # obtain coords
+            coords_string = line_elems[0]
+            each_coords_list = coords_string.split()
+            assert all(
+                line_elem.isdigit() for line_elem in each_coords_list
+            ), f"modredundant coordinates should be integers, but is {line_elems[0]} instead."
+            each_modred_list = [
+                int(line_elem) for line_elem in each_coords_list
+            ]
+            coords.append(each_modred_list)
+            modred["coords"] = coords
+
+            # obtain num_steps and step_size (assumed the same for each scan coordinate)
+            steps_string = line_elems[-1]
+            steps_list = steps_string.split()
+            num_steps = int(steps_list[0])
+            step_size = float(steps_list[1])
+            modred["num_steps"] = num_steps
+            modred["step_size"] = step_size
+
+        return modred
