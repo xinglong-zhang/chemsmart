@@ -23,9 +23,7 @@ logger = logging.getLogger(__name__)
     default=1,
     help="runs jobs in parallel with specified number of processes",
 )
-@click.option(
-    "-d", "--debug/--no-debug", default=False, help="turns on debug logging"
-)
+@click.option("-d", "--debug/--no-debug", default=False, help="turns on debug logging")
 @click.option(
     "--test/--no-test",
     default=False,

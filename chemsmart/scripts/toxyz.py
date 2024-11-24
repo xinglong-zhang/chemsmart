@@ -60,9 +60,7 @@ def entry_point(directory, filename, append):
             logger.info(f"No readable structure from file {logpath}")
             continue
 
-        log_empirical_formula = log_final_atoms.get_chemical_formula(
-            empirical=True
-        )
+        log_empirical_formula = log_final_atoms.get_chemical_formula(empirical=True)
         log_final_energy_in_Hartree = round(
             logoutput.final_energy, 6
         )  # this is in Hartree from pymatgen

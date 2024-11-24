@@ -4,9 +4,7 @@ f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
 
 # standard coordinate pattern with (symbol x y z)
-standard_coord_pattern = (
-    r"\s*[A-Z][a-z]?\s+-?\d+\.\d+\s+-?\d+\.\d+\s+-?\d+\.\d+\s*"
-)
+standard_coord_pattern = r"\s*[A-Z][a-z]?\s+-?\d+\.\d+\s+-?\d+\.\d+\s+-?\d+\.\d+\s*"
 
 """
 An example of the relevant part of the output describing the structure is:
@@ -14,7 +12,9 @@ An example of the relevant part of the output describing the structure is:
         | 21>   O   -0.00000000323406      0.00000000000000      0.08734060152197
         | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
 """
-orca_input_coordinate_in_output = r"(?i)\|\s+(\d+)>\s+(\w+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)"
+orca_input_coordinate_in_output = (
+    r"(?i)\|\s+(\d+)>\s+(\w+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)"
+)
 
 """Given input example:
         Mayer bond orders larger than 0.100000

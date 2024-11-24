@@ -203,20 +203,13 @@ class Gaussian16Input(FileMixin):
 
     def _get_modredundant_conditions(self):
         modred = None
-        if (
-            "modred" in self.route_string
-            and self.modredundant_group is not None
-        ):
+        if "modred" in self.route_string and self.modredundant_group is not None:
             for line in self.modredundant_group:
                 if "F" in line or "f" in line:
-                    modred = self._get_modred_frozen_coords(
-                        self.modredundant_group
-                    )
+                    modred = self._get_modred_frozen_coords(self.modredundant_group)
                     self.job_type = "modred"
                 elif "S" in line or "s" in line:
-                    modred = self._get_modred_scan_coords(
-                        self.modredundant_group
-                    )
+                    modred = self._get_modred_scan_coords(self.modredundant_group)
                     self.job_type = "scan"
                 return modred
 
@@ -246,9 +239,7 @@ class Gaussian16Input(FileMixin):
             assert all(
                 line_elem.isdigit() for line_elem in each_coords_list
             ), f"modredundant coordinates should be integers, but is {line_elems[0]} instead."
-            each_modred_list = [
-                int(line_elem) for line_elem in each_coords_list
-            ]
+            each_modred_list = [int(line_elem) for line_elem in each_coords_list]
             coords.append(each_modred_list)
             modred["coords"] = coords
 

@@ -168,18 +168,14 @@ class GenGenECPSection:
             light_atoms_string = " ".join(light_elements) + " 0\n"
             genecp_string += light_atoms_string
             if "def2-" in light_elements_basis:
-                light_elements_basis = light_elements_basis.replace(
-                    "def2-", "def2"
-                )
+                light_elements_basis = light_elements_basis.replace("def2-", "def2")
 
             genecp_string += light_elements_basis + "\n"
             genecp_string += "****\n"  # separate light atoms basis from beginning of heavy atoms gen/genecp basis
 
         # write heavy atom basis (from api)
         if "def2" in heavy_elements_basis and "-" not in heavy_elements_basis:
-            heavy_elements_basis = heavy_elements_basis.replace(
-                "def2", "def2-"
-            )
+            heavy_elements_basis = heavy_elements_basis.replace("def2", "def2-")
 
         assert heavy_elements_basis in bse_all_bases, (
             f"BSE basis for {heavy_elements} given is {heavy_elements_basis}.\n"
@@ -193,9 +189,7 @@ class GenGenECPSection:
             header=True,
         )
 
-        heavy_atoms_gengenecp_basis_list = heavy_atoms_gengenecp_basis.split(
-            "\n"
-        )
+        heavy_atoms_gengenecp_basis_list = heavy_atoms_gengenecp_basis.split("\n")
         heavy_atoms_gengenecp_basis_blocks = content_blocks_by_paragraph(
             string_list=heavy_atoms_gengenecp_basis_list
         )

@@ -54,9 +54,7 @@ def entry_point(filename, numbers):
     if numbers is not None:
         for n in numbers:
             charge_value = get_value_by_number(n, hirshfeld_charges)
-            hk = get_key_by_value_and_number(
-                charge_value, n, hirshfeld_charges
-            )
+            hk = get_key_by_value_and_number(charge_value, n, hirshfeld_charges)
             logger.info(f"Hirshfeld Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 

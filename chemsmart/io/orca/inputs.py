@@ -91,9 +91,7 @@ class ORCAInput(FileMixin, ORCAFileMixin):
                             # Find the index of "maxiter" in the same line
                             index = line.index("maxiter")
                             # Find the substring immediately following "maxiter"
-                            num_maxiter = line[
-                                index + len("maxiter") :
-                            ].split()[0]
+                            num_maxiter = line[index + len("maxiter") :].split()[0]
                             return int(num_maxiter)
         return None
 

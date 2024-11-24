@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 def click_gaussian_options(f):
     """Common click options for Gaussian jobs."""
 
-    @click.option(
-        "--project", "-p", type=str, default=None, help="Project settings."
-    )
+    @click.option("--project", "-p", type=str, default=None, help="Project settings.")
     @click.option(
         "--scratch/--no-scratch",
         type=bool,
@@ -51,12 +49,8 @@ def click_gaussian_settings_options(f):
         default=None,
         help="name to be appended to file for the job",
     )
-    @click.option(
-        "-t", "--title", type=str, default=None, help="Gaussian job title."
-    )
-    @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the atoms"
-    )
+    @click.option("-t", "--title", type=str, default=None, help="Gaussian job title.")
+    @click.option("-c", "--charge", type=int, default=None, help="charge of the atoms")
     @click.option(
         "-m",
         "--multiplicity",
@@ -71,9 +65,7 @@ def click_gaussian_settings_options(f):
         default=None,
         help="New functional to run.",
     )
-    @click.option(
-        "-b", "--basis", type=str, default=None, help="New basis set to run."
-    )
+    @click.option("-b", "--basis", type=str, default=None, help="New basis set to run.")
     @click.option(
         "-i",
         "--index",

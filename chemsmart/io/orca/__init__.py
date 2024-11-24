@@ -687,24 +687,15 @@ class ORCARefs:
                 orca_basis = f"6-311++G{polarization}"
                 orca_basis_with_polarization_and_diffusion.append(orca_basis)
 
-        return [
-            basis.lower()
-            for basis in orca_basis_with_polarization_and_diffusion
-        ]
+        return [basis.lower() for basis in orca_basis_with_polarization_and_diffusion]
 
     @property
     def orca_basis_karlsruhe_def2(self):
-        return [
-            basis.lower()
-            for basis in self.ORCA_STANDARD_BASIS_SETS_KARLSRUHE_DEF2
-        ]
+        return [basis.lower() for basis in self.ORCA_STANDARD_BASIS_SETS_KARLSRUHE_DEF2]
 
     @property
     def orca_basis_karlsruhe_def(self):
-        return [
-            basis.lower()
-            for basis in self.ORCA_STANDARD_BASIS_SETS_KARLSRUHE_DEF
-        ]
+        return [basis.lower() for basis in self.ORCA_STANDARD_BASIS_SETS_KARLSRUHE_DEF]
 
     @property
     def orca_basis_karlsruhe_minimally_augmented(self):
@@ -972,9 +963,7 @@ class ORCARefs:
     @property
     def orca_auxiliary_basis_coulomb(self):
         """Auxiliary basis sets for Coulomb fitting."""
-        return [
-            basis.lower() for basis in self.ORCA_AUXILIARY_COULOMB_BASIS_SETS
-        ]
+        return [basis.lower() for basis in self.ORCA_AUXILIARY_COULOMB_BASIS_SETS]
 
     @property
     def orca_auxiliary_basis_coulomb_exchange(self):
@@ -992,9 +981,7 @@ class ORCARefs:
                     orca_auxiliary_basis_coulomb_exchange.append(cx_basis)
             else:
                 orca_auxiliary_basis_coulomb_exchange.append(basis)
-        return [
-            basis.lower() for basis in orca_auxiliary_basis_coulomb_exchange
-        ]
+        return [basis.lower() for basis in orca_auxiliary_basis_coulomb_exchange]
 
     @property
     def orca_auxiliary_basis_cc(self):
@@ -1046,13 +1033,8 @@ class ORCARefs:
                         for m in range(3, 6):
                             if m > n:
                                 m_basis = n_basis.replace("/m", f"/{m}")
-                                if (
-                                    m_basis
-                                    not in orca_extrapolation_basis_sets
-                                ):
-                                    orca_extrapolation_basis_sets.append(
-                                        m_basis
-                                    )
+                                if m_basis not in orca_extrapolation_basis_sets:
+                                    orca_extrapolation_basis_sets.append(m_basis)
                 elif "n," in new_basis:
                     for n in range(2, 6):
                         n_basis = new_basis.replace("n,", f"{n},")
@@ -1072,13 +1054,8 @@ class ORCARefs:
                         new_method_basis = new_basis.replace(
                             "method-details]", method_detail
                         )
-                        if (
-                            new_method_basis
-                            not in orca_extrapolation_all_basis_sets
-                        ):
-                            orca_extrapolation_all_basis_sets.append(
-                                new_method_basis
-                            )
+                        if new_method_basis not in orca_extrapolation_all_basis_sets:
+                            orca_extrapolation_all_basis_sets.append(new_method_basis)
 
         orca_extrapolation_basis_sets = [
             basis
@@ -1139,9 +1116,7 @@ class ORCARefs:
 
     @property
     def orca_all_solvents(self):
-        orca_all_solvent_ids = [
-            solvent.lower() for solvent in self.ORCA_SOLVENT_IDS
-        ]
+        orca_all_solvent_ids = [solvent.lower() for solvent in self.ORCA_SOLVENT_IDS]
         orca_all_solvent_ids_short_names = [
             solvent.lower() for solvent in self.ORCA_SOLVENT_IDS_SHORT_NAMES
         ]
