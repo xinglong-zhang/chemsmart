@@ -10,7 +10,6 @@ from chemsmart.utils.repattern import (
     f_pattern,
     float_pattern,
 )
-from chemsmart.io.molecules.dataset import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -462,17 +461,8 @@ class Gaussian16Output(FileMixin):
         Returns:
             Dataset.
         """
-        # get data for key_value_pairs in Atoms
-        # data = self.get_settings()
-        data = self.get_logfile_data()
-        all_atoms = self.get_atoms(":", **kwargs)
-        if all_atoms is None:
-            return None
-
-        # key_value_pairs is a list of same length as len(all_atoms)
-        # duplicate data for len(all_atoms) times since they are the same in the same gaussian log file
-        key_value_pairs = [data for _ in range(len(all_atoms))]
-        return Dataset(images=all_atoms, key_value_pairs=key_value_pairs)
+        # TODO: to be implemented
+        pass
 
 
 class Gaussian16WBIOutput(Gaussian16Output):
