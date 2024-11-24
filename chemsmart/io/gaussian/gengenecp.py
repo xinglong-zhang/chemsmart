@@ -1,7 +1,7 @@
 import logging
 import os
 
-from chemsmart.io.utils import (
+from chemsmart.utils.utils import (
     content_blocks_by_paragraph,
     write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
