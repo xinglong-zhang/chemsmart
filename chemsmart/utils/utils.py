@@ -239,9 +239,11 @@ def two_files_have_similar_contents(
             return False
     return True
 
+
 def two_lists_have_similar_contents(list1, list2, ignore_string=None):
     """Checks if two lists have the same contents.
-    If ignored string appears in the list member, then this member is ignored."""
+    If ignored string appears in the list member, then this member is ignored.
+    """
     if len(list1) != len(list2):
         return False
     for item1, item2 in zip(list1, list2):

@@ -115,8 +115,7 @@ class GenGenECPSection:
 
     @classmethod
     def from_genecp_group(cls, genecp_group):
-        """Create GenGenECPSection from the genecp_group string.
-        """
+        """Create GenGenECPSection from the genecp_group string."""
         genecp_string = ""
         num_groups = len(genecp_group)
         for i in range(num_groups):
@@ -154,7 +153,9 @@ class GenGenECPSection:
                 "see https://github.com/MolSSI-BSE/basis_set_exchange for installation."
             ) from e
 
-        heavy_elements = pt.sorted_periodic_table_list(list_of_elements=heavy_elements)
+        heavy_elements = pt.sorted_periodic_table_list(
+            list_of_elements=heavy_elements
+        )
         heavy_elements_basis = heavy_elements_basis.lower()
 
         genecp_string = ""
