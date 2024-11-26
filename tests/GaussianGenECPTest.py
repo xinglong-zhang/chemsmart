@@ -1,8 +1,11 @@
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.utils import two_files_have_similar_contents
 
+
 class TestGaussianGenGenECP:
-    def test_genecp_from_base_api(self, tmpdir, reference_genecp_txt_file_from_api):
+    def test_genecp_from_base_api(
+        self, tmpdir, reference_genecp_txt_file_from_api
+    ):
         genecp_section = GenGenECPSection.from_bse_api(
             light_elements=["C", "H", "O"],
             light_elements_basis="def2-SVP",
@@ -29,8 +32,12 @@ class TestGaussianGenGenECP:
             ignored_string="Version",
         )
 
-    def test_genecp_from_comfile(self, tmpdir, gaussian_opt_genecp_inputfile, genecp_txt_file_from_web):
-        genecp_section = GenGenECPSection.from_comfile(gaussian_opt_genecp_inputfile)
+    def test_genecp_from_comfile(
+        self, tmpdir, gaussian_opt_genecp_inputfile, genecp_txt_file_from_web
+    ):
+        genecp_section = GenGenECPSection.from_comfile(
+            gaussian_opt_genecp_inputfile
+        )
         assert genecp_section.heavy_elements == ["Pd"]
         assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
         assert set(genecp_section.light_elements) == {"C", "H", "O"}

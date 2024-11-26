@@ -4,6 +4,7 @@ from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 
+
 class Gaussian16Input(FileMixin):
     def __init__(self, filename):
         self.filename = filename
@@ -28,6 +29,7 @@ class Gaussian16Input(FileMixin):
     @property
     def coordinate_block(self):
         from chemsmart.io.molecules.structure import CoordinateBlock
+
         cb = CoordinateBlock(coordinate_block=self.content_groups[2])
         return cb
 
@@ -303,27 +305,29 @@ class Gaussian16Input(FileMixin):
         return modred
 
     def _get_gen_genecp_group(self):
-        if 'gen' not in self.basis:
+        if "gen" not in self.basis:
             return None
-        if 'modred' in self.route and 'solvent=generic' in self.route:
+        if "modred" in self.route and "solvent=generic" in self.route:
             return self.content_groups[4:-1]
-        if 'modred' in self.route and 'solvent=generic' not in self.route:
-            return self.content_groups[4:]  # need to change if there are additional append info after these
-        if 'modred' not in self.route and 'solvent=generic' in self.route:
+        if "modred" in self.route and "solvent=generic" not in self.route:
+            return self.content_groups[
+                4:
+            ]  # need to change if there are additional append info after these
+        if "modred" not in self.route and "solvent=generic" in self.route:
             return self.content_groups[3:-1]
-        if 'modred' not in self.route and 'solvent=generic' not in self.route:
+        if "modred" not in self.route and "solvent=generic" not in self.route:
             return self.content_groups[3:]
         return None
 
     def _get_custom_solvent_group(self):
-        """ Get the custom solvent group from the content groups.
+        """Get the custom solvent group from the content groups.
         Custom solvent is always the last content group in the input file.
         """
-        if 'solvent=generic' in self.route:
+        if "solvent=generic" in self.route:
             return self.content_groups[-1]
         return None
 
     def _get_custom_solvent_string(self):
         if self.custom_solvent_group is not None:
-            return '\n'.join(self.custom_solvent_group)
+            return "\n".join(self.custom_solvent_group)
         return None
