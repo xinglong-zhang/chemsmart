@@ -78,6 +78,37 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
     return gaussian_scan_inputfile
 
 
+# Gaussian input files for genecp
+@pytest.fixture()
+def gaussian_inputs_genecp_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "genecp")
+
+
+@pytest.fixture()
+def gaussian_opt_genecp_inputfile(gaussian_inputs_genecp_directory):
+    gaussian_opt_genecp_input = os.path.join(
+        gaussian_inputs_genecp_directory, "opt_genecp.com"
+    )
+    return gaussian_opt_genecp_input
+
+
+@pytest.fixture
+def modred_gen_comfile(gaussian_inputs_genecp_directory):
+    return os.path.join(gaussian_inputs_genecp_directory, "modred_gen.com")
+
+
+@pytest.fixture
+def modred_genecp_comfile(gaussian_inputs_genecp_directory):
+    return os.path.join(gaussian_inputs_genecp_directory, "modred_genecp.com")
+
+
+@pytest.fixture
+def modred_genecp_custom_solvent_comfile(gaussian_inputs_genecp_directory):
+    return os.path.join(
+        gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
+    )
+
+
 # Gaussian output files
 @pytest.fixture()
 def gaussian_outputs_test_directory(gaussian_test_directory):
@@ -125,6 +156,38 @@ def gaussian_pbc_1d_inputfile(gaussian_pbc_inputs_test_directory):
         gaussian_pbc_inputs_test_directory, "neoprene_1d.com"
     )
     return gaussian_pbc_1d_inputfile
+
+
+# text path and associated files
+@pytest.fixture
+def txt_path(gaussian_test_directory):
+    test_txt_path = os.path.join(gaussian_test_directory, "text")
+    return os.path.abspath(test_txt_path)
+
+
+@pytest.fixture
+def reference_genecp_txt_file_from_api(txt_path):
+    return os.path.join(txt_path, "genecp_txt_from_api.txt")
+
+
+@pytest.fixture
+def genecp_txt_file_from_web(txt_path):
+    return os.path.join(txt_path, "test_genecp.txt")
+
+
+@pytest.fixture
+def gen_txt_file_from_web(txt_path):
+    return os.path.join(txt_path, "test_gen.txt")
+
+
+@pytest.fixture
+def smd_TBME_solvent_parameters_txt_file(txt_path):
+    return os.path.join(txt_path, "smd_TBME.txt")
+
+
+@pytest.fixture
+def Ni_def2tzvp_PCHOSi_svp_txt_file(txt_path):
+    return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
 
 
 # Gaussian output file from TDDFT

@@ -2,20 +2,16 @@ from functools import cached_property
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 
 
 class Gaussian16Input(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-        from chemsmart.io.molecules.structure import CoordinateBlock
-
-        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
-        self.cb = cb
-
     @property
     def num_content_blocks(self):
-        return len(content_blocks_by_paragraph(string_list=self.contents))
+        return len(self.content_groups)
 
     @cached_property
     def content_groups(self):
@@ -26,8 +22,16 @@ class Gaussian16Input(FileMixin):
         # content_groups[3:] gives everything else that are appended at the end of the coordinates:
         # modred, followed by gen/genecp, then custom solvent definitions - the details vary as it
         depends on the actual calculation
+        # may need to be updated if there are job specific sections appended at the end.
         """
         return content_blocks_by_paragraph(string_list=self.contents)
+
+    @property
+    def coordinate_block(self):
+        from chemsmart.io.molecules.structure import CoordinateBlock
+
+        cb = CoordinateBlock(coordinate_block=self.content_groups[2])
+        return cb
 
     @property
     def modredundant_group(self):
@@ -59,7 +63,7 @@ class Gaussian16Input(FileMixin):
 
     @property
     def translation_vectors(self):
-        return self.cb.translation_vectors
+        return self.coordinate_block.translation_vectors
 
     @property
     def chk(self):
@@ -140,16 +144,53 @@ class Gaussian16Input(FileMixin):
         return self.route_object.additional_route_parameters
 
     @property
+    def gen_genecp(self):
+        return self._get_gen_genecp_group()
+
+    @property
+    def genecp_section(self):
+        return GenGenECPSection.from_genecp_group(genecp_group=self.gen_genecp)
+
+    @property
+    def light_elements(self):
+        return self.genecp_section.light_elements
+
+    @property
+    def light_elements_basis(self):
+        return self.genecp_section.light_elements_basis
+
+    @property
+    def heavy_elements(self):
+        return self.genecp_section.heavy_elements
+
+    @property
+    def heavy_elements_basis(self):
+        return self.genecp_section.heavy_elements_basis
+
+    @property
+    def custom_solvent(self):
+        """Get the custom solvent string."""
+        return self._get_custom_solvent_string()
+
+    @property
+    def custom_solvent_group(self):
+        return self._get_custom_solvent_group()
+
+    @property
     def molecule(self):
-        return self.cb.molecule
+        return self.coordinate_block.molecule
+
+    @property
+    def natoms(self):
+        return self.molecule.natoms
 
     @property
     def constrained_atoms(self):
-        self.cb.constrained_atoms
+        self.coordinate_block.constrained_atoms
 
     @constrained_atoms.setter
     def constrained_atoms(self, value):
-        self.cb.constrained_atoms = value
+        self.coordinate_block.constrained_atoms = value
 
     def _get_chk(self):
         for line in self.contents:
@@ -172,7 +213,8 @@ class Gaussian16Input(FileMixin):
         return nproc
 
     def _get_route(self):
-        """Obtain route string that may span over multiple lines."""
+        """Obtain route string that may span over multiple lines
+        and convert route to lower case."""
         concatenated_string = ""
         found_hash = False
         for line in self.content_groups[0]:
@@ -261,3 +303,31 @@ class Gaussian16Input(FileMixin):
             modred["step_size"] = step_size
 
         return modred
+
+    def _get_gen_genecp_group(self):
+        if "gen" not in self.basis:
+            return None
+        if "modred" in self.route and "solvent=generic" in self.route:
+            return self.content_groups[4:-1]
+        if "modred" in self.route and "solvent=generic" not in self.route:
+            return self.content_groups[
+                4:
+            ]  # need to change if there are additional append info after these
+        if "modred" not in self.route and "solvent=generic" in self.route:
+            return self.content_groups[3:-1]
+        if "modred" not in self.route and "solvent=generic" not in self.route:
+            return self.content_groups[3:]
+        return None
+
+    def _get_custom_solvent_group(self):
+        """Get the custom solvent group from the content groups.
+        Custom solvent is always the last content group in the input file.
+        """
+        if "solvent=generic" in self.route:
+            return self.content_groups[-1]
+        return None
+
+    def _get_custom_solvent_string(self):
+        if self.custom_solvent_group is not None:
+            return "\n".join(self.custom_solvent_group)
+        return None

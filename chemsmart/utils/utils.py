@@ -215,3 +215,40 @@ def get_key_by_value_and_number(value, number, data):
             # Check if both the value and the numerical part of the key match
             if val == value and key_number == number:
                 return key
+
+
+def two_files_have_similar_contents(
+    reference_file, output_file, ignored_string=None
+):
+    """Checks if the reference_file has same contents as output_file, except where ignored strings.
+
+    reference_file: reference file
+    output_file: output file
+    ignored_string: If a string is ignored, it will not be compared.
+    """
+    with open(reference_file, "r") as f:
+        reference_lines = f.readlines()
+    with open(output_file, "r") as f:
+        output_lines = f.readlines()
+    for reference_line, output_line in zip(
+        reference_lines, output_lines, strict=False
+    ):
+        if reference_line.strip() != output_line.strip():
+            if ignored_string and ignored_string in reference_line:
+                continue
+            return False
+    return True
+
+
+def two_lists_have_similar_contents(list1, list2, ignore_string=None):
+    """Checks if two lists have the same contents.
+    If ignored string appears in the list member, then this member is ignored.
+    """
+    if len(list1) != len(list2):
+        return False
+    for item1, item2 in zip(list1, list2):
+        if item1 != item2:
+            if ignore_string and ignore_string in item1:
+                continue
+            return False
+    return True

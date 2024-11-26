@@ -5,7 +5,9 @@ from chemsmart.utils.utils import (
     content_blocks_by_paragraph,
     write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
-from chemsmart.utils.periodictable import PeriodicTable as pt
+from chemsmart.utils.periodictable import PeriodicTable
+
+pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +115,7 @@ class GenGenECPSection:
 
     @classmethod
     def from_genecp_group(cls, genecp_group):
-        # genecp group from gen_genecp attribute of inputs.py
+        """Create GenGenECPSection from the genecp_group string."""
         genecp_string = ""
         num_groups = len(genecp_group)
         for i in range(num_groups):
@@ -151,7 +153,9 @@ class GenGenECPSection:
                 "see https://github.com/MolSSI-BSE/basis_set_exchange for installation."
             ) from e
 
-        heavy_elements = pt.sorted_periodic_table_list(heavy_elements)
+        heavy_elements = pt.sorted_periodic_table_list(
+            list_of_elements=heavy_elements
+        )
         heavy_elements_basis = heavy_elements_basis.lower()
 
         genecp_string = ""

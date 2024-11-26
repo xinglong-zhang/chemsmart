@@ -1,0 +1,9 @@
+stoichiometry=C5H12O
+solventname=2-methoxy-2-methylpropane
+eps=2.6
+epsinf=1.86704896
+HBondAcidity=0.00
+HBondBasicity=0.54
+SurfaceTensionAtInterface=15.7173744
+CarbonAromaticity=0.0
+ElectronegativeHalogenicity=0.00
