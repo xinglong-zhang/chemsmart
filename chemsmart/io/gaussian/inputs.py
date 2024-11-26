@@ -2,7 +2,7 @@ from functools import cached_property
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.io.gaussian.route import GaussianRoute
-
+from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 
 class Gaussian16Input(FileMixin):
     def __init__(self, filename):
@@ -140,6 +140,10 @@ class Gaussian16Input(FileMixin):
         return self.route_object.additional_route_parameters
 
     @property
+    def gen_genecp(self):
+        return self._get_gen_genecp()
+
+    @property
     def molecule(self):
         return self.cb.molecule
 
@@ -172,7 +176,8 @@ class Gaussian16Input(FileMixin):
         return nproc
 
     def _get_route(self):
-        """Obtain route string that may span over multiple lines."""
+        """Obtain route string that may span over multiple lines
+        and convert route to lower case."""
         concatenated_string = ""
         found_hash = False
         for line in self.content_groups[0]:
@@ -261,3 +266,16 @@ class Gaussian16Input(FileMixin):
             modred["step_size"] = step_size
 
         return modred
+
+    def _get_gen_genecp(self):
+        if 'gen' not in self.basis:
+            return None
+        if 'modred' in self.route and 'solvent=generic' in self.route:
+            return self.content_groups[4:-1]
+        if 'modred' in self.route and 'solvent=generic' not in self.route:
+            return self.content_groups[4:]  # need to change if there are additional append info after these
+        if 'modred' not in self.route and 'solvent=generic' in self.route:
+            return self.content_groups[3:-1]
+        if 'modred' not in self.route and 'solvent=generic' not in self.route:
+            return self.content_groups[3:]
+        return None
