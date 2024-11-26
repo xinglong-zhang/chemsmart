@@ -1,37 +1,6 @@
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.utils import two_files_have_similar_contents
 
-# def is_genecp_output_same_as_reference(
-#     reference_output, genecp_output, ignore_version=True
-# ):
-#     """Checks if the genecp output is the same as the reference output.
-#
-#     reference_output: reference file
-#     genecp_output: genecp output (file or list of strings)
-#     ignore_version: the version number in the comments of the input file might change as the BSE api gets updated
-#                     this does not affect the accuracy of the gaussian input file, but may cause the tests to fail due to
-#                     file comparison between the reference/rewritten file in the test path and the written gaussian
-#                     input file. Therefore we exclude strings with "Version" if ignore_version=True.
-#     """
-#     # genecp_output is a file, convert to list of strings
-#     if isinstance(genecp_output, str):
-#         with open(genecp_output) as f:
-#             genecp_output = f.readlines()
-#
-#     if isinstance(reference_output, str):
-#         with open(reference_output) as f:
-#             reference_output = f.readlines()
-#
-#     for reference_line, genecp_line in zip(
-#         reference_output, genecp_output, strict=False
-#     ):
-#         if reference_line.strip() != genecp_line.strip():
-#             if ignore_version and "Version" in reference_line:
-#                 continue
-#             return False
-#     return True
-
-
 class TestGaussianGenGenECP:
     def test_genecp_from_base_api(self, tmpdir, reference_genecp_txt_file_from_api):
         genecp_section = GenGenECPSection.from_bse_api(
