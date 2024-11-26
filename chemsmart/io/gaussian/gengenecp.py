@@ -115,7 +115,8 @@ class GenGenECPSection:
 
     @classmethod
     def from_genecp_group(cls, genecp_group):
-        # genecp group from gen_genecp attribute of inputs.py
+        """Create GenGenECPSection from the genecp_group string.
+        """
         genecp_string = ""
         num_groups = len(genecp_group)
         for i in range(num_groups):
