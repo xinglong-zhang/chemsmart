@@ -5,7 +5,7 @@ import re
 from functools import cached_property
 import numpy as np
 from ase import units
-from chemsmart.utils.mixins import FileMixin, ORCAFileMixin
+from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.utils import is_float
@@ -21,7 +21,7 @@ p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class ORCAOutput(FileMixin, ORCAFileMixin):
+class ORCAOutput(ORCAFileMixin):
     """ORCA output file with .out extension."""
 
     def __init__(self, filename):
