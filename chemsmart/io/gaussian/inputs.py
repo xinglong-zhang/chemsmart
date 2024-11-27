@@ -46,14 +46,6 @@ class Gaussian16Input(GaussianFileMixin):
         return self._get_modredundant_conditions()
 
     @property
-    def route_object(self):
-        try:
-            route_object = GaussianRoute(route_string=self.route_string)
-            return route_object
-        except TypeError as err:
-            print(err)
-
-    @property
     def is_pbc(self):
         for line in self.contents:
             line_elements = line.split()
@@ -90,58 +82,6 @@ class Gaussian16Input(GaussianFileMixin):
     @property
     def route_string(self):
         return self._get_route()
-
-    @property
-    def dieze_tag(self):
-        return self.route_object.dieze_tag
-
-    @property
-    def job_type(self):
-        return self.route_object.job_type
-
-    @job_type.setter
-    def job_type(self, value):
-        self.route_object.job_type = value
-
-    @property
-    def freq(self):
-        return self.route_object.freq
-
-    @property
-    def numfreq(self):
-        return self.route_object.numfreq
-
-    @property
-    def ab_initio(self):
-        return self.route_object.ab_initio
-
-    @property
-    def functional(self):
-        return self.route_object.functional
-
-    @property
-    def basis(self):
-        return self.route_object.basis
-
-    @property
-    def solv_on(self):
-        return self.route_object.solv
-
-    @property
-    def solvent_model(self):
-        return self.route_object.solvent_model
-
-    @property
-    def solvent_id(self):
-        return self.route_object.solvent_id
-
-    @property
-    def additional_opt_options_in_route(self):
-        return self.route_object.additional_opt_options_in_route
-
-    @property
-    def additional_route_parameters(self):
-        return self.route_object.additional_route_parameters
 
     @property
     def gen_genecp(self):
