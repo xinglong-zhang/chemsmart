@@ -34,7 +34,31 @@ class FileMixin:
             return f.read()
 
 
-class ORCAFileMixin:
+class GaussianFileMixin(FileMixin):
+    """Mixin class for Gaussian files."""
+
+    def _get_chk(self):
+        for line in self.contents:
+            if line.startswith("%chk"):
+                return True
+        return False
+
+    def _get_mem(self):
+        mem = 20  # default value: 20 GB
+        for line in self.contents:
+            if line.startswith("%mem"):
+                mem = int(line.split("=")[-1].split("GB")[0])
+        return mem
+
+    def _get_nproc(self):
+        nproc = 16  # default value
+        for line in self.contents:
+            if line.startswith("%nproc"):
+                nproc = int(line.split("=")[-1])
+        return nproc
+
+
+class ORCAFileMixin(FileMixin):
     """Mixin class for ORCA files."""
 
     @cached_property

@@ -1,11 +1,11 @@
 from functools import cached_property
-from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 
 
-class Gaussian16Input(FileMixin):
+class Gaussian16Input(GaussianFileMixin):
     def __init__(self, filename):
         self.filename = filename
 
@@ -186,38 +186,18 @@ class Gaussian16Input(FileMixin):
 
     @property
     def constrained_atoms(self):
-        self.coordinate_block.constrained_atoms
+        return self.coordinate_block.constrained_atoms
 
     @constrained_atoms.setter
     def constrained_atoms(self, value):
-        self.coordinate_block.constrained_atoms = value
-
-    def _get_chk(self):
-        for line in self.contents:
-            if line.startswith("%chk"):
-                return True
-        return False
-
-    def _get_mem(self):
-        mem = 20  # default value: 20 GB
-        for line in self.contents:
-            if line.startswith("%mem"):
-                mem = int(line.split("=")[-1].split("GB")[0])
-        return mem
-
-    def _get_nproc(self):
-        nproc = 16  # default value
-        for line in self.contents:
-            if line.startswith("%nproc"):
-                nproc = int(line.split("=")[-1])
-        return nproc
+        self.constrained_atoms = value
 
     def _get_route(self):
         """Obtain route string that may span over multiple lines
         and convert route to lower case."""
         concatenated_string = ""
-        found_hash = False
         for line in self.content_groups[0]:
+            found_hash = False
             if line.startswith("#"):
                 concatenated_string += (
                     line.strip()
@@ -262,7 +242,8 @@ class Gaussian16Input(FileMixin):
                     self.job_type = "scan"
                 return modred
 
-    def _get_modred_frozen_coords(self, modred_list_of_string):
+    @staticmethod
+    def _get_modred_frozen_coords(modred_list_of_string):
         modred = []
         for raw_line in modred_list_of_string:
             line = raw_line[2:-2]

@@ -291,7 +291,7 @@ class Gaussian16Output(FileMixin):
             alpha_occ_eigenvalues = [
                 value * units.Hartree for value in last_block_values
             ]
-            return alpha_occ_eigenvalues
+        return alpha_occ_eigenvalues
 
     @cached_property
     def alpha_virtual_eigenvalues(self):
