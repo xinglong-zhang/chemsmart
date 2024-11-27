@@ -1712,7 +1712,7 @@ class ORCAOutput(ORCAFileMixin):
     #     )
 
 
-class ORCAEngradFile(FileMixin):
+class ORCAEngradFile(ORCAFileMixin):
     def __init__(self, filename):
         self.filename = filename
         """ Obtain energy and gradient of ORCA calculation"""
