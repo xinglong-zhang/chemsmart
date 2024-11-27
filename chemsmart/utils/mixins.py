@@ -4,6 +4,7 @@ from functools import cached_property
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.gaussian.route import GaussianRoute
 
+
 class FileMixin:
     """Mixin class for files that can be opened and read"""
 

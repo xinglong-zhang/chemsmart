@@ -89,15 +89,19 @@ class Gaussian16Output(GaussianFileMixin):
     def _get_route(self):
         lines = self.contents
         for i, line in enumerate(lines):
-            if line.startswith('#'):
-                if lines[i + 1].startswith('------'):
+            if line.startswith("#"):
+                if lines[i + 1].startswith("------"):
                     # route string in a single line
                     route = line.lower()
-                elif not lines[i + 1].startswith('------') and lines[i + 2].startswith('------'):
+                elif not lines[i + 1].startswith("------") and lines[
+                    i + 2
+                ].startswith("------"):
                     # route string spans two lines
                     route = line.lower()
                     route += lines[i + 1].strip().lower()
-                elif not lines[i + 1].startswith('------') and not lines[i + 2].startswith('------'):
+                elif not lines[i + 1].startswith("------") and not lines[
+                    i + 2
+                ].startswith("------"):
                     # route string spans three lines
                     route = line.lower()
                     route += lines[i + 1].lower()

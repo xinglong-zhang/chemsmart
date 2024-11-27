@@ -1,7 +1,6 @@
 from functools import cached_property
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.utils import content_blocks_by_paragraph
-from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 
 
