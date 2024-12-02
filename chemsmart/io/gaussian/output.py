@@ -3,7 +3,7 @@ import logging
 from itertools import islice
 from functools import cached_property
 from ase import units
-from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.repattern import (
     eV_pattern,
     nm_pattern,
@@ -14,9 +14,21 @@ from chemsmart.utils.repattern import (
 logger = logging.getLogger(__name__)
 
 
-class Gaussian16Output(FileMixin):
+class Gaussian16Output(GaussianFileMixin):
     def __init__(self, filename):
         self.filename = filename
+
+    @property
+    def chk(self):
+        return self._get_chk()
+
+    @property
+    def mem(self):
+        return self._get_mem()
+
+    @property
+    def nproc(self):
+        return self._get_nproc()
 
     @property
     def normal_termination(self):
@@ -69,6 +81,35 @@ class Gaussian16Output(FileMixin):
                 else:
                     spin = None
                 return spin
+
+    @property
+    def route_string(self):
+        return self._get_route()
+
+    def _get_route(self):
+        lines = self.contents
+        for i, line in enumerate(lines):
+            if line.startswith("#"):
+                if lines[i + 1].startswith("------"):
+                    # route string in a single line
+                    route = line.lower()
+                elif not lines[i + 1].startswith("------") and lines[
+                    i + 2
+                ].startswith("------"):
+                    # route string spans two lines
+                    route = line.lower()
+                    route += lines[i + 1].strip().lower()
+                elif not lines[i + 1].startswith("------") and not lines[
+                    i + 2
+                ].startswith("------"):
+                    # route string spans three lines
+                    route = line.lower()
+                    route += lines[i + 1].lower()
+                    route += lines[i + 2].lower()
+                else:
+                    route = None
+                return route
+        return None
 
     @property
     def num_basis_functions(self):
@@ -291,7 +332,7 @@ class Gaussian16Output(FileMixin):
             alpha_occ_eigenvalues = [
                 value * units.Hartree for value in last_block_values
             ]
-            return alpha_occ_eigenvalues
+        return alpha_occ_eigenvalues
 
     @cached_property
     def alpha_virtual_eigenvalues(self):
