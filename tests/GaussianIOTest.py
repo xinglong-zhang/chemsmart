@@ -115,6 +115,24 @@ class TestGaussian16Input:
         assert g16_scan.functional == "m062x"
         assert g16_scan.basis == "def2svp"
 
+    def test_read_genecp_inputfile(self, gaussian_opt_genecp_inputfile):
+        assert os.path.exists(gaussian_opt_genecp_inputfile)
+        g16_genecp = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16_genecp.molecule.symbols.formula == "PdC2O2C2O2H6"
+        assert g16_genecp.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_genecp.additional_opt_options_in_route is None
+        assert g16_genecp.additional_route_parameters is None
+        assert g16_genecp.job_type == "opt"
+        assert g16_genecp.functional == "mn15"
+        assert g16_genecp.basis == "genecp"
+        assert g16_genecp.genecp_section.genecp_type == "genecp"
+        assert g16_genecp.genecp_section.light_elements == ["H", "C", "O"]
+        assert g16_genecp.genecp_section.heavy_elements == ["Pd"]
+        assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
+        assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
+        assert g16_genecp.molecule.frozen_atoms is None
+
+
     def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
         g16_pbc_1d = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
@@ -141,6 +159,7 @@ class TestGaussian16Output:
     ):
         assert os.path.exists(td_outputfile)
         g16_output = Gaussian16Output(filename=td_outputfile)
+        assert g16_output.route_string == "# cam-b3lyp gen td(singlets,nstates=50,root=1)"
         assert g16_output.num_atoms == 49
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
@@ -371,6 +390,50 @@ class TestGaussianWBIOutput:
             g16_output.get_electronic_configuration("Ni1")
             == "[core]4S(0.27)3d(8.70)4p(0.51)"
         )
+
+    def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
+        assert os.path.exists(gaussian_ts_genecp_outfile)
+        g16_genecp = Gaussian16Output(filename=gaussian_ts_genecp_outfile)
+        assert g16_genecp.normal_termination
+        assert g16_genecp.gen_genecp == 'genecp'
+        assert len(g16_genecp.vibrational_frequencies) == g16_genecp.num_atoms * 3 - 6 == 138
+        assert g16_genecp.vibrational_frequencies[0] == -1138.1183
+        assert g16_genecp.vibrational_frequencies[1] == 19.1625
+        assert g16_genecp.vibrational_frequencies[-1] == 3291.3845
+        assert len(g16_genecp.reduced_masses) == g16_genecp.num_atoms * 3 - 6 == 138
+        assert g16_genecp.reduced_masses[0] == 1.1629
+        assert g16_genecp.reduced_masses[1] == 7.3337
+        assert g16_genecp.reduced_masses[-1] == 1.0952
+        assert len(g16_genecp.force_constants) == g16_genecp.num_atoms * 3 - 6 == 138
+        assert g16_genecp.force_constants[0] == 0.8875
+        assert g16_genecp.force_constants[1] == 0.0016
+        assert g16_genecp.force_constants[-1] == 6.9902
+        assert len(g16_genecp.ir_intensities) == g16_genecp.num_atoms * 3 - 6 == 138
+        assert g16_genecp.ir_intensities[0] == 3338.6551
+        assert g16_genecp.ir_intensities[1] == 0.1952
+        assert g16_genecp.ir_intensities[-1] == 2.0786
+        assert len(g16_genecp.vibrational_mode_symmetries) == g16_genecp.num_atoms * 3 - 6 == 138
+        # all members are "A"
+        assert all(sym == "A" for sym in g16_genecp.vibrational_mode_symmetries)
+        print(g16_genecp.vibrational_modes)
+
+
+
+        assert g16_genecp.molecule.symbols.formula == "PdC2O2C2O2H6"
+        assert g16_genecp.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_genecp.additional_opt_options_in_route is None
+        assert g16_genecp.additional_route_parameters is None
+        assert g16_genecp.job_type == "opt"
+        assert g16_genecp.functional == "mn15"
+        assert g16_genecp.basis == "genecp"
+        assert g16_genecp.genecp_section.genecp_type == "genecp"
+        assert g16_genecp.genecp_section.light_elements == ["H", "C", "O"]
+        assert g16_genecp.genecp_section.heavy_elements == ["Pd"]
+        assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
+        assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
+        assert g16_genecp.molecule.frozen_atoms is None
+
+
 
 
 class TestGaussianCubeFile:

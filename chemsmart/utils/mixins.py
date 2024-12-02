@@ -59,6 +59,16 @@ class GaussianFileMixin(FileMixin):
         return nproc
 
     @property
+    def route_string(self):
+        """Route string for Gaussian file.
+        Returned by individual subclasses."""
+        return self._get_route()
+
+    def _get_route(self):
+        """Default implementation. Subclasses must override this method."""
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
     def route_object(self):
         try:
             route_object = GaussianRoute(route_string=self.route_string)

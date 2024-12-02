@@ -2,6 +2,7 @@ import re
 import logging
 from itertools import islice
 from functools import cached_property
+import numpy as np
 from ase import units
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.repattern import (
@@ -9,6 +10,7 @@ from chemsmart.utils.repattern import (
     nm_pattern,
     f_pattern,
     float_pattern,
+    normal_mode_pattern,
 )
 
 logger = logging.getLogger(__name__)
@@ -17,18 +19,6 @@ logger = logging.getLogger(__name__)
 class Gaussian16Output(GaussianFileMixin):
     def __init__(self, filename):
         self.filename = filename
-
-    @property
-    def chk(self):
-        return self._get_chk()
-
-    @property
-    def mem(self):
-        return self._get_mem()
-
-    @property
-    def nproc(self):
-        return self._get_nproc()
 
     @property
     def normal_termination(self):
@@ -45,7 +35,15 @@ class Gaussian16Output(GaussianFileMixin):
         logger.info(f"File {self.filename} has error termination.")
         return False
 
-    @property
+    @cached_property
+    def num_steps(self):
+        """Number of points scanned."""
+        for line in self.contents:
+            if line.startswith('Step number'):
+                return int(line.split()[-1])
+        return None
+
+    @cached_property
     def num_atoms(self):
         """Number of atoms in the molecule."""
         for line in self.contents:
@@ -82,9 +80,45 @@ class Gaussian16Output(GaussianFileMixin):
                     spin = None
                 return spin
 
-    @property
-    def route_string(self):
-        return self._get_route()
+    ######################### the following properties relate to intermediate geometry optimizations
+    # for a constrained opt in e.g, scan/modred job
+
+    @cached_property
+    def intermediate_steps(self):
+        """Return a list of intermediate steps."""
+        initial_step = []
+        final_step = []
+        for line in self.contents:
+            if line.startswith('Step number') and 'on scan point' in line:
+                line_elem = line.split()
+                initial_step.append(int(line_elem[2]))
+                final_step.append(int(line_elem[12]))
+        steps_zip = zip(initial_step, final_step, strict=False)
+        zipped_steps_list = list(steps_zip)
+        if len(zipped_steps_list) != 0:
+            return zipped_steps_list
+        return None
+
+    @cached_property
+    def optimized_steps(self):
+        """Return a list of optimized steps without intermediate steps."""
+        steps = self.intermediate_steps
+        if steps:
+            optimized_steps = []
+            for i in range(steps[-1][-1]):
+                i_gaussian = i + 1  # gaussian uses 1-index
+                each_steps = [step for step in steps if step[-1] == i_gaussian]
+                optimized_steps.append(each_steps[-1])
+            return optimized_steps
+        return None
+
+    @cached_property
+    def optimized_steps_indices(self):
+        if self.optimized_steps:
+            return [self.intermediate_steps.index(i) for i in self.optimized_steps]
+        return None
+
+    #########################
 
     def _get_route(self):
         lines = self.contents
@@ -112,6 +146,17 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     @property
+    def gen_genecp(self):
+        """String specifying if gen or genecp is used in the calculation output file."""
+        return self._get_gen_genecp()
+
+    def _get_gen_genecp(self):
+        if 'gen' in self.basis:
+            # return the string containing gen or genecp
+            return self.basis
+        return None
+
+    @cached_property
     def num_basis_functions(self):
         for line in self.contents:
             if "basis functions," in line:
@@ -120,7 +165,7 @@ class Gaussian16Output(GaussianFileMixin):
                 return int(num_basis_functions)
         return None
 
-    @property
+    @cached_property
     def num_primitive_gaussians(self):
         for line in self.contents:
             if "primitive gaussians," in line:
@@ -129,7 +174,7 @@ class Gaussian16Output(GaussianFileMixin):
                 return int(primitives)
         return None
 
-    @property
+    @cached_property
     def num_cartesian_basis_functions(self):
         for line in self.contents:
             if (
@@ -143,7 +188,7 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     # Below gives computing time/resources used
-    @property
+    @cached_property
     def cpu_runtime_by_jobs_core_hours(self):
         cpu_runtime = []
         for line in self.contents:
@@ -164,20 +209,20 @@ class Gaussian16Output(GaussianFileMixin):
                 cpu_runtime.append(total_hours)
         return cpu_runtime
 
-    @property
+    @cached_property
     def service_units_by_jobs(self):
         """SUs defined as the JOB CPU time in hours."""
         return self.cpu_runtime_by_jobs_core_hours
 
-    @property
+    @cached_property
     def total_core_hours(self):
         return round(sum(self.cpu_runtime_by_jobs_core_hours), 4)
 
-    @property
+    @cached_property
     def total_service_unit(self):
         return self.total_core_hours
 
-    @property
+    @cached_property
     def elapsed_walltime_by_jobs(self):
         elapsed_walltime = []
         for line in self.contents:
@@ -196,9 +241,123 @@ class Gaussian16Output(GaussianFileMixin):
                 elapsed_walltime.append(total_hours)
         return elapsed_walltime
 
-    @property
+    @cached_property
     def total_elapsed_walltime(self):
         return round(sum(self.elapsed_walltime_by_jobs), 4)
+
+    #### FREQUENCY CALCULATIONS
+    @cached_property
+    def vibrational_frequencies(self):
+        """Read the vibrational frequencies from the Gaussian output file."""
+        frequencies = []
+        for line in self.contents:
+            if line.startswith("Frequencies --"):
+                freq_string = line.split("--")[1].strip()
+                for freq in freq_string.split():
+                    frequencies.append(float(freq))
+            else:
+                continue
+            if "Thermochemistry" in line:
+                break
+        return frequencies
+
+    @cached_property
+    def reduced_masses(self):
+        """Obtain list of reduced masses corresponding to the vibrational frequency."""
+        reduced_masses = []
+        for line in self.contents:
+            if line.startswith("Red. masses --"):
+                reduced_masses_string = line.split("--")[1].strip()
+                for mass in reduced_masses_string.split():
+                    reduced_masses.append(float(mass))
+            else:
+                continue
+            if "Thermochemistry" in line:
+                break
+        return reduced_masses
+
+    @cached_property
+    def force_constants(self):
+        """Obtain list of force constants corresponding to the vibrational frequency."""
+        force_constants = []
+        for line in self.contents:
+            if line.startswith("Frc consts  --"):
+                force_constants_string = line.split("--")[1].strip()
+                for force in force_constants_string.split():
+                    force_constants.append(float(force))
+            else:
+                continue
+            if "Thermochemistry" in line:
+                break
+        return force_constants
+
+    @cached_property
+    def ir_intensities(self):
+        """Obtain list of IR intensities corresponding to the vibrational frequency."""
+        IR_intensities = []
+        for line in self.contents:
+            if line.startswith("IR Inten    --"):
+                IR_intensities_string = line.split("--")[1].strip()
+                for intensity in IR_intensities_string.split():
+                    IR_intensities.append(float(intensity))
+            else:
+                continue
+            if "Thermochemistry" in line:
+                break
+        return IR_intensities
+
+    @cached_property
+    def vibrational_mode_symmetries(self):
+        """Obtain list of vibrational mode symmetries corresponding to the vibrational frequency."""
+        vibrational_mode_symmetries = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Frequencies --"):
+                # go back one line to get the symmetries
+                symmetries = self.contents[i - 1].split()
+                for sym in symmetries:
+                    vibrational_mode_symmetries.append(sym)
+            else:
+                continue
+            if "Thermochemistry" in line:
+                break
+        return vibrational_mode_symmetries
+
+    @property
+    def vibrational_modes(self):
+        """Obtain list of vibrational normal modes corresponding to the vibrational frequency.
+        Returns a list of normal modes, each of natoms x 3 (in dx, dy, and dz for each element) vibration.
+        """
+        list_of_vib_modes = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Frequencies --"):
+                for j_line in self.contents[i + 5:]:
+                    # if line match normal mode pattern
+                    if re.match(normal_mode_pattern, j_line):
+                        # normal_mode = j_line.split()
+                        # normal_mode = np.array(normal_mode)
+                        # if self.has_frozen_coordinates:
+                        #     num_free_coordinates = self.natoms - len(self.frozen_coordinate_indices)
+                        #     normal_mode = np.reshape(normal_mode, (num_free_coordinates, 3))
+                        # else:
+                        #     normal_mode = np.reshape(normal_mode, (self.natoms, 3))
+                        # list_of_vib_modes.append(normal_mode)
+                        print(j_line)
+                    else:
+                        break
+            else:
+                continue
+
+        # for freq_dict in self.frequencies[0]:
+        #     normal_mode = freq_dict['mode']  # The normal mode is a 1D vector of dx, dy, dz of each atom.
+        #     normal_mode = np.array(normal_mode)
+        #     if self.has_frozen_coordinates:
+        #         num_free_coordinates = self.natoms - len(self.frozen_coordinate_indices)
+        #         normal_mode = np.reshape(normal_mode, (num_free_coordinates, 3))
+        #     else:
+        #         normal_mode = np.reshape(normal_mode, (self.natoms, 3))
+        #     list_of_vib_modes.append(normal_mode)
+        # return list_of_vib_modes
+    #### FREQUENCY CALCULATIONS
 
     @cached_property
     def tddft_transitions(self):
@@ -662,3 +821,156 @@ class Gaussian16WBIOutput(Gaussian16Output):
     def get_electronic_configuration(self, atom_key):
         """Get the electronic configuration for a given atom."""
         return self.electronic_configuration[atom_key]
+
+
+class Gaussian16OutputWithPBC(Gaussian16Output):
+    """class for parsing and obtaining information from Gaussian output file with PBC."""
+
+    def __init__(self, filename):
+        super().__init__(filename=filename)
+
+    def _parse(self, filename):
+        pass
+
+    @property
+    def pbc(self):
+        for line in self.contents:
+            if 'Periodicity:' in line:
+                pbc_conditions = line.split('Periodicity:')[-1]
+                pbc_conditions = pbc_conditions.split()
+                assert len(pbc_conditions) == 3, 'Periodicity given for 3 dimensions.'
+                return np.array([int(pbc_conditions[0]), int(pbc_conditions[1]), int(pbc_conditions[2])])
+        return None
+
+    @property
+    def dim(self):
+        d = 0
+        for i in self.pbc:
+            if i == 1:
+                d += 1
+        return d
+
+    @property
+    def cells(self):
+        for i, line in enumerate(self.contents):
+            if 'Lengths of translation vectors:' in line:
+                # get cells just once
+                all_cells = []
+                for tv_line in self.contents[i - 1 - self.dim : i - 1]:
+                    tv_line_elem = tv_line.split()
+                    assert float(tv_line_elem[1]) == -2.0, 'Translation vector has "atomic number" -2 in Gaussian.'
+                    tv_vector = [float(tv_line_elem[-3]), float(tv_line_elem[-2]), float(tv_line_elem[-1])]
+                    all_cells.append(tv_vector)
+
+                if self.dim == 1:
+                    all_cells.append([0.0, 0.0, 0.0])
+                    all_cells.append([0.0, 0.0, 0.0])
+                if self.dim == 2:
+                    all_cells.append([0.0, 0.0, 0.0])
+
+                return np.array(all_cells)
+        return None
+
+    def get_energies(self):
+        all_energies = []
+        for line in self.contents:
+            if 'SCF Done:' in line:
+                raw_energy = line.split('=')[-1].split()[0]
+                raw_energy = float(raw_energy)
+                # convert from Hartrees to eV
+                raw_energy *= units.Hartree
+                all_energies.append(raw_energy)
+
+        return all_energies
+
+    def get_forces(self):
+        all_forces = []
+        for i, line in enumerate(self.contents):
+            if 'Forces (Hartrees/Bohr)' in line:
+                each_forces = []
+                for force_line in self.contents[i + 3 : i + 3 + self.natoms]:
+                    # lines containing forces
+                    assert int(force_line.split()[1]) > 0, 'Atomic Number should be greater than 0.'
+                    force_line_elem = force_line.split()
+                    force = [float(force_line_elem[-3]), float(force_line_elem[-2]), float(force_line_elem[-1])]
+                    # convert forces from Hartrees/Bohr to eV/Å
+                    force = [i * units.Hartree / units.Bohr for i in force]
+                    each_forces.append(force)
+                each_forces = np.array(each_forces)
+                all_forces.append(each_forces)
+        return all_forces
+
+    def get_symbols(self):
+        all_symbols = []
+        for i, line in enumerate(self.contents):
+            if 'Input orientation:' in line:
+                assert 'Coordinates (Angstroms)' in self.contents[i + 2], 'Coordinate line follows'
+                for position_line in self.contents[i + 5 : i + 5 + self.natoms]:
+                    # lines containing forces
+                    atomic_number = int(position_line.split()[1])
+
+                    assert atomic_number > 0, 'Atomic Number should be greater than 0.'
+                    element = PERIODIC_TABLE[atomic_number]
+                    all_symbols.append(element)
+                return all_symbols
+        return None
+
+    def get_structures(self):
+        all_structures = []
+        for i, line in enumerate(self.contents):
+            if 'Input orientation:' in line:
+                assert 'Coordinates (Angstroms)' in self.contents[i + 2], 'Coordinate line follows'
+                each_positions = []
+                for position_line in self.contents[i + 5 : i + 5 + self.natoms]:
+                    # lines containing forces
+                    assert int(position_line.split()[1]) > 0, 'Atomic Number should be greater than 0.'
+                    position_line_elem = position_line.split()
+                    # coordinates already in Å - no conversion needed
+                    positions = [
+                        float(position_line_elem[-3]),
+                        float(position_line_elem[-2]),
+                        float(position_line_elem[-1]),
+                    ]
+                    each_positions.append(positions)
+                each_positions = np.array(each_positions)
+                all_structures.append(each_positions)
+
+        return all_structures
+
+    def get_atoms(self, index='-1', include_failed_logfile=False):
+        all_atoms = []
+
+        if not self.normal_termination and not include_failed_logfile:
+            return None
+
+        all_energies = self.get_energies()
+        all_structures = self.get_structures()
+        all_forces = self.get_forces()
+        chemical_symbols = self.get_symbols()
+        assert len(all_energies) > 0, 'No energies found!'
+        assert len(all_structures) > 0, 'No structures found!'
+
+        # order in the .log file: input orientation, then SCF Done, then Forces
+        if len(all_forces) != 0:
+            # forces are given
+            min_num_structures = min(len(all_energies), len(all_structures), len(all_forces))
+            for i in range(min_num_structures):
+                atoms = Atoms(symbols=chemical_symbols, positions=all_structures[i], pbc=self.pbc, cell=self.cells)
+                atoms.calc = SinglePointCalculator(atoms=atoms, energy=all_energies[i], forces=all_forces[i])
+                all_atoms.append(atoms)
+        else:
+            # no forces information
+            min_num_structures = min(len(all_energies), len(all_structures))
+            for i in range(min_num_structures):
+                atoms = Atoms(symbols=chemical_symbols, positions=all_structures[i], pbc=self.pbc, cell=self.cells)
+                atoms.calc = SinglePointCalculator(atoms=atoms, energy=all_energies[i])
+                all_atoms.append(atoms)
+
+        index = string2index(index)
+        return all_atoms[index]
+
+    @property
+    def has_forces(self):
+        """Method for checking if there are forces from Gaussian .log file with PBC."""
+        return len(self.get_forces()) != 0
+

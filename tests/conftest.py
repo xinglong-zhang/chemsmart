@@ -139,6 +139,18 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
     return gaussian_quintet_opt_outfile
 
 
+# Gaussian output files for genecp
+@pytest.fixture()
+def gaussian_outputs_genecp_directory(gaussian_outputs_test_directory):
+    return os.path.join(gaussian_outputs_test_directory, "genecp")
+
+@pytest.fixture()
+def gaussian_ts_genecp_outfile(gaussian_outputs_genecp_directory):
+    gaussian_ts_genecp_output = os.path.join(
+        gaussian_outputs_genecp_directory, "pd_genecp_ts.log"
+    )
+    return gaussian_ts_genecp_output
+
 # Gaussian pbc input files
 @pytest.fixture()
 def gaussian_pbc_test_directory(gaussian_test_directory):
