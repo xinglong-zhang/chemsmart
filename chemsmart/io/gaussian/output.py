@@ -101,85 +101,191 @@ class Gaussian16Output(GaussianFileMixin):
         return cb
 
     @cached_property
-    def list_of_symbols(self):
+    def symbols(self):
         return self.input_coordinates_block.symbols
 
     @cached_property
     def list_of_pbc_conditions(self):
         return self.input_coordinates_block.pbc_conditions
 
+    # @cached_property
+    # def all_structures(self):
+    #     """Obtain all the structures from the output file.
+    #     Use Standard orientations to get the structures; if not, use input orientations.
+    #     Include their corresponding energy and forces if present.
+    #     """
+    #     all_structures = []
+    #
+    #     if self.normal_termination:
+    #         # first clean up the number of structures and energies and forces by removing the structure without energy and forces
+    #         if "opt" in self.route_string and "freq" in self.route_string:
+    #             # both opt and freq jobs have been performed, then output structure is as follows:
+    #             # 1. opt part
+    #             # 		Input orientation
+    #             # 		Standard orientation
+    #             # 		Forces
+    #             #
+    #             # 		<after reaching optimized structure>
+    #             # 		Input orientation
+    #             # 		Standard orientation
+    #             # 		<suspect this structure should be same as previously>
+    #             #
+    #             # 2. Freq part
+    #             # 		Input orientation
+    #             # 		Standard orientation
+    #             # 		Forces
+    #             assert np.allclose(
+    #                 self.input_orientations[-1],
+    #                 self.input_orientations[-2],
+    #                 rtol=1e-5,
+    #             ), "The last two input orientations should be the same."
+    #             self.input_orientations.pop(-1)
+    #             assert np.allclose(
+    #                 self.standard_orientations[-1],
+    #                 self.standard_orientations[-2],
+    #                 rtol=1e-5,
+    #             ), "The last two standard orientations should be the same."
+    #             self.standard_orientations.pop(-1)
+    #         # elif "opt" in self.route_string and not "freq" in self.route_string:
+    #         #     # optimization job without freq calcs
+    #
+    #         if len(self.standard_orientations) == 0:
+    #             # no standard orientation structures present, then use input orientation structures
+    #
+    #             for i, positions in enumerate(self.input_orientations):
+    #                 all_structures.append(
+    #                     Molecule(
+    #                         symbols=self.symbols,
+    #                         positions=positions,
+    #                         charge=self.charge,
+    #                         multiplicity=self.multiplicity,
+    #                         frozen_atoms=self.frozen_atoms_masks,
+    #                         pbc_conditions=self.list_of_pbc_conditions,
+    #                         energy=self.energies_in_eV[i],
+    #                         forces=self.forces_in_eV_per_A[i],
+    #                     )
+    #                 )
+    #         else:
+    #             # if standard orientation present, then use standard orientation structures
+    #             for i, positions in enumerate(self.standard_orientations):
+    #                 all_structures.append(
+    #                     Molecule(
+    #                         symbols=self.symbols,
+    #                         positions=positions,
+    #                         charge=self.charge,
+    #                         multiplicity=self.multiplicity,
+    #                         frozen_atoms=self.frozen_atoms_masks,
+    #                         pbc_conditions=self.list_of_pbc_conditions,
+    #                         energy=self.energies_in_eV[i],
+    #                         forces=self.forces_in_eV_per_A[i],
+    #                     )
+    #                 )
+    #         return all_structures
+    #     else:
+    #         # if the job is not terminated normally, then assemble structures according to least number of
+    #         # energies and forces available
+    #         num_structures_to_use = min(
+    #             max(len(self.input_orientations), len(self.standard_orientations)),
+    #             len(self.energies),
+    #             len(self.forces)
+    #         )
+    #         if len(self.standard_orientations) == 0:
+    #             # no standard orientation structures present, then use input orientation structures
+    #
+    #             for i, positions in enumerate(self.input_orientations[:num_structures_to_use]):
+    #                 all_structures.append(
+    #                     Molecule(
+    #                         symbols=self.symbols,
+    #                         positions=positions,
+    #                         charge=self.charge,
+    #                         multiplicity=self.multiplicity,
+    #                         frozen_atoms=self.frozen_atoms_masks,
+    #                         pbc_conditions=self.list_of_pbc_conditions,
+    #                         energy=self.energies_in_eV[i],
+    #                         forces=self.forces_in_eV_per_A[i],
+    #                     )
+    #                 )
+    #         else:
+    #             # if standard orientation present, then use standard orientation structures
+    #             for i, positions in enumerate(self.standard_orientations[:num_structures_to_use]):
+    #                 all_structures.append(
+    #                     Molecule(
+    #                         symbols=self.symbols,
+    #                         positions=positions,
+    #                         charge=self.charge,
+    #                         multiplicity=self.multiplicity,
+    #                         frozen_atoms=self.frozen_atoms_masks,
+    #                         pbc_conditions=self.list_of_pbc_conditions,
+    #                         energy=self.energies_in_eV[i],
+    #                         forces=self.forces_in_eV_per_A[i],
+    #                     )
+    #                 )
+    #         return all_structures
+
     @cached_property
     def all_structures(self):
-        """Obtain all the structures from the output file.
+        """
+        Obtain all the structures from the output file.
         Use Standard orientations to get the structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
-        all_structures = []
 
-        # first clean up the number of structures and energies and forces by removing the structure without energy and forces
-        if "opt" in self.route_string and "freq" in self.route_string:
-            # both opt and freq jobs have been performed, then output structure is as follows:
-            # 1. opt part
-            # 		Input orientation
-            # 		Standard orientation
-            # 		Forces
-            #
-            # 		<after reaching optimized structure>
-            # 		Input orientation
-            # 		Standard orientation
-            # 		<suspect this structure should be same as previously>
-            #
-            # 2. Freq part
-            # 		Input orientation
-            # 		Standard orientation
-            # 		Forces
-            assert np.allclose(
-                self.input_orientations[-1],
-                self.input_orientations[-2],
-                rtol=1e-5,
-            ), "The last two input orientations should be the same."
-            self.input_orientations.pop(-1)
-            assert np.allclose(
-                self.standard_orientations[-1],
-                self.standard_orientations[-2],
-                rtol=1e-5,
-            ), "The last two standard orientations should be the same."
-            self.standard_orientations.pop(-1)
-        # elif "opt" in self.route_string and not "freq" in self.route_string:
-        #     # optimization job without freq calcs
-
-        if len(self.standard_orientations) == 0:
-            # no standard orientation structures present, then use input orientation structures
-
-            for i, positions in enumerate(self.input_orientations):
-                all_structures.append(
-                    Molecule(
-                        symbols=self.list_of_symbols,
-                        positions=positions,
-                        charge=self.charge,
-                        multiplicity=self.multiplicity,
-                        frozen_atoms=self.frozen_atoms_masks,
-                        pbc_conditions=self.list_of_pbc_conditions,
-                        energy=self.energies_in_eV[i],
-                        forces=self.forces_in_eV_per_A[i],
-                    )
+        def create_molecule_list(orientations, num_structures=None):
+            """Helper function to create Molecule objects."""
+            num_structures = num_structures or len(orientations)
+            return [
+                Molecule(
+                    symbols=self.symbols,
+                    positions=orientations[i],
+                    charge=self.charge,
+                    multiplicity=self.multiplicity,
+                    frozen_atoms=self.frozen_atoms_masks,
+                    pbc_conditions=self.list_of_pbc_conditions,
+                    energy=self.energies_in_eV[i],
+                    forces=self.forces_in_eV_per_A[i],
                 )
-        else:
-            # if standard orientation present, then use standard orientation structures
-            for i, positions in enumerate(self.standard_orientations):
-                all_structures.append(
-                    Molecule(
-                        symbols=self.list_of_symbols,
-                        positions=positions,
-                        charge=self.charge,
-                        multiplicity=self.multiplicity,
-                        frozen_atoms=self.frozen_atoms_masks,
-                        pbc_conditions=self.list_of_pbc_conditions,
-                        energy=self.energies_in_eV[i],
-                        forces=self.forces_in_eV_per_A[i],
-                    )
-                )
-        return all_structures
+                for i in range(num_structures)
+            ]
+
+        # If the job terminated normally
+        if self.normal_termination:
+            # Handle special case: both "opt" and "freq" present in route
+            if "opt" in self.route_string and "freq" in self.route_string:
+                assert np.allclose(
+                    self.input_orientations[-1],
+                    self.input_orientations[-2],
+                    rtol=1e-5,
+                ), "The last two input orientations should be the same."
+                assert np.allclose(
+                    self.standard_orientations[-1],
+                    self.standard_orientations[-2],
+                    rtol=1e-5,
+                ), "The last two standard orientations should be the same."
+                self.input_orientations.pop(-1)
+                self.standard_orientations.pop(-1)
+
+            # Use Standard orientations if available, otherwise Input orientations
+            orientations = (
+                self.standard_orientations
+                if self.standard_orientations
+                else self.input_orientations
+            )
+            return create_molecule_list(orientations)
+
+        # If the job did not terminate normally
+        num_structures_to_use = min(
+            max(len(self.input_orientations), len(self.standard_orientations)),
+            len(self.energies),
+            len(self.forces),
+        )
+        orientations = (
+            self.standard_orientations
+            if self.standard_orientations
+            else self.input_orientations
+        )
+        return create_molecule_list(
+            orientations, num_structures=num_structures_to_use
+        )
 
     @cached_property
     def optimized_structure(self):
@@ -188,6 +294,11 @@ class Gaussian16Output(GaussianFileMixin):
             return self.all_structures[-1]
         else:
             return None
+
+    @cached_property
+    def last_structure(self):
+        """Return last structure, whether the output file has completed successfully or not."""
+        return self.all_structures[-1]
 
     ######################### the following properties relate to intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
@@ -655,6 +766,9 @@ class Gaussian16Output(GaussianFileMixin):
                 for j_line in self.contents[i + 3 :]:
                     if "---------------------------" in j_line:
                         break
+                    if j_line.startswith("-2"):
+                        # remove those pbc forces
+                        continue
                     forces.append([float(val) for val in j_line.split()[2:5]])
                 list_of_all_forces.append(np.array(forces))
         return list_of_all_forces
@@ -681,6 +795,9 @@ class Gaussian16Output(GaussianFileMixin):
                 for j_line in self.contents[i + 5 :]:
                     if "-----------------" in j_line:
                         break
+                    if j_line.split()[1] == "-2":  # atomic number = -2 for TV
+                        continue
+                    print(j_line)
                     input_orientation.append(
                         [float(val) for val in j_line.split()[3:6]]
                     )
@@ -697,6 +814,8 @@ class Gaussian16Output(GaussianFileMixin):
                 for j_line in self.contents[i + 5 :]:
                     if "-----------------" in j_line:
                         break
+                    if j_line.split()[1] == "-2":  # atomic number = -2 for TV
+                        continue
                     standard_orientation.append(
                         [float(val) for val in j_line.split()[3:6]]
                     )
@@ -1203,165 +1322,96 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
         return d
 
     @property
-    def cells(self):
+    def input_translation_vectors(self):
         for i, line in enumerate(self.contents):
             if "Lengths of translation vectors:" in line:
                 # get cells just once
                 all_cells = []
-                for tv_line in self.contents[i - 1 - self.dim : i - 1]:
+                for tv_line in self.contents[i - 1 - self.num_atoms : i - 1]:
                     tv_line_elem = tv_line.split()
-                    assert (
-                        float(tv_line_elem[1]) == -2.0
-                    ), 'Translation vector has "atomic number" -2 in Gaussian.'
-                    tv_vector = [
-                        float(tv_line_elem[-3]),
-                        float(tv_line_elem[-2]),
-                        float(tv_line_elem[-1]),
-                    ]
-                    all_cells.append(tv_vector)
-
-                if self.dim == 1:
-                    all_cells.append([0.0, 0.0, 0.0])
-                    all_cells.append([0.0, 0.0, 0.0])
-                if self.dim == 2:
-                    all_cells.append([0.0, 0.0, 0.0])
-
+                    if "-----------------" in tv_line:
+                        continue
+                    if float(tv_line_elem[1]) == -2.0:
+                        tv_vector = [
+                            float(tv_line_elem[-3]),
+                            float(tv_line_elem[-2]),
+                            float(tv_line_elem[-1]),
+                        ]
+                        all_cells.append(tv_vector)
                 return np.array(all_cells)
         return None
 
-    def get_energies(self):
-        all_energies = []
-        for line in self.contents:
-            if "SCF Done:" in line:
-                raw_energy = line.split("=")[-1].split()[0]
-                raw_energy = float(raw_energy)
-                # convert from Hartrees to eV
-                raw_energy *= units.Hartree
-                all_energies.append(raw_energy)
-
-        return all_energies
-
-    def get_forces(self):
-        all_forces = []
-        for i, line in enumerate(self.contents):
-            if "Forces (Hartrees/Bohr)" in line:
-                each_forces = []
-                for force_line in self.contents[i + 3 : i + 3 + self.natoms]:
-                    # lines containing forces
-                    assert (
-                        int(force_line.split()[1]) > 0
-                    ), "Atomic Number should be greater than 0."
-                    force_line_elem = force_line.split()
-                    force = [
-                        float(force_line_elem[-3]),
-                        float(force_line_elem[-2]),
-                        float(force_line_elem[-1]),
-                    ]
-                    # convert forces from Hartrees/Bohr to eV/Å
-                    force = [i * units.Hartree / units.Bohr for i in force]
-                    each_forces.append(force)
-                each_forces = np.array(each_forces)
-                all_forces.append(each_forces)
-        return all_forces
-
-    def get_symbols(self):
-        all_symbols = []
-        for i, line in enumerate(self.contents):
-            if "Input orientation:" in line:
-                assert (
-                    "Coordinates (Angstroms)" in self.contents[i + 2]
-                ), "Coordinate line follows"
-                for position_line in self.contents[
-                    i + 5 : i + 5 + self.natoms
+    @property
+    def final_translation_vector(self):
+        """Get final translation vectors from last step."""
+        for i, line in enumerate(reversed(self.contents)):
+            # read from backwards and get the last translation vector
+            if "Lengths of translation vectors:" in line:
+                start_idx = (
+                    len(self.contents) - i
+                )  # Line index in forward order
+                # get cells just once
+                all_cells = []
+                for tv_line in self.contents[
+                    start_idx - self.num_atoms - 4 : start_idx - 1
                 ]:
-                    # lines containing forces
-                    atomic_number = int(position_line.split()[1])
-
-                    assert (
-                        atomic_number > 0
-                    ), "Atomic Number should be greater than 0."
-                    element = PERIODIC_TABLE[atomic_number]
-                    all_symbols.append(element)
-                return all_symbols
+                    if "-----------------" in tv_line:
+                        continue
+                    tv_line_elem = tv_line.split()
+                    if float(tv_line_elem[1]) == -2.0:
+                        tv_vector = [
+                            float(tv_line_elem[-3]),
+                            float(tv_line_elem[-2]),
+                            float(tv_line_elem[-1]),
+                        ]
+                        all_cells.append(tv_vector)
+                return np.array(all_cells)
         return None
 
-    def get_structures(self):
-        all_structures = []
-        for i, line in enumerate(self.contents):
-            if "Input orientation:" in line:
-                assert (
-                    "Coordinates (Angstroms)" in self.contents[i + 2]
-                ), "Coordinate line follows"
-                each_positions = []
-                for position_line in self.contents[
-                    i + 5 : i + 5 + self.natoms
-                ]:
-                    # lines containing forces
-                    assert (
-                        int(position_line.split()[1]) > 0
-                    ), "Atomic Number should be greater than 0."
-                    position_line_elem = position_line.split()
-                    # coordinates already in Å - no conversion needed
-                    positions = [
-                        float(position_line_elem[-3]),
-                        float(position_line_elem[-2]),
-                        float(position_line_elem[-1]),
-                    ]
-                    each_positions.append(positions)
-                each_positions = np.array(each_positions)
-                all_structures.append(each_positions)
-
-        return all_structures
-
-    def get_atoms(self, index="-1", include_failed_logfile=False):
-        all_atoms = []
-
-        if not self.normal_termination and not include_failed_logfile:
-            return None
-
-        all_energies = self.get_energies()
-        all_structures = self.get_structures()
-        all_forces = self.get_forces()
-        chemical_symbols = self.get_symbols()
-        assert len(all_energies) > 0, "No energies found!"
-        assert len(all_structures) > 0, "No structures found!"
-
-        # order in the .log file: input orientation, then SCF Done, then Forces
-        if len(all_forces) != 0:
-            # forces are given
-            min_num_structures = min(
-                len(all_energies), len(all_structures), len(all_forces)
-            )
-            for i in range(min_num_structures):
-                atoms = Atoms(
-                    symbols=chemical_symbols,
-                    positions=all_structures[i],
-                    pbc=self.pbc,
-                    cell=self.cells,
-                )
-                atoms.calc = SinglePointCalculator(
-                    atoms=atoms, energy=all_energies[i], forces=all_forces[i]
-                )
-                all_atoms.append(atoms)
-        else:
-            # no forces information
-            min_num_structures = min(len(all_energies), len(all_structures))
-            for i in range(min_num_structures):
-                atoms = Atoms(
-                    symbols=chemical_symbols,
-                    positions=all_structures[i],
-                    pbc=self.pbc,
-                    cell=self.cells,
-                )
-                atoms.calc = SinglePointCalculator(
-                    atoms=atoms, energy=all_energies[i]
-                )
-                all_atoms.append(atoms)
-
-        index = string2index(index)
-        return all_atoms[index]
-
-    @property
-    def has_forces(self):
-        """Method for checking if there are forces from Gaussian .log file with PBC."""
-        return len(self.get_forces()) != 0
+    # def get_atoms(self, index="-1", include_failed_logfile=False):
+    #     all_atoms = []
+    #
+    #     if not self.normal_termination and not include_failed_logfile:
+    #         return None
+    #
+    #     all_energies = self.get_energies()
+    #     all_structures = self.get_structures()
+    #     all_forces = self.get_forces()
+    #     chemical_symbols = self.get_symbols()
+    #     assert len(all_energies) > 0, "No energies found!"
+    #     assert len(all_structures) > 0, "No structures found!"
+    #
+    #     # order in the .log file: input orientation, then SCF Done, then Forces
+    #     if len(all_forces) != 0:
+    #         # forces are given
+    #         min_num_structures = min(
+    #             len(all_energies), len(all_structures), len(all_forces)
+    #         )
+    #         for i in range(min_num_structures):
+    #             atoms = Atoms(
+    #                 symbols=chemical_symbols,
+    #                 positions=all_structures[i],
+    #                 pbc=self.pbc,
+    #                 cell=self.cells,
+    #             )
+    #             atoms.calc = SinglePointCalculator(
+    #                 atoms=atoms, energy=all_energies[i], forces=all_forces[i]
+    #             )
+    #             all_atoms.append(atoms)
+    #     else:
+    #         # no forces information
+    #         min_num_structures = min(len(all_energies), len(all_structures))
+    #         for i in range(min_num_structures):
+    #             atoms = Atoms(
+    #                 symbols=chemical_symbols,
+    #                 positions=all_structures[i],
+    #                 pbc=self.pbc,
+    #                 cell=self.cells,
+    #             )
+    #             atoms.calc = SinglePointCalculator(
+    #                 atoms=atoms, energy=all_energies[i]
+    #             )
+    #             all_atoms.append(atoms)
+    #
+    #     index = string2index(index)
+    #     return all_atoms[index]

@@ -194,6 +194,28 @@ def gaussian_pbc_1d_inputfile(gaussian_pbc_inputs_test_directory):
     return gaussian_pbc_1d_inputfile
 
 
+# Gaussian PBC output files
+@pytest.fixture()
+def gaussian_pbc_outputs_test_directory(gaussian_pbc_test_directory):
+    return os.path.join(gaussian_pbc_test_directory, "log")
+
+
+@pytest.fixture()
+def gaussian_pbc_2d_outputfile(gaussian_pbc_outputs_test_directory):
+    gaussian_pbc_2d_outputfile = os.path.join(
+        gaussian_pbc_outputs_test_directory, "graphite_2d_opt.log"
+    )
+    return gaussian_pbc_2d_outputfile
+
+
+@pytest.fixture()
+def gaussian_pbc_3d_outputfile(gaussian_pbc_outputs_test_directory):
+    gaussian_pbc_3d_outputfile = os.path.join(
+        gaussian_pbc_outputs_test_directory, "gallium_arsenide_3d.log"
+    )
+    return gaussian_pbc_3d_outputfile
+
+
 # text path and associated files
 @pytest.fixture
 def txt_path(gaussian_test_directory):

@@ -2,10 +2,12 @@ import os.path
 import numpy as np
 from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.gaussian.output import Gaussian16OutputWithPBC
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 from ase.symbols import Symbols
 from ase import units
+from torch.onnx.symbolic_opset11 import unbind
 
 
 class TestGaussian16Input:
@@ -934,3 +936,79 @@ class TestGaussianCubeFile:
             (0.0, 1.2911, 0.0),
             (0.0, 0.0, 1.2911),
         )
+
+
+class TestGaussianPBCOutputFile:
+    def test_read_2d_pbc_output(self, gaussian_pbc_2d_outputfile):
+        assert os.path.exists(gaussian_pbc_2d_outputfile)
+        g16_pbc_2d = Gaussian16OutputWithPBC(
+            filename=gaussian_pbc_2d_outputfile
+        )
+        assert g16_pbc_2d.normal_termination is False
+        assert g16_pbc_2d.num_atoms == 2
+        assert np.array_equal(g16_pbc_2d.pbc, [1, 1, 0])
+        assert g16_pbc_2d.dim == 2
+        assert np.allclose(
+            g16_pbc_2d.input_translation_vectors,
+            np.array(
+                [
+                    [2.475315, 0.0, 0.0],
+                    [-1.219952, 2.133447, 0.0],
+                ]
+            ),
+        )
+        assert np.allclose(
+            g16_pbc_2d.final_translation_vector,
+            np.array([[2.47554, -0.0, -0.0], [-1.237852, 2.143856, 0.0]]),
+        )
+        assert len(g16_pbc_2d.energies) == 5
+        assert g16_pbc_2d.energies[0] == -76.1487231466
+        assert g16_pbc_2d.energies_in_eV[0] == -76.1487231466 * units.Hartree
+        assert np.allclose(
+            g16_pbc_2d.forces[-1],
+            np.array(
+                [
+                    [1.5884e-05, 6.7630e-06, 0.0000e00],
+                    [-1.5884e-05, -6.7630e-06, -0.0000e00],
+                ]
+            ),
+        )
+
+        assert np.allclose(
+            g16_pbc_2d.forces_in_eV_per_A[-1],
+            np.array(
+                [
+                    [1.5884e-05, 6.7630e-06, 0.0000e00],
+                    [-1.5884e-05, -6.7630e-06, -0.0000e00],
+                ]
+            )
+            * units.Hartree
+            / units.Bohr,
+        )
+
+        assert np.allclose(
+            g16_pbc_2d.last_structure.positions,
+            np.array(
+                [[-0.001724, -0.714621, -0.0], [0.001724, 0.714621, 0.0]]
+            ),
+        )  # last structure that has energy and forces
+
+        assert np.isclose(
+            g16_pbc_2d.last_structure.energy,
+            -76.1490641879 * units.Hartree,
+            rtol=1e-5,
+        )
+        assert np.allclose(
+            g16_pbc_2d.last_structure.forces,
+            np.array(
+                [
+                    [0.000015884, 0.000006763, 0.000000000],
+                    [-0.000015884, -0.000006763, -0.000000000],
+                ]
+            )
+            * units.Hartree
+            / units.Bohr,
+            rtol=1e-5,
+        )
+
+        assert g16_pbc_2d.has_forces
