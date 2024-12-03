@@ -12,6 +12,9 @@ from chemsmart.utils.repattern import (
     float_pattern,
     normal_mode_pattern,
     frozen_coordinates_pattern,
+    scf_energy_pattern,
+    mp2_energy_pattern,
+    oniom_energy_pattern,
 )
 
 logger = logging.getLogger(__name__)
@@ -413,6 +416,83 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     @cached_property
+    def scf_energies(self):
+        """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
+        scf_energies = []
+        for line in self.contents:
+            match = re.match(scf_energy_pattern, line)
+            if match:
+                scf_energies.append(float(match[1]))
+        return scf_energies
+
+    @cached_property
+    def mp2_energies(self):
+        """Obtain MP2 energies from the Gaussian output file. Default units of Hartree."""
+        mp2_energies = []
+        for line in self.contents:
+            match = re.search(mp2_energy_pattern, line)
+            if match:
+                mp2_energies.append(float(match[1].replace("D", "E")))
+        return mp2_energies
+
+    @cached_property
+    def oniom_energies(self):
+        """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
+        oniom_energies = []
+        for line in self.contents:
+            match = re.match(oniom_energy_pattern, line)
+            if match:
+                oniom_energies.append(float(match[1]))
+        return oniom_energies
+
+    @cached_property
+    def energies(self):
+        """Return energies of the system."""
+        if len(self.mp2_energies) == 0 and len(self.oniom_energies) == 0:
+            return self.scf_energies
+        elif len(self.mp2_energies) != 0:
+            return self.mp2_energies
+        elif len(self.oniom_energies) != 0:
+            return self.oniom_energies
+
+    @cached_property
+    def energies_in_eV(self):
+        """Convert energies from Hartree to eV."""
+        return [energy * units.Hartree for energy in self.energies]
+
+    @cached_property
+    def has_forces(self):
+        """Check if the output file contains forces calculations."""
+        for line in self.contents:
+            if "Forces (Hartrees/Bohr)" in line:
+                return True
+        return False
+
+    @cached_property
+    def forces(self):
+        """Obtain a list of cartesian forces.
+        Each force is stored as a np array of shape (natoms, 3).
+        Intrinsic units as used in Gaussian: Hartrees/Bohr."""
+        list_of_all_forces = []
+        for i, line in enumerate(self.contents):
+            if "Forces (Hartrees/Bohr)" in line:
+                forces = []
+                for j_line in self.contents[i + 3 :]:
+                    if "---------------------------" in j_line:
+                        break
+                    forces.append([float(val) for val in j_line.split()[2:5]])
+                list_of_all_forces.append(np.array(forces))
+        return list_of_all_forces
+
+    @cached_property
+    def forces_in_eV_per_A(self):
+        """Convert forces from Hartrees/Bohr to eV/Angstrom."""
+        forces_in_eV_per_A = []
+        for forces in self.forces:
+            forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
+        return forces_in_eV_per_A
+
+    @cached_property
     def tddft_transitions(self):
         """
         Read a excitation energies after a TD-DFT calculation.
@@ -510,7 +590,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def alpha_occ_eigenvalues(self):
-        """Obtain all eigenenergies of the alpha occuplied orbitals."""
+        """Obtain all eigenenergies of the alpha occuplied orbitals and convert to eV."""
         alpha_occ_eigenvalues = []
 
         # Iterate through lines in reverse to find the last block of eigenvalues

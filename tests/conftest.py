@@ -157,6 +157,24 @@ def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
     return gaussian_frozen_opt_outfile
 
 
+# Gaussian output file for MP2 calculations
+@pytest.fixture()
+def gaussian_mp2_outputfile(gaussian_outputs_test_directory):
+    gaussian_mp2_outfile = os.path.join(
+        gaussian_outputs_test_directory, "water_mp2.log"
+    )
+    return gaussian_mp2_outfile
+
+
+# Gaussian output file for (failed) ONIOM calculations
+@pytest.fixture()
+def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
+    gaussian_oniom_outfile = os.path.join(
+        gaussian_outputs_test_directory, "failed_oniom_b3lypd3_in_uff.log"
+    )
+    return gaussian_oniom_outfile
+
+
 # Gaussian pbc input files
 @pytest.fixture()
 def gaussian_pbc_test_directory(gaussian_test_directory):

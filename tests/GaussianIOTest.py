@@ -442,7 +442,6 @@ class TestGaussianWBIOutput:
         assert (
             g16_genecp.num_vib_modes == g16_genecp.num_vib_frequencies == 138
         )
-        print(g16_genecp.vibrational_modes[0])
         assert np.allclose(
             g16_genecp.vibrational_modes[0],
             np.array(
@@ -498,6 +497,29 @@ class TestGaussianWBIOutput:
                 ]
             ),
             rtol=1e-4,
+        )
+        assert len(g16_genecp.forces) == 11
+        assert g16_genecp.forces[0].shape == (g16_genecp.num_atoms, 3)
+        assert np.allclose(
+            g16_genecp.forces[0][0], [-0.002864142, 0.002344278, -0.003585424]
+        )
+        assert np.allclose(
+            g16_genecp.forces[0][-1], [0.002024907, 0.001926310, 0.008510237]
+        )
+        assert np.allclose(
+            g16_genecp.forces[-1][0], [0.000000455, 0.000001531, 0.000000084]
+        )
+        assert np.allclose(
+            g16_genecp.forces[-1][-1],
+            [-0.000000478, 0.000001912, -0.000001255],
+        )
+        assert np.allclose(
+            g16_genecp.forces_in_eV_per_A[0][0],
+            [
+                -0.002864142 * units.Hartree / units.Bohr,
+                0.002344278 * units.Hartree / units.Bohr,
+                -0.003585424 * units.Hartree / units.Bohr,
+            ],
         )
 
         assert g16_genecp.molecule.symbols.formula == "PdC2O2C2O2H6"
@@ -570,6 +592,37 @@ class TestGaussianWBIOutput:
                 ]
             ),
             rtol=1e-4,
+        )
+
+    def test_read_mp2_outputfile(self, gaussian_mp2_outputfile):
+        assert os.path.exists(gaussian_mp2_outputfile)
+        g16_mp2 = Gaussian16Output(filename=gaussian_mp2_outputfile)
+        assert g16_mp2.normal_termination
+        assert g16_mp2.num_atoms == 3
+        assert g16_mp2.tddft_transitions == []
+        assert len(g16_mp2.alpha_occ_eigenvalues) == 5
+        assert g16_mp2.alpha_occ_eigenvalues[0] == -20.56810 * units.Hartree
+        assert g16_mp2.alpha_occ_eigenvalues[-1] == -0.51014 * units.Hartree
+        assert len(g16_mp2.alpha_virtual_eigenvalues) == 87
+        assert g16_mp2.alpha_virtual_eigenvalues[0] == 0.02937 * units.Hartree
+        assert (
+            g16_mp2.alpha_virtual_eigenvalues[-1] == 15.70360 * units.Hartree
+        )
+        assert len(g16_mp2.mp2_energies) == 5
+        assert g16_mp2.mp2_energies[0] == -76.32896706205
+        assert g16_mp2.scf_energies[0] == -76.0599359638
+
+    def test_read_oniom_outputfile(self, gaussian_oniom_outputfile):
+        assert os.path.exists(gaussian_oniom_outputfile)
+        g16_oniom = Gaussian16Output(filename=gaussian_oniom_outputfile)
+        assert g16_oniom.normal_termination is False
+        assert g16_oniom.num_atoms == 483
+        assert len(g16_oniom.oniom_energies) == 2
+        assert g16_oniom.oniom_energies[0] == -5278.927903743607
+        assert g16_oniom.oniom_energies[1] == -5300.535127673756
+        assert g16_oniom.scf_energies[0] == -5303.01662026
+        assert (
+            g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
         )
 
 
