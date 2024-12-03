@@ -18,7 +18,6 @@ from chemsmart.utils.repattern import (
     mp2_energy_pattern,
     oniom_energy_pattern,
 )
-from sympy import symbols
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +101,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def symbols(self):
-        return self.input_coordinates_block.symbols
+        return self.input_coordinates_block.chemical_symbols
 
     @cached_property
     def list_of_pbc_conditions(self):
