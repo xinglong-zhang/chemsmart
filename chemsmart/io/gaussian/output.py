@@ -11,6 +11,7 @@ from chemsmart.utils.repattern import (
     f_pattern,
     float_pattern,
     normal_mode_pattern,
+    frozen_coordinates_pattern,
 )
 
 logger = logging.getLogger(__name__)
@@ -322,7 +323,7 @@ class Gaussian16Output(GaussianFileMixin):
                 break
         return vibrational_mode_symmetries
 
-    @property
+    @cached_property
     def vibrational_modes(self):
         """Obtain list of vibrational normal modes corresponding to the vibrational frequency.
         Returns a list of normal modes, each of natoms x 3 (in dx, dy, and dz for each element) vibration.
@@ -358,6 +359,43 @@ class Gaussian16Output(GaussianFileMixin):
         #     list_of_vib_modes.append(normal_mode)
         # return list_of_vib_modes
     #### FREQUENCY CALCULATIONS
+    @property
+    def has_frozen_coordinates(self):
+        """Check if the output file has frozen coordinates."""
+        has_frozen = []
+        for i, line_i in enumerate(self.contents):
+            if 'Derivative Info.' in line_i:
+                for _j, line_j in enumerate(self.contents[i + 2 :]):
+                    if '-----------------------------------' in line_j:
+                        break
+                    if line_j.split()[-2] == 'Frozen':
+                        has_frozen.append(True)
+                    elif line_j.split()[-2] == 'D2E/DX2':
+                        has_frozen.append(False)
+        return any(has_frozen)
+
+    @cached_property
+    def frozen_coordinate_indices(self):
+        """Obtain list of frozen coordinate indices from the input format.
+        Use 1-index to be the same as atom numbering."""
+        frozen_coordinate_indices = []
+        if self.has_frozen_coordinates:
+            for i, line_i in enumerate(self.contents):
+                if 'Symbolic Z-matrix:' in line_i:
+                    if len(line_i) == 0:
+                        break
+                    for j, line_j in enumerate(self.contents[i + 2 :]):
+                        line_j_elem = line_j.split()
+                        if re.match(frozen_coordinates_pattern, line_j) and line_j_elem[1] == '-1':
+                            frozen_coordinate_indices.append(j+1)
+        return frozen_coordinate_indices
+
+    @cached_property
+    def free_coordinate_indices(self):
+        """Obtain list of free coordinate indices from the input format by taking the complement of the frozen coordinates."""
+        if self.has_frozen_coordinates:
+            return [i for i in range(1, self.num_atoms + 1) if i not in self.frozen_coordinate_indices]
+        return None
 
     @cached_property
     def tddft_transitions(self):

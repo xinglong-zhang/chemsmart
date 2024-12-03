@@ -141,15 +141,19 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
 
 # Gaussian output files for genecp
 @pytest.fixture()
-def gaussian_outputs_genecp_directory(gaussian_outputs_test_directory):
-    return os.path.join(gaussian_outputs_test_directory, "genecp")
-
-@pytest.fixture()
-def gaussian_ts_genecp_outfile(gaussian_outputs_genecp_directory):
+def gaussian_ts_genecp_outfile(gaussian_outputs_test_directory):
     gaussian_ts_genecp_output = os.path.join(
-        gaussian_outputs_genecp_directory, "pd_genecp_ts.log"
+        gaussian_outputs_test_directory, "pd_genecp_ts.log"
     )
     return gaussian_ts_genecp_output
+
+# Gaussian output file for frozen coordinates
+@pytest.fixture()
+def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_frozen_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "frozen_coordinates_opt.log"
+    )
+    return gaussian_frozen_opt_outfile
 
 # Gaussian pbc input files
 @pytest.fixture()

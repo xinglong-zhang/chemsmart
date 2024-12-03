@@ -433,6 +433,23 @@ class TestGaussianWBIOutput:
         assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
         assert g16_genecp.molecule.frozen_atoms is None
 
+    def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
+        assert os.path.exists(gaussian_frozen_opt_outfile)
+        g16_frozen = Gaussian16Output(filename=gaussian_frozen_opt_outfile)
+        assert g16_frozen.normal_termination
+        assert g16_frozen.num_atoms == 14
+        assert g16_frozen.tddft_transitions == []
+        assert len(g16_frozen.alpha_occ_eigenvalues) == 36
+        assert g16_frozen.alpha_occ_eigenvalues[0] == -102.65018 * units.Hartree
+        assert g16_frozen.alpha_occ_eigenvalues[-1] == -0.31442 * units.Hartree
+        assert len(g16_frozen.alpha_virtual_eigenvalues) == 119
+        assert g16_frozen.alpha_virtual_eigenvalues[0] == -0.03944 * units.Hartree
+        assert g16_frozen.alpha_virtual_eigenvalues[-1] == 3.66749 * units.Hartree
+        assert g16_frozen.has_frozen_coordinates
+        assert g16_frozen.frozen_coordinate_indices == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
+
+
 
 
 
