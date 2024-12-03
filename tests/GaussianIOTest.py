@@ -439,7 +439,66 @@ class TestGaussianWBIOutput:
         assert all(
             sym == "A" for sym in g16_genecp.vibrational_mode_symmetries
         )
-        print(g16_genecp.vibrational_modes)
+        assert (
+            g16_genecp.num_vib_modes == g16_genecp.num_vib_frequencies == 138
+        )
+        print(g16_genecp.vibrational_modes[0])
+        assert np.allclose(
+            g16_genecp.vibrational_modes[0],
+            np.array(
+                [
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, -0.01, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, -0.01, 0.0],
+                    [0.0, -0.0, -0.01],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.06, 0.01],
+                    [-0.03, 0.06, 0.01],
+                    [0.0, -0.01, 0.0],
+                    [-0.01, 0.02, 0.0],
+                    [-0.0, -0.0, 0.01],
+                    [0.84, -0.47, 0.23],
+                    [-0.03, 0.05, -0.01],
+                    [0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, -0.01, -0.0],
+                    [0.01, -0.0, 0.0],
+                    [0.01, 0.01, 0.0],
+                    [-0.06, 0.01, -0.02],
+                    [0.01, -0.02, -0.0],
+                    [0.0, 0.0, 0.0],
+                    [-0.01, 0.01, -0.0],
+                    [0.02, 0.05, 0.01],
+                    [-0.01, -0.01, -0.0],
+                    [-0.0, -0.01, -0.0],
+                    [-0.01, -0.01, -0.01],
+                    [-0.01, -0.01, -0.0],
+                    [0.0, -0.01, 0.0],
+                    [-0.01, -0.01, -0.0],
+                    [-0.0, -0.0, -0.0],
+                ]
+            ),
+            rtol=1e-4,
+        )
 
         assert g16_genecp.molecule.symbols.formula == "PdC2O2C2O2H6"
         assert g16_genecp.molecule.empirical_formula == "C4H6O4Pd"
@@ -487,6 +546,31 @@ class TestGaussianWBIOutput:
             10,
         ]
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
+        assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
+        assert np.allclose(
+            g16_frozen.vibrational_modes[0],
+            np.array(
+                [
+                    [0.0, -0.0, 0.37],
+                    [0.0, -0.0, 0.91],
+                    [-0.0, 0.0, 0.18],
+                    [-0.0, 0.0, 0.02],
+                ]
+            ),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            g16_frozen.vibrational_modes[-1],
+            np.array(
+                [
+                    [-0.03, -0.08, -0.00],
+                    [0.0, -0.0, 0.0],
+                    [0.37, 0.93, 0.00],
+                    [-0.00, -0.00, -0.00],
+                ]
+            ),
+            rtol=1e-4,
+        )
 
 
 class TestGaussianCubeFile:

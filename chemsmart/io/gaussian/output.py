@@ -333,33 +333,37 @@ class Gaussian16Output(GaussianFileMixin):
         list_of_vib_modes = []
         for i, line in enumerate(self.contents):
             if line.startswith("Frequencies --"):
+                first_col_vib_modes = []
+                second_col_vib_modes = []
+                third_col_vib_modes = []
                 for j_line in self.contents[i + 5 :]:
                     # if line match normal mode pattern
                     if re.match(normal_mode_pattern, j_line):
-                        # normal_mode = j_line.split()
-                        # normal_mode = np.array(normal_mode)
-                        # if self.has_frozen_coordinates:
-                        #     num_free_coordinates = self.natoms - len(self.frozen_coordinate_indices)
-                        #     normal_mode = np.reshape(normal_mode, (num_free_coordinates, 3))
-                        # else:
-                        #     normal_mode = np.reshape(normal_mode, (self.natoms, 3))
-                        # list_of_vib_modes.append(normal_mode)
-                        print(j_line)
+                        normal_mode = [float(val) for val in j_line.split()]
+                        first_col_vib_mode = normal_mode[2:5]
+                        second_col_vib_mode = normal_mode[5:8]
+                        third_col_vib_mode = normal_mode[8:11]
+                        first_col_vib_modes.append(first_col_vib_mode)
+                        second_col_vib_modes.append(second_col_vib_mode)
+                        third_col_vib_modes.append(third_col_vib_mode)
                     else:
                         break
+                list_of_vib_modes.append(np.array(first_col_vib_modes))
+                list_of_vib_modes.append(np.array(second_col_vib_modes))
+                list_of_vib_modes.append(np.array(third_col_vib_modes))
             else:
                 continue
+            if "Thermochemistry" in line:
+                break
+        return list_of_vib_modes
 
-        # for freq_dict in self.frequencies[0]:
-        #     normal_mode = freq_dict['mode']  # The normal mode is a 1D vector of dx, dy, dz of each atom.
-        #     normal_mode = np.array(normal_mode)
-        #     if self.has_frozen_coordinates:
-        #         num_free_coordinates = self.natoms - len(self.frozen_coordinate_indices)
-        #         normal_mode = np.reshape(normal_mode, (num_free_coordinates, 3))
-        #     else:
-        #         normal_mode = np.reshape(normal_mode, (self.natoms, 3))
-        #     list_of_vib_modes.append(normal_mode)
-        # return list_of_vib_modes
+    @cached_property
+    def num_vib_modes(self):
+        return len(self.vibrational_modes)
+
+    @cached_property
+    def num_vib_frequencies(self):
+        return len(self.vibrational_frequencies)
 
     #### FREQUENCY CALCULATIONS
     @property
