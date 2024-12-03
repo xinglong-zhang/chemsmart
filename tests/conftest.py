@@ -147,6 +147,7 @@ def gaussian_ts_genecp_outfile(gaussian_outputs_test_directory):
     )
     return gaussian_ts_genecp_output
 
+
 # Gaussian output file for frozen coordinates
 @pytest.fixture()
 def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
@@ -154,6 +155,7 @@ def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "frozen_coordinates_opt.log"
     )
     return gaussian_frozen_opt_outfile
+
 
 # Gaussian pbc input files
 @pytest.fixture()

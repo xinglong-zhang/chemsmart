@@ -40,7 +40,7 @@ class Gaussian16Output(GaussianFileMixin):
     def num_steps(self):
         """Number of points scanned."""
         for line in self.contents:
-            if line.startswith('Step number'):
+            if line.startswith("Step number"):
                 return int(line.split()[-1])
         return None
 
@@ -90,7 +90,7 @@ class Gaussian16Output(GaussianFileMixin):
         initial_step = []
         final_step = []
         for line in self.contents:
-            if line.startswith('Step number') and 'on scan point' in line:
+            if line.startswith("Step number") and "on scan point" in line:
                 line_elem = line.split()
                 initial_step.append(int(line_elem[2]))
                 final_step.append(int(line_elem[12]))
@@ -116,7 +116,9 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def optimized_steps_indices(self):
         if self.optimized_steps:
-            return [self.intermediate_steps.index(i) for i in self.optimized_steps]
+            return [
+                self.intermediate_steps.index(i) for i in self.optimized_steps
+            ]
         return None
 
     #########################
@@ -152,7 +154,7 @@ class Gaussian16Output(GaussianFileMixin):
         return self._get_gen_genecp()
 
     def _get_gen_genecp(self):
-        if 'gen' in self.basis:
+        if "gen" in self.basis:
             # return the string containing gen or genecp
             return self.basis
         return None
@@ -331,7 +333,7 @@ class Gaussian16Output(GaussianFileMixin):
         list_of_vib_modes = []
         for i, line in enumerate(self.contents):
             if line.startswith("Frequencies --"):
-                for j_line in self.contents[i + 5:]:
+                for j_line in self.contents[i + 5 :]:
                     # if line match normal mode pattern
                     if re.match(normal_mode_pattern, j_line):
                         # normal_mode = j_line.split()
@@ -358,19 +360,20 @@ class Gaussian16Output(GaussianFileMixin):
         #         normal_mode = np.reshape(normal_mode, (self.natoms, 3))
         #     list_of_vib_modes.append(normal_mode)
         # return list_of_vib_modes
+
     #### FREQUENCY CALCULATIONS
     @property
     def has_frozen_coordinates(self):
         """Check if the output file has frozen coordinates."""
         has_frozen = []
         for i, line_i in enumerate(self.contents):
-            if 'Derivative Info.' in line_i:
+            if "Derivative Info." in line_i:
                 for _j, line_j in enumerate(self.contents[i + 2 :]):
-                    if '-----------------------------------' in line_j:
+                    if "-----------------------------------" in line_j:
                         break
-                    if line_j.split()[-2] == 'Frozen':
+                    if line_j.split()[-2] == "Frozen":
                         has_frozen.append(True)
-                    elif line_j.split()[-2] == 'D2E/DX2':
+                    elif line_j.split()[-2] == "D2E/DX2":
                         has_frozen.append(False)
         return any(has_frozen)
 
@@ -381,20 +384,28 @@ class Gaussian16Output(GaussianFileMixin):
         frozen_coordinate_indices = []
         if self.has_frozen_coordinates:
             for i, line_i in enumerate(self.contents):
-                if 'Symbolic Z-matrix:' in line_i:
+                if "Symbolic Z-matrix:" in line_i:
                     if len(line_i) == 0:
                         break
                     for j, line_j in enumerate(self.contents[i + 2 :]):
                         line_j_elem = line_j.split()
-                        if re.match(frozen_coordinates_pattern, line_j) and line_j_elem[1] == '-1':
-                            frozen_coordinate_indices.append(j+1)
+                        if (
+                            re.match(frozen_coordinates_pattern, line_j)
+                            and line_j_elem[1] == "-1"
+                        ):
+                            frozen_coordinate_indices.append(j + 1)
         return frozen_coordinate_indices
 
     @cached_property
     def free_coordinate_indices(self):
-        """Obtain list of free coordinate indices from the input format by taking the complement of the frozen coordinates."""
+        """Obtain list of free coordinate indices from the input format by taking
+        the complement of the frozen coordinates."""
         if self.has_frozen_coordinates:
-            return [i for i in range(1, self.num_atoms + 1) if i not in self.frozen_coordinate_indices]
+            return [
+                i
+                for i in range(1, self.num_atoms + 1)
+                if i not in self.frozen_coordinate_indices
+            ]
         return None
 
     @cached_property
@@ -873,11 +884,19 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     @property
     def pbc(self):
         for line in self.contents:
-            if 'Periodicity:' in line:
-                pbc_conditions = line.split('Periodicity:')[-1]
+            if "Periodicity:" in line:
+                pbc_conditions = line.split("Periodicity:")[-1]
                 pbc_conditions = pbc_conditions.split()
-                assert len(pbc_conditions) == 3, 'Periodicity given for 3 dimensions.'
-                return np.array([int(pbc_conditions[0]), int(pbc_conditions[1]), int(pbc_conditions[2])])
+                assert (
+                    len(pbc_conditions) == 3
+                ), "Periodicity given for 3 dimensions."
+                return np.array(
+                    [
+                        int(pbc_conditions[0]),
+                        int(pbc_conditions[1]),
+                        int(pbc_conditions[2]),
+                    ]
+                )
         return None
 
     @property
@@ -891,13 +910,19 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     @property
     def cells(self):
         for i, line in enumerate(self.contents):
-            if 'Lengths of translation vectors:' in line:
+            if "Lengths of translation vectors:" in line:
                 # get cells just once
                 all_cells = []
                 for tv_line in self.contents[i - 1 - self.dim : i - 1]:
                     tv_line_elem = tv_line.split()
-                    assert float(tv_line_elem[1]) == -2.0, 'Translation vector has "atomic number" -2 in Gaussian.'
-                    tv_vector = [float(tv_line_elem[-3]), float(tv_line_elem[-2]), float(tv_line_elem[-1])]
+                    assert (
+                        float(tv_line_elem[1]) == -2.0
+                    ), 'Translation vector has "atomic number" -2 in Gaussian.'
+                    tv_vector = [
+                        float(tv_line_elem[-3]),
+                        float(tv_line_elem[-2]),
+                        float(tv_line_elem[-1]),
+                    ]
                     all_cells.append(tv_vector)
 
                 if self.dim == 1:
@@ -912,8 +937,8 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     def get_energies(self):
         all_energies = []
         for line in self.contents:
-            if 'SCF Done:' in line:
-                raw_energy = line.split('=')[-1].split()[0]
+            if "SCF Done:" in line:
+                raw_energy = line.split("=")[-1].split()[0]
                 raw_energy = float(raw_energy)
                 # convert from Hartrees to eV
                 raw_energy *= units.Hartree
@@ -924,13 +949,19 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     def get_forces(self):
         all_forces = []
         for i, line in enumerate(self.contents):
-            if 'Forces (Hartrees/Bohr)' in line:
+            if "Forces (Hartrees/Bohr)" in line:
                 each_forces = []
                 for force_line in self.contents[i + 3 : i + 3 + self.natoms]:
                     # lines containing forces
-                    assert int(force_line.split()[1]) > 0, 'Atomic Number should be greater than 0.'
+                    assert (
+                        int(force_line.split()[1]) > 0
+                    ), "Atomic Number should be greater than 0."
                     force_line_elem = force_line.split()
-                    force = [float(force_line_elem[-3]), float(force_line_elem[-2]), float(force_line_elem[-1])]
+                    force = [
+                        float(force_line_elem[-3]),
+                        float(force_line_elem[-2]),
+                        float(force_line_elem[-1]),
+                    ]
                     # convert forces from Hartrees/Bohr to eV/Å
                     force = [i * units.Hartree / units.Bohr for i in force]
                     each_forces.append(force)
@@ -941,13 +972,19 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     def get_symbols(self):
         all_symbols = []
         for i, line in enumerate(self.contents):
-            if 'Input orientation:' in line:
-                assert 'Coordinates (Angstroms)' in self.contents[i + 2], 'Coordinate line follows'
-                for position_line in self.contents[i + 5 : i + 5 + self.natoms]:
+            if "Input orientation:" in line:
+                assert (
+                    "Coordinates (Angstroms)" in self.contents[i + 2]
+                ), "Coordinate line follows"
+                for position_line in self.contents[
+                    i + 5 : i + 5 + self.natoms
+                ]:
                     # lines containing forces
                     atomic_number = int(position_line.split()[1])
 
-                    assert atomic_number > 0, 'Atomic Number should be greater than 0.'
+                    assert (
+                        atomic_number > 0
+                    ), "Atomic Number should be greater than 0."
                     element = PERIODIC_TABLE[atomic_number]
                     all_symbols.append(element)
                 return all_symbols
@@ -956,12 +993,18 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     def get_structures(self):
         all_structures = []
         for i, line in enumerate(self.contents):
-            if 'Input orientation:' in line:
-                assert 'Coordinates (Angstroms)' in self.contents[i + 2], 'Coordinate line follows'
+            if "Input orientation:" in line:
+                assert (
+                    "Coordinates (Angstroms)" in self.contents[i + 2]
+                ), "Coordinate line follows"
                 each_positions = []
-                for position_line in self.contents[i + 5 : i + 5 + self.natoms]:
+                for position_line in self.contents[
+                    i + 5 : i + 5 + self.natoms
+                ]:
                     # lines containing forces
-                    assert int(position_line.split()[1]) > 0, 'Atomic Number should be greater than 0.'
+                    assert (
+                        int(position_line.split()[1]) > 0
+                    ), "Atomic Number should be greater than 0."
                     position_line_elem = position_line.split()
                     # coordinates already in Å - no conversion needed
                     positions = [
@@ -975,7 +1018,7 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
 
         return all_structures
 
-    def get_atoms(self, index='-1', include_failed_logfile=False):
+    def get_atoms(self, index="-1", include_failed_logfile=False):
         all_atoms = []
 
         if not self.normal_termination and not include_failed_logfile:
@@ -985,23 +1028,39 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
         all_structures = self.get_structures()
         all_forces = self.get_forces()
         chemical_symbols = self.get_symbols()
-        assert len(all_energies) > 0, 'No energies found!'
-        assert len(all_structures) > 0, 'No structures found!'
+        assert len(all_energies) > 0, "No energies found!"
+        assert len(all_structures) > 0, "No structures found!"
 
         # order in the .log file: input orientation, then SCF Done, then Forces
         if len(all_forces) != 0:
             # forces are given
-            min_num_structures = min(len(all_energies), len(all_structures), len(all_forces))
+            min_num_structures = min(
+                len(all_energies), len(all_structures), len(all_forces)
+            )
             for i in range(min_num_structures):
-                atoms = Atoms(symbols=chemical_symbols, positions=all_structures[i], pbc=self.pbc, cell=self.cells)
-                atoms.calc = SinglePointCalculator(atoms=atoms, energy=all_energies[i], forces=all_forces[i])
+                atoms = Atoms(
+                    symbols=chemical_symbols,
+                    positions=all_structures[i],
+                    pbc=self.pbc,
+                    cell=self.cells,
+                )
+                atoms.calc = SinglePointCalculator(
+                    atoms=atoms, energy=all_energies[i], forces=all_forces[i]
+                )
                 all_atoms.append(atoms)
         else:
             # no forces information
             min_num_structures = min(len(all_energies), len(all_structures))
             for i in range(min_num_structures):
-                atoms = Atoms(symbols=chemical_symbols, positions=all_structures[i], pbc=self.pbc, cell=self.cells)
-                atoms.calc = SinglePointCalculator(atoms=atoms, energy=all_energies[i])
+                atoms = Atoms(
+                    symbols=chemical_symbols,
+                    positions=all_structures[i],
+                    pbc=self.pbc,
+                    cell=self.cells,
+                )
+                atoms.calc = SinglePointCalculator(
+                    atoms=atoms, energy=all_energies[i]
+                )
                 all_atoms.append(atoms)
 
         index = string2index(index)
@@ -1011,4 +1070,3 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
     def has_forces(self):
         """Method for checking if there are forces from Gaussian .log file with PBC."""
         return len(self.get_forces()) != 0
-

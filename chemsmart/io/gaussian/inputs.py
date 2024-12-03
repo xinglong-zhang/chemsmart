@@ -89,7 +89,9 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def genecp_section(self):
-        return GenGenECPSection.from_genecp_group(genecp_group=self.gen_genecp_group)
+        return GenGenECPSection.from_genecp_group(
+            genecp_group=self.gen_genecp_group
+        )
 
     @property
     def light_elements(self):
@@ -228,15 +230,27 @@ class Gaussian16Input(GaussianFileMixin):
     def _get_gen_genecp_group(self):
         if "gen" not in self.basis:
             return None
-        if "modred" in self.route_string and "solvent=generic" in self.route_string:
+        if (
+            "modred" in self.route_string
+            and "solvent=generic" in self.route_string
+        ):
             return self.content_groups[4:-1]
-        if "modred" in self.route_string and "solvent=generic" not in self.route_string:
+        if (
+            "modred" in self.route_string
+            and "solvent=generic" not in self.route_string
+        ):
             return self.content_groups[
                 4:
             ]  # need to change if there are additional append info after these
-        if "modred" not in self.route_string and "solvent=generic" in self.route_string:
+        if (
+            "modred" not in self.route_string
+            and "solvent=generic" in self.route_string
+        ):
             return self.content_groups[3:-1]
-        if "modred" not in self.route_string and "solvent=generic" not in self.route_string:
+        if (
+            "modred" not in self.route_string
+            and "solvent=generic" not in self.route_string
+        ):
             return self.content_groups[3:]
         return None
 
