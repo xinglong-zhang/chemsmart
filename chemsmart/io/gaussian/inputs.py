@@ -123,7 +123,7 @@ class Gaussian16Input(GaussianFileMixin):
         return self.coordinate_block.molecule
 
     @property
-    def natoms(self):
+    def num_atoms(self):
         return self.molecule.natoms
 
     @property

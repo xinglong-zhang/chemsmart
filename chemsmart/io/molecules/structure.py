@@ -69,10 +69,10 @@ class Molecule:
         """Return the number of atoms in the molecule."""
         return len(self.chemical_symbols)
 
-    def get_chemical_formula(self, mode, empirical):
+    def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return self.symbols.get_chemical_formula(
-                mode="hill", empirical=False
+                mode=mode, empirical=empirical
             )
 
     @classmethod
@@ -530,6 +530,18 @@ class CoordinateBlock:
                 tv = [x_coordinate, y_coordinate, z_coordinate]
                 tvs.append(tv)
         return tvs
+
+    @property
+    def pbc_conditions(self):
+        """Obtain PBC conditions from given translation vectors."""
+        if len(self.translation_vectors) == 0:
+            return None
+        elif len(self.translation_vectors) == 1:
+            return [1, 0, 0]
+        elif len(self.translation_vectors) == 2:
+            return [1, 1, 0]
+        elif len(self.translation_vectors) == 3:
+            return [1, 1, 1]
 
 
 class SDFFile(FileMixin):

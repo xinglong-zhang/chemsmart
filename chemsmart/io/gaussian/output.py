@@ -4,7 +4,10 @@ from itertools import islice
 from functools import cached_property
 import numpy as np
 from ase import units
+from ase.build import molecule
 from chemsmart.utils.mixins import GaussianFileMixin
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.repattern import (
     eV_pattern,
     nm_pattern,
@@ -16,6 +19,7 @@ from chemsmart.utils.repattern import (
     mp2_energy_pattern,
     oniom_energy_pattern,
 )
+from sympy import symbols
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +87,63 @@ class Gaussian16Output(GaussianFileMixin):
                 else:
                     spin = None
                 return spin
+
+    @cached_property
+    def input_coordinates_block(self):
+        """Obtain the coordinate block from the input that is printed in the outputfile."""
+        coordinates_block_lines_list = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Symbolic Z-matrix:"):
+                for j_line in self.contents[i + 2 :]:
+                    if len(j_line) == 0:
+                        break
+                    coordinates_block_lines_list.append(j_line)
+        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+        return cb
+
+    @cached_property
+    def list_of_symbols(self):
+        return self.input_coordinates_block.symbols
+
+    @cached_property
+    def list_of_pbc_conditions(self):
+        return self.input_coordinates_block.pbc_conditions
+
+    @cached_property
+    def all_structures(self):
+        """Obtain all the structures from the output file.
+        Use Standard orientations to get the structures; if not, use input orientations.
+        """
+        all_structures = []
+        if len(self.standard_orientations) == 0:
+            # no standard orientation structures present, then use input orientation structures
+            for positions in self.input_orientations:
+                all_structures.append(
+                    Molecule(
+                        symbols=self.list_of_symbols,
+                        positions=positions,
+                        pbc_conditions=self.list_of_pbc_conditions,
+                    )
+                )
+        else:
+            # if standard orientation present, then use standard orientation structures
+            for positions in self.standard_orientations:
+                all_structures.append(
+                    Molecule(
+                        symbols=self.list_of_symbols,
+                        positions=positions,
+                        pbc_conditions=self.list_of_pbc_conditions,
+                    )
+                )
+        return all_structures
+
+    @cached_property
+    def optimized_structure(self):
+        """Return optimized structure."""
+        if self.normal_termination:
+            return self.all_structures[-1]
+        else:
+            return None
 
     ######################### the following properties relate to intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
@@ -504,9 +565,41 @@ class Gaussian16Output(GaussianFileMixin):
             forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
         return forces_in_eV_per_A
 
-    @property
+    @cached_property
     def num_forces(self):
         return len(self.forces_in_eV_per_A)
+
+    @cached_property
+    def input_orientations(self):
+        """Obtain structures in Input Orientation from Gaussian output file."""
+        input_orientations = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Input orientation:"):
+                input_orientation = []
+                for j_line in self.contents[i + 5 :]:
+                    if "-----------------" in j_line:
+                        break
+                    input_orientation.append(
+                        [float(val) for val in j_line.split()[3:6]]
+                    )
+                input_orientations.append(np.array(input_orientation))
+        return input_orientations
+
+    @cached_property
+    def standard_orientations(self):
+        """Obtain structures in Standard Orientation from Gaussian output file."""
+        standard_orientations = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Standard orientation:"):
+                standard_orientation = []
+                for j_line in self.contents[i + 5 :]:
+                    if "-----------------" in j_line:
+                        break
+                    standard_orientation.append(
+                        [float(val) for val in j_line.split()[3:6]]
+                    )
+                standard_orientations.append(np.array(standard_orientation))
+        return standard_orientations
 
     @cached_property
     def tddft_transitions(self):
