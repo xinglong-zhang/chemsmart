@@ -4,7 +4,6 @@ from itertools import islice
 from functools import cached_property
 import numpy as np
 from ase import units
-from ase.build import molecule
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import CoordinateBlock
@@ -113,26 +112,71 @@ class Gaussian16Output(GaussianFileMixin):
     def all_structures(self):
         """Obtain all the structures from the output file.
         Use Standard orientations to get the structures; if not, use input orientations.
+        Include their corresponding energy and forces if present.
         """
         all_structures = []
+
+        # first clean up the number of structures and energies and forces by removing the structure without energy and forces
+        if "opt" in self.route_string and "freq" in self.route_string:
+            # both opt and freq jobs have been performed, then output structure is as follows:
+            # 1. opt part
+            # 		Input orientation
+            # 		Standard orientation
+            # 		Forces
+            #
+            # 		<after reaching optimized structure>
+            # 		Input orientation
+            # 		Standard orientation
+            # 		<suspect this structure should be same as previously>
+            #
+            # 2. Freq part
+            # 		Input orientation
+            # 		Standard orientation
+            # 		Forces
+            assert np.allclose(
+                self.input_orientations[-1],
+                self.input_orientations[-2],
+                rtol=1e-5,
+            ), "The last two input orientations should be the same."
+            self.input_orientations.pop(-1)
+            assert np.allclose(
+                self.standard_orientations[-1],
+                self.standard_orientations[-2],
+                rtol=1e-5,
+            ), "The last two standard orientations should be the same."
+            self.standard_orientations.pop(-1)
+        # elif "opt" in self.route_string and not "freq" in self.route_string:
+        #     # optimization job without freq calcs
+
         if len(self.standard_orientations) == 0:
             # no standard orientation structures present, then use input orientation structures
-            for positions in self.input_orientations:
+
+            for i, positions in enumerate(self.input_orientations):
                 all_structures.append(
                     Molecule(
                         symbols=self.list_of_symbols,
                         positions=positions,
+                        charge=self.charge,
+                        multiplicity=self.multiplicity,
+                        frozen_atoms=self.frozen_atoms_masks,
                         pbc_conditions=self.list_of_pbc_conditions,
+                        energy=self.energies_in_eV[i],
+                        forces=self.forces_in_eV_per_A[i],
                     )
                 )
         else:
             # if standard orientation present, then use standard orientation structures
-            for positions in self.standard_orientations:
+            for i, positions in enumerate(self.standard_orientations):
                 all_structures.append(
                     Molecule(
                         symbols=self.list_of_symbols,
                         positions=positions,
+                        charge=self.charge,
+                        multiplicity=self.multiplicity,
+                        frozen_atoms=self.frozen_atoms_masks,
                         pbc_conditions=self.list_of_pbc_conditions,
+                        energy=self.energies_in_eV[i],
+                        forces=self.forces_in_eV_per_A[i],
                     )
                 )
         return all_structures
@@ -430,7 +474,7 @@ class Gaussian16Output(GaussianFileMixin):
         return len(self.vibrational_frequencies)
 
     #### FREQUENCY CALCULATIONS
-    @property
+    @cached_property
     def has_frozen_coordinates(self):
         """Check if the output file has frozen coordinates."""
         has_frozen = []
@@ -474,6 +518,64 @@ class Gaussian16Output(GaussianFileMixin):
                 for i in range(1, self.num_atoms + 1)
                 if i not in self.frozen_coordinate_indices
             ]
+        return None
+
+    @cached_property
+    def frozen_elements(self):
+        frozen_atoms, _ = self._get_frozen_and_free_atoms()
+        return frozen_atoms
+
+    @cached_property
+    def free_elements(self):
+        _, free_atoms = self._get_frozen_and_free_atoms()
+        return free_atoms
+
+    def _get_frozen_and_free_atoms(self):
+        """Obtain list of frozen and free atoms from the input format."""
+        frozen_atoms = []
+        free_atoms = []
+        if self.has_frozen_coordinates:
+            for i, line_i in enumerate(self.contents):
+                if "Symbolic Z-matrix:" in line_i:
+                    if len(line_i) == 0:
+                        break
+                    for j, line_j in enumerate(self.contents[i + 2 :]):
+                        line_j_elem = line_j.split()
+                        if (
+                            re.match(frozen_coordinates_pattern, line_j)
+                            and line_j_elem[1] == "-1"
+                        ):
+                            frozen_atoms.append(line_j_elem[0])
+                        elif (
+                            re.match(frozen_coordinates_pattern, line_j)
+                            and line_j_elem[1] == "0"
+                        ):
+                            free_atoms.append(line_j_elem[0])
+        return frozen_atoms, free_atoms
+
+    @cached_property
+    def frozen_atoms_masks(self):
+        """Obtain list of frozen atoms masks from the input format.
+        -1 is used for frozen atoms and 0 for free atoms."""
+        frozen_atoms_masks = []
+        if self.has_frozen_coordinates:
+            for i, line_i in enumerate(self.contents):
+                if "Symbolic Z-matrix:" in line_i:
+                    if len(line_i) == 0:
+                        break
+                    for j, line_j in enumerate(self.contents[i + 2 :]):
+                        line_j_elem = line_j.split()
+                        if (
+                            re.match(frozen_coordinates_pattern, line_j)
+                            and line_j_elem[1] == "-1"
+                        ):
+                            frozen_atoms_masks.append(-1)
+                        elif (
+                            re.match(frozen_coordinates_pattern, line_j)
+                            and line_j_elem[1] == "0"
+                        ):
+                            frozen_atoms_masks.append(0)
+            return frozen_atoms_masks
         return None
 
     @cached_property

@@ -808,6 +808,55 @@ class TestGaussianWBIOutput:
             9,
             10,
         ]
+        assert g16_frozen.frozen_elements == [
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+        ]
+        assert g16_frozen.free_elements == ["C", "O", "H", "Cl"]
+        assert g16_frozen.frozen_atoms_masks == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        assert g16_frozen.optimized_structure.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        assert (
+            g16_frozen.optimized_structure.energy
+            == -804.614710796 * units.Hartree
+        )
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
         assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
         assert np.allclose(

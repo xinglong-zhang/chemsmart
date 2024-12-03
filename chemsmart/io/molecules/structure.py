@@ -22,10 +22,28 @@ class Molecule:
         Can be a string formula, a list of symbols or a list of
         Atom objects.  Examples: 'H2O', 'COPt12', ['H', 'H', 'O'],
         [Atom('Ne', (x, y, z)), ...].
+    positions: a numpy array of atomic positions
+        The shape of the array should be (n, 3) where n is the number
+        of atoms in the molecule.
+    charge: integer
+        The charge of the molecule.
+    multiplicity: integer
+        The multiplicity of the molecule.
     frozen_atoms: list of integers to freeze atoms in the molecule.
         Follows Gaussian input file format where -1 denotes frozen atoms
         and 0 denotes relaxed atoms.
-
+    pbc_conditions: list of integers
+        The periodic boundary conditions for the molecule.
+    translation_vectors: list of lists
+        The translation vectors for the molecule.
+    energy: float
+        The energy of the molecule in eV.
+    forces: numpy array
+        The forces on the atoms in the molecule in eV/Å.
+    velocities: numpy array
+        The velocities of the atoms in the molecule.
+    info: dict
+        A dictionary containing additional information about the molecule.
     """
 
     def __init__(
