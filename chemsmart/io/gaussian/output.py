@@ -460,6 +460,18 @@ class Gaussian16Output(GaussianFileMixin):
         """Convert energies from Hartree to eV."""
         return [energy * units.Hartree for energy in self.energies]
 
+    @property
+    def num_energies(self):
+        return len(self.energies_in_eV)
+
+    # check for convergence criterion not met (happens for some output files)
+    @property
+    def convergence_criterion_not_met(self):
+        return any(
+            ">>>>>>>>>> Convergence criterion not met." in line
+            for line in self.contents
+        )
+
     @cached_property
     def has_forces(self):
         """Check if the output file contains forces calculations."""
@@ -491,6 +503,10 @@ class Gaussian16Output(GaussianFileMixin):
         for forces in self.forces:
             forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
         return forces_in_eV_per_A
+
+    @property
+    def num_forces(self):
+        return len(self.forces_in_eV_per_A)
 
     @cached_property
     def tddft_transitions(self):
