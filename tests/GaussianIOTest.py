@@ -330,72 +330,6 @@ class TestGaussian16Output:
         assert g16_output.somo_energy == -0.18764 * units.Hartree
         assert g16_output.fmo_gap is None
 
-
-class TestGaussianWBIOutput:
-    def test_normal_termination_with_forces_and_frequencies(
-        self, wbi_outputfile
-    ):
-        assert os.path.exists(wbi_outputfile)
-        g16_output = Gaussian16WBIOutput(filename=wbi_outputfile)
-        assert g16_output.nbo_version == "3.1"
-        assert len(g16_output.natural_atomic_orbitals) == 128
-        assert len(g16_output.natural_atomic_orbitals["Ni1"]) == 31
-        assert len(g16_output.natural_atomic_orbitals["P2"]) == 18
-        assert len(g16_output.natural_atomic_orbitals["H128"]) == 5
-        assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["nao_type"]
-            == "3py"
-        )
-        assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"][
-                "electron_type"
-            ]
-            == "Cor"
-        )
-        assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["occupancy"]
-            == 1.99858
-        )
-        assert (
-            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["energy"]
-            == -2.68937
-        )
-        assert g16_output.get_num_naos("Ni1") == 31
-        assert np.isclose(
-            g16_output.get_total_electron_occ("Ni1"), 27.47171, rtol=1e-4
-        )
-        assert np.isclose(
-            g16_output.get_total_electron_occ("H17"), 0.78631, rtol=1e-4
-        )
-        # import pprint
-        # pprint.pprint(g16_output.natural_atomic_orbitals['Ni1'])
-        assert len(g16_output.natural_population_analysis) == 128
-        assert (
-            g16_output.natural_population_analysis["Ni1"]["natural_charge"]
-            == 0.52827
-        )
-        assert (
-            g16_output.natural_population_analysis["C100"]["natural_charge"]
-            == -0.42062
-        )
-        assert g16_output.natural_charges["Ni1"] == 0.52827
-        assert g16_output.natural_charges["C100"] == -0.42062
-        assert g16_output.total_electrons["Ni1"] == 27.47173
-        assert g16_output.total_electrons["C100"] == 6.42062
-        assert (
-            g16_output.electronic_configuration["Ni1"]
-            == "[core]4S(0.27)3d(8.70)4p(0.51)"
-        )
-        assert (
-            g16_output.electronic_configuration["C100"]
-            == "[core]2S(0.95)2p(3.44)3S(0.01)3p(0.02)"
-        )
-        assert g16_output.electronic_configuration["H128"] == "1S(0.80)"
-        assert (
-            g16_output.get_electronic_configuration("Ni1")
-            == "[core]4S(0.27)3d(8.70)4p(0.51)"
-        )
-
     def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
         assert os.path.exists(gaussian_ts_genecp_outfile)
         g16_genecp = Gaussian16Output(filename=gaussian_ts_genecp_outfile)
@@ -703,60 +637,62 @@ class TestGaussianWBIOutput:
             ),
         )
 
+        last_structure_positions = np.array(
+            [
+                [3.738125, -0.799262, -0.33422],
+                [4.88285, -1.590061, -0.131866],
+                [6.120627, -1.239348, -0.664417],
+                [6.241126, -0.072719, -1.42203],
+                [5.11621, 0.713671, -1.659267],
+                [3.869481, 0.355676, -1.136943],
+                [4.792375, -2.511643, 0.447817],
+                [6.987624, -1.879741, -0.492953],
+                [7.205597, 0.214468, -1.845689],
+                [5.17365, 1.613668, -2.275798],
+                [2.472231, -1.148636, 0.352523],
+                [2.476846, -1.74526, 1.622674],
+                [1.198691, -0.858815, -0.154214],
+                [3.427248, -1.968556, 2.119805],
+                [1.064719, -0.405795, -1.135583],
+                [0.214191, -1.704367, 1.751149],
+                [-0.715188, -1.912566, 2.289781],
+                [2.780751, 1.112162, -1.456551],
+                [2.578422, 2.369462, -0.810716],
+                [3.518074, 2.706377, -0.341283],
+                [2.300966, 3.090811, -1.594029],
+                [1.47304, 2.230989, 0.2044],
+                [0.170519, 1.977876, -0.245295],
+                [1.737958, 2.173055, 1.576517],
+                [-0.857089, 1.601699, 0.635529],
+                [-0.033147, 2.01122, -1.322326],
+                [0.715409, 1.878715, 2.48663],
+                [2.755566, 2.353372, 1.936817],
+                [-0.566695, 1.594058, 2.01651],
+                [-2.087111, 1.913135, 0.267447],
+                [-1.35723, 1.332419, 2.726778],
+                [1.367959, -2.050215, 2.29513],
+                [0.094194, -1.090098, 0.564326],
+                [-1.745423, -0.299056, 0.041066],
+                [-4.193282, -3.230814, -1.108266],
+                [-2.406973, -2.099882, -0.390937],
+                [-3.246217, 2.440636, -0.056249],
+                [-3.564925, 0.243581, -0.479381],
+                [-4.398654, -0.862143, -0.908862],
+                [-3.647121, -2.193895, -0.810501],
+                [-3.99004, 1.492341, -0.441352],
+                [-5.400401, 1.811767, -0.864176],
+                [-5.312433, -0.959801, -0.297868],
+                [-5.575158, 1.48526, -1.899811],
+                [-6.120992, 1.275751, -0.228973],
+                [-5.564679, 2.890946, -0.781104],
+                [-4.72977, -0.753691, -1.956403],
+                [0.930185, 1.852433, 3.557361],
+            ]
+        )
+
         assert np.allclose(
             g16_genecp.standard_orientations[-1],
-            np.array(
-                [
-                    [3.738125, -0.799262, -0.33422],
-                    [4.88285, -1.590061, -0.131866],
-                    [6.120627, -1.239348, -0.664417],
-                    [6.241126, -0.072719, -1.42203],
-                    [5.11621, 0.713671, -1.659267],
-                    [3.869481, 0.355676, -1.136943],
-                    [4.792375, -2.511643, 0.447817],
-                    [6.987624, -1.879741, -0.492953],
-                    [7.205597, 0.214468, -1.845689],
-                    [5.17365, 1.613668, -2.275798],
-                    [2.472231, -1.148636, 0.352523],
-                    [2.476846, -1.74526, 1.622674],
-                    [1.198691, -0.858815, -0.154214],
-                    [3.427248, -1.968556, 2.119805],
-                    [1.064719, -0.405795, -1.135583],
-                    [0.214191, -1.704367, 1.751149],
-                    [-0.715188, -1.912566, 2.289781],
-                    [2.780751, 1.112162, -1.456551],
-                    [2.578422, 2.369462, -0.810716],
-                    [3.518074, 2.706377, -0.341283],
-                    [2.300966, 3.090811, -1.594029],
-                    [1.47304, 2.230989, 0.2044],
-                    [0.170519, 1.977876, -0.245295],
-                    [1.737958, 2.173055, 1.576517],
-                    [-0.857089, 1.601699, 0.635529],
-                    [-0.033147, 2.01122, -1.322326],
-                    [0.715409, 1.878715, 2.48663],
-                    [2.755566, 2.353372, 1.936817],
-                    [-0.566695, 1.594058, 2.01651],
-                    [-2.087111, 1.913135, 0.267447],
-                    [-1.35723, 1.332419, 2.726778],
-                    [1.367959, -2.050215, 2.29513],
-                    [0.094194, -1.090098, 0.564326],
-                    [-1.745423, -0.299056, 0.041066],
-                    [-4.193282, -3.230814, -1.108266],
-                    [-2.406973, -2.099882, -0.390937],
-                    [-3.246217, 2.440636, -0.056249],
-                    [-3.564925, 0.243581, -0.479381],
-                    [-4.398654, -0.862143, -0.908862],
-                    [-3.647121, -2.193895, -0.810501],
-                    [-3.99004, 1.492341, -0.441352],
-                    [-5.400401, 1.811767, -0.864176],
-                    [-5.312433, -0.959801, -0.297868],
-                    [-5.575158, 1.48526, -1.899811],
-                    [-6.120992, 1.275751, -0.228973],
-                    [-5.564679, 2.890946, -0.781104],
-                    [-4.72977, -0.753691, -1.956403],
-                    [0.930185, 1.852433, 3.557361],
-                ]
-            ),
+            last_structure_positions,
         )
 
         assert np.allclose(
@@ -778,6 +714,24 @@ class TestGaussianWBIOutput:
         assert g16_genecp.functional == "mn15"
         assert g16_genecp.basis == "genecp"
         assert g16_genecp.optimized_structure.frozen_atoms is None
+        assert (
+            len(g16_genecp.all_structures) == 11
+        )  # 11 structures altogether, as shown in GaussView
+        assert g16_genecp.optimized_structure.positions.shape == (48, 3)
+        assert np.allclose(
+            g16_genecp.optimized_structure.positions,
+            last_structure_positions,
+        )
+        assert np.allclose(
+            g16_genecp.get_molecule().positions, last_structure_positions
+        )
+
+        assert len(g16_genecp.get_molecule(index=":3")) == 3
+        assert np.allclose(
+            g16_genecp.get_molecule(index=":3")[-1].positions[0],
+            [3.69135800, -0.83587500, -0.25754700],
+        )
+        assert len(g16_genecp.get_molecule(index="3:")) == 8
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
@@ -915,6 +869,72 @@ class TestGaussianWBIOutput:
         assert g16_oniom.scf_energies[0] == -5303.01662026
         assert (
             g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
+        )
+
+
+class TestGaussianWBIOutput:
+    def test_normal_termination_with_forces_and_frequencies(
+        self, wbi_outputfile
+    ):
+        assert os.path.exists(wbi_outputfile)
+        g16_output = Gaussian16WBIOutput(filename=wbi_outputfile)
+        assert g16_output.nbo_version == "3.1"
+        assert len(g16_output.natural_atomic_orbitals) == 128
+        assert len(g16_output.natural_atomic_orbitals["Ni1"]) == 31
+        assert len(g16_output.natural_atomic_orbitals["P2"]) == 18
+        assert len(g16_output.natural_atomic_orbitals["H128"]) == 5
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["nao_type"]
+            == "3py"
+        )
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"][
+                "electron_type"
+            ]
+            == "Cor"
+        )
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["occupancy"]
+            == 1.99858
+        )
+        assert (
+            g16_output.natural_atomic_orbitals["Ni1"]["NAO_Ni10"]["energy"]
+            == -2.68937
+        )
+        assert g16_output.get_num_naos("Ni1") == 31
+        assert np.isclose(
+            g16_output.get_total_electron_occ("Ni1"), 27.47171, rtol=1e-4
+        )
+        assert np.isclose(
+            g16_output.get_total_electron_occ("H17"), 0.78631, rtol=1e-4
+        )
+        # import pprint
+        # pprint.pprint(g16_output.natural_atomic_orbitals['Ni1'])
+        assert len(g16_output.natural_population_analysis) == 128
+        assert (
+            g16_output.natural_population_analysis["Ni1"]["natural_charge"]
+            == 0.52827
+        )
+        assert (
+            g16_output.natural_population_analysis["C100"]["natural_charge"]
+            == -0.42062
+        )
+        assert g16_output.natural_charges["Ni1"] == 0.52827
+        assert g16_output.natural_charges["C100"] == -0.42062
+        assert g16_output.total_electrons["Ni1"] == 27.47173
+        assert g16_output.total_electrons["C100"] == 6.42062
+        assert (
+            g16_output.electronic_configuration["Ni1"]
+            == "[core]4S(0.27)3d(8.70)4p(0.51)"
+        )
+        assert (
+            g16_output.electronic_configuration["C100"]
+            == "[core]2S(0.95)2p(3.44)3S(0.01)3p(0.02)"
+        )
+        assert g16_output.electronic_configuration["H128"] == "1S(0.80)"
+        assert (
+            g16_output.get_electronic_configuration("Ni1")
+            == "[core]4S(0.27)3d(8.70)4p(0.51)"
         )
 
 

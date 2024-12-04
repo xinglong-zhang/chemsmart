@@ -74,7 +74,9 @@ class Molecule:
 
     @property
     def empirical_formula(self):
-        return self.symbols.get_chemical_formula(mode="hill", empirical=True)
+        return Symbols.fromsymbols(self.symbols).get_chemical_formula(
+            mode="hill", empirical=True
+        )
 
     @property
     def chemical_symbols(self):

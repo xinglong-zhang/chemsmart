@@ -18,6 +18,7 @@ from chemsmart.utils.repattern import (
     mp2_energy_pattern,
     oniom_energy_pattern,
 )
+from ase.io.formats import string2index
 
 logger = logging.getLogger(__name__)
 
@@ -796,7 +797,6 @@ class Gaussian16Output(GaussianFileMixin):
                         break
                     if j_line.split()[1] == "-2":  # atomic number = -2 for TV
                         continue
-                    print(j_line)
                     input_orientation.append(
                         [float(val) for val in j_line.split()[3:6]]
                     )
@@ -1116,6 +1116,10 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             # to implement for radical systems
             pass
+
+    def get_molecule(self, index="-1", include_failed_logfile=True):
+        index = string2index(index)
+        return self.all_structures[index]
 
     def to_dataset(self, **kwargs):
         """Convert Gaussian .log file to Dataset with all data points taken from the .log file.
