@@ -58,7 +58,7 @@ class TestGaussianGenGenECP:
     def test_genecp_from_modred_gen_comfile(
         self, tmpdir, modred_gen_comfile, gen_txt_file_from_web
     ):
-        genecp_section = GenGenECPSection.from_comfile(modred_gen_comfile)
+        genecp_section = GenGenECPSection.from_comfile(modred_gen_inputfile)
         assert genecp_section.heavy_elements == ["Br"]
         assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
         assert set(genecp_section.light_elements) == {"C", "H", "O"}
@@ -77,7 +77,7 @@ class TestGaussianGenGenECP:
         )
 
     def test_genecp_from_modred_genecp_comfile(self, modred_genecp_comfile):
-        genecp_section = GenGenECPSection.from_comfile(modred_genecp_comfile)
+        genecp_section = GenGenECPSection.from_comfile(modred_genecp_inputfile)
         assert genecp_section.heavy_elements == ["Pd"]
         assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
         assert set(genecp_section.light_elements) == {"C", "H", "O"}
@@ -87,7 +87,7 @@ class TestGaussianGenGenECP:
         self, modred_genecp_custom_solvent_comfile
     ):
         genecp_section = GenGenECPSection.from_comfile(
-            modred_genecp_custom_solvent_comfile
+            modred_genecp_custom_solvent_inputfile
         )
         assert genecp_section.heavy_elements == ["Pd"]
         assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()

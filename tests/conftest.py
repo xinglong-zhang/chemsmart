@@ -93,17 +93,17 @@ def gaussian_opt_genecp_inputfile(gaussian_inputs_genecp_directory):
 
 
 @pytest.fixture
-def modred_gen_comfile(gaussian_inputs_genecp_directory):
+def modred_gen_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_gen.com")
 
 
 @pytest.fixture
-def modred_genecp_comfile(gaussian_inputs_genecp_directory):
+def modred_genecp_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_genecp.com")
 
 
 @pytest.fixture
-def modred_genecp_custom_solvent_comfile(gaussian_inputs_genecp_directory):
+def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(
         gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
     )

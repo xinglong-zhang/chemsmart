@@ -98,12 +98,12 @@ class Molecule:
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
-        c = CoordinateBlock(coordinate_block=coordinate_block)
+        cb = CoordinateBlock(coordinate_block=coordinate_block)
         return cls(
-            symbols=c.symbols,
-            positions=c.positions,
-            frozen_atoms=c.constrained_atoms,
-            translation_vectors=c.translation_vectors,
+            symbols=cb.symbols,
+            positions=cb.positions,
+            frozen_atoms=cb.constrained_atoms,
+            translation_vectors=cb.translation_vectors,
         )
 
     @classmethod
@@ -229,121 +229,10 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_gaussian_comfile(filepath, **kwargs):
-        ## TODO
-        from ase.constraints import FixAtoms
+        from chemsmart.io.gaussian.inputs import Gaussian16Input
 
-        from pyatoms.utils.periodictable import PERIODIC_TABLE
-        from pyatoms.utils.utils import is_float
-
-        symbols = []
-        positions = []
-
-        pbc_conditions = []
-        translation_vectors = []
-
-        frozen_coordinates_dict = {"frozen": []}
-        frozen_coordinates_list = []
-        coordinates_frozen_status = []
-
-        with open(filepath) as f:
-            for line in f.readlines():
-                line_elements = line.strip().split()
-
-                # read charge and multiplicity from Gaussian .com file
-                if len(line_elements) == 2 and all(
-                    i.isdigit for i in line_elements
-                ):
-                    line_elements[0]
-                    line_elements[1]
-
-                # read symbols and positions
-                if (
-                    len(line_elements) == 4
-                    and line_elements[0] in PERIODIC_TABLE
-                    and is_float(line_elements[1])
-                    and is_float(line_elements[2])
-                    and is_float(line_elements[3])
-                ):
-                    symbols.append(str(line_elements[0]))
-                    each_coord = [
-                        float(line_elements[1]),
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                    ]
-                    positions.append(each_coord)
-                elif (
-                    len(line_elements) == 5
-                    and line_elements[0] in PERIODIC_TABLE
-                    and is_float(line_elements[2])
-                    and is_float(line_elements[3])
-                    and is_float(line_elements[4])
-                ):
-                    symbols.append(str(line_elements[0]))
-                    each_coord = [
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                        float(line_elements[4]),
-                    ]
-                    positions.append(each_coord)
-                    coordinates_frozen_status.append(int(line_elements[1]))
-
-                # to be able to read PBC files
-                if (
-                    len(line_elements) == 4
-                    and line_elements[0].upper() == "TV"
-                ):
-                    pbc_conditions.append(1)
-                    tv = [
-                        float(line_elements[1]),
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                    ]
-                    translation_vectors.append(tv)
-                elif (
-                    len(line_elements) == 5
-                    and line_elements[0].upper() == "TV"
-                ):
-                    pbc_conditions.append(1)
-                    tv = [
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                        float(line_elements[4]),
-                    ]
-                    translation_vectors.append(tv)
-                    coordinates_frozen_status.append(int(line_elements[1]))
-
-        if translation_vectors and any(pbc_conditions):
-            if len(translation_vectors) == 1:
-                translation_vectors.append([0.0, 0.0, 0.0])
-                translation_vectors.append([0.0, 0.0, 0.0])
-                pbc_conditions = [1, 0, 0]
-            elif len(translation_vectors) == 2:
-                translation_vectors.append([0.0, 0.0, 0.0])
-                pbc_conditions = [1, 1, 0]
-            elif len(translation_vectors) == 3:
-                pbc_conditions = [1, 1, 1]
-
-            cells = np.array(translation_vectors)
-        else:
-            pbc_conditions = [0, 0, 0]
-            cells = None
-
-        # take care of frozen coordinates
-        for i, status in enumerate(coordinates_frozen_status):
-            if status == -1:
-                frozen_coordinates_list.append(i)
-                frozen_coordinates_dict["frozen"].append(i)
-
-        c = FixAtoms(indices=frozen_coordinates_list)
-        atoms = Atoms(
-            symbols=symbols,
-            positions=positions,
-            pbc=pbc_conditions,
-            cell=cells,
-        )
-        atoms.set_constraint(c)
-
-        return atoms
+        g16_input = Gaussian16Input(filename=filepath)
+        return g16_input.molecule
 
     @staticmethod
     @file_cache()
@@ -582,6 +471,8 @@ class CoordinateBlock:
         _, _, constraints = (
             self._get_atomic_numbers_positions_and_constraints()
         )
+        if len(constraints) == 0:
+            return None
         return constraints
 
     def _get_translation_vectors(self):
@@ -601,19 +492,22 @@ class CoordinateBlock:
                     z_coordinate = float(line_elements[-1])
                 tv = [x_coordinate, y_coordinate, z_coordinate]
                 tvs.append(tv)
+        if len(tvs) == 0:
+            return None
         return tvs
 
     @property
     def pbc_conditions(self):
         """Obtain PBC conditions from given translation vectors."""
-        if len(self.translation_vectors) == 0:
+        if self.translation_vectors is not None:
+            if len(self.translation_vectors) == 1:
+                return [1, 0, 0]
+            elif len(self.translation_vectors) == 2:
+                return [1, 1, 0]
+            elif len(self.translation_vectors) == 3:
+                return [1, 1, 1]
+        else:
             return None
-        elif len(self.translation_vectors) == 1:
-            return [1, 0, 0]
-        elif len(self.translation_vectors) == 2:
-            return [1, 1, 0]
-        elif len(self.translation_vectors) == 3:
-            return [1, 1, 1]
 
 
 class SDFFile(FileMixin):

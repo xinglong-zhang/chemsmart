@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import XYZFile
@@ -243,3 +244,160 @@ class TestStructures:
         )
         assert isinstance(molecule, list)
         assert len(molecule) == 1
+
+
+class TestStructuresFromGaussianInput:
+    def test_read_molecule_from_gaussian_opt_input(
+        self, gaussian_opt_inputfile
+    ):
+        assert os.path.exists(gaussian_opt_inputfile)
+        assert os.path.isfile(gaussian_opt_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_opt_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C7H5ClO"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_modred(
+        self, gaussian_modred_inputfile
+    ):
+        assert os.path.exists(gaussian_modred_inputfile)
+        assert os.path.isfile(gaussian_modred_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C3H7NO3"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_scan(self, gaussian_scan_inputfile):
+        assert os.path.exists(gaussian_scan_inputfile)
+        assert os.path.isfile(gaussian_scan_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_scan_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C3H7NO3"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_opt_genecp(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        assert os.path.exists(gaussian_opt_genecp_inputfile)
+        assert os.path.isfile(gaussian_opt_genecp_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16_file.num_atoms == 15
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_modred_gen(self, modred_gen_inputfile):
+        assert os.path.exists(modred_gen_inputfile)
+        assert os.path.isfile(modred_gen_inputfile)
+
+        g16_file = Gaussian16Input(filename=modred_gen_inputfile)
+        assert g16_file.num_atoms == 15
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H6BrO4"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_modred_genecp(self, modred_genecp_inputfile):
+        assert os.path.exists(modred_genecp_inputfile)
+        assert os.path.isfile(modred_genecp_inputfile)
+
+        g16_file = Gaussian16Input(filename=modred_genecp_inputfile)
+        assert g16_file.num_atoms == 15
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_modred_genecp_custom_solvent(
+        self, modred_genecp_custom_solvent_inputfile
+    ):
+        assert os.path.exists(modred_genecp_custom_solvent_inputfile)
+        assert os.path.isfile(modred_genecp_custom_solvent_inputfile)
+
+        g16_file = Gaussian16Input(
+            filename=modred_genecp_custom_solvent_inputfile
+        )
+        assert g16_file.num_atoms == 65
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C28H26Cl2N2O4PdS2"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_frozen_opt(
+        self, gaussian_frozen_opt_inputfile
+    ):
+        assert os.path.exists(gaussian_frozen_opt_inputfile)
+        assert os.path.isfile(gaussian_frozen_opt_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C7H5ClO"
+        assert g16_file.molecule.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_pbc(self, gaussian_pbc_1d_inputfile):
+        assert os.path.exists(gaussian_pbc_1d_inputfile)
+        assert os.path.isfile(gaussian_pbc_1d_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
+        assert g16_file.num_atoms == 10
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H5Cl"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions == [True, False, False]
+        assert g16_file.molecule.translation_vectors == [
+            [4.8477468928, 0.1714181332, 0.5112729831],
+        ]

@@ -120,7 +120,11 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def molecule(self):
-        return self.coordinate_block.molecule
+        molecule = self.coordinate_block.molecule
+        # update the charge and multiplicity of the molecule
+        molecule.charge = self.charge
+        molecule.multiplicity = self.multiplicity
+        return molecule
 
     @property
     def num_atoms(self):
