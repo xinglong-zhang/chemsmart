@@ -126,9 +126,7 @@ class Molecule:
             return None
 
         try:
-            molecule = cls._read_file(
-                filepath, index=index, return_list=return_list, **kwargs
-            )
+            molecule = cls._read_filepath(filepath, index=index, return_list=return_list, **kwargs)
             return molecule
         except Exception as e:
             raise FileReadError(
@@ -136,7 +134,7 @@ class Molecule:
             ) from e
 
     @classmethod
-    def _read_file(cls, filepath, index, return_list, **kwargs):
+    def _read_filepath(cls, filepath, index, return_list, **kwargs):
         basename = os.path.basename(filepath)
 
         if basename.endswith(".xyz"):
@@ -172,42 +170,42 @@ class Molecule:
 
         return cls._read_other(filepath, index, **kwargs)
 
-    @staticmethod
-    @file_cache()
-    def _read_xyz_file_structures_and_comments(
-        filepath, index=":", return_list=False
-    ):
-        """Return a molecule object or a list of of molecule objects from an xyz file.
-        The xzy file can either contain a single molecule, as conventionally, or a list
-        of molecules, such as those in crest_conformers.xyz file."""
-        all_molecules = []
-        comments = []
-        with open(filepath) as f:
-            lines = f.readlines()
-            i = 0
-            while i < len(lines):
-                # Read number of atoms
-                num_atoms = int(lines[i].strip())
-                i += 1
-                # Read comment line
-                comment = lines[i].strip()
-                comments.append(comment)
-                i += 1
-                # Read the coordinate block
-                coordinate_block = lines[i : i + num_atoms]
-                i += num_atoms
-                molecule = Molecule.from_coordinate_block_text(
-                    coordinate_block
-                )
-
-                # Store the molecule data
-                all_molecules.append(molecule)
-
-        molecules = all_molecules[string2index(index)]
-        comments = comments[string2index(index)]
-        if return_list and isinstance(molecules, Molecule):
-            return [molecules], [comments]
-        return molecules, comments
+    # @staticmethod
+    # @file_cache()
+    # def _read_xyz_file_structures_and_comments(
+    #     filepath, index=":", return_list=False
+    # ):
+    #     """Return a molecule object or a list of of molecule objects from an xyz file.
+    #     The xzy file can either contain a single molecule, as conventionally, or a list
+    #     of molecules, such as those in crest_conformers.xyz file."""
+    #     all_molecules = []
+    #     comments = []
+    #     with open(filepath) as f:
+    #         lines = f.readlines()
+    #         i = 0
+    #         while i < len(lines):
+    #             # Read number of atoms
+    #             num_atoms = int(lines[i].strip())
+    #             i += 1
+    #             # Read comment line
+    #             comment = lines[i].strip()
+    #             comments.append(comment)
+    #             i += 1
+    #             # Read the coordinate block
+    #             coordinate_block = lines[i : i + num_atoms]
+    #             i += num_atoms
+    #             molecule = Molecule.from_coordinate_block_text(
+    #                 coordinate_block
+    #             )
+    #
+    #             # Store the molecule data
+    #             all_molecules.append(molecule)
+    #
+    #     molecules = all_molecules[string2index(index)]
+    #     comments = comments[string2index(index)]
+    #     if return_list and isinstance(molecules, Molecule):
+    #         return [molecules], [comments]
+    #     return molecules, comments
 
     @classmethod
     def _read_xyz_file(cls, filepath, index=":", return_list=False):
