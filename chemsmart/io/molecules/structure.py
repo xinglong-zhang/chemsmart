@@ -3,7 +3,8 @@ import re
 import ase
 import numpy as np
 from ase.symbols import Symbols
-from ase.atoms import Atoms
+from ase.io.formats import string2index
+from functools import cached_property
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.utils import FileReadError
 from chemsmart.utils.mixins import FileMixin
@@ -22,10 +23,28 @@ class Molecule:
         Can be a string formula, a list of symbols or a list of
         Atom objects.  Examples: 'H2O', 'COPt12', ['H', 'H', 'O'],
         [Atom('Ne', (x, y, z)), ...].
+    positions: a numpy array of atomic positions
+        The shape of the array should be (n, 3) where n is the number
+        of atoms in the molecule.
+    charge: integer
+        The charge of the molecule.
+    multiplicity: integer
+        The multiplicity of the molecule.
     frozen_atoms: list of integers to freeze atoms in the molecule.
         Follows Gaussian input file format where -1 denotes frozen atoms
         and 0 denotes relaxed atoms.
-
+    pbc_conditions: list of integers
+        The periodic boundary conditions for the molecule.
+    translation_vectors: list of lists
+        The translation vectors for the molecule.
+    energy: float
+        The energy of the molecule in eV.
+    forces: numpy array
+        The forces on the atoms in the molecule in eV/Å.
+    velocities: numpy array
+        The velocities of the atoms in the molecule.
+    info: dict
+        A dictionary containing additional information about the molecule.
     """
 
     def __init__(
@@ -56,7 +75,9 @@ class Molecule:
 
     @property
     def empirical_formula(self):
-        return self.symbols.get_chemical_formula(mode="hill", empirical=True)
+        return Symbols.fromsymbols(self.symbols).get_chemical_formula(
+            mode="hill", empirical=True
+        )
 
     @property
     def chemical_symbols(self):
@@ -65,24 +86,24 @@ class Molecule:
             return list(self.symbols)
 
     @property
-    def natoms(self):
+    def num_atoms(self):
         """Return the number of atoms in the molecule."""
         return len(self.chemical_symbols)
 
-    def get_chemical_formula(self, mode, empirical):
+    def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return self.symbols.get_chemical_formula(
-                mode="hill", empirical=False
+                mode=mode, empirical=empirical
             )
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
-        c = CoordinateBlock(coordinate_block=coordinate_block)
+        cb = CoordinateBlock(coordinate_block=coordinate_block)
         return cls(
-            symbols=c.symbols,
-            positions=c.positions,
-            frozen_atoms=c.constrained_atoms,
-            translation_vectors=c.translation_vectors,
+            symbols=cb.symbols,
+            positions=cb.positions,
+            frozen_atoms=cb.constrained_atoms,
+            translation_vectors=cb.translation_vectors,
         )
 
     @classmethod
@@ -96,11 +117,7 @@ class Molecule:
         )
 
     @classmethod
-    def from_file(cls, **kwargs):
-        return cls.from_filepath(**kwargs)
-
-    @classmethod
-    def from_filepath(cls, filepath, index="-1", **kwargs):
+    def from_filepath(cls, filepath, index="-1", return_list=False, **kwargs):
         filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"{filepath} could not be found!")
@@ -109,28 +126,34 @@ class Molecule:
             return None
 
         try:
-            molecule = cls._read_file(filepath, index=index, **kwargs)
+            molecule = cls._read_filepath(
+                filepath, index=index, return_list=return_list, **kwargs
+            )
+            return molecule
         except Exception as e:
             raise FileReadError(
                 f"Failed to create molecule from {filepath}."
             ) from e
-        return molecule
 
     @classmethod
-    def _read_file(cls, filepath, index, **kwargs):
+    def _read_filepath(cls, filepath, index, return_list, **kwargs):
         basename = os.path.basename(filepath)
 
         if basename.endswith(".xyz"):
-            return cls._read_xyz_file(filepath)
+            return cls._read_xyz_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
 
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 
         if basename.endswith((".com", ".gjf")):
-            return cls._read_gaussian_comfile(filepath, **kwargs)
+            return cls._read_gaussian_inputfile(filepath)
 
         if basename.endswith(".log"):
-            return cls._read_gaussian_logfile(filepath, index, **kwargs)
+            return cls._read_gaussian_logfile(filepath, index)
 
         if basename.endswith(".inp"):
             return cls._read_orca_inputfile(filepath, **kwargs)
@@ -149,10 +172,11 @@ class Molecule:
 
         return cls._read_other(filepath, index, **kwargs)
 
-    @staticmethod
-    @file_cache()
-    def _read_other(filepath, index, **kwargs):
-        return ase.io.read(filepath, index=index, **kwargs)
+    @classmethod
+    def _read_xyz_file(cls, filepath, index=":", return_list=False):
+        xyz_file = XYZFile(filename=filepath)
+        molecules = xyz_file.get_molecule(index=index, return_list=return_list)
+        return molecules
 
     @staticmethod
     @file_cache()
@@ -162,173 +186,58 @@ class Molecule:
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_comfile(filepath, **kwargs):
-        ## TODO
-        from ase.constraints import FixAtoms
+    def _read_gaussian_inputfile(filepath):
+        from chemsmart.io.gaussian.inputs import Gaussian16Input
 
-        from pyatoms.utils.periodictable import PERIODIC_TABLE
-        from pyatoms.utils.utils import is_float
-
-        symbols = []
-        positions = []
-
-        pbc_conditions = []
-        translation_vectors = []
-
-        frozen_coordinates_dict = {"frozen": []}
-        frozen_coordinates_list = []
-        coordinates_frozen_status = []
-
-        with open(filepath) as f:
-            for line in f.readlines():
-                line_elements = line.strip().split()
-
-                # read charge and multiplicity from Gaussian .com file
-                if len(line_elements) == 2 and all(
-                    i.isdigit for i in line_elements
-                ):
-                    line_elements[0]
-                    line_elements[1]
-
-                # read symbols and positions
-                if (
-                    len(line_elements) == 4
-                    and line_elements[0] in PERIODIC_TABLE
-                    and is_float(line_elements[1])
-                    and is_float(line_elements[2])
-                    and is_float(line_elements[3])
-                ):
-                    symbols.append(str(line_elements[0]))
-                    each_coord = [
-                        float(line_elements[1]),
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                    ]
-                    positions.append(each_coord)
-                elif (
-                    len(line_elements) == 5
-                    and line_elements[0] in PERIODIC_TABLE
-                    and is_float(line_elements[2])
-                    and is_float(line_elements[3])
-                    and is_float(line_elements[4])
-                ):
-                    symbols.append(str(line_elements[0]))
-                    each_coord = [
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                        float(line_elements[4]),
-                    ]
-                    positions.append(each_coord)
-                    coordinates_frozen_status.append(int(line_elements[1]))
-
-                # to be able to read PBC files
-                if (
-                    len(line_elements) == 4
-                    and line_elements[0].upper() == "TV"
-                ):
-                    pbc_conditions.append(1)
-                    tv = [
-                        float(line_elements[1]),
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                    ]
-                    translation_vectors.append(tv)
-                elif (
-                    len(line_elements) == 5
-                    and line_elements[0].upper() == "TV"
-                ):
-                    pbc_conditions.append(1)
-                    tv = [
-                        float(line_elements[2]),
-                        float(line_elements[3]),
-                        float(line_elements[4]),
-                    ]
-                    translation_vectors.append(tv)
-                    coordinates_frozen_status.append(int(line_elements[1]))
-
-        if translation_vectors and any(pbc_conditions):
-            if len(translation_vectors) == 1:
-                translation_vectors.append([0.0, 0.0, 0.0])
-                translation_vectors.append([0.0, 0.0, 0.0])
-                pbc_conditions = [1, 0, 0]
-            elif len(translation_vectors) == 2:
-                translation_vectors.append([0.0, 0.0, 0.0])
-                pbc_conditions = [1, 1, 0]
-            elif len(translation_vectors) == 3:
-                pbc_conditions = [1, 1, 1]
-
-            cells = np.array(translation_vectors)
-        else:
-            pbc_conditions = [0, 0, 0]
-            cells = None
-
-        # take care of frozen coordinates
-        for i, status in enumerate(coordinates_frozen_status):
-            if status == -1:
-                frozen_coordinates_list.append(i)
-                frozen_coordinates_dict["frozen"].append(i)
-
-        c = FixAtoms(indices=frozen_coordinates_list)
-        atoms = Atoms(
-            symbols=symbols,
-            positions=positions,
-            pbc=pbc_conditions,
-            cell=cells,
-        )
-        atoms.set_constraint(c)
-
-        return atoms
+        g16_input = Gaussian16Input(filename=filepath)
+        return g16_input.molecule
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_logfile(filepath, index, **kwargs):
-        try:
-            from chemsmart.io.gaussian.output import Gaussian16Output
+    def _read_gaussian_logfile(filepath, index):
+        from chemsmart.io.gaussian.output import Gaussian16Output
 
-            g16_output = Gaussian16Output(filename=filepath)
-            return g16_output.get_atoms(
-                index=index, include_failed_logfile=True
-            )
-        except ValueError:
-            from pyatoms.io.gaussian.outputs import Gaussian16OutputWithPBC
-
-            g16_output = Gaussian16OutputWithPBC(logfile=filepath)
-            return g16_output.get_atoms(
-                index=index, include_failed_logfile=True
-            )
+        g16_output = Gaussian16Output(filename=filepath)
+        return g16_output.get_molecule(index=index)
 
     @staticmethod
     @file_cache()
-    def _read_orca_inputfile(filepath, **kwargs):
-        from pyatoms.io.orca.inputs import ORCAInput
+    def _read_orca_inputfile(filepath):
+        from chemsmart.io.orca.inputs import ORCAInput
 
-        orca_input = ORCAInput(inpfile=filepath, **kwargs)
-        return orca_input.atoms
-
-    @staticmethod
-    @file_cache()
-    def _read_orca_outfile(filepath, index, **kwargs):
-        from pyatoms.io.orca.outputs import ORCAOutput
-
-        orca_output = ORCAOutput(filename=filepath, **kwargs)
-        return orca_output.get_atoms(index=index, include_failed_file=True)
+        orca_input = ORCAInput(filename=filepath)
+        return orca_input.molecule
 
     @staticmethod
     @file_cache()
-    def _read_gromacs_gro(filepath, index, **kwargs):
-        # TODO: add handling of index
-        from pyatoms.io.gromacs.outputs import GroGroOutput
+    def _read_orca_outfile(filepath, index):
+        # TODO: to improve ORCAOutput object so that all the structures can be obtained and returned via index
+        from chemsmart.io.orca.outputs import ORCAOutput
 
-        gro_output = GroGroOutput(filename=filepath)
-        return gro_output.get_gro()
+        orca_output = ORCAOutput(filename=filepath)
+        return orca_output.molecule
+
+    # @staticmethod
+    # @file_cache()
+    # def _read_gromacs_gro(filepath, index, **kwargs):
+    #     # TODO: add handling of index
+    #     from pyatoms.io.gromacs.outputs import GroGroOutput
+    #
+    #     gro_output = GroGroOutput(filename=filepath)
+    #     return gro_output.get_gro()
+    #
+    # @staticmethod
+    # @file_cache()
+    # def _read_gromacs_trr(filepath, index, **kwargs):
+    #     from pyatoms.io.gromacs.outputs import GroTrrOutput
+    #
+    #     trr_output = GroTrrOutput(filename=filepath)
+    #     return trr_output.get_atoms(index=index)
 
     @staticmethod
     @file_cache()
-    def _read_gromacs_trr(filepath, index, **kwargs):
-        from pyatoms.io.gromacs.outputs import GroTrrOutput
-
-        trr_output = GroTrrOutput(filename=filepath)
-        return trr_output.get_atoms(index=index)
+    def _read_other(filepath, index, **kwargs):
+        return ase.io.read(filepath, index=index, **kwargs)
 
     def write(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
@@ -350,8 +259,8 @@ class Molecule:
 
     def get_all_distances(self):
         bond_distances = []
-        for i in range(self.natoms):
-            for j in range(i + 1, self.natoms):
+        for i in range(self.num_atoms):
+            for j in range(i + 1, self.num_atoms):
                 bond_distances.append(
                     np.linalg.norm(self.positions[i] - self.positions[j])
                 )
@@ -409,7 +318,13 @@ class CoordinateBlock:
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class."""
-        return Molecule(symbols=self.symbols, positions=self.positions)
+        return Molecule(
+            symbols=self.symbols,
+            positions=self.positions,
+            frozen_atoms=self.constrained_atoms,
+            pbc_conditions=self.pbc_conditions,
+            translation_vectors=self.translation_vectors,
+        )
 
     def _get_symbols(self):
         symbols = []
@@ -510,6 +425,8 @@ class CoordinateBlock:
         _, _, constraints = (
             self._get_atomic_numbers_positions_and_constraints()
         )
+        if len(constraints) == 0:
+            return None
         return constraints
 
     def _get_translation_vectors(self):
@@ -529,7 +446,22 @@ class CoordinateBlock:
                     z_coordinate = float(line_elements[-1])
                 tv = [x_coordinate, y_coordinate, z_coordinate]
                 tvs.append(tv)
+        if len(tvs) == 0:
+            return None
         return tvs
+
+    @property
+    def pbc_conditions(self):
+        """Obtain PBC conditions from given translation vectors."""
+        if self.translation_vectors is not None:
+            if len(self.translation_vectors) == 1:
+                return [1, 0, 0]
+            elif len(self.translation_vectors) == 2:
+                return [1, 1, 0]
+            elif len(self.translation_vectors) == 3:
+                return [1, 1, 1]
+        else:
+            return None
 
 
 class SDFFile(FileMixin):
@@ -562,3 +494,55 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+
+class XYZFile(FileMixin):
+    """xyz file object."""
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    @cached_property
+    def num_atoms(self):
+        return int(self.contents[0])
+
+    def _get_molecules_and_comments(self, index=":", return_list=False):
+        """Return a molecule object or a list of molecule objects from an xyz file.
+        The xzy file can either contain a single molecule, as conventionally, or a list
+        of molecules, such as those in crest_conformers.xyz file."""
+        all_molecules = []
+        comments = []
+        i = 0
+        while i < len(self.contents):
+            # Read number of atoms
+            num_atoms = int(self.contents[i].strip())
+            i += 1
+            # Read comment line
+            comment = self.contents[i].strip()
+            comments.append(comment)
+            i += 1
+            # Read the coordinate block
+            coordinate_block = self.contents[i : i + num_atoms]
+            i += num_atoms
+            molecule = Molecule.from_coordinate_block_text(coordinate_block)
+
+            # Store the molecule data
+            all_molecules.append(molecule)
+
+        molecules = all_molecules[string2index(index)]
+        comments = comments[string2index(index)]
+        if return_list and isinstance(molecules, Molecule):
+            return [molecules], [comments]
+        return molecules, comments
+
+    def get_molecule(self, index=":", return_list=False):
+        molecules, _ = self._get_molecules_and_comments(
+            index=index, return_list=return_list
+        )
+        return molecules
+
+    def get_comments(self, index=":", return_list=False):
+        _, comments = self._get_molecules_and_comments(
+            index=index, return_list=return_list
+        )
+        return comments
