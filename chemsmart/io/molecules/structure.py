@@ -210,28 +210,29 @@ class Molecule:
 
     @staticmethod
     @file_cache()
-    def _read_orca_outfile(filepath, index, **kwargs):
-        from pyatoms.io.orca.outputs import ORCAOutput
+    def _read_orca_outfile(filepath, index):
+        # TODO: to improve ORCAOutput object so that all the structures can be obtained and returned via index
+        from chemsmart.io.orca.outputs import ORCAOutput
 
-        orca_output = ORCAOutput(filename=filepath, **kwargs)
-        return orca_output.get_atoms(index=index, include_failed_file=True)
+        orca_output = ORCAOutput(filename=filepath)
+        return orca_output.molecule
 
-    @staticmethod
-    @file_cache()
-    def _read_gromacs_gro(filepath, index, **kwargs):
-        # TODO: add handling of index
-        from pyatoms.io.gromacs.outputs import GroGroOutput
-
-        gro_output = GroGroOutput(filename=filepath)
-        return gro_output.get_gro()
-
-    @staticmethod
-    @file_cache()
-    def _read_gromacs_trr(filepath, index, **kwargs):
-        from pyatoms.io.gromacs.outputs import GroTrrOutput
-
-        trr_output = GroTrrOutput(filename=filepath)
-        return trr_output.get_atoms(index=index)
+    # @staticmethod
+    # @file_cache()
+    # def _read_gromacs_gro(filepath, index, **kwargs):
+    #     # TODO: add handling of index
+    #     from pyatoms.io.gromacs.outputs import GroGroOutput
+    #
+    #     gro_output = GroGroOutput(filename=filepath)
+    #     return gro_output.get_gro()
+    #
+    # @staticmethod
+    # @file_cache()
+    # def _read_gromacs_trr(filepath, index, **kwargs):
+    #     from pyatoms.io.gromacs.outputs import GroTrrOutput
+    #
+    #     trr_output = GroTrrOutput(filename=filepath)
+    #     return trr_output.get_atoms(index=index)
 
     @staticmethod
     @file_cache()
