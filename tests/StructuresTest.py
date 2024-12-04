@@ -2,6 +2,7 @@ import os
 import numpy as np
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import XYZFile
 from pyatoms.cli.traj import index
 from tests.conftest import reference_genecp_txt_file_from_api
 
@@ -69,15 +70,21 @@ class TestStructures:
         assert os.path.exists(single_molecule_xyz_file)
         assert os.path.isfile(single_molecule_xyz_file)
 
-        molecule = Molecule.from_filepath(
-            filepath=single_molecule_xyz_file, index="-1", return_list=False
-        )
+        xyz_file = XYZFile(filename=single_molecule_xyz_file)
+        assert xyz_file.num_atoms == 71
+
+        molecule = xyz_file.get_molecule(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
 
-        molecule = Molecule.from_filepath(
-            filepath=single_molecule_xyz_file, index="-1", return_list=True
-        )
+        molecule = xyz_file.get_molecule(index="-1", return_list=True)
         assert isinstance(molecule, list)
+        assert len(molecule) == 1
+
+        # molecule creation from path
+        molecule = Molecule.from_filepath(
+            single_molecule_xyz_file, return_list=False
+        )
+        assert isinstance(molecule, Molecule)
 
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
@@ -85,18 +92,18 @@ class TestStructures:
         assert os.path.exists(multiple_molecules_xyz_file)
         assert os.path.isfile(multiple_molecules_xyz_file)
 
-        molecules = Molecule.from_filepath(
-            filepath=multiple_molecules_xyz_file, index=":", return_list=True
-        )
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        assert xyz_file.num_atoms == 71
+
+        molecules = xyz_file.get_molecule(index=":", return_list=True)
         assert isinstance(molecules, list)
         assert len(molecules) == 18
 
         # obtain the last structure as molecule
-        molecule = Molecule.from_filepath(
-            filepath=multiple_molecules_xyz_file, index="-1", return_list=False
-        )
+        molecule = xyz_file.get_molecule(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
+
         last_structure_positions = np.array(
             [
                 [0.2264896660, -2.2726277143, -1.5005807047],
@@ -176,6 +183,38 @@ class TestStructures:
             molecule.positions, last_structure_positions, rtol=1e-5
         )
 
+        # obtain the last structure as a list
+        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        assert isinstance(molecule, list)
+        assert len(molecule) == 1
+
+        # obtain the last 10 structures
+        molecules = xyz_file.get_molecule(index="-10:", return_list=True)
+        assert isinstance(molecules, list)
+        assert len(molecules) == 10
+
+        # first coordinates of the 10th last structure
+        assert np.allclose(
+            molecules[0].positions[0],
+            np.array([-0.5297471504, -3.4014322100, -1.3490458905]),
+            rtol=1e-5,
+        )
+
+        # molecule creation from path
+        molecules = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index=":", return_list=True
+        )
+        assert isinstance(molecules, list)
+        assert len(molecules) == 18
+        # obtain the last structure as molecule
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="-1", return_list=False
+        )
+        assert isinstance(molecule, Molecule)
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+        assert np.allclose(
+            molecule.positions, last_structure_positions, rtol=1e-5
+        )
         # obtain the last structure as list
         molecule = Molecule.from_filepath(
             filepath=multiple_molecules_xyz_file, index="-1", return_list=True

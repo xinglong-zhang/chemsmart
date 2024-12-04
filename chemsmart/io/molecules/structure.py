@@ -4,6 +4,7 @@ import ase
 import numpy as np
 from ase.symbols import Symbols
 from ase.io.formats import string2index
+from functools import cached_property
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.utils import FileReadError
 from chemsmart.utils.mixins import FileMixin
@@ -143,7 +144,6 @@ class Molecule:
                 filepath=filepath,
                 index=index,
                 return_list=return_list,
-                **kwargs,
             )
 
         if basename.endswith(".sdf"):
@@ -211,9 +211,8 @@ class Molecule:
 
     @classmethod
     def _read_xyz_file(cls, filepath, index=":", return_list=False):
-        molecules, _ = cls._read_xyz_file_structures_and_comments(
-            filepath, index, return_list
-        )
+        xyz_file = XYZFile(filename=filepath)
+        molecules = xyz_file.get_molecule(index=index, return_list=return_list)
         return molecules
 
     @staticmethod
@@ -641,3 +640,55 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+
+class XYZFile(FileMixin):
+    """xyz file object."""
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    @cached_property
+    def num_atoms(self):
+        return int(self.contents[0])
+
+    def _get_molecules_and_comments(self, index=":", return_list=False):
+        """Return a molecule object or a list of molecule objects from an xyz file.
+        The xzy file can either contain a single molecule, as conventionally, or a list
+        of molecules, such as those in crest_conformers.xyz file."""
+        all_molecules = []
+        comments = []
+        i = 0
+        while i < len(self.contents):
+            # Read number of atoms
+            num_atoms = int(self.contents[i].strip())
+            i += 1
+            # Read comment line
+            comment = self.contents[i].strip()
+            comments.append(comment)
+            i += 1
+            # Read the coordinate block
+            coordinate_block = self.contents[i : i + num_atoms]
+            i += num_atoms
+            molecule = Molecule.from_coordinate_block_text(coordinate_block)
+
+            # Store the molecule data
+            all_molecules.append(molecule)
+
+        molecules = all_molecules[string2index(index)]
+        comments = comments[string2index(index)]
+        if return_list and isinstance(molecules, Molecule):
+            return [molecules], [comments]
+        return molecules, comments
+
+    def get_molecule(self, index=":", return_list=False):
+        molecules, _ = self._get_molecules_and_comments(
+            index=index, return_list=return_list
+        )
+        return molecules
+
+    def get_comments(self, index=":", return_list=False):
+        _, comments = self._get_molecules_and_comments(
+            index=index, return_list=return_list
+        )
+        return comments
