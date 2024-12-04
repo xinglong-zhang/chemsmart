@@ -126,7 +126,9 @@ class Molecule:
             return None
 
         try:
-            molecule = cls._read_filepath(filepath, index=index, return_list=return_list, **kwargs)
+            molecule = cls._read_filepath(
+                filepath, index=index, return_list=return_list, **kwargs
+            )
             return molecule
         except Exception as e:
             raise FileReadError(
@@ -148,10 +150,10 @@ class Molecule:
             return cls._read_sdf_file(filepath)
 
         if basename.endswith((".com", ".gjf")):
-            return cls._read_gaussian_comfile(filepath, **kwargs)
+            return cls._read_gaussian_inputfile(filepath)
 
         if basename.endswith(".log"):
-            return cls._read_gaussian_logfile(filepath, index, **kwargs)
+            return cls._read_gaussian_logfile(filepath, index)
 
         if basename.endswith(".inp"):
             return cls._read_orca_inputfile(filepath, **kwargs)
@@ -170,53 +172,11 @@ class Molecule:
 
         return cls._read_other(filepath, index, **kwargs)
 
-    # @staticmethod
-    # @file_cache()
-    # def _read_xyz_file_structures_and_comments(
-    #     filepath, index=":", return_list=False
-    # ):
-    #     """Return a molecule object or a list of of molecule objects from an xyz file.
-    #     The xzy file can either contain a single molecule, as conventionally, or a list
-    #     of molecules, such as those in crest_conformers.xyz file."""
-    #     all_molecules = []
-    #     comments = []
-    #     with open(filepath) as f:
-    #         lines = f.readlines()
-    #         i = 0
-    #         while i < len(lines):
-    #             # Read number of atoms
-    #             num_atoms = int(lines[i].strip())
-    #             i += 1
-    #             # Read comment line
-    #             comment = lines[i].strip()
-    #             comments.append(comment)
-    #             i += 1
-    #             # Read the coordinate block
-    #             coordinate_block = lines[i : i + num_atoms]
-    #             i += num_atoms
-    #             molecule = Molecule.from_coordinate_block_text(
-    #                 coordinate_block
-    #             )
-    #
-    #             # Store the molecule data
-    #             all_molecules.append(molecule)
-    #
-    #     molecules = all_molecules[string2index(index)]
-    #     comments = comments[string2index(index)]
-    #     if return_list and isinstance(molecules, Molecule):
-    #         return [molecules], [comments]
-    #     return molecules, comments
-
     @classmethod
     def _read_xyz_file(cls, filepath, index=":", return_list=False):
         xyz_file = XYZFile(filename=filepath)
         molecules = xyz_file.get_molecule(index=index, return_list=return_list)
         return molecules
-
-    @staticmethod
-    @file_cache()
-    def _read_other(filepath, index, **kwargs):
-        return ase.io.read(filepath, index=index, **kwargs)
 
     @staticmethod
     @file_cache()
@@ -226,7 +186,7 @@ class Molecule:
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_comfile(filepath, **kwargs):
+    def _read_gaussian_inputfile(filepath):
         from chemsmart.io.gaussian.inputs import Gaussian16Input
 
         g16_input = Gaussian16Input(filename=filepath)
@@ -234,29 +194,19 @@ class Molecule:
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_logfile(filepath, index, **kwargs):
-        try:
-            from chemsmart.io.gaussian.output import Gaussian16Output
+    def _read_gaussian_logfile(filepath, index):
+        from chemsmart.io.gaussian.output import Gaussian16Output
 
-            g16_output = Gaussian16Output(filename=filepath)
-            return g16_output.get_atoms(
-                index=index, include_failed_logfile=True
-            )
-        except ValueError:
-            from pyatoms.io.gaussian.outputs import Gaussian16OutputWithPBC
-
-            g16_output = Gaussian16OutputWithPBC(logfile=filepath)
-            return g16_output.get_atoms(
-                index=index, include_failed_logfile=True
-            )
+        g16_output = Gaussian16Output(filename=filepath)
+        return g16_output.get_molecule(index=index)
 
     @staticmethod
     @file_cache()
-    def _read_orca_inputfile(filepath, **kwargs):
-        from pyatoms.io.orca.inputs import ORCAInput
+    def _read_orca_inputfile(filepath):
+        from chemsmart.io.orca.inputs import ORCAInput
 
-        orca_input = ORCAInput(inpfile=filepath, **kwargs)
-        return orca_input.atoms
+        orca_input = ORCAInput(filename=filepath)
+        return orca_input.molecule
 
     @staticmethod
     @file_cache()
@@ -282,6 +232,11 @@ class Molecule:
 
         trr_output = GroTrrOutput(filename=filepath)
         return trr_output.get_atoms(index=index)
+
+    @staticmethod
+    @file_cache()
+    def _read_other(filepath, index, **kwargs):
+        return ase.io.read(filepath, index=index, **kwargs)
 
     def write(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"

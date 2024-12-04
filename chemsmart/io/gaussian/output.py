@@ -1003,7 +1003,7 @@ class Gaussian16Output(GaussianFileMixin):
             # to implement for radical systems
             pass
 
-    def get_molecule(self, index="-1", include_failed_logfile=True):
+    def get_molecule(self, index="-1"):
         index = string2index(index)
         return self.all_structures[index]
 
