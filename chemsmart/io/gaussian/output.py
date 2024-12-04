@@ -433,7 +433,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_modes(self):
         """Obtain list of vibrational normal modes corresponding to the vibrational frequency.
-        Returns a list of normal modes, each of natoms x 3 (in dx, dy, and dz for each element) vibration.
+        Returns a list of normal modes, each of num_atoms x 3 (in dx, dy, and dz for each element) vibration.
         """
         list_of_vib_modes = []
         for i, line in enumerate(self.contents):
@@ -643,7 +643,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def forces(self):
         """Obtain a list of cartesian forces.
-        Each force is stored as a np array of shape (natoms, 3).
+        Each force is stored as a np array of shape (num_atoms, 3).
         Intrinsic units as used in Gaussian: Hartrees/Bohr."""
         list_of_all_forces = []
         for i, line in enumerate(self.contents):

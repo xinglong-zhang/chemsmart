@@ -3,7 +3,7 @@ import re
 import ase
 import numpy as np
 from ase.symbols import Symbols
-from ase.atoms import Atoms
+from ase.io.formats import string2index
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.utils import FileReadError
 from chemsmart.utils.mixins import FileMixin
@@ -85,7 +85,7 @@ class Molecule:
             return list(self.symbols)
 
     @property
-    def natoms(self):
+    def num_atoms(self):
         """Return the number of atoms in the molecule."""
         return len(self.chemical_symbols)
 
@@ -116,11 +116,7 @@ class Molecule:
         )
 
     @classmethod
-    def from_file(cls, **kwargs):
-        return cls.from_filepath(**kwargs)
-
-    @classmethod
-    def from_filepath(cls, filepath, index="-1", **kwargs):
+    def from_filepath(cls, filepath, index="-1", return_list=False, **kwargs):
         filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"{filepath} could not be found!")
@@ -129,19 +125,26 @@ class Molecule:
             return None
 
         try:
-            molecule = cls._read_file(filepath, index=index, **kwargs)
+            molecule = cls._read_file(
+                filepath, index=index, return_list=return_list, **kwargs
+            )
+            return molecule
         except Exception as e:
             raise FileReadError(
                 f"Failed to create molecule from {filepath}."
             ) from e
-        return molecule
 
     @classmethod
-    def _read_file(cls, filepath, index, **kwargs):
+    def _read_file(cls, filepath, index, return_list, **kwargs):
         basename = os.path.basename(filepath)
 
         if basename.endswith(".xyz"):
-            return cls._read_xyz_file(filepath)
+            return cls._read_xyz_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+                **kwargs,
+            )
 
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
@@ -168,6 +171,50 @@ class Molecule:
         #     return cls._read_traj_file(filepath, index, **kwargs)
 
         return cls._read_other(filepath, index, **kwargs)
+
+    @staticmethod
+    @file_cache()
+    def _read_xyz_file_structures_and_comments(
+        filepath, index=":", return_list=False
+    ):
+        """Return a molecule object or a list of of molecule objects from an xyz file.
+        The xzy file can either contain a single molecule, as conventionally, or a list
+        of molecules, such as those in crest_conformers.xyz file."""
+        all_molecules = []
+        comments = []
+        with open(filepath) as f:
+            lines = f.readlines()
+            i = 0
+            while i < len(lines):
+                # Read number of atoms
+                num_atoms = int(lines[i].strip())
+                i += 1
+                # Read comment line
+                comment = lines[i].strip()
+                comments.append(comment)
+                i += 1
+                # Read the coordinate block
+                coordinate_block = lines[i : i + num_atoms]
+                i += num_atoms
+                molecule = Molecule.from_coordinate_block_text(
+                    coordinate_block
+                )
+
+                # Store the molecule data
+                all_molecules.append(molecule)
+
+        molecules = all_molecules[string2index(index)]
+        comments = comments[string2index(index)]
+        if return_list and isinstance(molecules, Molecule):
+            return [molecules], [comments]
+        return molecules, comments
+
+    @classmethod
+    def _read_xyz_file(cls, filepath, index=":", return_list=False):
+        molecules, _ = cls._read_xyz_file_structures_and_comments(
+            filepath, index, return_list
+        )
+        return molecules
 
     @staticmethod
     @file_cache()
@@ -370,8 +417,8 @@ class Molecule:
 
     def get_all_distances(self):
         bond_distances = []
-        for i in range(self.natoms):
-            for j in range(i + 1, self.natoms):
+        for i in range(self.num_atoms):
+            for j in range(i + 1, self.num_atoms):
                 bond_distances.append(
                     np.linalg.norm(self.positions[i] - self.positions[j])
                 )

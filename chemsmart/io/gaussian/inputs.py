@@ -124,7 +124,7 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def num_atoms(self):
-        return self.molecule.natoms
+        return self.molecule.num_atoms
 
     @property
     def constrained_atoms(self):

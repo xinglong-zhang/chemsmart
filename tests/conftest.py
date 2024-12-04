@@ -419,3 +419,24 @@ def orca_yaml_settings_gas_solv(orca_yaml_settings_directory):
 @pytest.fixture()
 def orca_yaml_settings_solv(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "solv.yaml")
+
+
+# test for structure.py
+@pytest.fixture()
+def structure_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "StructuresTest")
+
+
+@pytest.fixture()
+def xyz_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "xyz")
+
+
+@pytest.fixture()
+def single_molecule_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crest_best.xyz")
+
+
+@pytest.fixture()
+def multiple_molecules_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crest_conformers.xyz")

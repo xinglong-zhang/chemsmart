@@ -110,7 +110,7 @@ class TestORCAInput:
         assert orca_inp.coordinate_type == "xyz"
         assert orca_inp.charge == 0
         assert orca_inp.multiplicity == 1
-        assert orca_inp.molecule.natoms == 3
+        assert orca_inp.molecule.num_atoms == 3
         assert orca_inp.molecule.chemical_symbols == ["O", "H", "H"]
         assert isinstance(orca_inp.molecule, Molecule)
         assert all(orca_inp.molecule.symbols == ["O", "H", "H"])
@@ -126,7 +126,7 @@ class TestORCAInput:
         assert orca_inp.coordinate_type == "xyz"
         assert orca_inp.charge == 0
         assert orca_inp.multiplicity == 1
-        assert orca_inp.molecule.natoms == 3
+        assert orca_inp.molecule.num_atoms == 3
         assert orca_inp.molecule.chemical_symbols == ["O", "H", "H"]
         assert isinstance(orca_inp.molecule, Molecule)
         assert all(orca_inp.molecule.symbols == ["O", "H", "H"])
