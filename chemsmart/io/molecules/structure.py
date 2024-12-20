@@ -266,6 +266,16 @@ class Molecule:
                 )
         return bond_distances
 
+    def get_all_angles(self):
+        # get all bond angles in the molecule
+        bond_angles = []
+        for i in range(self.num_atoms):
+            for j in range(i + 1, self.num_atoms):
+                for k in range(j + 1, self.num_atoms):
+                    bond_angles.append(
+                        self.get_angle(i, j, k)
+                    )   # get the angle between atoms i, j, k
+
 
 class CoordinateBlock:
     """Class to create coordinate block object to abstract the geometry."""
