@@ -42,13 +42,13 @@ def entry_point(filename, numbers):
     hirshfeld_charges = outputfile.hirshfeld_charges
     logger.info("\nHirshfeld Charges:")
     for hkey, hvalue in hirshfeld_charges.items():
-        logger.info(f"{hkey}  :  {hvalue:.3f}")
+        logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
     logger.info("\n")
 
-    hirshfeld_spins = outputfile.hirshfeld_spins
+    hirshfeld_spins = outputfile.hirshfeld_spin_densities
     logger.info("\nHirshfeld Spins:")
     for hkey, hvalue in hirshfeld_spins.items():
-        logger.info(f"{hkey}  :  {hvalue:.3f}")
+        logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
     logger.info("\n")
 
     if numbers is not None:

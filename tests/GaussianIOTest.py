@@ -7,6 +7,7 @@ from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 from ase.symbols import Symbols
 from ase import units
+from tests.conftest import hirshfeld_full_print
 from torch.onnx.symbolic_opset11 import unbind
 
 
@@ -839,6 +840,56 @@ class TestGaussian16Output:
             ),
             rtol=1e-4,
         )
+
+    def test_read_hirshfeld_charges_outputfile(
+        self, gaussian_hirshfeld_outfile
+    ):
+        assert os.path.exists(gaussian_hirshfeld_outfile)
+        g16_hirshfeld = Gaussian16Output(filename=gaussian_hirshfeld_outfile)
+        assert g16_hirshfeld.normal_termination
+        assert g16_hirshfeld.num_atoms == 33
+        assert len(g16_hirshfeld.mulliken_atomic_charges) == 33
+        assert g16_hirshfeld.mulliken_atomic_charges["O1"] == -0.359649
+        assert g16_hirshfeld.mulliken_atomic_charges["O2"] == -0.317260
+        assert g16_hirshfeld.mulliken_atomic_charges["C3"] == -0.090440
+        assert g16_hirshfeld.mulliken_atomic_charges["H33"] == 0.183443
+        assert len(g16_hirshfeld.mulliken_atomic_charges_heavy_atoms) == 15
+        assert (
+            g16_hirshfeld.mulliken_atomic_charges_heavy_atoms["O1"]
+            == -0.359649
+        )
+        assert (
+            g16_hirshfeld.mulliken_atomic_charges_heavy_atoms["O2"]
+            == -0.317260
+        )
+        assert (
+            g16_hirshfeld.mulliken_atomic_charges_heavy_atoms["C3"] == 0.064107
+        )
+
+        assert len(g16_hirshfeld.hirshfeld_charges) == 33
+        assert g16_hirshfeld.hirshfeld_charges["O1"] == -0.222183
+        assert g16_hirshfeld.hirshfeld_charges["O2"] == -0.175602
+        assert g16_hirshfeld.hirshfeld_charges["C3"] == -0.030469
+        assert g16_hirshfeld.hirshfeld_charges["H33"] == 0.050255
+        assert g16_hirshfeld.hirshfeld_spin_densities["O1"] == 0.000000
+        assert g16_hirshfeld.hirshfeld_spin_densities["O2"] == 0.000000
+        assert g16_hirshfeld.hirshfeld_spin_densities["C3"] == 0.000000
+        assert g16_hirshfeld.hirshfeld_spin_densities["H33"] == 0.000000
+        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["O1"],np.array([-0.121486, -0.118753, -0.104620]))
+        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["O2"],np.array([0.024882, -0.086174, 0.133652]))
+        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["C3"],np.array([-0.008461, -0.029311, -0.015572]))
+        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["H33"],np.array([-0.143072, 0.058847, -0.063056]))
+        assert g16_hirshfeld.hirshfeld_cm5_charges["O1"] == -0.309536
+        assert g16_hirshfeld.hirshfeld_cm5_charges["O2"] == -0.278764
+        assert g16_hirshfeld.hirshfeld_cm5_charges["C3"] == -0.089643
+        assert len(g16_hirshfeld.hirshfeld_charges_heavy_atoms) == 15
+        assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["O1"] == -0.222183
+        assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["O2"] == -0.175602
+        assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["C3"] == 0.011726
+        assert g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O1"] == -0.309536
+        assert g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O2"] == -0.278764
+        assert g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["C3"] == 0.012018
+
 
     def test_read_mp2_outputfile(self, gaussian_mp2_outputfile):
         assert os.path.exists(gaussian_mp2_outputfile)
