@@ -1007,12 +1007,16 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def mulliken_atomic_charges(self):
-        mulliken_atomic_charges, _ = self._get_mulliken_atomic_charges_and_spin_densities()
+        mulliken_atomic_charges, _ = (
+            self._get_mulliken_atomic_charges_and_spin_densities()
+        )
         return mulliken_atomic_charges
 
     @cached_property
     def mulliken_spin_densities(self):
-        _, mulliken_spin_densities = self._get_mulliken_atomic_charges_and_spin_densities()
+        _, mulliken_spin_densities = (
+            self._get_mulliken_atomic_charges_and_spin_densities()
+        )
         return mulliken_spin_densities
 
     def _get_mulliken_atomic_charges_and_spin_densities(self):
@@ -1022,7 +1026,9 @@ class Gaussian16Output(GaussianFileMixin):
         for i, line_i in enumerate(self.contents):
             mulliken_atomic_charges = {}
             mulliken_spin_densities = {}
-            if line_i.startswith(("Mulliken charges:", "Mulliken charges and spin densities:")):
+            if line_i.startswith(
+                ("Mulliken charges:", "Mulliken charges and spin densities:")
+            ):
                 for line_j in self.contents[i + 2 :]:
                     if "Sum of Mulliken charges" in line_j:
                         break
@@ -1033,12 +1039,17 @@ class Gaussian16Output(GaussianFileMixin):
                         line_j_elements[2]
                     )
                     if len(line_j_elements) == 4:
-                        mulliken_spin_densities[element_num] = float(line_j_elements[3])
+                        mulliken_spin_densities[element_num] = float(
+                            line_j_elements[3]
+                        )
                 all_mulliken_atomic_charges.append(mulliken_atomic_charges)
                 if mulliken_spin_densities:
                     all_mulliken_spin_densities.append(mulliken_spin_densities)
         if all_mulliken_atomic_charges and all_mulliken_spin_densities:
-            return all_mulliken_atomic_charges[-1], all_mulliken_spin_densities[-1]
+            return (
+                all_mulliken_atomic_charges[-1],
+                all_mulliken_spin_densities[-1],
+            )
         elif all_mulliken_atomic_charges:
             return all_mulliken_atomic_charges[-1], None
         else:
@@ -1046,12 +1057,16 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def mulliken_atomic_charges_heavy_atoms(self):
-        mulliken_atomic_charges_heavy_atoms, _ = self._get_mulliken_atomic_charges_and_spin_densities_heavy_atoms()
+        mulliken_atomic_charges_heavy_atoms, _ = (
+            self._get_mulliken_atomic_charges_and_spin_densities_heavy_atoms()
+        )
         return mulliken_atomic_charges_heavy_atoms
 
     @cached_property
     def mulliken_spin_densities_heavy_atoms(self):
-        _, mulliken_spin_densities_heavy_atoms = self._get_mulliken_atomic_charges_and_spin_densities_heavy_atoms()
+        _, mulliken_spin_densities_heavy_atoms = (
+            self._get_mulliken_atomic_charges_and_spin_densities_heavy_atoms()
+        )
         return mulliken_spin_densities_heavy_atoms
 
     def _get_mulliken_atomic_charges_and_spin_densities_heavy_atoms(self):
@@ -1061,7 +1076,12 @@ class Gaussian16Output(GaussianFileMixin):
         for i, line_i in enumerate(self.contents):
             mulliken_atomic_charges_heavy_atoms = {}
             mulliken_spin_densities_heavy_atoms = {}
-            if line_i.startswith(("Mulliken charges with hydrogens summed into heavy atoms:", "Mulliken charges and spin densities with hydrogens summed into heavy atoms:")):
+            if line_i.startswith(
+                (
+                    "Mulliken charges with hydrogens summed into heavy atoms:",
+                    "Mulliken charges and spin densities with hydrogens summed into heavy atoms:",
+                )
+            ):
                 for line_j in self.contents[i + 2 :]:
                     if "Electronic spatial extent" in line_j:
                         break
@@ -1072,8 +1092,8 @@ class Gaussian16Output(GaussianFileMixin):
                         line_j_elements[2]
                     )
                     if len(line_j_elements) == 4:
-                        mulliken_spin_densities_heavy_atoms[element_num] = float(
-                            line_j_elements[3]
+                        mulliken_spin_densities_heavy_atoms[element_num] = (
+                            float(line_j_elements[3])
                         )
                 all_mulliken_atomic_charges_heavy_atoms.append(
                     mulliken_atomic_charges_heavy_atoms
@@ -1082,7 +1102,10 @@ class Gaussian16Output(GaussianFileMixin):
                     all_mulliken_spin_densities_heavy_atoms.append(
                         mulliken_spin_densities_heavy_atoms
                     )
-        if all_mulliken_atomic_charges_heavy_atoms and all_mulliken_spin_densities_heavy_atoms:
+        if (
+            all_mulliken_atomic_charges_heavy_atoms
+            and all_mulliken_spin_densities_heavy_atoms
+        ):
             return (
                 all_mulliken_atomic_charges_heavy_atoms[-1],
                 all_mulliken_spin_densities_heavy_atoms[-1],
@@ -1189,10 +1212,12 @@ class Gaussian16Output(GaussianFileMixin):
             hirshfeld_charges_heavy_atoms = {}
             hirshfeld_spin_densities_heavy_atoms = {}
             cm5_charges_heavy_atoms = {}
-            if line_i.startswith((
-                "Hirshfeld charges with hydrogens summed into heavy atoms:",
-                "Hirshfeld charges and spin densities with hydrogens summed into heavy atoms:"
-                                 )):
+            if line_i.startswith(
+                (
+                    "Hirshfeld charges with hydrogens summed into heavy atoms:",
+                    "Hirshfeld charges and spin densities with hydrogens summed into heavy atoms:",
+                )
+            ):
                 for line_j in self.contents[i + 2 :]:
                     if len(line_j) == 0 or line_j.startswith("Tot"):
                         break
@@ -1207,8 +1232,8 @@ class Gaussian16Output(GaussianFileMixin):
                             line_j_elements[3]
                         )
                     elif len(line_j_elements) == 5:
-                        hirshfeld_spin_densities_heavy_atoms[element_num] = float(
-                            line_j_elements[3]
+                        hirshfeld_spin_densities_heavy_atoms[element_num] = (
+                            float(line_j_elements[3])
                         )
                         cm5_charges_heavy_atoms[element_num] = float(
                             line_j_elements[4]
@@ -1223,14 +1248,24 @@ class Gaussian16Output(GaussianFileMixin):
                     )
                 print(hirshfeld_spin_densities_heavy_atoms)
 
-        if all_hirshfeld_charges_heavy_atoms and all_hirshfeld_spin_densities_heavy_atoms:
+        if (
+            all_hirshfeld_charges_heavy_atoms
+            and all_hirshfeld_spin_densities_heavy_atoms
+        ):
             return (
                 all_hirshfeld_charges_heavy_atoms[-1],
                 all_hirshfeld_spin_densities_heavy_atoms[-1],
-                all_cm5_charges_heavy_atoms
+                all_cm5_charges_heavy_atoms,
             )
-        elif all_hirshfeld_charges_heavy_atoms and not all_hirshfeld_spin_densities_heavy_atoms:
-            return all_hirshfeld_charges_heavy_atoms[-1], None, all_cm5_charges_heavy_atoms[-1]
+        elif (
+            all_hirshfeld_charges_heavy_atoms
+            and not all_hirshfeld_spin_densities_heavy_atoms
+        ):
+            return (
+                all_hirshfeld_charges_heavy_atoms[-1],
+                None,
+                all_cm5_charges_heavy_atoms[-1],
+            )
         else:
             return None, None, None
 

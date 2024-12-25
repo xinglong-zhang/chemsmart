@@ -54,9 +54,7 @@ def entry_point(filename, numbers):
     if numbers is not None:
         for n in numbers:
             charge_value = get_value_by_number(n, mulliken_charges)
-            hk = get_key_by_value_and_number(
-                charge_value, n, mulliken_charges
-            )
+            hk = get_key_by_value_and_number(charge_value, n, mulliken_charges)
             logger.info(f"Mulliken Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 
@@ -64,7 +62,9 @@ def entry_point(filename, numbers):
         for n in numbers:
             spin_value = get_value_by_number(n, mulliken_spins)
             hk = get_key_by_value_and_number(spin_value, n, mulliken_spins)
-            logger.info(f"Mulliken Spin densities at {hk} is {mulliken_spins:.3f}.")
+            logger.info(
+                f"Mulliken Spin densities at {hk} is {mulliken_spins:.3f}."
+            )
         logger.info("\n")
 
 
