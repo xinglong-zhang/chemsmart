@@ -166,6 +166,14 @@ def gaussian_hirshfeld_outfile(gaussian_outputs_test_directory):
     )
     return gaussian_hirshfeld_outfile
 
+@pytest.fixture()
+def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
+    gaussian_hirshfeld_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "oxetane_rc_hirshfeld_sp_smd_n_n-DiMethylFormamide.log",
+    )
+    return gaussian_hirshfeld_outfile
+
 
 # Gaussian output file for MP2 calculations
 @pytest.fixture()
