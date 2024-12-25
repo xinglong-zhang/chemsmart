@@ -1056,12 +1056,16 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def hirshfeld_charges(self):
-        hirshfeld_charges, _, _, _ = self._get_hirshfeld_charges_spins_dipoles_cm5()
+        hirshfeld_charges, _, _, _ = (
+            self._get_hirshfeld_charges_spins_dipoles_cm5()
+        )
         return hirshfeld_charges
 
     @cached_property
     def hirshfeld_spin_densities(self):
-        _, spin_densities, _, _ = self._get_hirshfeld_charges_spins_dipoles_cm5()
+        _, spin_densities, _, _ = (
+            self._get_hirshfeld_charges_spins_dipoles_cm5()
+        )
         return spin_densities
 
     @cached_property
@@ -1076,12 +1080,16 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def hirshfeld_charges_heavy_atoms(self):
-        hirshfeld_charges_heavy_atoms, _ = self._get_hirshfeld_cm5_charges_heavy_atoms()
+        hirshfeld_charges_heavy_atoms, _ = (
+            self._get_hirshfeld_cm5_charges_heavy_atoms()
+        )
         return hirshfeld_charges_heavy_atoms
 
     @cached_property
     def hirshfeld_cm5_charges_heavy_atoms(self):
-        _, cm5_charges_heavy_atoms = self._get_hirshfeld_cm5_charges_heavy_atoms()
+        _, cm5_charges_heavy_atoms = (
+            self._get_hirshfeld_cm5_charges_heavy_atoms()
+        )
         return cm5_charges_heavy_atoms
 
     def _get_hirshfeld_charges_spins_dipoles_cm5(self):
@@ -1153,7 +1161,10 @@ class Gaussian16Output(GaussianFileMixin):
                     hirshfeld_charges_heavy_atoms
                 )
                 all_cm5_charges_heavy_atoms.append(cm5_charges_heavy_atoms)
-        return all_hirshfeld_charges_heavy_atoms[-1], all_cm5_charges_heavy_atoms[-1]
+        return (
+            all_hirshfeld_charges_heavy_atoms[-1],
+            all_cm5_charges_heavy_atoms[-1],
+        )
 
     def get_molecule(self, index="-1"):
         index = string2index(index)

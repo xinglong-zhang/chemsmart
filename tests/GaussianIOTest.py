@@ -875,10 +875,22 @@ class TestGaussian16Output:
         assert g16_hirshfeld.hirshfeld_spin_densities["O2"] == 0.000000
         assert g16_hirshfeld.hirshfeld_spin_densities["C3"] == 0.000000
         assert g16_hirshfeld.hirshfeld_spin_densities["H33"] == 0.000000
-        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["O1"],np.array([-0.121486, -0.118753, -0.104620]))
-        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["O2"],np.array([0.024882, -0.086174, 0.133652]))
-        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["C3"],np.array([-0.008461, -0.029311, -0.015572]))
-        assert np.allclose(g16_hirshfeld.hirshfeld_dipoles["H33"],np.array([-0.143072, 0.058847, -0.063056]))
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["O1"],
+            np.array([-0.121486, -0.118753, -0.104620]),
+        )
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["O2"],
+            np.array([0.024882, -0.086174, 0.133652]),
+        )
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["C3"],
+            np.array([-0.008461, -0.029311, -0.015572]),
+        )
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["H33"],
+            np.array([-0.143072, 0.058847, -0.063056]),
+        )
         assert g16_hirshfeld.hirshfeld_cm5_charges["O1"] == -0.309536
         assert g16_hirshfeld.hirshfeld_cm5_charges["O2"] == -0.278764
         assert g16_hirshfeld.hirshfeld_cm5_charges["C3"] == -0.089643
@@ -886,10 +898,15 @@ class TestGaussian16Output:
         assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["O1"] == -0.222183
         assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["O2"] == -0.175602
         assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["C3"] == 0.011726
-        assert g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O1"] == -0.309536
-        assert g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O2"] == -0.278764
-        assert g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["C3"] == 0.012018
-
+        assert (
+            g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O1"] == -0.309536
+        )
+        assert (
+            g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O2"] == -0.278764
+        )
+        assert (
+            g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["C3"] == 0.012018
+        )
 
     def test_read_mp2_outputfile(self, gaussian_mp2_outputfile):
         assert os.path.exists(gaussian_mp2_outputfile)
