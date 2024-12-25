@@ -6,7 +6,6 @@ from chemsmart.utils.utils import create_logger
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.utils.utils import (
     get_value_by_number,
-    get_key_by_value_and_number,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +53,7 @@ def entry_point(filename, numbers):
             logger.info(f"Natural Charge at atom {n} is {charge_value:.>3f}.")
             logger.info("\n")
         logger.info("\n")
+
 
 if __name__ == "__main__":
     entry_point()
