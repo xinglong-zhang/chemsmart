@@ -777,7 +777,7 @@ class TestORCAOutput:
         assert np.isclose(orca_out.lumo_energy, 1.56267, rtol=1e-5)
         assert np.isclose(orca_out.fmo_gap, 10.968637, rtol=1e-5)
 
-    def test_read_hirshfelf_full_print_output(self, hirshfeld_full_print):
+    def test_read_hirshfeld_full_print_output(self, hirshfeld_full_print):
         orca_out = ORCAOutput(filename=hirshfeld_full_print)
         assert orca_out.route_string == "! Hirshfeld".lower()
         assert orca_out.functional is None
@@ -1616,7 +1616,7 @@ class TestORCAOutput:
             "F77": -0.150262,
             "F78": -0.152801,
         }
-        assert orca_out.hirshfeld_spins == {
+        assert orca_out.hirshfeld_spin_densities == {
             "O1": 0.0,
             "O2": 0.0,
             "O3": 0.0,

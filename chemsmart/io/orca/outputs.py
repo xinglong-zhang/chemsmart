@@ -985,7 +985,7 @@ class ORCAOutput(ORCAFileMixin):
         return hirshfeld_charges
 
     @property
-    def hirshfeld_spins(self):
+    def hirshfeld_spin_densities(self):
         _, hirshfeld_spins = self._get_hirshfeld_charges_and_spins()
         return hirshfeld_spins
 
