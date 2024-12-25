@@ -20,10 +20,6 @@ from chemsmart.utils.repattern import (
 )
 from ase.io.formats import string2index
 from chemsmart.utils.periodictable import PeriodicTable
-from tests.conftest import hirshfeld_full_print
-from torch.distributed.algorithms.ddp_comm_hooks.default_hooks import (
-    allreduce_hook,
-)
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
