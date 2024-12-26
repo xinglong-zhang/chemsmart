@@ -144,8 +144,8 @@ class ORCAFileMixin(FileMixin):
                 next_lines = self.contents[i + 1 :]
                 for next_line in next_lines:
                     if "cutoff" in next_line.lower():
-                        # Find the string prior to it. This is assuming the input is written by pyatoms
-                        # where the comment on the cutoff is also written
+                        # Find the string prior to it. This is assuming the input is written by
+                        # this program where the comment on the cutoff is also written
                         l_elem = next_line.split()
                         c_idx = l_elem.index("cutoff")
                         return l_elem[c_idx - 1]
