@@ -4,8 +4,6 @@ from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import XYZFile
-from pyatoms.cli.traj import index
-from tests.conftest import reference_genecp_txt_file_from_api
 
 
 class TestCoordinateBlock:
