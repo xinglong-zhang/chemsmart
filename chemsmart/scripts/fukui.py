@@ -122,7 +122,7 @@ def entry_point(
             "\nUsing CM5 Charges for computing Fukui Reactivity Indices."
         )
         assert (
-            filetype(neutral_filename) == "gaussian"
+            file == "gaussian"
         ), "CM5 charges are only available for Gaussian outputs."
         charge_for_neutral = neutral_output.hirshfeld_cm5_charges
         if radical_cation_filename is not None:
