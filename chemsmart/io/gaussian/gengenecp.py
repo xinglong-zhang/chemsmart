@@ -108,7 +108,7 @@ class GenGenECPSection:
 
     @classmethod
     def from_comfile(cls, comfile):
-        from pyatoms.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.inputs import Gaussian16Input
 
         comfile = Gaussian16Input(comfile=comfile)
         return cls.from_genecp_group(comfile.gen_genecp)
@@ -144,7 +144,7 @@ class GenGenECPSection:
         try:
             import basis_set_exchange as bse
 
-            from pyatoms.io.gaussian import BSEMetadata
+            from chemsmart.io.gaussian import BSEMetadata
 
             bse_all_bases = BSEMetadata().all_bases_names()
         except ImportError as e:

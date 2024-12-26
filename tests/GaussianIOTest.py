@@ -7,8 +7,6 @@ from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 from ase.symbols import Symbols
 from ase import units
-from tests.conftest import hirshfeld_full_print
-from torch.onnx.symbolic_opset11 import unbind
 
 
 class TestGaussian16Input:

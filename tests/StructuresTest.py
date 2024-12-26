@@ -4,8 +4,6 @@ from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import XYZFile
-from pyatoms.cli.traj import index
-from tests.conftest import reference_genecp_txt_file_from_api
 
 
 class TestCoordinateBlock:
@@ -401,3 +399,185 @@ class TestStructuresFromGaussianInput:
         assert g16_file.molecule.translation_vectors == [
             [4.8477468928, 0.1714181332, 0.5112729831],
         ]
+
+
+class TestSDFFile:
+    def test_converts_sdf_string_to_molecule_object(self, tmpdir):
+        sdf_string = """6999790
+  -OEChem-03092302273D
+
+ 13 12  0     1  0  0  0  0  0999 V2000
+   -1.1018    1.2385   -0.0496 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4517    0.0248    0.3184 C   0  0  1  0  0  0  0  0  0  0  0  0
+   -1.3489   -1.1518   -0.0426 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8543   -0.0422   -0.4148 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0481   -0.0692    0.1885 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.2932    0.0475    1.4026 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.3037   -1.0804    0.4900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.5887   -1.1551   -1.1122 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8804   -2.1073    0.2141 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8229   -0.0582   -1.5016 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.9459    1.2770    0.4319 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.9591   -0.1121   -0.3983 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.1387   -0.0496    1.2689 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1 11  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  6  1  0  0  0  0
+  3  7  1  0  0  0  0
+  3  8  1  0  0  0  0
+  3  9  1  0  0  0  0
+  4  5  2  0  0  0  0
+  4 10  1  0  0  0  0
+  5 12  1  0  0  0  0
+  5 13  1  0  0  0  0
+M  END
+> <PUBCHEM_COMPOUND_CID>
+6999790
+
+> <PUBCHEM_CONFORMER_RMSD>
+0.4
+
+> <PUBCHEM_CONFORMER_DIVERSEORDER>
+1
+2
+3
+
+> <PUBCHEM_MMFF94_PARTIAL_CHARGES>
+8
+1 -0.68
+10 0.15
+11 0.4
+12 0.15
+13 0.15
+2 0.42
+4 -0.29
+5 -0.3
+
+> <PUBCHEM_EFFECTIVE_ROTOR_COUNT>
+1
+
+> <PUBCHEM_PHARMACOPHORE_FEATURES>
+3
+1 1 acceptor
+1 1 donor
+1 5 hydrophobe
+
+> <PUBCHEM_HEAVY_ATOM_COUNT>
+5
+
+> <PUBCHEM_ATOM_DEF_STEREO_COUNT>
+1
+
+> <PUBCHEM_ATOM_UDEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_BOND_DEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_BOND_UDEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_ISOTOPIC_ATOM_COUNT>
+0
+
+> <PUBCHEM_COMPONENT_COUNT>
+1
+
+> <PUBCHEM_CACTVS_TAUTO_COUNT>
+1
+
+> <PUBCHEM_CONFORMER_ID>
+006ACEEE00000001
+
+> <PUBCHEM_MMFF94_ENERGY>
+2.2534
+
+> <PUBCHEM_FEATURE_SELFOVERLAP>
+15.223
+
+> <PUBCHEM_SHAPE_FINGERPRINT>
+139733 1 9078577887532652523
+16714656 1 18411707598977923407
+20096714 4 18191872223362461888
+21015797 1 9943532881608965411
+21040471 1 18194406580373827108
+29004967 10 18120096344745644827
+5460574 1 9511472116931879378
+5943 1 10672208095369030331
+
+> <PUBCHEM_SHAPE_MULTIPOLES>
+97.03
+2.26
+1.1
+0.66
+0.88
+0.14
+0
+-0.36
+0.09
+-0.58
+-0.02
+0.05
+-0.02
+-0.01
+
+> <PUBCHEM_SHAPE_SELFOVERLAP>
+167.629
+
+> <PUBCHEM_SHAPE_VOLUME>
+65.3
+
+> <PUBCHEM_COORDINATE_TYPE>
+2
+5
+10
+
+$$$$"""
+        from chemsmart.io.molecules.structure import SDFFile
+
+        tmpfile = os.path.join(tmpdir, "test.sdf")
+        with open(tmpfile, "w") as f:
+            f.write(sdf_string)
+        sdf_file = SDFFile(filename=tmpfile)
+        sdf_molecule = sdf_file.molecule
+        assert isinstance(sdf_molecule, Molecule)
+        assert all(
+            sdf_molecule.symbols
+            == [
+                "O",
+                "C",
+                "C",
+                "C",
+                "C",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+            ]
+        )
+        assert sdf_molecule.empirical_formula == "C4H8O"
+        structure_coords = np.array(
+            [
+                [-1.1018, 1.2385, -0.0496],
+                [-0.4517, 0.0248, 0.3184],
+                [-1.3489, -1.1518, -0.0426],
+                [0.8543, -0.0422, -0.4148],
+                [2.0481, -0.0692, 0.1885],
+                [-0.2932, 0.0475, 1.4026],
+                [-2.3037, -1.0804, 0.49],
+                [-1.5887, -1.1551, -1.1122],
+                [-0.8804, -2.1073, 0.2141],
+                [0.8229, -0.0582, -1.5016],
+                [-1.9459, 1.277, 0.4319],
+                [2.9591, -0.1121, -0.3983],
+                [2.1387, -0.0496, 1.2689],
+            ]
+        )
+
+        assert np.all(sdf_molecule.positions == structure_coords)

@@ -221,7 +221,7 @@ class Molecule:
     # @file_cache()
     # def _read_gromacs_gro(filepath, index, **kwargs):
     #     # TODO: add handling of index
-    #     from pyatoms.io.gromacs.outputs import GroGroOutput
+    #     from chemsmart.io.gromacs.outputs import GroGroOutput
     #
     #     gro_output = GroGroOutput(filename=filepath)
     #     return gro_output.get_gro()
@@ -229,7 +229,7 @@ class Molecule:
     # @staticmethod
     # @file_cache()
     # def _read_gromacs_trr(filepath, index, **kwargs):
-    #     from pyatoms.io.gromacs.outputs import GroTrrOutput
+    #     from chemsmart.io.gromacs.outputs import GroTrrOutput
     #
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
