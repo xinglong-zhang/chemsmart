@@ -536,14 +536,32 @@ M  END
 
 $$$$"""
         from chemsmart.io.molecules.structure import SDFFile
+
         tmpfile = os.path.join(tmpdir, "test.sdf")
         with open(tmpfile, "w") as f:
             f.write(sdf_string)
         sdf_file = SDFFile(filename=tmpfile)
         sdf_molecule = sdf_file.molecule
         assert isinstance(sdf_molecule, Molecule)
-        assert all(sdf_molecule.symbols == ['O', 'C', 'C', 'C', 'C', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'])
-        assert sdf_molecule.empirical_formula == 'C4H8O'
+        assert all(
+            sdf_molecule.symbols
+            == [
+                "O",
+                "C",
+                "C",
+                "C",
+                "C",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+                "H",
+            ]
+        )
+        assert sdf_molecule.empirical_formula == "C4H8O"
         structure_coords = np.array(
             [
                 [-1.1018, 1.2385, -0.0496],
