@@ -1,4 +1,3 @@
-import numpy as np
 from chemsmart.utils.utils import (
     get_list_from_string_range,
     str_indices_to_list,
