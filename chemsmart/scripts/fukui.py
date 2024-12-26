@@ -46,15 +46,23 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-m",
     "--mode",
     default="mulliken",
-    type=click.Choice(["mulliken", "nbo", "hirshfeld", "cm5"], case_sensitive=False),
+    type=click.Choice(
+        ["mulliken", "nbo", "hirshfeld", "cm5"], case_sensitive=False
+    ),
     help="Charges to be used for Fukui Indices calculations.",
 )
-def entry_point(neutral_filename, radical_cation_filename=None, radical_anion_filename=None,
-                mode="mulliken"):
+def entry_point(
+    neutral_filename,
+    radical_cation_filename=None,
+    radical_anion_filename=None,
+    mode="mulliken",
+):
     create_logger()
 
     if radical_cation_filename is None and radical_anion_filename is None:
-        raise ValueError("At least one of radical cation or radical anion files must be provided.")
+        raise ValueError(
+            "At least one of radical cation or radical anion files must be provided."
+        )
 
     if neutral_filename.endswith(".log"):
         file = "gaussian"
@@ -66,7 +74,9 @@ def entry_point(neutral_filename, radical_cation_filename=None, radical_anion_fi
     if file == "gaussian":
         neutral_output = Gaussian16WBIOutput(neutral_filename)
         if radical_cation_filename is not None:
-            radical_cation_output = Gaussian16WBIOutput(radical_cation_filename)
+            radical_cation_output = Gaussian16WBIOutput(
+                radical_cation_filename
+            )
         if radical_anion_filename is not None:
             radical_anion_output = Gaussian16WBIOutput(radical_anion_filename)
     elif file == "orca":
@@ -76,37 +86,53 @@ def entry_point(neutral_filename, radical_cation_filename=None, radical_anion_fi
         if radical_anion_filename is not None:
             radical_anion_output = ORCAOutput(radical_anion_filename)
 
-
-
     if mode == "mulliken":
-        logger.info("\nUsing Mulliken Charges for computing Fukui Reactivity Indices.")
+        logger.info(
+            "\nUsing Mulliken Charges for computing Fukui Reactivity Indices."
+        )
         charge_for_neutral = neutral_output.mulliken_atomic_charges
         if radical_cation_filename is not None:
-            charge_for_radical_cation = radical_cation_output.mulliken_atomic_charges
+            charge_for_radical_cation = (
+                radical_cation_output.mulliken_atomic_charges
+            )
         if radical_anion_filename is not None:
-            charge_for_radical_anion = radical_anion_output.mulliken_atomic_charges
+            charge_for_radical_anion = (
+                radical_anion_output.mulliken_atomic_charges
+            )
     elif mode == "nbo":
-        logger.info("\nUsing NBO Charges for computing Fukui Reactivity Indices.")
+        logger.info(
+            "\nUsing NBO Charges for computing Fukui Reactivity Indices."
+        )
         charge_for_neutral = neutral_output.natural_charges
         if radical_cation_filename is not None:
             charge_for_radical_cation = radical_cation_output.natural_charges
         if radical_anion_filename is not None:
             charge_for_radical_anion = radical_anion_output.natural_charges
     elif mode == "hirshfeld":
-        logger.info("\nUsing Hirshfeld Charges for computing Fukui Reactivity Indices.")
+        logger.info(
+            "\nUsing Hirshfeld Charges for computing Fukui Reactivity Indices."
+        )
         charge_for_neutral = neutral_output.hirshfeld_charges
         if radical_cation_filename is not None:
             charge_for_radical_cation = radical_cation_output.hirshfeld_charges
         if radical_anion_filename is not None:
             charge_for_radical_anion = radical_anion_output.hirshfeld_charges
     elif mode == "cm5":
-        logger.info("\nUsing CM5 Charges for computing Fukui Reactivity Indices.")
-        assert filetype(neutral_filename) == "gaussian", "CM5 charges are only available for Gaussian outputs."
+        logger.info(
+            "\nUsing CM5 Charges for computing Fukui Reactivity Indices."
+        )
+        assert (
+            filetype(neutral_filename) == "gaussian"
+        ), "CM5 charges are only available for Gaussian outputs."
         charge_for_neutral = neutral_output.hirshfeld_cm5_charges
         if radical_cation_filename is not None:
-            charge_for_radical_cation = radical_cation_output.hirshfeld_cm5_charges
+            charge_for_radical_cation = (
+                radical_cation_output.hirshfeld_cm5_charges
+            )
         if radical_anion_filename is not None:
-            charge_for_radical_anion = radical_anion_output.hirshfeld_cm5_charges
+            charge_for_radical_anion = (
+                radical_anion_output.hirshfeld_cm5_charges
+            )
 
     logger.info("\nNeutral System Charges:")
     for key, value in charge_for_neutral.items():
@@ -125,7 +151,9 @@ def entry_point(neutral_filename, radical_cation_filename=None, radical_anion_fi
             logger.info(f"{key:<6}  :  {value:>8.3f}")
         logger.info("\n")
 
-    logger.info("\nAtom        Fukui Minus (f-)   Fukui Plus(f+)    Fukui Zero(f0)    Fukui Dual Descriptor(f(2))")
+    logger.info(
+        "\nAtom        Fukui Minus (f-)   Fukui Plus(f+)    Fukui Zero(f0)    Fukui Dual Descriptor(f(2))"
+    )
     for key, value in charge_for_neutral.items():
         if radical_cation_filename is not None:
             fukui_minus = charge_for_radical_cation[key] - value
@@ -135,13 +163,20 @@ def entry_point(neutral_filename, radical_cation_filename=None, radical_anion_fi
             fukui_plus = value - charge_for_radical_anion[key]
         else:
             fukui_plus = 0.0
-        if radical_cation_filename is not None and radical_anion_filename is not None:
-            fukui_zero = 0.5 * (charge_for_radical_cation[key] - charge_for_radical_anion[key])
+        if (
+            radical_cation_filename is not None
+            and radical_anion_filename is not None
+        ):
+            fukui_zero = 0.5 * (
+                charge_for_radical_cation[key] - charge_for_radical_anion[key]
+            )
             fukui_dual = fukui_plus - fukui_minus
         else:
             fukui_zero = 0.0
             fukui_dual = 0.0
-        logger.info(f"{key:<4}        {fukui_minus:>12.3f}     {fukui_plus:>12.3f}     {fukui_zero:>12.3f}     {fukui_dual:>12.3f}")
+        logger.info(
+            f"{key:<4}        {fukui_minus:>12.3f}     {fukui_plus:>12.3f}     {fukui_zero:>12.3f}     {fukui_dual:>12.3f}"
+        )
 
 
 if __name__ == "__main__":
