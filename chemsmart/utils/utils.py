@@ -7,6 +7,7 @@ import copy
 import logging
 from functools import lru_cache, wraps
 from itertools import groupby
+from ase.io import string2index
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -142,6 +143,44 @@ def get_list_from_string_range(string_of_range):
         else:
             indices.append(int(s))
     return indices
+
+
+def str_indices_to_list(str_indices):
+    """Convert a supplied string of indices to a list of indices. All 0-indexed.
+
+        Supported formats: e.g.,
+            '1:9' -> gives [1,2,3,4,5,6,7,8]
+            '1,2,4' -> gives [1,2,4]
+            '1-9' -> gives [1,2,3,4,5,6,7,8]
+            '[1-9]' -> gives [1,2,3,4,5,6,7,8].
+        """
+    try:
+        indices_slice = string2index(str_indices)
+        list_indices = list(range(*indices_slice.indices(100000)))
+        # randomly large number (100000) to provide an upper bound onn the total number of components in the structure
+    except (TypeError, ValueError, AttributeError):
+        list_indices = []
+        if '[' in str_indices:
+            str_indices = str_indices.replace('[', '')
+        if ']' in str_indices:
+            str_indices = str_indices.replace(']', '')
+        if ',' in str_indices:
+            str_indices_split = str_indices.split(',')
+            for i in str_indices_split:
+                list_indices.append(int(i))
+        if ':' in str_indices:
+            str_indices_split = str_indices.split(':')
+            start_index = int(str_indices_split[0])
+            end_index = int(str_indices_split[-1])
+            for i in range(start_index, end_index):
+                list_indices.append(i)
+        if '-' in str_indices:
+            str_indices_split = str_indices.split('-')
+            start_index = int(str_indices_split[0])
+            end_index = int(str_indices_split[-1])
+            for i in range(start_index, end_index):
+                list_indices.append(i)
+    return list_indices
 
 
 def create_logger(
