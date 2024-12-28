@@ -443,7 +443,7 @@ def orca_yaml_settings_solv(orca_yaml_settings_directory):
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
-    return os.path.join(test_data_directory, "StructuresTest")
+    return os.path.join(test_data_directory, "StructuresTests")
 
 
 @pytest.fixture()
@@ -459,3 +459,13 @@ def single_molecule_xyz_file(xyz_directory):
 @pytest.fixture()
 def multiple_molecules_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_conformers.xyz")
+
+
+@pytest.fixture()
+def utils_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "UtilsTests")
+
+
+@pytest.fixture()
+def server_yaml_file(utils_test_directory):
+    return os.path.join(utils_test_directory, "server.yaml")

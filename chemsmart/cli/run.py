@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
     default=False,
     help="If true, fake jobrunners will be used",
 )
+@click.option(
+    "--stream/--no-stream",
+    default=None,
+    callback=use_server_defaults,
+    help="Turns on logging to stdout",
+)
 def entry_point(
     ctx,
     num_processes,

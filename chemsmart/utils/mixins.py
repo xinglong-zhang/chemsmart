@@ -278,6 +278,27 @@ class ORCAFileMixin(FileMixin):
         return self.route_object.numfreq
 
 
+class YAMLFileMixin(FileMixin):
+    """Mixin class for YAML files."""
+
+    @cached_property
+    def yaml_contents_dict(self):
+        import yaml
+        return yaml.safe_load(self.content_lines_string)
+
+    @property
+    def yaml_contents_keys(self):
+        return self.yaml_contents_dict.keys()
+
+    @property
+    def yaml_contents_values(self):
+        return self.yaml_contents_dict.values()
+
+    def yaml_contents_by_key(self, key):
+        return self.yaml_contents_dict[key]
+
+
+
 # class BlockMixin:
 #     """Mixin class for files that can be opened and read"""
 #     def write(self, f):
