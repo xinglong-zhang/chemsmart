@@ -1,5 +1,7 @@
 import os
 import re
+import inspect
+from functools import lru_cache
 from functools import cached_property
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.gaussian.route import GaussianRoute
@@ -284,6 +286,7 @@ class YAMLFileMixin(FileMixin):
     @cached_property
     def yaml_contents_dict(self):
         import yaml
+
         return yaml.safe_load(self.content_lines_string)
 
     @property
@@ -297,6 +300,38 @@ class YAMLFileMixin(FileMixin):
     def yaml_contents_by_key(self, key):
         return self.yaml_contents_dict[key]
 
+
+class RegistryMeta(type):
+    """Metaclass to ensure each class has its own _REGISTRY."""
+
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        if not hasattr(cls, "_REGISTRY"):
+            cls._REGISTRY = []
+
+
+class RegistryMixin(metaclass=RegistryMeta):
+    REGISTERABLE = True
+
+    @classmethod
+    def subclasses(cls, allow_abstract=False):
+        return cls._subclasses(cls, cls._REGISTRY, allow_abstract)
+
+    @staticmethod
+    @lru_cache
+    def _subclasses(parent_cls, registry, allow_abstract):
+        return [
+            c
+            for c in registry
+            if issubclass(c, parent_cls)
+            and c != parent_cls
+            and (not inspect.isabstract(c) or allow_abstract)
+        ]
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.REGISTERABLE:
+            cls._REGISTRY.append(cls)
 
 
 # class BlockMixin:

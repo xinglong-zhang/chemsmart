@@ -463,7 +463,7 @@ def multiple_molecules_xyz_file(xyz_directory):
 
 @pytest.fixture()
 def utils_test_directory(test_data_directory):
-    return os.path.join(test_data_directory, "UtilsTests")
+    return os.path.join(test_data_directory, "YAMLTests")
 
 
 @pytest.fixture()

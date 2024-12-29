@@ -1,30 +1,30 @@
 SERVER:
-  STYPE: pbs
-  DEFAULT_QUEUE_NAME: normal
-  DEFAULT_NUM_HOURS: 24
-  MAX_MEM_GIGS: 400
+  SCHEDULER: pbs
+  QUEUE_NAME: normal
+  NUM_HOURS: 24
+  MEM_GB: 400
   NUM_CORES: 64
   NUM_GPUS: 0
   NUM_THREADS: 64
   EXECUTION_TYPE: craympirun
   PROJECT: 13003611
   ##PROJECT: 13002374
-  TMP_DIR: null
+  SCRATCH_DIR: null
   USE_HOSTS: true
   EXTRA_COMMANDS: |
        source ~/anaconda3/etc/profile.d/conda.sh
        conda activate /home/users/astar/bmsi/zhangx5/anaconda3/envs/pyatoms-dev2
        module purge
        module load craype-x86-rome
-       module load libfabric/1.11.0.4.125 
-       module load craype-network-ofi 
+       module load libfabric/1.11.0.4.125
+       module load craype-network-ofi
        module load perftools-base/22.04.0
-       module load cce/13.0.2  
+       module load cce/13.0.2
        module load craype/2.7.15
        module load cray-dsmml/0.2.2
-       module load cray-mpich/8.1.15 
-       module load cray-libsci/21.08.1.2 
-       module load cray-pals/1.1.6 
+       module load cray-mpich/8.1.15
+       module load cray-libsci/21.08.1.2
+       module load cray-pals/1.1.6
        module load PrgEnv-cray/8.3.3
        module load gcc/11.2.0
        module load mkl/2022.0.2
