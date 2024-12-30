@@ -1,7 +1,5 @@
 import logging
-import os
 
-import yaml
 
 from chemsmart.utils.mixins import YAMLFileMixin
 

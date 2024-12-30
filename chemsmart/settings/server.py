@@ -15,6 +15,15 @@ class Server(RegistryMixin):
     def __str__(self):
         return f"Server: {self.name}"
 
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __repr__(self):
+        return f"Server(name={self.name})"
+
     def __call__(self):
         server_cls = [s for s in Server.subclasses() if self.name == s.NAME]
         if len(server_cls) == 0:
@@ -86,3 +95,4 @@ class Server(RegistryMixin):
         if self in Server._REGISTRY:
             return self
         Server._REGISTRY.append(self)
+        return self

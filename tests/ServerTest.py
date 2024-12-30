@@ -1,9 +1,4 @@
-import math
 import os
-from wsgiref.simple_server import server_version
-
-import numpy as np
-import pytest
 from chemsmart.settings.server import Server
 
 
@@ -41,7 +36,6 @@ module load mkl/2022.0.2
 module load intel/2022.0.2
 """
         assert server.extra_commands == extra_commands
-
 
         # server_yaml = YAMLFile(filename=server_yaml_file)
         # assert len(server_yaml.yaml_contents_dict) == 3
