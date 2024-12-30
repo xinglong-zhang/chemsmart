@@ -182,3 +182,28 @@ class PBSSubmitter(Submitter):
 
     def _write_change_to_job_directory(self, f):
         f.write(f"cd $PBS_O_WORKDIR\n\n")
+
+
+class SLURMSubmitter(Submitter):
+    def __init__(self, name="SLURM", job=None, server=None, **kwargs):
+        super().__init__(name=name, job=job, server=server, **kwargs)
+
+    def _write_scheduler_options(self, f):
+        f.write(f"#SBATCH --job-name={self.job.label}\n")
+        f.write(f"#SBATCH --output={self.job.label}.slurmout\n")
+        f.write(f"#SBATCH --error={self.job.label}.slurmerr\n")
+        f.write(
+            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} "
+            f"--ntasks-per-gpu={self.server.num_gpus} --mem={self.server.mem_gb}G\n"
+        )
+        f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if user_settings.data.get("PROJECT"):
+            f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+
+        if user_settings.data.get("EMAIL"):
+            f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+            f.write("#SBATCH --mail-type=abe\n")
+
+    def _write_change_to_job_directory(self, f):
+        f.write(f"cd $SLURM_SUBMIT_DIR\n\n")
