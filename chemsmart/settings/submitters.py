@@ -3,6 +3,7 @@ import logging
 import os
 
 from chemsmart.settings.user import ChemsmartUserSettings
+
 user_settings = ChemsmartUserSettings()
 
 
@@ -207,3 +208,40 @@ class SLURMSubmitter(Submitter):
 
     def _write_change_to_job_directory(self, f):
         f.write(f"cd $SLURM_SUBMIT_DIR\n\n")
+
+
+class IBMSubmitter(Submitter):
+    def __init__(self, name="FUGAKU", job=None, server=None, **kwargs):
+        super().__init__(name=name, job=job, server=server, **kwargs)
+
+    def _write_scheduler_options(self, f):
+        f.write(f"#BSUB -J {self.job.label}\n")
+        f.write(f"#BSUB -o {self.job.label}.bsubout\n")
+        f.write(f"#BSUB -e {self.job.label}.bsuberr\n")
+        f.write(
+            f"#BSUB -nnodes {self.server.num_nodes} -P {user_settings.data['PROJECT']}\n"
+        )
+        f.write(f"#BSUB -W {self.server.num_hours}\n")
+        f.write(f"#BSUB -alloc_flags gpumps\n")
+
+    def _write_change_to_job_directory(self, f):
+        f.write(f"cd $LS_SUBCWD\n\n")
+
+
+class FUGAKUSubmitter(Submitter):
+    def __init__(self, name="FUGAKU", job=None, server=None, **kwargs):
+        super().__init__(name=name, job=job, server=server, **kwargs)
+
+    def _write_scheduler_options(self, f):
+        f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
+        f.write(f"#PJM -L node=1\n")  # using one node here
+        f.write(f"#PJM -L elapse={self.server.num_hours}\n")
+        f.write(f"#PJM --mpi proc={self.server.num_cores}\n")
+        f.write(f"#PJM -g {self.project}\n")
+        f.write("#PJM -o pjm.%j.out\n")
+        f.write("#PJM -e pjm.%j.err\n")
+        f.write("#PJM -x PJM_LLIO_GFSCACHE=/vol0005:/vol0004\n")
+        f.write("#PJM -S\n")
+
+    def _write_change_to_job_directory(self, f):
+        f.write(f"cd $PJM_O_WORKDIR\n\n")
