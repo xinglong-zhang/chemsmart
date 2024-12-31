@@ -8,7 +8,7 @@ class TestYAMLFile:
         assert os.path.isfile(server_yaml_file)
         server_yaml = YAMLFile(filename=server_yaml_file)
         assert len(server_yaml.yaml_contents_dict) == 3
-        assert server_yaml.yaml_contents_dict["SERVER"]["SCHEDULER"] == "pbs"
+        assert server_yaml.yaml_contents_dict["SERVER"]["SCHEDULER"] == "PBS"
         assert len(server_yaml.yaml_contents_dict["SERVER"].keys()) == 12
         assert list(server_yaml.yaml_contents_dict.keys())[0] == "SERVER"
         assert list(server_yaml.yaml_contents_dict.keys())[1] == "GAUSSIAN"

@@ -210,8 +210,8 @@ class SLURMSubmitter(Submitter):
         f.write(f"cd $SLURM_SUBMIT_DIR\n\n")
 
 
-class IBMSubmitter(Submitter):
-    def __init__(self, name="FUGAKU", job=None, server=None, **kwargs):
+class SLFSubmitter(Submitter):
+    def __init__(self, name="SLF", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
     def _write_scheduler_options(self, f):
