@@ -9,7 +9,7 @@ SERVER:
   EXECUTION_TYPE: craympirun
   PROJECT: 13003611
   ##PROJECT: 13002374
-  SCRATCH_DIR: null
+  SCRATCH: null
   USE_HOSTS: true
   EXTRA_COMMANDS: |
        source ~/anaconda3/etc/profile.d/conda.sh

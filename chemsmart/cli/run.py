@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 #     default=None,
 #     help="Turns on logging to stdout",
 # )
-def entry_point(
+def run(
     ctx,
     num_processes,
     debug,
@@ -60,7 +60,7 @@ def entry_point(
     # ctx.obj['jobrunner'] = jobrunner
 
 
-@entry_point.result_callback()
+@run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
     invoked_subcommand = ctx.invoked_subcommand
@@ -69,11 +69,11 @@ def process_pipeline(ctx, *args, **kwargs):
 
 
 for subcommand in subcommands:
-    entry_point.add_command(subcommand)
+    run.add_command(subcommand)
 
 if __name__ == "__main__":
     obj = {}
     try:
-        entry_point(obj=obj)
+        run(obj=obj)
     except KeyboardInterrupt as e:
         raise e

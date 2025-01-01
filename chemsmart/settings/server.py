@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
@@ -79,8 +80,8 @@ class Server(RegistryMixin):
         return self.kwargs.get("EXECUTION_TYPE")
 
     @cached_property
-    def scratch_dir(self):
-        return self.kwargs.get("SCRATCH_DIR")
+    def scratch(self):
+        return self.kwargs.get("SCRATCH")
 
     @cached_property
     def use_hosts(self):
@@ -124,7 +125,10 @@ class Server(RegistryMixin):
 
         # Match scheduler type with available Server subclasses
         for server_cls in cls.subclasses():
-            if hasattr(server_cls, "SCHEDULER_TYPE") and server_cls.SCHEDULER_TYPE == scheduler_type:
+            if (
+                hasattr(server_cls, "SCHEDULER_TYPE")
+                and server_cls.SCHEDULER_TYPE == scheduler_type
+            ):
                 return server_cls(name=scheduler_type)()
 
         raise ValueError(
@@ -160,7 +164,8 @@ class Server(RegistryMixin):
                 "name": "SGE",
                 "env_vars": [],
                 "commands": [["qstat"], ["qstat", "-help"]],
-                "check_output": lambda output: "Grid Engine" in output or "Sun" in output,
+                "check_output": lambda output: "Grid Engine" in output
+                or "Sun" in output,
             },
             {
                 "name": "HTCondor",

@@ -291,3 +291,14 @@ def two_lists_have_similar_contents(list1, list2, ignore_string=None):
                 continue
             return False
     return True
+
+
+def update_dict_with_existing_keys(dict1, dict2):
+    for k, v in dict2.items():
+        if k in dict1:
+            dict1[k] = v
+        else:
+            raise ValueError(
+                f"Keyword `{k}` is not in list of keywords `{dict1.keys()}`\nPlease double check and rectify!"
+            )
+    return dict1

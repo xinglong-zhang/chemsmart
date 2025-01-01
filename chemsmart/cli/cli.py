@@ -10,7 +10,7 @@ Be creative! do whatever you want!
 
 import click
 import logging
-from .run import entry_point as run
+from .run import run
 
 
 @click.group()

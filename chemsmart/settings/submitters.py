@@ -1,6 +1,7 @@
 import inspect
 import logging
 import os
+from abc import abstractmethod
 
 from chemsmart.settings.user import ChemsmartUserSettings
 
@@ -182,7 +183,7 @@ class PBSSubmitter(Submitter):
             f.write("#PBS -m abe\n")
 
     def _write_change_to_job_directory(self, f):
-        f.write(f"cd $PBS_O_WORKDIR\n\n")
+        f.write("cd $PBS_O_WORKDIR\n\n")
 
 
 class SLURMSubmitter(Submitter):
@@ -207,7 +208,7 @@ class SLURMSubmitter(Submitter):
             f.write("#SBATCH --mail-type=abe\n")
 
     def _write_change_to_job_directory(self, f):
-        f.write(f"cd $SLURM_SUBMIT_DIR\n\n")
+        f.write("cd $SLURM_SUBMIT_DIR\n\n")
 
 
 class SLFSubmitter(Submitter):
@@ -222,10 +223,10 @@ class SLFSubmitter(Submitter):
             f"#BSUB -nnodes {self.server.num_nodes} -P {user_settings.data['PROJECT']}\n"
         )
         f.write(f"#BSUB -W {self.server.num_hours}\n")
-        f.write(f"#BSUB -alloc_flags gpumps\n")
+        f.write("#BSUB -alloc_flags gpumps\n")
 
     def _write_change_to_job_directory(self, f):
-        f.write(f"cd $LS_SUBCWD\n\n")
+        f.write("cd $LS_SUBCWD\n\n")
 
 
 class FUGAKUSubmitter(Submitter):
@@ -234,7 +235,7 @@ class FUGAKUSubmitter(Submitter):
 
     def _write_scheduler_options(self, f):
         f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
-        f.write(f"#PJM -L node=1\n")  # using one node here
+        f.write("#PJM -L node=1\n")  # using one node here
         f.write(f"#PJM -L elapse={self.server.num_hours}\n")
         f.write(f"#PJM --mpi proc={self.server.num_cores}\n")
         f.write(f"#PJM -g {self.project}\n")
@@ -244,4 +245,4 @@ class FUGAKUSubmitter(Submitter):
         f.write("#PJM -S\n")
 
     def _write_change_to_job_directory(self, f):
-        f.write(f"cd $PJM_O_WORKDIR\n\n")
+        f.write("cd $PJM_O_WORKDIR\n\n")
