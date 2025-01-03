@@ -103,10 +103,6 @@ class Server(RegistryMixin):
         return cls.from_scheduler_type()
 
     @classmethod
-    def from_yaml_file(cls, filename):
-        return cls.from_yaml(filename)
-
-    @classmethod
     def from_name(cls, name):
         return cls(name)()
 
@@ -228,3 +224,5 @@ class SGE_Server(Server):
 
     def __init__(self, **kwargs):
         super().__init__(self.NAME, **kwargs)
+
+

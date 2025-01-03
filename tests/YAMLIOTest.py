@@ -1,5 +1,6 @@
 import os
 from chemsmart.io.yaml import YAMLFile
+from execnet.gateway_base import serve
 
 
 class TestYAMLFile:
@@ -14,10 +15,11 @@ class TestYAMLFile:
         assert list(server_yaml.yaml_contents_dict.keys())[1] == "GAUSSIAN"
         assert list(server_yaml.yaml_contents_dict.keys())[2] == "ORCA"
         assert (
-            server_yaml.yaml_contents_dict["GAUSSIAN"]["G16FOLDER"]
+            server_yaml.yaml_contents_dict["GAUSSIAN"]["EXEFOLDER"]
             == "~/programs/g16"
         )
         assert (
-            server_yaml.yaml_contents_dict["ORCA"]["ORCAFOLDER"]
+            server_yaml.yaml_contents_dict["ORCA"]["EXEFOLDER"]
             == "~/programs/orca_6_0_0"
         )
+

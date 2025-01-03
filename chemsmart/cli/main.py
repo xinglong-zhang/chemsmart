@@ -11,9 +11,10 @@ Be creative! do whatever you want!
 import click
 import logging
 from .run import run
+from chemsmart.utils.cli import MyGroup
 
 
-@click.group()
+@click.group(cls=MyGroup)
 @click.pass_context
 @click.option("--verbose", is_flag=True, default=False)
 def entry_point(ctx, verbose):

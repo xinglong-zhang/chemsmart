@@ -1,9 +1,8 @@
+import click
 import functools
 import logging
+from chemsmart.utils.cli import MyGroup
 
-import click
-
-from pyatoms.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +155,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
     pubchem,
 ):
     import os
+    from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
     from pyatoms.io.ase.atoms import AtomsWrapper
     from pyatoms.settings.projects.gaussian import GaussianProjectSettings
@@ -165,7 +165,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
     project_settings = GaussianProjectSettings.from_project_name(project)
 
     # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
-    from pyatoms.jobs.gaussian.settings import GaussianJobSettings
 
     if filename is None:
         # for cases where filename is not supplied, eg, get structure from pubchem

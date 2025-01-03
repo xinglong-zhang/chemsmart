@@ -1,0 +1,326 @@
+import logging
+import os
+import shlex
+import shutil
+import subprocess
+from contextlib import suppress
+from datetime import datetime
+from glob import glob
+from random import random
+from shutil import copy, rmtree
+
+from chemsmart.jobs.runner import JobRunner
+
+# from pyatoms.cli.submitters import SubmitscriptWriter
+# from pyatoms.io.gaussian.inputs import Gaussian16Input
+# from pyatoms.jobs.gaussian.execution import GaussianExecutables
+# from pyatoms.jobs.runner import JobRunner
+# from pyatoms.utils.periodictable import chemical_symbol_to_atomic_number
+
+shutil._USE_CP_SENDFILE = False
+# to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
+
+logger = logging.getLogger(__name__)
+
+
+class GaussianJobRunner(JobRunner):
+    # creates job runner process
+    # combines information about server and program
+    JOBTYPES = [
+        'g16crestopt',
+        'g16crestts',
+        'g16job',
+        'g16dias',
+        'g16opt',
+        'g16irc',
+        'g16modred',
+        'g16nci',
+        'g16resp',
+        'g16saopt',
+        'g16scan',
+        'g16sp',
+        'g16td',
+        'g16ts',
+        'g16uvvis',
+        'g16wbi',
+        'g16',
+        'g16com',
+        'g16link',
+    ]
+    def __init__(self, server, job, scratch=True, fake=False, **kwargs):
+        super().__init__(server=server, job=job, scratch=scratch, fake=fake, **kwargs)
+
+    @property
+    def executables(self):
+        return GaussianExecutables.from_servername(servername=self.servername)
+
+    def _prerun(self, job):
+        self._assign_variables(job)
+
+    def _assign_variables(self, job):
+        """Creates input file in scratch (done in settings.apply_on()), if running in scratch directory.
+
+        Set up file paths if running in scratch/not running in scratch.
+        """
+        # keep job output file in job folder regardless of running in scratch or not
+        self.job_outputfile = job.outfile
+
+        if self.scratch:
+            logger.info('Setting up run in scratch folder.')
+            # set up files in scratch folder
+            scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+            self.running_directory = scratch_job_dir
+
+            job_inputfile = job.label + '.com'
+            scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+            self.job_inputfile = scratch_job_inputfile
+
+            job_chkfile = job.label + '.chk'
+            scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
+            self.job_chkfile = scratch_job_chkfile
+
+            job_errfile = job.label + '.err'
+            scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
+            self.job_errfile = scratch_job_errfile
+        else:
+            logger.info('Setting up run in job folder (no scratch).')
+            # keep files as in running directory
+            self.running_directory = job.folder
+            self.job_inputfile = job.inputfile
+            self.job_chkfile = job.chkfile
+            self.job_errfile = job.errfile
+
+        if self.executables and self.executables.local_run is not None:
+            logger.info(f'Local run is {self.executables.local_run}.')
+            job.local = self.executables.local_run
+
+    def _run(self, job, process):
+        process.communicate()
+        return process.poll()
+
+    def _environment_vars(self, job, *args, **kwargs):
+        return self.executables.ENVIRONMENT_VARIABLES
+
+    def _create_process(self, job, command, env):
+        with open(self.job_outputfile, 'w') as out, open(self.job_errfile, 'w') as err:
+            logger.info(
+                f'Command executed: {command}\n'
+                f'Writing output file to: {self.job_outputfile} and err file to: {self.job_errfile}'
+            )
+            return subprocess.Popen(shlex.split(command), stdout=out, stderr=err, env=env, cwd=self.running_directory)
+
+    def _get_executable(self):
+        """Get executable for Gaussian."""
+        exe = self.executables.get_executable()
+        logger.info(f'Gaussian executable: {exe}')
+        return exe
+
+    def get_command(self, job, host):
+        self._assign_variables(job)
+        executable = self._get_executable()
+        resources = self._resources(job=job)
+
+        command = self.server.command(
+            folder=self.running_directory, executable=executable, resources=resources, local=job.local, host=host
+        )
+
+        return f'{command} {self.job_inputfile}'
+
+    def _postrun(self, job):
+        if self.scratch:
+            # if job was run in scratch, copy files to job folder except files starting with Gau-
+            for file in glob(f'{self.running_directory}/{job.label}*'):
+                if not file.startswith('Gau-'):
+                    logger.info(f'Copying file {file} from {self.running_directory} \nto {job.folder}\n')
+                    copy(file, job.folder)
+
+        if job.is_complete():
+            # if job is completed, remove scratch directory and submitscript and log.info and log.err files
+            if self.scratch:
+                logger.info(f'Removing scratch directory: {self.running_directory}.')
+                rmtree(self.running_directory)
+
+            writer = SubmitscriptWriter(job)
+            submit_script = writer.job_submit_script
+            run_script = writer.job_run_script
+            err_filepath = os.path.join(job.folder, f'{job.errfile}')
+            joblogerr_filepath = os.path.join(job.folder, 'log.err')
+            jobloginfo_filepath = os.path.join(job.folder, 'log.info')
+            pbs_errfile = os.path.join(job.folder, 'pbs.err')
+            pbs_infofile = os.path.join(job.folder, 'pbs.info')
+
+            files_to_remove = [
+                submit_script,
+                run_script,
+                err_filepath,
+                joblogerr_filepath,
+                jobloginfo_filepath,
+                pbs_errfile,
+                pbs_infofile,
+            ]
+
+            for f in files_to_remove:
+                with suppress(FileNotFoundError):
+                    os.remove(f)
+
+
+class FakeGaussian:
+    def __init__(self, file_to_run):
+        if not os.path.exists(file_to_run):
+            raise FileNotFoundError(f'File {file_to_run} not found.')
+        self.file_to_run = os.path.abspath(file_to_run)
+        self.input_object = Gaussian16Input(comfile=self.file_to_run)
+
+    @property
+    def file_folder(self):
+        return os.path.dirname(self.file_to_run)
+
+    @property
+    def filename(self):
+        return os.path.basename(self.file_to_run)
+
+    @property
+    def input_filepath(self):
+        return os.path.join(self.file_folder, self.file_to_run)
+
+    @property
+    def output_filepath(self):
+        output_file = self.filename.split('.')[0] + '.log'
+        return os.path.join(self.file_folder, output_file)
+
+    @property
+    def input_contents(self):
+        return self.input_object.contents
+
+    @property
+    def molecule(self):
+        return self.input_object.atoms
+
+    @property
+    def charge(self):
+        return self.input_object.charge
+
+    @property
+    def multiplicity(self):
+        return self.input_object.multiplicity
+
+    @property
+    def spin(self):
+        if self.multiplicity == 1:
+            return 'R'
+        return 'U'
+
+    @property
+    def num_atoms(self):
+        return len(self.molecule.chemical_symbols)
+
+    @property
+    def atomic_symbols(self):
+        return list(self.molecule.chemical_symbols)
+
+    @property
+    def atomic_numbers(self):
+        return [chemical_symbol_to_atomic_number(s) for s in self.atomic_symbols]
+
+    @property
+    def atomic_coordinates(self):
+        return self.molecule.coordinates.coordinates
+
+    @property
+    def empirical_formula(self):
+        return self.molecule.get_chemical_formula(empirical=True)
+
+    def run(self):
+        # get input lines
+        input_lines = []
+        with open(self.input_filepath) as f:
+            lines = f.readlines()
+            input_lines = lines.copy()
+            for line in lines:
+                input_lines.append(line)
+
+        with open(self.output_filepath, 'w') as g:
+            g.write(' Entering Gaussian System, FakeGaussianRunner\n')
+            g.write(f' Input={self.input_filepath}\n')
+            g.write(f' Output={self.output_filepath}\n')
+            g.write(' ******************************************\n')
+            g.write(' Fake Gaussian Executable\n')
+            g.write(' ******************************************\n')
+            # write mem/nproc/chk information (%...)
+            for line in input_lines:
+                if line.startswith('%'):
+                    g.write(f' {line}')
+            # write route information
+            for line in input_lines:
+                if line.startswith('#'):
+                    line_len = len(line)
+                    g.write(' ' + '-' * line_len + '\n')
+                    g.write(f' {line}')
+                    g.write(' ' + '-' * line_len + '\n')
+            # write charge and multiplicity
+            g.write(f' Charge =  {self.charge} Multiplicity = {self.multiplicity}\n')
+            # missing Z-matrix
+
+            # write input orientation
+            g.write('                          Input orientation:                             \n')
+            g.write(' ------------------------------------------------------------------------\n')
+            g.write(' Center     Atomic      Atomic             Coordinates (Angstroms)       \n')
+            g.write(' Number     Number       Type             X           Y           Z      \n')
+            g.write(' ------------------------------------------------------------------------\n')
+
+            # write coordinates
+            for i in range(self.num_atoms):
+                g.write(
+                    f'{i + 1:>4} {self.atomic_numbers[i]:>10} {0!s:>10} '
+                    f'{self.atomic_coordinates[i][0]:>20.6}'
+                    f'{self.atomic_coordinates[i][1]:>14.6}'
+                    f'{self.atomic_coordinates[i][2]:>14.6}\n'
+                )
+            g.write(' ------------------------------------------------------------------------\n')
+            g.write(f' Stoichiometry    {self.empirical_formula}')
+
+            # write standard orientation
+            g.write('                       Standard orientation:                             \n')
+            g.write(' ------------------------------------------------------------------------\n')
+            g.write(' Center     Atomic      Atomic             Coordinates (Angstroms)       \n')
+            g.write(' Number     Number       Type             X           Y           Z      \n')
+            g.write(' ------------------------------------------------------------------------\n')
+            # write coordinates
+            for i in range(self.num_atoms):
+                g.write(
+                    f'{i + 1:>4} {self.atomic_numbers[i]:>10} {0!s:>10} '
+                    f'{self.atomic_coordinates[i][0]:>20.6}'
+                    f'{self.atomic_coordinates[i][1]:>14.6}'
+                    f'{self.atomic_coordinates[i][2]:>14.6}\n'
+                )
+            g.write(' ------------------------------------------------------------------------\n')
+            g.write(' ! Dummy Rotational constant values and dummy SCF energy value...\n')
+            g.write(
+                ' Rotational constants (GHZ):          11.4493930           9.4805599           5.3596246\n'
+            )  # not real values
+            g.write(f' Standard basis: {self.input_object.basis} (5D, 7F)\n')
+            g.write(f' NAtoms=    {self.num_atoms}\n')
+            g.write(
+                f' SCF Done:  E({self.spin}{self.input_object.functional.upper()}) =  '
+                f'-{1000 * random()}  A.U. after   14 cycles\n'
+            )  # dummy energy
+            g.write(' Mulliken charges:\n')
+            g.write('               1\n')
+            for i in range(self.num_atoms):
+                g.write(f'{i + 1:>7} {self.atomic_symbols[i]:>3} {random():>12.6}\n')  # not real values
+            g.write(' Elapsed time: xx\n')
+            g.write(f' Normal termination of Gaussian 16 (fake executable) at {datetime.now()}.')
+
+
+class FakeGaussianJobRunner(GaussianJobRunner):
+    # creates job runner process
+    # combines information about server and program
+
+    def __init__(self, server, job, scratch=False, fake=True, **kwargs):
+        super().__init__(server=server, job=job, scratch=scratch, fake=fake, **kwargs)
+
+    def run(self, job, **kwargs):
+        self._prerun(job=job)
+        returncode = FakeGaussian(self.job_inputfile).run()
+        self._postrun(job=job)
+        return returncode

@@ -31,9 +31,9 @@ SERVER:
        module load intel/2022.0.2
 
 GAUSSIAN:
-        G16FOLDER: ~/programs/g16 
-        LOCAL_RUN: True  # local run True to use serial_command
+       EXEFOLDER: ~/programs/g16 
+       LOCAL_RUN: True  # local run True to use serial_command
 ORCA:
-        ORCAFOLDER: ~/programs/orca_6_0_0
-        LOCAL_RUN: False  # local run False to use parallel_command
+       EXEFOLDER: ~/programs/orca_6_0_0
+       LOCAL_RUN: False  # local run False to use parallel_command
 
