@@ -91,25 +91,35 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def genecp_section(self):
-        return GenGenECPSection.from_genecp_group(
-            genecp_group=self.gen_genecp_group
-        )
+        if self.gen_genecp_group:
+            return GenGenECPSection.from_genecp_group(
+                genecp_group=self.gen_genecp_group
+            )
+        return None
 
     @property
     def light_elements(self):
-        return self.genecp_section.light_elements
+        if self.genecp_section:
+            return self.genecp_section.light_elements
+        return None
 
     @property
     def light_elements_basis(self):
-        return self.genecp_section.light_elements_basis
+        if self.genecp_section:
+            return self.genecp_section.light_elements_basis
+        return None
 
     @property
     def heavy_elements(self):
-        return self.genecp_section.heavy_elements
+        if self.genecp_section:
+            return self.genecp_section.heavy_elements
+        return None
 
     @property
     def heavy_elements_basis(self):
-        return self.genecp_section.heavy_elements_basis
+        if self.genecp_section:
+            return self.genecp_section.heavy_elements_basis
+        return None
 
     @property
     def custom_solvent(self):
@@ -264,7 +274,7 @@ class Gaussian16Input(GaussianFileMixin):
         """Get the custom solvent group from the content groups.
         Custom solvent is always the last content group in the input file.
         """
-        if "solvent=generic" in self.route:
+        if "solvent=generic" in self.route_string:
             return self.content_groups[-1]
         return None
 

@@ -393,7 +393,6 @@ class RegistryMixin(metaclass=RegistryMeta):
         return cls._subclasses(cls, cls._REGISTRY, allow_abstract)
 
     @staticmethod
-    @lru_cache
     def _subclasses(parent_cls, registry, allow_abstract):
         return [
             c

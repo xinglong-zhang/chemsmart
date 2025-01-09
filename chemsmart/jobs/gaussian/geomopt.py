@@ -3,6 +3,7 @@ import logging
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.gaussian import gaussian
 from chemsmart.utils.cli import MyCommand
+from chemsmart.jobs.gaussian.job import GaussianJob
 
 logger = logging.getLogger(__name__)
 
