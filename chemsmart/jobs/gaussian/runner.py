@@ -48,6 +48,8 @@ class GaussianJobRunner(JobRunner):
         "g16link",
     ]
 
+    PROGRAM = "gaussian"
+
     def __init__(self, server, job, scratch=True, fake=False, **kwargs):
         super().__init__(
             server=server, job=job, scratch=scratch, fake=fake, **kwargs

@@ -121,7 +121,7 @@ class Server(RegistryMixin):
         scheduler_type = cls.detect_server_scheduler()
 
         if scheduler_type == "Unknown Scheduler":
-            # no scheduler type detected, thus use local server
+            logger.info("No scheduler detected. Using local server.")
             return cls.from_server(server="local")
 
         # Match scheduler type with available Server subclasses
@@ -178,6 +178,7 @@ class Server(RegistryMixin):
         for scheduler in schedulers:
             # Check environment variables
             if any(env in os.environ for env in scheduler.get("env_vars", [])):
+                logger.info(f"Detected scheduler: {scheduler['name']}")
                 return scheduler["name"]
 
             # Check commands
@@ -189,13 +190,16 @@ class Server(RegistryMixin):
                     if "check_output" in scheduler:
                         output = result.stdout.decode()
                         if scheduler["check_output"](output):
+                            logger.info(f"Detected scheduler: {scheduler['name']}")
                             return scheduler["name"]
                     else:
+                        logger.info(f"Detected scheduler: {scheduler['name']}")
                         return scheduler["name"]
                 except FileNotFoundError:
                     pass  # Command not found, move to the next scheduler
 
         # Default case: unknown scheduler
+        logger.info("No scheduler detected.")
         return "Unknown Scheduler"
 
     @classmethod

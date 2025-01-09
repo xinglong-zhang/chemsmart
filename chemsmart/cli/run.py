@@ -4,6 +4,8 @@ import platform
 from multiprocessing import set_start_method
 import click
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.server import Server
 
 system_type = platform.system()
 
@@ -16,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 @click.group(name="run")
 @click.pass_context
+@click.option(
+    '-s',
+    '--server',
+    type=str,
+    default=None,
+    help='Server. If not specified, will try to automatically determine and use the current server.',
+)
 @click.option(
     "-n",
     "--num-processes",
@@ -38,6 +47,7 @@ logger = logging.getLogger(__name__)
 # )
 def run(
     ctx,
+    server,
     num_processes,
     debug,
     test,
@@ -45,16 +55,18 @@ def run(
 
     logger.info("Entering main program")
 
-    jobrunner = create_jobrunner(
-        servername=servername,
-        num_nodes=num_nodes,
-        num_cpus=num_cpus,
-        num_gpus=num_gpus,
-        num_gpus_per_node_per_job=num_gpus_per_node_per_job,
-        exclude_localhost=exclude_localhost,
-        fake=test,
-        use_host_queues=use_host_queues,
-    )
+    jobrunner = JobRunner(server=server)
+
+    # jobrunner = JobRunner(
+    #     servername=servername,
+    #     num_nodes=num_nodes,
+    #     num_cpus=num_cpus,
+    #     num_gpus=num_gpus,
+    #     num_gpus_per_node_per_job=num_gpus_per_node_per_job,
+    #     exclude_localhost=exclude_localhost,
+    #     fake=test,
+    #     use_host_queues=use_host_queues,
+    # )
 
     ctx.obj["num_processes"] = num_processes
     ctx.obj['jobrunner'] = jobrunner

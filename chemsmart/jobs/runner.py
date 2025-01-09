@@ -5,6 +5,7 @@ from abc import abstractmethod
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
+user_settings = ChemsmartUserSettings()
 
 
 logger = logging.getLogger(__name__)
@@ -15,18 +16,19 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        job (Job): Job to be run with the jobrunner.
-        scratch (str): Scratch directory path. If specified, will use scratch for job run, if not, run in job folder.
-        Defaults to None.
-        fake (bool): If true, will create a fake JobRunner specific for the job.
+        scratch (bool): Whether to use scratch directory.
+        scratch_dir (str): Path to scratch directory.
+        fake (bool): Whether to use fake job runner.
+        **kwargs: Additional keyword arguments.
     """
 
     JOBTYPES: list = NotImplemented
+    PROGRAM: str = NotImplemented
 
-    def __init__(self, server, job, scratch=None, fake=False, **kwargs):
+    def __init__(self, server, scratch=False, scratch_dir=None, fake=False, **kwargs):
         self.server = server
-        self.job = job
         self.scratch = scratch
+        self.scratch_dir = scratch_dir
         self.fake = fake
         self.kwargs = kwargs
 
@@ -44,36 +46,50 @@ class JobRunner(RegistryMixin):
                 f"server must be instance of Server. Instead was: {server}"
             )
 
+        if self.scratch:
+            self._set_scratch()
+
+
+    def _set_scratch(self):
+        scratch_dir = None
+
         # get scratch directory in order:
         # (1) first try to get from program specific environment variable
         # different programs may need to use different scratch directory
-        # (2) then try to get from server specific environment variable
-        # (3) then try to get from user settings
-
         program_specific_enviornment_vars = os.path.expanduser(
-            f"~/.chemsmart/{self.job.PROGRAM}/{self.job.PROGRAM}.envars"
+            f"~/.chemsmart/{self.PROGRAM}/{self.PROGRAM}.envars"
         )
         if os.path.exists(program_specific_enviornment_vars):
             # extract any scratch export statement
-            with open(program_specific_enviornment_vars) as f:
-                for line in f.readlines():
-                    if "SCRATCH" in line:
-                        scratch = line.split("=")[-1]
+            try:
+                with open(program_specific_enviornment_vars) as f:
+                    for line in f.readlines():
+                        if "SCRATCH" in line:
+                            scratch_dir = line.split("=")[-1]
+            except OSError as e:
+                raise RuntimeError(
+                    f"Failed to read environment variable file: {program_specific_enviornment_vars}"
+                ) from e
 
-        if scratch is None:
-            scratch = self.server.scratch
+        # (2) then try to get from server specific environment variable
+        if scratch_dir is None:
+            scratch_dir = self.server.scratch
 
-        if scratch is None:
-            user_settings = ChemsmartUserSettings()
-            scratch = user_settings.scratch
+        # (3) then try to get from user settings
+        if scratch_dir is None:
+            scratch_dir = user_settings.scratch
 
-        if scratch is not None:
+        if scratch_dir is not None:
             # check that the scratch folder exists
-            scratch = os.path.expanduser(scratch)
-            if not os.path.exists(scratch):
+            scratch_dir = os.path.expanduser(scratch_dir)
+            if not os.path.exists(scratch_dir):
                 raise FileNotFoundError(
-                    f"Specified scratch dir does not exist: {scratch}"
+                    f"Specified scratch dir does not exist: {scratch_dir}"
                 )
+        else:
+            raise ValueError("No valid scratch directory could be determined.")
+
+        self.scratch_dir = scratch_dir
 
     def __repr__(self):
         return f"{self.__class__.__qualname__}<server={self.server}, job={self.job}>"

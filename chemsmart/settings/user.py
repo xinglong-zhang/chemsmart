@@ -23,6 +23,30 @@ class ChemsmartUserSettings:
         return os.path.join(self.config_dir, "gaussian")
 
     @property
+    def user_gaussian_envars(self):
+        return os.path.join(self.user_gaussian_settings_dir, "gaussian.envars")
+
+    @property
+    def user_gaussian_modules(self):
+        return os.path.join(self.user_gaussian_settings_dir, "gaussian.modules")
+
+    @property
+    def user_gaussian_script(self):
+        return os.path.join(self.user_gaussian_settings_dir, "gaussian.sh")
+
+    @property
+    def user_orca_envars(self):
+        return os.path.join(self.user_orca_settings_dir, "orca.envars")
+
+    @property
+    def user_orca_modules(self):
+        return os.path.join(self.user_orca_settings_dir, "orca.modules")
+
+    @property
+    def user_orca_script(self):
+        return os.path.join(self.user_orca_settings_dir, "orca.sh")
+
+    @property
     def user_orca_settings_dir(self):
         return os.path.join(self.config_dir, "orca")
 
