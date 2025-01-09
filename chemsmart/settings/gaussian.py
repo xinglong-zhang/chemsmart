@@ -1,20 +1,22 @@
 import logging
 import os
-from abc import abstractmethod
-from functools import cache
 
 from chemsmart.jobs.gaussian.settings import (
     GaussianJobSettings,
     GaussianIRCJobSettings,
     GaussianTDDFTJobSettings,
 )
+
+from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.user import ChemsmartUserSettings
+user_settings = ChemsmartUserSettings()
+
 
 logger = logging.getLogger(__name__)
 project_settings_registry = []
 
 
-class GaussianProjectSettings:
+class GaussianProjectSettings(RegistryMixin):
     """Most general Gaussian settings class with key defaults."""
 
     PROJECT_NAME = "general"
@@ -85,6 +87,37 @@ class GaussianProjectSettings:
         settings.freq = False
         settings.basis = self.large_basis
         return settings
+
+    @classmethod
+    def from_project(cls, project):
+        return cls._from_project_name(project)
+
+    @classmethod
+    def _from_projects_manager(cls, manager):
+        try:
+            return manager.create()
+        except FileNotFoundError:
+            return None
+
+    @classmethod
+    def _from_project_name(cls, project_name):
+        """Get .yaml project settings file from user directory based on project name."""
+        project_name_yaml_path = os.path.join(
+            ChemsmartUserSettings().user_gaussian_settings_dir, f"{project_name}.yaml"
+        )
+        user_settings_manager = GaussianProjectSettingsManager(filename=project_name_yaml_path)
+        settings = cls._from_projects_manager(user_settings_manager)
+
+        if settings is not None:
+            return settings
+
+        templates_path = os.path.join(os.path.dirname(__file__), 'templates')
+        raise ValueError(
+            f'No settings implemented for {project_name}.\n\n'
+            f'Place new settings.yaml file in {user_settings.user_gaussian_settings_dir}.\n\n'
+            f'Templates for such settings.yaml files are available at {templates_path}\n\n '
+            f'Currently available projects: {user_settings.all_available_gaussian_projects}'
+        )
 
 
 class YamlGaussianProjectSettings(GaussianProjectSettings):

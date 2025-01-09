@@ -10,7 +10,7 @@ class ChemsmartUserSettings:
     USER_CONFIG_DIR = os.path.expanduser("~/.chemsmart")
 
     def __init__(self):
-        self.yaml = self.USER_YAML_FILE
+        self.yaml = os.path.join(self.USER_CONFIG_DIR, self.USER_YAML_FILE)
         self.config_dir = self.USER_CONFIG_DIR
         self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
 

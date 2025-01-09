@@ -156,13 +156,13 @@ def gaussian(  # noqa: PLR0912, PLR0915
 ):
     import os
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+    from chemsmart.settings.gaussian import GaussianProjectSettings
 
     from pyatoms.io.ase.atoms import AtomsWrapper
-    from pyatoms.settings.projects.gaussian import GaussianProjectSettings
     from pyatoms.utils.utils import string2index
 
     # get project settings
-    project_settings = GaussianProjectSettings.from_project_name(project)
+    project_settings = GaussianProjectSettings.from_project(project)
 
     # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
 
