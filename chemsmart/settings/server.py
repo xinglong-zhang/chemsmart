@@ -5,6 +5,10 @@ from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
 
+from chemsmart.settings.user import ChemsmartUserSettings
+
+user_settings = ChemsmartUserSettings()
+
 logger = logging.getLogger(__name__)
 
 
@@ -117,7 +121,8 @@ class Server(RegistryMixin):
         scheduler_type = cls.detect_server_scheduler()
 
         if scheduler_type == "Unknown Scheduler":
-            raise ValueError("Could not detect a known scheduler type.")
+            # no scheduler type detected, thus use local server
+            return cls.from_server(server="local")
 
         # Match scheduler type with available Server subclasses
         for server_cls in cls.subclasses():
@@ -193,6 +198,42 @@ class Server(RegistryMixin):
         # Default case: unknown scheduler
         return "Unknown Scheduler"
 
+    @classmethod
+    def from_server(cls, server):
+        """Obtain server details from server name."""
+        if server is None:
+            # by default return current server
+            return cls.current()
+        return cls._from_server_name(server)
+
+    @classmethod
+    def _from_server_name(cls, server_name):
+        """Get server settings from user directory .yaml file based on server name."""
+        server_name_yaml_path = os.path.join(
+            user_settings.user_server_dir, f"{server_name}.yaml"
+        )
+        user_settings_manager = ServerSettingsManager(filename=server_name_yaml_path)
+        server = cls._from_servers_manager(user_settings_manager)
+
+        if server is not None:
+            return server
+
+        # could not find server settings
+        templates_path = os.path.join(os.path.dirname(__file__), 'templates')
+        raise ValueError(
+            f'No server implemented for {server_name}.\n\n'
+            f'Place new server.yaml file in {user_settings.user_server_dir}.\n\n'
+            f'Templates for such settings.yaml files are available at {templates_path}\n\n '
+            f'Currently available projects: {user_settings.all_available_servers}'
+        )
+
+    @classmethod
+    def _from_servers_manager(cls, manager):
+        try:
+            return manager.create()
+        except FileNotFoundError:
+            return None
+
 
 class SLURMServer(Server):
     NAME = "SLURM"
@@ -224,3 +265,46 @@ class SGE_Server(Server):
 
     def __init__(self, **kwargs):
         super().__init__(self.NAME, **kwargs)
+
+class YamlServerSettings(Server):
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
+
+    @classmethod
+    def from_yaml(cls, filename):
+        yaml_file = YAMLFile(filename)
+        return cls(name=filename, **yaml_file.yaml_contents_dict["SERVER"])
+
+    def __repr__(self):
+        return f"YamlServerSettings(name={self.name})"
+
+    def __str__(self):
+        return f"YamlServerSettings: {self.name}"
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __call__(self):
+        return self
+
+    def register(self):
+        return self
+
+
+class ServerSettingsManager:
+    """Manages server settings specified in the form of yaml files in a folder.
+
+    Args:
+        filename: yaml filename in the default servers folder.
+    """
+
+    def __init__(self, filename):
+        if filename is None:
+            raise ValueError("filename is not specified")
+        self.filename = os.path.abspath(filename)
+
+    def create(self):
+        return YamlServerSettings.from_yaml(self.filename)

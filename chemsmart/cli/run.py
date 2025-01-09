@@ -45,19 +45,19 @@ def run(
 
     logger.info("Entering main program")
 
-    # jobrunner = create_jobrunner(
-    #     servername=servername,
-    #     num_nodes=num_nodes,
-    #     num_cpus=num_cpus,
-    #     num_gpus=num_gpus,
-    #     num_gpus_per_node_per_job=num_gpus_per_node_per_job,
-    #     exclude_localhost=exclude_localhost,
-    #     fake=test,
-    #     use_host_queues=use_host_queues,
-    # )
+    jobrunner = create_jobrunner(
+        servername=servername,
+        num_nodes=num_nodes,
+        num_cpus=num_cpus,
+        num_gpus=num_gpus,
+        num_gpus_per_node_per_job=num_gpus_per_node_per_job,
+        exclude_localhost=exclude_localhost,
+        fake=test,
+        use_host_queues=use_host_queues,
+    )
 
     ctx.obj["num_processes"] = num_processes
-    # ctx.obj['jobrunner'] = jobrunner
+    ctx.obj['jobrunner'] = jobrunner
 
 
 @run.result_callback()
