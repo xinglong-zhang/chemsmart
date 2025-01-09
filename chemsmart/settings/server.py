@@ -224,5 +224,3 @@ class SGE_Server(Server):
 
     def __init__(self, **kwargs):
         super().__init__(self.NAME, **kwargs)
-
-

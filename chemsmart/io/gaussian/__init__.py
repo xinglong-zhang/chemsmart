@@ -24,7 +24,7 @@ class GaussianRefs:
         "m06",
         "mn15",
     ]
-    g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen"]
+    g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
     g_solvation_models = [
         "smd",
         "cpcm",

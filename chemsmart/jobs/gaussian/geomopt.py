@@ -7,33 +7,40 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command('opt', cls=MyCommand)
+@gaussian.command("opt", cls=MyCommand)
 @click_job_options
-@click.option('-f', '--freeze-atoms', type=str, help='Indices of atoms to freeze for constrained optimization.')
+@click.option(
+    "-f",
+    "--freeze-atoms",
+    type=str,
+    help="Indices of atoms to freeze for constrained optimization.",
+)
 @click.pass_context
 def opt(ctx, freeze_atoms, **kwargs):
-    folder = ctx.obj['folder']
+    folder = ctx.obj["folder"]
 
     # get settings from project
-    project_settings = ctx.obj['project_settings']
+    project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
-    job_settings = ctx.obj['job_settings']
-    keywords = ctx.obj['keywords']
+    job_settings = ctx.obj["job_settings"]
+    keywords = ctx.obj["keywords"]
 
     # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
     # get atoms
-    atoms = ctx.obj['atoms']
-    atoms = atoms[-1]  # get last atom from list of atoms from cli.gaussian.py subcommands
+    atoms = ctx.obj["atoms"]
+    atoms = atoms[
+        -1
+    ]  # get last atom from list of atoms from cli.gaussian.py subcommands
     # index = '-1' would access the right structure from the list of atoms returned from cli.gaussian.py subcommands
     # user specified index was used there to return the right atoms and store it as a list of single element/itself
 
     # get label for the job
-    label = ctx.obj['label']
+    label = ctx.obj["label"]
 
     # Set atoms to freeze
     from ase.constraints import FixAtoms
@@ -44,15 +51,23 @@ def opt(ctx, freeze_atoms, **kwargs):
         frozen_atoms_list = get_list_from_string_range(freeze_atoms)
         atoms.set_constraint(FixAtoms(frozen_atoms_list))
 
-    logger.info(f'Opt settings from project: {opt_settings.__dict__}')
+    logger.info(f"Opt settings from project: {opt_settings.__dict__}")
 
     from pyatoms.jobs.gaussian import GaussianGeomOptJob
 
-    return GaussianGeomOptJob(folder=folder, atoms=atoms, settings=opt_settings, label=label, **kwargs)
+    return GaussianGeomOptJob(
+        folder=folder,
+        atoms=atoms,
+        settings=opt_settings,
+        label=label,
+        **kwargs,
+    )
 
 
 class GaussianGeomOptJob(GaussianJob):
-    TYPE = 'g16opt'
+    TYPE = "g16opt"
 
     def __init__(self, folder, atoms, settings, **kwargs):
-        super().__init__(folder=folder, atoms=atoms, settings=settings, **kwargs)
+        super().__init__(
+            folder=folder, atoms=atoms, settings=settings, **kwargs
+        )

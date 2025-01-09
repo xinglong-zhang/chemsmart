@@ -20,6 +20,7 @@ class JobRunner(RegistryMixin):
         Defaults to None.
         fake (bool): If true, will create a fake JobRunner specific for the job.
     """
+
     JOBTYPES: list = NotImplemented
 
     def __init__(self, server, job, scratch=None, fake=False, **kwargs):

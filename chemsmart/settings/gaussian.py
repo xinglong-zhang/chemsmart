@@ -3,7 +3,11 @@ import os
 from abc import abstractmethod
 from functools import cache
 
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings, GaussianIRCJobSettings, GaussianTDDFTJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianJobSettings,
+    GaussianIRCJobSettings,
+    GaussianTDDFTJobSettings,
+)
 from chemsmart.settings.user import ChemsmartUserSettings
 
 logger = logging.getLogger(__name__)
@@ -13,85 +17,78 @@ project_settings_registry = []
 class GaussianProjectSettings:
     """Most general Gaussian settings class with key defaults."""
 
-    PROJECT_NAME = 'general'
+    PROJECT_NAME = "general"
     functional = None
     small_basis = None
     large_basis = None
 
     def main_settings(self):
-        """Gaussian main settings with key default values.
-        """
+        """Gaussian main settings with key default values."""
         default_gaussian_job_settings = GaussianJobSettings.default()
         default_gaussian_job_settings.functional = self.functional
         default_gaussian_job_settings.basis = self.small_basis
         return default_gaussian_job_settings
 
     def opt_settings(self):
-        """Gaussian default settings for opt job.
-        """
+        """Gaussian default settings for opt job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'opt'
+        settings.job_type = "opt"
         return settings
 
     def modred_settings(self):
-        """Gaussian default settings for modred job.
-        """
+        """Gaussian default settings for modredundant job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'modred'
+        settings.job_type = "modredundant"
         return settings
 
     def ts_settings(self):
-        """Gaussian default settings for ts job.
-        """
+        """Gaussian default settings for ts job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'ts'
+        settings.job_type = "ts"
         return settings
 
     def irc_settings(self):
-        """Gaussian default settings for irc job.
-        """
+        """Gaussian default settings for irc job."""
         settings = self.main_settings().copy()
-        settings = GaussianIRCJobSettings(**settings.__dict__)  # convert settings to GaussianIRCJobSettings
-        settings.job_type = 'irc'
+        settings = GaussianIRCJobSettings(
+            **settings.__dict__
+        )  # convert settings to GaussianIRCJobSettings
+        settings.job_type = "irc"
         settings.freq = False
         return settings
 
     def scan_settings(self):
-        """Gaussian default settings for scan job.
-        """
+        """Gaussian default settings for scan job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'scan'
+        settings.job_type = "scan"
         settings.freq = False
         return settings
 
     def nci_settings(self):
-        """Gaussian default settings for nci job.
-        """
+        """Gaussian default settings for nci job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'nci'
+        settings.job_type = "nci"
         settings.freq = False
         return settings
 
     def wbi_settings(self):
-        """Gaussian default settings for WBI job.
-        """
+        """Gaussian default settings for WBI job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'wbi'
+        settings.job_type = "wbi"
         settings.freq = False
         return settings
 
     def sp_settings(self):
-        """Gaussian default settings for sp job.
-        """
+        """Gaussian default settings for sp job."""
         settings = self.main_settings().copy()
-        settings.job_type = 'sp'
+        settings.job_type = "sp"
         settings.freq = False
         settings.basis = self.large_basis
         return settings
 
 
 class YamlGaussianProjectSettings(GaussianProjectSettings):
-    PROJECT_NAME = 'yaml'
+    PROJECT_NAME = "yaml"
 
     def __init__(
         self,
@@ -153,15 +150,17 @@ class YamlGaussianProjectSettingsBuilder:
         self.filename = filename
 
     def build(self):
-        opt_settings = self._project_settings_for_job(job_type='opt')
-        modred_settings = self._project_settings_for_job(job_type='modred')
-        ts_settings = self._project_settings_for_job(job_type='ts')
-        irc_settings = self._project_settings_for_job(job_type='irc')
-        scan_settings = self._project_settings_for_job(job_type='scan')
-        nci_settings = self._project_settings_for_job(job_type='nci')
-        sp_settings = self._project_settings_for_job(job_type='sp')
-        td_settings = self._project_settings_for_job(job_type='td')
-        wbi_settings = self._project_settings_for_job(job_type='wbi')
+        opt_settings = self._project_settings_for_job(job_type="opt")
+        modred_settings = self._project_settings_for_job(
+            job_type="modredundant"
+        )
+        ts_settings = self._project_settings_for_job(job_type="ts")
+        irc_settings = self._project_settings_for_job(job_type="irc")
+        scan_settings = self._project_settings_for_job(job_type="scan")
+        nci_settings = self._project_settings_for_job(job_type="nci")
+        sp_settings = self._project_settings_for_job(job_type="sp")
+        td_settings = self._project_settings_for_job(job_type="td")
+        wbi_settings = self._project_settings_for_job(job_type="wbi")
 
         project_settings = YamlGaussianProjectSettings(
             opt_settings=opt_settings,
@@ -186,20 +185,25 @@ class YamlGaussianProjectSettingsBuilder:
 
     def _project_settings_for_job(self, job_type):
         # Define a dictionary to map job_type to corresponding settings class
-        settings_mapping = {'irc': GaussianIRCJobSettings, 'td': GaussianTDDFTJobSettings}
+        settings_mapping = {
+            "irc": GaussianIRCJobSettings,
+            "td": GaussianTDDFTJobSettings,
+        }
 
         try:
             job_type_config = self._read_config().get(job_type)
             if job_type_config is not None:
-                return settings_mapping.get(job_type, GaussianJobSettings).from_dict(job_type_config)
+                return settings_mapping.get(
+                    job_type, GaussianJobSettings
+                ).from_dict(job_type_config)
         except KeyError as e:
             raise RuntimeError(
-                f'Gaussian settings for job {job_type} cannot be found!\n'
-                f'Available Gaussian jobs with settings are: {self._read_config().keys()}'
+                f"Gaussian settings for job {job_type} cannot be found!\n"
+                f"Available Gaussian jobs with settings are: {self._read_config().keys()}"
             ) from e
 
     def _parse_project_name(self):
-        return os.path.basename(self.filename).split('.')[0]
+        return os.path.basename(self.filename).split(".")[0]
 
 
 class GaussianProjectSettingsManager:
@@ -211,7 +215,7 @@ class GaussianProjectSettingsManager:
 
     def __init__(self, filename):
         if filename is None:
-            raise ValueError('filename is not specified')
+            raise ValueError("filename is not specified")
         self.filename = os.path.abspath(filename)
 
     def create(self):

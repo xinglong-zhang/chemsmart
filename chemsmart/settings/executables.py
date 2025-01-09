@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 
 class Executables(RegistryMixin):
     """Abstract base class for obtaining program executables.
-    Given program type, the executable will be specified in server.yaml file."""
+    Given program type, the executable will be specified in server.yaml file.
+    """
 
     PROGRAM = NotImplemented
+
     def __init__(self, executable_path=None):
         self.executable_path = executable_path
 
@@ -25,17 +27,20 @@ class Executables(RegistryMixin):
     @classmethod
     def from_yaml(cls, filename):
         executable_yaml = YAMLFile(filename=filename)
-        return cls(executable_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"])
+        return cls(
+            executable_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
+        )
 
 
 class GaussianExecutable(Executables):
     PROGRAM = "GAUSSIAN"
+
     def __init__(self, executable_path=None):
         super().__init__(executable_path=executable_path)
 
 
 class ORCAExecutable(Executables):
     PROGRAM = "ORCA"
+
     def __init__(self, executable_path=None):
         super().__init__(executable_path=executable_path)
-

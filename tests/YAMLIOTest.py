@@ -22,4 +22,3 @@ class TestYAMLFile:
             server_yaml.yaml_contents_dict["ORCA"]["EXEFOLDER"]
             == "~/programs/orca_6_0_0"
         )
-

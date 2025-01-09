@@ -1,12 +1,162 @@
 import os.path
 import numpy as np
-from chemsmart.io.gaussian.inputs import Gaussian16Input
+from ase.symbols import Symbols
+from ase import units
+from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.gaussian.output import Gaussian16OutputWithPBC
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
-from ase.symbols import Symbols
-from ase import units
+
+
+class TestRouteString:
+    def test_read_route_string_standard(self):
+        s1a = "# opt freq mn15 def2svp"
+        r1a = GaussianRoute(s1a)
+        assert r1a.functional == "mn15"
+        assert r1a.basis == "def2svp"
+        assert r1a.job_type == "opt"
+        assert r1a.solv is False
+        assert r1a.dieze_tag is None
+        assert r1a.additional_opt_options_in_route is None
+        assert r1a.additional_route_parameters is None
+
+    def test_read_route_string_standard2(self):
+        s1b = "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-311+G(d,p) empiricaldispersion=gd3bj"
+        r1b = GaussianRoute(s1b)
+        assert r1b.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert r1b.basis == "6-311+g(d,p)"
+        assert r1b.job_type == "ts"
+        assert r1b.solv is False
+        assert r1b.dieze_tag is None
+        assert (
+            r1b.additional_opt_options_in_route is None
+        )  # noeigentest prevents Gaussian from stopping
+        # if no negative Hessian eigenvalue was found
+        #                                                   # (not additional opt options for geometry opt)
+        assert r1b.additional_route_parameters is None
+
+    def test_read_route_string_standard3a(self):
+        s1c = "# opt freq mn15 gen"
+        r1c = GaussianRoute(s1c)
+        assert r1c.functional == "mn15"
+        assert r1c.basis == "gen"
+        assert r1c.job_type == "opt"
+        assert r1c.solv is False
+        assert r1c.dieze_tag is None
+        assert r1c.additional_opt_options_in_route is None
+        assert r1c.additional_route_parameters is None
+
+    def test_read_route_string_standard3b(self):
+        s1c = "# opt freq mn15 genecp"
+        r1c = GaussianRoute(s1c)
+        assert r1c.functional == "mn15"
+        assert r1c.basis == "genecp"
+        assert r1c.job_type == "opt"
+        assert r1c.solv is False
+        assert r1c.dieze_tag is None
+        assert r1c.additional_opt_options_in_route is None
+        assert r1c.additional_route_parameters is None
+
+    def test_read_route_string_standard4(self):
+        s1d = "#t mn15 def2qzvp scrf=(smd,solvent=generic,read)"
+        r1d = GaussianRoute(s1d)
+        assert r1d.functional == "mn15"
+        assert r1d.basis == "def2qzvp"
+        assert r1d.job_type == "sp"
+        assert r1d.solv is True
+        assert r1d.solvent_model == "smd"
+        assert r1d.solvent_id == "generic,read"
+        assert r1d.dieze_tag == "#t"
+        assert r1d.additional_opt_options_in_route is None
+        assert r1d.additional_route_parameters is None
+
+    def test_read_route_string_standard5(self):
+        s1e = "#p opt=modredundant freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
+        r1e = GaussianRoute(s1e)
+        assert r1e.functional == "tpsstpss empiricaldispersion=gd3bj"
+        assert (
+            r1e.basis == "def2tzvp/fit"
+        )  # density fitting basis set (for pure functionals)
+        assert r1e.job_type == "modred"
+        assert r1e.solv is True
+        assert r1e.solvent_model == "cpcm"
+        assert r1e.solvent_id == "toluene"
+        assert r1e.dieze_tag == "#p"
+        assert r1e.additional_opt_options_in_route is None
+        assert r1e.additional_route_parameters is None
+
+    def test_read_route_string_standard6(self):
+        s1f = "# mpw1pw91/6-311+G(2d,p) nmr=(GIAO,Mixed)"  # NMR route
+        r1f = GaussianRoute(s1f)
+        assert r1f.functional == "mpw1pw91"
+        assert r1f.basis == "6-311+g(2d,p)"
+        assert r1f.job_type == "sp"
+        assert r1f.dieze_tag is None
+        assert r1f.additional_opt_options_in_route is None
+        assert r1f.additional_route_parameters is None
+        # assert r1f.additional_route_parameters == 'nmr=(GIAO,Mixed)'
+        # TODO: nmr route to be specified
+
+    def test_read_route_string_standard7(self):
+        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"  # TD-DFT route
+        r1g = GaussianRoute(s1g)
+        assert r1g.functional == "wb97xd"
+        assert r1g.basis == "def2svp"
+        assert r1g.job_type == "sp"
+        assert r1g.dieze_tag is None
+        assert r1g.solv is True
+        assert r1g.solvent_model == "pcm"  # default solvet model in Gaussian
+        assert r1g.solvent_id == "dichloroethane"
+        assert r1g.additional_opt_options_in_route is None
+        # TODO: TD-DFT route to be specified
+
+    def test_read_route_string_nonstandard(self):
+        s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
+        r1 = GaussianRoute(s1)
+        assert r1.solvent_model == "dipole"
+        assert r1.solvent_id == "water"
+        # TODO: fix nonstandard functional/basis (very rare cases such as this)
+
+    def test_read_route_string_opt_options(self):
+        s2a = "# opt=(recalcfc=5) freq mn15 def2svp"
+        r2a = GaussianRoute(s2a)
+        assert r2a.functional == "mn15"
+        assert r2a.basis == "def2svp"
+        assert r2a.job_type == "opt"
+        assert r2a.solv is False
+        assert r2a.dieze_tag is None
+        assert r2a.additional_opt_options_in_route == "recalcfc=5"
+        assert r2a.additional_route_parameters is None
+
+        s2b = "# opt=(recalcfc=5,MaxStep=3,MaxCycles=128) freq mn15 def2svp"
+        r2b = GaussianRoute(s2b)
+        assert r2b.job_type == "opt"
+        assert (
+            r2b.additional_opt_options_in_route
+            == "recalcfc=5,maxstep=3,maxcycles=128"
+        )
+
+        s2c = "# opt=(ts,calcfc,noeigentest,recalcfc=5,MaxStep=3,MaxCycles=128) freq mn15 def2svp"
+        r2c = GaussianRoute(s2c)
+        assert r2c.job_type == "ts"
+        assert (
+            r2c.additional_opt_options_in_route
+            == "recalcfc=5,maxstep=3,maxcycles=128"
+        )
+
+    def test_read_additional_route_parameters(self):
+        s3a = "# opt=(recalcfc=5) freq=numer pbepbe/def2svp nosymm guess=mix"
+        r3a = GaussianRoute(s3a)
+        assert r3a.job_type == "opt"
+        assert r3a.additional_opt_options_in_route == "recalcfc=5"
+        assert r3a.freq is False
+        assert r3a.numfreq is True
+        assert r3a.solv is False
+        assert r3a.functional == "pbepbe"
+        assert r3a.basis == "def2svp"
+        assert r3a.additional_route_parameters == "nosymm guess=mix"
 
 
 class TestGaussian16Input:

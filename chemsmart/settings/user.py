@@ -28,15 +28,17 @@ class ChemsmartUserSettings:
 
     @cached_property
     def server_yaml_files(self):
-        return glob.glob(os.path.join(self.user_server_dir, '*.yaml'))
+        return glob.glob(os.path.join(self.user_server_dir, "*.yaml"))
 
     @cached_property
     def gaussian_project_yaml_files(self):
-        return glob.glob(os.path.join(self.user_gaussian_settings_dir, '*.yaml'))
+        return glob.glob(
+            os.path.join(self.user_gaussian_settings_dir, "*.yaml")
+        )
 
     @cached_property
     def orca_project_yaml_files(self):
-        return glob.glob(os.path.join(self.user_orca_settings_dir, '*.yaml'))
+        return glob.glob(os.path.join(self.user_orca_settings_dir, "*.yaml"))
 
     @cached_property
     def scratch(self):
@@ -52,18 +54,26 @@ class ChemsmartUserSettings:
 
     @cached_property
     def all_available_servers(self):
-        return [os.path.basename(s).strip('.yaml') for s in self.server_yaml_files]
+        return [
+            os.path.basename(s).strip(".yaml") for s in self.server_yaml_files
+        ]
 
     @cached_property
     def all_available_gaussian_projects(self):
-        return [os.path.basename(g).strip('.yaml') for g in self.gaussian_project_yaml_files]
+        return [
+            os.path.basename(g).strip(".yaml")
+            for g in self.gaussian_project_yaml_files
+        ]
 
     @cached_property
     def all_available_orca_projects(self):
-        return [os.path.basename(o).strip('.yaml') for o in self.orca_project_yaml_files]
+        return [
+            os.path.basename(o).strip(".yaml")
+            for o in self.orca_project_yaml_files
+        ]
 
     def _yaml_file(self, project):
-        file = os.path.join(self.path, f'{project}.yaml')
+        file = os.path.join(self.path, f"{project}.yaml")
         if not os.path.exists(file):
-            raise FileNotFoundError(f'Could not find file: {file}')
+            raise FileNotFoundError(f"Could not find file: {file}")
         return file

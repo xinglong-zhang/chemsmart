@@ -188,8 +188,12 @@ class Gaussian16Output(GaussianFileMixin):
         """Return last structure, whether the output file has completed successfully or not."""
         return self.all_structures[-1]
 
+    @property
+    def molecule(self):
+        return self.last_structure
+
     ######################### the following properties relate to intermediate geometry optimizations
-    # for a constrained opt in e.g, scan/modred job
+    # for a constrained opt in e.g, scan/modredundant job
 
     @cached_property
     def intermediate_steps(self):

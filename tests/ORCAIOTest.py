@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
-from chemsmart.io.orca.inputs import ORCAInput
-from chemsmart.io.orca.outputs import ORCAOutput
+from chemsmart.io.orca.input import ORCAInput
+from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.orca.outputs import ORCAEngradFile
+from chemsmart.io.orca.output import ORCAEngradFile
 
 
 class TestORCARoute:

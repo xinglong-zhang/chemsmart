@@ -1,8 +1,8 @@
-from pyatoms.jobs.gaussian.job import GaussianJob
+from pyatoms.jobs.orca.job import ORCAJob
 
 
-class GaussianWBIJob(GaussianJob):
-    TYPE = "g16wbi"
+class ORCATSJob(ORCAJob):
+    TYPE = "orcats"
 
     def __init__(self, folder, atoms, settings, **kwargs):
         super().__init__(

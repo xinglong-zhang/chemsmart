@@ -303,3 +303,75 @@ def update_dict_with_existing_keys(dict1, dict2):
             )
     return dict1
 
+
+# Common utils for orca and gaussian
+def get_prepend_string_for_modred(list_of_string):
+    list_length = len(list_of_string)
+    prepend_strings = {2: "B", 3: "A", 4: "D"}
+    if list_length not in prepend_strings:
+        raise ValueError(
+            "Supplied list of coordinates should be 2 for Bond; 3 for Angle and 4 for Dihedral!"
+        )
+    return prepend_strings[list_length]
+
+
+def convert_modred_list_to_string(modred_list):
+    list_of_string = [str(a) for a in modred_list]
+    return " ".join(list_of_string)
+
+
+def get_prepend_string_list_from_modred_free_format(
+    input_modred, program_type="gaussian"
+):
+    """Get prepend string list from either a list of lists or a list.
+    e.g., [[1,2],[5,6]] or [1,2] -> ['B 1 2', 'B 5 6']
+    program_type: gaussian or orca, variable to decide the index to start from
+    Gaussian starts from 1, while orca starts from 0
+    For chemsmart applications in homogeneous catalysis, we will use 1-indexing throughout,
+    since this is what we usually see when we use GaussView or Avogadro to visualise the structures.
+    """
+    prepend_string_list = []
+    if not isinstance(input_modred, list):
+        raise ValueError(
+            f"Required input for modredundant coordinates should be a list of lists "
+            f"e.g., [[1,2],[5,6]] or a list e.g., [1,2].\n "
+            f"But the given input is {input_modred} instead!"
+        )
+    if isinstance(input_modred[0], list):
+        # for list of lists; e.g.: [[2,3],[4,5]]
+        num_list = len(input_modred)
+        for i in range(num_list):
+            prepend_string = get_prepend_string_for_modred(input_modred[i])
+            if program_type == "gaussian":
+                modred_string = convert_modred_list_to_string(input_modred[i])
+            elif program_type == "orca":
+                modred_string = convert_modred_list_to_string(
+                    [a - 1 for a in input_modred[i]]
+                )
+            else:
+                raise ValueError(
+                    f"Program type should be either gaussian or orca, but the given type is {program_type}!"
+                )
+            each_frozen_string = f"{prepend_string} {modred_string}"
+            prepend_string_list.append(each_frozen_string)
+    elif isinstance(input_modred[0], int):
+        # for a single list; e.g.: [2,3]
+        prepend_string = get_prepend_string_for_modred(input_modred)
+        if program_type == "gaussian":
+            modred_string = convert_modred_list_to_string(input_modred)
+        elif program_type == "orca":
+            modred_string = convert_modred_list_to_string(
+                [a - 1 for a in input_modred]
+            )
+        each_frozen_string = f"{prepend_string} {modred_string}"
+        prepend_string_list.append(each_frozen_string)
+    return prepend_string_list
+
+
+def prune_list_of_elements(list_of_elements, molecule):
+    """Prune the list of elements so that only the specified elements that appear in a molecule is returned.
+    E.g., one can specify heavy elements to be heavy_elements = ["Pd", "Ag", "Au"], but if only "Pd" appears
+    in the molecule, then only "Pd" will be returned."""
+    return list(
+        set(molecule.chemical_symbols).intersection(set(list_of_elements))
+    )

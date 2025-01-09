@@ -4,7 +4,7 @@ import os
 import click
 from chemsmart.utils.utils import create_logger
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.io.orca.outputs import ORCAOutput
+from chemsmart.io.orca.output import ORCAOutput
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"

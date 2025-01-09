@@ -4,18 +4,14 @@ import shlex
 import shutil
 import subprocess
 from contextlib import suppress
-from datetime import datetime
 from glob import glob
-from random import random
 from shutil import copy, rmtree
 
-from chemsmart.jobs.runner import JobRunner
-
-# from pyatoms.cli.submitters import SubmitscriptWriter
-# from pyatoms.io.gaussian.inputs import Gaussian16Input
-# from pyatoms.jobs.gaussian.execution import GaussianExecutables
-# from pyatoms.jobs.runner import JobRunner
-# from pyatoms.utils.periodictable import chemical_symbol_to_atomic_number
+from pyatoms.cli.submitters import SubmitscriptWriter
+from pyatoms.io.orca.inputs import ORCAInput
+from pyatoms.jobs.orca.execution import OrcaExecutables
+from pyatoms.jobs.runner import JobRunner
+from pyatoms.utils.periodictable import chemical_symbol_to_atomic_number
 
 shutil._USE_CP_SENDFILE = False
 # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
@@ -23,50 +19,40 @@ shutil._USE_CP_SENDFILE = False
 logger = logging.getLogger(__name__)
 
 
-class GaussianJobRunner(JobRunner):
+class ORCAJobRunner(JobRunner):
     # creates job runner process
     # combines information about server and program
+
     JOBTYPES = [
-        "g16crestopt",
-        "g16crestts",
-        "g16job",
-        "g16dias",
-        "g16opt",
-        "g16irc",
-        "g16modred",
-        "g16nci",
-        "g16resp",
-        "g16saopt",
-        "g16scan",
-        "g16sp",
-        "g16td",
-        "g16ts",
-        "g16uvvis",
-        "g16wbi",
-        "g16",
-        "g16com",
-        "g16link",
+        "orcainp",
+        "orcaopt",
+        "orcamodred",
+        "orcascan",
+        "orcats",
+        "orcasp",
+        "orcairc",
     ]
 
-    def __init__(self, server, job, scratch=True, fake=False, **kwargs):
+    def __init__(self, server, num_nodes, scratch=True, **kwargs):
         super().__init__(
-            server=server, job=job, scratch=scratch, fake=fake, **kwargs
+            server=server, num_nodes=num_nodes, scratch=scratch, **kwargs
         )
 
     @property
     def executables(self):
-        return GaussianExecutables.from_servername(servername=self.servername)
+        return OrcaExecutables.from_servername(servername=self.servername)
 
     def _prerun(self, job):
         self._assign_variables(job)
+        self._copy_over_files(job)
 
     def _assign_variables(self, job):
-        """Creates input file in scratch (done in settings.apply_on()), if running in scratch directory.
+        """Creates input file in scratch (done in settings.apply_on()) if running in scratch directory.
 
         Set up file paths if running in scratch/not running in scratch.
         """
         # keep job output file in job folder regardless of running in scratch or not
-        self.job_outputfile = job.outputfile
+        self.job_outputfile = job.outfile
 
         if self.scratch:
             logger.info("Setting up run in scratch folder.")
@@ -74,30 +60,57 @@ class GaussianJobRunner(JobRunner):
             scratch_job_dir = os.path.join(self.scratch_dir, job.label)
             self.running_directory = scratch_job_dir
 
-            job_inputfile = job.label + ".com"
+            job_inputfile = job.label + ".inp"
             scratch_job_inputfile = os.path.join(
                 scratch_job_dir, job_inputfile
             )
             self.job_inputfile = scratch_job_inputfile
 
-            job_chkfile = job.label + ".chk"
-            scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
-            self.job_chkfile = scratch_job_chkfile
+            job_gbwfile = job.label + ".gbw"
+            scratch_job_gbwfile = os.path.join(scratch_job_dir, job_gbwfile)
+            self.job_gbwfile = scratch_job_gbwfile
 
             job_errfile = job.label + ".err"
             scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
             self.job_errfile = scratch_job_errfile
         else:
             logger.info("Setting up run in job folder (no scratch).")
-            # keep files as in running directory
+            # keep files as in runnind directory
             self.running_directory = job.folder
             self.job_inputfile = job.inputfile
-            self.job_chkfile = job.chkfile
+            self.job_gbwfile = job.gbwfile
             self.job_errfile = job.errfile
 
-        if self.executables and self.executables.local_run is not None:
-            logger.info(f"Local run is {self.executables.local_run}.")
+        if self.executables.local_run is not None:
+            logger.info("Local run is True.")
             job.local = self.executables.local_run
+
+    def _copy_over_files(self, job):
+        if self.scratch:
+            logger.info("Copying over files to scratch folder.")
+            # copy over files
+            scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+            with suppress(FileExistsError):
+                os.mkdir(scratch_job_dir)
+            for file in glob(f"{job.folder}/*xyz"):
+                # copy over xyz files if running in scratch (the xyz files can be part of the input specification
+                # e.g., for neb-TS calculations)
+                logger.info(
+                    f"Copying file {file} from {job.folder} \nto {scratch_job_dir}\n"
+                )
+                copy(file, scratch_job_dir)
+            # copy over hessian files
+            for file in glob(f"{job.folder}/*hess"):
+                logger.info(
+                    f"Copying file {file} from {job.folder} \nto {scratch_job_dir}\n"
+                )
+                copy(file, scratch_job_dir)
+            # copy over gbw files
+            for file in glob(f"{job.folder}/*gbw"):
+                logger.info(
+                    f"Copying file {file} from {job.folder} \nto {scratch_job_dir}\n"
+                )
+                copy(file, scratch_job_dir)
 
     def _run(self, job, process):
         process.communicate()
@@ -123,9 +136,9 @@ class GaussianJobRunner(JobRunner):
             )
 
     def _get_executable(self):
-        """Get executable for Gaussian."""
+        """Get executable for orca."""
         exe = self.executables.get_executable()
-        logger.info(f"Gaussian executable: {exe}")
+        logger.info(f"Orca executable: {exe}")
         return exe
 
     def get_command(self, job, host):
@@ -145,13 +158,14 @@ class GaussianJobRunner(JobRunner):
 
     def _postrun(self, job):
         if self.scratch:
-            # if job was run in scratch, copy files to job folder except files starting with Gau-
+            # if job was run in scratch, copy files to job folder except files ending with .tmp or .tmp.*
             for file in glob(f"{self.running_directory}/{job.label}*"):
-                if not file.startswith("Gau-"):
-                    logger.info(
-                        f"Copying file {file} from {self.running_directory} \nto {job.folder}\n"
-                    )
-                    copy(file, job.folder)
+                if file.endswith(".tmp") or ".tmp." in file:
+                    continue
+                logger.info(
+                    f"Copying file {file} from {self.running_directory} \nto {job.folder}\n"
+                )
+                copy(file, job.folder)
 
         if job.is_complete():
             # if job is completed, remove scratch directory and submitscript and log.info and log.err files
@@ -185,12 +199,12 @@ class GaussianJobRunner(JobRunner):
                     os.remove(f)
 
 
-class FakeGaussian:
+class FakeORCA:
     def __init__(self, file_to_run):
         if not os.path.exists(file_to_run):
             raise FileNotFoundError(f"File {file_to_run} not found.")
         self.file_to_run = os.path.abspath(file_to_run)
-        self.input_object = Gaussian16Input(comfile=self.file_to_run)
+        self.input_object = ORCAInput(inpfile=self.file_to_run)
 
     @property
     def file_folder(self):
@@ -206,7 +220,7 @@ class FakeGaussian:
 
     @property
     def output_filepath(self):
-        output_file = self.filename.split(".")[0] + ".log"
+        output_file = self.filename.split(".")[0] + ".out"
         return os.path.join(self.file_folder, output_file)
 
     @property
@@ -255,129 +269,105 @@ class FakeGaussian:
 
     def run(self):
         # get input lines
-        input_lines = []
         with open(self.input_filepath) as f:
-            lines = f.readlines()
-            input_lines = lines.copy()
-            for line in lines:
-                input_lines.append(line)
+            input_lines = f.readlines()
 
         with open(self.output_filepath, "w") as g:
-            g.write(" Entering Gaussian System, FakeGaussianRunner\n")
-            g.write(f" Input={self.input_filepath}\n")
-            g.write(f" Output={self.output_filepath}\n")
-            g.write(" ******************************************\n")
-            g.write(" Fake Gaussian Executable\n")
-            g.write(" ******************************************\n")
-            # write mem/nproc/chk information (%...)
-            for line in input_lines:
-                if line.startswith("%"):
-                    g.write(f" {line}")
-            # write route information
-            for line in input_lines:
-                if line.startswith("#"):
-                    line_len = len(line)
-                    g.write(" " + "-" * line_len + "\n")
-                    g.write(f" {line}")
-                    g.write(" " + "-" * line_len + "\n")
-            # write charge and multiplicity
+            g.write("\n")
             g.write(
-                f" Charge =  {self.charge} Multiplicity = {self.multiplicity}\n"
-            )
-            # missing Z-matrix
-
-            # write input orientation
-            g.write(
-                "                          Input orientation:                             \n"
+                """                                 *****************
+                                 * O   R   C   A *
+                                 *****************\n"""
             )
             g.write(
-                " ------------------------------------------------------------------------\n"
+                "                         Fake Orca version 0.0.0 -  RELEASE  -                \n"
             )
             g.write(
-                " Center     Atomic      Atomic             Coordinates (Angstroms)       \n"
+                "================================================================================\n"
             )
             g.write(
-                " Number     Number       Type             X           Y           Z      \n"
+                "                                       INPUT FILE                               \n"
             )
             g.write(
-                " ------------------------------------------------------------------------\n"
+                "================================================================================\n"
             )
-
-            # write coordinates
-            for i in range(self.num_atoms):
-                g.write(
-                    f"{i + 1:>4} {self.atomic_numbers[i]:>10} {0!s:>10} "
-                    f"{self.atomic_coordinates[i][0]:>20.6}"
-                    f"{self.atomic_coordinates[i][1]:>14.6}"
-                    f"{self.atomic_coordinates[i][2]:>14.6}\n"
-                )
+            g.write(f"NAME = {self.input_filepath}\n")
+            for i, line in enumerate(input_lines):
+                g.write(f"|  {i+1}> {line}")
+            g.write(f"|  {len(input_lines)+1}> ")
             g.write(
-                " ------------------------------------------------------------------------\n"
+                f"|  {len(input_lines) + 2}>                          ****END OF INPUT****\n"
             )
-            g.write(f" Stoichiometry    {self.empirical_formula}")
-
-            # write standard orientation
+            g.write("                       *****************************\n")
+            g.write("                       *        Fake Orca Run      *\n")
+            g.write("                       *****************************\n")
             g.write(
-                "                       Standard orientation:                             \n"
+                f"Number of atoms                         .... {self.num_atoms}\n"
             )
             g.write(
-                " ------------------------------------------------------------------------\n"
+                f"  Total Charge           Charge          ....    {self.input_object.charge}\n"
             )
             g.write(
-                " Center     Atomic      Atomic             Coordinates (Angstroms)       \n"
+                f"  Multiplicity           Mult            ....    {self.input_object.multiplicity}\n"
             )
             g.write(
-                " Number     Number       Type             X           Y           Z      \n"
+                "                     ***********************HURRAY********************\n"
             )
             g.write(
-                " ------------------------------------------------------------------------\n"
-            )
-            # write coordinates
-            for i in range(self.num_atoms):
-                g.write(
-                    f"{i + 1:>4} {self.atomic_numbers[i]:>10} {0!s:>10} "
-                    f"{self.atomic_coordinates[i][0]:>20.6}"
-                    f"{self.atomic_coordinates[i][1]:>14.6}"
-                    f"{self.atomic_coordinates[i][2]:>14.6}\n"
-                )
-            g.write(
-                " ------------------------------------------------------------------------\n"
+                "                     ***        THE OPTIMIZATION HAS CONVERGED     ***\n"
             )
             g.write(
-                " ! Dummy Rotational constant values and dummy SCF energy value...\n"
+                "                     ***********************HURRAY********************\n"
             )
             g.write(
-                " Rotational constants (GHZ):          11.4493930           9.4805599           5.3596246\n"
-            )  # not real values
-            g.write(f" Standard basis: {self.input_object.basis} (5D, 7F)\n")
-            g.write(f" NAtoms=    {self.num_atoms}\n")
+                "                  *******************************************************\n"
+            )
             g.write(
-                f" SCF Done:  E({self.spin}{self.input_object.functional.upper()}) =  "
-                f"-{1000 * random()}  A.U. after   14 cycles\n"
-            )  # dummy energy
-            g.write(" Mulliken charges:\n")
-            g.write("               1\n")
-            for i in range(self.num_atoms):
-                g.write(
-                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {random():>12.6}\n"
-                )  # not real values
-            g.write(" Elapsed time: xx\n")
+                "                  *** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***\n"
+            )
             g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
+                "                  *******************************************************\n"
+            )
+            g.write(" ---------------------------------\n")
+            g.write(" CARTESIAN COORDINATES (ANGSTROEM)\n")
+            g.write(" ---------------------------------\n")
+            for line in input_lines[2:-2]:
+                g.write(f"{line}")
+            g.write(" ----------------\n")
+            g.write(" TOTAL SCF ENERGY\n")
+            g.write(" ----------------\n")
+            g.write(
+                " Total Energy       :          -76.32331101 Eh           -2076.86288 eV\n"
+            )
+            g.write(
+                "                              ****ORCA TERMINATED NORMALLY****\n"
+            )
+            g.write(
+                "TOTAL RUN TIME: 0 days 0 hours 0 minutes 0 seconds xx msec\n"
             )
 
 
-class FakeGaussianJobRunner(GaussianJobRunner):
+class FakeORCAJobRunner(ORCAJobRunner):
     # creates job runner process
     # combines information about server and program
+    FAKE = True
+    JOBTYPES = [
+        "orcainp",
+        "orcaopt",
+        "orcamodred",
+        "orcascan",
+        "orcats",
+        "orcasp",
+        "orcairc",
+    ]
 
-    def __init__(self, server, job, scratch=False, fake=True, **kwargs):
+    def __init__(self, server, num_nodes, scratch=False, **kwargs):
         super().__init__(
-            server=server, job=job, scratch=scratch, fake=fake, **kwargs
+            server=server, num_nodes=num_nodes, scratch=scratch, **kwargs
         )
 
-    def run(self, job, **kwargs):
+    def run(self, job):
         self._prerun(job=job)
-        returncode = FakeGaussian(self.job_inputfile).run()
+        returncode = FakeORCA(self.job_inputfile).run()
         self._postrun(job=job)
         return returncode

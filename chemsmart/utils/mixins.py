@@ -111,7 +111,11 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.basis
 
     @property
-    def solv_on(self):
+    def force(self):
+        return self.route_object.force
+
+    @property
+    def solvent_on(self):
         return self.route_object.solv
 
     @property
@@ -129,6 +133,38 @@ class GaussianFileMixin(FileMixin):
     @property
     def additional_route_parameters(self):
         return self.route_object.additional_route_parameters
+
+    def read_settings(self):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        title = f"Job prepared from Gaussian file {self.filename}"
+
+        return GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            chk=self.chk,
+            job_type=self.job_type,
+            title=title,
+            freq=self.freq,
+            numfreq=self.numfreq,
+            dieze_tag=self.dieze_tag,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            additional_opt_options_in_route=self.additional_opt_options_in_route,
+            additional_route_parameters=self.additional_route_parameters,
+            route_to_be_written=None,
+            modredundant=self.modredundant,
+            gen_genecp_file=None,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+            custom_solvent=self.custom_solvent,
+            append_additional_info=None,
+            forces=False,
+        )
 
 
 class ORCAFileMixin(FileMixin):
@@ -278,6 +314,45 @@ class ORCAFileMixin(FileMixin):
     @property
     def numfreq(self):
         return self.route_object.numfreq
+
+    def read_settings(self):
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        dv = ORCAJobSettings.default()
+        return ORCAJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            dispersion=self.dispersion,
+            basis=self.basis,
+            aux_basis=self.aux_basis,
+            extrapolation_basis=self.extrapolation_basis,
+            defgrid=self.defgrid,
+            scf_tol=self.scf_tol,
+            scf_algorithm=self.scf_algorithm,
+            scf_maxiter=self.scf_maxiter,
+            scf_convergence=self.scf_convergence,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            gbw=dv.gbw,
+            freq=self.freq,
+            numfreq=self.numfreq,
+            dipole=self.dipole,
+            quadrupole=self.quadrupole,
+            mdci_cutoff=self.mdci_cutoff,
+            mdci_density=self.mdci_density,
+            job_type=self.job_type,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            additional_route_parameters=dv.additional_route_parameters,
+            route_to_be_written=dv.route_to_be_written,
+            modredundant=dv.modredundant,
+            gen_genecp_file=dv.gen_genecp_file,
+            heavy_elements=dv.heavy_elements,
+            heavy_elements_basis=dv.heavy_elements_basis,
+            light_elements_basis=dv.light_elements_basis,
+            custom_solvent=dv.custom_solvent,
+            forces=dv.forces,
+        )
 
 
 class YAMLFileMixin(FileMixin):

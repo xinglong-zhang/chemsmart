@@ -2,10 +2,14 @@ from pyatoms.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 
 class GaussianCrestTSJob(GaussianJob):
-    TYPE = 'g16crestts'
+    TYPE = "g16crestts"
 
-    def __init__(self, folder, atoms, settings, num_confs_to_opt=None, **kwargs):
-        super().__init__(folder=folder, atoms=atoms, settings=settings, **kwargs)
+    def __init__(
+        self, folder, atoms, settings, num_confs_to_opt=None, **kwargs
+    ):
+        super().__init__(
+            folder=folder, atoms=atoms, settings=settings, **kwargs
+        )
 
         if num_confs_to_opt is None:
             num_confs_to_opt = len(atoms)
@@ -27,7 +31,11 @@ class GaussianCrestTSJob(GaussianJob):
 
     @property
     def incomplete_conformers_opt_jobs(self):
-        return [job for job in self.all_conformers_opt_jobs if not job.is_complete()]
+        return [
+            job
+            for job in self.all_conformers_opt_jobs
+            if not job.is_complete()
+        ]
 
     def _check_last_finished_job_index(self):
         for i, job in enumerate(self.all_conformers_opt_jobs):
@@ -40,10 +48,13 @@ class GaussianCrestTSJob(GaussianJob):
     def _prepare_all_jobs(self):
         jobs = []
         for i in range(self.num_conformers):
-            label = f'{self.label}_c{i + 1}'  # 1-indexed for conformers
+            label = f"{self.label}_c{i + 1}"  # 1-indexed for conformers
             jobs += [
                 GaussianGeneralJob(
-                    folder=self.folder, atoms=self.all_conformers[i], settings=self.settings, label=label
+                    folder=self.folder,
+                    atoms=self.all_conformers[i],
+                    settings=self.settings,
+                    label=label,
                 )
             ]
         return jobs
@@ -59,4 +70,7 @@ class GaussianCrestTSJob(GaussianJob):
         return self._run_all_crest_opt_jobs_are_complete()
 
     def _run_all_crest_opt_jobs_are_complete(self):
-        return all(job.is_complete() for job in self.all_conformers_opt_jobs[: self.num_confs_to_opt])
+        return all(
+            job.is_complete()
+            for job in self.all_conformers_opt_jobs[: self.num_confs_to_opt]
+        )

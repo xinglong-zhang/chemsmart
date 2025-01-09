@@ -2,7 +2,9 @@ import datetime
 import glob
 import logging
 import os
+import time
 import shutil
+from contextlib import suppress
 from abc import abstractmethod
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -21,7 +23,8 @@ class Job(RegistryMixin):
     # ALIASES = []
     # RUNNERS = []
 
-    def __init__(self, label, local=False, skip_completed=True):
+    def __init__(self, molecule, label, local=False, skip_completed=True):
+        self.molecule = molecule
         self.label = label
         self.local = local
         self.skip_completed = skip_completed
@@ -81,3 +84,27 @@ class Job(RegistryMixin):
 
         shutil.copytree(src=self.folder, dst=dest_folder)
         return dest_folder
+
+    def backup_file(self, file, folder=None, remove=False):
+        if not os.path.exists(file):
+            return
+
+        if folder is None:
+            folder = self._create_backup_folder_name()
+
+        with suppress(FileExistsError):
+            os.mkdir(folder)
+
+        newfilepath = os.path.join(
+            folder, os.path.basename(os.path.abspath(file))
+        )
+
+        if remove:
+            shutil.move(src=file, dst=newfilepath)
+        else:  # noqa: PLR5501
+            if os.path.isdir(file):
+                if os.path.exists(newfilepath):
+                    os.rename(newfilepath, newfilepath + f"_{time.time()}")
+                shutil.copytree(src=file, dst=newfilepath)
+            else:
+                shutil.copy(src=file, dst=newfilepath)
