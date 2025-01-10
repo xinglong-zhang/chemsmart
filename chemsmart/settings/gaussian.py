@@ -113,8 +113,8 @@ class GaussianProjectSettings(RegistryMixin):
 
         templates_path = os.path.join(os.path.dirname(__file__), 'templates')
         raise ValueError(
-            f'No settings implemented for {project_name}.\n\n'
-            f'Place new settings.yaml file in {user_settings.user_gaussian_settings_dir}.\n\n'
+            f'No project settings implemented for {project_name}.\n\n'
+            f'Place new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n'
             f'Templates for such settings.yaml files are available at {templates_path}\n\n '
             f'Currently available projects: {user_settings.all_available_gaussian_projects}'
         )

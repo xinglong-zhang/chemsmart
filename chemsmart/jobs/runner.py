@@ -32,14 +32,9 @@ class JobRunner(RegistryMixin):
         self.fake = fake
         self.kwargs = kwargs
 
-        if server is None:
-            server = Server.current()
-            logger.info(
-                f"No server is specified, using current server {server} instead"
-            )
 
         if isinstance(server, str):
-            server = Server.from_name(server)
+            server = Server.from_server(server)
 
         if not isinstance(server, Server):
             raise ValueError(

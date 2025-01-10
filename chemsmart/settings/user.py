@@ -1,8 +1,10 @@
 import os
+import logging
 from functools import cached_property
 import glob
-
 from chemsmart.io.yaml import YAMLFile
+
+logger = logging.getLogger(__name__)
 
 
 class ChemsmartUserSettings:
@@ -79,25 +81,22 @@ class ChemsmartUserSettings:
     @cached_property
     def all_available_servers(self):
         return [
-            os.path.basename(s).strip(".yaml") for s in self.server_yaml_files
+            os.path.basename(s).removesuffix(".yaml") for s in self.server_yaml_files
         ]
 
     @cached_property
     def all_available_gaussian_projects(self):
-        return [
-            os.path.basename(g).strip(".yaml")
+        gaussian_project_settings = [
+            os.path.basename(g).removesuffix(".yaml")  # python 3.9+
+            # os.path.basename(g).strip(".yaml") does not work since
+            # m062x.yaml gets stripped to 062x
             for g in self.gaussian_project_yaml_files
         ]
+        return gaussian_project_settings
 
     @cached_property
     def all_available_orca_projects(self):
         return [
-            os.path.basename(o).strip(".yaml")
+            os.path.basename(o).removesuffix(".yaml")
             for o in self.orca_project_yaml_files
         ]
-
-    def _yaml_file(self, project):
-        file = os.path.join(self.path, f"{project}.yaml")
-        if not os.path.exists(file):
-            raise FileNotFoundError(f"Could not find file: {file}")
-        return file

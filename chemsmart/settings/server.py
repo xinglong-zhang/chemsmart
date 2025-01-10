@@ -29,17 +29,6 @@ class Server(RegistryMixin):
     def __repr__(self):
         return f"Server(name={self.name})"
 
-    def __call__(self):
-        server_cls = [s for s in Server.subclasses() if self.name == s.NAME]
-        if len(server_cls) == 0:
-            raise ValueError(
-                f"No server of defined name: {self.name}.\nAvailable servers: {Server.subclasses()}"
-            )
-
-        assert len(server_cls) == 1
-        server_cls = server_cls[0]
-        return server_cls(**self.kwargs)
-
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
@@ -105,10 +94,6 @@ class Server(RegistryMixin):
     @classmethod
     def current(cls):
         return cls.from_scheduler_type()
-
-    @classmethod
-    def from_name(cls, name):
-        return cls(name)()
 
     @classmethod
     def from_scheduler_type(cls):
@@ -226,9 +211,9 @@ class Server(RegistryMixin):
         templates_path = os.path.join(os.path.dirname(__file__), 'templates')
         raise ValueError(
             f'No server implemented for {server_name}.\n\n'
-            f'Place new server.yaml file in {user_settings.user_server_dir}.\n\n'
-            f'Templates for such settings.yaml files are available at {templates_path}\n\n '
-            f'Currently available projects: {user_settings.all_available_servers}'
+            f'Place new server .yaml file in {user_settings.user_server_dir}.\n\n'
+            f'Templates for server settings .yaml files are available at {templates_path}\n\n '
+            f'Currently available servers: {user_settings.all_available_servers}'
         )
 
     @classmethod
@@ -271,6 +256,7 @@ class SGE_Server(Server):
         super().__init__(self.NAME, **kwargs)
 
 class YamlServerSettings(Server):
+    NAME = "yaml"
     def __init__(self, name, **kwargs):
         super().__init__(name, **kwargs)
 

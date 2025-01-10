@@ -3,6 +3,7 @@ import logging
 import platform
 from multiprocessing import set_start_method
 import click
+from chemsmart.utils.utils import create_logger
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
@@ -40,22 +41,24 @@ logger = logging.getLogger(__name__)
     default=False,
     help="If true, fake jobrunners will be used",
 )
-# @click.option(
-#     "--stream/--no-stream",
-#     default=None,
-#     help="Turns on logging to stdout",
-# )
+@click.option(
+    "--stream/--no-stream",
+    default=None,
+    help="Turns on logging to stdout",
+)
 def run(
     ctx,
     server,
     num_processes,
     debug,
     test,
+    stream,
 ):
+    create_logger(debug=debug, stream=stream)
 
     logger.info("Entering main program")
 
-    jobrunner = JobRunner(server=server)
+    jobrunner = JobRunner(server=server, fake=test)
 
     # jobrunner = JobRunner(
     #     servername=servername,
