@@ -30,7 +30,9 @@ class ChemsmartUserSettings:
 
     @property
     def user_gaussian_modules(self):
-        return os.path.join(self.user_gaussian_settings_dir, "gaussian.modules")
+        return os.path.join(
+            self.user_gaussian_settings_dir, "gaussian.modules"
+        )
 
     @property
     def user_gaussian_script(self):
@@ -81,7 +83,8 @@ class ChemsmartUserSettings:
     @cached_property
     def all_available_servers(self):
         return [
-            os.path.basename(s).removesuffix(".yaml") for s in self.server_yaml_files
+            os.path.basename(s).removesuffix(".yaml")
+            for s in self.server_yaml_files
         ]
 
     @cached_property

@@ -5,6 +5,7 @@ from abc import abstractmethod
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
+
 user_settings = ChemsmartUserSettings()
 
 
@@ -25,13 +26,17 @@ class JobRunner(RegistryMixin):
     JOBTYPES: list = NotImplemented
     PROGRAM: str = NotImplemented
 
-    def __init__(self, server, scratch=False, scratch_dir=None, fake=False, **kwargs):
+    def __init__(
+        self, server, scratch=False, scratch_dir=None, fake=False, **kwargs
+    ):
         self.server = server
         self.scratch = scratch
         self.scratch_dir = scratch_dir
         self.fake = fake
         self.kwargs = kwargs
 
+        if server is None:
+            server = Server.current()
 
         if isinstance(server, str):
             server = Server.from_server(server)
@@ -43,7 +48,6 @@ class JobRunner(RegistryMixin):
 
         if self.scratch:
             self._set_scratch()
-
 
     def _set_scratch(self):
         scratch_dir = None

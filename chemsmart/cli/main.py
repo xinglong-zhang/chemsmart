@@ -19,6 +19,9 @@ from chemsmart.utils.cli import MyGroup
 @click.option("--verbose", is_flag=True, default=False)
 def entry_point(ctx, verbose):
     if verbose:
+        from chemsmart.utils.utils import create_logger
+
+        create_logger(debug=True)
         logging.basicConfig(level=logging.INFO)
         logging.info("Verbose mode activated.")
 

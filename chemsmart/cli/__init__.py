@@ -1,1 +1,1 @@
-from chemsmart.jobs.gaussian.geomopt import opt
+from chemsmart.cli.gaussian.gaussian import opt

@@ -175,7 +175,9 @@ class Server(RegistryMixin):
                     if "check_output" in scheduler:
                         output = result.stdout.decode()
                         if scheduler["check_output"](output):
-                            logger.info(f"Detected scheduler: {scheduler['name']}")
+                            logger.info(
+                                f"Detected scheduler: {scheduler['name']}"
+                            )
                             return scheduler["name"]
                     else:
                         logger.info(f"Detected scheduler: {scheduler['name']}")
@@ -201,19 +203,21 @@ class Server(RegistryMixin):
         server_name_yaml_path = os.path.join(
             user_settings.user_server_dir, f"{server_name}.yaml"
         )
-        user_settings_manager = ServerSettingsManager(filename=server_name_yaml_path)
+        user_settings_manager = ServerSettingsManager(
+            filename=server_name_yaml_path
+        )
         server = cls._from_servers_manager(user_settings_manager)
 
         if server is not None:
             return server
 
         # could not find server settings
-        templates_path = os.path.join(os.path.dirname(__file__), 'templates')
+        templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise ValueError(
-            f'No server implemented for {server_name}.\n\n'
-            f'Place new server .yaml file in {user_settings.user_server_dir}.\n\n'
-            f'Templates for server settings .yaml files are available at {templates_path}\n\n '
-            f'Currently available servers: {user_settings.all_available_servers}'
+            f"No server implemented for {server_name}.\n\n"
+            f"Place new server .yaml file in {user_settings.user_server_dir}.\n\n"
+            f"Templates for server settings .yaml files are available at {templates_path}\n\n "
+            f"Currently available servers: {user_settings.all_available_servers}"
         )
 
     @classmethod
@@ -255,8 +259,10 @@ class SGE_Server(Server):
     def __init__(self, **kwargs):
         super().__init__(self.NAME, **kwargs)
 
+
 class YamlServerSettings(Server):
     NAME = "yaml"
+
     def __init__(self, name, **kwargs):
         super().__init__(name, **kwargs)
 

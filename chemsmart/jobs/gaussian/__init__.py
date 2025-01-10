@@ -2,7 +2,7 @@ from .crestopt import GaussianCrestOptJob
 from .crestts import GaussianCrestTSJob
 from .customjob import GaussianCustomJob
 from .dias import GaussianDIASJob
-from .geomopt import GaussianGeomOptJob
+from .opt import GaussianGeomOptJob
 from .irc import GaussianIRCJob
 from .job import GaussianComJob, GaussianGeneralJob, GaussianJob
 from .linkjob import GaussianLinkJob

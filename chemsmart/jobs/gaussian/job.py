@@ -1,12 +1,10 @@
 import ase
 import logging
 import os
-
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
-
-from pyatoms.io.ase.atoms import AtomsWrapper
-from pyatoms.jobs.gaussian.settings import GaussianJobSettings
-from pyatoms.utils.utils import string2index
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.utils.utils import string2index
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +14,7 @@ class GaussianJob(Job):
     _SETTINGS_CLS = GaussianJobSettings
 
     def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(label=label, **kwargs)
+        super().__init__(molecule=molecule, label=label)
         if not isinstance(settings, self._SETTINGS_CLS):
             raise ValueError(
                 f"Settings must be instance of {self._SETTINGS_CLS} for {self}, but is {settings} instead!"
@@ -94,8 +92,6 @@ class GaussianJob(Job):
             from chemsmart.io.gaussian.output import Gaussian16OutputWithPBC
 
             return Gaussian16OutputWithPBC(filename=self.outputfile)
-        else:
-            return None
 
     def _job_is_complete(self):
         # private method to check if the job is complete
@@ -106,8 +102,11 @@ class GaussianJob(Job):
     def is_complete(self):
         return self._job_is_complete()
 
-    def _run(self, jobrunner, queue_manager=None, **kwargs):
-        self.settings.apply_on(self, jobrunner, **kwargs)
+    def _run(self, jobrunner):
+        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+
+        input_writer = GaussianInputWriter(job=self, jobrunner=jobrunner)
+        input_writer.write()
         jobrunner.run(self)
 
     @classmethod
@@ -123,16 +122,16 @@ class GaussianJob(Job):
     ):
         # get all atoms in a file and give the result as a list
         logger.info(f"Reading images from file: {filename}.")
-        atoms = AtomsWrapper.from_filepath(
+        molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
         )
-        logger.info(f"Num of images read: {len(atoms)}.")
-        atoms = atoms[string2index(index)]  # python 0-indexed
+        logger.info(f"Num of images read: {len(molecules)}.")
+        molecules = molecules[string2index(index)]  # python 0-indexed
 
         # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
         return cls(
             folder=folder,
-            molecule=atoms,
+            molecule=molecules,
             settings=settings,
             label=label,
             **kwargs,
@@ -142,10 +141,10 @@ class GaussianJob(Job):
     def from_pubchem(
         cls, folder, identifier, settings=None, label=None, **kwargs
     ):
-        atoms = AtomsWrapper.from_pubchem(identifier=identifier)
+        molecules = Molecule.from_pubchem(identifier=identifier)
         return cls(
             folder=folder,
-            molecule=atoms,
+            molecule=molecules,
             settings=settings,
             label=label,
             **kwargs,
@@ -157,7 +156,7 @@ class GaussianJob(Job):
             comfile = os.path.join(folder, label + ".com")
             if not os.path.exists(comfile):
                 pass
-            atoms = AtomsWrapper.from_filepath(comfile)
+            atoms = Molecule.from_filepath(comfile)
 
         if settings is None:
             settings = GaussianJobSettings.default()
@@ -190,7 +189,7 @@ class GaussianComJob(GaussianJob):
             label = os.path.splitext(os.path.basename(filename))[0]
 
         # set file
-        from pyatoms.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.input import Gaussian16Input
 
         g16com_file = Gaussian16Input(comfile=filename)
 
@@ -198,7 +197,7 @@ class GaussianComJob(GaussianJob):
         atoms = AtomsWrapper.from_filepath(filepath=filename)
 
         # get settings from file
-        from pyatoms.jobs.gaussian.settings import GaussianJobSettings
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
         settings = GaussianJobSettings.from_filepath(filename)
         logger.info(

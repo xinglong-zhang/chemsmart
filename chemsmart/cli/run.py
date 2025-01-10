@@ -6,7 +6,6 @@ import click
 from chemsmart.utils.utils import create_logger
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.server import Server
 
 system_type = platform.system()
 
@@ -20,11 +19,11 @@ logger = logging.getLogger(__name__)
 @click.group(name="run")
 @click.pass_context
 @click.option(
-    '-s',
-    '--server',
+    "-s",
+    "--server",
     type=str,
     default=None,
-    help='Server. If not specified, will try to automatically determine and use the current server.',
+    help="Server. If not specified, will try to automatically determine and use the current server.",
 )
 @click.option(
     "-n",
@@ -72,7 +71,7 @@ def run(
     # )
 
     ctx.obj["num_processes"] = num_processes
-    ctx.obj['jobrunner'] = jobrunner
+    ctx.obj["jobrunner"] = jobrunner
 
 
 @run.result_callback()
@@ -80,7 +79,6 @@ def run(
 def process_pipeline(ctx, *args, **kwargs):
     invoked_subcommand = ctx.invoked_subcommand
     jobrunner = ctx.obj["jobrunner"]
-    queue_manager = ctx.obj["queue_manager"]
 
 
 for subcommand in subcommands:

@@ -1,7 +1,9 @@
 import os
 import re
 import ase
+import copy
 import numpy as np
+import requests
 from ase.symbols import Symbols
 from ase.io.formats import string2index
 from functools import cached_property
@@ -96,6 +98,9 @@ class Molecule:
                 mode=mode, empirical=empirical
             )
 
+    def copy(self):
+        return copy.deepcopy(self)
+
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
         cb = CoordinateBlock(coordinate_block=coordinate_block)
@@ -129,7 +134,10 @@ class Molecule:
             molecule = cls._read_filepath(
                 filepath, index=index, return_list=return_list, **kwargs
             )
-            return molecule
+            if return_list and isinstance(molecule, Molecule):
+                return [molecule]
+            else:
+                return molecule
         except Exception as e:
             raise FileReadError(
                 f"Failed to create molecule from {filepath}."
@@ -242,6 +250,50 @@ class Molecule:
     @file_cache()
     def _read_other(filepath, index, **kwargs):
         return ase.io.read(filepath, index=index, **kwargs)
+
+    @classmethod
+    def from_pubchem(
+        cls, identifier, identifier_type="cid", return_list=False
+    ):
+        """Creates Molecule object from pubchem based on an identifier (CID, SMILES, or name).
+        Args:
+        identifier (str): The compound identifier (name, CID, or SMILES string).
+        identifier_type (str): The type of the identifier. Can be "name", "cid", or "smiles".
+        output_format (str): The desired format of the response. Default is "json".
+                             Other options include "sdf" or "xml".
+        Raises:
+            ValueError: If an invalid `identifier_type` is provided.
+            requests.exceptions.RequestException: For network or HTTP-related issues.
+        """
+        # Base URL for PubChem PUG REST API
+        base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+
+        # Determine the input section based on the identifier type
+        if identifier_type.lower() == "name":
+            input_section = "compound/name"
+        elif identifier_type.lower() == "cid":
+            input_section = "compound/cid"
+        elif identifier_type.lower() == "smiles":
+            input_section = "compound/smiles"
+        else:
+            raise ValueError(
+                "Invalid identifier_type. Use 'name', 'cid', or 'smiles'."
+            )
+
+        # Construct the full API URL
+        url = f"{base_url}/{input_section}/{identifier}/record/sdf"
+
+        try:
+            # Send a GET request to the API
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            sdf_string = response.text  # Return raw response for "sdf" format
+            sdf_file = SDFFile.from_sdf_string(sdf_string)
+            return sdf_file.molecule
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(
+                f"An error occurred while fetching data from PubChem: {e}"
+            )
 
     def write_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
@@ -513,6 +565,15 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+    @classmethod
+    def from_sdf_string(cls, sdf_string):
+        """Creates a SDFFile object from a string by writing the SDF string to a temporary file."""
+        with TemporaryDirectory() as tempdir:
+            sdf_file = os.path.join(tempdir, "temp.sdf")
+            with open(sdf_file, "w") as f:
+                f.write(sdf_string)
+            return cls(filename=sdf_file)
 
 
 class XYZFile(FileMixin):

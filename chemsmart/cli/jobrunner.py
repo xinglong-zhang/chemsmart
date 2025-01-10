@@ -1,9 +1,7 @@
 import functools
 import logging
-
 import click
 
-from pyatoms.cli.defaults import use_server_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +29,6 @@ def jobrunner_options(f):
         "--num-cpus",
         type=int,
         default=None,
-        callback=use_server_defaults,
     )
     @click.option(
         "-g",
@@ -39,7 +36,6 @@ def jobrunner_options(f):
         "--num-gpus-per-node",
         type=int,
         default=None,
-        callback=use_server_defaults,
         help="Number of gpus per node. Defaults to number of GPUs on specified server if None.",
     )
     @click.option(
@@ -58,7 +54,6 @@ def jobrunner_options(f):
         "--server",
         type=str,
         default=None,
-        callback=use_server_defaults,
         help="Server. If not specified, will try to automatically determine and use the current server.",
     )
     @click.option(
@@ -86,10 +81,10 @@ def create_jobrunner(
     hosts=None,
     use_host_queues=True,
 ):
-    from pyatoms.jobs.runner import OverallJobRunner
-    from pyatoms.settings.server.server import Server
+    from chemsmart.settings.server import Server
+    from chemsmart.jobs.runner import JobRunner
 
-    server = Server.from_name(servername)
+    server = Server.from_server(servername)
 
     if ship:
         use_host_queues = False
@@ -110,7 +105,7 @@ def create_jobrunner(
     if num_gpus_per_node_per_job is None:
         num_gpus_per_node_per_job = num_gpus
 
-    return OverallJobRunner(
+    return JobRunner(
         memory_gigs=memory_gigs,
         num_nodes=num_nodes,
         num_gpus_per_node=num_gpus_per_node_per_job,
