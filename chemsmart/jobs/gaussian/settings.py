@@ -6,17 +6,9 @@ from contextlib import suppress
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.io.gaussian import GaussianRefs
 
 pt = PeriodicTable()
-
-from pyatoms.io.ase.atoms import AtomsWrapper
-from pyatoms.io.gaussian import GaussianRefs
-from pyatoms.jobs.settings import read_molecular_job_yaml
-from pyatoms.utils.utils import (
-    file_cache,
-    get_prepend_string_list_from_modred_free_format,
-)
-
 gaussian_ab_initio = GaussianRefs().gaussian_ab_initio
 gaussian_functionals = GaussianRefs().gaussian_dft_fuctionals
 gaussian_bases = GaussianRefs().gaussian_basis_sets
@@ -418,186 +410,6 @@ class GaussianJobSettings(MolecularJobSettings):
             route_string += " pop=nboread"  # write bond order matrix
         return route_string
 
-    def write_gaussian_input_from_job(self, job, jobrunner, **kwargs):
-        num_cores_per_node = jobrunner.server.NUM_CORES
-        num_cores = jobrunner.num_nodes * num_cores_per_node
-        mem_gigs = min(int(jobrunner.server.MAX_MEM_GIGS // 2), 2 * num_cores)
-        return self.write_gaussian_input(
-            atoms=job.atoms,
-            job_label=job.label,
-            num_cores=num_cores,
-            mem_gigs=mem_gigs,
-            **kwargs,
-        )
-
-    def write_gaussian_input(
-        self,
-        atoms,
-        job_label=None,
-        num_cores=20,
-        mem_gigs=20,
-        output_dir=None,
-        make_dir_if_not_present=True,
-    ):
-        """Write Gaussian input file.
-
-        Args:
-            atoms: atoms object containing the structure.
-            job_label: job basename to be used.
-            num_cores: number of cores from server for Gaussian input.
-            mem_gigs: memory in GB for Gaussian input.
-            output_dir: output directory for input file writing.
-            make_dir_if_not_present: make directory if it is not present
-
-        Return:
-            filepath of the inputfile that is written.
-        """
-        logger.info(
-            f"Writing gaussian input file with settings: {self.__dict__}"
-        )
-
-        if output_dir is None:
-            output_dir = "."
-
-        if not os.path.isdir(output_dir) and make_dir_if_not_present:
-            os.mkdir(output_dir)
-
-        # get basename/job_label for inputs/outputs writing
-        assert (
-            job_label is not None
-        ), f"Basename of Gaussian file to be written {job_label} cannot be None!"
-
-        atoms = AtomsWrapper.from_atoms(atoms)
-        input_filename = job_label + ".com"
-        filepath = os.path.join(output_dir, input_filename)
-        logger.info(f"Writing inputfile {filepath} to folder {output_dir}\n")
-        with open(filepath, "w") as f:  # will close() when we leave this block
-            self._write_gaussian_header(
-                f=f,
-                num_cores=num_cores,
-                mem_gigs=mem_gigs,
-                job_label=job_label,
-            )
-            self._write_route_section(f, atoms)
-            self._write_gaussian_title(f, job_label)
-            self._write_charge_and_multiplicity(f)
-            self._write_cartesian_coordinates(f, atoms)
-            self._write_pbc(f, atoms)
-            self._append_modredundant(f)  # write modredundant parameters
-            self._append_gen_genecp_basis(f, atoms)  # then write genecp info
-            self._append_custom_solvent_parameters(
-                f
-            )  # followed by user defined solvennt parameters
-            self._append_job_specific_info(f, job_label)
-            self._append_other_additional_info(f)
-            self._write_link_section(f, atoms, num_cores, mem_gigs, job_label)
-        return filepath
-
-    def _write_gaussian_header(self, f, num_cores, mem_gigs, job_label):
-        if self.chk:
-            f.write(f"%chk={job_label}.chk\n")
-        f.write(f"%nprocshared={num_cores}\n")
-        f.write(f"%mem={mem_gigs}GB\n")
-
-    def _write_route_section(self, f, atoms):
-        if self.route_to_be_written is not None:
-            self._write_route_section_from_user_input(f)
-        else:
-            self._write_route_section_default(f, atoms=atoms)
-
-    def _write_route_section_default(self, f, atoms):
-        route_string = self._get_route_string_from_jobtype(atoms=atoms)
-        f.write(route_string + "\n")
-        f.write("\n")
-
-    def _write_gaussian_title(self, f, job_label):
-        if self.title is not None:
-            f.write(f"{self.title}\n")
-        else:
-            # write default title
-            f.write(f"Gaussian job: {job_label}\n")
-        f.write("\n")
-
-    def _write_charge_and_multiplicity(self, f):
-        if self.charge is None or self.multiplicity is None:
-            raise TypeError(
-                f"Charge is {self.charge} and Multiplicity is {self.multiplicity}"
-            )
-        f.write(f"{self.charge} {self.multiplicity}\n")
-
-    def _write_pbc(self, f, atoms):
-        if any(atoms.pbc):
-            pbc_vectors = atoms.cell[:]
-            for i in range(3):  # 3D PBC vectors
-                if not all(pbc_vectors[i] == [0.0, 0.0, 0.0]):
-                    string = "{:5} {:15.10f} {:15.10f} {:15.10f}\n".format(
-                        "TV",
-                        float(pbc_vectors[i][0]),
-                        float(pbc_vectors[i][1]),
-                        float(pbc_vectors[i][2]),
-                    )
-                    f.write(string)
-        f.write("\n")
-
-    def _write_link_section(self, f, atoms, num_cores, mem_gigs, job_label):
-        # subclass can implement
-        pass
-
-    def _write_cartesian_coordinates(self, f, atoms):
-        assert atoms is not None, "No molecular geometry found!"
-        coordinates = ""
-        freeze_atom_indices = atoms.fixed_atoms_indices()
-
-        for i, (s, (x, y, z)) in enumerate(
-            zip(atoms.symbols, atoms.positions, strict=False)
-        ):
-            if len(freeze_atom_indices) == 0:
-                # No frozen indices
-                string = f"{s:5} {float(x):15.10f} {float(y):15.10f} {float(z):15.10f}\n"
-            elif i in freeze_atom_indices:
-                # Some frozen indices and i in list of frozen indices
-                string = f"{s:5}    -1    {float(x):15.10f} {float(y):15.10f} {float(z):15.10f}\n"
-            else:
-                # Some frozen indices and i not in list of frozen indices
-                string = f"{s:5}     0    {float(x):15.10f} {float(y):15.10f} {float(z):15.10f}\n"
-            coordinates += string
-        f.write(coordinates)
-
-    def _append_modredundant(self, f):
-        if self.modredundant:
-            if isinstance(self.modredundant, list):
-                # append for modredundant jobs
-                # 'self.modredundant' as list of lists, or a single list if only one fixed constraint
-                prepend_string_list = (
-                    get_prepend_string_list_from_modred_free_format(
-                        input_modred=self.modredundant
-                    )
-                )
-                for prepend_string in prepend_string_list:
-                    f.write(f"{prepend_string} F\n")
-
-            elif isinstance(self.modredundant, dict):
-                # append for scanning job
-                # self.modredundant = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
-                coords_list = self.modredundant["coords"]
-                prepend_string_list = (
-                    get_prepend_string_list_from_modred_free_format(
-                        input_modred=coords_list
-                    )
-                )
-                for prepend_string in prepend_string_list:
-                    f.write(
-                        f"{prepend_string} S {self.modredundant['num_steps']} {self.modredundant['step_size']}\n"
-                    )
-            f.write("\n")
-
-    def _append_gen_genecp_basis(self, f, atoms):
-        if self._genecp_elements_specified or self._genecp_file_specified:
-            genecp_section = self.get_genecp_section(molecule=atoms)
-            genecp_string = genecp_section.string
-            f.write(genecp_string)
-            f.write("\n")
-
     @property
     def _genecp_elements_specified(self):
         return (
@@ -641,31 +453,11 @@ class GaussianJobSettings(MolecularJobSettings):
             raise ValueError("Could not get GenECPSection")
         return genecp_section
 
-    def prune_heavy_elements(self, atoms):
+    def prune_heavy_elements(self, molecule):
         # heavy atoms list supplied from settings contains all heavy atoms needed for heavy_atom_basis but in each
         # structure, some heave atoms supplied from settings may not appear in the structure
-        return list(set(atoms.symbols).intersection(self.heavy_elements))
+        return list(set(molecule.chemical_symbols).intersection(self.heavy_elements))
 
-    def get_light_elements(self, atoms):
-        if self.heavy_elements is None:
-            return []
-
-        unique_atoms = set(atoms.symbols)
-        light_elements_set = unique_atoms - set(self.heavy_elements)
-        light_elements_list = list(light_elements_set)
-        from pyatoms.utils.periodictable import (
-            sort_list_of_elements_according_to_atomic_number,
-        )
-
-        sorted_light_elements_list = (
-            sort_list_of_elements_according_to_atomic_number(
-                light_elements_list
-            )
-        )
-        logger.info(
-            f"Light elements in structure: {sorted_light_elements_list}"
-        )
-        return sorted_light_elements_list
 
     def set_custom_solvent_via_file(self, filename):
         if not os.path.exists(os.path.expanduser(filename)):
@@ -679,48 +471,6 @@ class GaussianJobSettings(MolecularJobSettings):
 
         self.custom_solvent = "\n".join(lines)
 
-    def _append_custom_solvent_parameters(self, f):
-        if self.custom_solvent is None:
-            return
-
-        # ensures that the solvent parameters can be supplied in free string format
-        line_elem = self.custom_solvent.strip().split("\n")
-        for line in line_elem:
-            f.write(f"{line}\n")
-        f.write("\n")
-
-    def _append_job_specific_info(self, f, job_label):
-        if self.job_type == "nci":
-            # appending for nci job
-            f.write(f"{job_label}.wfn\n")
-            f.write("\n")
-        elif self.job_type == "wbi":
-            # appending for wbi job
-            f.write("$nbo bndidx $end\n")
-            f.write("\n")
-        elif self.job_type == "resp":
-            # appending for resp job
-            f.write(f"{job_label}.gesp\n")
-            f.write("\n")
-
-    def _append_other_additional_info(self, f):
-        # append content of a supplied text file or text (as in append custom solvent)
-        if not self.append_additional_info:
-            return
-
-        if isinstance(self.append_additional_info, str) and os.path.exists(
-            os.path.expanduser(self.append_additional_info)
-        ):
-            # path to the file for additional append info
-            with open(self.append_additional_info) as g:
-                for line in g.readlines():
-                    f.write(line)
-        else:
-            # ensures that the additional append info can be supplied in free string format
-            line_elem = self.append_additional_info.strip().split("\n")
-            for line in line_elem:
-                f.write(f"{line}\n")
-        f.write("\n")
 
     def remove_solvent(self):
         self.solvent_model = None
@@ -749,70 +499,6 @@ class GaussianJobSettings(MolecularJobSettings):
             self.update_solvent(**kwargs)
         else:
             self.remove_solvent()
-
-    def apply_on(self, job, jobrunner):
-        # TODO: what are the exact roles of apply_on?
-        # pass
-        # jobrunner is the OverallJobRunner instead of job specific jobrunner
-        # specific_runner = jobrunner.create_specific_runner(job)
-        # specific_runner._prerun(job)
-        # assert os.path.exists(specific_runner.job_inputfile), f'Inputfile {specific_runner.job_inputfile}
-        # is not found!'
-
-        if (
-            jobrunner.scratch
-            and jobrunner.scratch_dir is not None
-            and os.path.exists(jobrunner.scratch_dir)
-        ):
-            job_scratch_dir = os.path.join(jobrunner.scratch_dir, job.label)
-            with suppress(FileExistsError):
-                os.mkdir(job_scratch_dir)
-                logger.info(f"Folder in scratch {job_scratch_dir} is made.")
-            self.write_gaussian_input_from_job(
-                output_dir=job_scratch_dir, job=job, jobrunner=jobrunner
-            )
-            scratch_inputfile = os.path.join(
-                job_scratch_dir, f"{job.label}.com"
-            )
-            assert os.path.exists(
-                scratch_inputfile
-            ), f"inputfile {scratch_inputfile} is not found"
-        elif jobrunner.scratch and not os.path.exists(jobrunner.scratch_dir):
-            logger.info(
-                f"{jobrunner.scratch_dir} does not exist! Running job in {job.folder}."
-            )
-            self.write_gaussian_input_from_job(
-                output_dir=job.folder, job=job, jobrunner=jobrunner
-            )
-            inputfilename = os.path.basename(
-                job.inputfile
-            )  # job.inputfile is the full path to the inputfile
-            runfolder_inputfile = os.path.join(job.folder, inputfilename)
-            assert os.path.exists(
-                runfolder_inputfile
-            ), f"inputfile {runfolder_inputfile} is not found"
-        else:
-            logger.info(f"Running job in {job.folder}.")
-            self.write_gaussian_input_from_job(
-                output_dir=job.folder, job=job, jobrunner=jobrunner
-            )
-            inputfilename = os.path.basename(
-                job.inputfile
-            )  # job.inputfile is the full path to the inputfile
-            runfolder_inputfile = os.path.join(job.folder, inputfilename)
-            assert os.path.exists(
-                runfolder_inputfile
-            ), f"inputfile {runfolder_inputfile} is not found"
-
-    @classmethod
-    def from_user_yaml(cls, filename, **kwargs):
-        config = read_molecular_job_yaml(filename)
-        return cls.from_user_config(config, **kwargs)
-
-    @classmethod
-    def from_user_config(cls, config, job_type):
-        """Generate GaussianJobSettings from a master dict containing all the settings for each job type config."""
-        return cls(**config[job_type])
 
     @classmethod
     def from_dict(cls, settings_dict):
@@ -915,25 +601,6 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             route_string_final += f" stable={self.stable} guess={self.guess}"
         route_string_final += " geom=check guess=read "
         return route_string_final
-
-    def _write_link_section(self, f, atoms, num_cores, mem_gigs, job_label):
-        # get route string from job type
-        route_string = self._get_route_string_from_jobtype(atoms=atoms)
-        route_string += " geom=check guess=read "
-        f.write("--Link1--\n")
-        self._write_gaussian_header(f, num_cores, mem_gigs, job_label)
-        f.write(f"{route_string}\n")
-        f.write("\n")
-        self._write_gaussian_title(f, job_label)
-        self._write_charge_and_multiplicity(f)
-        f.write("\n")
-        self._append_modredundant(f)  # write modredundant parameters
-        self._append_gen_genecp_basis(f, atoms)  # then write genecp info
-        self._append_custom_solvent_parameters(
-            f
-        )  # followed by user defined solvennt parameters
-        self._append_job_specific_info(f, job_label)
-        self._append_other_additional_info(f)
 
 
 class GaussianTDDFTJobSettings(GaussianJobSettings):

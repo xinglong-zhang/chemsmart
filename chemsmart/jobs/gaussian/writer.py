@@ -63,7 +63,6 @@ class GaussianInputWriter(InputWriter):
         charge = self.job.settings.charge
         multiplicity = self.job.settings.multiplicity
         f.write(f"{charge} {multiplicity}\n")
-        f.write("\n")
 
     def _write_cartesian_coordinates(self, f):
         assert self.job.molecule is not None, "No molecular geometry found!"

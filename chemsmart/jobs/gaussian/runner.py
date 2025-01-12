@@ -9,6 +9,7 @@ from glob import glob
 from random import random
 from shutil import copy, rmtree
 
+from ase.build import molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.io.gaussian.input import Gaussian16Input
@@ -81,7 +82,7 @@ class GaussianJobRunner(JobRunner):
 
         if self.scratch and self.scratch_dir:
             # set up files in scratch folder
-            scratch_job_dir = os.path.join(self.executable.scratch_dir, job.label)
+            scratch_job_dir = os.path.join(self.scratch_dir, job.label)
             if not os.path.exists(scratch_job_dir):
                 try:
                     os.makedirs(scratch_job_dir)
@@ -92,22 +93,22 @@ class GaussianJobRunner(JobRunner):
 
             job_inputfile = job.label + ".com"
             scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
-            self.job_inputfile = scratch_job_inputfile
+            self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
             job_chkfile = job.label + ".chk"
             scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
-            self.job_chkfile = scratch_job_chkfile
+            self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
             job_errfile = job.label + ".err"
             scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
-            self.job_errfile = scratch_job_errfile
+            self.job_errfile = os.path.abspath(scratch_job_errfile)
         else:
             # keep files as in running directory
             self.running_directory = job.folder
             logger.info(f"Running directory: {self.running_directory}")
-            self.job_inputfile = job.inputfile
-            self.job_chkfile = job.chkfile
-            self.job_errfile = job.errfile
+            self.job_inputfile = os.path.abspath(job.inputfile)
+            self.job_chkfile = os.path.abspath(job.chkfile)
+            self.job_errfile = os.path.abspath(job.errfile)
 
         if self.executable and self.executable.local_run is not None:
             logger.info(f"Local run is {self.executable.local_run}.")
@@ -214,7 +215,7 @@ class FakeGaussian:
     def __init__(self, file_to_run):
         if not os.path.exists(file_to_run):
             raise FileNotFoundError(f"File {file_to_run} not found.")
-        self.file_to_run = os.path.abspath(file_to_run)
+        self.file_to_run = file_to_run
         self.input_object = Gaussian16Input(filename=self.file_to_run)
 
     @property
@@ -227,7 +228,7 @@ class FakeGaussian:
 
     @property
     def input_filepath(self):
-        return os.path.join(self.file_folder, self.file_to_run)
+        return self.file_to_run
 
     @property
     def output_filepath(self):
@@ -272,7 +273,7 @@ class FakeGaussian:
 
     @property
     def atomic_coordinates(self):
-        return self.molecule.coordinates.coordinates
+        return self.molecule.positions
 
     @property
     def empirical_formula(self):
