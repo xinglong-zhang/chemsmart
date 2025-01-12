@@ -11,6 +11,9 @@ from shutil import copy, rmtree
 
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
+from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.utils.periodictable import PeriodicTable
+pt = PeriodicTable()
 
 # from pyatoms.cli.submitters import SubmitscriptWriter
 # from pyatoms.io.gaussian.inputs import Gaussian16Input
@@ -51,8 +54,10 @@ class GaussianJobRunner(JobRunner):
 
     PROGRAM = "gaussian"
 
-    def __init__(self, server, scratch=True, scratch_dir=None, fake=False, **kwargs):
-        super().__init__(server=server, scratch=scratch, scratch_dir=scratch_dir, fake=fake, **kwargs)
+    FAKE = False
+
+    def __init__(self, server, scratch=True, fake=False, **kwargs):
+        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     @property
     def executable(self):
@@ -73,16 +78,18 @@ class GaussianJobRunner(JobRunner):
         # keep job output file in job folder regardless of running in scratch or not
         self.job_outputfile = job.outputfile
 
-        if self.executable.scratch_dir:
+        if self.scratch and self.scratch_dir:
             logger.info("Setting up run in scratch folder.")
             # set up files in scratch folder
             scratch_job_dir = os.path.join(self.executable.scratch_dir, job.label)
             if not os.path.exists(scratch_job_dir):
                 try:
                     os.makedirs(scratch_job_dir)
+                    logger.info(f"Created scratch directory: {scratch_job_dir}.")
                 except OSError as e:
                     raise RuntimeError(f"Failed to create directory {scratch_job_dir}: {e}")
             self.running_directory = scratch_job_dir
+            logger.info(f"Running directory: {self.running_directory}")
 
             job_inputfile = job.label + ".com"
             scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
@@ -96,9 +103,10 @@ class GaussianJobRunner(JobRunner):
             scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
             self.job_errfile = scratch_job_errfile
         else:
-            logger.info("Setting up run in job folder (no scratch).")
+            logger.info(f"Setting up run in job folder (no scratch).")
             # keep files as in running directory
             self.running_directory = job.folder
+            logger.info(f"Running directory: {self.running_directory}")
             self.job_inputfile = job.inputfile
             self.job_chkfile = job.chkfile
             self.job_errfile = job.errfile
@@ -106,6 +114,12 @@ class GaussianJobRunner(JobRunner):
         if self.executable and self.executable.local_run is not None:
             logger.info(f"Local run is {self.executable.local_run}.")
             job.local = self.executable.local_run
+
+    def _write_input(self, job):
+        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+
+        input_writer = GaussianInputWriter(job=job, jobrunner=self)
+        input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self):
         exe = self._get_executable()
@@ -127,12 +141,10 @@ class GaussianJobRunner(JobRunner):
                 env=self.executable.env,
                 cwd=self.running_directory,
             )
-    def _run(self, job, process):
+
+    def _run(self, job, process, **kwargs):
         process.communicate()
         return process.poll()
-
-    def _environment_vars(self, job, *args, **kwargs):
-        return self.executable.ENVIRONMENT_VARIABLES
 
     def _get_executable(self):
         """Get executable for Gaussian."""
@@ -158,28 +170,46 @@ class GaussianJobRunner(JobRunner):
                 )
                 rmtree(self.running_directory)
 
-            writer = SubmitscriptWriter(job)
-            submit_script = writer.job_submit_script
-            run_script = writer.job_run_script
-            err_filepath = os.path.join(job.folder, f"{job.errfile}")
-            joblogerr_filepath = os.path.join(job.folder, "log.err")
-            jobloginfo_filepath = os.path.join(job.folder, "log.info")
-            pbs_errfile = os.path.join(job.folder, "pbs.err")
-            pbs_infofile = os.path.join(job.folder, "pbs.info")
+            # writer = SubmitscriptWriter(job)
+            # submit_script = writer.job_submit_script
+            # run_script = writer.job_run_script
+            # err_filepath = os.path.join(job.folder, f"{job.errfile}")
+            # joblogerr_filepath = os.path.join(job.folder, "log.err")
+            # jobloginfo_filepath = os.path.join(job.folder, "log.info")
+            # pbs_errfile = os.path.join(job.folder, "pbs.err")
+            # pbs_infofile = os.path.join(job.folder, "pbs.info")
+            #
+            # files_to_remove = [
+            #     submit_script,
+            #     run_script,
+            #     err_filepath,
+            #     joblogerr_filepath,
+            #     jobloginfo_filepath,
+            #     pbs_errfile,
+            #     pbs_infofile,
+            # ]
+            #
+            # for f in files_to_remove:
+            #     with suppress(FileNotFoundError):
+            #         os.remove(f)
 
-            files_to_remove = [
-                submit_script,
-                run_script,
-                err_filepath,
-                joblogerr_filepath,
-                jobloginfo_filepath,
-                pbs_errfile,
-                pbs_infofile,
-            ]
 
-            for f in files_to_remove:
-                with suppress(FileNotFoundError):
-                    os.remove(f)
+class FakeGaussianJobRunner(GaussianJobRunner):
+    # creates job runner process
+    # combines information about server and program
+    FAKE = True
+
+    def __init__(self, server, scratch=True, fake=False, **kwargs):
+        super().__init__(
+            server=server, scratch=scratch, fake=fake, **kwargs
+        )
+
+    def run(self, job, **kwargs):
+        self._prerun(job=job)
+        self._write_input(job=job)
+        returncode = FakeGaussian(self.job_inputfile).run()
+        self._postrun(job=job)
+        return returncode
 
 
 class FakeGaussian:
@@ -187,7 +217,7 @@ class FakeGaussian:
         if not os.path.exists(file_to_run):
             raise FileNotFoundError(f"File {file_to_run} not found.")
         self.file_to_run = os.path.abspath(file_to_run)
-        self.input_object = Gaussian16Input(comfile=self.file_to_run)
+        self.input_object = Gaussian16Input(filename=self.file_to_run)
 
     @property
     def file_folder(self):
@@ -212,7 +242,7 @@ class FakeGaussian:
 
     @property
     def molecule(self):
-        return self.input_object.atoms
+        return self.input_object.molecule
 
     @property
     def charge(self):
@@ -239,7 +269,7 @@ class FakeGaussian:
     @property
     def atomic_numbers(self):
         return [
-            chemical_symbol_to_atomic_number(s) for s in self.atomic_symbols
+            pt.to_atomic_number(s) for s in self.atomic_symbols
         ]
 
     @property
@@ -362,19 +392,3 @@ class FakeGaussian:
             g.write(
                 f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
             )
-
-
-class FakeGaussianJobRunner(GaussianJobRunner):
-    # creates job runner process
-    # combines information about server and program
-
-    def __init__(self, server, job, scratch=False, fake=True, **kwargs):
-        super().__init__(
-            server=server, job=job, scratch=scratch, fake=fake, **kwargs
-        )
-
-    def run(self, job, **kwargs):
-        self._prerun(job=job)
-        returncode = FakeGaussian(self.job_inputfile).run()
-        self._postrun(job=job)
-        return returncode

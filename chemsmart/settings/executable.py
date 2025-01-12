@@ -58,7 +58,6 @@ class Executable(RegistryMixin):
                 if line.startswith("export"):
                     line = line.split('#')[0].strip()
                     line = line[7:]
-                    print(line)
                     key, value = line.split("=")
                     env[key] = value
             return env

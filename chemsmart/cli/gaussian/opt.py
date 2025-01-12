@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
     help="Indices of atoms to freeze for constrained optimization.",
 )
 @click.pass_context
-def opt(ctx, freeze_atoms, **kwargs):
+def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     # folder = ctx.obj["folder"]
 
     # get settings from project
@@ -60,5 +60,6 @@ def opt(ctx, freeze_atoms, **kwargs):
         molecule=molecule,
         settings=opt_settings,
         label=label,
+        skip_completed=skip_completed,
         **kwargs,
     )

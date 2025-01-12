@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
     "-d", "--debug/--no-debug", default=False, help="turns on debug logging"
 )
 @click.option(
-    "--test/--no-test",
+    "--fake/--no-fake",
     default=False,
     help="If true, fake jobrunners will be used",
 )
@@ -50,14 +50,14 @@ def run(
     server,
     num_processes,
     debug,
-    test,
+    fake,
     stream,
 ):
     create_logger(debug=debug, stream=stream)
 
     logger.info("Entering main program")
 
-    jobrunner = JobRunner(server=server, fake=test)
+    jobrunner = JobRunner(server=server, fake=fake)
 
     # jobrunner = JobRunner(
     #     servername=servername,
@@ -84,7 +84,7 @@ def process_pipeline(ctx, *args, **kwargs):
     if isinstance(job, list) and len(job) == 1:
         job = job[0]
 
-    jobrunner = jobrunner.from_jobtype(job=job, server=jobrunner.server)
+    jobrunner = jobrunner.from_jobtype(job=job, server=jobrunner.server, fake=jobrunner.fake)
 
     job.run(jobrunner=jobrunner)
 

@@ -14,7 +14,7 @@ class GaussianJob(Job):
     _SETTINGS_CLS = GaussianJobSettings
 
     def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(molecule=molecule, label=label)
+        super().__init__(molecule=molecule, label=label, **kwargs)
         if not isinstance(settings, self._SETTINGS_CLS):
             raise ValueError(
                 f"Settings must be instance of {self._SETTINGS_CLS} for {self}, but is {settings} instead!"
@@ -103,10 +103,6 @@ class GaussianJob(Job):
         return self._job_is_complete()
 
     def _run(self, jobrunner):
-        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
-
-        input_writer = GaussianInputWriter(job=self, jobrunner=jobrunner)
-        input_writer.write()
         jobrunner.run(self)
 
     @classmethod

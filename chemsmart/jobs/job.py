@@ -58,6 +58,7 @@ class Job(RegistryMixin):
     def run(self, **kwargs):
         if self.is_complete() and self.skip_completed:
             logger.info(f"{self} is already complete, not running.")
+            return
         self._run(**kwargs)
 
     @abstractmethod

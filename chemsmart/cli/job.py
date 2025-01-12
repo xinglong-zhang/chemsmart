@@ -14,7 +14,6 @@ def click_job_options(f):
         type=bool,
         help="To run completed job again. Use -R to rerun completed job.",
     )
-    @click.option("--timeout-seconds", type=float)
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)

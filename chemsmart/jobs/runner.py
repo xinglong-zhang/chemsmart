@@ -26,9 +26,10 @@ class JobRunner(RegistryMixin):
 
     JOBTYPES: list = NotImplemented
     PROGRAM: str = NotImplemented
+    FAKE: bool = False
 
     def __init__(
-        self, server, scratch=False, scratch_dir=None, fake=False, **kwargs
+        self, server, scratch=False, fake=False, **kwargs
     ):
         if server is None:
             server = Server.current()
@@ -43,12 +44,15 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = scratch
-        self.scratch_dir = scratch_dir
         self.fake = fake
         self.kwargs = kwargs
 
         if self.scratch:
             self._set_scratch()
+
+    @property
+    def scratch_dir(self):
+        return self._set_scratch()
 
     def _set_scratch(self):
         scratch_dir = self.executable.scratch_dir
@@ -67,10 +71,9 @@ class JobRunner(RegistryMixin):
                 raise FileNotFoundError(
                     f"Specified scratch dir does not exist: {scratch_dir}"
                 )
+            return scratch_dir
         else:
-            raise ValueError("No valid scratch directory could be determined.")
-
-        self.scratch_dir = scratch_dir
+            return None
 
     def __repr__(self):
         return f"{self.__class__.__qualname__}<server={self.server}>"
@@ -109,6 +112,10 @@ class JobRunner(RegistryMixin):
         # Subclasses can implement
         pass
 
+    def _write_input(self, job):
+        # Subclasses can implement
+        pass
+
     @abstractmethod
     def _run(self, job, process, **kwargs):
         raise NotImplementedError
@@ -128,6 +135,7 @@ class JobRunner(RegistryMixin):
 
     def run(self, job, **kwargs):
         self._prerun(job)
+        self._write_input(job)
         command = self._get_command()
         process = self._create_process(job, command=command, env=self.executable.env)
         # self._create_jobrunner(job, **kwargs)
@@ -148,8 +156,9 @@ class JobRunner(RegistryMixin):
             if runner_jobtypes is NotImplemented:
                 runner_jobtypes = []
 
-            if jobtype in runner_jobtypes:
-                return runner(server=server, scratch=scratch, **kwargs)
+            if jobtype in runner_jobtypes and fake == runner.FAKE:
+                logger.info(f"Using job runner: {runner} for job: {job}")
+                return runner(server=server, scratch=scratch, scratch_dir=scratch_dir, **kwargs)
 
         raise ValueError(
             f'Could not find any runners for job: {job}. \n'

@@ -9,6 +9,7 @@ class InputWriter:
 
     Args:
         job (Job): The job for which the input file is being written.
+        jobrunner (JobRunner): The job runner for the job.
     """
 
     def __init__(self, job, jobrunner):

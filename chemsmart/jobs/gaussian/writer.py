@@ -13,15 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 class GaussianInputWriter(InputWriter):
-    """Class that writes Gaussian input files for a job.
+    """Class that writes Gaussian input files for a job."""
 
-    Args:
-        job (Job): The job for which the input file is being written.
-    """
-
-    def write(self):
-        logger.info(f"Writing Gaussian input file: {self.job.inputfile}")
-        f = open(self.job.inputfile, "w")
+    def write(self, target_directory=None):
+        if target_directory is not None:
+            if not os.path.exists(target_directory):
+                os.makedirs(target_directory)
+            self.job.folder = target_directory
+            print(f"self.job.folder: {self.job.folder}")
+        job_inputfile = os.path.join(self.job.folder, f"{self.job.label}.com")
+        logger.info(f"Writing Gaussian input file: {job_inputfile}")
+        f = open(job_inputfile, "w")
         self._write_gaussian_header(f)
         self._write_route_section(f)
         self._write_gaussian_title(f)
@@ -37,6 +39,7 @@ class GaussianInputWriter(InputWriter):
         self._append_other_additional_info(f)
         if isinstance(self.job.settings, GaussianLinkJobSettings):
             self._write_link_section(f)
+        logger.info(f"Finished writing Gaussian input file: {job_inputfile}")
         f.close()
 
     def _write_gaussian_header(self, f):
