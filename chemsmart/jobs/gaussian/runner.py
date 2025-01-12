@@ -80,13 +80,11 @@ class GaussianJobRunner(JobRunner):
         self.job_outputfile = job.outputfile
 
         if self.scratch and self.scratch_dir:
-            logger.info("Setting up run in scratch folder.")
             # set up files in scratch folder
             scratch_job_dir = os.path.join(self.executable.scratch_dir, job.label)
             if not os.path.exists(scratch_job_dir):
                 try:
                     os.makedirs(scratch_job_dir)
-                    logger.info(f"Created scratch directory: {scratch_job_dir}.")
                 except OSError as e:
                     raise RuntimeError(f"Failed to create directory {scratch_job_dir}: {e}")
             self.running_directory = scratch_job_dir
@@ -104,7 +102,6 @@ class GaussianJobRunner(JobRunner):
             scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
             self.job_errfile = scratch_job_errfile
         else:
-            logger.info(f"Setting up run in job folder (no scratch).")
             # keep files as in running directory
             self.running_directory = job.folder
             logger.info(f"Running directory: {self.running_directory}")

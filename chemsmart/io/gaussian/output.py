@@ -146,8 +146,6 @@ class Gaussian16Output(GaussianFileMixin):
         def create_molecule_list(orientations, num_structures=None):
             """Helper function to create Molecule objects."""
             num_structures = num_structures or len(orientations)
-            print(len(orientations), num_structures)
-            print(len(self.energies_in_eV), len(self.forces_in_eV_per_A))
             return [
                 Molecule(
                     symbols=self.symbols,
