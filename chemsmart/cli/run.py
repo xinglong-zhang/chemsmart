@@ -30,20 +30,25 @@ logger = logging.getLogger(__name__)
     "--num-processes",
     type=int,
     default=1,
-    help="runs jobs in parallel with specified number of processes",
+    help="Runs jobs in parallel with specified number of processes.",
 )
 @click.option(
-    "-d", "--debug/--no-debug", default=False, help="turns on debug logging"
+    "-d", "--debug/--no-debug", default=False, help="Turns on debug logging."
 )
 @click.option(
     "--fake/--no-fake",
     default=False,
-    help="If true, fake jobrunners will be used",
+    help="If true, fake jobrunners will be used.",
+)
+@click.option(
+    "--scratch/--no-scratch",
+    default=True,  # Default behavior is to use scratch
+    help="Run in scratch mode or without scratch folder.",
 )
 @click.option(
     "--stream/--no-stream",
     default=None,
-    help="Turns on logging to stdout",
+    help="Turns on logging to stdout.",
 )
 def run(
     ctx,
@@ -51,25 +56,21 @@ def run(
     num_processes,
     debug,
     fake,
+    scratch,
     stream,
 ):
+    # Set up logging
     create_logger(debug=debug, stream=stream)
-
     logger.info("Entering main program")
 
-    jobrunner = JobRunner(server=server, fake=fake)
+    # Instantiate the jobrunner with CLI options
+    jobrunner = JobRunner(server=server, scratch=scratch, fake=fake)
 
-    # jobrunner = JobRunner(
-    #     servername=servername,
-    #     num_nodes=num_nodes,
-    #     num_cpus=num_cpus,
-    #     num_gpus=num_gpus,
-    #     num_gpus_per_node_per_job=num_gpus_per_node_per_job,
-    #     exclude_localhost=exclude_localhost,
-    #     fake=test,
-    #     use_host_queues=use_host_queues,
-    # )
+    # Log the scratch value for debugging purposes
+    logger.debug(f"Scratch value passed from CLI: {scratch}")
 
+    # Store the jobrunner and other options in the context object
+    ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["num_processes"] = num_processes
     ctx.obj["jobrunner"] = jobrunner
 
@@ -77,15 +78,29 @@ def run(
 @run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
+    # Retrieve the jobrunner from context
     jobrunner = ctx.obj["jobrunner"]
+
+    # Log for debugging
+    logger.debug(f"JobRunner before from_jobtype: {jobrunner}")
 
     # Get the job
     job = args[0]
     if isinstance(job, list) and len(job) == 1:
         job = job[0]
 
-    jobrunner = jobrunner.from_jobtype(job=job, server=jobrunner.server, fake=jobrunner.fake)
+    # Instantiate a specific jobrunner based on job type
+    jobrunner = jobrunner.from_jobtype(
+        job=job,
+        server=jobrunner.server,
+        scratch=jobrunner.scratch,  # Propagate scratch
+        fake=jobrunner.fake
+    )
 
+    # Log for debugging
+    logger.debug(f"JobRunner after from_jobtype: {jobrunner}")
+
+    # Run the job with the jobrunner
     job.run(jobrunner=jobrunner)
 
 

@@ -28,7 +28,10 @@ class Job(RegistryMixin):
         self.label = label
         self.local = local
         self.skip_completed = skip_completed
-        self.folder = self._determine_folder()
+
+    @property
+    def folder(self):
+        return self._determine_folder()
 
     def _determine_folder(self):
         """

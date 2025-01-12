@@ -71,6 +71,73 @@ class GaussianFileMixin(FileMixin):
         raise NotImplementedError("Subclasses must implement `_get_route`.")
 
     @property
+    def modredundant(self):
+        return self._get_modredundant_conditions()
+
+    def _get_modredundant_conditions(self):
+        modred = None
+        if (
+            "modredundant" in self.route_string
+            and self.modredundant_group is not None
+        ):
+            for line in self.modredundant_group:
+                if "F" in line or "f" in line:
+                    modred = self._get_modred_frozen_coords(
+                        self.modredundant_group
+                    )
+                    self.job_type = "modredundant"
+                elif "S" in line or "s" in line:
+                    modred = self._get_modred_scan_coords(
+                        self.modredundant_group
+                    )
+                    self.job_type = "scan"
+                return modred
+
+    @staticmethod
+    def _get_modred_frozen_coords(modred_list_of_string):
+        modred = []
+        for raw_line in modred_list_of_string:
+            line = raw_line[2:-2]
+            line_elems = line.split()
+            assert all(
+                line_elem.isdigit() for line_elem in line_elems
+            ), f"modredundant coordinates should be integers, but is {line_elems} instead."
+            each_modred_list = [int(line_elem) for line_elem in line_elems]
+            modred.append(each_modred_list)
+        return modred
+
+    @staticmethod
+    def _get_modred_scan_coords(modred_list_of_string):
+        modred = {}
+        coords = []
+        # modredundant = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        for raw_line in modred_list_of_string:
+            line = raw_line.strip()[2:]
+            line_elems = line.split("S")
+
+            # obtain coords
+            coords_string = line_elems[0]
+            each_coords_list = coords_string.split()
+            assert all(
+                line_elem.isdigit() for line_elem in each_coords_list
+            ), f"modredundant coordinates should be integers, but is {line_elems[0]} instead."
+            each_modred_list = [
+                int(line_elem) for line_elem in each_coords_list
+            ]
+            coords.append(each_modred_list)
+            modred["coords"] = coords
+
+            # obtain num_steps and step_size (assumed the same for each scan coordinate)
+            steps_string = line_elems[-1]
+            steps_list = steps_string.split()
+            num_steps = int(steps_list[0])
+            step_size = float(steps_list[1])
+            modred["num_steps"] = num_steps
+            modred["step_size"] = step_size
+
+        return modred
+
+    @property
     def route_object(self):
         try:
             route_object = GaussianRoute(route_string=self.route_string)
@@ -89,6 +156,10 @@ class GaussianFileMixin(FileMixin):
     @job_type.setter
     def job_type(self, value):
         self.route_object.job_type = value
+
+    @property
+    def chk(self):
+        return self._get_chk()
 
     @property
     def freq(self):

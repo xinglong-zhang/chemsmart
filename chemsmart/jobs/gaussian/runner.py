@@ -63,6 +63,7 @@ class GaussianJobRunner(JobRunner):
     def executable(self):
         """Executable class object for Gaussian."""
         try:
+            logger.info(f"Obtaining executable from server: {self.server}")
             executable = GaussianExecutable.from_server(server=self.server)
             return executable
         except FileNotFoundError as e:
@@ -199,7 +200,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=True, fake=False, **kwargs):
+    def __init__(self, server, scratch=True, fake=True, **kwargs):
         super().__init__(
             server=server, scratch=scratch, fake=fake, **kwargs
         )

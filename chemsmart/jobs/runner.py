@@ -5,7 +5,6 @@ from abc import abstractmethod
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
-from debugpy.launcher.debuggee import process
 
 user_settings = ChemsmartUserSettings()
 
@@ -55,7 +54,11 @@ class JobRunner(RegistryMixin):
         return self._set_scratch()
 
     def _set_scratch(self):
-        scratch_dir = self.executable.scratch_dir
+        scratch_dir = None
+        if self.executable is not None:
+            logger.info(f"Setting scratch dir for {self} from executable.")
+            scratch_dir = self.executable.scratch_dir
+            logger.info(f"Scratch dir set to: {scratch_dir}")
         # (2) then try to get from server specific environment variable
         if scratch_dir is None:
             scratch_dir = self.server.scratch
@@ -105,8 +108,8 @@ class JobRunner(RegistryMixin):
     @property
     @abstractmethod
     def executable(self):
-        """Subclasses to implement. Return None if no executable."""
-        raise NotImplementedError
+        """Subclasses to implement."""
+        pass
 
     def _prerun(self, job):
         # Subclasses can implement
@@ -138,7 +141,6 @@ class JobRunner(RegistryMixin):
         self._write_input(job)
         command = self._get_command()
         process = self._create_process(job, command=command, env=self.executable.env)
-        # self._create_jobrunner(job, **kwargs)
         self._run(job, process, **kwargs)
         self._postrun(job)
 
@@ -146,7 +148,7 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_jobtype(cls, job, server, scratch=False, scratch_dir=None, fake=False, **kwargs):
+    def from_jobtype(cls, job, server, scratch=False, fake=False, **kwargs):
         runners = cls.subclasses()
         jobtype = job.TYPE
 
@@ -158,7 +160,7 @@ class JobRunner(RegistryMixin):
 
             if jobtype in runner_jobtypes and fake == runner.FAKE:
                 logger.info(f"Using job runner: {runner} for job: {job}")
-                return runner(server=server, scratch=scratch, scratch_dir=scratch_dir, **kwargs)
+                return runner(server=server, scratch=scratch, **kwargs)
 
         raise ValueError(
             f'Could not find any runners for job: {job}. \n'

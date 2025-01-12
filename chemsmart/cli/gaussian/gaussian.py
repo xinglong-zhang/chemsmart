@@ -16,12 +16,6 @@ def click_gaussian_options(f):
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
     )
-    @click.option(
-        "--scratch/--no-scratch",
-        type=bool,
-        default=True,
-        help="To run in scratch or without scratch folder.",
-    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -140,7 +134,6 @@ def click_gaussian_settings_options(f):
 def gaussian(  # noqa: PLR0912, PLR0915
     ctx,
     project,
-    scratch,
     filename,
     label,
     append_label,
@@ -264,7 +257,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
     jobrunner = ctx.obj["jobrunner"]
-    jobrunner.scratch = scratch
+    logger.info(f"Scratch: {jobrunner.scratch}")
 
 
 @gaussian.result_callback()
@@ -321,7 +314,7 @@ def opt(ctx, freeze_atoms, **kwargs):
     #
     # logger.info(f"Opt settings from project: {opt_settings.__dict__}")
     #
-    # from chemsmart.jobs.gaussian import GaussianGeomOptJob
+    from chemsmart.jobs.gaussian import GaussianGeomOptJob
 
     return GaussianGeomOptJob(
         molecule=molecule,

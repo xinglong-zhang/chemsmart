@@ -130,18 +130,18 @@ class Molecule:
         if os.path.getsize(filepath) == 0:
             return None
 
-        try:
-            molecule = cls._read_filepath(
-                filepath, index=index, return_list=return_list, **kwargs
-            )
-            if return_list and isinstance(molecule, Molecule):
-                return [molecule]
-            else:
-                return molecule
-        except Exception as e:
-            raise FileReadError(
-                f"Failed to create molecule from {filepath}."
-            ) from e
+        # try:
+        molecule = cls._read_filepath(
+            filepath, index=index, return_list=return_list, **kwargs
+        )
+        if return_list and isinstance(molecule, Molecule):
+            return [molecule]
+        else:
+            return molecule
+        # except Exception as e:
+        #     raise FileReadError(
+        #         f"Failed to create molecule from {filepath}."
+        #     ) from e
 
     @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):

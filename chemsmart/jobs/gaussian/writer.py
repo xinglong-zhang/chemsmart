@@ -19,9 +19,10 @@ class GaussianInputWriter(InputWriter):
         if target_directory is not None:
             if not os.path.exists(target_directory):
                 os.makedirs(target_directory)
-            self.job.folder = target_directory
-            print(f"self.job.folder: {self.job.folder}")
-        job_inputfile = os.path.join(self.job.folder, f"{self.job.label}.com")
+            folder = target_directory
+        else:
+            folder = self.job.folder
+        job_inputfile = os.path.join(folder, f"{self.job.label}.com")
         logger.info(f"Writing Gaussian input file: {job_inputfile}")
         f = open(job_inputfile, "w")
         self._write_gaussian_header(f)
