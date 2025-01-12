@@ -162,24 +162,6 @@ class Gaussian16Output(GaussianFileMixin):
 
         # If the job terminated normally
         if self.normal_termination:
-            # # Handle special case: both "opt" and "freq" present in route
-            # if "opt" in self.route_string and "freq" in self.route_string:
-            #     assert np.allclose(
-            #         self.input_orientations[-1],
-            #         self.input_orientations[-2],
-            #         rtol=1e-5,
-            #     ), "The last two input orientations should be the same."
-            #     assert np.allclose(
-            #         self.standard_orientations[-1],
-            #         self.standard_orientations[-2],
-            #         rtol=1e-5,
-            #     ), "The last two standard orientations should be the same."
-
-                # remove the last structure
-                # self.input_orientations.pop(-1)
-                # self.standard_orientations.pop(-1)
-            # if the last and second last structures are the same, remove the last structure
-            # occurs in "opt freq" and "opt=modredundant" jobs
             if np.allclose(
                 self.input_orientations[-1], self.input_orientations[-2], rtol=1e-5
             ):
