@@ -16,7 +16,7 @@ class OrcaExecutablesFactory(YAMLCreatableMixin):
 
     Usage:
         factory = OrcaExecutablesFactory.from_yaml('myserver.yaml')
-        executables = factory().
+        executable = factory().
     """
 
     YAML_KEY = "ORCA"
@@ -60,17 +60,17 @@ class OrcaExecutables(Executables):
             return super().from_servername(servername, **kwargs)
         except pyatoms.io.yaml.MalformedYamlError as e:
             raise ConfigurationError(
-                f"\n\nOrca Executables for {servername} are not set. "
+                f"\n\nOrca Executable for {servername} are not set. "
             ) from e
 
 
 class PyatomsOrcaExecutables(OrcaExecutables):
     """For testing orca jobs within pyatoms package."""
 
-    EXECUTABLES = "../../executables/fake/orca"
+    EXECUTABLES = "../../executable/fake/orca"
     SUITABLE_SERVERS = ["inpackage"]
     ENVIRONMENT_VARIABLES = {
-        "set": {"OMP_NUM_THREADS": 1, "ORCAFOLDER": "../../executables"}
+        "set": {"OMP_NUM_THREADS": 1, "ORCAFOLDER": "../../executable"}
     }
 
 

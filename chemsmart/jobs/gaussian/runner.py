@@ -10,6 +10,7 @@ from random import random
 from shutil import copy, rmtree
 
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.executable import GaussianExecutable
 
 # from pyatoms.cli.submitters import SubmitscriptWriter
 # from pyatoms.io.gaussian.inputs import Gaussian16Input
@@ -50,36 +51,41 @@ class GaussianJobRunner(JobRunner):
 
     PROGRAM = "gaussian"
 
-    def __init__(self, server, job, scratch=True, fake=False, **kwargs):
-        super().__init__(
-            server=server, job=job, scratch=scratch, fake=fake, **kwargs
-        )
+    def __init__(self, server, scratch=True, scratch_dir=None, fake=False, **kwargs):
+        super().__init__(server=server, scratch=scratch, scratch_dir=scratch_dir, fake=fake, **kwargs)
 
     @property
-    def executables(self):
-        return GaussianExecutables.from_servername(servername=self.servername)
+    def executable(self):
+        """Executable class object for Gaussian."""
+        try:
+            executable = GaussianExecutable.from_server(server=self.server)
+            return executable
+        except FileNotFoundError as e:
+            logger.error(f"No server file {self.server} is found: {e}\n"
+                         f"Available servers are: {GaussianExecutable.available_servers}")
+            raise
 
     def _prerun(self, job):
         self._assign_variables(job)
 
     def _assign_variables(self, job):
-        """Creates input file in scratch (done in settings.apply_on()), if running in scratch directory.
-
-        Set up file paths if running in scratch/not running in scratch.
-        """
+        """Sets proper file paths for job input, output, and error files in scratch or not in scratch."""
         # keep job output file in job folder regardless of running in scratch or not
         self.job_outputfile = job.outputfile
 
-        if self.scratch:
+        if self.executable.scratch_dir:
             logger.info("Setting up run in scratch folder.")
             # set up files in scratch folder
-            scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+            scratch_job_dir = os.path.join(self.executable.scratch_dir, job.label)
+            if not os.path.exists(scratch_job_dir):
+                try:
+                    os.makedirs(scratch_job_dir)
+                except OSError as e:
+                    raise RuntimeError(f"Failed to create directory {scratch_job_dir}: {e}")
             self.running_directory = scratch_job_dir
 
             job_inputfile = job.label + ".com"
-            scratch_job_inputfile = os.path.join(
-                scratch_job_dir, job_inputfile
-            )
+            scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
             self.job_inputfile = scratch_job_inputfile
 
             job_chkfile = job.label + ".chk"
@@ -97,16 +103,14 @@ class GaussianJobRunner(JobRunner):
             self.job_chkfile = job.chkfile
             self.job_errfile = job.errfile
 
-        if self.executables and self.executables.local_run is not None:
-            logger.info(f"Local run is {self.executables.local_run}.")
-            job.local = self.executables.local_run
+        if self.executable and self.executable.local_run is not None:
+            logger.info(f"Local run is {self.executable.local_run}.")
+            job.local = self.executable.local_run
 
-    def _run(self, job, process):
-        process.communicate()
-        return process.poll()
-
-    def _environment_vars(self, job, *args, **kwargs):
-        return self.executables.ENVIRONMENT_VARIABLES
+    def _get_command(self):
+        exe = self._get_executable()
+        command = f"{exe} {self.job_inputfile}"
+        return command
 
     def _create_process(self, job, command, env):
         with open(self.job_outputfile, "w") as out, open(
@@ -120,30 +124,21 @@ class GaussianJobRunner(JobRunner):
                 shlex.split(command),
                 stdout=out,
                 stderr=err,
-                env=env,
+                env=self.executable.env,
                 cwd=self.running_directory,
             )
+    def _run(self, job, process):
+        process.communicate()
+        return process.poll()
+
+    def _environment_vars(self, job, *args, **kwargs):
+        return self.executable.ENVIRONMENT_VARIABLES
 
     def _get_executable(self):
         """Get executable for Gaussian."""
-        exe = self.executables.get_executable()
+        exe = self.executable.get_executable()
         logger.info(f"Gaussian executable: {exe}")
         return exe
-
-    def get_command(self, job, host):
-        self._assign_variables(job)
-        executable = self._get_executable()
-        resources = self._resources(job=job)
-
-        command = self.server.command(
-            folder=self.running_directory,
-            executable=executable,
-            resources=resources,
-            local=job.local,
-            host=host,
-        )
-
-        return f"{command} {self.job_inputfile}"
 
     def _postrun(self, job):
         if self.scratch:

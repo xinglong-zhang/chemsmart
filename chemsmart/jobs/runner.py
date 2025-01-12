@@ -5,6 +5,7 @@ from abc import abstractmethod
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
+from debugpy.launcher.debuggee import process
 
 user_settings = ChemsmartUserSettings()
 
@@ -29,12 +30,6 @@ class JobRunner(RegistryMixin):
     def __init__(
         self, server, scratch=False, scratch_dir=None, fake=False, **kwargs
     ):
-        self.server = server
-        self.scratch = scratch
-        self.scratch_dir = scratch_dir
-        self.fake = fake
-        self.kwargs = kwargs
-
         if server is None:
             server = Server.current()
 
@@ -46,30 +41,17 @@ class JobRunner(RegistryMixin):
                 f"server must be instance of Server. Instead was: {server}"
             )
 
+        self.server = server
+        self.scratch = scratch
+        self.scratch_dir = scratch_dir
+        self.fake = fake
+        self.kwargs = kwargs
+
         if self.scratch:
             self._set_scratch()
 
     def _set_scratch(self):
-        scratch_dir = None
-
-        # get scratch directory in order:
-        # (1) first try to get from program specific environment variable
-        # different programs may need to use different scratch directory
-        program_specific_enviornment_vars = os.path.expanduser(
-            f"~/.chemsmart/{self.PROGRAM}/{self.PROGRAM}.envars"
-        )
-        if os.path.exists(program_specific_enviornment_vars):
-            # extract any scratch export statement
-            try:
-                with open(program_specific_enviornment_vars) as f:
-                    for line in f.readlines():
-                        if "SCRATCH" in line:
-                            scratch_dir = line.split("=")[-1]
-            except OSError as e:
-                raise RuntimeError(
-                    f"Failed to read environment variable file: {program_specific_enviornment_vars}"
-                ) from e
-
+        scratch_dir = self.executable.scratch_dir
         # (2) then try to get from server specific environment variable
         if scratch_dir is None:
             scratch_dir = self.server.scratch
@@ -91,7 +73,7 @@ class JobRunner(RegistryMixin):
         self.scratch_dir = scratch_dir
 
     def __repr__(self):
-        return f"{self.__class__.__qualname__}<server={self.server}, job={self.job}>"
+        return f"{self.__class__.__qualname__}<server={self.server}>"
 
     @property
     def servername(self):
@@ -119,40 +101,58 @@ class JobRunner(RegistryMixin):
 
     @property
     @abstractmethod
-    def executables(self):
-        """Subclasses to implement. Return None if no executables."""
+    def executable(self):
+        """Subclasses to implement. Return None if no executable."""
         raise NotImplementedError
 
-    def _prerun(self):
+    def _prerun(self, job):
         # Subclasses can implement
         pass
 
     @abstractmethod
-    def _run(self, **kwargs):
+    def _run(self, job, process, **kwargs):
         raise NotImplementedError
 
-    def _postrun(self):
+    def _postrun(self, job):
         # Subclasses can implement
         pass
-
-    @abstractmethod
-    def get_command(self, **kwargs):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _create_process(self, command, env):
-        raise NotImplementedError
 
     @abstractmethod
     def _get_command(self):
+        command = self.server
         raise NotImplementedError
 
-    def run(self, **kwargs):
-        self._prerun()
-        self._get_command()
-        self._create_process()
-        self._run(**kwargs)
-        self._postrun()
+    @abstractmethod
+    def _create_process(self, job, command, env):
+        raise NotImplementedError
+
+    def run(self, job, **kwargs):
+        self._prerun(job)
+        command = self._get_command()
+        process = self._create_process(job, command=command, env=self.executable.env)
+        # self._create_jobrunner(job, **kwargs)
+        self._run(job, process, **kwargs)
+        self._postrun(job)
 
     def copy(self):
         return copy.copy(self)
+
+    @classmethod
+    def from_jobtype(cls, job, server, scratch=False, scratch_dir=None, fake=False, **kwargs):
+        runners = cls.subclasses()
+        jobtype = job.TYPE
+
+        for runner in runners:
+            runner_jobtypes = runner.JOBTYPES
+
+            if runner_jobtypes is NotImplemented:
+                runner_jobtypes = []
+
+            if jobtype in runner_jobtypes:
+                return runner(server=server, scratch=scratch, **kwargs)
+
+        raise ValueError(
+            f'Could not find any runners for job: {job}. \n'
+            f'Runners in registry: {cls.subclasses()}. \n '
+            f'Fake: {fake}'
+        )

@@ -105,14 +105,6 @@ def create_jobrunner(
     if num_gpus_per_node_per_job is None:
         num_gpus_per_node_per_job = num_gpus
 
-    return JobRunner(
-        memory_gigs=memory_gigs,
-        num_nodes=num_nodes,
-        num_gpus_per_node=num_gpus_per_node_per_job,
-        num_tasks_per_node=num_cpus,
-        server=server,
-        fake=fake,
-        exclude_localhost=exclude_localhost,
-        gpu_queue=gpu_queue,
-        host_queue=host_queue,
-    )
+    return JobRunner(server=server, fake=fake, memory_gigs=memory_gigs, num_nodes=num_nodes,
+                     num_gpus_per_node=num_gpus_per_node_per_job, num_tasks_per_node=num_cpus,
+                     exclude_localhost=exclude_localhost, gpu_queue=gpu_queue, host_queue=host_queue)

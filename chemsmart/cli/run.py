@@ -77,8 +77,16 @@ def run(
 @run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
-    invoked_subcommand = ctx.invoked_subcommand
     jobrunner = ctx.obj["jobrunner"]
+
+    # Get the job
+    job = args[0]
+    if isinstance(job, list) and len(job) == 1:
+        job = job[0]
+
+    jobrunner = jobrunner.from_jobtype(job=job, server=jobrunner.server)
+
+    job.run(jobrunner=jobrunner)
 
 
 for subcommand in subcommands:

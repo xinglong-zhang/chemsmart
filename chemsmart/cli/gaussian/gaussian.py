@@ -177,10 +177,8 @@ def gaussian(  # noqa: PLR0912, PLR0915
     elif filename.endswith((".com", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
-        logger.info(f"Job settings from {filename}:\n{job_settings.__dict__}")
     elif filename.endswith(".xyz"):
         job_settings = GaussianJobSettings.default()
-        logger.info(f"Job settings from {filename}:\n{job_settings.__dict__}")
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
@@ -261,7 +259,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
     ctx.obj["job_settings"] = job_settings
     ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = (
-        molecules  # atoms as a list as some jobs requires all structures to be used
+        molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename

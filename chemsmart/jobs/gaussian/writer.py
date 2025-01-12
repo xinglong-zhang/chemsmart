@@ -1,5 +1,7 @@
 import logging
 import os.path
+
+from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.utils import (
@@ -18,6 +20,7 @@ class GaussianInputWriter(InputWriter):
     """
 
     def write(self):
+        logger.info(f"Writing Gaussian input file: {self.job.inputfile}")
         f = open(self.job.inputfile, "w")
         self._write_gaussian_header(f)
         self._write_route_section(f)
@@ -32,11 +35,12 @@ class GaussianInputWriter(InputWriter):
         )  # followed by user defined solvent parameters
         self._append_job_specific_info(f)
         self._append_other_additional_info(f)
-        self._write_link_section(f)
+        if isinstance(self.job.settings, GaussianLinkJobSettings):
+            self._write_link_section(f)
         f.close()
 
     def _write_gaussian_header(self, f):
-        if self.chk:
+        if self.job.settings.chk:
             f.write(f"%chk={self.job.label}.chk\n")
         f.write(f"%nprocshared={self.jobrunner.num_cores}\n")
         f.write(f"%mem={self.jobrunner.mem_gb}GB\n")

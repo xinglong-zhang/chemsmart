@@ -166,13 +166,9 @@ class GaussianJobSettings(MolecularJobSettings):
         from chemsmart.io.gaussian.input import Gaussian16Input
 
         com_path = os.path.abspath(filename)
-        logger.info(f"Return Settings object from .com filename: {filename}")
         gaussian_settings_from_comfile = Gaussian16Input(
-            filename=filename
+            filename=com_path
         ).read_settings()
-        logger.info(
-            f"with settings: {gaussian_settings_from_comfile.__dict__}"
-        )
         return gaussian_settings_from_comfile
 
     @classmethod
@@ -316,7 +312,7 @@ class GaussianJobSettings(MolecularJobSettings):
         )
         return sorted_light_elements_list
 
-    def _get_route_string_from_jobtype(self):  # noqa: PLR0912, PLR0915
+    def _get_route_string_from_jobtype(self):
         route_string = ""
         if self.dieze_tag is not None:
             route_string += (
@@ -336,7 +332,7 @@ class GaussianJobSettings(MolecularJobSettings):
                     route_string += f" opt=(ts,calcfc,noeigentest,{self.additional_opt_options_in_route})"
                 else:
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
-            elif self.job_type == "modred":
+            elif self.job_type == "modredundant":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = True
             elif self.job_type == "scan":
@@ -349,7 +345,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 route_string += " opt"
             elif self.job_type == "ts":
                 route_string += " opt=(ts,calcfc,noeigentest)"
-            elif self.job_type == "modred":
+            elif self.job_type == "modredundant":
                 route_string += " opt=modredundant"
                 self.freq = True
             elif self.job_type == "scan":
@@ -513,115 +509,6 @@ class GaussianJobSettings(MolecularJobSettings):
         route_string = self._get_route_string_from_jobtype(atoms=atoms)
         f.write(route_string + "\n")
         f.write("\n")
-
-    def _get_route_string_from_jobtype(self, atoms):  # noqa: PLR0912, PLR0915
-        route_string = ""
-        if self.dieze_tag is not None:
-            route_string += (
-                f"#{self.dieze_tag}"  # e.g. dieze_tag='p' to get '#p'
-            )
-        else:
-            route_string += "#"
-
-        # write opt with additional options e.g., maxstep, calcall etc
-        if self.additional_opt_options_in_route is not None:
-            if self.job_type == "opt":
-                route_string += (
-                    f" opt=({self.additional_opt_options_in_route})"
-                )
-            elif self.job_type == "ts":
-                if "calcall" not in self.additional_opt_options_in_route:
-                    route_string += f" opt=(ts,calcfc,noeigentest,{self.additional_opt_options_in_route})"
-                else:
-                    route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
-            elif self.job_type == "modredundant":
-                route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = True
-            elif self.job_type == "scan":
-                route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = False
-            elif self.job_type == "sp":
-                route_string += ""
-        elif self.additional_opt_options_in_route is None:
-            if self.job_type == "opt":
-                route_string += " opt"
-            elif self.job_type == "ts":
-                route_string += " opt=(ts,calcfc,noeigentest)"
-            elif self.job_type == "modredundant":
-                route_string += " opt=modredundant"
-                self.freq = True
-            elif self.job_type == "scan":
-                route_string += " opt=modredundant"
-                self.freq = False
-            elif self.job_type == "sp":
-                route_string += ""
-
-        # write frequency
-        if self.freq and not self.numfreq:
-            route_string += " freq"
-        elif not self.freq and self.numfreq:
-            route_string += " freq=numer"
-
-        # write functional and basis
-        if self.basis is None:
-            raise ValueError("Warning: Basis is missing!")
-        if self.ab_initio is not None and self.functional is None:
-            method = self.ab_initio
-        elif self.ab_initio is None and self.functional is not None:
-            method = self.functional
-        elif self.ab_initio is not None and self.functional is not None:
-            raise ValueError(
-                "Warning: Both ab initio and DFT functional are provided!"
-            )
-        else:
-            raise ValueError(
-                "Warning: Both ab initio and DFT functional are missing!"
-            )
-
-        if "gen" in self.basis:
-            genecp_section = self.get_genecp_section(molecule=atoms)
-            route_string += f" {method} {genecp_section.genecp_type}"
-        else:
-            route_string += f" {method} {self.basis}"
-
-        # write forces calculation
-        if self.forces:
-            route_string += " force"
-
-        if self.custom_solvent is not None:
-            if self.solvent_model is None and self.solvent_id is None:
-                route_string += (
-                    " scrf=(pcm,read)"  # using pcm model as default
-                )
-            else:
-                # Set default values if any of solvent_model or solvent_id are None
-                solvent_model = self.solvent_model or "pcm"
-                solvent_id = self.solvent_id or "generic,read"
-                route_string += f" scrf=({solvent_model},solvent={solvent_id})"
-        elif (
-            self.solvent_model is not None and self.solvent_id is not None
-        ):  # solvation is turned on
-            route_string += (
-                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
-            )
-        elif (self.solvent_model is not None and self.solvent_id is None) or (
-            self.solvent_model is None and self.solvent_id is not None
-        ):  # if one is provided but the other not
-            raise ValueError(
-                f"Both solvent model need to be specified. \nCurrently, solvent model is {self.solvent_model} "
-                f"and solvent id is {self.solvent_id}!"
-            )
-
-        # write additional parameters for route
-        if self.additional_route_parameters is not None:
-            route_string += f" {self.additional_route_parameters}"
-
-        # write job type specific route
-        if self.job_type == "nci":
-            route_string += " output=wfn"  # output wavefunction file for NCI
-        elif self.job_type == "wbi":
-            route_string += " pop=nboread"  # write bond order matrix
-        return route_string
 
     def _write_gaussian_title(self, f, job_label):
         if self.title is not None:

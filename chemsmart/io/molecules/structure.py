@@ -300,19 +300,18 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        with open(f, "w") as f:
-            if self.frozen_atoms is None:
-                for i, (s, (x, y, z)) in enumerate(
-                    zip(self.chemical_symbols, self.positions)
-                ):
-                    f.write(f"{s:5} {x:10.15f} {y:15.10f} {z:15.10f}\n")
-            else:
-                for i, (s, (x, y, z)) in enumerate(
-                    zip(self.chemical_symbols, self.positions)
-                ):
-                    f.write(
-                        f"{s:5} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
-                    )
+        if self.frozen_atoms is None:
+            for i, (s, (x, y, z)) in enumerate(
+                zip(self.chemical_symbols, self.positions)
+            ):
+                f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
+        else:
+            for i, (s, (x, y, z)) in enumerate(
+                zip(self.chemical_symbols, self.positions)
+            ):
+                f.write(
+                    f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
+                )
 
     def __repr__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"
