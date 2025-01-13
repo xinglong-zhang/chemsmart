@@ -126,7 +126,7 @@ class GaussianJobRunner(JobRunner):
         command = f"{exe} {self.job_inputfile}"
         return command
 
-    def _create_process(self, job, command):
+    def _create_process(self, job, command, env):
         with open(self.job_outputfile, "w") as out, open(
             self.job_errfile, "w"
         ) as err:
@@ -139,7 +139,7 @@ class GaussianJobRunner(JobRunner):
                 shlex.split(command),
                 stdout=out,
                 stderr=err,
-                env=self.executable.env,
+                env=env,
                 cwd=self.running_directory,
             )
 

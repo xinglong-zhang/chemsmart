@@ -138,14 +138,27 @@ class JobRunner(RegistryMixin):
         raise NotImplementedError
 
     @abstractmethod
-    def _create_process(self, job, command):
+    def _create_process(self, job, command, env):
         raise NotImplementedError
+
+    def _update_os_environ(self, job):
+        env = os.environ.copy()
+        env_vars = self.executable.env
+        if not env_vars:
+            return env
+        logger.debug(f"Environment variables to update: \n{env_vars}")
+        for k, v in env_vars.items():
+            if isinstance(v, str):
+                v = os.path.expanduser(v)
+            env[k] = str(v)
+        return env
 
     def run(self, job, **kwargs):
         self._prerun(job)
         self._write_input(job)
         command = self._get_command()
-        process = self._create_process(job, command=command)
+        env = self._update_os_environ(job)
+        process = self._create_process(job, command=command, env=env)
         self._run(process, **kwargs)
         self._postrun(job)
 
