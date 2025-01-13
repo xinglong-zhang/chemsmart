@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 def run(
     ctx,
     server,
+    num_cores,
     mem_gb,
     fake,
     scratch,

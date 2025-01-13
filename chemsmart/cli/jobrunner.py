@@ -15,6 +15,12 @@ def jobrunner_options(f):
         help="Server. If not specified, will try to automatically determine and use the current server.",
     )
     @click.option(
+        "-n",
+        "--num-cores",
+        type=int,
+        help="Number of cores for each job.",
+    )
+    @click.option(
         "-m", "--mem-gb", type=int, default=None, help="Memory in GBs"
     )
     @click.option(
