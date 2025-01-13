@@ -4,6 +4,7 @@ import os.path
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.user import ChemsmartUserSettings
+from tests.conftest import server_yaml_file
 
 user_settings = ChemsmartUserSettings()
 
@@ -33,8 +34,12 @@ class Executable(RegistryMixin):
 
     @classmethod
     def from_server(cls, server):
+        if server.name.endswith(".yaml"):
+            server_yaml = server.name
+        else:
+            server_yaml = f"{server.name}.yaml"
         server_yaml_file = os.path.join(
-            user_settings.user_server_dir, f"{server.name}"
+            user_settings.user_server_dir, server_yaml
         )
         server_yaml = YAMLFile(filename=server_yaml_file)
         executable_folder = os.path.expanduser(
