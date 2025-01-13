@@ -1,4 +1,4 @@
-from pyatoms.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 
 class GaussianCrestOptJob(GaussianJob):

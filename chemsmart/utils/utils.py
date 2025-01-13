@@ -3,6 +3,7 @@ import re
 import time
 import hashlib
 import copy
+import numpy as np
 from functools import lru_cache, wraps
 from itertools import groupby
 from ase.io import string2index
@@ -330,4 +331,36 @@ def prune_list_of_elements(list_of_elements, molecule):
     in the molecule, then only "Pd" will be returned."""
     return list(
         set(molecule.chemical_symbols).intersection(set(list_of_elements))
+    )
+
+
+def sdf2molecule(sdf_lines):
+    from chemsmart.io.molecules.structure import Molecule
+
+    list_of_symbols = []
+    cart_coords = []
+
+    # sdf line pattern containing coordinates and element type
+    pattern = (
+        r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
+        r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
+    )
+    if isinstance(sdf_lines, list):
+        line_elements = sdf_lines
+    elif isinstance(sdf_lines, str):
+        line_elements = sdf_lines.split("\n")
+
+    for line in line_elements:
+        match = re.match(pattern, line)
+        if match:
+            x = float(match.group(1))
+            y = float(match.group(2))
+            z = float(match.group(3))
+            atom_type = str(match.group(4))
+            list_of_symbols.append(atom_type)
+            cart_coords.append((x, y, z))
+
+    cart_coords = np.array(cart_coords)
+    return Molecule.from_symbols_and_positions_and_pbc_conditions(
+        list_of_symbols=list_of_symbols, positions=cart_coords
     )

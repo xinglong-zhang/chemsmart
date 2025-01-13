@@ -32,6 +32,11 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
+    if opt_settings.charge is None or opt_settings.multiplicity is None:
+        raise ValueError(
+            "Charge and multiplicity must be set for Gaussian jobs."
+        )
+
     # get atoms
     molecules = ctx.obj["molecules"]
     molecule = molecules[
@@ -52,11 +57,10 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     if freeze_atoms is not None:
         frozen_atoms_list = get_list_from_string_range(freeze_atoms)
-        print(f"Freezing atoms: {frozen_atoms_list}")
+        logger.debug(f"Freezing atoms: {frozen_atoms_list}")
         molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
             frozen_atoms_list, molecule
         )
-        # atoms.set_constraint(FixAtoms(frozen_atoms_list))
 
     logger.info(f"Opt settings from project: {opt_settings.__dict__}")
 
