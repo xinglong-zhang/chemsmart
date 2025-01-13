@@ -108,15 +108,9 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
         from chemsmart.utils.utils import sdf2molecule
 
         sdflines = f_like.readlines()
-        print("(((((((")
-        print(sdflines)
-        print(type(sdflines))
         molecule = sdf2molecule(sdflines)
         assert isinstance(molecule, Molecule)
         return molecule
-        # atoms = read(f_like, format='sdf')
-        # result = PubchemData(atoms, data=None)
-        # return result.get_atoms()
 
     try:
         return _pubchem_search()
