@@ -231,38 +231,6 @@ class Server(RegistryMixin):
             return None
 
 
-class SLURMServer(Server):
-    NAME = "SLURM"
-    SCHEDULER_TYPE = "SLURM"
-
-    def __init__(self, name, **kwargs):
-        super().__init__(name, **kwargs)
-
-
-class PBSServer(Server):
-    NAME = "PBS"
-    SCHEDULER_TYPE = "PBS"
-
-    def __init__(self, **kwargs):
-        super().__init__(self.NAME, **kwargs)
-
-
-class LSFServer(Server):
-    NAME = "LSF"
-    SCHEDULER_TYPE = "LSF"
-
-    def __init__(self, **kwargs):
-        super().__init__(self.NAME, **kwargs)
-
-
-class SGE_Server(Server):
-    NAME = "SGE"
-    SCHEDULER_TYPE = "SGE"
-
-    def __init__(self, **kwargs):
-        super().__init__(self.NAME, **kwargs)
-
-
 class YamlServerSettings(Server):
     NAME = "yaml"
 
@@ -307,3 +275,35 @@ class ServerSettingsManager:
 
     def create(self):
         return YamlServerSettings.from_yaml(self.filename)
+
+
+class SLURMServer(YamlServerSettings):
+    NAME = "SLURM"
+    SCHEDULER_TYPE = "SLURM"
+
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
+
+
+class PBSServer(YamlServerSettings):
+    NAME = "PBS"
+    SCHEDULER_TYPE = "PBS"
+
+    def __init__(self, **kwargs):
+        super().__init__(self.NAME, **kwargs)
+
+
+class LSFServer(YamlServerSettings):
+    NAME = "LSF"
+    SCHEDULER_TYPE = "LSF"
+
+    def __init__(self, **kwargs):
+        super().__init__(self.NAME, **kwargs)
+
+
+class SGE_Server(YamlServerSettings):
+    NAME = "SGE"
+    SCHEDULER_TYPE = "SGE"
+
+    def __init__(self, **kwargs):
+        super().__init__(self.NAME, **kwargs)
