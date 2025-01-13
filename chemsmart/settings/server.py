@@ -109,15 +109,12 @@ class Server(RegistryMixin):
 
         if scheduler_type == "Unknown Scheduler":
             logger.info("No scheduler detected. Using local server.")
-            return cls.from_servenamer(servername="local")
+            return cls.from_servename(servername="local")
 
         # Match scheduler type with available Server subclasses
         for server_cls in cls.subclasses():
-            if (
-                hasattr(server_cls, "SCHEDULER_TYPE")
-                and server_cls.SCHEDULER_TYPE == scheduler_type
-            ):
-                return server_cls(name=scheduler_type)
+            if getattr(server_cls, "SCHEDULER_TYPE", None) == scheduler_type:
+                return server_cls.from_servename(scheduler_type)
 
         raise ValueError(
             f"No server class defined for scheduler type: {scheduler_type}. "
@@ -193,7 +190,7 @@ class Server(RegistryMixin):
         return "Unknown Scheduler"
 
     @classmethod
-    def from_servenamer(cls, servername):
+    def from_servename(cls, servername):
         """Obtain server details from server name."""
         if servername is None:
             # by default return current server

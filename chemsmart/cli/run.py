@@ -38,7 +38,7 @@ def run(
 
     # Instantiate the jobrunner with CLI options
     if server is not None:
-        server = Server.from_servenamer(server)
+        server = Server.from_servename(server)
     jobrunner = JobRunner(server=server, scratch=scratch, fake=fake)
 
     # Log the scratch value for debugging purposes
