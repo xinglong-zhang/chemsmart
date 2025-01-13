@@ -8,6 +8,7 @@ from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.cli.jobrunner import jobrunner_options
 from chemsmart.cli.logger import logger_options
+from chemsmart.settings.server import Server
 
 system_type = platform.system()
 
@@ -36,6 +37,8 @@ def run(
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
+    if server is not None:
+        server = Server.from_servenamer(server)
     jobrunner = JobRunner(server=server, scratch=scratch, fake=fake)
 
     # Log the scratch value for debugging purposes

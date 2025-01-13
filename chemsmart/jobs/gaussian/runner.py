@@ -64,8 +64,12 @@ class GaussianJobRunner(JobRunner):
     def executable(self):
         """Executable class object for Gaussian."""
         try:
-            logger.info(f"Obtaining executable from server: {self.server}")
-            executable = GaussianExecutable.from_server(server=self.server)
+            logger.info(
+                f"Obtaining executable from server: {self.server.name}"
+            )
+            executable = GaussianExecutable.from_servername(
+                servername=self.server.name
+            )
             return executable
         except FileNotFoundError as e:
             logger.error(

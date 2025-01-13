@@ -35,7 +35,7 @@ class JobRunner(RegistryMixin):
             server = Server.current()
 
         if isinstance(server, str):
-            server = Server.from_server(server)
+            server = Server.from_servenamer(server)
 
         if not isinstance(server, Server):
             raise ValueError(

@@ -40,7 +40,7 @@ class ORCAJobRunner(JobRunner):
 
     @property
     def executables(self):
-        return OrcaExecutables.from_servername(servername=self.servername)
+        return OrcaExecutables.from_servername()
 
     def _prerun(self, job):
         self._assign_variables(job)

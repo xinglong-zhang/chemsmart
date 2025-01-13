@@ -57,7 +57,7 @@ class OrcaExecutables(Executables):
     @classmethod
     def from_servername(cls, servername, **kwargs):
         try:
-            return super().from_servername(servername, **kwargs)
+            return super().from_servername(servername)
         except pyatoms.io.yaml.MalformedYamlError as e:
             raise ConfigurationError(
                 f"\n\nOrca Executable for {servername} are not set. "

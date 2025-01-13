@@ -32,11 +32,11 @@ class Executable(RegistryMixin):
         self.envars = envars
 
     @classmethod
-    def from_server(cls, server):
-        if server.name.endswith(".yaml"):
-            server_yaml = server.name
+    def from_servername(cls, servername):
+        if servername.endswith(".yaml"):
+            server_yaml = servername
         else:
-            server_yaml = f"{server.name}.yaml"
+            server_yaml = f"{servername}.yaml"
         server_yaml_file = os.path.join(
             user_settings.user_server_dir, server_yaml
         )
