@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 from abc import abstractmethod
+from functools import lru_cache
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -57,9 +58,11 @@ class JobRunner(RegistryMixin):
 
 
     @property
+    @lru_cache(maxsize=12)
     def scratch_dir(self):
         return self._set_scratch()
 
+    @lru_cache(maxsize=12)
     def _set_scratch(self):
         scratch_dir = None
         if self.executable is not None:
@@ -122,9 +125,9 @@ class JobRunner(RegistryMixin):
         # Subclasses can implement
         pass
 
-    @abstractmethod
-    def _run(self, job, process, **kwargs):
-        raise NotImplementedError
+    def _run(self, process, **kwargs):
+        process.communicate()
+        return process.poll()
 
     def _postrun(self, job):
         # Subclasses can implement
@@ -136,15 +139,15 @@ class JobRunner(RegistryMixin):
         raise NotImplementedError
 
     @abstractmethod
-    def _create_process(self, job, command, env):
+    def _create_process(self, job, command):
         raise NotImplementedError
 
     def run(self, job, **kwargs):
         self._prerun(job)
         self._write_input(job)
         command = self._get_command()
-        process = self._create_process(job, command=command, env=self.executable.env)
-        self._run(job, process, **kwargs)
+        process = self._create_process(job, command=command)
+        self._run(process, **kwargs)
         self._postrun(job)
 
     def copy(self):

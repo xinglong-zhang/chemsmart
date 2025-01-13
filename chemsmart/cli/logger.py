@@ -12,7 +12,7 @@ def logger_options(f):
     )
     @click.option(
         "--stream/--no-stream",
-        default=None,
+        default=True,
         help="Turns on logging to stdout.",
     )
     @functools.wraps(f)

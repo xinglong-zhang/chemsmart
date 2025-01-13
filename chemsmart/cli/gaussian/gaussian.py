@@ -257,8 +257,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
     jobrunner = ctx.obj["jobrunner"]
-    logger.info(f"Scratch: {jobrunner.scratch}")
-
 
 @gaussian.result_callback()
 @click.pass_context

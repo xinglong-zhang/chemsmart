@@ -3,6 +3,7 @@ import os
 import shlex
 import shutil
 import subprocess
+from functools import lru_cache
 from datetime import datetime
 from glob import glob
 from random import random
@@ -13,12 +14,6 @@ from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.periodictable import PeriodicTable
 pt = PeriodicTable()
-
-# from pyatoms.cli.submitters import SubmitscriptWriter
-# from pyatoms.io.gaussian.inputs import Gaussian16Input
-# from pyatoms.jobs.gaussian.execution import GaussianExecutables
-# from pyatoms.jobs.runner import JobRunner
-# from pyatoms.utils.periodictable import chemical_symbol_to_atomic_number
 
 shutil._USE_CP_SENDFILE = False
 # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
@@ -59,6 +54,7 @@ class GaussianJobRunner(JobRunner):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     @property
+    @lru_cache(maxsize=12)
     def executable(self):
         """Executable class object for Gaussian."""
         try:
@@ -123,10 +119,8 @@ class GaussianJobRunner(JobRunner):
         command = f"{exe} {self.job_inputfile}"
         return command
 
-    def _create_process(self, job, command, env):
-        with open(self.job_outputfile, "w") as out, open(
-            self.job_errfile, "w"
-        ) as err:
+    def _create_process(self, job, command):
+        with open(self.job_outputfile, "w") as out, open(self.job_errfile, "w") as err:
             logger.info(
                 f"Command executed: {command}\n"
                 f"Writing output file to: {self.job_outputfile} and err file to: {self.job_errfile}"
@@ -135,13 +129,8 @@ class GaussianJobRunner(JobRunner):
                 shlex.split(command),
                 stdout=out,
                 stderr=err,
-                env=self.executable.env,
                 cwd=self.running_directory,
             )
-
-    def _run(self, job, process, **kwargs):
-        process.communicate()
-        return process.poll()
 
     def _get_executable(self):
         """Get executable for Gaussian."""
@@ -155,7 +144,7 @@ class GaussianJobRunner(JobRunner):
             for file in glob(f"{self.running_directory}/{job.label}*"):
                 if not file.startswith("Gau-"):
                     logger.info(
-                        f"Copying file {file} from {self.running_directory} \nto {job.folder}\n"
+                        f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
                     copy(file, job.folder)
 
@@ -279,12 +268,8 @@ class FakeGaussian:
 
     def run(self):
         # get input lines
-        input_lines = []
         with open(self.input_filepath) as f:
             lines = f.readlines()
-            input_lines = lines.copy()
-            for line in lines:
-                input_lines.append(line)
 
         with open(self.output_filepath, "w") as g:
             g.write(" Entering Gaussian System, FakeGaussianRunner\n")
@@ -294,11 +279,11 @@ class FakeGaussian:
             g.write(" Fake Gaussian Executable\n")
             g.write(" ******************************************\n")
             # write mem/nproc/chk information (%...)
-            for line in input_lines:
+            for line in lines:
                 if line.startswith("%"):
                     g.write(f" {line}")
             # write route information
-            for line in input_lines:
+            for line in lines:
                 if line.startswith("#"):
                     line_len = len(line)
                     g.write(" " + "-" * line_len + "\n")

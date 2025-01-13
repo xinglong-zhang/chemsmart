@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+from functools import lru_cache
 from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
@@ -96,6 +97,7 @@ class Server(RegistryMixin):
         return cls.from_scheduler_type()
 
     @classmethod
+    @lru_cache(maxsize=12)
     def from_scheduler_type(cls):
         """
         Create a Server instance based on the detected scheduler type.
@@ -123,6 +125,7 @@ class Server(RegistryMixin):
         )
 
     @staticmethod
+    @lru_cache(maxsize=12)
     def detect_server_scheduler():
         """
         Detect the server's job scheduler system.

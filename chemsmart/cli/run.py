@@ -73,9 +73,6 @@ def process_pipeline(ctx, *args, **kwargs):
         mem_gb = mem_gb,
     )
 
-    # Log for debugging
-    logger.debug(f"JobRunner after from_jobtype: {jobrunner}")
-
     # Run the job with the jobrunner
     job.run(jobrunner=jobrunner)
 

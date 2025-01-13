@@ -6,10 +6,9 @@ import logging
 class LogOnceFilter(logging.Filter):
     def __init__(self):
         super().__init__()
-        self.logged_messages = set()  # To track logged messages
+        self.logged_messages = set()  # Track logged messages globally
 
     def filter(self, record):
-        # Only log the message if it hasn't been logged before
         if record.msg in self.logged_messages:
             return False  # Skip the log message
         self.logged_messages.add(record.msg)
@@ -43,10 +42,9 @@ def create_logger(
     formatter = logging.Formatter(
         '{asctime} - {levelname:6s} - [{name}] {message}',
         style="{",
-
     )
 
-    # Add the filter to the logger
+    # Add the filter directly to the logger (shared globally across handlers)
     log_once_filter = LogOnceFilter()
     logger.addFilter(log_once_filter)
 
@@ -55,14 +53,12 @@ def create_logger(
     err_stream_handler.setLevel(logging.ERROR)
     err_stream_handler.setFormatter(formatter)
     logger.addHandler(err_stream_handler)
-    logger.addFilter(log_once_filter)
 
     # Stream other info only if required
     if stream:
         stream_handler = logging.StreamHandler(stream=sys.stdout)
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
-        logger.addFilter(log_once_filter)
 
     # logfile
     if logfile is not None:
@@ -72,8 +68,6 @@ def create_logger(
         infofile_handler.setLevel(level)
         infofile_handler.setFormatter(formatter)
         logger.addHandler(infofile_handler)
-        logger.addFilter(log_once_filter)
-
 
     # errfile
     if errfile is not None:
@@ -83,4 +77,3 @@ def create_logger(
         errfile_handler.setLevel(logging.WARNING)
         errfile_handler.setFormatter(formatter)
         logger.addHandler(errfile_handler)
-        logger.addFilter(log_once_filter)

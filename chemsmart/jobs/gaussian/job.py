@@ -122,7 +122,7 @@ class GaussianJob(Job):
             filepath=filename, index=":", return_list=True
         )
         logger.info(f"Num of images read: {len(molecules)}.")
-        molecules = molecules[string2index(index)]  # python 0-indexed
+        molecules = molecules[string2index(index)]
 
         # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
         return cls(
