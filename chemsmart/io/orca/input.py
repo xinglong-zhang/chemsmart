@@ -141,7 +141,7 @@ class ORCAInput(ORCAFileMixin):
         return None
 
     def read_settings(self):
-        from chemsmart.jobs.orca.settings import ORCAJobSettings
+        pass
 
     # def read_settings(self):
     #     from chemsmart.jobs.orca.settings import ORCAJobSettings

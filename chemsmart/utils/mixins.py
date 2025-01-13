@@ -1,7 +1,6 @@
 import os
 import re
 import inspect
-from functools import lru_cache
 from functools import cached_property
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.gaussian.route import GaussianRoute

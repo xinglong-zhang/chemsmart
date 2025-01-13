@@ -3,13 +3,11 @@ import os
 import shlex
 import shutil
 import subprocess
-from contextlib import suppress
 from datetime import datetime
 from glob import glob
 from random import random
 from shutil import copy, rmtree
 
-from ase.build import molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.io.gaussian.input import Gaussian16Input

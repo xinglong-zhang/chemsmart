@@ -1,6 +1,5 @@
 import os
 from chemsmart.io.yaml import YAMLFile
-from execnet.gateway_base import serve
 
 
 class TestYAMLFile:

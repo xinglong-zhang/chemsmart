@@ -8,7 +8,6 @@ from ase.symbols import Symbols
 from ase.io.formats import string2index
 from functools import cached_property
 from chemsmart.utils.utils import file_cache
-from chemsmart.utils.utils import FileReadError
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 

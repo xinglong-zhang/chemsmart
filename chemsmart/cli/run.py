@@ -3,7 +3,7 @@ import logging
 import platform
 from multiprocessing import set_start_method
 import click
-from chemsmart.utils.utils import create_logger
+from chemsmart.utils.logger import create_logger
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.cli.jobrunner import jobrunner_options

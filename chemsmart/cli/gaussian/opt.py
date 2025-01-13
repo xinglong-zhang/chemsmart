@@ -44,7 +44,6 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     label = ctx.obj["label"]
 
     # Set atoms to freeze
-    from ase.constraints import FixAtoms
 
     from chemsmart.utils.utils import get_list_from_string_range
 

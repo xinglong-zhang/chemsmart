@@ -2,7 +2,6 @@ import copy
 import logging
 import os
 import re
-from contextlib import suppress
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.periodictable import PeriodicTable
