@@ -119,6 +119,7 @@ def write_list_of_lists_as_a_string_with_empty_line_between_lists(
             string += "\n"
     return string
 
+
 def get_list_from_string_range(string_of_range):
     """Use 1-indexed.
     See chemsmart/tests/GaussianUtilsTest.py::GetListFromStringRangeTest::test_get_list_from_string_range
@@ -139,6 +140,7 @@ def get_list_from_string_range(string_of_range):
         else:
             indices.append(int(s))
     return indices
+
 
 def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
     """Convert a list of indices to a list of indices for Gaussian frozen list.
@@ -187,6 +189,7 @@ def str_indices_to_list(str_indices):
             for i in range(start_index, end_index):
                 list_indices.append(i)
     return list_indices
+
 
 def get_value_by_number(num, data):
     # Iterate through all keys in the dictionary

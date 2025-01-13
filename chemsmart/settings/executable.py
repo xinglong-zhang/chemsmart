@@ -17,7 +17,14 @@ class Executable(RegistryMixin):
 
     PROGRAM = NotImplemented
 
-    def __init__(self, executable_folder=None, local_run=False, modules=None, scripts=None, envars=None):
+    def __init__(
+        self,
+        executable_folder=None,
+        local_run=False,
+        modules=None,
+        scripts=None,
+        envars=None,
+    ):
         self.executable_folder = executable_folder
         self.local_run = local_run
         self.modules = modules
@@ -26,15 +33,31 @@ class Executable(RegistryMixin):
 
     @classmethod
     def from_server(cls, server):
-        server_yaml_file = os.path.join(user_settings.user_server_dir, f"{server.name}")
+        server_yaml_file = os.path.join(
+            user_settings.user_server_dir, f"{server.name}"
+        )
         server_yaml = YAMLFile(filename=server_yaml_file)
-        executable_folder = os.path.expanduser(server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"])
-        local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get("LOCAL_RUN", False)
-        modules = server_yaml.yaml_contents_dict[cls.PROGRAM].get("MODULES", None)
-        scripts = server_yaml.yaml_contents_dict[cls.PROGRAM].get("SCRIPTS", None)
-        envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get("ENVARS", None)
+        executable_folder = os.path.expanduser(
+            server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
+        )
+        local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
+            "LOCAL_RUN", False
+        )
+        modules = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
+            "MODULES", None
+        )
+        scripts = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
+            "SCRIPTS", None
+        )
+        envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
+            "ENVARS", None
+        )
         return cls(
-            executable_folder=executable_folder, local_run=local_run, modules=modules, scripts=scripts, envars=envars
+            executable_folder=executable_folder,
+            local_run=local_run,
+            modules=modules,
+            scripts=scripts,
+            envars=envars,
         )
 
     @property
@@ -45,7 +68,7 @@ class Executable(RegistryMixin):
     def scratch_dir(self):
         if self.envars is not None:
             for line in self.envars.split("\n"):
-                line = line.split('#')[0].strip()
+                line = line.split("#")[0].strip()
                 if "SCRATCH" in line:
                     return line.split("=")[1]
         return None
@@ -56,7 +79,7 @@ class Executable(RegistryMixin):
             env = {}
             for line in self.envars.split("\n"):
                 if line.startswith("export"):
-                    line = line.split('#')[0].strip()
+                    line = line.split("#")[0].strip()
                     line = line[7:]
                     key, value = line.split("=")
                     env[key] = value
@@ -72,7 +95,7 @@ class GaussianExecutable(Executable):
 
     def get_executable(self):
         if self.executable_folder is not None:
-            executable_path = os.path.join(self.executable_folder, 'g16')
+            executable_path = os.path.join(self.executable_folder, "g16")
             return executable_path
 
 
@@ -84,6 +107,5 @@ class ORCAExecutable(Executable):
 
     def get_executable(self):
         if self.executable_folder is not None:
-            executable_path = os.path.join(self.executable_folder, 'orca')
+            executable_path = os.path.join(self.executable_folder, "orca")
             return executable_path
-

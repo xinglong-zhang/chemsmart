@@ -56,7 +56,6 @@ class JobRunner(RegistryMixin):
 
         self.kwargs = kwargs
 
-
     @property
     @lru_cache(maxsize=12)
     def scratch_dir(self):
@@ -169,7 +168,7 @@ class JobRunner(RegistryMixin):
                 return runner(server=server, scratch=scratch, **kwargs)
 
         raise ValueError(
-            f'Could not find any runners for job: {job}. \n'
-            f'Runners in registry: {cls.subclasses()}. \n '
-            f'Fake: {fake}'
+            f"Could not find any runners for job: {job}. \n"
+            f"Runners in registry: {cls.subclasses()}. \n "
+            f"Fake: {fake}"
         )

@@ -206,6 +206,7 @@ class GaussianFileMixin(FileMixin):
 
     def read_settings(self):
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
         filename = os.path.basename(self.filename)
 
         title = f"Job prepared from Gaussian file {filename}"

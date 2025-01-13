@@ -163,11 +163,15 @@ class Gaussian16Output(GaussianFileMixin):
         # If the job terminated normally
         if self.normal_termination:
             if np.allclose(
-                self.input_orientations[-1], self.input_orientations[-2], rtol=1e-5
+                self.input_orientations[-1],
+                self.input_orientations[-2],
+                rtol=1e-5,
             ):
                 self.input_orientations.pop(-1)
             if np.allclose(
-                self.standard_orientations[-1], self.standard_orientations[-2], rtol=1e-5
+                self.standard_orientations[-1],
+                self.standard_orientations[-2],
+                rtol=1e-5,
             ):
                 self.standard_orientations.pop(-1)
 
@@ -284,7 +288,9 @@ class Gaussian16Output(GaussianFileMixin):
     def _get_modredundant_group(self):
         if "modredundant" in self.route_string:
             for i, line in enumerate(self.contents):
-                if line.startswith("The following ModRedundant input section has been read:"):
+                if line.startswith(
+                    "The following ModRedundant input section has been read:"
+                ):
                     for j_line in self.contents[i + 1 :]:
                         modredundant_group = []
                         if len(j_line) == 0:

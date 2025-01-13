@@ -70,7 +70,7 @@ def process_pipeline(ctx, *args, **kwargs):
         server=jobrunner.server,
         scratch=jobrunner.scratch,  # Propagate scratch
         fake=jobrunner.fake,
-        mem_gb = mem_gb,
+        mem_gb=mem_gb,
     )
 
     # Run the job with the jobrunner

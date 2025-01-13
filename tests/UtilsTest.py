@@ -47,7 +47,37 @@ class TestUtils:
         assert get_list_from_string_range(s5) == [1, 2, 3, 5, 6, 7]
         assert get_list_from_string_range(s6) == [1, 2, 3, 5, 6, 7, 10]
         assert get_list_from_string_range(s7) == [1, 2, 3, 5, 6, 7, 10]
-        assert get_list_from_string_range(s8) == [1, 2, 3, 28, 29, 30, 31, 34, 35, 36, 37, 38, 39, 40, 41]
-        assert get_list_from_string_range(s9) == [1, 2, 3, 28, 29, 30, 31, 34, 35, 36, 37, 38, 39, 40, 41]
-
-
+        assert get_list_from_string_range(s8) == [
+            1,
+            2,
+            3,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+        ]
+        assert get_list_from_string_range(s9) == [
+            1,
+            2,
+            3,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+        ]

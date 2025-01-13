@@ -8,7 +8,10 @@ logger = logging.getLogger(__name__)
 
 def logger_options(f):
     @click.option(
-        "-d", "--debug/--no-debug", default=False, help="Turns on debug logging."
+        "-d",
+        "--debug/--no-debug",
+        default=False,
+        help="Turns on debug logging.",
     )
     @click.option(
         "--stream/--no-stream",

@@ -455,8 +455,9 @@ class GaussianJobSettings(MolecularJobSettings):
     def prune_heavy_elements(self, molecule):
         # heavy atoms list supplied from settings contains all heavy atoms needed for heavy_atom_basis but in each
         # structure, some heave atoms supplied from settings may not appear in the structure
-        return list(set(molecule.chemical_symbols).intersection(self.heavy_elements))
-
+        return list(
+            set(molecule.chemical_symbols).intersection(self.heavy_elements)
+        )
 
     def set_custom_solvent_via_file(self, filename):
         if not os.path.exists(os.path.expanduser(filename)):
@@ -469,7 +470,6 @@ class GaussianJobSettings(MolecularJobSettings):
         lines = [line.strip() for line in lines]
 
         self.custom_solvent = "\n".join(lines)
-
 
     def remove_solvent(self):
         self.solvent_model = None

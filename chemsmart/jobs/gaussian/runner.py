@@ -13,6 +13,7 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.periodictable import PeriodicTable
+
 pt = PeriodicTable()
 
 shutil._USE_CP_SENDFILE = False
@@ -62,8 +63,10 @@ class GaussianJobRunner(JobRunner):
             executable = GaussianExecutable.from_server(server=self.server)
             return executable
         except FileNotFoundError as e:
-            logger.error(f"No server file {self.server} is found: {e}\n"
-                         f"Available servers are: {GaussianExecutable.available_servers}")
+            logger.error(
+                f"No server file {self.server} is found: {e}\n"
+                f"Available servers are: {GaussianExecutable.available_servers}"
+            )
             raise
 
     def _prerun(self, job):
@@ -81,12 +84,16 @@ class GaussianJobRunner(JobRunner):
                 try:
                     os.makedirs(scratch_job_dir)
                 except OSError as e:
-                    raise RuntimeError(f"Failed to create directory {scratch_job_dir}: {e}")
+                    raise RuntimeError(
+                        f"Failed to create directory {scratch_job_dir}: {e}"
+                    )
             self.running_directory = scratch_job_dir
             logger.info(f"Running directory: {self.running_directory}")
 
             job_inputfile = job.label + ".com"
-            scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+            scratch_job_inputfile = os.path.join(
+                scratch_job_dir, job_inputfile
+            )
             self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
             job_chkfile = job.label + ".chk"
@@ -120,7 +127,9 @@ class GaussianJobRunner(JobRunner):
         return command
 
     def _create_process(self, job, command):
-        with open(self.job_outputfile, "w") as out, open(self.job_errfile, "w") as err:
+        with open(self.job_outputfile, "w") as out, open(
+            self.job_errfile, "w"
+        ) as err:
             logger.info(
                 f"Command executed: {command}\n"
                 f"Writing output file to: {self.job_outputfile} and err file to: {self.job_errfile}"
@@ -186,9 +195,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     FAKE = True
 
     def __init__(self, server, scratch=True, fake=True, **kwargs):
-        super().__init__(
-            server=server, scratch=scratch, fake=fake, **kwargs
-        )
+        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     def run(self, job, **kwargs):
         self._prerun(job=job)
@@ -254,9 +261,7 @@ class FakeGaussian:
 
     @property
     def atomic_numbers(self):
-        return [
-            pt.to_atomic_number(s) for s in self.atomic_symbols
-        ]
+        return [pt.to_atomic_number(s) for s in self.atomic_symbols]
 
     @property
     def atomic_coordinates(self):

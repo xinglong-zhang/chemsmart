@@ -258,6 +258,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
     ctx.obj["filename"] = filename
     jobrunner = ctx.obj["jobrunner"]
 
+
 @gaussian.result_callback()
 @click.pass_context
 def gaussian_process_pipeline(ctx, *args, **kwargs):

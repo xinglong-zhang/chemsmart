@@ -40,7 +40,7 @@ def create_logger(
     logger.setLevel(level)
     logger.handlers = []
     formatter = logging.Formatter(
-        '{asctime} - {levelname:6s} - [{name}] {message}',
+        "{asctime} - {levelname:6s} - [{name}] {message}",
         style="{",
     )
 
