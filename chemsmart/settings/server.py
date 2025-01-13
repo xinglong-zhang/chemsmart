@@ -117,7 +117,7 @@ class Server(RegistryMixin):
                 hasattr(server_cls, "SCHEDULER_TYPE")
                 and server_cls.SCHEDULER_TYPE == scheduler_type
             ):
-                return server_cls(name=scheduler_type)()
+                return server_cls(name=scheduler_type)
 
         raise ValueError(
             f"No server class defined for scheduler type: {scheduler_type}. "
