@@ -235,8 +235,8 @@ class SLURMServer(Server):
     NAME = "SLURM"
     SCHEDULER_TYPE = "SLURM"
 
-    def __init__(self, **kwargs):
-        super().__init__(self.NAME, **kwargs)
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
 
 
 class PBSServer(Server):
