@@ -6,6 +6,8 @@ import click
 from chemsmart.utils.utils import create_logger
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.cli.jobrunner import jobrunner_options
+from chemsmart.cli.logger import logger_options
 
 system_type = platform.system()
 
@@ -18,45 +20,15 @@ logger = logging.getLogger(__name__)
 
 @click.group(name="run")
 @click.pass_context
-@click.option(
-    "-s",
-    "--server",
-    type=str,
-    default=None,
-    help="Server. If not specified, will try to automatically determine and use the current server.",
-)
-@click.option(
-    "-n",
-    "--num-processes",
-    type=int,
-    default=1,
-    help="Runs jobs in parallel with specified number of processes.",
-)
-@click.option(
-    "-d", "--debug/--no-debug", default=False, help="Turns on debug logging."
-)
-@click.option(
-    "--fake/--no-fake",
-    default=False,
-    help="If true, fake jobrunners will be used.",
-)
-@click.option(
-    "--scratch/--no-scratch",
-    default=True,  # Default behavior is to use scratch
-    help="Run in scratch mode or without scratch folder.",
-)
-@click.option(
-    "--stream/--no-stream",
-    default=None,
-    help="Turns on logging to stdout.",
-)
+@jobrunner_options
+@logger_options
 def run(
     ctx,
     server,
-    num_processes,
-    debug,
+    mem_gb,
     fake,
     scratch,
+    debug,
     stream,
 ):
     # Set up logging
@@ -71,18 +43,20 @@ def run(
 
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
-    ctx.obj["num_processes"] = num_processes
+    ctx.obj["mem_gb"] = mem_gb
     ctx.obj["jobrunner"] = jobrunner
 
 
 @run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
-    # Retrieve the jobrunner from context
-    jobrunner = ctx.obj["jobrunner"]
+    # will give the following error if without **kwargs:
+    # TypeError: process_pipeline() got an unexpected keyword argument 'stream'
 
-    # Log for debugging
-    logger.debug(f"JobRunner before from_jobtype: {jobrunner}")
+    # Retrieve the jobrunner from context
+    # jobrunner at this stage is an instance of JobRunner class
+    jobrunner = ctx.obj["jobrunner"]
+    mem_gb = ctx.obj["mem_gb"]
 
     # Get the job
     job = args[0]
@@ -90,11 +64,13 @@ def process_pipeline(ctx, *args, **kwargs):
         job = job[0]
 
     # Instantiate a specific jobrunner based on job type
+    # jobrunner at this stage is an instance of specific JobRunner subclass to run the job
     jobrunner = jobrunner.from_jobtype(
         job=job,
         server=jobrunner.server,
         scratch=jobrunner.scratch,  # Propagate scratch
-        fake=jobrunner.fake
+        fake=jobrunner.fake,
+        mem_gb = mem_gb,
     )
 
     # Log for debugging

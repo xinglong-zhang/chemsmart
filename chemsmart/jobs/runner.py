@@ -28,7 +28,7 @@ class JobRunner(RegistryMixin):
     FAKE: bool = False
 
     def __init__(
-        self, server, scratch=False, fake=False, **kwargs
+        self, server, scratch=False, fake=False, mem_gb=None, **kwargs
     ):
         if server is None:
             server = Server.current()
@@ -43,11 +43,18 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = scratch
-        self.fake = fake
-        self.kwargs = kwargs
-
         if self.scratch:
             self._set_scratch()
+
+        self.fake = fake
+
+        if mem_gb is not None:
+            self.mem_gb = mem_gb
+        else:
+            self.mem_gb = self.server.mem_gb
+
+        self.kwargs = kwargs
+
 
     @property
     def scratch_dir(self):
@@ -88,10 +95,6 @@ class JobRunner(RegistryMixin):
     @property
     def num_hours(self):
         return self.server.num_hours
-
-    @property
-    def mem_gb(self):
-        return self.server.mem_gb
 
     @property
     def num_cores(self):
