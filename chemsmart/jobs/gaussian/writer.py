@@ -23,7 +23,7 @@ class GaussianInputWriter(InputWriter):
         else:
             folder = self.job.folder
         job_inputfile = os.path.join(folder, f"{self.job.label}.com")
-        logger.info(f"Writing Gaussian input file: {job_inputfile}")
+        logger.debug(f"Writing Gaussian input file: {job_inputfile}")
         f = open(job_inputfile, "w")
         self._write_gaussian_header(f)
         self._write_route_section(f)
@@ -44,33 +44,42 @@ class GaussianInputWriter(InputWriter):
         f.close()
 
     def _write_gaussian_header(self, f):
+        logger.debug("Writing Gaussian header.")
         if self.job.settings.chk:
+            logger.debug(f"Writing chk file: {self.job.label}.chk")
             f.write(f"%chk={self.job.label}.chk\n")
         num_cores = self.jobrunner.num_cores if not None else 12
         mem_gb = self.jobrunner.mem_gb if not None else 16
+        logger.debug(f"Writing nprocshared={num_cores} and mem={mem_gb}GB.")
         f.write(f"%nprocshared={num_cores}\n")
         f.write(f"%mem={mem_gb}GB\n")
 
     def _write_route_section(self, f):
+        logger.debug("Writing route section.")
         route_string = self.job.settings.route_string
         f.write(route_string + "\n")
         f.write("\n")
 
     def _write_gaussian_title(self, f):
+        logger.debug("Writing Gaussian title.")
         title = self.job.settings.title
         f.write(f"{title}\n")
         f.write("\n")
 
     def _write_charge_and_multiplicity(self, f):
+        logger.debug("Writing charge and multiplicity.")
         charge = self.job.settings.charge
         multiplicity = self.job.settings.multiplicity
         f.write(f"{charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
+        logger.debug("Writing Cartesian coordinates.")
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f)
 
     def _write_pbc(self, f):
+        """Write the periodic boundary conditions section if present in the job settings."""
+        logger.debug("Writing periodic boundary conditions.")
         if self.job.molecule.pbc_conditions:
             for translation_vector in self.job.molecule.translation_vectors:
                 f.write(
@@ -86,6 +95,7 @@ class GaussianInputWriter(InputWriter):
         Given a list or list of lists, write the modredundant section for the constraints.
         Given a dictionary with 'num_steps', 'step_size', and 'coords', write the scan section.
         """
+        logger.debug("Writing modredundant section.")
         modredundant = self.job.settings.modredundant
         if modredundant:
             if isinstance(modredundant, list):
@@ -116,6 +126,7 @@ class GaussianInputWriter(InputWriter):
 
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
+        logger.debug("Writing gen/genecp basis set information.")
         gen_genecp_file = self.job.settings.gen_genecp_file
         heavy_elements = self.job.settings.heavy_elements
         heavy_elements_basis = self.job.settings.heavy_elements_basis
@@ -158,6 +169,7 @@ class GaussianInputWriter(InputWriter):
 
     def _append_custom_solvent_parameters(self, f):
         """Write the custom solvent parameters if present in the job settings."""
+        logger.debug("Writing custom solvent parameters.")
         custom_solvent = self.job.settings.custom_solvent
         if custom_solvent:
             f.write(custom_solvent)
@@ -165,6 +177,7 @@ class GaussianInputWriter(InputWriter):
 
     def _append_job_specific_info(self, f):
         """Write any job specific information that needs to be appended to the input file."""
+        logger.debug("Writing job specific information.")
         job_type = self.job.settings.job_type
         job_label = self.job.label
         if job_type == "nci":
@@ -182,6 +195,7 @@ class GaussianInputWriter(InputWriter):
 
     def _append_other_additional_info(self, f):
         """Write any additional information that needs to be appended to the input file."""
+        logger.debug("Writing other additional information.")
         append_additional_info = self.job.settings.append_additional_info
         if isinstance(append_additional_info, str) and os.path.exists(
             os.path.expanduser(append_additional_info)
@@ -198,6 +212,7 @@ class GaussianInputWriter(InputWriter):
 
     def _write_link_section(self, f):
         """Write the link section for the input file."""
+        logger.debug("Writing link section.")
         if self.job.settings.link:
             f.write("--Link1--\n")
             self._write_gaussian_header(f)
