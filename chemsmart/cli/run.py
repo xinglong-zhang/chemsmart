@@ -53,9 +53,7 @@ def run(
 
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
-    ctx.obj["num_cores"] = num_cores
-    # ctx.obj["mem_gb"] = mem_gb
-    # ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["jobrunner"] = jobrunner
 
 
 @run.result_callback()
@@ -67,8 +65,6 @@ def process_pipeline(ctx, *args, **kwargs):
     # Retrieve the jobrunner from context
     # jobrunner at this stage is an instance of JobRunner class
     jobrunner = ctx.obj["jobrunner"]
-    # num_cores = ctx.obj["num_cores"]
-    # mem_gb = ctx.obj["mem_gb"]
 
     # Get the job
     job = args[0]
