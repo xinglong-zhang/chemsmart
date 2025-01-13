@@ -40,15 +40,22 @@ def run(
     # Instantiate the jobrunner with CLI options
     if server is not None:
         server = Server.from_servename(server)
-    jobrunner = JobRunner(server=server, scratch=scratch, fake=fake)
+    jobrunner = JobRunner(
+        server=server,
+        scratch=scratch,
+        fake=fake,
+        num_cores=num_cores,
+        mem_gb=mem_gb,
+    )
 
     # Log the scratch value for debugging purposes
     logger.debug(f"Scratch value passed from CLI: {scratch}")
 
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
-    ctx.obj["mem_gb"] = mem_gb
-    ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["num_cores"] = num_cores
+    # ctx.obj["mem_gb"] = mem_gb
+    # ctx.obj["jobrunner"] = jobrunner
 
 
 @run.result_callback()
@@ -60,7 +67,8 @@ def process_pipeline(ctx, *args, **kwargs):
     # Retrieve the jobrunner from context
     # jobrunner at this stage is an instance of JobRunner class
     jobrunner = ctx.obj["jobrunner"]
-    mem_gb = ctx.obj["mem_gb"]
+    # num_cores = ctx.obj["num_cores"]
+    # mem_gb = ctx.obj["mem_gb"]
 
     # Get the job
     job = args[0]
@@ -74,7 +82,8 @@ def process_pipeline(ctx, *args, **kwargs):
         server=jobrunner.server,
         scratch=jobrunner.scratch,  # Propagate scratch
         fake=jobrunner.fake,
-        mem_gb=mem_gb,
+        num_cores=jobrunner.num_cores,
+        mem_gb=jobrunner.mem_gb,
     )
 
     # Run the job with the jobrunner

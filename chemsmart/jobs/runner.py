@@ -29,7 +29,13 @@ class JobRunner(RegistryMixin):
     FAKE: bool = False
 
     def __init__(
-        self, server, scratch=False, fake=False, num_cores=None, mem_gb=None, **kwargs
+        self,
+        server,
+        scratch=False,
+        fake=False,
+        num_cores=None,
+        mem_gb=None,
+        **kwargs,
     ):
         if server is None:
             server = Server.current()
