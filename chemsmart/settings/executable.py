@@ -4,7 +4,6 @@ import os.path
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.user import ChemsmartUserSettings
-from tests.conftest import server_yaml_file
 
 user_settings = ChemsmartUserSettings()
 

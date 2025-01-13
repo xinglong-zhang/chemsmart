@@ -134,10 +134,12 @@ class GaussianJobRunner(JobRunner):
                 f"Command executed: {command}\n"
                 f"Writing output file to: {self.job_outputfile} and err file to: {self.job_errfile}"
             )
+            logger.debug(f"Environments for running: {self.executable.env}")
             return subprocess.Popen(
                 shlex.split(command),
                 stdout=out,
                 stderr=err,
+                env=self.executable.env,
                 cwd=self.running_directory,
             )
 
