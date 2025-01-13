@@ -203,8 +203,12 @@ class Server(RegistryMixin):
     @classmethod
     def _from_server_name(cls, server_name):
         """Get server settings from user directory .yaml file based on server name."""
+        if server_name.endswith(".yaml"):
+            server_name = server_name
+        else:
+            server_name = f"{server_name}.yaml"
         server_name_yaml_path = os.path.join(
-            user_settings.user_server_dir, f"{server_name}.yaml"
+            user_settings.user_server_dir, server_name
         )
         user_settings_manager = ServerSettingsManager(
             filename=server_name_yaml_path
@@ -281,8 +285,8 @@ class SLURMServer(YamlServerSettings):
     NAME = "SLURM"
     SCHEDULER_TYPE = "SLURM"
 
-    def __init__(self, name, **kwargs):
-        super().__init__(name, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(filename=f"{self.NAME}.yaml", **kwargs)
 
 
 class PBSServer(YamlServerSettings):
