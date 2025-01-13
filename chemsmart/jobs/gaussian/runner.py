@@ -53,6 +53,11 @@ class GaussianJobRunner(JobRunner):
 
     def __init__(self, server, scratch=True, fake=False, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        logger.debug(f"Jobrunner num cores: {self.num_cores}")
+        logger.debug(f"Jobrunner num hours: {self.num_hours}")
+        logger.debug(f"Jobrunner num gpus: {self.num_gpus}")
+        logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
+        logger.debug(f"Jobrunner num threads: {self.num_threads}")
 
     @property
     @lru_cache(maxsize=12)
