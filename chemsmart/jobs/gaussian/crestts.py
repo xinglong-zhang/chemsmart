@@ -5,11 +5,14 @@ class GaussianCrestTSJob(GaussianJob):
     TYPE = "g16crestts"
 
     def __init__(
-        self, molecules, settings=None, label=None, num_confs_to_opt=None, **kwargs
+        self,
+        molecules,
+        settings=None,
+        label=None,
+        num_confs_to_opt=None,
+        **kwargs,
     ):
-        super().__init__(
-            molecules, settings=settings, label=label, **kwargs
-        )
+        super().__init__(molecules, settings=settings, label=label, **kwargs)
 
         if num_confs_to_opt is None:
             num_confs_to_opt = len(molecules)

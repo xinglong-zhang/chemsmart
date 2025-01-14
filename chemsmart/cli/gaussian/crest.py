@@ -1,6 +1,5 @@
 import click
 import logging
-
 from chemsmart.utils.utils import check_charge_and_multiplicity
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
@@ -8,61 +7,73 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 
 logger = logging.getLogger(__name__)
 
+
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click.option(
-    "-t",
-    "--type",
+    "-j",
+    "--jobtype",
     type=str,
     required=True,
     help="Type of job to run for crest.",
 )
-@click.option('-n', '--num-confs-to-run', type=int, default=None, help='Number of conformers to optimize.')
+@click.option(
+    "-n",
+    "--num-confs-to-run",
+    type=int,
+    default=None,
+    help="Number of conformers to optimize.",
+)
 @click.pass_context
-def crest(ctx, type, num_confs_to_run, skip_completed, **kwargs):
+def crest(ctx, jobtype, num_confs_to_run, skip_completed, **kwargs):
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    if type.lower() == "opt":
+
+    if jobtype.lower() == "opt":
         settings = project_settings.opt_settings()
-    elif type.lower() == "ts":
+    elif jobtype.lower() == "ts":
         settings = project_settings.ts_settings()
-    elif type.lower() == "modred":
+    elif jobtype.lower() == "modred":
         settings = project_settings.modred_settings()
-    elif type.lower() == "irc":
+    elif jobtype.lower() == "irc":
         settings = project_settings.irc_settings()
-    elif type.lower() == "scan":
+    elif jobtype.lower() == "scan":
         settings = project_settings.scan_settings()
-    elif type.lower() == "sp":
+    elif jobtype.lower() == "sp":
         settings = project_settings.sp_settings()
-    elif type.lower() == "td":
+    elif jobtype.lower() == "td":
         settings = project_settings.td_settings()
-    elif type.lower() == "wbi":
+    elif jobtype.lower() == "wbi":
         settings = project_settings.wbi_settings()
-    elif type.lower() == "nci":
+    elif jobtype.lower() == "nci":
         settings = project_settings.nci_settings()
-    else:
-        raise ValueError(f"Invalid crest type: {type}")
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
-    crest_settings = settings.merge(job_settings, keywords=keywords)
+    settings = settings.merge(job_settings, keywords=keywords)
 
-    check_charge_and_multiplicity(crest_settings)
+    check_charge_and_multiplicity(settings)
 
     # get molecule
-    molecules = ctx.obj["molecules"]  # use all molecules as a list for crest jobs
+    molecules = ctx.obj[
+        "molecules"
+    ]  # use all molecules as a list for crest jobs
 
     # get label for the job
     label = ctx.obj["label"]
 
-    logger.info(f"Crest {type} settings from project: {crest_settings.__dict__}")
+    logger.info(f"Crest {type} settings from project: {settings.__dict__}")
 
-    from chemsmart.jobs.gaussian.job import GaussianJob
-    crest_jobs = [GaussianJob.from_jobtype(jobtype=type, molecule=molecule, settings=crest_settings, label=label,
-                                     skip_completed=skip_completed, **kwargs) for molecule in molecules]
-    crest_jobs_to_run = crest_jobs if num_confs_to_run is None else crest_jobs[:num_confs_to_run]
-    return crest_jobs_to_run
+    from chemsmart.jobs.gaussian import GaussianCrestJob
+
+    return GaussianCrestJob(
+        molecules=molecules,
+        settings=settings,
+        label=label,
+        num_confs_to_run=num_confs_to_run,
+        skip_completed=skip_completed,
+        **kwargs,
+    )

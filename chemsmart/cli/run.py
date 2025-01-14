@@ -1,7 +1,6 @@
 import contextlib
 import logging
 import platform
-from math import lgamma
 from multiprocessing import set_start_method
 import click
 from chemsmart.utils.logger import create_logger
@@ -77,22 +76,26 @@ def process_pipeline(ctx, *args, **kwargs):
     # Instantiate a specific jobrunner based on job type
     # jobrunner at this stage is an instance of specific JobRunner subclass to run the job
     if isinstance(job, Job):
-        jobrunner = jobrunner.from_job(job=job, server=jobrunner.server, scratch=jobrunner.scratch, fake=jobrunner.fake,
-                                       num_cores=jobrunner.num_cores, mem_gb=jobrunner.mem_gb)
+        jobrunner = jobrunner.from_job(
+            job=job,
+            server=jobrunner.server,
+            scratch=jobrunner.scratch,
+            fake=jobrunner.fake,
+            num_cores=jobrunner.num_cores,
+            mem_gb=jobrunner.mem_gb,
+        )
         # Run the job with the jobrunner
         job.run(jobrunner=jobrunner)
 
-    elif isinstance(job, list):
-        jobrunner = jobrunner.from_job(job=job[0], server=jobrunner.server, scratch=jobrunner.scratch,
-                                       fake=jobrunner.fake,
-                                       num_cores=jobrunner.num_cores, mem_gb=jobrunner.mem_gb)
-        for i, j in enumerate(job):
-            j.label = f"{j.label}_c{i+1}"
-            logger.debug(f"Job to be run: {j}")
-            logger.debug(f"Jobrunner to be used: {jobrunner}")
-            j.run(jobrunner=jobrunner)
-
-
+    # elif isinstance(job, list):
+    #     jobrunner = jobrunner.from_job(job=job[0], server=jobrunner.server, scratch=jobrunner.scratch,
+    #                                    fake=jobrunner.fake,
+    #                                    num_cores=jobrunner.num_cores, mem_gb=jobrunner.mem_gb)
+    #     for i, j in enumerate(job):
+    #         j.label = f"{j.label}_c{i+1}"
+    #         logger.debug(f"Job to be run: {j}")
+    #         logger.debug(f"Jobrunner to be used: {jobrunner}")
+    #         j.run(jobrunner=jobrunner)
 
 
 for subcommand in subcommands:

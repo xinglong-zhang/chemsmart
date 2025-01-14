@@ -26,6 +26,7 @@ class GaussianJobRunner(JobRunner):
     # creates job runner process
     # combines information about server and program
     JOBTYPES = [
+        "g16crest",
         "g16crestopt",
         "g16crestts",
         "g16job",

@@ -11,7 +11,13 @@ logger = logging.getLogger(__name__)
 
 @gaussian.command("crestopt", cls=MyCommand)
 @click_job_options
-@click.option('-n', '--num-confs-to-opt', type=int, default=None, help='Number of conformers to optimize.')
+@click.option(
+    "-n",
+    "--num-confs-to-opt",
+    type=int,
+    default=None,
+    help="Number of conformers to optimize.",
+)
 @click.pass_context
 def crestopt(ctx, num_confs_to_opt, skip_completed, **kwargs):
     # get settings from project
@@ -29,7 +35,9 @@ def crestopt(ctx, num_confs_to_opt, skip_completed, **kwargs):
     check_charge_and_multiplicity(opt_settings)
 
     # get molecule
-    molecules = ctx.obj["molecules"]  # use all molecules as a list for crestopt
+    molecules = ctx.obj[
+        "molecules"
+    ]  # use all molecules as a list for crestopt
 
     # get label for the job
     label = ctx.obj["label"]

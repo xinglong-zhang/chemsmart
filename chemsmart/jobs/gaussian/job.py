@@ -142,9 +142,12 @@ class GaussianJob(Job):
         )
 
     @classmethod
-    def from_jobtype(cls, jobtype, molecule, settings=None, label=None, **kwargs):
+    def from_jobtype(
+        cls, jobtype, molecule, settings=None, label=None, **kwargs
+    ):
         if jobtype.lower() == "opt":
             from chemsmart.jobs.gaussian.opt import GaussianOptJob
+
             logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
 
             return GaussianOptJob(

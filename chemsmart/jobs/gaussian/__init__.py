@@ -1,3 +1,4 @@
+from .crest import GaussianCrestJob
 from .crestopt import GaussianCrestOptJob
 from .crestts import GaussianCrestTSJob
 from .customjob import GaussianCustomJob

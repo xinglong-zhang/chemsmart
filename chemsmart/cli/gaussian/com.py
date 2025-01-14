@@ -27,13 +27,13 @@ def com(ctx, skip_completed, **kwargs):
     check_charge_and_multiplicity(opt_settings)
     filename = ctx.obj["filename"]
     if filename is not None:
-        opt_settings.input_string = Gaussian16Input(filename=filename).content_lines_string
+        opt_settings.input_string = Gaussian16Input(
+            filename=filename
+        ).content_lines_string
 
     # get molecule
     molecules = ctx.obj["molecules"]
-    molecule = molecules[
-        -1
-    ]
+    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]

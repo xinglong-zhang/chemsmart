@@ -1,24 +1,24 @@
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 
-class GaussianCrestOptJob(GaussianJob):
-    TYPE = "g16crestopt"
+class GaussianCrestJob(GaussianJob):
+    TYPE = "g16crest"
 
     def __init__(
         self,
         molecules,
         settings=None,
         label=None,
-        num_confs_to_opt=None,
+        num_confs_to_run=None,
         **kwargs,
     ):
         super().__init__(molecules, settings=settings, label=label, **kwargs)
 
-        if num_confs_to_opt is None:
-            num_confs_to_opt = len(molecules)
+        if num_confs_to_run is None:
+            num_confs_to_run = len(molecules)
 
         self.all_conformers = molecules
-        self.num_confs_to_opt = num_confs_to_opt
+        self.num_confs_to_opt = num_confs_to_run
 
     @property
     def num_conformers(self):
