@@ -49,7 +49,7 @@ class MolecularJobSettings:
         self.solvent_id = solvent_id
         self.additional_route_parameters = additional_route_parameters
         self.route_to_be_written = route_to_be_written
-        self.modredundant = modred
+        self.modred = modred
         self.gen_genecp_file = gen_genecp_file
         self.heavy_elements = heavy_elements
         self.heavy_elements_basis = heavy_elements_basis
