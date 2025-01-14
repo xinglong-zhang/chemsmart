@@ -10,6 +10,7 @@ from functools import cached_property, lru_cache
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
+from sympy import symbols
 
 p = pt()
 
@@ -75,6 +76,14 @@ class Molecule:
         self.forces = forces
         self.velocities = velocities
         self.info = info
+
+    def __len__(self):
+        return len(self.chemical_symbols)
+
+    def __getitem__(self, idx):
+        symbols = [self.symbols[i - 1] for i in idx]
+        positions = [self.positions[i - 1] for i in idx]
+        return type(self)(symbols=symbols, positions=positions)
 
     @property
     def empirical_formula(self):
