@@ -10,7 +10,6 @@ from functools import cached_property, lru_cache
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
-from sympy import symbols
 
 p = pt()
 

@@ -1,5 +1,3 @@
-from QUIP.bin.coverage_report import modules
-from ase.build import molecule
 from chemsmart.utils.utils import get_list_from_string_range
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
