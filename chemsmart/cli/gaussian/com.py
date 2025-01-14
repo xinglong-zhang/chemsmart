@@ -33,9 +33,7 @@ def com(ctx, skip_completed, **kwargs):
     molecules = ctx.obj["molecules"]
     molecule = molecules[
         -1
-    ]  # get last atom from list of atoms from cli.gaussian.py subcommands
-    # index = '-1' would access the right structure from the list of atoms returned from cli.gaussian.py subcommands
-    # user specified index was used there to return the right atoms and store it as a list of single element/itself
+    ]
 
     # get label for the job
     label = ctx.obj["label"]
