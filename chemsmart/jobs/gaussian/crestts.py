@@ -5,16 +5,16 @@ class GaussianCrestTSJob(GaussianJob):
     TYPE = "g16crestts"
 
     def __init__(
-        self, folder, atoms, settings, num_confs_to_opt=None, **kwargs
+        self, molecules, settings=None, label=None, num_confs_to_opt=None, **kwargs
     ):
         super().__init__(
-            folder=folder, atoms=atoms, settings=settings, **kwargs
+            molecules, settings=settings, label=label, **kwargs
         )
 
         if num_confs_to_opt is None:
-            num_confs_to_opt = len(atoms)
+            num_confs_to_opt = len(molecules)
 
-        self.all_conformers = atoms
+        self.all_conformers = molecules
         self.num_confs_to_opt = num_confs_to_opt
 
     @property
@@ -51,20 +51,19 @@ class GaussianCrestTSJob(GaussianJob):
             label = f"{self.label}_c{i + 1}"  # 1-indexed for conformers
             jobs += [
                 GaussianGeneralJob(
-                    folder=self.folder,
-                    atoms=self.all_conformers[i],
+                    molecule=self.all_conformers[i],
                     settings=self.settings,
                     label=label,
                 )
             ]
         return jobs
 
-    def _run_all_jobs(self, jobrunner, queue_manager=None):
+    def _run_all_jobs(self, jobrunner):
         for job in self.all_conformers_opt_jobs[: self.num_confs_to_opt]:
-            job.run(jobrunner=jobrunner, queue_manager=queue_manager)
+            job.run(jobrunner=jobrunner)
 
-    def _run(self, jobrunner, queue_manager=None, **kwargs):
-        self._run_all_jobs(jobrunner=jobrunner, queue_manager=queue_manager)
+    def _run(self, jobrunner):
+        self._run_all_jobs(jobrunner=jobrunner)
 
     def is_complete(self):
         return self._run_all_crest_opt_jobs_are_complete()

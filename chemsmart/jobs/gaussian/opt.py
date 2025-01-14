@@ -4,7 +4,7 @@ from chemsmart.jobs.gaussian.job import GaussianJob
 logger = logging.getLogger(__name__)
 
 
-class GaussianGeomOptJob(GaussianJob):
+class GaussianOptJob(GaussianJob):
     TYPE = "g16opt"
 
     def __init__(self, molecule, settings, label, **kwargs):

@@ -73,14 +73,8 @@ def process_pipeline(ctx, *args, **kwargs):
 
     # Instantiate a specific jobrunner based on job type
     # jobrunner at this stage is an instance of specific JobRunner subclass to run the job
-    jobrunner = jobrunner.from_jobtype(
-        job=job,
-        server=jobrunner.server,
-        scratch=jobrunner.scratch,  # Propagate scratch
-        fake=jobrunner.fake,
-        num_cores=jobrunner.num_cores,
-        mem_gb=jobrunner.mem_gb,
-    )
+    jobrunner = jobrunner.from_job(job=job, server=jobrunner.server, scratch=jobrunner.scratch, fake=jobrunner.fake,
+                                   num_cores=jobrunner.num_cores, mem_gb=jobrunner.mem_gb)
 
     # Run the job with the jobrunner
     job.run(jobrunner=jobrunner)

@@ -60,9 +60,9 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     logger.info(f"Opt settings from project: {opt_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian.opt import GaussianGeomOptJob
+    from chemsmart.jobs.gaussian.opt import GaussianOptJob
 
-    return GaussianGeomOptJob(
+    return GaussianOptJob(
         molecule=molecule,
         settings=opt_settings,
         label=label,

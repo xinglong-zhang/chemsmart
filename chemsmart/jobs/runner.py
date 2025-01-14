@@ -173,12 +173,13 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_jobtype(cls, job, server, scratch=False, fake=False, **kwargs):
+    def from_job(cls, job, server, scratch=False, fake=False, **kwargs):
         runners = cls.subclasses()
         jobtype = job.TYPE
 
         for runner in runners:
             runner_jobtypes = runner.JOBTYPES
+            logger.debug(f"Runner jobtypes: {runner_jobtypes}")
 
             if runner_jobtypes is NotImplemented:
                 runner_jobtypes = []
@@ -189,6 +190,6 @@ class JobRunner(RegistryMixin):
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"
-            f"Runners in registry: {cls.subclasses()}. \n "
+            f"Runners in registry: {runners}. \n "
             f"Fake: {fake}"
         )
