@@ -1,7 +1,7 @@
 import click
 import logging
-
 from chemsmart.cli.job import click_job_options
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 from chemsmart.cli.gaussian.gaussian import gaussian
@@ -9,16 +9,10 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("opt", cls=MyCommand)
+@gaussian.command("com", cls=MyCommand)
 @click_job_options
-@click.option(
-    "-f",
-    "--freeze-atoms",
-    type=str,
-    help="Indices of atoms to freeze for constrained optimization.",
-)
 @click.pass_context
-def opt(ctx, freeze_atoms, skip_completed, **kwargs):
+def com(ctx, skip_completed, **kwargs):
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -30,8 +24,10 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
-
     check_charge_and_multiplicity(opt_settings)
+    filename = ctx.obj["filename"]
+    if filename is not None:
+        opt_settings.input_string = Gaussian16Input(filename=filename).content_lines_string
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -44,28 +40,12 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     # get label for the job
     label = ctx.obj["label"]
 
-    # Set atoms to freeze
+    from chemsmart.jobs.gaussian import GaussianComJob
 
-    from chemsmart.utils.utils import (
-        get_list_from_string_range,
-        convert_list_to_gaussian_frozen_list,
-    )
-
-    if freeze_atoms is not None:
-        frozen_atoms_list = get_list_from_string_range(freeze_atoms)
-        logger.debug(f"Freezing atoms: {frozen_atoms_list}")
-        molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
-            frozen_atoms_list, molecule
-        )
-
-    logger.info(f"Opt settings from project: {opt_settings.__dict__}")
-
-    from chemsmart.jobs.gaussian import GaussianGeomOptJob
-
-    return GaussianGeomOptJob(
+    return GaussianComJob(
         molecule=molecule,
         settings=opt_settings,
         label=label,
         skip_completed=skip_completed,
-        **kwargs,
+        **kwargs
     )

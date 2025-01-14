@@ -364,3 +364,10 @@ def sdf2molecule(sdf_lines):
     return Molecule.from_symbols_and_positions_and_pbc_conditions(
         list_of_symbols=list_of_symbols, positions=cart_coords
     )
+
+
+def check_charge_and_multiplicity(settings):
+    if settings.charge is None or settings.multiplicity is None:
+        raise ValueError(
+            "Charge and multiplicity must be set for Gaussian jobs."
+        )
