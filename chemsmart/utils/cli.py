@@ -52,3 +52,53 @@ class MyCommand(click.Command):
     def invoke(self, ctx):
         _add_subcommand_info_to_ctx(ctx)
         return super().invoke(ctx)
+
+
+def get_setting_from_jobtype(
+    project_settings, jobtype, coordinates, step_size, num_steps
+):
+    if jobtype is None:
+        raise ValueError("Jobtype must be provided for crest job.")
+
+    if jobtype.lower() == "opt":
+        settings = project_settings.opt_settings()
+    elif jobtype.lower() == "ts":
+        settings = project_settings.ts_settings()
+    elif jobtype.lower() == "modred":
+        assert (
+            coordinates is not None
+        ), "Coordinates must be provided for modred job"
+        settings = project_settings.modred_settings()
+    elif jobtype.lower() == "irc":
+        settings = project_settings.irc_settings()
+    elif jobtype.lower() == "scan":
+        assert (
+            coordinates is not None
+        ), "Coordinates must be provided for scan job"
+        assert step_size is not None, "Step size must be provided for scan job"
+        assert (
+            num_steps is not None
+        ), "Number of steps must be provided for scan job"
+        settings = project_settings.scan_settings()
+    elif jobtype.lower() == "sp":
+        settings = project_settings.sp_settings()
+    elif jobtype.lower() == "td":
+        settings = project_settings.td_settings()
+    elif jobtype.lower() == "wbi":
+        settings = project_settings.wbi_settings()
+    elif jobtype.lower() == "nci":
+        settings = project_settings.nci_settings()
+
+    if coordinates is not None:
+        modred_info = eval(coordinates)
+        if jobtype == "modred":
+            settings.modred = modred_info
+        elif jobtype == "scan":
+            scan_info = {
+                "coords": modred_info,
+                "num_steps": int(num_steps),
+                "step_size": float(step_size),
+            }
+            settings.modred = scan_info
+
+    return settings

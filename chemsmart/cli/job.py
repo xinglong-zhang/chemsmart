@@ -28,7 +28,7 @@ def click_gaussian_link_jobs_options(f):
         "-j",
         "--jobtype",
         type=str,
-        default="opt",
+        default=None,
         help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
     )
     @click.option(

@@ -231,11 +231,10 @@ class GaussianInputWriter(InputWriter):
         if self.job.settings.link:
             f.write("--Link1--\n")
             self._write_gaussian_header(f)
-            f.write(f"# {self.job.settings.link_route_string}\n")
+            f.write(f"{self.job.settings.link_route_string}\n")
             f.write("\n")
             self._write_gaussian_title(f)
             self._write_charge_and_multiplicity(f)
-            f.write("\n")
             self._append_modredundant(f)
             self._append_gen_genecp_basis(f)  # then write genecp info
             self._append_custom_solvent_parameters(

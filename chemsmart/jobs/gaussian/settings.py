@@ -591,20 +591,26 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         self.stable = stable
         self.guess = guess
 
-        logger.debug(
-            f"Route for link section {self}: {self.link_route_string}"
-        )
-
     @property
     def link_route_string(self):
         if self.link_route is not None:
             link_route_string = self.link_route
+            if self.functional not in self.link_route:
+                link_route_string += f" {self.functional}"
+            if self.basis not in self.link_route:
+                link_route_string += f" {self.basis}"
             if "geom=check" not in self.link_route:
                 link_route_string += " geom=check"
             if "guess=read" not in self.link_route:
                 link_route_string += " guess=read"
+            logger.debug(
+                f"Link route for settings {self}: {link_route_string}"
+            )
             return link_route_string
-        return self._get_link_route_string_from_jobtype()
+
+        link_route_string = self._get_link_route_string_from_jobtype()
+        logger.debug(f"Link route for settings {self}: {link_route_string}")
+        return link_route_string
 
     def _get_link_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
