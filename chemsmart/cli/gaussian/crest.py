@@ -4,10 +4,11 @@ import logging
 from chemsmart.utils.utils import check_charge_and_multiplicity
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
+from chemsmart.cli.gaussian.gaussian import gaussian
 
 logger = logging.getLogger(__name__)
 
-@click.command(cls=MyCommand)
+@gaussian.command(cls=MyCommand)
 @click_job_options
 @click.option(
     "-t",
@@ -16,8 +17,9 @@ logger = logging.getLogger(__name__)
     required=True,
     help="Type of job to run for crest.",
 )
+@click.option('-n', '--num-confs-to-run', type=int, default=None, help='Number of conformers to optimize.')
 @click.pass_context
-def crest(ctx, type, skip_completed, **kwargs):
+def crest(ctx, type, num_confs_to_run, skip_completed, **kwargs):
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     if type.lower() == "opt":
@@ -60,12 +62,7 @@ def crest(ctx, type, skip_completed, **kwargs):
     logger.info(f"Crest {type} settings from project: {crest_settings.__dict__}")
 
     from chemsmart.jobs.gaussian.job import GaussianJob
-
-    return GaussianJob.from_jobtype(
-        jobtype=type,
-        molecules=molecules,
-        settings=crest_settings,
-        label=label,
-        skip_completed=skip_completed,
-        **kwargs,
-    )
+    crest_jobs = [GaussianJob.from_jobtype(jobtype=type, molecule=molecule, settings=crest_settings, label=label,
+                                     skip_completed=skip_completed, **kwargs) for molecule in molecules]
+    crest_jobs_to_run = crest_jobs if num_confs_to_run is None else crest_jobs[:num_confs_to_run]
+    return crest_jobs_to_run

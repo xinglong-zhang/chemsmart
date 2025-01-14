@@ -449,15 +449,18 @@ class YAMLFileMixin(FileMixin):
 
 
 class RegistryMeta(type):
-    """Metaclass to ensure each class has its own _REGISTRY."""
+    """Metaclass to ensure all subclasses are registered in the root class's _REGISTRY."""
 
     def __init__(cls, name, bases, dct):
         super().__init__(name, bases, dct)
+        # Only initialize _REGISTRY in the root parent class
         if not hasattr(cls, "_REGISTRY"):
             cls._REGISTRY = []
 
 
 class RegistryMixin(metaclass=RegistryMeta):
+    """Mixin to register subclasses in a shared registry."""
+
     REGISTERABLE = True
 
     @classmethod
@@ -477,6 +480,7 @@ class RegistryMixin(metaclass=RegistryMeta):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if cls.REGISTERABLE:
+            # Append the subclass to the root _REGISTRY
             cls._REGISTRY.append(cls)
 
 

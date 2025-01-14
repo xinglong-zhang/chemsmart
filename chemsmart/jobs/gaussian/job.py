@@ -141,6 +141,35 @@ class GaussianJob(Job):
             **kwargs,
         )
 
+    @classmethod
+    def from_jobtype(cls, jobtype, molecule, settings=None, label=None, **kwargs):
+        if jobtype.lower() == "opt":
+            from chemsmart.jobs.gaussian.opt import GaussianOptJob
+            logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
+
+            return GaussianOptJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        elif jobtype.lower() == "com":
+            return GaussianComJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        elif jobtype.lower() == "g16":
+            return GaussianGeneralJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Invalid job type: {jobtype}")
+
 
 class GaussianComJob(GaussianJob):
     """Runs any given .com Gaussian input file as is."""
