@@ -3,8 +3,6 @@ import functools
 import logging
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
@@ -256,7 +254,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
-    # jobrunner = ctx.obj["jobrunner"]
     ctx.obj["filename"] = filename
 
 
