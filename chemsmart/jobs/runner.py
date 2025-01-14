@@ -141,7 +141,6 @@ class JobRunner(RegistryMixin):
 
     @abstractmethod
     def _get_command(self):
-        command = self.server
         raise NotImplementedError
 
     @abstractmethod

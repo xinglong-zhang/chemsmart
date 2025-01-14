@@ -46,14 +46,20 @@ def crest(
     elif jobtype.lower() == "ts":
         crest_settings = project_settings.ts_settings()
     elif jobtype.lower() == "modred":
-        assert coordinates is not None, "Coordinates must be provided for modred job"
+        assert (
+            coordinates is not None
+        ), "Coordinates must be provided for modred job"
         crest_settings = project_settings.modred_settings()
     elif jobtype.lower() == "irc":
         crest_settings = project_settings.irc_settings()
     elif jobtype.lower() == "scan":
-        assert coordinates is not None, "Coordinates must be provided for scan job"
+        assert (
+            coordinates is not None
+        ), "Coordinates must be provided for scan job"
         assert step_size is not None, "Step size must be provided for scan job"
-        assert num_steps is not None, "Number of steps must be provided for scan job"
+        assert (
+            num_steps is not None
+        ), "Number of steps must be provided for scan job"
         crest_settings = project_settings.scan_settings()
     elif jobtype.lower() == "sp":
         crest_settings = project_settings.sp_settings()

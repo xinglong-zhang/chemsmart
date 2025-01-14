@@ -4,6 +4,7 @@ import logging
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +153,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
 
-    from chemsmart.utils.utils import string2index
-
     # get project settings
     project_settings = GaussianProjectSettings.from_project(project)
 
@@ -242,8 +241,8 @@ def gaussian(  # noqa: PLR0912, PLR0915
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        molecules = molecules[string2index(index)]
-        molecules = [molecules]
+        list_of_indices = get_list_from_string_range(index)
+        molecules = [molecules[i - 1] for i in list_of_indices]
 
     # store objects
     ctx.obj["project_settings"] = project_settings
