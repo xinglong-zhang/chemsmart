@@ -290,7 +290,7 @@ def get_prepend_string_list_from_modred_free_format(
     prepend_string_list = []
     if not isinstance(input_modred, list):
         raise ValueError(
-            f"Required input for modredundant coordinates should be a list of lists "
+            f"Required input for modred coordinates should be a list of lists "
             f"e.g., [[1,2],[5,6]] or a list e.g., [1,2].\n "
             f"But the given input is {input_modred} instead!"
         )

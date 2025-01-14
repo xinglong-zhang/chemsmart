@@ -73,7 +73,7 @@ class TestRouteString:
         assert r1d.additional_route_parameters is None
 
     def test_read_route_string_standard5(self):
-        s1e = "#p opt=modredundant freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
+        s1e = "#p opt=modred freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
         r1e = GaussianRoute(s1e)
         assert r1e.functional == "tpsstpss empiricaldispersion=gd3bj"
         assert (
@@ -231,7 +231,7 @@ class TestGaussian16Input:
         assert g16_modred.additional_opt_options_in_route is None
         assert g16_modred.additional_route_parameters is None
         assert g16_modred.job_type == "modred"
-        assert g16_modred.modredundant == [[2, 12], [9, 2]]
+        assert g16_modred.modred == [[2, 12], [9, 2]]
         assert g16_modred.functional == "m062x"
         assert g16_modred.basis == "def2svp"
 
@@ -259,7 +259,7 @@ class TestGaussian16Input:
         assert g16_scan.additional_opt_options_in_route is None
         assert g16_scan.additional_route_parameters is None
         assert g16_scan.job_type == "modred"
-        assert g16_scan.modredundant == {
+        assert g16_scan.modred == {
             "coords": [[2, 12], [9, 2]],
             "num_steps": 10,
             "step_size": 0.05,
@@ -299,7 +299,7 @@ class TestGaussian16Input:
         assert g16_pbc_1d.additional_opt_options_in_route is None
         assert g16_pbc_1d.additional_route_parameters is None
         assert g16_pbc_1d.job_type == "sp"
-        assert g16_pbc_1d.modredundant is None
+        assert g16_pbc_1d.modred is None
         assert g16_pbc_1d.functional == "pbepbe"
         assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
 

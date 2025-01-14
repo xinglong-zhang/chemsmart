@@ -19,7 +19,7 @@ class Gaussian16Input(GaussianFileMixin):
         # content_groups[1] gives the title
         # content_groups[2] gives the charge/multiplicity and the xyz coordinates
         # content_groups[3:] gives everything else that are appended at the end of the coordinates:
-        # modredundant, followed by gen/genecp, then custom solvent definitions - the details vary as it
+        # modred, followed by gen/genecp, then custom solvent definitions - the details vary as it
         depends on the actual calculation
         # may need to be updated if there are job specific sections appended at the end.
         """
@@ -35,11 +35,10 @@ class Gaussian16Input(GaussianFileMixin):
     @property
     def modredundant_group(self):
         if (
-            "modredundant" in self.route_string
-            or "modred" in self.route_string
+            "modred" in self.route_string or "modred" in self.route_string
         ) and self.num_content_blocks > 3:
-            # in case the input .com file has opt=modredundant
-            # in route but no modredundant section at the end
+            # in case the input .com file has opt=modred
+            # in route but no modred section at the end
             return self.content_groups[3]
 
     @property
@@ -177,24 +176,24 @@ class Gaussian16Input(GaussianFileMixin):
         if "gen" not in self.basis:
             return None
         if (
-            "modredundant" in self.route_string
+            "modred" in self.route_string
             and "solvent=generic" in self.route_string
         ):
             return self.content_groups[4:-1]
         if (
-            "modredundant" in self.route_string
+            "modred" in self.route_string
             and "solvent=generic" not in self.route_string
         ):
             return self.content_groups[
                 4:
             ]  # need to change if there are additional append info after these
         if (
-            "modredundant" not in self.route_string
+            "modred" not in self.route_string
             and "solvent=generic" in self.route_string
         ):
             return self.content_groups[3:-1]
         if (
-            "modredundant" not in self.route_string
+            "modred" not in self.route_string
             and "solvent=generic" not in self.route_string
         ):
             return self.content_groups[3:]

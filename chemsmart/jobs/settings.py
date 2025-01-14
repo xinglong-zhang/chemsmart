@@ -26,7 +26,7 @@ class MolecularJobSettings:
         solvent_id=None,
         additional_route_parameters=None,
         route_to_be_written=None,
-        modredundant=None,
+        modred=None,
         gen_genecp_file=None,
         heavy_elements=None,
         heavy_elements_basis=None,
@@ -49,7 +49,7 @@ class MolecularJobSettings:
         self.solvent_id = solvent_id
         self.additional_route_parameters = additional_route_parameters
         self.route_to_be_written = route_to_be_written
-        self.modredundant = modredundant
+        self.modredundant = modred
         self.gen_genecp_file = gen_genecp_file
         self.heavy_elements = heavy_elements
         self.heavy_elements_basis = heavy_elements_basis
@@ -77,7 +77,7 @@ def read_molecular_job_yaml(filename):
     # job types
     gas_phase_jobs = [
         "opt",
-        "modredundant",
+        "modred",
         "ts",
         "irc",
         "scan",

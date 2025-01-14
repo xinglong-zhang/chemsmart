@@ -500,7 +500,7 @@ class ORCAJobSettings(MolecularJobSettings):
 
     def _write_modred_if_list(self, f, modred):
         f.write("  Constraints\n")
-        # append for modredundant jobs
+        # append for modred jobs
         # 'self.modred' as list of lists, or a single list if only one fixed constraint
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
             input_modred=modred, program_type="orca"

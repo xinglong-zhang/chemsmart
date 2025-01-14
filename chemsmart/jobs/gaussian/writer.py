@@ -105,16 +105,17 @@ class GaussianInputWriter(InputWriter):
             f.write("\n")
 
     def _append_modredundant(self, f):
-        """Write modredundant section if present in the job settings.
-        Given a list or list of lists, write the modredundant section for the constraints.
+        """Write modred section if present in the job settings.
+        Given a list or list of lists, write the modred section for the constraints.
         Given a dictionary with 'num_steps', 'step_size', and 'coords', write the scan section.
         """
-        logger.debug("Writing modredundant section.")
-        modredundant = self.job.settings.modredundant
+        logger.debug("Writing modred section.")
+        modredundant = self.job.settings.modred
         if modredundant:
+            f.write("\n")
             if isinstance(modredundant, list):
                 # for modredunant job
-                # modredundant = [[1,2], [3,4]]
+                # modred = [[1,2], [3,4]]
                 prepend_string_list = (
                     get_prepend_string_list_from_modred_free_format(
                         input_modred=modredundant
@@ -125,7 +126,7 @@ class GaussianInputWriter(InputWriter):
 
             elif isinstance(modredundant, dict):
                 # for scanning job
-                # modredundant = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
+                # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
                 coords_list = modredundant["coords"]
                 prepend_string_list = (
                     get_prepend_string_list_from_modred_free_format(

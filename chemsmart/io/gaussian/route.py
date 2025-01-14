@@ -98,10 +98,10 @@ class GaussianRoute:
         elif (
             "opt" in self.route_string
             and "ts" not in self.route_string
-            and "modredundant" not in self.route_string
+            and "modred" not in self.route_string
         ):
             job_type = "opt"
-        elif "opt=modredundant" in self.route_string:
+        elif "opt=modred" in self.route_string:
             job_type = "modred"  # would include scan jobs too
         elif "irc" in self.route_string and "forward" in self.route_string:
             job_type = "ircf"

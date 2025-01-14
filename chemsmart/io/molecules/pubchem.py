@@ -10,10 +10,8 @@ from io import StringIO
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError, URLError
 
-from ase.data.pubchem import PubchemData, analyze_input, base_url
-from ase.io import read
+from ase.data.pubchem import analyze_input, base_url
 from chemsmart.io.molecules.structure import Molecule
-from periodictable.core import isisotope
 
 try:
     import rdkit

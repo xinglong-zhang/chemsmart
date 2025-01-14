@@ -216,7 +216,7 @@ class Gaussian16Output(GaussianFileMixin):
         return self.last_structure
 
     ######################### the following properties relate to intermediate geometry optimizations
-    # for a constrained opt in e.g, scan/modredundant job
+    # for a constrained opt in e.g, scan/modred job
 
     @cached_property
     def intermediate_steps(self):
@@ -286,7 +286,7 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     def _get_modredundant_group(self):
-        if "modredundant" in self.route_string:
+        if "modred" in self.route_string:
             for i, line in enumerate(self.contents):
                 if line.startswith(
                     "The following ModRedundant input section has been read:"

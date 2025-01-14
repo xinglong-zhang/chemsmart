@@ -4,7 +4,6 @@ import ase
 import copy
 import logging
 import numpy as np
-import requests
 from ase.symbols import Symbols
 from ase.io.formats import string2index
 from functools import cached_property, lru_cache

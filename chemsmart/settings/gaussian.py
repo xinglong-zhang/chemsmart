@@ -39,9 +39,9 @@ class GaussianProjectSettings(RegistryMixin):
         return settings
 
     def modred_settings(self):
-        """Gaussian default settings for modredundant job."""
+        """Gaussian default settings for modred job."""
         settings = self.main_settings().copy()
-        settings.job_type = "modredundant"
+        settings.job_type = "modred"
         return settings
 
     def ts_settings(self):
@@ -188,9 +188,7 @@ class YamlGaussianProjectSettingsBuilder:
 
     def build(self):
         opt_settings = self._project_settings_for_job(job_type="opt")
-        modred_settings = self._project_settings_for_job(
-            job_type="modredundant"
-        )
+        modred_settings = self._project_settings_for_job(job_type="modred")
         ts_settings = self._project_settings_for_job(job_type="ts")
         irc_settings = self._project_settings_for_job(job_type="irc")
         scan_settings = self._project_settings_for_job(job_type="scan")

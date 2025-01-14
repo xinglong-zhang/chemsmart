@@ -70,13 +70,13 @@ class GaussianFileMixin(FileMixin):
         raise NotImplementedError("Subclasses must implement `_get_route`.")
 
     @property
-    def modredundant(self):
+    def modred(self):
         return self._get_modredundant_conditions()
 
     def _get_modredundant_conditions(self):
         modred = None
         if (
-            "modredundant" in self.route_string
+            "modred" in self.route_string
             and self.modredundant_group is not None
         ):
             for line in self.modredundant_group:
@@ -84,7 +84,7 @@ class GaussianFileMixin(FileMixin):
                     modred = self._get_modred_frozen_coords(
                         self.modredundant_group
                     )
-                    self.job_type = "modredundant"
+                    self.job_type = "modred"
                 elif "S" in line or "s" in line:
                     modred = self._get_modred_scan_coords(
                         self.modredundant_group
@@ -100,7 +100,7 @@ class GaussianFileMixin(FileMixin):
             line_elems = line.split()
             assert all(
                 line_elem.isdigit() for line_elem in line_elems
-            ), f"modredundant coordinates should be integers, but is {line_elems} instead."
+            ), f"modred coordinates should be integers, but is {line_elems} instead."
             each_modred_list = [int(line_elem) for line_elem in line_elems]
             modred.append(each_modred_list)
         return modred
@@ -109,7 +109,7 @@ class GaussianFileMixin(FileMixin):
     def _get_modred_scan_coords(modred_list_of_string):
         modred = {}
         coords = []
-        # modredundant = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
         for raw_line in modred_list_of_string:
             line = raw_line.strip()[2:]
             line_elems = line.split("S")
@@ -119,7 +119,7 @@ class GaussianFileMixin(FileMixin):
             each_coords_list = coords_string.split()
             assert all(
                 line_elem.isdigit() for line_elem in each_coords_list
-            ), f"modredundant coordinates should be integers, but is {line_elems[0]} instead."
+            ), f"modred coordinates should be integers, but is {line_elems[0]} instead."
             each_modred_list = [
                 int(line_elem) for line_elem in each_coords_list
             ]
@@ -228,7 +228,7 @@ class GaussianFileMixin(FileMixin):
             additional_opt_options_in_route=self.additional_opt_options_in_route,
             additional_route_parameters=self.additional_route_parameters,
             route_to_be_written=None,
-            modredundant=self.modredundant,
+            modred=self.modred,
             gen_genecp_file=None,
             heavy_elements=self.heavy_elements,
             heavy_elements_basis=self.heavy_elements_basis,
@@ -417,7 +417,7 @@ class ORCAFileMixin(FileMixin):
             solvent_id=self.solvent_id,
             additional_route_parameters=dv.additional_route_parameters,
             route_to_be_written=dv.route_to_be_written,
-            modredundant=dv.modredundant,
+            modred=dv.modred,
             gen_genecp_file=dv.gen_genecp_file,
             heavy_elements=dv.heavy_elements,
             heavy_elements_basis=dv.heavy_elements_basis,

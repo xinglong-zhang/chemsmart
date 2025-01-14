@@ -10,9 +10,16 @@ class GaussianCrestJob(GaussianJob):
         settings=None,
         label=None,
         num_confs_to_run=None,
+        skip_completed=True,
         **kwargs,
     ):
-        super().__init__(molecules, settings=settings, label=label, **kwargs)
+        super().__init__(
+            molecules,
+            settings=settings,
+            label=label,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
 
         if num_confs_to_run is None:
             num_confs_to_run = len(molecules)
@@ -57,6 +64,7 @@ class GaussianCrestJob(GaussianJob):
                     molecule=self.all_conformers[i],
                     settings=self.settings,
                     label=label,
+                    skip_completed=self.skip_completed,
                 )
             ]
         return jobs
