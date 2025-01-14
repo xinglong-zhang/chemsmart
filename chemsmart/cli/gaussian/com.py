@@ -38,7 +38,7 @@ def com(ctx, skip_completed, **kwargs):
     # get label for the job
     label = ctx.obj["label"]
 
-    from chemsmart.jobs.gaussian import GaussianComJob
+    from chemsmart.jobs.gaussian.job import GaussianComJob
 
     return GaussianComJob(
         molecule=molecule,

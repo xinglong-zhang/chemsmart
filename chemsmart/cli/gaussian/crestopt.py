@@ -36,7 +36,7 @@ def crestopt(ctx, num_confs_to_opt, skip_completed, **kwargs):
 
     logger.info(f"Crest opt settings from project: {opt_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianCrestOptJob
+    from chemsmart.jobs.gaussian.crestopt import GaussianCrestOptJob
 
     return GaussianCrestOptJob(
         molecules=molecules,
