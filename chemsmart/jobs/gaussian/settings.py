@@ -278,6 +278,7 @@ class GaussianJobSettings(MolecularJobSettings):
             route_string = self._get_route_string_from_user_input()
         else:
             route_string = self._get_route_string_from_jobtype()
+        logger.debug(f"Route for settings {self}: {route_string}")
         return route_string
 
     def _get_route_string_from_user_input(self):
@@ -537,14 +538,20 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         self.forces = False  # turn off forces calculations
         self.route_to_be_written = None
 
-    def _write_route_section_default(self, f, atoms):
-        route_string = self._get_route_string_from_jobtype(atoms=atoms)
-
+    def _get_route_string_from_jobtype(self):
+        route_string = super()._get_route_string_from_jobtype()
         # if flat irc
         if self.flat_irc:
-            self.predictor = "LQA"
-            self.recorrect = "never"
-            self.recalc_step = -5
+            # default route for flat IRC run if no options are specified
+            self.predictor = (
+                "LQA" if self.predictor is None else self.predictor
+            )
+            self.recorrect = (
+                "never" if self.recorrect is None else self.recorrect
+            )
+            self.recalc_step = (
+                -5 if self.recalc_step == 6 else self.recalc_step
+            )
 
         # write job type specific route for irc
         if self.job_type == "ircf":
@@ -571,8 +578,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         if self.additional_route_parameters is not None:
             route_string += f" {self.additional_route_parameters}"
 
-        f.write(route_string + "\n")
-        f.write("\n")
+        return route_string
 
 
 class GaussianLinkJobSettings(GaussianJobSettings):
@@ -584,6 +590,10 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         self.link_route = link_route
         self.stable = stable
         self.guess = guess
+
+        logger.debug(
+            f"Route for link section {self}: {self.link_route_string}"
+        )
 
     @property
     def link_route_string(self):

@@ -1,7 +1,4 @@
-import logging
 from chemsmart.jobs.gaussian.job import GaussianJob
-
-logger = logging.getLogger(__name__)
 
 
 class GaussianOptJob(GaussianJob):

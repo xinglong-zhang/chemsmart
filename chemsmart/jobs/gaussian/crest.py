@@ -13,7 +13,7 @@ class GaussianCrestJob(GaussianJob):
         **kwargs,
     ):
         super().__init__(
-            molecules,
+            molecule=molecules,
             settings=settings,
             label=label,
             **kwargs,

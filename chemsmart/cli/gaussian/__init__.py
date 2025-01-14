@@ -3,5 +3,6 @@ from .crest import crest
 from .crestopt import crestopt
 from .dias import dias
 from .gaussian import gaussian
+from .irc import irc
 from .custom import userjob
 from .opt import opt
