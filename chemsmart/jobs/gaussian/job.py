@@ -108,7 +108,6 @@ class GaussianJob(Job):
     @classmethod
     def from_filename(
         cls,
-        folder,
         filename,
         settings=None,
         index="-1",
@@ -126,7 +125,6 @@ class GaussianJob(Job):
 
         # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
         return cls(
-            folder=folder,
             molecule=molecules,
             settings=settings,
             label=label,
@@ -134,34 +132,12 @@ class GaussianJob(Job):
         )
 
     @classmethod
-    def from_pubchem(
-        cls, folder, identifier, settings=None, label=None, **kwargs
-    ):
+    def from_pubchem(cls, identifier, settings=None, label=None, **kwargs):
         molecules = Molecule.from_pubchem(identifier=identifier)
         return cls(
-            folder=folder,
             molecule=molecules,
             settings=settings,
             label=label,
-            **kwargs,
-        )
-
-    @classmethod
-    def from_label(cls, folder, label, atoms=None, settings=None, **kwargs):
-        if atoms is None:
-            comfile = os.path.join(folder, label + ".com")
-            if not os.path.exists(comfile):
-                pass
-            atoms = Molecule.from_filepath(comfile)
-
-        if settings is None:
-            settings = GaussianJobSettings.default()
-
-        return cls(
-            folder=folder,
-            label=label,
-            molecule=atoms,
-            settings=settings,
             **kwargs,
         )
 
@@ -171,15 +147,13 @@ class GaussianComJob(GaussianJob):
 
     TYPE = "g16com"
 
-    def __init__(self, folder, atoms, settings=None, **kwargs):
+    def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(
-            molecule=atoms, settings=settings, folder=folder, **kwargs
+            molecule=molecule, settings=settings, label=label, **kwargs
         )
 
     @classmethod
-    def from_filename(
-        cls, folder, filename, settings=None, label=None, **kwargs
-    ):
+    def from_filename(cls, filename, settings=None, label=None, **kwargs):
         # job.label as the filename (without extension) used
         if label is None:
             label = os.path.splitext(os.path.basename(filename))[0]
@@ -187,38 +161,22 @@ class GaussianComJob(GaussianJob):
         # set file
         from chemsmart.io.gaussian.input import Gaussian16Input
 
-        g16com_file = Gaussian16Input(comfile=filename)
-
-        # get atoms object from supplied .com file
-        atoms = AtomsWrapper.from_filepath(filepath=filename)
+        g16com_file = Gaussian16Input(filename=filename)
+        input_lines = g16com_file.content_lines_string
 
         # get settings from file
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
+        # store file lines in settings
         settings = GaussianJobSettings.from_filepath(filename)
-        logger.info(
+        settings.input_string = input_lines
+
+        logger.debug(
             f"Supplied file {filename} settings are: \n{settings.__dict__}"
         )
+        logger.debug(f"Writing input lines: \n{input_lines}")
 
-        # update settings to write the same file - turn off everything that would be appended at the end from route info
-        settings.route_to_be_written = g16com_file.route
-        settings.modredundant = None
-        settings.gen_genecp_file = None
-        settings.custom_solvent = None
-
-        # append original information as is to the end of input file
-        settings.append_additional_info = (
-            g16com_file.append_info_after_coords_as_string
-        )
-        logger.info(f"Rewritten settings are: \n{settings.__dict__}")
-
-        return cls(
-            folder=folder,
-            atoms=atoms,
-            settings=settings,
-            label=label,
-            **kwargs,
-        )
+        return cls(molecule=None, settings=settings, label=label, **kwargs)
 
 
 class GaussianGeneralJob(GaussianJob):
