@@ -182,13 +182,13 @@ class GaussianComJob(GaussianJob):
 class GaussianGeneralJob(GaussianJob):
     """GaussianGeneralJob subclasses GaussianJob, this is needed to prevent recursive loop.
 
-    For example, recursive loop occurs in class GaussianCrestOptJob(GaussianJob) that subclasses GaussianJob
-    and calls and runs GaussianGeneralJob.
+    For example, recursive loop occurs in class GaussianCrestOptJob(GaussianJob) that
+    subclasses GaussianJob and calls and runs GaussianGeneralJob.
     """
 
     TYPE = "g16"
 
-    def __init__(self, folder, atoms, settings, **kwargs):
+    def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(
-            molecule=atoms, settings=settings, folder=folder, **kwargs
+            molecule=molecule, settings=settings, label=label, **kwargs
         )
