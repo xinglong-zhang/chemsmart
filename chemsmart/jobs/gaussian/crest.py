@@ -10,14 +10,12 @@ class GaussianCrestJob(GaussianJob):
         settings=None,
         label=None,
         num_confs_to_run=None,
-        skip_completed=True,
         **kwargs,
     ):
         super().__init__(
             molecules,
             settings=settings,
             label=label,
-            skip_completed=skip_completed,
             **kwargs,
         )
 
