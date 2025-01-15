@@ -1,7 +1,6 @@
 """CLI options for all jobs that can be run in this package."""
 
 import functools
-
 import click
 
 
@@ -48,6 +47,37 @@ def click_gaussian_jobtype_options(f):
         "--num-steps",
         default=None,
         help="step size of coordinates to scan",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_gaussian_solvent_options(f):
+    """Common click solvent options for Gaussian jobs."""
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        "-r/ ",
+        type=bool,
+        default=False,
+        help="Whether to use solvent model in the job. Defaults to project settings.",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="solvent model to be used for single point.",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="solvent ID to be used for single point.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

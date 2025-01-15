@@ -11,3 +11,4 @@ from .nci import nci
 from .opt import opt
 from .resp import resp
 from .scan import scan
+from .singlepoint import sp
