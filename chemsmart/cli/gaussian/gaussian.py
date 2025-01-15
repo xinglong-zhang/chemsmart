@@ -119,6 +119,112 @@ def click_gaussian_settings_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_jobtype_options(f):
+    """Common click options for Gaussian link/crest jobs."""
+
+    @click.option(
+        "-j",
+        "--jobtype",
+        type=str,
+        default=None,
+        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+    )
+    @click.option(
+        "-c",
+        "--coordinates",
+        default=None,
+        help="list of coordinates to be fixed for modred or scan job",
+    )
+    @click.option(
+        "-s",
+        "--step-size",
+        default=None,
+        help="step size of coordinates to scan",
+    )
+    @click.option(
+        "-n",
+        "--num-steps",
+        default=None,
+        help="step size of coordinates to scan",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_gaussian_solvent_options(f):
+    """Common click solvent options for Gaussian jobs."""
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        "-r/ ",
+        type=bool,
+        default=False,
+        help="Whether to use solvent model in the job. Defaults to project settings.",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="solvent model to be used for single point.",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="solvent ID to be used for single point.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_gaussian_td_options(f):
+    @click.option(
+        "-s",
+        "--states",
+        type=click.Choice(
+            ["singlets", "triplets", "50-50"], case_sensitive=False
+        ),
+        default="singlets",
+        help='States for closed-shell singlet systems.\nOptions choice =["Singlets", "Triplets", "50-50"]',
+    )
+    @click.option(
+        "-r",
+        "--root",
+        type=int,
+        default=1,
+        help="Specifies the “state of interest”. The default is the first excited state (N=1).",
+    )
+    @click.option(
+        "-n",
+        "--nstates",
+        type=int,
+        default=3,
+        help="Solve for M states (the default is 3). "
+        "If 50-50, this gives the number of each type of state to solve (i.e., 3 singlets and 3 triplets).",
+    )
+    @click.option(
+        "-e",
+        "--eqsolv",
+        type=str,
+        default=None,
+        help="Whether to perform equilibrium or non-equilibrium PCM solvation. NonEqSolv is the default except "
+        "for excited state opt and when  excited state density is requested (e.g., Density=Current or All).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_gaussian_options
 @click_gaussian_settings_options
