@@ -3,6 +3,7 @@ import os
 import shlex
 import shutil
 import subprocess
+from contextlib import suppress
 from functools import lru_cache
 from datetime import datetime
 from glob import glob
@@ -88,42 +89,40 @@ class GaussianJobRunner(JobRunner):
         self.job_outputfile = job.outputfile
 
         if self.scratch and self.scratch_dir:
-            # set up files in scratch folder
-            scratch_job_dir = os.path.join(self.scratch_dir, job.label)
-            if not os.path.exists(scratch_job_dir):
-                try:
-                    os.makedirs(scratch_job_dir)
-                except OSError as e:
-                    raise RuntimeError(
-                        f"Failed to create directory {scratch_job_dir}: {e}"
-                    )
-            self.running_directory = scratch_job_dir
-            logger.info(f"Running directory: {self.running_directory}")
-
-            job_inputfile = job.label + ".com"
-            scratch_job_inputfile = os.path.join(
-                scratch_job_dir, job_inputfile
-            )
-            self.job_inputfile = os.path.abspath(scratch_job_inputfile)
-
-            job_chkfile = job.label + ".chk"
-            scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
-            self.job_chkfile = os.path.abspath(scratch_job_chkfile)
-
-            job_errfile = job.label + ".err"
-            scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
-            self.job_errfile = os.path.abspath(scratch_job_errfile)
+            self._set_up_variables_in_scratch(job)
         else:
-            # keep files as in running directory
-            self.running_directory = job.folder
-            logger.info(f"Running directory: {self.running_directory}")
-            self.job_inputfile = os.path.abspath(job.inputfile)
-            self.job_chkfile = os.path.abspath(job.chkfile)
-            self.job_errfile = os.path.abspath(job.errfile)
+            self._set_up_variables_in_job_directory(job)
 
         if self.executable and self.executable.local_run is not None:
             logger.info(f"Local run is {self.executable.local_run}.")
             job.local = self.executable.local_run
+
+    def _set_up_variables_in_scratch(self, job):
+        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        if not os.path.exists(scratch_job_dir):
+            with suppress(FileExistsError):
+                os.makedirs(scratch_job_dir)
+        self.running_directory = scratch_job_dir
+        logger.debug(f"Running directory: {self.running_directory}")
+
+        job_inputfile = job.label + ".com"
+        scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+        self.job_inputfile = os.path.abspath(scratch_job_inputfile)
+
+        job_chkfile = job.label + ".chk"
+        scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
+        self.job_chkfile = os.path.abspath(scratch_job_chkfile)
+
+        job_errfile = job.label + ".err"
+        scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
+        self.job_errfile = os.path.abspath(scratch_job_errfile)
+
+    def _set_up_variables_in_job_directory(self, job):
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        self.job_chkfile = os.path.abspath(job.chkfile)
+        self.job_errfile = os.path.abspath(job.errfile)
 
     def _write_input(self, job):
         from chemsmart.jobs.gaussian.writer import GaussianInputWriter
@@ -215,6 +214,39 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         returncode = FakeGaussian(self.job_inputfile).run()
         self._postrun(job=job)
         return returncode
+
+    def _set_up_variables_in_scratch(self, job):
+        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        if not os.path.exists(scratch_job_dir):
+            with suppress(FileExistsError):
+                os.makedirs(scratch_job_dir)
+        self.running_directory = scratch_job_dir
+        logger.debug(f"Running directory: {self.running_directory}")
+
+        # assign label with fake to differentiate from real job
+        job.label = f"{job.label}_fake"
+        logger.debug(f"Job label for fake job run: {job.label}")
+
+        job_inputfile = job.label + ".com"
+        scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+        self.job_inputfile = os.path.abspath(scratch_job_inputfile)
+
+        job_chkfile = job.label + ".chk"
+        scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
+        self.job_chkfile = os.path.abspath(scratch_job_chkfile)
+
+        job_errfile = job.label + ".err"
+        scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
+        self.job_errfile = os.path.abspath(scratch_job_errfile)
+
+    def _set_up_variables_in_job_directory(self, job):
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+        job.label = f"{job.label}_fake"
+        logger.debug(f"Job label for fake job run: {job.label}")
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        self.job_chkfile = os.path.abspath(job.chkfile)
+        self.job_errfile = os.path.abspath(job.errfile)
 
 
 class FakeGaussian:

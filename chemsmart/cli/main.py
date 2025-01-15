@@ -11,6 +11,7 @@ Be creative! do whatever you want!
 import click
 import logging
 from .run import run
+from .sub import sub
 from chemsmart.utils.cli import MyGroup
 
 
