@@ -3,6 +3,7 @@ import logging
 import os
 from abc import abstractmethod
 
+from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.user import ChemsmartUserSettings
 
 user_settings = ChemsmartUserSettings()
@@ -125,9 +126,24 @@ class Submitter:
         raise NotImplementedError
 
     def _write_program_specifics(self, f):
+        self._write_program_specific_conda_env(f)
         self._write_load_program_specific_modules(f)
         self._write_source_program_specific_script(f)
         self._write_program_specific_environment_variables(f)
+
+    def _write_program_specific_conda_env(self, f):
+        if self.job.PROGRAM.lower() == "gaussian":
+            executable = GaussianExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "orca":
+            executable = ORCAExecutable.from_servername(self.server.name)
+        else:
+            # Need to add programs here to be supported for other types of programs
+            raise ValueError(f"Program {self.job.PROGRAM} not supported.")
+        if executable.conda_env is not None:
+            logger.debug(f"Writing conda environment: {executable.conda_env}")
+            for line in executable.conda_env.split("\n"):
+                logger.debug(f"Writing line: {line}")
+                f.write(line)
 
     def _write_load_program_specific_modules(self, f):
         """Different programs may require loading different modules."""

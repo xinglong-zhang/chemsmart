@@ -266,11 +266,10 @@ class Server(RegistryMixin):
         from chemsmart.settings.submitters import Submitter
         submitter = Submitter(name=self.scheduler, job=job, server=self)
         submission_script_path = os.path.join(job.folder, f"chemsmart_sub_{job.label}.x")
-        submitter.write(submission_script_path)
+        submitter.write()
 
         logger.info(f"Submission script written to: {submission_script_path}")
         return submission_script_path
-
 
 
 class YamlServerSettings(Server):
