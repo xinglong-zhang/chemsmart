@@ -1,8 +1,10 @@
 import logging
 import os
+import shlex
 import sys
 import subprocess
 from functools import lru_cache
+
 from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
@@ -72,7 +74,10 @@ class Server(RegistryMixin):
 
     @cached_property
     def submit_command(self):
-        return self.kwargs.get("SUBMIT_COMMAND", None)
+        command = self.kwargs.get("SUBMIT_COMMAND")
+        if command is None:
+            command = self._get_submit_command()
+        return command
 
     @cached_property
     def scratch_dir(self):
@@ -89,6 +94,17 @@ class Server(RegistryMixin):
     @cached_property
     def extra_commands(self):
         return self.kwargs.get("EXTRA_COMMANDS", None)
+
+    def _get_submit_command(self):
+        """Obtain submit command based on scheduler type."""
+        scheduler_submit_commands = {
+            "SLURM": "sbatch",
+            "PBS": "qsub",
+            "LSF": "bsub",
+            "SGE": "qsub",
+            "HTCondor": "condor_q",
+        }
+        return scheduler_submit_commands.get(self.scheduler, None)
 
     def register(self):
         # if server already in registry, pass
@@ -199,6 +215,7 @@ class Server(RegistryMixin):
         """Obtain server details from server name."""
         if servername is None:
             # by default return current server
+            logger.warning("No server specified. Using current server.")
             return cls.current()
         return cls._from_server_name(servername)
 
@@ -241,9 +258,9 @@ class Server(RegistryMixin):
         # First check that the job to be submitted is not already queued/running
         self._check_running_jobs(job)
         # Then write the submission script
-        submission_script_path = self._write_submission_script(job)
+        self._write_submission_script(job)
         # Submit the job
-        self._submit_job(submission_script_path)
+        self._submit_job(job)
 
     def _check_running_jobs(self, job):
         """Check if the job is already running."""
@@ -254,22 +271,35 @@ class Server(RegistryMixin):
             return
 
         cluster_helper = ClusterHelper()
-        running_job_ids, running_job_names = cluster_helper.get_gaussian_running_jobs()
+        running_job_ids, running_job_names = (
+            cluster_helper.get_gaussian_running_jobs()
+        )
 
         if job.label in running_job_names:
-            logger.info(f'Warning: submitting job with duplicate name: {job.label}')
-            sys.exit(f'Duplicate job NOT submitted: {job.label}')
+            logger.info(
+                f"Warning: submitting job with duplicate name: {job.label}"
+            )
+            sys.exit(f"Duplicate job NOT submitted: {job.label}")
 
     def _write_submission_script(self, job):
         """Write the submission script for the job."""
         # first determine submitter type
         from chemsmart.settings.submitters import Submitter
+
         submitter = Submitter(name=self.scheduler, job=job, server=self)
-        submission_script_path = os.path.join(job.folder, f"chemsmart_sub_{job.label}.x")
         submitter.write()
 
-        logger.info(f"Submission script written to: {submission_script_path}")
-        return submission_script_path
+    def _submit_job(self, job):
+        """Submit the job."""
+        command = self.submit_command
+        if command is None:
+            raise ValueError(
+                f"Cannot submit job on {self} "
+                f"since no submit command is defined."
+            )
+
+        p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+        return p.wait()
 
 
 class YamlServerSettings(Server):

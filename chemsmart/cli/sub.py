@@ -11,6 +11,7 @@ from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.utils.logger import create_logger
 from chemsmart.utils.cli import MyGroup
+
 # from chemsmart.utils.cli import CtxObjArguments, MyGroup, determine_folders
 
 logger = logging.getLogger(__name__)
@@ -32,38 +33,74 @@ logger = logging.getLogger(__name__)
 #     return atoms.set_calculated_magmoms_as_initial(error_if_no_magmoms=False)
 
 
-@click.group(name='sub', cls=MyGroup)
+@click.group(name="sub", cls=MyGroup)
 @click.pass_context
 @jobrunner_options
 @logger_options
-@click.option('-S', '--node-for-runner/--no-node-for-runner', default=DEFAULTS['node-for-runner'])
-@click.option('-t', '--num-hours', type=float, default=None)
-@click.option('-q', '--queue', type=str, default=DEFAULTS['queue'], help='queue')
-@click.option('-Q', '--qos', type=str, default=None, help='qos')
-@click.option('-V', '--verbose/--no-verbose', default=DEFAULTS['verbose'], help='turns on logging')
-@click.option('-f', '--folders', '--folder', multiple=True, type=str, default=DEFAULTS['folders'], help='folder')
-@click.option('--folderlist-file', type=click.Path(exists=True), default=None, help='file containing a list of folders')
-@click.option('-D', '--dryrun/--no-dryrun', default=True, help='turns on dryrun')
 @click.option(
-    '-N',
-    '--queue-manager-num-processes',
+    "-S",
+    "--node-for-runner/--no-node-for-runner",
+    default=DEFAULTS["node-for-runner"],
+)
+@click.option("-t", "--num-hours", type=float, default=None)
+@click.option(
+    "-q", "--queue", type=str, default=DEFAULTS["queue"], help="queue"
+)
+@click.option("-Q", "--qos", type=str, default=None, help="qos")
+@click.option(
+    "-V",
+    "--verbose/--no-verbose",
+    default=DEFAULTS["verbose"],
+    help="turns on logging",
+)
+@click.option(
+    "-f",
+    "--folders",
+    "--folder",
+    multiple=True,
+    type=str,
+    default=DEFAULTS["folders"],
+    help="folder",
+)
+@click.option(
+    "--folderlist-file",
+    type=click.Path(exists=True),
+    default=None,
+    help="file containing a list of folders",
+)
+@click.option(
+    "-D", "--dryrun/--no-dryrun", default=True, help="turns on dryrun"
+)
+@click.option(
+    "-N",
+    "--queue-manager-num-processes",
     type=int,
-    default=DEFAULTS['queue-manager-num-processes'],
-    help='runs jobs in parallel with N processes',
+    default=DEFAULTS["queue-manager-num-processes"],
+    help="runs jobs in parallel with N processes",
 )
-@click.option('-l', '--label', type=str, default=None)
-@click.option('--multi/--no-multi', default=False, help='Submit all folders as separate jobs.')
+@click.option("-l", "--label", type=str, default=None)
 @click.option(
-    '-F',
-    '--source-folder',
+    "--multi/--no-multi",
+    default=False,
+    help="Submit all folders as separate jobs.",
+)
+@click.option(
+    "-F",
+    "--source-folder",
     type=click.Path(exists=True, resolve_path=True),
-    default=DEFAULTS['source-folder'],
-    help='read atoms from source folder',
+    default=DEFAULTS["source-folder"],
+    help="read atoms from source folder",
 )
 @click.option(
-    '--print-command/--no-print-command', default=DEFAULTS['print-command'], help='print the command generated'
+    "--print-command/--no-print-command",
+    default=DEFAULTS["print-command"],
+    help="print the command generated",
 )
-@click.option('--test/--no-test', default=False, help='If true, job will not be submitted')
+@click.option(
+    "--test/--no-test",
+    default=False,
+    help="If true, job will not be submitted",
+)
 def sub(
     ctx,
     folders,
@@ -91,20 +128,22 @@ def sub(
 
     if multi and queue_manager_num_processes is not None:
         raise ValueError(
-            'Cannot use --multi and --queue-manager-num-processes together. '
-            'Please choose one of them.\n'
-            '    --multi submits all specified folders as single jobs.\n'
-            '    -N/--queue-manager-num-processes submits all specified folders as a single job that is '
-            'run in parallel by N processes.'
+            "Cannot use --multi and --queue-manager-num-processes together. "
+            "Please choose one of them.\n"
+            "    --multi submits all specified folders as single jobs.\n"
+            "    -N/--queue-manager-num-processes submits all specified folders as a single job that is "
+            "run in parallel by N processes."
         )
 
     if len(folders) == 0 and folderlist_file is None:
-        folders = glob.glob('*/') if multi else [os.getcwd()]
+        folders = glob.glob("*/") if multi else [os.getcwd()]
 
-    folders = determine_folders(folders=None, folder_regex=folders, folderlist_file=folderlist_file)
+    folders = determine_folders(
+        folders=None, folder_regex=folders, folderlist_file=folderlist_file
+    )
 
     if len(folders) == 0:
-        raise ValueError(f'Invalid folders specified: folders: {folders}')
+        raise ValueError(f"Invalid folders specified: folders: {folders}")
 
     jobrunner = create_jobrunner(
         servername=servername,
@@ -117,15 +156,15 @@ def sub(
         memory_gigs=memory_gigs,
     )
 
-    ctx.obj['jobrunner'] = jobrunner
-    ctx.obj['source_folder'] = source_folder
-    ctx.obj['other_queue_managers'] = {}
-    ctx.obj['folder'] = folders
-    ctx.obj['folders'] = folders if isinstance(folders, list) else [folders]
+    ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["source_folder"] = source_folder
+    ctx.obj["other_queue_managers"] = {}
+    ctx.obj["folder"] = folders
+    ctx.obj["folders"] = folders if isinstance(folders, list) else [folders]
 
     if source_folder:
         atoms = prepare_job_from_source_folder(folder=source_folder)
-        ctx.obj['atoms'] = atoms
+        ctx.obj["atoms"] = atoms
 
 
 @sub.result_callback(replace=True)
@@ -138,25 +177,29 @@ def process_pipeline(ctx, *args, qos, multi, **kwargs):  # noqa: PLR0915
     def _clean_command(ctx):
         """Remove keywords used in sub.py but not in run.py."""
         # Get "sub" command
-        command = [subcommand for subcommand in ctx.obj['subcommand'] if subcommand['name'] == 'sub']
+        command = [
+            subcommand
+            for subcommand in ctx.obj["subcommand"]
+            if subcommand["name"] == "sub"
+        ]
         assert len(command) == 1
         command = command[0]
         keywords_not_in_run = [
-            'print_command',
-            'queue',
-            'num_hours',
-            'verbose',
-            'node_for_runner',
-            'test',
-            'qos',
-            'dryrun',
-            'multi',
-            'label',
-            'folderlist_file',
+            "print_command",
+            "queue",
+            "num_hours",
+            "verbose",
+            "node_for_runner",
+            "test",
+            "qos",
+            "dryrun",
+            "multi",
+            "label",
+            "folderlist_file",
         ]
 
         for keyword in keywords_not_in_run:
-            del command['kwargs'][keyword]
+            del command["kwargs"][keyword]
         return ctx
 
     def _dry_run(job, jobrunner):
@@ -172,59 +215,67 @@ def process_pipeline(ctx, *args, qos, multi, **kwargs):  # noqa: PLR0915
 
     def _reconstruct_cli_args(ctx, multi, job):
         """Get cli args that reconstruct the command line."""
-        commands = ctx.obj['subcommand']
+        commands = ctx.obj["subcommand"]
 
         if multi:
             # Jobs should be submitted within each folder, so we need to edit the
             # "folders" value for the "sub" subcommand
-            command = [subcommand for subcommand in commands if subcommand['name'] == 'sub']
+            command = [
+                subcommand
+                for subcommand in commands
+                if subcommand["name"] == "sub"
+            ]
             assert len(command) == 1
             command = command[0]
-            command['kwargs']['folders']['value'] = '.'
+            command["kwargs"]["folders"]["value"] = "."
 
-        args = CtxObjArguments(commands, entry_point='sub')
-        cli_args = args.reconstruct_command_line()[1:]  # remove the first element 'sub'
-        if kwargs.get('print_command'):
+        args = CtxObjArguments(commands, entry_point="sub")
+        cli_args = args.reconstruct_command_line()[
+            1:
+        ]  # remove the first element 'sub'
+        if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
 
     def _process_single_job(job, jobrunner, multi):
         # Perform a dry run to catch any user input errors
-        if kwargs['dryrun']:
+        if kwargs["dryrun"]:
             _dry_run(job=job, jobrunner=jobrunner)
 
-        if kwargs.get('test'):
+        if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
         submitscript_kwargs = {}
         if qos is not None:
-            submitscript_kwargs.update({'qos': qos})
+            submitscript_kwargs.update({"qos": qos})
 
         cli_args = _reconstruct_cli_args(ctx, multi, job)
         # If --multi flag is specified, submit each job in its own folder
 
-        server = Server.from_servername(kwargs.get('servername'))
+        server = Server.from_servername(kwargs.get("servername"))
         server.submit(
             job=job,
-            label=kwargs.get('label'),
+            label=kwargs.get("label"),
             submit_in_job_folder=multi,
-            num_nodes=kwargs.get('num_nodes'),
-            num_hours=kwargs.get('num_hours'),
-            num_gpus=kwargs.get('num_gpus'),
-            num_cpus=kwargs.get('num_cpus'),
-            memory_gigs=kwargs.get('memory_gigs'),
-            node_for_runner=kwargs.get('node_for_runner'),
-            exclude_localhost=kwargs.get('exclude_localhost'),
-            queue=kwargs.get('queue'),
-            queue_manager_num_processes=kwargs.get('queue_manager_num_processes'),
-            variable_time_minimum=kwargs.get('variable_time_minimum'),
-            test=kwargs.get('test'),
+            num_nodes=kwargs.get("num_nodes"),
+            num_hours=kwargs.get("num_hours"),
+            num_gpus=kwargs.get("num_gpus"),
+            num_cpus=kwargs.get("num_cpus"),
+            memory_gigs=kwargs.get("memory_gigs"),
+            node_for_runner=kwargs.get("node_for_runner"),
+            exclude_localhost=kwargs.get("exclude_localhost"),
+            queue=kwargs.get("queue"),
+            queue_manager_num_processes=kwargs.get(
+                "queue_manager_num_processes"
+            ),
+            variable_time_minimum=kwargs.get("variable_time_minimum"),
+            test=kwargs.get("test"),
             cli_args=cli_args,
             **submitscript_kwargs,
         )
 
     ctx = _clean_command(ctx)
-    jobrunner = ctx.obj['jobrunner']
+    jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
     if not isinstance(job, list):
@@ -237,11 +288,11 @@ def process_pipeline(ctx, *args, qos, multi, **kwargs):  # noqa: PLR0915
     for j in job:
         _process_single_job(job=j, jobrunner=jobrunner, multi=multi)
 
-    for qm, processes in ctx.obj['other_queue_managers'].items():
+    for qm, processes in ctx.obj["other_queue_managers"].items():
         qm.close_queue()
         qm.join_processes(processes)
 
-    logger.debug('Closing global processes')
+    logger.debug("Closing global processes")
     store = GlobalProcessStore()
     store.join_processes()
 

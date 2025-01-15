@@ -2,6 +2,7 @@ import os
 from chemsmart.settings.server import Server
 from chemsmart.settings.executable import GaussianExecutable
 
+
 class TestServer:
     def test_server_yaml(self, server_yaml_file):
         assert os.path.exists(server_yaml_file)
@@ -20,8 +21,12 @@ class TestServer:
         assert server.extra_commands is None
 
     def test_gaussian_executable(self, server_yaml_file):
-        gaussian_executable = GaussianExecutable.from_servername(server_yaml_file)
-        assert gaussian_executable.executable_folder == os.path.expanduser("~/programs/g16")
+        gaussian_executable = GaussianExecutable.from_servername(
+            server_yaml_file
+        )
+        assert gaussian_executable.executable_folder == os.path.expanduser(
+            "~/programs/g16"
+        )
         assert gaussian_executable.local_run is True
 
         gaussian_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
@@ -35,7 +40,9 @@ module load libfabric/1.11.0.4.125
 """
         assert gaussian_executable.modules == gaussian_modules
 
-        assert gaussian_executable.scripts == "source GAUSS_DIR=~/programs/g16\n"
+        assert (
+            gaussian_executable.scripts == "source GAUSS_DIR=~/programs/g16\n"
+        )
 
         gassian_envars = """export SCRATCH=~/scratch
 export GAUSS_EXEDIR=~/programs/g16
@@ -44,7 +51,6 @@ export g16root=~/programs/g16
 """
         assert gaussian_executable.envars == gassian_envars
         print(gaussian_executable.executable_folder)
-
 
         # server_yaml = YAMLFile(filename=server_yaml_file)
         # assert len(server_yaml.yaml_contents_dict) == 3

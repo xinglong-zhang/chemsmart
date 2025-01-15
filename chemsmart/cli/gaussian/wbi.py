@@ -35,7 +35,9 @@ def wbi(ctx, **kwargs):
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
-    logger.info(f"Weiberg bond index job settings from project: {wbi_settings.__dict__}")
+    logger.info(
+        f"Weiberg bond index job settings from project: {wbi_settings.__dict__}"
+    )
 
     from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
 

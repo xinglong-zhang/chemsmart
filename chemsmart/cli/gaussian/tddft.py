@@ -47,7 +47,6 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     td_settings.nstates = nstates
     td_settings.eqsolv = eqsolv
 
-
     logger.info(f"TDDFT job settings from project: {td_settings.__dict__}")
 
     from chemsmart.jobs.gaussian.tddft import GaussianTDDFTJob

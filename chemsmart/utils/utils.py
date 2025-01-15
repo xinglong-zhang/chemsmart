@@ -98,12 +98,12 @@ def is_float(string):
     except ValueError:
         return False
 
+
 def strip_out_comments(string):
     """Strips out comments from a string by removing everything
     that follows after # for each line."""
-    return "\n".join(
-        line.split("#")[0].strip() for line in string.split("\n")
-    )
+    return "\n".join(line.split("#")[0].strip() for line in string.split("\n"))
+
 
 def content_blocks_by_paragraph(string_list):
     return [

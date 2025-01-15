@@ -1,6 +1,5 @@
 import inspect
 import logging
-import os
 from abc import abstractmethod
 
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
@@ -94,8 +93,8 @@ class Submitter:
     def run_script(self):
         """Run script for the job."""
         if self.job.label is not None:
-            return f'chemsmart_run_{self.job.label}.py'
-        return 'chemsmart_run.py'
+            return f"chemsmart_run_{self.job.label}.py"
+        return "chemsmart_run.py"
 
     @property
     def executable(self):
@@ -117,11 +116,13 @@ class Submitter:
     def _write_runscript(self):
         """Write the run script for the job."""
         runscript = RunScript(self.run_script, self.job.cli_args)
+        logger.debug(f"Writing run script to: {runscript.filename}")
         runscript.write()
 
     def _write_submitscript(self):
         """Write the submission script for the job."""
         with open(self.submit_script, "w") as f:
+            logger.debug(f"Writing submission script to: {self.submit_script}")
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)
@@ -143,7 +144,9 @@ class Submitter:
 
     def _write_program_specific_conda_env(self, f):
         if self.executable.conda_env is not None:
-            logger.debug(f"Writing conda environment: {self.executable.conda_env}")
+            logger.debug(
+                f"Writing conda environment: {self.executable.conda_env}"
+            )
             for line in self.executable.conda_env.split("\n"):
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
@@ -169,9 +172,12 @@ class Submitter:
 
     def _write_program_specific_environment_variables(self, f):
         """Different programs may require different environment variables.
-        May need to run different programs in different scratch folder e.g. Gaussian vs ORCA."""
+        May need to run different programs in different scratch folder e.g. Gaussian vs ORCA.
+        """
         if self.executable.envars is not None:
-            logger.debug(f"Writing environment variables: {self.executable.envars}")
+            logger.debug(
+                f"Writing environment variables: {self.executable.envars}"
+            )
             for key, value in self.executable.env.items():
                 f.write(f"export {key}={value}\n")
             f.write("\n")
