@@ -15,7 +15,7 @@ from .saopt import GaussianSAOptJob
 from .scan import GaussianScanJob
 from .singlepoint import GaussianSinglePointJob
 from .tddft import GaussianTDDFTJob
-from .tssearch import GaussianTSJob
+from .ts import GaussianTSJob
 from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
 
