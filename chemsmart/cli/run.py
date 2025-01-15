@@ -40,7 +40,7 @@ def run(
 
     # Instantiate the jobrunner with CLI options
     if server is not None:
-        server = Server.from_servename(server)
+        server = Server.from_servername(server)
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,

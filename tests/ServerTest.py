@@ -1,6 +1,6 @@
 import os
 from chemsmart.settings.server import Server
-
+from chemsmart.settings.executable import GaussianExecutable
 
 class TestServer:
     def test_server_yaml(self, server_yaml_file):
@@ -17,25 +17,34 @@ class TestServer:
         assert server.submit_command == "qsub"
         assert server.scratch_dir is None
         assert server.use_hosts is True
-        extra_commands = """source ~/anaconda3/etc/profile.d/conda.sh
-conda activate /home/users/astar/bmsi/zhangx5/anaconda3/envs/pyatoms-dev2
-module purge
+        assert server.extra_commands is None
+
+    def test_gaussian_executable(self, server_yaml_file):
+        gaussian_executable = GaussianExecutable.from_servername(server_yaml_file)
+        assert gaussian_executable.executable_folder == os.path.expanduser("~/programs/g16")
+        assert gaussian_executable.local_run is True
+
+        gaussian_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/pyatoms-dev2
+"""
+        assert gaussian_executable.conda_env == gaussian_conda_env
+
+        gaussian_modules = """module purge
 module load craype-x86-rome
 module load libfabric/1.11.0.4.125
-module load craype-network-ofi
-module load perftools-base/22.04.0
-module load cce/13.0.2
-module load craype/2.7.15
-module load cray-dsmml/0.2.2
-module load cray-mpich/8.1.15
-module load cray-libsci/21.08.1.2
-module load cray-pals/1.1.6
-module load PrgEnv-cray/8.3.3
-module load gcc/11.2.0
-module load mkl/2022.0.2
-module load intel/2022.0.2
 """
-        assert server.extra_commands == extra_commands
+        assert gaussian_executable.modules == gaussian_modules
+
+        assert gaussian_executable.scripts == "source GAUSS_DIR=~/programs/g16\n"
+
+        gassian_envars = """export SCRATCH=~/scratch
+export GAUSS_EXEDIR=~/programs/g16
+export g16root=~/programs/g16
+
+"""
+        assert gaussian_executable.envars == gassian_envars
+        print(gaussian_executable.executable_folder)
+
 
         # server_yaml = YAMLFile(filename=server_yaml_file)
         # assert len(server_yaml.yaml_contents_dict) == 3

@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import subprocess
 from functools import lru_cache
 from chemsmart.utils.mixins import cached_property
@@ -113,12 +114,12 @@ class Server(RegistryMixin):
 
         if scheduler_type == "Unknown Scheduler":
             logger.info("No scheduler detected. Using local server.")
-            return cls.from_servename(servername="local")
+            return cls.from_servername(servername="local")
 
         # Match scheduler type with available Server subclasses
         for server_cls in cls.subclasses():
             if getattr(server_cls, "SCHEDULER_TYPE", None) == scheduler_type:
-                return server_cls.from_servename(scheduler_type)
+                return server_cls.from_servername(scheduler_type)
 
         raise ValueError(
             f"No server class defined for scheduler type: {scheduler_type}. "
@@ -194,7 +195,7 @@ class Server(RegistryMixin):
         return "Unknown Scheduler"
 
     @classmethod
-    def from_servename(cls, servername):
+    def from_servername(cls, servername):
         """Obtain server details from server name."""
         if servername is None:
             # by default return current server
@@ -234,6 +235,42 @@ class Server(RegistryMixin):
             return manager.create()
         except FileNotFoundError:
             return None
+
+    def submit(self, job):
+        """Class method to submit job on the Server."""
+        # First check that the job to be submitted is not already queued/running
+        self._check_running_jobs(job)
+        # Then write the submission script
+        submission_script_path = self._write_submission_script(job)
+        # Submit the job
+        self._submit_job(submission_script_path)
+
+    def _check_running_jobs(self, job):
+        """Check if the job is already running."""
+        from chemsmart.utils.cluster import ClusterHelper
+        from chemsmart.jobs.gaussian import GaussianJob
+
+        if not isinstance(job, GaussianJob) or job.label is None:
+            return
+
+        cluster_helper = ClusterHelper()
+        running_job_ids, running_job_names = cluster_helper.get_gaussian_running_jobs()
+
+        if job.label in running_job_names:
+            logger.info(f'Warning: submitting job with duplicate name: {job.label}')
+            sys.exit(f'Duplicate job NOT submitted: {job.label}')
+
+    def _write_submission_script(self, job):
+        """Write the submission script for the job."""
+        # first determine submitter type
+        from chemsmart.settings.submitters import Submitter
+        submitter = Submitter(name=self.scheduler, job=job, server=self)
+        submission_script_path = os.path.join(job.folder, f"chemsmart_sub_{job.label}.x")
+        submitter.write(submission_script_path)
+
+        logger.info(f"Submission script written to: {submission_script_path}")
+        return submission_script_path
+
 
 
 class YamlServerSettings(Server):

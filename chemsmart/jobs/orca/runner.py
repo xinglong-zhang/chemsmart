@@ -168,7 +168,7 @@ class ORCAJobRunner(JobRunner):
                 copy(file, job.folder)
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submitscript and log.info and log.err files
+            # if job is completed, remove scratch directory and submit_script and log.info and log.err files
             if self.scratch:
                 logger.info(
                     f"Removing scratch directory: {self.running_directory}."

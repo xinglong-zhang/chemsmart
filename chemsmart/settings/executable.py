@@ -3,6 +3,7 @@ import os.path
 
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.utils.mixins import RegistryMixin
+from chemsmart.utils.utils import strip_out_comments
 from chemsmart.settings.user import ChemsmartUserSettings
 
 user_settings = ChemsmartUserSettings()
@@ -21,12 +22,14 @@ class Executable(RegistryMixin):
         self,
         executable_folder=None,
         local_run=False,
+        conda_env=None,
         modules=None,
         scripts=None,
         envars=None,
     ):
         self.executable_folder = executable_folder
         self.local_run = local_run
+        self.conda_env = conda_env
         self.modules = modules
         self.scripts = scripts
         self.envars = envars
@@ -47,6 +50,9 @@ class Executable(RegistryMixin):
         local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "LOCAL_RUN", False
         )
+        conda_env = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
+            "CONDA_ENV", None
+        )
         modules = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "MODULES", None
         )
@@ -56,9 +62,18 @@ class Executable(RegistryMixin):
         envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "ENVARS", None
         )
+        if conda_env is not None:
+            conda_env = strip_out_comments(conda_env)
+        if modules is not None:
+            modules = strip_out_comments(modules)
+        if scripts is not None:
+            scripts = strip_out_comments(scripts)
+        if envars is not None:
+            envars = strip_out_comments(envars)
         return cls(
             executable_folder=executable_folder,
             local_run=local_run,
+            conda_env=conda_env,
             modules=modules,
             scripts=scripts,
             envars=envars,

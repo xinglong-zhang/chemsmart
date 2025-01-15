@@ -88,7 +88,8 @@ class FileReadError(Exception):
 
 
 def is_float(string):
-    """Function to test if a given string is float or not. This should exclude string that is a digit."""
+    """Function to test if a given string is float or not.
+    This should exclude string that is a digit."""
     if string.replace("-", "").isdigit():
         return False  # if test string is a digit, then it is not a float
     try:
@@ -97,6 +98,12 @@ def is_float(string):
     except ValueError:
         return False
 
+def strip_out_comments(string):
+    """Strips out comments from a string by removing everything
+    that follows after # for each line."""
+    return "\n".join(
+        line.split("#")[0].strip() for line in string.split("\n")
+    )
 
 def content_blocks_by_paragraph(string_list):
     return [

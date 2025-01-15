@@ -6,7 +6,6 @@ import os
 
 import click
 
-from pyatoms.cli.defaults import DEFAULTS
 from chemsmart.cli.jobrunner import jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
@@ -133,7 +132,7 @@ def sub(
 @click.pass_context
 def process_pipeline(ctx, *args, qos, multi, **kwargs):  # noqa: PLR0915
     from pyatoms.jobs.job import JobBatch, Procedure
-    from pyatoms.settings.server.server import Server
+    from chemsmart.settings.server import Server
     from pyatoms.utils.processors import GlobalProcessStore
 
     def _clean_command(ctx):

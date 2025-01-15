@@ -79,9 +79,22 @@ class Submitter:
         return cls(**d)
 
     @property
-    def submitscript(self):
+    def submit_folder(self):
+        return self.job.folder
+
+    @property
+    def submit_script(self):
         """Submission script for the job."""
-        return f"{self.job.PROGRAM}_submitscript_{self.job.label}.x"
+        if self.job.label is not None:
+            return f"chemsmart_sub_{self.job.label}.x"
+        return "chemsmart_sub.x"
+
+    @property
+    def run_script(self):
+        """Run script for the job."""
+        if self.job.label is not None:
+            return f'chemsmart_run_{self.job.label}.py'
+        return 'chemsmart_run.py'
 
     def write(self):
         """Write the submission script for the job."""
@@ -92,15 +105,12 @@ class Submitter:
 
     def _write_runscript(self):
         """Write the run script for the job."""
-        runscript = RunScript(
-            f"{self.job.PROGRAM}_runscript_{self.job.label}.x",
-            self.job.cli_args,
-        )
+        runscript = RunScript(self.run_script, self.job.cli_args)
         runscript.write()
 
     def _write_submitscript(self):
         """Write the submission script for the job."""
-        with open(self.submitscript, "w") as f:
+        with open(self.submit_script, "w") as f:
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)
@@ -115,21 +125,9 @@ class Submitter:
         raise NotImplementedError
 
     def _write_program_specifics(self, f):
-        self._write_program_specific_environment_variables(f)
         self._write_load_program_specific_modules(f)
         self._write_source_program_specific_script(f)
-
-    def _write_program_specific_environment_variables(self, f):
-        """Different programs may require different environment variables.
-        May need to run different programs in different scratch folder."""
-        program_specific_enviornment_vars = os.path.expanduser(
-            f"~/.chemsmart/{self.job.PROGRAM}/{self.job.PROGRAM}.envars"
-        )
-        if os.path.exists(program_specific_enviornment_vars):
-            with open(program_specific_enviornment_vars, "r") as f2:
-                for line in f2:
-                    f.write(line)
-            f.write("\n")
+        self._write_program_specific_environment_variables(f)
 
     def _write_load_program_specific_modules(self, f):
         """Different programs may require loading different modules."""
@@ -148,6 +146,18 @@ class Submitter:
         )
         if os.path.exists(program_specific_script):
             f.write(f"source {program_specific_script}\n\n")
+
+    def _write_program_specific_environment_variables(self, f):
+        """Different programs may require different environment variables.
+        May need to run different programs in different scratch folder."""
+        program_specific_enviornment_vars = os.path.expanduser(
+            f"~/.chemsmart/{self.job.PROGRAM}/{self.job.PROGRAM}.envars"
+        )
+        if os.path.exists(program_specific_enviornment_vars):
+            with open(program_specific_enviornment_vars, "r") as f2:
+                for line in f2:
+                    f.write(line)
+            f.write("\n")
 
     @abstractmethod
     def _write_change_to_job_directory(self, f):

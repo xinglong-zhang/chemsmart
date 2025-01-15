@@ -141,7 +141,8 @@ class GaussianJobRunner(JobRunner):
         ) as err:
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {self.job_outputfile} and err file to: {self.job_errfile}"
+                f"Writing output file to: {self.job_outputfile}\n "
+                f"And err file to: {self.job_errfile}"
             )
             logger.debug(f"Environments for running: {self.executable.env}")
             return subprocess.Popen(
@@ -169,7 +170,8 @@ class GaussianJobRunner(JobRunner):
                     copy(file, job.folder)
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submitscript and log.info and log.err files
+            # if job is completed, remove scratch directory and submit_script
+            # and log.info and log.err files
             if self.scratch:
                 logger.info(
                     f"Removing scratch directory: {self.running_directory}."
