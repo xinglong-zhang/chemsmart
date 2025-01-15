@@ -147,35 +147,33 @@ class Submitter:
             for line in self.executable.conda_env.split("\n"):
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
+            f.write("\n")
 
     def _write_load_program_specific_modules(self, f):
         """Different programs may require loading different modules."""
-        program_specific_modules = os.path.expanduser(
-            f"~/.chemsmart/{self.job.PROGRAM}/{self.job.PROGRAM}.modules"
-        )
-        if os.path.exists(program_specific_modules):
-            with open(program_specific_modules, "r") as f2:
-                for line in f2:
-                    f.write(line)
+        if self.executable.modules is not None:
+            logger.debug(f"Writing modules: {self.executable.modules}")
+            for line in self.executable.modules.split("\n"):
+                logger.debug(f"Writing line: {line}")
+                f.write(line)
             f.write("\n")
 
     def _write_source_program_specific_script(self, f):
-        program_specific_script = os.path.expanduser(
-            f"~/.chemsmart/{self.job.PROGRAM}/{self.job.PROGRAM}.sh"
-        )
-        if os.path.exists(program_specific_script):
-            f.write(f"source {program_specific_script}\n\n")
+        """Different programs may require sourcing different scripts."""
+        if self.executable.scripts is not None:
+            logger.debug(f"Writing scripts: {self.executable.scripts}")
+            for line in self.executable.scripts.split("\n"):
+                logger.debug(f"Writing line: {line}")
+                f.write(line)
+            f.write("\n")
 
     def _write_program_specific_environment_variables(self, f):
         """Different programs may require different environment variables.
-        May need to run different programs in different scratch folder."""
-        program_specific_enviornment_vars = os.path.expanduser(
-            f"~/.chemsmart/{self.job.PROGRAM}/{self.job.PROGRAM}.envars"
-        )
-        if os.path.exists(program_specific_enviornment_vars):
-            with open(program_specific_enviornment_vars, "r") as f2:
-                for line in f2:
-                    f.write(line)
+        May need to run different programs in different scratch folder e.g. Gaussian vs ORCA."""
+        if self.executable.envars is not None:
+            logger.debug(f"Writing environment variables: {self.executable.envars}")
+            for key, value in self.executable.env.items():
+                f.write(f"export {key}={value}\n")
             f.write("\n")
 
     @abstractmethod
