@@ -63,7 +63,7 @@ def dias(
 
     logger.info(f"DI-AS settings from project: {sp_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianDIASJob
+    from chemsmart.jobs.gaussian.dias import GaussianDIASJob
 
     return GaussianDIASJob(
         molecules=molecules,

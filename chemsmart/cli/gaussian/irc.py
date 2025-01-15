@@ -128,7 +128,7 @@ def irc(
 
     logger.info(f"IRC job settings from project: {irc_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianIRCJob
+    from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 
     return GaussianIRCJob(
         molecule=molecule,

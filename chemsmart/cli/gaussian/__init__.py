@@ -14,3 +14,4 @@ from .scan import scan
 from .singlepoint import sp
 from .tddft import td
 from .ts import ts
+from .wbi import wbi

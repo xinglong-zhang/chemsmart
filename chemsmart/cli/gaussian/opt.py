@@ -58,7 +58,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
             frozen_atoms_list, molecule
         )
 
-    logger.info(f"Opt settings from project: {opt_settings.__dict__}")
+    logger.info(f"Opt job settings from project: {opt_settings.__dict__}")
 
     from chemsmart.jobs.gaussian.opt import GaussianOptJob
 

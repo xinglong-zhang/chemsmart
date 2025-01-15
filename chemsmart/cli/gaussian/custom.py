@@ -54,7 +54,7 @@ def userjob(ctx, route, append_info, **kwargs):
             "unicode-escape"
         )
 
-    from chemsmart.jobs.gaussian import GaussianCustomJob
+    from chemsmart.jobs.gaussian.custom import GaussianCustomJob
 
     return GaussianCustomJob(
         molecule=molecule, settings=opt_settings, label=label, **kwargs

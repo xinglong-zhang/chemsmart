@@ -42,7 +42,7 @@ def resp(ctx, **kwargs):
 
     logger.info(f"RESP settings from project: {resp_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianRESPJob
+    from chemsmart.jobs.gaussian.resp import GaussianRESPJob
 
     return GaussianRESPJob(
         molecule=molecule, settings=resp_settings, label=label, **kwargs

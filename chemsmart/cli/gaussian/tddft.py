@@ -50,7 +50,7 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
 
     logger.info(f"TDDFT job settings from project: {td_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianTDDFTJob
+    from chemsmart.jobs.gaussian.tddft import GaussianTDDFTJob
 
     return GaussianTDDFTJob(
         molecule=molecule, settings=td_settings, label=label, **kwargs

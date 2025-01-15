@@ -35,9 +35,9 @@ def nci(ctx, **kwargs):
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
-    logger.info(f"IRC settings from project: {nci_settings.__dict__}")
+    logger.info(f"IRC job settings from project: {nci_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianNCIJob
+    from chemsmart.jobs.gaussian.nci import GaussianNCIJob
 
     return GaussianNCIJob(
         molecule=molecule, settings=nci_settings, label=label, **kwargs

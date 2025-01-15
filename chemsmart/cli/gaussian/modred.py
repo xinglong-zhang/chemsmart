@@ -44,7 +44,7 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
 
     logger.info(f"Modred settings from project: {modred_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianModredJob
+    from chemsmart.jobs.gaussian.modred import GaussianModredJob
 
     return GaussianModredJob(
         molecule=molecule, settings=modred_settings, label=label, **kwargs

@@ -82,9 +82,9 @@ def link(
         label = f"{label[:-5]}_{jobtype}_link"
     logger.debug(f"Label for job: {label}")
 
-    logger.info(f"IRC settings from project: {link_settings.__dict__}")
+    logger.info(f"Link job {jobtype} settings from project: {link_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianLinkJob
+    from chemsmart.jobs.gaussian.link import GaussianLinkJob
 
     return GaussianLinkJob(
         molecule=molecule, settings=link_settings, label=label, **kwargs

@@ -61,7 +61,7 @@ def crest(
         f"Crest {type} settings from project: {crest_settings.__dict__}"
     )
 
-    from chemsmart.jobs.gaussian import GaussianCrestJob
+    from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 
     return GaussianCrestJob(
         molecules=molecules,

@@ -65,7 +65,7 @@ def sp(ctx, remove_solvent, solvent_model, solvent_id, **kwargs):
         f"Single point job settings from project: {sp_settings.__dict__}"
     )
 
-    from chemsmart.jobs.gaussian import GaussianSinglePointJob
+    from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
     return GaussianSinglePointJob(
         molecule=molecule, settings=sp_settings, label=label, **kwargs
