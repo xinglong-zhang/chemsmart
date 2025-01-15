@@ -101,6 +101,11 @@ class Molecule:
         """Return the number of atoms in the molecule."""
         return len(self.chemical_symbols)
 
+    @property
+    def pbc(self):
+        """Return the periodic boundary conditions."""
+        return all(i == 0 for i in self.pbc_conditions)
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return self.symbols.get_chemical_formula(
@@ -293,6 +298,18 @@ class Molecule:
 
         logger.debug("Could not create structure from pubchem.")
         return None
+
+    @classmethod
+    def from_molecule(cls, molecule):
+        return cls(**molecule.__dict__)
+
+    @classmethod
+    def from_ase_atoms(cls, atoms):
+        return cls(
+            symbols=atoms.get_chemical_symbols(),
+            positions=atoms.get_positions(),
+            pbc_conditions=atoms.get_pbc(),
+        )
 
     def write_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"

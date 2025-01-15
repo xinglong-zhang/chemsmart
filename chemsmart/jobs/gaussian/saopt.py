@@ -3,8 +3,8 @@ from functools import cached_property
 
 import numpy as np
 
-from pyatoms.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
-from pyatoms.utils.grouper import (
+from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.utils.grouper import (
     StructuralSelfConsistentGrouper,
     StructuralSequentialGrouper,
 )
@@ -17,9 +17,7 @@ class GaussianSAOptJob(GaussianJob):
 
     def __init__(
         self,
-        folder,
-        atoms,
-        settings,
+        molecule, settings, label,
         num_structures_to_opt=None,
         grouper_type="seq",
         num_grouper_processes=1,
@@ -27,7 +25,7 @@ class GaussianSAOptJob(GaussianJob):
         **kwargs,
     ):
         super().__init__(
-            folder=folder, atoms=atoms, settings=settings, **kwargs
+            fmolecule=molecule, settings=settings, label=label, **kwargs
         )
         self.num_structures_to_opt = num_structures_to_opt
         self.grouper_type = grouper_type
