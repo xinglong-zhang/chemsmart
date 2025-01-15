@@ -97,6 +97,16 @@ class Submitter:
             return f'chemsmart_run_{self.job.label}.py'
         return 'chemsmart_run.py'
 
+    @property
+    def executable(self):
+        if self.job.PROGRAM.lower() == "gaussian":
+            executable = GaussianExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "orca":
+            executable = ORCAExecutable.from_servername(self.server.name)
+        else:
+            # Need to add programs here to be supported for other types of programs
+            raise ValueError(f"Program {self.job.PROGRAM} not supported.")
+
     def write(self):
         """Write the submission script for the job."""
         if self.job.is_complete():
@@ -132,16 +142,9 @@ class Submitter:
         self._write_program_specific_environment_variables(f)
 
     def _write_program_specific_conda_env(self, f):
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        else:
-            # Need to add programs here to be supported for other types of programs
-            raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        if executable.conda_env is not None:
-            logger.debug(f"Writing conda environment: {executable.conda_env}")
-            for line in executable.conda_env.split("\n"):
+        if self.executable.conda_env is not None:
+            logger.debug(f"Writing conda environment: {self.executable.conda_env}")
+            for line in self.executable.conda_env.split("\n"):
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
 
