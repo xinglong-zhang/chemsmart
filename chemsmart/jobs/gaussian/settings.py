@@ -329,12 +329,12 @@ class GaussianJobSettings(MolecularJobSettings):
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
             elif self.job_type == "modred":
                 route_string += (
-                    f" opt=(modred,{self.additional_opt_options_in_route})"
+                    f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 )
                 self.freq = True
             elif self.job_type == "scan":
                 route_string += (
-                    f" opt=(modred,{self.additional_opt_options_in_route})"
+                    f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 )
                 self.freq = False
             elif self.job_type == "sp":
@@ -345,10 +345,10 @@ class GaussianJobSettings(MolecularJobSettings):
             elif self.job_type == "ts":
                 route_string += " opt=(ts,calcfc,noeigentest)"
             elif self.job_type == "modred":
-                route_string += " opt=modred"
+                route_string += " opt=modredundant"
                 self.freq = True
             elif self.job_type == "scan":
-                route_string += " opt=modred"
+                route_string += " opt=modredundant"
                 self.freq = False
             elif self.job_type == "sp":
                 route_string += ""

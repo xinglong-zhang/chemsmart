@@ -6,4 +6,5 @@ from .dias import dias
 from .gaussian import gaussian
 from .irc import irc
 from .link import link
+from .modred import modred
 from .opt import opt

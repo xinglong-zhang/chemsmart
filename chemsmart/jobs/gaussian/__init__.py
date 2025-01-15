@@ -7,7 +7,7 @@ from .opt import GaussianOptJob
 from .irc import GaussianIRCJob
 from .job import GaussianComJob, GaussianGeneralJob, GaussianJob
 from .link import GaussianLinkJob
-from .modred import GaussianModredundantJob
+from .modred import GaussianModredJob
 from .nci import GaussianNCIJob
 from .resp import GaussianRESPJob
 from .runner import GaussianJobRunner
