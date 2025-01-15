@@ -9,15 +9,15 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("nci", cls=MyCommand)
+@gaussian.command("resp", cls=MyCommand)
 @click_job_options
 @click.pass_context
-def nci(ctx, **kwargs):
+def resp(ctx, **kwargs):
     from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    nci_settings = project_settings.nci_settings()
+    resp_settings = project_settings.sp_settings()
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
@@ -25,8 +25,8 @@ def nci(ctx, **kwargs):
     keywords = ctx.obj["keywords"]
 
     # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
-    nci_settings = nci_settings.merge(job_settings, keywords=keywords)
-    check_charge_and_multiplicity(nci_settings)
+    resp_settings = resp_settings.merge(job_settings, keywords=keywords)
+    check_charge_and_multiplicity(resp_settings)
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -36,10 +36,13 @@ def nci(ctx, **kwargs):
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
-    logger.info(f"IRC settings from project: {nci_settings.__dict__}")
+    # fixed route for resp job
+    resp_settings.route_to_be_written = 'HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)'
 
-    from chemsmart.jobs.gaussian import GaussianNCIJob
+    logger.info(f"RESP settings from project: {resp_settings.__dict__}")
 
-    return GaussianNCIJob(
-        molecule=molecule, settings=nci_settings, label=label, **kwargs
+    from chemsmart.jobs.gaussian import GaussianRESPJob
+
+    return GaussianRESPJob(
+        molecule=molecule, settings=resp_settings, label=label, **kwargs
     )
