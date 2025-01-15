@@ -81,7 +81,7 @@ class JobRunner(RegistryMixin):
             logger.info(f"Scratch dir set to: {scratch_dir}")
         # (2) then try to get from server specific environment variable
         if scratch_dir is None:
-            scratch_dir = self.server.scratch
+            scratch_dir = self.server.scratch_dir
 
         # (3) then try to get from user settings
         if scratch_dir is None:

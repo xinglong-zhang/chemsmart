@@ -7,14 +7,14 @@ class TestServer:
         assert os.path.exists(server_yaml_file)
         assert os.path.isfile(server_yaml_file)
         server = Server.from_yaml(name=server_yaml_file)
-        assert server.scheduler == "pbs"
+        assert server.scheduler.lower() == "pbs"
         assert server.queue_name == "normal"
         assert server.num_hours == 24
         assert server.mem_gb == 400
         assert server.num_cores == 64
         assert server.num_gpus == 0
         assert server.num_threads == 64
-        assert server.execution_type == "craympirun"
+        assert server.submit_command == "qsub"
         assert server.scratch_dir is None
         assert server.use_hosts is True
         extra_commands = """source ~/anaconda3/etc/profile.d/conda.sh

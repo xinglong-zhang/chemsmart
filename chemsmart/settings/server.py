@@ -43,47 +43,51 @@ class Server(RegistryMixin):
 
     @cached_property
     def scheduler(self):
-        return self.kwargs.get("SCHEDULER")
+        return self.kwargs.get("SCHEDULER", None)
 
     @cached_property
     def queue_name(self):
-        return self.kwargs.get("QUEUE_NAME")
+        return self.kwargs.get("QUEUE_NAME", None)
 
     @cached_property
     def num_hours(self):
-        return self.kwargs.get("NUM_HOURS")
+        return self.kwargs.get("NUM_HOURS", None)
 
     @cached_property
     def mem_gb(self):
-        return self.kwargs.get("MEM_GB")
+        return self.kwargs.get("MEM_GB", 64)
 
     @cached_property
     def num_cores(self):
-        return self.kwargs.get("NUM_CORES")
+        return self.kwargs.get("NUM_CORES", 16)
 
     @cached_property
     def num_gpus(self):
-        return self.kwargs.get("NUM_GPUS")
+        return self.kwargs.get("NUM_GPUS", 0)
 
     @cached_property
     def num_threads(self):
-        return self.kwargs.get("NUM_THREADS")
+        return self.kwargs.get("NUM_THREADS", 16)
 
     @cached_property
-    def execution_type(self):
-        return self.kwargs.get("EXECUTION_TYPE")
+    def submit_command(self):
+        return self.kwargs.get("SUBMIT_COMMAND", None)
+
+    @cached_property
+    def scratch_dir(self):
+        return self.kwargs.get("SCRATCH_DIR", None)
 
     @cached_property
     def scratch(self):
-        return self.kwargs.get("SCRATCH")
+        return self.scratch_dir is not None
 
     @cached_property
     def use_hosts(self):
-        return self.kwargs.get("USE_HOSTS")
+        return self.kwargs.get("USE_HOSTS", None)
 
     @cached_property
     def extra_commands(self):
-        return self.kwargs.get("EXTRA_COMMANDS")
+        return self.kwargs.get("EXTRA_COMMANDS", None)
 
     def register(self):
         # if server already in registry, pass

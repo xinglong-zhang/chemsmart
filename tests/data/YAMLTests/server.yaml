@@ -6,10 +6,10 @@ SERVER:
   NUM_CORES: 64
   NUM_GPUS: 0
   NUM_THREADS: 64
-  EXECUTION_TYPE: craympirun
+  SUBMIT_COMMAND: qsub
   PROJECT: 13003611
   ##PROJECT: 13002374
-  SCRATCH: null
+  SCRATCH_DIR: null
   USE_HOSTS: true
   EXTRA_COMMANDS: |
        source ~/anaconda3/etc/profile.d/conda.sh
