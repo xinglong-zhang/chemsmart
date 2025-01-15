@@ -12,7 +12,12 @@ logger = logging.getLogger(__name__)
 
 @gaussian.command("modred", cls=MyCommand)
 @click_job_options
-@click.option('-c', '--coordinates', default=None, help='list of coordinates to be fixed for modredundant job')
+@click.option(
+    "-c",
+    "--coordinates",
+    default=None,
+    help="list of coordinates to be fixed for modredundant job",
+)
 @click.pass_context
 def modred(ctx, coordinates, **kwargs):
     from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
@@ -39,8 +44,8 @@ def modred(ctx, coordinates, **kwargs):
     logger.debug(f"Label for job: {label}")
 
     assert coordinates is not None, (
-        'Fixed coordinates for modredundant job required!\n'
-        'Use the flags `-c` for coordinates.\n'
+        "Fixed coordinates for modredundant job required!\n"
+        "Use the flags `-c` for coordinates.\n"
         'Example usage: `-c "[[2,3],[6,7]]"`'
     )
     modred_info = eval(coordinates)

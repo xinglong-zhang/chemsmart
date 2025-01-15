@@ -37,7 +37,9 @@ def resp(ctx, **kwargs):
     logger.debug(f"Label for job: {label}")
 
     # fixed route for resp job
-    resp_settings.route_to_be_written = 'HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)'
+    resp_settings.route_to_be_written = (
+        "HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)"
+    )
 
     logger.info(f"RESP settings from project: {resp_settings.__dict__}")
 

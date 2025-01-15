@@ -160,7 +160,9 @@ class GaussianInputWriter(InputWriter):
                 assert os.path.exists(
                     gen_genecp_file
                 ), f"File {gen_genecp_file} not found!"
-                genecp_section = GenGenECPSection.from_genecp_path(gen_genecp_file)
+                genecp_section = GenGenECPSection.from_genecp_path(
+                    gen_genecp_file
+                )
             elif heavy_elements and heavy_elements_basis:
                 logger.info(
                     f"GENECP elements specified:\n"

@@ -17,7 +17,9 @@ class GaussianSAOptJob(GaussianJob):
 
     def __init__(
         self,
-        molecule, settings, label,
+        molecules,
+        settings,
+        label,
         num_structures_to_opt=None,
         grouper_type="seq",
         num_grouper_processes=1,
@@ -25,7 +27,7 @@ class GaussianSAOptJob(GaussianJob):
         **kwargs,
     ):
         super().__init__(
-            fmolecule=molecule, settings=settings, label=label, **kwargs
+            molecule=molecules, settings=settings, label=label, **kwargs
         )
         self.num_structures_to_opt = num_structures_to_opt
         self.grouper_type = grouper_type
@@ -34,17 +36,17 @@ class GaussianSAOptJob(GaussianJob):
         # proportion of the traj from last portion to obtain structures
         self.proportion_to_opt = proportion_structures_to_use
         last_num_structures = int(
-            round(len(atoms) * proportion_structures_to_use, 1)
+            round(len(molecules) * proportion_structures_to_use, 1)
         )
-        self.atoms = atoms[-last_num_structures:]
+        self.molecules = molecules[-last_num_structures:]
 
     @cached_property
     def num_structures(self):
-        return len(self.atoms)
+        return len(self.molecules)
 
     @cached_property
     def all_energies(self):
-        return [structure.get_potential_energy() for structure in self.atoms]
+        return [structure.energy for structure in self.molecules]
 
     @cached_property
     def energies_indices(self):
@@ -58,9 +60,9 @@ class GaussianSAOptJob(GaussianJob):
         return [self.all_energies[i] for i in self.energies_indices]
 
     @cached_property
-    def sorted_atoms(self):
-        """List of atoms sorted by ascending energies."""
-        return [self.atoms[i] for i in self.energies_indices]
+    def sorted_molecules(self):
+        """List of molecules sorted by ascending energies."""
+        return [self.molecules[i] for i in self.energies_indices]
 
     @cached_property
     def unique_structures_sequential_grouper(self):
@@ -68,15 +70,14 @@ class GaussianSAOptJob(GaussianJob):
 
         Skip_structure_reduction is set to True as structures as molecular.
         """
-        images = [image.set_automatic_cell() for image in self.sorted_atoms]
-        grouper = StructuralSequentialGrouper.from_atoms(
-            atoms=images,
+        grouper = StructuralSequentialGrouper.from_molecules(
+            molecules=self.sorted_molecules,
             num_procs=self.num_grouper_processes,
             skip_structure_reduction=True,
         )
         groups, _ = grouper.group()
         unique_images = [group[0] for group in groups]
-        return [image.wrap_positions() for image in unique_images]
+        return unique_images
 
     @cached_property
     def unique_structures_self_consistent_grouper(self):
@@ -84,9 +85,8 @@ class GaussianSAOptJob(GaussianJob):
 
         Skip_structure_reduction is set to True as structures as molecular.
         """
-        images = [image.set_automatic_cell() for image in self.sorted_atoms]
-        grouper = StructuralSelfConsistentGrouper.from_atoms(
-            atoms=images,
+        grouper = StructuralSelfConsistentGrouper.from_molecules(
+            molecules=self.sorted_molecules,
             num_procs=self.num_grouper_processes,
             skip_structure_reduction=True,
         )
@@ -94,13 +94,11 @@ class GaussianSAOptJob(GaussianJob):
         unique_images = [group[0] for group in groups]
 
         # sort unique images by ascending order of energies again
-        unique_images_energies = [
-            image.get_potential_energy() for image in unique_images
-        ]
+        unique_images_energies = [image.energy for image in unique_images]
         unique_images_sorted = [
             unique_images[i] for i in np.argsort(unique_images_energies)
         ]
-        return [image.wrap_positions() for image in unique_images_sorted]
+        return unique_images_sorted
 
     @property
     def unique_structures(self):
@@ -114,10 +112,7 @@ class GaussianSAOptJob(GaussianJob):
 
     @property
     def unique_structures_energies(self):
-        return [
-            structure.get_potential_energy()
-            for structure in self.unique_structures
-        ]
+        return [structure.energy for structure in self.unique_structures]
 
     @property
     def num_unique_structures(self):
@@ -125,21 +120,21 @@ class GaussianSAOptJob(GaussianJob):
 
     def _prepare_all_jobs(self):
         jobs = []
-        logger.info(
+        logger.debug(
             f"Number of structures used for optimization: {self.num_unique_structures}\n"
         )
-        logger.info(f"Unique structures: {self.unique_structures}")
-        logger.info(
+        logger.debug(f"Unique structures: {self.unique_structures}")
+        logger.debug(
             f"Unique structures energies: {self.unique_structures_energies}"
         )
         for i in range(self.num_unique_structures):
             label = f"{self.label}_c{i + 1}"  # 1-indexed for structures
             jobs += [
                 GaussianGeneralJob(
-                    folder=self.folder,
-                    atoms=self.unique_structures[i],
+                    molecule=self.unique_structures[i],
                     settings=self.settings,
                     label=label,
+                    skip_completed=self.skip_completed,
                 )
             ]
         return jobs
@@ -167,12 +162,12 @@ class GaussianSAOptJob(GaussianJob):
         # If all complete
         return self.num_unique_structures
 
-    def _run_all_jobs(self, jobrunner, queue_manager=None):
+    def _run_all_jobs(self, jobrunner):
         for job in self.all_structures_opt_jobs[: self.num_structures_to_opt]:
-            job.run(jobrunner=jobrunner, queue_manager=queue_manager)
+            job.run(jobrunner=jobrunner)
 
-    def _run(self, jobrunner, queue_manager=None, **kwargs):
-        self._run_all_jobs(jobrunner=jobrunner, queue_manager=queue_manager)
+    def _run(self, jobrunner, **kwargs):
+        self._run_all_jobs(jobrunner=jobrunner)
 
     def is_complete(self):
         return self._run_all_sa_opt_jobs_are_complete()

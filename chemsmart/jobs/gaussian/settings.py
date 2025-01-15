@@ -95,7 +95,9 @@ class GaussianJobSettings(MolecularJobSettings):
 
     @property
     def genecp(self):
-        return self.gen_genecp_file is not None or self.heavy_elements is not None
+        return (
+            self.gen_genecp_file is not None or self.heavy_elements is not None
+        )
 
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
@@ -332,14 +334,10 @@ class GaussianJobSettings(MolecularJobSettings):
                 else:
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
             elif self.job_type == "modred":
-                route_string += (
-                    f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                )
+                route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = True
             elif self.job_type == "scan":
-                route_string += (
-                    f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                )
+                route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
                 self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
