@@ -93,6 +93,10 @@ class GaussianJobSettings(MolecularJobSettings):
 
         self.input_string = input_string
 
+    @property
+    def genecp(self):
+        return self.gen_genecp_file is not None or self.heavy_elements is not None
+
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
     ):
@@ -615,7 +619,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
     def _get_link_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
         # remove "opt or opt= and freq" from route string
-        pattern = re.compile(r"\s*opt\s*(=\s*(\(.*\)|\w+))?\s*", re.IGNORECASE)
+        pattern = re.compile(r"opt\s*(=\s*(\(.*\)|\w+))?\s*", re.IGNORECASE)
         route_string_final = re.sub(pattern, "", route_string)
         route_string_final = route_string_final.replace("freq", "")
 

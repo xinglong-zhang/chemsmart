@@ -7,4 +7,5 @@ from .gaussian import gaussian
 from .irc import irc
 from .link import link
 from .modred import modred
+from .nci import nci
 from .opt import opt

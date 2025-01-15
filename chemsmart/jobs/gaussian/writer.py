@@ -29,9 +29,9 @@ class GaussianInputWriter(InputWriter):
         logger.debug(f"Writing Gaussian input file: {job_inputfile}")
         f = open(job_inputfile, "w")
         if self.job.settings.input_string:
+            # write the file itself for direct run
             self._write_self(f)
         else:
-            # write the file itself for direct run
             self._write_all(f)
         logger.info(f"Finished writing Gaussian input file: {job_inputfile}")
         f.close()
@@ -90,6 +90,8 @@ class GaussianInputWriter(InputWriter):
         logger.debug("Writing Cartesian coordinates.")
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f)
+        if not self.job.molecule.pbc_conditions:
+            f.write("\n")
 
     def _write_pbc(self, f):
         """Write the periodic boundary conditions section if present in the job settings."""
@@ -112,7 +114,6 @@ class GaussianInputWriter(InputWriter):
         logger.debug("Writing modred section.")
         modredundant = self.job.settings.modred
         if modredundant:
-            f.write("\n")
             if isinstance(modredundant, list):
                 # for modredunant job
                 # modred = [[1,2], [3,4]]
@@ -123,6 +124,7 @@ class GaussianInputWriter(InputWriter):
                 )
                 for prepend_string in prepend_string_list:
                     f.write(f"{prepend_string} F\n")
+                f.write("\n")
 
             elif isinstance(modredundant, dict):
                 # for scanning job
@@ -135,9 +137,9 @@ class GaussianInputWriter(InputWriter):
                 )
                 for prepend_string in prepend_string_list:
                     f.write(
-                        f"{prepend_string} S {self.modred['num_steps']} {self.modred['step_size']}\n"
+                        f"{prepend_string} S {self.job.settings.modred['num_steps']} {self.job.settings.modred['step_size']}\n"
                     )
-                    f.write("\n")
+                f.write("\n")
 
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
@@ -149,38 +151,39 @@ class GaussianInputWriter(InputWriter):
             self.job.molecule
         )
         light_elements_basis = self.job.settings.light_elements_basis
-        if gen_genecp_file and heavy_elements and heavy_elements_basis:
-            raise ValueError(
-                "Please provide either gen_genecp_file or heavy_elements and heavy_elements_basis."
-            )
-        if gen_genecp_file:
-            assert os.path.exists(
-                gen_genecp_file
-            ), f"File {gen_genecp_file} not found!"
-            genecp_section = GenGenECPSection.from_genecp_path(gen_genecp_file)
-        elif heavy_elements and heavy_elements_basis:
-            logger.info(
-                f"GENECP elements specified:\n"
-                f"Heavy elements: {heavy_elements}\n"
-                f"Heavy elements basis: {heavy_elements_basis}\n"
-                f"Light elements: {light_elements}\n"
-                f"Light elements basis: {light_elements_basis}\n"
-                "Using basis set exchange api to get gen/genecp basis set for heavy atoms.\n"
-            )
-            heavy_elements_in_structure = prune_list_of_elements(
-                heavy_elements, self.job.molecule
-            )
+        if self.job.settings.genecp:
+            if gen_genecp_file and heavy_elements and heavy_elements_basis:
+                raise ValueError(
+                    "Please provide either gen_genecp_file or heavy_elements and heavy_elements_basis."
+                )
+            if gen_genecp_file:
+                assert os.path.exists(
+                    gen_genecp_file
+                ), f"File {gen_genecp_file} not found!"
+                genecp_section = GenGenECPSection.from_genecp_path(gen_genecp_file)
+            elif heavy_elements and heavy_elements_basis:
+                logger.info(
+                    f"GENECP elements specified:\n"
+                    f"Heavy elements: {heavy_elements}\n"
+                    f"Heavy elements basis: {heavy_elements_basis}\n"
+                    f"Light elements: {light_elements}\n"
+                    f"Light elements basis: {light_elements_basis}\n"
+                    "Using basis set exchange api to get gen/genecp basis set for heavy atoms.\n"
+                )
+                heavy_elements_in_structure = prune_list_of_elements(
+                    heavy_elements, self.job.molecule
+                )
 
-            genecp_section = GenGenECPSection.from_bse_api(
-                light_elements=light_elements,
-                light_elements_basis=light_elements_basis,
-                heavy_elements=heavy_elements_in_structure,
-                heavy_elements_basis=heavy_elements_basis,
-            )
-        else:
-            return
-        f.write(genecp_section.string)
-        f.write("\n")
+                genecp_section = GenGenECPSection.from_bse_api(
+                    light_elements=light_elements,
+                    light_elements_basis=light_elements_basis,
+                    heavy_elements=heavy_elements_in_structure,
+                    heavy_elements_basis=heavy_elements_basis,
+                )
+            else:
+                return
+            f.write(genecp_section.string)
+            f.write("\n")
 
     def _append_custom_solvent_parameters(self, f):
         """Write the custom solvent parameters if present in the job settings."""
@@ -198,15 +201,15 @@ class GaussianInputWriter(InputWriter):
         if job_type == "nci":
             # appending for nci job
             f.write(f"{job_label}.wfn\n")
-            f.write("\n")
+            f.write(f"\n")
         elif job_type == "wbi":
             # appending for wbi job
             f.write("$nbo bndidx $end\n")
-            f.write("\n")
+            f.write(f"\n")
         elif job_type == "resp":
             # appending for resp job
             f.write(f"{job_label}.gesp\n")
-            f.write("\n")
+            f.write(f"\n")
 
     def _append_other_additional_info(self, f):
         """Write any additional information that needs to be appended to the input file."""
@@ -231,10 +234,10 @@ class GaussianInputWriter(InputWriter):
         if self.job.settings.link:
             f.write("--Link1--\n")
             self._write_gaussian_header(f)
-            f.write(f"{self.job.settings.link_route_string}\n")
-            f.write("\n")
+            self._write_link_route(f)
             self._write_gaussian_title(f)
             self._write_charge_and_multiplicity(f)
+            f.write("\n")
             self._append_modredundant(f)
             self._append_gen_genecp_basis(f)  # then write genecp info
             self._append_custom_solvent_parameters(
@@ -242,3 +245,9 @@ class GaussianInputWriter(InputWriter):
             )  # followed by user defined solvent parameters
             self._append_job_specific_info(f)
             self._append_other_additional_info(f)
+
+    def _write_link_route(self, f):
+        """Write the route section for the link job."""
+        logger.debug("Writing link route section.")
+        f.write(f"{self.job.settings.link_route_string}\n")
+        f.write("\n")
