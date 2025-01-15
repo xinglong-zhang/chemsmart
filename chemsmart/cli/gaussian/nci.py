@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def nci(ctx, **kwargs):
-    from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]

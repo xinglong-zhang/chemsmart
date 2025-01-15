@@ -11,17 +11,17 @@ from chemsmart.utils.cli import get_setting_from_jobtype
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("modred", cls=MyCommand)
+@gaussian.command("scan", cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
 @click.pass_context
-def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
+def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     if jobtype is None:
-        jobtype = "modred"
+        jobtype = "scan"
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    modred_settings = get_setting_from_jobtype(
+    scan_settings = get_setting_from_jobtype(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
@@ -31,8 +31,8 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     keywords = ctx.obj["keywords"]
 
     # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
-    modred_settings = modred_settings.merge(job_settings, keywords=keywords)
-    check_charge_and_multiplicity(modred_settings)
+    scan_settings = scan_settings.merge(job_settings, keywords=keywords)
+    check_charge_and_multiplicity(scan_settings)
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -42,10 +42,10 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
-    logger.info(f"Modred settings from project: {modred_settings.__dict__}")
+    logger.info(f"Scan job settings from project: {scan_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian import GaussianModredJob
+    from chemsmart.jobs.gaussian import GaussianScanJob
 
-    return GaussianModredJob(
-        molecule=molecule, settings=modred_settings, label=label, **kwargs
+    return GaussianScanJob(
+        molecule=molecule, settings=scan_settings, label=label, **kwargs
     )

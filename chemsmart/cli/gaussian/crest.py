@@ -2,8 +2,9 @@ import click
 import logging
 from chemsmart.utils.utils import check_charge_and_multiplicity
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.job import click_gaussian_link_jobs_options
+from chemsmart.cli.job import click_gaussian_jobtype_options
 from chemsmart.utils.cli import get_setting_from_jobtype
+
 from chemsmart.utils.cli import MyCommand
 from chemsmart.cli.gaussian.gaussian import gaussian
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @gaussian.command(cls=MyCommand)
 @click_job_options
-@click_gaussian_link_jobs_options
+@click_gaussian_jobtype_options
 @click.option(
     "-n",
     "--num-confs-to-run",

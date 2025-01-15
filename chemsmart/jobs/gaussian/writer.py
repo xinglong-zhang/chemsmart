@@ -203,15 +203,15 @@ class GaussianInputWriter(InputWriter):
         if job_type == "nci":
             # appending for nci job
             f.write(f"{job_label}.wfn\n")
-            f.write(f"\n")
+            f.write("\n")
         elif job_type == "wbi":
             # appending for wbi job
             f.write("$nbo bndidx $end\n")
-            f.write(f"\n")
+            f.write("\n")
         elif job_type == "resp":
             # appending for resp job
             f.write(f"{job_label}.gesp\n")
-            f.write(f"\n")
+            f.write("\n")
 
     def _append_other_additional_info(self, f):
         """Write any additional information that needs to be appended to the input file."""

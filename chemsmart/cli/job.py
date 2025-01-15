@@ -21,7 +21,7 @@ def click_job_options(f):
     return wrapper_common_options
 
 
-def click_gaussian_link_jobs_options(f):
+def click_gaussian_jobtype_options(f):
     """Common click options for Gaussian link/crest jobs."""
 
     @click.option(

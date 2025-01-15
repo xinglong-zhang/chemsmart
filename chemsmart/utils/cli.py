@@ -58,7 +58,7 @@ def get_setting_from_jobtype(
     project_settings, jobtype, coordinates, step_size, num_steps
 ):
     if jobtype is None:
-        raise ValueError("Jobtype must be provided for crest job.")
+        raise ValueError("Jobtype must be provided for Crest and Link job.")
 
     if jobtype.lower() == "opt":
         settings = project_settings.opt_settings()
@@ -67,18 +67,18 @@ def get_setting_from_jobtype(
     elif jobtype.lower() == "modred":
         assert (
             coordinates is not None
-        ), "Coordinates must be provided for modred job"
+        ), "Coordinates must be provided for modred job."
         settings = project_settings.modred_settings()
     elif jobtype.lower() == "irc":
         settings = project_settings.irc_settings()
     elif jobtype.lower() == "scan":
-        assert (
-            coordinates is not None
-        ), "Coordinates must be provided for scan job"
-        assert step_size is not None, "Step size must be provided for scan job"
-        assert (
-            num_steps is not None
-        ), "Number of steps must be provided for scan job"
+        assert all(
+            v is not None for v in [coordinates, step_size, num_steps]
+        ), (
+            "Scanning coordinates, step size and number of steps of scan required!\n"
+            "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
+            "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
+        )
         settings = project_settings.scan_settings()
     elif jobtype.lower() == "sp":
         settings = project_settings.sp_settings()

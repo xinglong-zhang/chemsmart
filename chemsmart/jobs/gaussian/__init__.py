@@ -12,7 +12,7 @@ from .nci import GaussianNCIJob
 from .resp import GaussianRESPJob
 from .runner import GaussianJobRunner
 from .saopt import GaussianSAOptJob
-from .scan import GaussianPESScanJob
+from .scan import GaussianScanJob
 from .singlepoint import GaussianSinglePointJob
 from .tddft import GaussianTDDFTJob
 from .tssearch import GaussianTSJob
