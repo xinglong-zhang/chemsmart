@@ -1,8 +1,8 @@
 from copy import deepcopy
 
-from pyatoms.jobs.gaussian.geomopt import GaussianGeomOptJob
-from pyatoms.jobs.gaussian.job import GaussianJob
-from pyatoms.jobs.gaussian.singlepoint import GaussianSinglePointJob
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.job import GaussianJob
+from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
 
 class GaussianUVVISJob(GaussianJob):
@@ -17,7 +17,7 @@ class GaussianUVVISJob(GaussianJob):
         # Ground state geometry optimization and frequencies
         # add equilibrium solvation if necessary
         gs_geom_opt_settings = deepcopy(self.settings)
-        return GaussianGeomOptJob(
+        return GaussianOptJob(
             folder=self.folder, atoms=self.atoms, settings=gs_geom_opt_settings
         )
 
