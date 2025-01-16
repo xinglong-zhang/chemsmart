@@ -1,3 +1,11 @@
+# If I comment all these out, I get the following error during run:
+#   File "/Users/xinglongzhang/bin/chemsmart/chemsmart/jobs/runner.py", line 192, in from_job
+#     raise ValueError(
+# ValueError: Could not find any runners for job:
+# GaussianOptJob<folder=/Users/xinglongzhang/pyatoms_tests, label=final_prd_opt_scan_gas_opt_opt>.
+# Runners in registry: [].
+#  Fake: True
+#
 from .crest import GaussianCrestJob
 from .crestopt import GaussianCrestOptJob
 from .crestts import GaussianCrestTSJob
