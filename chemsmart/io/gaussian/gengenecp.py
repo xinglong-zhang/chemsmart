@@ -108,10 +108,10 @@ class GenGenECPSection:
 
     @classmethod
     def from_comfile(cls, comfile):
-        from chemsmart.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.input import Gaussian16Input
 
-        comfile = Gaussian16Input(comfile=comfile)
-        return cls.from_genecp_group(comfile.gen_genecp)
+        comfile = Gaussian16Input(filename=comfile)
+        return cls.from_genecp_group(comfile.gen_genecp_group)
 
     @classmethod
     def from_genecp_group(cls, genecp_group):

@@ -44,6 +44,31 @@ class Gaussian16Output(GaussianFileMixin):
         logger.info(f"File {self.filename} has error termination.")
         return False
 
+    @property
+    def heavy_elements(self):
+        """TODO"""
+        return None
+
+    @property
+    def heavy_elements_basis(self):
+        """TODO"""
+        return None
+
+    @property
+    def light_elements(self):
+        """TODO"""
+        return None
+
+    @property
+    def light_elements_basis(self):
+        """TODO"""
+        return None
+
+    @property
+    def custom_solvent(self):
+        """TODO"""
+        return None
+
     @cached_property
     def num_steps(self):
         """Number of points scanned."""
@@ -137,19 +162,17 @@ class Gaussian16Output(GaussianFileMixin):
 
         # If the job terminated normally
         if self.normal_termination:
-            # Handle special case: both "opt" and "freq" present in route
-            if "opt" in self.route_string and "freq" in self.route_string:
-                assert np.allclose(
-                    self.input_orientations[-1],
-                    self.input_orientations[-2],
-                    rtol=1e-5,
-                ), "The last two input orientations should be the same."
-                assert np.allclose(
-                    self.standard_orientations[-1],
-                    self.standard_orientations[-2],
-                    rtol=1e-5,
-                ), "The last two standard orientations should be the same."
+            if np.allclose(
+                self.input_orientations[-1],
+                self.input_orientations[-2],
+                rtol=1e-5,
+            ):
                 self.input_orientations.pop(-1)
+            if np.allclose(
+                self.standard_orientations[-1],
+                self.standard_orientations[-2],
+                rtol=1e-5,
+            ):
                 self.standard_orientations.pop(-1)
 
             # Use Standard orientations if available, otherwise Input orientations
@@ -187,6 +210,10 @@ class Gaussian16Output(GaussianFileMixin):
     def last_structure(self):
         """Return last structure, whether the output file has completed successfully or not."""
         return self.all_structures[-1]
+
+    @property
+    def molecule(self):
+        return self.last_structure
 
     ######################### the following properties relate to intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
@@ -229,6 +256,9 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     #########################
+    @property
+    def modredundant_group(self):
+        return self._get_modredundant_group()
 
     def _get_route(self):
         lines = self.contents
@@ -253,6 +283,20 @@ class Gaussian16Output(GaussianFileMixin):
                 else:
                     route = None
                 return route
+        return None
+
+    def _get_modredundant_group(self):
+        if "modred" in self.route_string:
+            for i, line in enumerate(self.contents):
+                if line.startswith(
+                    "The following ModRedundant input section has been read:"
+                ):
+                    for j_line in self.contents[i + 1 :]:
+                        modredundant_group = []
+                        if len(j_line) == 0:
+                            break
+                        modredundant_group.append(j_line)
+                    return modredundant_group
         return None
 
     @property

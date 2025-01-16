@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from chemsmart.io.gaussian.inputs import Gaussian16Input
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import XYZFile

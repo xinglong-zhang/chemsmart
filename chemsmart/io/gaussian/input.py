@@ -35,14 +35,11 @@ class Gaussian16Input(GaussianFileMixin):
     @property
     def modredundant_group(self):
         if (
-            "modred" in self.route_string and self.num_content_blocks > 3
-        ):  # in case the input .com file has opt=modredundant
-            # in route but no modredundant section at the end
+            "modred" in self.route_string or "modred" in self.route_string
+        ) and self.num_content_blocks > 3:
+            # in case the input .com file has opt=modred
+            # in route but no modred section at the end
             return self.content_groups[3]
-
-    @property
-    def modredundant(self):
-        return self._get_modredundant_conditions()
 
     @property
     def is_pbc(self):
@@ -55,10 +52,6 @@ class Gaussian16Input(GaussianFileMixin):
     @property
     def translation_vectors(self):
         return self.coordinate_block.translation_vectors
-
-    @property
-    def chk(self):
-        return self._get_chk()
 
     @property
     def mem(self):
@@ -89,25 +82,35 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def genecp_section(self):
-        return GenGenECPSection.from_genecp_group(
-            genecp_group=self.gen_genecp_group
-        )
+        if self.gen_genecp_group:
+            return GenGenECPSection.from_genecp_group(
+                genecp_group=self.gen_genecp_group
+            )
+        return None
 
     @property
     def light_elements(self):
-        return self.genecp_section.light_elements
+        if self.genecp_section:
+            return self.genecp_section.light_elements
+        return None
 
     @property
     def light_elements_basis(self):
-        return self.genecp_section.light_elements_basis
+        if self.genecp_section:
+            return self.genecp_section.light_elements_basis
+        return None
 
     @property
     def heavy_elements(self):
-        return self.genecp_section.heavy_elements
+        if self.genecp_section:
+            return self.genecp_section.heavy_elements
+        return None
 
     @property
     def heavy_elements_basis(self):
-        return self.genecp_section.heavy_elements_basis
+        if self.genecp_section:
+            return self.genecp_section.heavy_elements_basis
+        return None
 
     @property
     def custom_solvent(self):
@@ -169,68 +172,6 @@ class Gaussian16Input(GaussianFileMixin):
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity
 
-    def _get_modredundant_conditions(self):
-        modred = None
-        if (
-            "modred" in self.route_string
-            and self.modredundant_group is not None
-        ):
-            for line in self.modredundant_group:
-                if "F" in line or "f" in line:
-                    modred = self._get_modred_frozen_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "modred"
-                elif "S" in line or "s" in line:
-                    modred = self._get_modred_scan_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "scan"
-                return modred
-
-    @staticmethod
-    def _get_modred_frozen_coords(modred_list_of_string):
-        modred = []
-        for raw_line in modred_list_of_string:
-            line = raw_line[2:-2]
-            line_elems = line.split()
-            assert all(
-                line_elem.isdigit() for line_elem in line_elems
-            ), f"modredundant coordinates should be integers, but is {line_elems} instead."
-            each_modred_list = [int(line_elem) for line_elem in line_elems]
-            modred.append(each_modred_list)
-        return modred
-
-    def _get_modred_scan_coords(self, modred_list_of_string):
-        modred = {}
-        coords = []
-        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
-        for raw_line in modred_list_of_string:
-            line = raw_line.strip()[2:]
-            line_elems = line.split("S")
-
-            # obtain coords
-            coords_string = line_elems[0]
-            each_coords_list = coords_string.split()
-            assert all(
-                line_elem.isdigit() for line_elem in each_coords_list
-            ), f"modredundant coordinates should be integers, but is {line_elems[0]} instead."
-            each_modred_list = [
-                int(line_elem) for line_elem in each_coords_list
-            ]
-            coords.append(each_modred_list)
-            modred["coords"] = coords
-
-            # obtain num_steps and step_size (assumed the same for each scan coordinate)
-            steps_string = line_elems[-1]
-            steps_list = steps_string.split()
-            num_steps = int(steps_list[0])
-            step_size = float(steps_list[1])
-            modred["num_steps"] = num_steps
-            modred["step_size"] = step_size
-
-        return modred
-
     def _get_gen_genecp_group(self):
         if "gen" not in self.basis:
             return None
@@ -262,7 +203,7 @@ class Gaussian16Input(GaussianFileMixin):
         """Get the custom solvent group from the content groups.
         Custom solvent is always the last content group in the input file.
         """
-        if "solvent=generic" in self.route:
+        if "solvent=generic" in self.route_string:
             return self.content_groups[-1]
         return None
 

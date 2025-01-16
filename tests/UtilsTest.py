@@ -1,8 +1,9 @@
 import numpy as np
 from chemsmart.utils.utils import is_float
-from chemsmart.io.gaussian.inputs import Gaussian16Input
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.utils import content_blocks_by_paragraph
+from chemsmart.utils.utils import get_list_from_string_range
 
 
 class TestUtils:
@@ -28,3 +29,55 @@ class TestUtils:
                 atol=1e-4,
             )
         )
+
+    def test_get_list_from_string_range(self):
+        s1 = "1-3"
+        s2 = "1,3"
+        s3 = "1,2,3"
+        s4 = "1-3,5"
+        s5 = "1-3,5-7"
+        s6 = "1-3,5-7,10"
+        s7 = "1,2,3,5-7,10"
+        s8 = "[1-3,28-31,34-41]"
+        s9 = "1-3,28-31,34-41"
+        assert get_list_from_string_range(s1) == [1, 2, 3]
+        assert get_list_from_string_range(s2) == [1, 3]
+        assert get_list_from_string_range(s3) == [1, 2, 3]
+        assert get_list_from_string_range(s4) == [1, 2, 3, 5]
+        assert get_list_from_string_range(s5) == [1, 2, 3, 5, 6, 7]
+        assert get_list_from_string_range(s6) == [1, 2, 3, 5, 6, 7, 10]
+        assert get_list_from_string_range(s7) == [1, 2, 3, 5, 6, 7, 10]
+        assert get_list_from_string_range(s8) == [
+            1,
+            2,
+            3,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+        ]
+        assert get_list_from_string_range(s9) == [
+            1,
+            2,
+            3,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+        ]

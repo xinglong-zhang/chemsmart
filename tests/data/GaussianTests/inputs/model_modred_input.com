@@ -1,7 +1,7 @@
 %chk=normal_ts_modred.chk
 %nprocshared=32
 %mem=30GB
-# opt=modredundant freq m062x def2svp
+# opt=modred freq m062x def2svp
 
 From inputfile normal_ts.log
 

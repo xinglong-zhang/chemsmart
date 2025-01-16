@@ -45,6 +45,10 @@ class GaussianRoute:
         return self.get_numfreq()
 
     @property
+    def force(self):
+        return "force" in self.route_string
+
+    @property
     def ab_initio(self):
         return self.get_ab_initio()
 

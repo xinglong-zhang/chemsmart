@@ -1,16 +1,19 @@
 import os
 import re
 import ase
+import copy
+import logging
 import numpy as np
 from ase.symbols import Symbols
 from ase.io.formats import string2index
-from functools import cached_property
+from functools import cached_property, lru_cache
 from chemsmart.utils.utils import file_cache
-from chemsmart.utils.utils import FileReadError
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 
 p = pt()
+
+logger = logging.getLogger(__name__)
 
 
 class Molecule:
@@ -73,6 +76,14 @@ class Molecule:
         self.velocities = velocities
         self.info = info
 
+    def __len__(self):
+        return len(self.chemical_symbols)
+
+    def __getitem__(self, idx):
+        symbols = [self.symbols[i - 1] for i in idx]
+        positions = [self.positions[i - 1] for i in idx]
+        return type(self)(symbols=symbols, positions=positions)
+
     @property
     def empirical_formula(self):
         return Symbols.fromsymbols(self.symbols).get_chemical_formula(
@@ -90,11 +101,19 @@ class Molecule:
         """Return the number of atoms in the molecule."""
         return len(self.chemical_symbols)
 
+    @property
+    def pbc(self):
+        """Return the periodic boundary conditions."""
+        return all(i == 0 for i in self.pbc_conditions)
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return self.symbols.get_chemical_formula(
                 mode=mode, empirical=empirical
             )
+
+    def copy(self):
+        return copy.deepcopy(self)
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
@@ -125,15 +144,18 @@ class Molecule:
         if os.path.getsize(filepath) == 0:
             return None
 
-        try:
-            molecule = cls._read_filepath(
-                filepath, index=index, return_list=return_list, **kwargs
-            )
+        # try:
+        molecule = cls._read_filepath(
+            filepath, index=index, return_list=return_list, **kwargs
+        )
+        if return_list and isinstance(molecule, Molecule):
+            return [molecule]
+        else:
             return molecule
-        except Exception as e:
-            raise FileReadError(
-                f"Failed to create molecule from {filepath}."
-            ) from e
+        # except Exception as e:
+        #     raise FileReadError(
+        #         f"Failed to create molecule from {filepath}."
+        #     ) from e
 
     @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):
@@ -187,10 +209,14 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_gaussian_inputfile(filepath):
-        from chemsmart.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.input import Gaussian16Input
 
-        g16_input = Gaussian16Input(filename=filepath)
-        return g16_input.molecule
+        try:
+
+            g16_input = Gaussian16Input(filename=filepath)
+            return g16_input.molecule
+        except ValueError:
+            g16_input = Gaussian16Input(filename=filepath)
 
     @staticmethod
     @file_cache()
@@ -203,7 +229,7 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_orca_inputfile(filepath):
-        from chemsmart.io.orca.inputs import ORCAInput
+        from chemsmart.io.orca.input import ORCAInput
 
         orca_input = ORCAInput(filename=filepath)
         return orca_input.molecule
@@ -212,7 +238,7 @@ class Molecule:
     @file_cache()
     def _read_orca_outfile(filepath, index):
         # TODO: to improve ORCAOutput object so that all the structures can be obtained and returned via index
-        from chemsmart.io.orca.outputs import ORCAOutput
+        from chemsmart.io.orca.output import ORCAOutput
 
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.molecule
@@ -239,13 +265,69 @@ class Molecule:
     def _read_other(filepath, index, **kwargs):
         return ase.io.read(filepath, index=index, **kwargs)
 
-    def write(self, f):
+    @classmethod
+    @lru_cache(maxsize=128)
+    def from_pubchem(cls, identifier, return_list=False):
+        """Creates Molecule object from pubchem based on an identifier (CID, SMILES, or name).
+        Args:
+        identifier (str): The compound identifier (name, CID, or SMILES string).
+        identifier_type (str): The type of the identifier. Can be "name", "cid", or "smiles".
+        output_format (str): The desired format of the response. Default is "json".
+                             Other options include "sdf" or "xml".
+        Raises:
+            ValueError: If an invalid `identifier_type` is provided.
+            requests.exceptions.RequestException: For network or HTTP-related issues.
+        """
+        from chemsmart.io.molecules.pubchem import pubchem_search
+
+        possible_attributes = (
+            ["cid"]
+            if identifier.isnumeric()
+            else ["smiles", "name", "conformer"]
+        )
+
+        for attribute in possible_attributes:
+            molecule = pubchem_search(**{attribute: identifier})
+            if molecule is not None:
+                logger.info(
+                    f"Structure successfully created from pubchem with {attribute} = {identifier}"
+                )
+                if return_list:
+                    return [molecule]
+                return molecule
+
+        logger.debug("Could not create structure from pubchem.")
+        return None
+
+    @classmethod
+    def from_molecule(cls, molecule):
+        return cls(**molecule.__dict__)
+
+    @classmethod
+    def from_ase_atoms(cls, atoms):
+        return cls(
+            symbols=atoms.get_chemical_symbols(),
+            positions=atoms.get_positions(),
+            pbc_conditions=atoms.get_pbc(),
+        )
+
+    def write_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-
-        pass
+        if self.frozen_atoms is None:
+            for i, (s, (x, y, z)) in enumerate(
+                zip(self.chemical_symbols, self.positions)
+            ):
+                f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
+        else:
+            for i, (s, (x, y, z)) in enumerate(
+                zip(self.chemical_symbols, self.positions)
+            ):
+                f.write(
+                    f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
+                )
 
     def __repr__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"
@@ -313,6 +395,8 @@ class CoordinateBlock:
 
     @property
     def constrained_atoms(self):
+        """Returns a list of contraints in Gaussian format where 0 means unconstrained
+        and -1 means constrained."""
         return self._get_constraints()
 
     def convert_coordinate_block_list_to_molecule(self):
@@ -426,6 +510,8 @@ class CoordinateBlock:
             self._get_atomic_numbers_positions_and_constraints()
         )
         if len(constraints) == 0:
+            return None
+        if all(constraint == 0 for constraint in constraints):
             return None
         return constraints
 

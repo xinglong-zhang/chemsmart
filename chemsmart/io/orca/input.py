@@ -140,6 +140,9 @@ class ORCAInput(ORCAFileMixin):
                 return line.split()[-1]
         return None
 
+    def read_settings(self):
+        pass
+
     # def read_settings(self):
     #     from chemsmart.jobs.orca.settings import ORCAJobSettings
     #     dv = ORCAJobSettings.default()
@@ -170,7 +173,7 @@ class ORCAInput(ORCAFileMixin):
     #         additional_route_parameters=dv.additional_route_parameters,
     #         route_to_be_written=dv.route_to_be_written,
     #         modred=dv.modred,
-    #         gen_genecp=dv.gen_genecp,
+    #         gen_genecp_file=dv.gen_genecp_file,
     #         heavy_elements=dv.heavy_elements,
     #         heavy_elements_basis=dv.heavy_elements_basis,
     #         light_elements_basis=dv.light_elements_basis,

@@ -1,7 +1,7 @@
 %chk=normal_ts_solv_modred.chk
 %nprocshared=32
 %mem=30GB
-# opt=modredundant freq m062x def2svp scrf=(smd,solvent=toluene)
+# opt=modred freq m062x def2svp scrf=(smd,solvent=toluene)
 
 From inputfile normal_ts.log
 

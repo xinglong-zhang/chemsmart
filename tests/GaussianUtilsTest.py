@@ -9,14 +9,13 @@ class TestGetListFromStringRange:
         s1 = "[1-3,28-31,34-41]"
         s1_list = get_list_from_string_range(string_of_range=s1)
         assert s1_list == [
-            0,
             1,
             2,
-            27,
+            3,
             28,
             29,
             30,
-            33,
+            31,
             34,
             35,
             36,
@@ -24,19 +23,19 @@ class TestGetListFromStringRange:
             38,
             39,
             40,
+            41,
         ]
 
         s2 = "1-3,28-31,34-41"
         s2_list = get_list_from_string_range(string_of_range=s2)
         assert s2_list == [
-            0,
             1,
             2,
-            27,
+            3,
             28,
             29,
             30,
-            33,
+            31,
             34,
             35,
             36,
@@ -44,6 +43,7 @@ class TestGetListFromStringRange:
             38,
             39,
             40,
+            41,
         ]
 
         s3 = "1,3,33,37,42,43,44,45"
