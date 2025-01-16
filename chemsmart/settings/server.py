@@ -5,7 +5,6 @@ import sys
 import subprocess
 from functools import lru_cache
 
-from PyQt5.QtQml import kwargs
 from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
