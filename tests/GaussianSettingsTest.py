@@ -4,7 +4,6 @@ from shutil import copy
 
 import pytest
 from chemsmart.jobs.settings import read_molecular_job_yaml
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
