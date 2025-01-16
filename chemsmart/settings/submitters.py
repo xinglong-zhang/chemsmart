@@ -135,7 +135,8 @@ class Submitter(RegistryMixin):
             self._write_change_to_job_directory(f)
             self._write_job_command(f)
 
-    def _write_bash_header(self, f):
+    @staticmethod
+    def _write_bash_header(f):
         f.write("#!/bin/bash\n\n")
 
     @abstractmethod
@@ -192,10 +193,9 @@ class Submitter(RegistryMixin):
     def _write_change_to_job_directory(self, f):
         raise NotImplementedError
 
-    @abstractmethod
     def _write_job_command(self, f):
-        f.write(f"chmod +x ./{self.job_run_script}\n")
-        f.write(f"./{self.job_run_script} &\n")
+        f.write(f"chmod +x ./{self.run_script}\n")
+        f.write(f"./{self.run_script} &\n")
         f.write("wait\n")
 
     @classmethod
