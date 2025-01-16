@@ -65,17 +65,11 @@ def read_molecular_job_yaml(filename):
     if os.path.exists(default_file):
         with open(default_file) as f:
             default_config = yaml.safe_load(f)
-        logger.info(
-            f"Using the following pre-set defaults: \n{default_config}"
-        )
     # else:
     #     logger.warning("Default file settings does not exist.\n")
     #     # from chemsmart.jobs.orca.settings import ORCAJobSettings
     #
     #     # default_config = ORCAJobSettings.default().__dict__
-    #     logger.warning(
-    #         f"Using the following pre-set defaults: \n{default_config}"
-    #     )
 
     # job types
     gas_phase_jobs = [
