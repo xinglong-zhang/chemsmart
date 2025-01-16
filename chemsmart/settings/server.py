@@ -263,7 +263,7 @@ class Server(RegistryMixin):
         # First check that the job to be submitted is not already queued/running
         self._check_running_jobs(job)
         # Then write the submission script
-        self._write_submission_script(job, cli_args, **kwargs)
+        self._write_submission_script(job=job, cli_args=cli_args, **kwargs)
         # Submit the job
         if not test:
             self._submit_job(job)
@@ -288,7 +288,7 @@ class Server(RegistryMixin):
             )
             sys.exit(f"Duplicate job NOT submitted: {job.label}")
 
-    def _write_submission_script(self, job, server, cli_args, **kwargs):
+    def _write_submission_script(self, job, cli_args, **kwargs):
         """Write the submission script for the job."""
         # first determine submitter type
         from chemsmart.settings.submitters import Submitter
