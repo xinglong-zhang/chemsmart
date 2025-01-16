@@ -4,6 +4,7 @@ from abc import abstractmethod
 
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin
 
 user_settings = ChemsmartUserSettings()
 
@@ -42,7 +43,10 @@ class RunScript:
         f.write(contents)
 
 
-class Submitter:
+class Submitter(RegistryMixin):
+    """Abstract base class for job submission."""
+    NAME = NotImplemented
+
     def __init__(self, name, job, server, **kwargs):
         self.name = name
         self.job = job
@@ -193,8 +197,19 @@ class Submitter:
         f.write(f"./{self.job_run_script} &\n")
         f.write("wait\n")
 
+    @classmethod
+    def from_scheduler_type(cls, scheduler_type, **kwargs):
+        submitters = cls.subclasses()
+        for submitter in submitters:
+            if submitter.NAME == scheduler_type:
+                return submitter(**kwargs)
+        raise ValueError(
+            f"Could not find any submitters for scheduler type: {scheduler_type}."
+        )
+
 
 class PBSSubmitter(Submitter):
+    NAME = "PBS"
     def __init__(self, name="PBS", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -221,6 +236,7 @@ class PBSSubmitter(Submitter):
 
 
 class SLURMSubmitter(Submitter):
+    NAME = "SLURM"
     def __init__(self, name="SLURM", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -246,6 +262,7 @@ class SLURMSubmitter(Submitter):
 
 
 class SLFSubmitter(Submitter):
+    NAME = "SLF"
     def __init__(self, name="SLF", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -264,6 +281,7 @@ class SLFSubmitter(Submitter):
 
 
 class FUGAKUSubmitter(Submitter):
+    NAME = "FUGAKU"
     def __init__(self, name="FUGAKU", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 

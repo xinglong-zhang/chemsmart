@@ -288,12 +288,12 @@ class Server(RegistryMixin):
             )
             sys.exit(f"Duplicate job NOT submitted: {job.label}")
 
-    def _write_submission_script(self, job, cli_args):
+    def _write_submission_script(self, job, cli_args, **kwargs):
         """Write the submission script for the job."""
         # first determine submitter type
         from chemsmart.settings.submitters import Submitter
 
-        submitter = Submitter(name=self.scheduler, job=job, server=self)
+        submitter = Submitter.from_scheduler_type(scheduler_type=self.scheduler, job=job, **kwargs)
         submitter.write(cli_args)
 
     def _submit_job(self, job):
