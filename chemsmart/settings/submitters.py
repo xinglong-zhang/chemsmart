@@ -154,7 +154,7 @@ class Submitter(RegistryMixin):
             logger.debug(
                 f"Writing conda environment: {self.executable.conda_env}"
             )
-            for line in self.executable.conda_env.split("\n"):
+            for line in self.executable.conda_env:
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
             f.write("\n")
@@ -163,7 +163,7 @@ class Submitter(RegistryMixin):
         """Different programs may require loading different modules."""
         if self.executable.modules is not None:
             logger.debug(f"Writing modules: {self.executable.modules}")
-            for line in self.executable.modules.split("\n"):
+            for line in self.executable.modules:
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
             f.write("\n")
@@ -172,7 +172,7 @@ class Submitter(RegistryMixin):
         """Different programs may require sourcing different scripts."""
         if self.executable.scripts is not None:
             logger.debug(f"Writing scripts: {self.executable.scripts}")
-            for line in self.executable.scripts.split("\n"):
+            for line in self.executable.scripts:
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
             f.write("\n")
