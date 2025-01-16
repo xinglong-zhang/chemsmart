@@ -344,9 +344,9 @@ class Molecule:
     def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
         if self.pbc_conditions is not None:
-            assert self.translation_vectors is not None, (
-                "Translation vectors should not be None when PBC conditions are given!"
-            )
+            assert (
+                self.translation_vectors is not None
+            ), "Translation vectors should not be None when PBC conditions are given!"
             for i in range(len(self.translation_vectors)):
                 f.write(
                     f"TV    {self.translation_vectors[i][0]:15.10f} "

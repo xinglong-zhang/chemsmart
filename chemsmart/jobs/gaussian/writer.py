@@ -83,8 +83,9 @@ class GaussianInputWriter(InputWriter):
         logger.debug("Writing charge and multiplicity.")
         charge = self.settings.charge
         multiplicity = self.settings.multiplicity
-        assert charge is not None and multiplicity is not None, \
-            "Charge and multiplicity must be specified!"
+        assert (
+            charge is not None and multiplicity is not None
+        ), "Charge and multiplicity must be specified!"
         f.write(f"{charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
@@ -93,6 +94,7 @@ class GaussianInputWriter(InputWriter):
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f, program="gaussian")
+        f.write("\n")
 
     def _append_modredundant(self, f):
         """Write modred section if present in the job settings.
@@ -113,7 +115,6 @@ class GaussianInputWriter(InputWriter):
                 for prepend_string in prepend_string_list:
                     f.write(f"{prepend_string} F\n")
                 f.write("\n")
-
             elif isinstance(modredundant, dict):
                 # for scanning job
                 # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
