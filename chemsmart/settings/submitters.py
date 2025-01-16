@@ -91,8 +91,8 @@ class Submitter(RegistryMixin):
     def submit_script(self):
         """Submission script for the job."""
         if self.job.label is not None:
-            return f"chemsmart_sub_{self.job.label}.x"
-        return "chemsmart_sub.x"
+            return f"chemsmart_sub_{self.job.label}.sh"
+        return "chemsmart_sub.sh"
 
     @property
     def run_script(self):

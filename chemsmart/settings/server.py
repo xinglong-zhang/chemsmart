@@ -8,7 +8,7 @@ from functools import lru_cache
 from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
-
+from chemsmart.settings.submitters import Submitter
 from chemsmart.settings.user import ChemsmartUserSettings
 
 user_settings = ChemsmartUserSettings()
@@ -77,6 +77,7 @@ class Server(RegistryMixin):
         command = self.kwargs.get("SUBMIT_COMMAND")
         if command is None:
             command = self._get_submit_command()
+        logger.debug(f"Submit command to submit the job: {command}")
         return command
 
     @cached_property
@@ -253,6 +254,13 @@ class Server(RegistryMixin):
         except FileNotFoundError:
             return None
 
+    def get_submitter(self, job, **kwargs):
+        submitter = Submitter.from_scheduler_type(
+            scheduler_type=self.scheduler, job=job, server=self, **kwargs
+        )
+        logger.info(f"Obtained Submitter: {submitter}")
+        return submitter
+
     def submit(self, job, test=False, cli_args=None, **kwargs):
         """Class method to submit job on the Server.
         Args:
@@ -290,25 +298,25 @@ class Server(RegistryMixin):
 
     def _write_submission_script(self, job, cli_args, **kwargs):
         """Write the submission script for the job."""
-        # first determine submitter type
-        from chemsmart.settings.submitters import Submitter
-
-        submitter = Submitter.from_scheduler_type(
-            scheduler_type=self.scheduler, job=job, server=self, **kwargs
-        )
+        submitter = self.get_submitter(job, **kwargs)
         submitter.write(cli_args)
 
     def _submit_job(self, job):
         """Submit the job."""
+        submitter = self.get_submitter(job)
         command = self.submit_command
         if command is None:
             raise ValueError(
                 f"Cannot submit job on {self} "
                 f"since no submit command is defined."
             )
-        command += f" {job.submit_script}"
-
-        p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+        command += f" {submitter.submit_script}"
+        logger.info(f"Submitting job with command: {command}")
+        if "<" in command or ">" in command or "|" in command:
+            # Use shell=True if the command has shell operators
+            p = subprocess.Popen(command, shell=True)
+        else:
+            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
         return p.wait()
 
 
