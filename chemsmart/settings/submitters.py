@@ -225,14 +225,17 @@ class PBSSubmitter(Submitter):
             f"#PBS -l select=1:ncpus={self.server.num_cores}:mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}\n"
         )
         # using only one node here
-        f.write(f"#PBS -q {self.server.queue_name}\n")
-        f.write(f"#PBS -l walltime={self.server.num_hours}\n")
+        if self.server.queue_name:
+            f.write(f"#PBS -q {self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#PBS -l walltime={self.server.num_hours}\n")
         if user_settings.data.get("PROJECT"):
             f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
-
         if user_settings.data.get("EMAIL"):
             f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
             f.write("#PBS -m abe\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $PBS_O_WORKDIR\n\n")
@@ -253,14 +256,17 @@ class SLURMSubmitter(Submitter):
         f.write(
             f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
         )
-        f.write(f"#SBATCH --partition={self.server.queue_name}\n")
-        f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if self.server.queue_name:
+            f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
         if user_settings.data.get("PROJECT"):
             f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
-
         if user_settings.data.get("EMAIL"):
             f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
             f.write("#SBATCH --mail-type=END,FAIL\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $SLURM_SUBMIT_DIR\n\n")
@@ -280,8 +286,12 @@ class SLFSubmitter(Submitter):
         if project_number is not None:
             f.write(f"#BSUB -P {project_number}\n")
         f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
+        if self.server.num_gpus:
+            f.write(f"#BSUB -gpu num={self.server.num_gpus}\n")
         f.write(f"#BSUB -W {self.server.num_hours}\n")
         f.write("#BSUB -alloc_flags gpumps\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $LS_SUBCWD\n\n")
@@ -303,6 +313,8 @@ class FUGAKUSubmitter(Submitter):
         f.write("#PJM -e pjm.%j.err\n")
         f.write("#PJM -x PJM_LLIO_GFSCACHE=/vol0005:/vol0004\n")
         f.write("#PJM -S\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $PJM_O_WORKDIR\n\n")
