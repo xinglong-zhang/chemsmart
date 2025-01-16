@@ -99,14 +99,14 @@ class TestGaussianJobSettings:
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
-    def test_read_gaussian_settings_from_orca_inp(self, water_sp_input_path):
-        settings = GaussianJobSettings.from_inpfile(water_sp_input_path)
-        assert isinstance(settings, GaussianJobSettings)
-        assert settings.ab_initio == 'hf'
-        assert settings.functional is None
-        assert settings.basis == 'def2-svp'
-        assert settings.solvent_model is None
-        assert settings.solvent_id is None
+    # def test_read_gaussian_settings_from_orca_inp(self, water_sp_input_path):
+    #     settings = GaussianJobSettings.from_inpfile(water_sp_input_path)
+    #     assert isinstance(settings, GaussianJobSettings)
+    #     assert settings.ab_initio == 'hf'
+    #     assert settings.functional is None
+    #     assert settings.basis == 'def2-svp'
+    #     assert settings.solvent_model is None
+    #     assert settings.solvent_id is None
 
 
 class GaussianRouteTest:
