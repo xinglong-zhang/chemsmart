@@ -42,7 +42,6 @@ class GaussianInputWriter(InputWriter):
         self._write_gaussian_title(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
-        self._write_pbc(f)
         self._append_modredundant(f)
         self._append_gen_genecp_basis(f)  # then write genecp info
         self._append_custom_solvent_parameters(
@@ -84,6 +83,8 @@ class GaussianInputWriter(InputWriter):
         logger.debug("Writing charge and multiplicity.")
         charge = self.settings.charge
         multiplicity = self.settings.multiplicity
+        assert charge is not None and multiplicity is not None, \
+            "Charge and multiplicity must be specified!"
         f.write(f"{charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
@@ -91,22 +92,7 @@ class GaussianInputWriter(InputWriter):
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
-        self.job.molecule.write_coordinates(f)
-        if not self.job.molecule.pbc_conditions:
-            f.write("\n")
-
-    def _write_pbc(self, f):
-        """Write the periodic boundary conditions section if present in the job settings."""
-        logger.debug("Writing periodic boundary conditions.")
-        if self.job.molecule.pbc_conditions:
-            for translation_vector in self.job.molecule.translation_vectors:
-                f.write(
-                    f"TV   "
-                    f"{translation_vector[0]:15.10f} "
-                    f"{translation_vector[1]:15.10f} "
-                    f"{translation_vector[2]:15.10f}\n"
-                )
-            f.write("\n")
+        self.job.molecule.write_coordinates(f, program="gaussian")
 
     def _append_modredundant(self, f):
         """Write modred section if present in the job settings.

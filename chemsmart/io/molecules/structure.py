@@ -307,7 +307,23 @@ class Molecule:
             pbc_conditions=atoms.get_pbc(),
         )
 
-    def write_coordinates(self, f):
+    def write_coordinates(self, f, program=None):
+        """Write the coordinates of the molecule to a file.
+        No empty end line at the end of the file."""
+        if program.lower() == "gaussian":
+            self._write_gaussian_coordinates(f)
+            self._write_gaussian_pbc_coordinates(f)
+        elif program.lower() == "orca":
+            self._write_orca_coordinates(f)
+            self._write_orca_pbc_coordinates(f)
+        # elif program.lower() == "gromacs":
+        # can implement other programs formats to write the coordinates for
+        else:
+            raise ValueError(
+                f"Program {program} is not supported for writing coordinates."
+            )
+
+    def _write_gaussian_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
@@ -324,6 +340,27 @@ class Molecule:
                 f.write(
                     f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
                 )
+
+    def _write_gaussian_pbc_coordinates(self, f):
+        """Write the coordinates of the molecule with PBC conditions to a file."""
+        if self.pbc_conditions is not None:
+            assert self.translation_vectors is not None, (
+                "Translation vectors should not be None when PBC conditions are given!"
+            )
+            for i in range(len(self.translation_vectors)):
+                f.write(
+                    f"TV    {self.translation_vectors[i][0]:15.10f} "
+                    f"{self.translation_vectors[i][1]:15.10f} "
+                    f"{self.translation_vectors[i][2]:15.10f}\n"
+                )
+
+    def _write_orca_coordinates(self, f):
+        # TODO: implement
+        pass
+
+    def _write_orca_pbc_coordinates(self, f):
+        # TODO: implement
+        pass
 
     def __repr__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"

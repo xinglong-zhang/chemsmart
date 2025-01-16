@@ -246,12 +246,35 @@ class TestStructures:
 
 class TestStructuresFromGaussianInput:
     def test_read_molecule_from_gaussian_opt_input(
-        self, gaussian_opt_inputfile
+        self, tmpdir, gaussian_opt_inputfile
     ):
         assert os.path.exists(gaussian_opt_inputfile)
         assert os.path.isfile(gaussian_opt_inputfile)
 
         g16_file = Gaussian16Input(filename=gaussian_opt_inputfile)
+        molecule = g16_file.molecule
+        tmp_file = os.path.join(tmpdir, "tmp.txt")
+        f = open(tmp_file, "w")
+        molecule.write_coordinates(f, program="gaussian")
+        f.close()
+        coordinates = """C       -0.5448210000   -1.1694570000    0.0001270000
+C        0.8378780000   -1.0476350000    0.0001900000
+C        1.4329940000    0.2194290000    0.0001440000
+C        0.6358350000    1.3657650000   -0.0000040000
+C       -0.7521390000    1.2582750000    0.0000710000
+C       -1.3283680000   -0.0113420000    0.0001560000
+H       -1.0298620000   -2.1454490000    0.0001020000
+H        1.4853190000   -1.9262430000    0.0002620000
+H        1.1050940000    2.3527070000    0.0000530000
+H       -1.3913950000    2.1406100000   -0.0000130000
+C        2.9142600000    0.3363820000    0.0000140000
+O        3.6625230000   -0.6037690000   -0.0002940000
+H        3.3025560000    1.3842410000    0.0001510000
+Cl      -3.0556310000   -0.1578960000   -0.0001400000"""
+        with open(tmp_file, "r") as g:
+            written_coordinates = g.read()
+        assert os.path.exists(tmp_file)
+        assert all([a == b for a, b in zip(coordinates, written_coordinates)])
         assert g16_file.num_atoms == 14
         assert isinstance(g16_file.molecule, Molecule)
         assert g16_file.molecule.charge == 0
@@ -354,7 +377,7 @@ class TestStructuresFromGaussianInput:
         assert g16_file.molecule.translation_vectors is None
 
     def test_read_molecule_from_gaussian_frozen_opt(
-        self, gaussian_frozen_opt_inputfile
+        self, tmpdir, gaussian_frozen_opt_inputfile
     ):
         assert os.path.exists(gaussian_frozen_opt_inputfile)
         assert os.path.isfile(gaussian_frozen_opt_inputfile)
@@ -383,8 +406,31 @@ class TestStructuresFromGaussianInput:
         ]
         assert g16_file.molecule.pbc_conditions is None
         assert g16_file.molecule.translation_vectors is None
+        molecule = g16_file.molecule
+        tmp_file = os.path.join(tmpdir, "tmp.txt")
+        f = open(tmp_file, "w")
+        molecule.write_coordinates(f, program="gaussian")
+        f.close()
+        coordinates = """C         -1   -0.5448210000   -1.1694570000    0.0001270000
+C         -1    0.8378780000   -1.0476350000    0.0001900000
+C         -1    1.4329940000    0.2194290000    0.0001440000
+C         -1    0.6358350000    1.3657650000   -0.0000040000
+C         -1   -0.7521390000    1.2582750000    0.0000710000
+C         -1   -1.3283680000   -0.0113420000    0.0001560000
+H         -1   -1.0298620000   -2.1454490000    0.0001020000
+H         -1    1.4853190000   -1.9262430000    0.0002620000
+H         -1    1.1050940000    2.3527070000    0.0000530000
+H         -1   -1.3913950000    2.1406100000   -0.0000130000
+C          0    2.9142600000    0.3363820000    0.0000140000
+O          0    3.6625230000   -0.6037690000   -0.0002940000
+H          0    3.3025560000    1.3842410000    0.0001510000
+Cl         0   -3.0556310000   -0.1578960000   -0.0001400000"""
+        with open(tmp_file, "r") as g:
+            written_coordinates = g.read()
+        assert os.path.exists(tmp_file)
+        assert all([a == b for a, b in zip(coordinates, written_coordinates)])
 
-    def test_read_molecule_from_gaussian_pbc(self, gaussian_pbc_1d_inputfile):
+    def test_read_molecule_from_gaussian_pbc(self, tmpdir, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
         assert os.path.isfile(gaussian_pbc_1d_inputfile)
 
@@ -399,6 +445,30 @@ class TestStructuresFromGaussianInput:
         assert g16_file.molecule.translation_vectors == [
             [4.8477468928, 0.1714181332, 0.5112729831],
         ]
+        molecule = g16_file.molecule
+        tmp_file = os.path.join(tmpdir, "tmp.txt")
+        print(tmp_file)
+        f = open(tmp_file, "w")
+        molecule.write_coordinates(f, program="gaussian")
+        f.close()
+        coordinates = """C       -1.9267226529    0.4060180273    0.0316702826
+H       -2.3523143977    0.9206168644    0.9131400756
+H       -1.8372739404    1.1548899113   -0.7707507970
+C       -0.5737182157   -0.1434584477    0.3762843235
+H       -0.5015912465   -0.7653394047    1.2791284293
+C        0.5790889876    0.0220081655   -0.3005160849
+C        1.9237098673   -0.5258773194    0.0966261209
+H        1.7722344520   -1.2511397907    0.9159625120
+H        2.3627869487   -1.0792380182   -0.7525115830
+Cl       0.6209825739    0.9860944599   -1.7876398696
+TV       4.8477468928    0.1714181332    0.5112729831"""
+        with open(tmp_file, "r") as g:
+            written_coordinates = g.read()
+        assert os.path.exists(tmp_file)
+        for a, b in zip(coordinates, written_coordinates):
+            print(a)
+            print(type(a))
+        assert all([a == b for a, b in zip(coordinates, written_coordinates)])
 
 
 class TestSDFFile:
@@ -543,9 +613,7 @@ $$$$"""
         sdf_file = SDFFile(filename=tmpfile)
         sdf_molecule = sdf_file.molecule
         assert isinstance(sdf_molecule, Molecule)
-        assert all(
-            sdf_molecule.symbols
-            == [
+        symbols = [
                 "O",
                 "C",
                 "C",
@@ -560,7 +628,8 @@ $$$$"""
                 "H",
                 "H",
             ]
-        )
+        assert all([sdf_molecule.symbols[i] == symbols[i] for i in range(len(symbols))])
+
         assert sdf_molecule.empirical_formula == "C4H8O"
         structure_coords = np.array(
             [
