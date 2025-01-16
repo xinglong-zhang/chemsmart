@@ -112,6 +112,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "queue",
             "verbose",
             "test",
+            "print_command",
         ]
 
         for keyword in keywords_not_in_run:
