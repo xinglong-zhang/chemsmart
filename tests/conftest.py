@@ -78,6 +78,13 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
     return gaussian_scan_inputfile
 
 
+@pytest.fixture
+def hf_com_filepath(gaussian_inputs_test_directory):
+    return os.path.join(
+        gaussian_inputs_test_directory, "hf.com"
+    )
+
+
 # Gaussian input files for genecp
 @pytest.fixture()
 def gaussian_inputs_genecp_directory(gaussian_inputs_test_directory):
