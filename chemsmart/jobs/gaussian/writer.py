@@ -89,7 +89,9 @@ class GaussianInputWriter(InputWriter):
         f.write(f"{charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
-        logger.debug("Writing Cartesian coordinates.")
+        logger.debug(
+            f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
+        )
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f, program="gaussian")
         f.write("\n")
@@ -124,21 +126,21 @@ class GaussianInputWriter(InputWriter):
                 )
                 for prepend_string in prepend_string_list:
                     f.write(
-                        f"{prepend_string} S {self.job.settings.modred['num_steps']} {self.job.settings.modred['step_size']}\n"
+                        f"{prepend_string} S {self.settings.modred['num_steps']} {self.settings.modred['step_size']}\n"
                     )
                 f.write("\n")
 
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
         logger.debug("Writing gen/genecp basis set information.")
-        gen_genecp_file = self.job.settings.gen_genecp_file
-        heavy_elements = self.job.settings.heavy_elements
-        heavy_elements_basis = self.job.settings.heavy_elements_basis
-        light_elements = self.job.settings.get_light_elements(
+        gen_genecp_file = self.settings.gen_genecp_file
+        heavy_elements = self.settings.heavy_elements
+        heavy_elements_basis = self.settings.heavy_elements_basis
+        light_elements = self.settings.get_light_elements(
             self.job.molecule
         )
-        light_elements_basis = self.job.settings.light_elements_basis
-        if self.job.settings.genecp:
+        light_elements_basis = self.settings.light_elements_basis
+        if self.settings.genecp:
             if gen_genecp_file and heavy_elements and heavy_elements_basis:
                 raise ValueError(
                     "Please provide either gen_genecp_file or heavy_elements and heavy_elements_basis."
@@ -177,7 +179,7 @@ class GaussianInputWriter(InputWriter):
     def _append_custom_solvent_parameters(self, f):
         """Write the custom solvent parameters if present in the job settings."""
         logger.debug("Writing custom solvent parameters.")
-        custom_solvent = self.job.settings.custom_solvent
+        custom_solvent = self.settings.custom_solvent
         if custom_solvent:
             f.write(custom_solvent)
             f.write("\n")
@@ -185,7 +187,7 @@ class GaussianInputWriter(InputWriter):
     def _append_job_specific_info(self, f):
         """Write any job specific information that needs to be appended to the input file."""
         logger.debug("Writing job specific information.")
-        job_type = self.job.settings.job_type
+        job_type = self.settings.job_type
         job_label = self.job.label
         if job_type == "nci":
             # appending for nci job
@@ -203,7 +205,7 @@ class GaussianInputWriter(InputWriter):
     def _append_other_additional_info(self, f):
         """Write any additional information that needs to be appended to the input file."""
         logger.debug("Writing other additional information.")
-        append_additional_info = self.job.settings.append_additional_info
+        append_additional_info = self.settings.append_additional_info
         if isinstance(append_additional_info, str) and os.path.exists(
             os.path.expanduser(append_additional_info)
         ):
@@ -220,7 +222,7 @@ class GaussianInputWriter(InputWriter):
     def _write_link_section(self, f):
         """Write the link section for the input file."""
         logger.debug("Writing link section.")
-        if self.job.settings.link:
+        if self.settings.link:
             f.write("--Link1--\n")
             self._write_gaussian_header(f)
             self._write_link_route(f)
@@ -238,5 +240,5 @@ class GaussianInputWriter(InputWriter):
     def _write_link_route(self, f):
         """Write the route section for the link job."""
         logger.debug("Writing link route section.")
-        f.write(f"{self.job.settings.link_route_string}\n")
+        f.write(f"{self.settings.link_route_string}\n")
         f.write("\n")
