@@ -132,6 +132,7 @@ class Submitter(RegistryMixin):
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)
+            self._write_extra_commands(f)
             self._write_change_to_job_directory(f)
             self._write_job_command(f)
 
@@ -155,7 +156,7 @@ class Submitter(RegistryMixin):
             logger.debug(
                 f"Writing conda environment: {self.executable.conda_env}"
             )
-            f.write("# Writing conda environment\n")
+            f.write("# conda environment\n")
             for line in self.executable.conda_env:
                 f.write(line)
             f.write("\n")
@@ -164,7 +165,7 @@ class Submitter(RegistryMixin):
         """Different programs may require loading different modules."""
         if self.executable.modules is not None:
             logger.debug(f"Writing modules: {self.executable.modules}")
-            f.write("# Writing modules\n")
+            f.write("# modules\n")
             for line in self.executable.modules:
                 f.write(line)
             f.write("\n")
@@ -173,8 +174,16 @@ class Submitter(RegistryMixin):
         """Different programs may require sourcing different scripts."""
         if self.executable.scripts is not None:
             logger.debug(f"Writing scripts: {self.executable.scripts}")
-            f.write("# Writing program specific scripts\n")
+            f.write("# program specific scripts\n")
             for line in self.executable.scripts:
+                f.write(line)
+            f.write("\n")
+
+    def _write_extra_commands(self, f):
+        """Extra commands that may be required for the job.
+        These extra commands are needed for all jobs across all programs."""
+        if self.server.extra_commands is not None:
+            for line in self.server.extra_commands:
                 f.write(line)
             f.write("\n")
 
