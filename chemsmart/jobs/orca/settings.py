@@ -3,11 +3,9 @@ import logging
 import os
 from contextlib import suppress
 from chemsmart.jobs.settings import MolecularJobSettings
-
-from pyatoms.io.ase.atoms import AtomsWrapper
-from pyatoms.io.orca import ORCA_SCF_CONVERGENCE
-from pyatoms.jobs.settings import MolecularJobSettings, read_molecular_job_yaml
-from pyatoms.utils.utils import get_prepend_string_list_from_modred_free_format
+from chemsmart.jobs.settings import read_molecular_job_yaml
+from chemsmart.utils.utils import get_prepend_string_list_from_modred_free_format
+from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +17,7 @@ class ORCAJobSettings(MolecularJobSettings):
         self,
         ab_initio=None,
         functional=None,
+        dispersion=None,
         basis=None,
         aux_basis=None,
         extrapolation_basis=None,
@@ -42,7 +41,7 @@ class ORCAJobSettings(MolecularJobSettings):
         additional_route_parameters=None,
         route_to_be_written=None,
         modred=None,
-        gen_genecp=None,
+        gen_genecp_file=None,
         heavy_elements=None,
         heavy_elements_basis=None,
         light_elements_basis=None,
@@ -53,6 +52,7 @@ class ORCAJobSettings(MolecularJobSettings):
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
+            dispersion=dispersion,
             basis=basis,
             defgrid=defgrid,
             charge=charge,
@@ -65,7 +65,7 @@ class ORCAJobSettings(MolecularJobSettings):
             additional_route_parameters=additional_route_parameters,
             route_to_be_written=route_to_be_written,
             modred=modred,
-            gen_genecp=gen_genecp,
+            gen_genecp_file=gen_genecp_file,
             heavy_elements=heavy_elements,
             heavy_elements_basis=heavy_elements_basis,
             light_elements_basis=light_elements_basis,
@@ -243,6 +243,7 @@ class ORCAJobSettings(MolecularJobSettings):
         return cls(
             ab_initio=None,
             functional=None,
+            dispersion=None,
             basis=None,
             aux_basis=None,
             extrapolation_basis=None,
@@ -264,7 +265,7 @@ class ORCAJobSettings(MolecularJobSettings):
             additional_route_parameters=None,
             route_to_be_written=None,
             modred=None,
-            gen_genecp=None,
+            gen_genecp_file=None,
             heavy_elements=None,
             heavy_elements_basis=None,
             light_elements_basis=None,

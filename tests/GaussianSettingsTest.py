@@ -98,17 +98,17 @@ class TestGaussianJobSettings:
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
-    # def test_read_gaussian_settings_from_orca_inp(self, water_sp_input_path):
-    #     settings = GaussianJobSettings.from_inpfile(water_sp_input_path)
-    #     assert isinstance(settings, GaussianJobSettings)
-    #     assert settings.ab_initio == 'hf'
-    #     assert settings.functional is None
-    #     assert settings.basis == 'def2-svp'
-    #     assert settings.solvent_model is None
-    #     assert settings.solvent_id is None
+    def test_read_gaussian_settings_from_orca_inp(self, water_sp_input_path):
+        settings = GaussianJobSettings.from_inpfile(water_sp_input_path)
+        assert isinstance(settings, GaussianJobSettings)
+        assert settings.ab_initio == 'hf'
+        assert settings.functional is None
+        assert settings.basis == 'def2-svp'
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
 
 
-class GaussianRouteTest:
+class TestGaussianRoute:
     gas_route = 'opt=(ts,calcfc,noeigentest) freq m062x def2svp'
     gas_route2 = 'opt b3lyp 6-31G(d) empiricaldispersion=gd3bj'
     solv_route = 'mn15 def2svp scrf=(smd,solvent=DiChloroMethane)'
@@ -157,7 +157,7 @@ class GaussianRouteTest:
         assert route_object4.solvent_id == 'chlorobenzene'
 
 
-class GaussianJobFromComFileTest:
+class TestGaussianJobFromComFile:
     def test_reads_com_file(self, com_filepath):
         com_settings = GaussianJobSettings.from_comfile(com_filepath)
         assert com_settings.chk is True
@@ -217,7 +217,7 @@ class GaussianJobFromComFileTest:
         assert written_settings == com_settings
 
 
-class GaussianJobFromLogFileTest:
+class TestGaussianJobFromLogFile:
     def test_accumulates_settings(self, tmpdir, normal_ts_filepath):
         settings = GaussianJobSettings.from_logfile(normal_ts_filepath)
         assert settings.functional == 'm062x'
@@ -496,7 +496,7 @@ class GaussianJobFromLogFileTest:
         assert cmp(written_file, model_custom_basis_for_all_elements_input)
 
 
-class GaussianPBCJobTest:
+class TestGaussianPBCJob:
     def test_writes_gaussian_input_from_pbc_comfile(self, tmpdir, gallium_arsenide_comfile):
         atoms = AtomsWrapper.from_filepath(gallium_arsenide_comfile)
         settings = GaussianJobSettings.from_filepath(filepath=gallium_arsenide_comfile)
