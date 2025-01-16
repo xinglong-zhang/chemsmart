@@ -45,6 +45,7 @@ class RunScript:
 
 class Submitter(RegistryMixin):
     """Abstract base class for job submission."""
+
     NAME = NotImplemented
 
     def __init__(self, name, job, server, **kwargs):
@@ -210,6 +211,7 @@ class Submitter(RegistryMixin):
 
 class PBSSubmitter(Submitter):
     NAME = "PBS"
+
     def __init__(self, name="PBS", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -237,6 +239,7 @@ class PBSSubmitter(Submitter):
 
 class SLURMSubmitter(Submitter):
     NAME = "SLURM"
+
     def __init__(self, name="SLURM", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -263,6 +266,7 @@ class SLURMSubmitter(Submitter):
 
 class SLFSubmitter(Submitter):
     NAME = "SLF"
+
     def __init__(self, name="SLF", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -282,6 +286,7 @@ class SLFSubmitter(Submitter):
 
 class FUGAKUSubmitter(Submitter):
     NAME = "FUGAKU"
+
     def __init__(self, name="FUGAKU", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 

@@ -5,6 +5,7 @@ import sys
 import subprocess
 from functools import lru_cache
 
+from PyQt5.QtQml import kwargs
 from chemsmart.utils.mixins import cached_property
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
@@ -253,7 +254,7 @@ class Server(RegistryMixin):
         except FileNotFoundError:
             return None
 
-    def submit(self, job, test=False, cli_args=None):
+    def submit(self, job, test=False, cli_args=None, **kwargs):
         """Class method to submit job on the Server.
         Args:
             job (Job): Job to be submitted.
@@ -263,7 +264,7 @@ class Server(RegistryMixin):
         # First check that the job to be submitted is not already queued/running
         self._check_running_jobs(job)
         # Then write the submission script
-        self._write_submission_script(job, cli_args)
+        self._write_submission_script(job, cli_args, **kwargs)
         # Submit the job
         if not test:
             self._submit_job(job)
@@ -288,12 +289,14 @@ class Server(RegistryMixin):
             )
             sys.exit(f"Duplicate job NOT submitted: {job.label}")
 
-    def _write_submission_script(self, job, cli_args, **kwargs):
+    def _write_submission_script(self, job, server, cli_args, **kwargs):
         """Write the submission script for the job."""
         # first determine submitter type
         from chemsmart.settings.submitters import Submitter
 
-        submitter = Submitter.from_scheduler_type(scheduler_type=self.scheduler, job=job, **kwargs)
+        submitter = Submitter.from_scheduler_type(
+            scheduler_type=self.scheduler, job=job, server=self, **kwargs
+        )
         submitter.write(cli_args)
 
     def _submit_job(self, job):
