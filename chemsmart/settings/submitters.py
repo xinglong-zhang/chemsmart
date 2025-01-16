@@ -107,16 +107,16 @@ class Submitter:
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")
         return executable
 
-    def write(self):
+    def write(self, cli_args):
         """Write the submission script for the job."""
         if self.job.is_complete():
             logger.warning("Submitting an already complete job.")
-        self._write_runscript()
+        self._write_runscript(cli_args)
         self._write_submitscript()
 
-    def _write_runscript(self):
+    def _write_runscript(self, cli_args):
         """Write the run script for the job."""
-        runscript = RunScript(self.run_script, self.job.cli_args)
+        runscript = RunScript(self.run_script, cli_args)
         logger.debug(f"Writing run script to: {runscript.filename}")
         runscript.write()
 

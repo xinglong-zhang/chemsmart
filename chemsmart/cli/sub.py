@@ -8,29 +8,12 @@ from chemsmart.cli.jobrunner import jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.utils.logger import create_logger
-from chemsmart.utils.cli import MyGroup
 from chemsmart.settings.server import Server
 from chemsmart.jobs.runner import JobRunner
-
-# from chemsmart.utils.cli import CtxObjArguments, MyGroup, determine_folders
+from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.cli import CtxObjArguments
 
 logger = logging.getLogger(__name__)
-
-
-# def prepare_job_from_source_folder(folder):
-#     from pyatoms.analysis.results.results import NebOptimizationResults, Results
-#
-#     try:
-#         results = Results.from_folder(folder)
-#     except Exception as e:
-#         raise ValueError(f'Could not create job from {folder}') from e
-#
-#     if not results.is_complete:
-#         raise ValueError(f'Job from {folder} is not complete.')
-#
-#     atoms = results.transition_state_atoms if isinstance(results, NebOptimizationResults) else results.optimized_atoms
-#
-#     return atoms.set_calculated_magmoms_as_initial(error_if_no_magmoms=False)
 
 
 @click.group(name="sub", cls=MyGroup)
@@ -49,6 +32,9 @@ logger = logging.getLogger(__name__)
     default=False,
     help="If true, job will not be submitted; only run and submit scripts will be written.",
 )
+@click.option(
+    '--print-command/--no-print-command', default=DEFAULTS['print-command'], help='print the command generated'
+)
 def sub(
     ctx,
     server,
@@ -63,6 +49,7 @@ def sub(
     queue,
     verbose,
     test,
+    print_command,
     **kwargs,
 ):
     # Set up logging
@@ -130,12 +117,24 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             command["kwargs"].pop(keyword, None)
         return ctx
 
-    def _process_single_job(job, jobrunner):
+    def _reconstruct_cli_args(ctx, job):
+        """Get cli args that reconstruct the command line."""
+        commands = ctx.obj['subcommand']
+
+        args = CtxObjArguments(commands, entry_point='sub')
+        cli_args = args.reconstruct_command_line()[1:]  # remove the first element 'sub'
+        if kwargs.get('print_command'):
+            print(cli_args)
+        return cli_args
+
+    def _process_single_job(job):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
+        cli_args = _reconstruct_cli_args(ctx, job)
+
         server = Server.from_servername(kwargs.get("server"))
-        server.submit(job=job, test=kwargs.get("test"))
+        server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
