@@ -131,7 +131,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             print(cli_args)
         return cli_args
 
-    def _process_single_job(job):
+    def _process_single_job(job, jobrunner):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
