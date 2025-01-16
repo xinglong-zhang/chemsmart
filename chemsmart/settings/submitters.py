@@ -157,7 +157,6 @@ class Submitter(RegistryMixin):
             )
             f.write("# Writing conda environment\n")
             for line in self.executable.conda_env:
-                logger.debug(f"Writing line: {line}")
                 f.write(line)
             f.write("\n")
 
@@ -167,7 +166,6 @@ class Submitter(RegistryMixin):
             logger.debug(f"Writing modules: {self.executable.modules}")
             f.write("# Writing modules\n")
             for line in self.executable.modules:
-                logger.debug(f"Writing line: {line}")
                 f.write(line)
             f.write("\n")
 
@@ -177,7 +175,6 @@ class Submitter(RegistryMixin):
             logger.debug(f"Writing scripts: {self.executable.scripts}")
             f.write("# Writing program specific scripts\n")
             for line in self.executable.scripts:
-                logger.debug(f"Writing line: {line}")
                 f.write(line)
             f.write("\n")
 
@@ -186,9 +183,6 @@ class Submitter(RegistryMixin):
         May need to run different programs in different scratch folder e.g. Gaussian vs ORCA.
         """
         if self.executable.envars is not None:
-            logger.debug(
-                f"Writing environment variables: {self.executable.envars}"
-            )
             f.write("# Writing program specific environment variables\n")
             for key, value in self.executable.env.items():
                 f.write(f"export {key}={value}\n")
