@@ -150,10 +150,12 @@ class Submitter(RegistryMixin):
         self._write_program_specific_environment_variables(f)
 
     def _write_program_specific_conda_env(self, f):
+        """Different programs may require different conda environments."""
         if self.executable.conda_env is not None:
             logger.debug(
                 f"Writing conda environment: {self.executable.conda_env}"
             )
+            f.write("# Writing conda environment\n")
             for line in self.executable.conda_env:
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
@@ -163,6 +165,7 @@ class Submitter(RegistryMixin):
         """Different programs may require loading different modules."""
         if self.executable.modules is not None:
             logger.debug(f"Writing modules: {self.executable.modules}")
+            f.write("# Writing modules\n")
             for line in self.executable.modules:
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
@@ -172,6 +175,7 @@ class Submitter(RegistryMixin):
         """Different programs may require sourcing different scripts."""
         if self.executable.scripts is not None:
             logger.debug(f"Writing scripts: {self.executable.scripts}")
+            f.write("# Writing program specific scripts\n")
             for line in self.executable.scripts:
                 logger.debug(f"Writing line: {line}")
                 f.write(line)
@@ -185,6 +189,7 @@ class Submitter(RegistryMixin):
             logger.debug(
                 f"Writing environment variables: {self.executable.envars}"
             )
+            f.write("# Writing program specific environment variables\n")
             for key, value in self.executable.env.items():
                 f.write(f"export {key}={value}\n")
             f.write("\n")
