@@ -328,17 +328,9 @@ def gaussian(  # noqa: PLR0912, PLR0915
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
         )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from PubChem {pubchem}!"
-        logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
     # update labels
     if label is not None and append_label is not None:

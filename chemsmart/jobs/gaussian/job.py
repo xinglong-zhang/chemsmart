@@ -19,10 +19,6 @@ class GaussianJob(Job):
             raise ValueError(
                 f"Settings must be instance of {self._SETTINGS_CLS} for {self}, but is {settings} instead!"
             )
-        if not isinstance(molecule, Molecule):
-            raise ValueError(
-                f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
-            )
 
         molecule = molecule.copy()
         settings = settings.copy()

@@ -144,13 +144,18 @@ class Molecule:
         if os.path.getsize(filepath) == 0:
             return None
 
+        # try:
         molecule = cls._read_filepath(
             filepath, index=index, return_list=return_list, **kwargs
         )
-        if return_list and not isinstance(molecule, list):
+        if return_list and isinstance(molecule, Molecule):
             return [molecule]
         else:
             return molecule
+        # except Exception as e:
+        #     raise FileReadError(
+        #         f"Failed to create molecule from {filepath}."
+        #     ) from e
 
     @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):
@@ -216,7 +221,6 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_gaussian_logfile(filepath, index):
-        """Returns a list of molecules."""
         from chemsmart.io.gaussian.output import Gaussian16Output
 
         g16_output = Gaussian16Output(filename=filepath)
@@ -471,10 +475,6 @@ class CoordinateBlock:
                 symbols.append(chemical_symbol)
             except ValueError:
                 symbols.append(p.to_element(element_str=str(line_elements[0])))
-        if len(symbols) == 0:
-            raise ValueError(
-                f"No symbols found in the coordinate block: {self.coordinate_block}!"
-            )
         return symbols
 
     def _get_atomic_numbers_positions_and_constraints(self):
@@ -528,10 +528,6 @@ class CoordinateBlock:
                 z_coordinate = float(line_elements[3])
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
-        if any(len(i) == 0 for i in [atomic_numbers, positions]):
-            raise ValueError(
-                f"No atomic numbers or positions found in the coordinate block: {self.coordinate_block}!"
-            )
         return atomic_numbers, np.array(positions), constraints
 
     def _get_atomic_numbers(self):
@@ -618,8 +614,6 @@ class SDFFile(FileMixin):
                 cart_coords.append((x, y, z))
 
         cart_coords = np.array(cart_coords)
-        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
-            raise ValueError("No coordinates found in the SDF file!")
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
@@ -645,8 +639,6 @@ class XYZFile(FileMixin):
         while i < len(self.contents):
             # Read number of atoms
             num_atoms = int(self.contents[i].strip())
-            if num_atoms == 0:
-                raise ValueError("Number of atoms in the xyz file is zero!")
             i += 1
             # Read comment line
             comment = self.contents[i].strip()

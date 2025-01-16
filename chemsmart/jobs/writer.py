@@ -14,7 +14,6 @@ class InputWriter:
 
     def __init__(self, job, jobrunner):
         self.job = job
-        self.settings = self.job.settings
         self.jobrunner = jobrunner
 
     @abstractmethod

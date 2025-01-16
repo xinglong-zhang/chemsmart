@@ -105,7 +105,6 @@ class Submitter:
         else:
             # Need to add programs here to be supported for other types of programs
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
 
     def write(self):
         """Write the submission script for the job."""
