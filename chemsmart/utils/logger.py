@@ -1,18 +1,34 @@
 import os
 import sys
 import logging
+import re
 
 
 class LogOnceFilter(logging.Filter):
     def __init__(self):
         super().__init__()
-        self.logged_messages = set()  # Track logged messages globally
+        self.logged_messages = set()
 
     def filter(self, record):
-        if record.msg in self.logged_messages:
-            return False  # Skip the log message
-        self.logged_messages.add(record.msg)
-        return True  # Allow the log message
+        formatted_message = self.format_record(record)
+        stripped_message = self.remove_timestamp(formatted_message)
+
+        if stripped_message in self.logged_messages:
+            return False
+        self.logged_messages.add(stripped_message)
+        return True
+
+    @staticmethod
+    def format_record(record):
+        if record.args:
+            return record.msg % record.args
+        return record.msg
+
+    @staticmethod
+    def remove_timestamp(message):
+        return re.sub(
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - ", "", message
+        )
 
 
 def create_logger(
@@ -32,11 +48,7 @@ def create_logger(
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logger = logging.getLogger()
 
-    # Stream
-    level = logging.INFO
-    if debug:
-        level = logging.DEBUG
-
+    level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(level)
     logger.handlers = []
     formatter = logging.Formatter(
@@ -44,7 +56,6 @@ def create_logger(
         style="{",
     )
 
-    # Add the filter directly to the logger (shared globally across handlers)
     log_once_filter = LogOnceFilter()
     logger.addFilter(log_once_filter)
 
@@ -61,7 +72,7 @@ def create_logger(
         logger.addHandler(stream_handler)
 
     # logfile
-    if logfile is not None:
+    if logfile:
         infofile_handler = logging.FileHandler(
             filename=os.path.join(folder, logfile)
         )
@@ -70,10 +81,12 @@ def create_logger(
         logger.addHandler(infofile_handler)
 
     # errfile
-    if errfile is not None:
+    if errfile:
         errfile_handler = logging.FileHandler(
             filename=os.path.join(folder, errfile)
         )
         errfile_handler.setLevel(logging.WARNING)
         errfile_handler.setFormatter(formatter)
         logger.addHandler(errfile_handler)
+
+    return logger

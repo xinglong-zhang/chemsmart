@@ -65,7 +65,7 @@ def read_molecular_job_yaml(filename):
     if os.path.exists(default_file):
         with open(default_file) as f:
             default_config = yaml.safe_load(f)
-        logger.info(
+        logger.warning(
             f"Using the following pre-set defaults: \n{default_config}"
         )
     # else:
