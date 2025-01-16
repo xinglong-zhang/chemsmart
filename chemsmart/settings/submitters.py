@@ -260,7 +260,7 @@ class SLURMSubmitter(Submitter):
 
         if user_settings.data.get("EMAIL"):
             f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
-            f.write("#SBATCH --mail-type=abe\n")
+            f.write("#SBATCH --mail-type=END,FAIL\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $SLURM_SUBMIT_DIR\n\n")
