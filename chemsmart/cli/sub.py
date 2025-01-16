@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
     help="If true, job will not be submitted; only run and submit scripts will be written.",
 )
 @click.option(
-    '--print-command/--no-print-command', default=DEFAULTS['print-command'], help='print the command generated'
+    "--print-command/--no-print-command",
+    default=False,
+    help="print the command generated",
 )
 def sub(
     ctx,
@@ -119,11 +121,13 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     def _reconstruct_cli_args(ctx, job):
         """Get cli args that reconstruct the command line."""
-        commands = ctx.obj['subcommand']
+        commands = ctx.obj["subcommand"]
 
-        args = CtxObjArguments(commands, entry_point='sub')
-        cli_args = args.reconstruct_command_line()[1:]  # remove the first element 'sub'
-        if kwargs.get('print_command'):
+        args = CtxObjArguments(commands, entry_point="sub")
+        cli_args = args.reconstruct_command_line()[
+            1:
+        ]  # remove the first element 'sub'
+        if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
 

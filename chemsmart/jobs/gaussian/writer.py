@@ -136,9 +136,7 @@ class GaussianInputWriter(InputWriter):
         gen_genecp_file = self.settings.gen_genecp_file
         heavy_elements = self.settings.heavy_elements
         heavy_elements_basis = self.settings.heavy_elements_basis
-        light_elements = self.settings.get_light_elements(
-            self.job.molecule
-        )
+        light_elements = self.settings.get_light_elements(self.job.molecule)
         light_elements_basis = self.settings.light_elements_basis
         if self.settings.genecp:
             if gen_genecp_file and heavy_elements and heavy_elements_basis:

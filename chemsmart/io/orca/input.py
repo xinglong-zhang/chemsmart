@@ -139,4 +139,3 @@ class ORCAInput(ORCAFileMixin):
             if "quadrupole" in line:
                 return line.split()[-1]
         return None
-

@@ -335,7 +335,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
-        assert(
+        assert (
             molecules is not None
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
