@@ -141,7 +141,7 @@ class GaussianJobRunner(JobRunner):
         ) as err:
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {self.job_outputfile}\n "
+                f"Writing output file to: {self.job_outputfile}\n"
                 f"And err file to: {self.job_errfile}"
             )
             logger.debug(f"Environments for running: {self.executable.env}")

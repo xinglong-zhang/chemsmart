@@ -114,7 +114,6 @@ class GaussianInputWriter(InputWriter):
                 )
                 for prepend_string in prepend_string_list:
                     f.write(f"{prepend_string} F\n")
-                f.write("\n")
             elif isinstance(modredundant, dict):
                 # for scanning job
                 # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
@@ -128,7 +127,11 @@ class GaussianInputWriter(InputWriter):
                     f.write(
                         f"{prepend_string} S {self.settings.modred['num_steps']} {self.settings.modred['step_size']}\n"
                     )
-                f.write("\n")
+            else:
+                raise ValueError(
+                    "modredundant must be a list or dictionary with 'num_steps', 'step_size', and 'coords'."
+                )
+            f.write("\n")
 
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
