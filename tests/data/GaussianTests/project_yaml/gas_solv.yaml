@@ -1,0 +1,9 @@
+# Default Gaussian settings for calculations 
+gas:
+  functional: "b3lyp empiricaldispersion=gd3bj"  # quotes required for string with spaces
+  basis: def2svp
+solv: 
+  functional: m062x
+  basis: def2tzvp
+  solvent_model: smd
+  solvent_id: toluene

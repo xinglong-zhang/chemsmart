@@ -299,6 +299,28 @@ def esp_cube_file(cube_test_directory):
     return esp_cube_file
 
 
+# gaussian yaml files
+@pytest.fixture
+def gaussian_yaml_settings_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, 'project_yaml')
+
+
+@pytest.fixture
+def gaussian_yaml_settings_defaults(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, 'defaults.yaml')
+
+
+
+@pytest.fixture
+def gaussian_yaml_settings_gas_solv(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, 'gas_solv.yaml')
+
+
+@pytest.fixture
+def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, 'solv.yaml')
+
+
 ############ Orca Fixtures ##################
 # master orca test directory
 @pytest.fixture()
