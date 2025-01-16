@@ -193,8 +193,6 @@ class CtxObjArguments:
                     command_line_string += [self._value(i) for i in v]
                 else:
                     command_line_string += [self._value(v)]
-
-        logger.info(f"Reconstructed {command_line_string}.")
         return command_line_string
 
     def _reconstruct_family(self, parent):
