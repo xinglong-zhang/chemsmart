@@ -21,6 +21,13 @@ def jobrunner_options(f):
         help="Number of cores for each job.",
     )
     @click.option(
+        "-g",
+        "--num-gpus",
+        type=int,
+        default=None,
+        help="Number of gpus per node. Defaults to number of GPUs on specified server if None.",
+    )
+    @click.option(
         "-m", "--mem-gb", type=int, default=None, help="Memory in GBs"
     )
     @click.option(

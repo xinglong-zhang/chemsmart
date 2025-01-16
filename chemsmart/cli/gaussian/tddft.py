@@ -39,7 +39,7 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     logger.debug(f"Label for job: {label}")
 
     # convert from GaussianJobSettings instance to GaussianTDJobSettings instance
-    link_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
+    td_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
 
     # populate cli options
     td_settings.states = states

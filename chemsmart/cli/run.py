@@ -28,6 +28,7 @@ def run(
     ctx,
     server,
     num_cores,
+    num_gpus,
     mem_gb,
     fake,
     scratch,
@@ -46,6 +47,7 @@ def run(
         scratch=scratch,
         fake=fake,
         num_cores=num_cores,
+        num_gpus=num_gpus,
         mem_gb=mem_gb,
     )
 
@@ -82,20 +84,13 @@ def process_pipeline(ctx, *args, **kwargs):
             scratch=jobrunner.scratch,
             fake=jobrunner.fake,
             num_cores=jobrunner.num_cores,
+            num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
         )
         # Run the job with the jobrunner
         job.run(jobrunner=jobrunner)
-
-    # elif isinstance(job, list):
-    #     jobrunner = jobrunner.from_job(job=job[0], server=jobrunner.server, scratch=jobrunner.scratch,
-    #                                    fake=jobrunner.fake,
-    #                                    num_cores=jobrunner.num_cores, mem_gb=jobrunner.mem_gb)
-    #     for i, j in enumerate(job):
-    #         j.label = f"{j.label}_c{i+1}"
-    #         logger.debug(f"Job to be run: {j}")
-    #         logger.debug(f"Jobrunner to be used: {jobrunner}")
-    #         j.run(jobrunner=jobrunner)
+    else:
+        raise ValueError(f"Invalid job type: {type(job)}.")
 
 
 for subcommand in subcommands:

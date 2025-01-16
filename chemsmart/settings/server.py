@@ -100,7 +100,7 @@ class Server(RegistryMixin):
         scheduler_submit_commands = {
             "SLURM": "sbatch",
             "PBS": "qsub",
-            "LSF": "bsub",
+            "LSF": "bsub < ",
             "SGE": "qsub",
             "HTCondor": "condor_q",
         }
@@ -253,16 +253,23 @@ class Server(RegistryMixin):
         except FileNotFoundError:
             return None
 
-    def submit(self, job):
-        """Class method to submit job on the Server."""
+    def submit(self, job, test=False):
+        """Class method to submit job on the Server.
+        Args:
+            job (Job): Job to be submitted.
+            test (bool): If True, the job will not be submitted and
+            only run script and submit_script will be written.
+        """
         # First check that the job to be submitted is not already queued/running
         self._check_running_jobs(job)
         # Then write the submission script
         self._write_submission_script(job)
         # Submit the job
-        self._submit_job(job)
+        if not test:
+            self._submit_job(job)
 
-    def _check_running_jobs(self, job):
+    @staticmethod
+    def _check_running_jobs(job):
         """Check if the job is already running."""
         from chemsmart.utils.cluster import ClusterHelper
         from chemsmart.jobs.gaussian import GaussianJob
@@ -297,6 +304,7 @@ class Server(RegistryMixin):
                 f"Cannot submit job on {self} "
                 f"since no submit command is defined."
             )
+        command += f" {job.submit_script}"
 
         p = subprocess.Popen(shlex.split(command), cwd=job.folder)
         return p.wait()

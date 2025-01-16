@@ -28,6 +28,7 @@ def entry_point(ctx, verbose):
 
 
 entry_point.add_command(run)
+entry_point.add_command(sub)
 
 
 def main():  # pragma: no cover
