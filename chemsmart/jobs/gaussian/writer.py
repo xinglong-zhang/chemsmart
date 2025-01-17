@@ -3,10 +3,8 @@ import os.path
 
 from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 from chemsmart.jobs.writer import InputWriter
-from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
-    prune_list_of_elements,
 )
 
 logger = logging.getLogger(__name__)

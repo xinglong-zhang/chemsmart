@@ -20,8 +20,6 @@ from chemsmart.utils.repattern import (
 )
 from ase.io.formats import string2index
 from chemsmart.utils.periodictable import PeriodicTable
-from reportlab.pdfbase.acroform import orientations
-from sshtunnel import input_
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
