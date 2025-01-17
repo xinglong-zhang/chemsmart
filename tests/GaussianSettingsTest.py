@@ -1,8 +1,3 @@
-import os
-from filecmp import cmp
-from shutil import copy
-
-import pytest
 from chemsmart.jobs.settings import read_molecular_job_yaml
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -185,7 +180,9 @@ class TestGaussianJobFromComFile:
         assert com_settings.solvent_id == "toluene"
 
     def test_include_solvent(self, gaussian_opt_inputfile, tmpdir):
-        com_settings = GaussianJobSettings.from_filepath(gaussian_opt_inputfile)
+        com_settings = GaussianJobSettings.from_filepath(
+            gaussian_opt_inputfile
+        )
         assert com_settings.solvent_model is None
         assert com_settings.solvent_id is None
 
@@ -232,4 +229,3 @@ class TestGaussianPBCJob:
         assert settings.functional.lower() == "pbepbe"
         assert settings.basis.lower() == "6-31g(d,p)/auto"
         assert settings.additional_route_parameters.lower() == "scf=tight"
-

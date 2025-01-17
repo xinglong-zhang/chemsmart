@@ -338,10 +338,94 @@ def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
 def gaussian_written_files_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "written_files")
 
+
 @pytest.fixture()
 def gaussian_written_opt_file(gaussian_written_files_directory):
     return os.path.join(gaussian_written_files_directory, "gaussian_opt.com")
 
+
+@pytest.fixture()
+def gaussian_written_opt_file_with_route(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_opt_with_route.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_written_modred_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_modred.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_scan.com")
+
+
+@pytest.fixture()
+def gaussian_written_ts_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_ts.com")
+
+
+@pytest.fixture()
+def gaussian_written_ts_from_nhc_singlet_log_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_ts_from_log.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_solvent_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_solvent.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_custom_solvent.com",
+    )
+
+
+# text path and associated files
+@pytest.fixture
+def text_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "text")
+
+
+@pytest.fixture
+def genecp_text_file_from_api(text_directory):
+    return os.path.join(text_directory, "genecp_txt_from_api.txt")
+
+
+@pytest.fixture
+def genecp_text_file_from_web(text_directory):
+    return os.path.join(text_directory, "test_genecp.txt")
+
+
+@pytest.fixture
+def gen_text_file_from_web(text_directory):
+    return os.path.join(txt_path, "test_gen.txt")
+
+
+@pytest.fixture
+def smd_TBME_solvent_parameters_text_file(txt_path):
+    return os.path.join(txt_path, "smd_TBME.txt")
+
+
+@pytest.fixture
+def Ni_def2tzvp_PCHOSi_svp_text_file(txt_path):
+    return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
 
 
 ############ Orca Fixtures ##################

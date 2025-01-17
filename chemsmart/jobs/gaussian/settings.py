@@ -96,7 +96,10 @@ class GaussianJobSettings(MolecularJobSettings):
         )
 
     def merge(
-        self, other, keywords=("charge", "multiplicity"), merge_all=False
+        self,
+        other,
+        keywords=("charge", "multiplicity", "title"),
+        merge_all=False,
     ):
         """Overwrite self settings with other settings.
 
@@ -464,18 +467,6 @@ class GaussianJobSettings(MolecularJobSettings):
         return list(
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
-
-    def set_custom_solvent_via_file(self, filename):
-        if not os.path.exists(os.path.expanduser(filename)):
-            raise ValueError(f"File {filename} does not exist!")
-
-        # path to the file for custom_solvent parameters
-        with open(filename) as f:
-            lines = f.readlines()
-
-        lines = [line.strip() for line in lines]
-
-        self.custom_solvent = "\n".join(lines)
 
     def remove_solvent(self):
         self.solvent_model = None

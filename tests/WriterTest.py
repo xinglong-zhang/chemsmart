@@ -3,13 +3,12 @@ from filecmp import cmp
 from shutil import copy
 
 import pytest
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
-from chemsmart.jobs.gaussian.opt import GaussianOptJob
-from chemsmart.jobs.settings import read_molecular_job_yaml
-from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.jobs.gaussian import GaussianOptJob, GaussianSinglePointJob
+from chemsmart.jobs.gaussian import GaussianModredJob
+from chemsmart.jobs.gaussian import GaussianScanJob
+from chemsmart.jobs.gaussian import GaussianTSJob
 from chemsmart.settings.gaussian import GaussianProjectSettings
-from chemsmart.settings.server import Server
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
 
@@ -20,7 +19,7 @@ class TestGaussianInputWriter:
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
         jobrunner_no_scratch,
-        gaussian_written_opt_file
+        gaussian_written_opt_file,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -43,7 +42,9 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_opt.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_opt_file)
+        assert cmp(
+            g16_file, gaussian_written_opt_file
+        )  # writes input file as expected
 
     def test_write_opt_job_with_route(
         self,
@@ -51,7 +52,7 @@ class TestGaussianInputWriter:
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
         jobrunner_no_scratch,
-        gaussian_written_opt_file_with_route
+        gaussian_written_opt_file_with_route,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -60,6 +61,8 @@ class TestGaussianInputWriter:
         settings = project_settings.opt_settings()
         settings.charge = 0
         settings.multiplicity = 1
+        settings.route_to_be_written = "#p pbepbe/6-31g(d) opt"
+        settings.title = "Optimisation job with supplied route"
         job = GaussianOptJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=settings,
@@ -76,66 +79,228 @@ class TestGaussianInputWriter:
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_opt_file_with_route)
 
-
-
-
-
-    def test_it_writes_simple_opt_input_from_logfile(
-        self, tmpdir, normal_min_log_filepath
-    ):
-        """Taking the Gaussian aldehyde.log output and write aldehyde_opt.com using the settings from the .log file."""
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="aldehyde_opt", atoms=atoms
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        assert written_settings == settings
-
-    def test_it_writes_simple_input_with_solvation_from_logfile(
-        self, tmpdir, normal_min_log_filepath
-    ):
-        """Test writing simple .com input file using settings from .log file, including solvation."""
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-        settings.update_solvent(solvent_model="smd", solvent_id="toluene")
-
-        written_file = settings.write_gaussian_input(
-            atoms=atoms, output_dir=tmpdir, job_label="aldehyde_opt"
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_simple_input_with_custom_solvation_from_logfile(
+    def test_write_modred_job(
         self,
         tmpdir,
-        smd_TBME_solvent_parameters_txt_file,
-        normal_min_log_filepath,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_modred_file,
     ):
-        """Test writing input file from log file.
-
-        Simply taking the Gaussian aldehyde.log output and write aldehyde_smd_TBME_solv_opt.com using the settings
-        from the .log file and including custom solvation parameters from file smd_TBME.
-        """
-        smd_TBME_tmp_path = os.path.join(tmpdir, "smd_TBME")
-        copy(smd_TBME_solvent_parameters_txt_file, smd_TBME_tmp_path)
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-        settings.solvent_model = "smd"
-        settings.solvent_id = "generic,read"
-        settings.custom_solvent = smd_TBME_tmp_path
-        written_file = settings.write_gaussian_input(
-            atoms=atoms, output_dir=tmpdir, job_label="custom_solv_opt"
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.modred_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.modred = [[1, 2], [3, 4, 5]]
+        job = GaussianModredJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_modred",
+        )
+        assert isinstance(job, GaussianModredJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
         )
 
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-        assert written_settings == settings
-        assert written_atoms == atoms
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_modred.com")
+        print(g16_file)
+        assert os.path.isfile(g16_file)
+        assert cmp(g16_file, gaussian_written_modred_file)
+
+    def test_write_scan_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_scan_file,
+    ):
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.scan_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.modred = {
+            "coords": [[1, 2], [3, 4, 5]],
+            "num_steps": 10,
+            "step_size": 0.1,
+        }
+        job = GaussianScanJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_scan",
+        )
+        assert isinstance(job, GaussianScanJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_scan.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(g16_file, gaussian_written_scan_file)
+
+    def test_write_ts_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_ts_file,
+    ):
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.ts_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        job = GaussianTSJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_ts",
+        )
+        assert isinstance(job, GaussianTSJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_ts.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(g16_file, gaussian_written_ts_file)
+
+    def test_write_opt_input_from_logfile(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        gaussian_written_ts_from_nhc_singlet_log_file,
+    ):
+        """Taking the Gaussian nhc_neutral_singlet.log output
+        and write aldehyde_opt.com using the settings from the .log file."""
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        ts_settings = project_settings.ts_settings()
+        job_settings = GaussianJobSettings.from_logfile(
+            gaussian_singlet_opt_outfile
+        )
+        # also merge the title keywords
+        keywords = ("charge", "multiplicity", "title")
+        ts_settings = ts_settings.merge(job_settings, keywords=keywords)
+        job = GaussianTSJob.from_filename(
+            filename=gaussian_singlet_opt_outfile,
+            settings=ts_settings,
+            label="gaussian_ts_from_log",
+        )
+        assert isinstance(job, GaussianTSJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_ts_from_log.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(g16_file, gaussian_written_ts_from_nhc_singlet_log_file)
+
+    def test_write_sp_input_with_solvation_from_logfile(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        gaussian_written_sp_from_nhc_singlet_log_with_solvent_file,
+    ):
+        """Test writing simple .com input file using settings from .log file,
+        including solvation."""
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        sp_settings = project_settings.sp_settings()
+        job_settings = GaussianJobSettings.from_logfile(
+            gaussian_singlet_opt_outfile
+        )
+        sp_settings = sp_settings.merge(job_settings)
+        job = GaussianSinglePointJob.from_filename(
+            filename=gaussian_singlet_opt_outfile,
+            settings=sp_settings,
+            label="gaussian_sp_from_log_with_solvent",
+        )
+        assert isinstance(job, GaussianSinglePointJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(
+            tmpdir, "gaussian_sp_from_log_with_solvent.com"
+        )
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_sp_from_nhc_singlet_log_with_solvent_file,
+        )
+
+    def test_it_writes_sp_with_custom_solvation_from_logfile(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        smd_TBME_solvent_parameters_text_file,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file,
+    ):
+        """Test writing input file from log file.
+        Simply taking the Gaussian nhc_neutral_singlet.log output and write
+        gaussian_sp_custom_solv.com using the settings from the .log
+        file and including custom solvation parameters from file smd_TBME.
+        """
+        smd_TBME_tmp_path = os.path.join(tmpdir, "smd_TBME")
+        copy(smd_TBME_solvent_parameters_text_file, smd_TBME_tmp_path)
+
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        sp_settings = project_settings.sp_settings()
+        job_settings = GaussianJobSettings.from_logfile(
+            gaussian_singlet_opt_outfile
+        )
+        sp_settings = sp_settings.merge(job_settings)
+        sp_settings.solvent_model = "smd"
+        sp_settings.solvent_id = "generic,read"
+        sp_settings.custom_solvent = smd_TBME_tmp_path
+
+        job = GaussianSinglePointJob.from_filename(
+            filename=gaussian_singlet_opt_outfile,
+            settings=sp_settings,
+            label="gaussian_sp_custom_solv",
+        )
+        assert isinstance(job, GaussianSinglePointJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_sp_custom_solv.com")
+        assert os.path.isfile(g16_file)
+        print(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file,
+        )
 
     def test_it_writes_single_point_from_logfile(
         self, tmpdir, normal_min_log_filepath

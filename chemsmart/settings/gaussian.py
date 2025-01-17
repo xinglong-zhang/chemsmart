@@ -85,7 +85,7 @@ class GaussianProjectSettings(RegistryMixin):
         """Gaussian default settings for sp job."""
         settings = self.main_settings().copy()
         settings.job_type = "sp"
-        settings.freq = False
+        settings.freq = False  # turn off freq calculation for sp job
         settings.basis = self.large_basis
         return settings
 
@@ -143,10 +143,10 @@ class GaussianProjectSettings(RegistryMixin):
         project_name_yaml_path = os.path.join(
             test_projects_dir, f"{project_name}.yaml"
         )
-        user_settings_manager = GaussianProjectSettingsManager(
+        project_settings_manager = GaussianProjectSettingsManager(
             filename=project_name_yaml_path
         )
-        settings = cls._from_projects_manager(user_settings_manager)
+        settings = cls._from_projects_manager(project_settings_manager)
 
         if settings is not None:
             return settings

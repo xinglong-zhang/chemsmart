@@ -54,8 +54,39 @@ class MolecularJobSettings:
         self.heavy_elements = heavy_elements
         self.heavy_elements_basis = heavy_elements_basis
         self.light_elements_basis = light_elements_basis
-        self.custom_solvent = custom_solvent
+
+        if custom_solvent is not None:
+            print("*******")
+            if not isinstance(custom_solvent, str):
+                raise ValueError(
+                    "Custom solvent parameters must be a string! It can be either a string"
+                    "giving the path of the custom solvent file or the custom solvent parameters"
+                    "in free string format."
+                )
+            if os.path.exists(custom_solvent) and os.path.isfile(
+                custom_solvent
+            ):
+                print("((((((")
+                self.set_custom_solvent_via_file(custom_solvent)
+            else:
+                self.custom_solvent = custom_solvent
+            logger.debug(f"Custom solvent parameters: {self.custom_solvent}")
+        else:
+            self.custom_solvent = custom_solvent
+
         self.forces = forces
+
+    def set_custom_solvent_via_file(self, filename):
+        if not os.path.exists(os.path.expanduser(filename)):
+            raise ValueError(f"File {filename} does not exist!")
+
+        # path to the file for custom_solvent parameters
+        with open(filename) as f:
+            lines = f.readlines()
+
+        lines = [line.strip() for line in lines]
+
+        self.custom_solvent = "\n".join(lines)
 
 
 def read_molecular_job_yaml(filename):
@@ -65,11 +96,17 @@ def read_molecular_job_yaml(filename):
     if os.path.exists(default_file):
         with open(default_file) as f:
             default_config = yaml.safe_load(f)
+        # logger.info(
+        #     f"Using the following pre-set defaults: \n{default_config}"
+        # )
     # else:
     #     logger.warning("Default file settings does not exist.\n")
     #     # from chemsmart.jobs.orca.settings import ORCAJobSettings
     #
     #     # default_config = ORCAJobSettings.default().__dict__
+    #     logger.warning(
+    #         f"Using the following pre-set defaults: \n{default_config}"
+    #     )
 
     # job types
     gas_phase_jobs = [
@@ -126,6 +163,8 @@ def read_molecular_job_yaml(filename):
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
+            # turn off freq calculation for single point calculations
+            all_project_configs[job]["freq"] = False
             all_project_configs[job]["job_type"] = job  # update job_type
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], solv_config

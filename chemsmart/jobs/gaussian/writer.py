@@ -134,7 +134,6 @@ class GaussianInputWriter(InputWriter):
                     "modredundant must be a list or dictionary with 'num_steps', 'step_size', and 'coords'."
                 )
 
-
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
         logger.debug("Writing gen/genecp basis set information.")
@@ -183,7 +182,8 @@ class GaussianInputWriter(InputWriter):
         """Write the custom solvent parameters if present in the job settings."""
         logger.debug("Writing custom solvent parameters.")
         custom_solvent = self.settings.custom_solvent
-        if custom_solvent:
+        print(custom_solvent)
+        if custom_solvent is not None:
             f.write(custom_solvent)
             f.write("\n")
 
