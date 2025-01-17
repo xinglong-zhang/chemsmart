@@ -430,7 +430,9 @@ Cl         0   -3.0556310000   -0.1578960000   -0.0001400000"""
         assert os.path.exists(tmp_file)
         assert all([a == b for a, b in zip(coordinates, written_coordinates)])
 
-    def test_read_molecule_from_gaussian_pbc(self, tmpdir, gaussian_pbc_1d_inputfile):
+    def test_read_molecule_from_gaussian_pbc(
+        self, tmpdir, gaussian_pbc_1d_inputfile
+    ):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
         assert os.path.isfile(gaussian_pbc_1d_inputfile)
 
@@ -614,21 +616,26 @@ $$$$"""
         sdf_molecule = sdf_file.molecule
         assert isinstance(sdf_molecule, Molecule)
         symbols = [
-                "O",
-                "C",
-                "C",
-                "C",
-                "C",
-                "H",
-                "H",
-                "H",
-                "H",
-                "H",
-                "H",
-                "H",
-                "H",
+            "O",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+        ]
+        assert all(
+            [
+                sdf_molecule.symbols[i] == symbols[i]
+                for i in range(len(symbols))
             ]
-        assert all([sdf_molecule.symbols[i] == symbols[i] for i in range(len(symbols))])
+        )
 
         assert sdf_molecule.empirical_formula == "C4H8O"
         structure_coords = np.array(

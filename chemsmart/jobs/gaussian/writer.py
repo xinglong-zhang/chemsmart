@@ -103,7 +103,7 @@ class GaussianInputWriter(InputWriter):
         """
         logger.debug("Writing modred section.")
         modredundant = self.job.settings.modred
-        if modredundant:
+        if modredundant is not None:
             if isinstance(modredundant, list):
                 # for modredunant job
                 # modred = [[1,2], [3,4]]

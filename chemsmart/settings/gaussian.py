@@ -91,7 +91,24 @@ class GaussianProjectSettings(RegistryMixin):
 
     @classmethod
     def from_project(cls, project):
-        return cls._from_project_name(project)
+        """Get project settings based on project name."""
+        user_project_settings = cls._from_user_project_name(project)
+        if user_project_settings is not None:
+            return user_project_settings
+        else:
+            chemsmart_test_project_settings = (
+                cls._from_chemsmart_test_projects(project)
+            )
+            if chemsmart_test_project_settings is not None:
+                return chemsmart_test_project_settings
+
+        templates_path = os.path.join(os.path.dirname(__file__), "templates")
+        raise FileNotFoundError(
+            f"No project settings implemented for {project}.\n\n"
+            f"Place new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
+            f"Templates for such settings.yaml files are available at {templates_path}\n\n "
+            f"Currently available projects: {user_settings.all_available_gaussian_projects}"
+        )
 
     @classmethod
     def _from_projects_manager(cls, manager):
@@ -101,7 +118,7 @@ class GaussianProjectSettings(RegistryMixin):
             return None
 
     @classmethod
-    def _from_project_name(cls, project_name):
+    def _from_user_project_name(cls, project_name):
         """Get .yaml project settings file from user directory based on project name."""
         project_name_yaml_path = os.path.join(
             ChemsmartUserSettings().user_gaussian_settings_dir,
@@ -115,13 +132,24 @@ class GaussianProjectSettings(RegistryMixin):
         if settings is not None:
             return settings
 
-        templates_path = os.path.join(os.path.dirname(__file__), "templates")
-        raise ValueError(
-            f"No project settings implemented for {project_name}.\n\n"
-            f"Place new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
-            f"Templates for such settings.yaml files are available at {templates_path}\n\n "
-            f"Currently available projects: {user_settings.all_available_gaussian_projects}"
+    @classmethod
+    def _from_chemsmart_test_projects(cls, project_name):
+        """Get .yaml project settings file from chemsmart test projects."""
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        test_projects_dir = os.path.join(
+            current_file_dir, "../../tests/data/GaussianTests/project_yaml"
         )
+
+        project_name_yaml_path = os.path.join(
+            test_projects_dir, f"{project_name}.yaml"
+        )
+        user_settings_manager = GaussianProjectSettingsManager(
+            filename=project_name_yaml_path
+        )
+        settings = cls._from_projects_manager(user_settings_manager)
+
+        if settings is not None:
+            return settings
 
 
 class YamlGaussianProjectSettings(GaussianProjectSettings):

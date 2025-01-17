@@ -80,6 +80,12 @@ class Molecule:
         return len(self.chemical_symbols)
 
     def __getitem__(self, idx):
+        """Interprets the input idx as 1-based indices by index Adjustment (i - 1).
+        The method assumes that idx contains 1-based indices (e.g., [1, 2, 3]),
+        so it subtracts 1 to convert them to Python's zero-based indexing.
+        Retrieves the corresponding elements from self.symbols and self.positions using the provided indices.
+        reates and returns a new instance of the same class, containing the selected symbols and positions.
+        """
         symbols = [self.symbols[i - 1] for i in idx]
         positions = [self.positions[i - 1] for i in idx]
         return type(self)(symbols=symbols, positions=positions)

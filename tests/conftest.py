@@ -1,6 +1,7 @@
 import os
 import pytest
-
+from chemsmart.settings.server import Server
+from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -80,9 +81,7 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
 
 @pytest.fixture
 def hf_com_filepath(gaussian_inputs_test_directory):
-    return os.path.join(
-        gaussian_inputs_test_directory, "hf.com"
-    )
+    return os.path.join(gaussian_inputs_test_directory, "hf.com")
 
 
 # Gaussian input files for genecp
@@ -309,23 +308,29 @@ def esp_cube_file(cube_test_directory):
 # gaussian yaml files
 @pytest.fixture
 def gaussian_yaml_settings_directory(gaussian_test_directory):
-    return os.path.join(gaussian_test_directory, 'project_yaml')
+    return os.path.join(gaussian_test_directory, "project_yaml")
 
 
 @pytest.fixture
 def gaussian_yaml_settings_defaults(gaussian_yaml_settings_directory):
-    return os.path.join(gaussian_yaml_settings_directory, 'defaults.yaml')
-
+    return os.path.join(gaussian_yaml_settings_directory, "defaults.yaml")
 
 
 @pytest.fixture
 def gaussian_yaml_settings_gas_solv(gaussian_yaml_settings_directory):
-    return os.path.join(gaussian_yaml_settings_directory, 'gas_solv.yaml')
+    return os.path.join(gaussian_yaml_settings_directory, "gas_solv.yaml")
+
+
+@pytest.fixture()
+def gaussian_yaml_settings_gas_solv_project_name(
+    gaussian_yaml_settings_directory,
+):
+    return os.path.join(gaussian_yaml_settings_directory, "gas_solv")
 
 
 @pytest.fixture
 def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
-    return os.path.join(gaussian_yaml_settings_directory, 'solv.yaml')
+    return os.path.join(gaussian_yaml_settings_directory, "solv.yaml")
 
 
 ############ Orca Fixtures ##################
@@ -498,3 +503,21 @@ def utils_test_directory(test_data_directory):
 @pytest.fixture()
 def server_yaml_file(utils_test_directory):
     return os.path.join(utils_test_directory, "server.yaml")
+
+
+### Server and JobRunner fixtures
+
+
+@pytest.fixture()
+def pbs_server(server_yaml_file):
+    return Server.from_servername(server_yaml_file)
+
+
+@pytest.fixture()
+def jobrunner_no_scratch(pbs_server):
+    return FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def jobrunner_scratch(pbs_server):
+    return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
