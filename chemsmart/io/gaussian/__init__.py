@@ -34,7 +34,7 @@ class GaussianRefs:
         "ipcm",
         "dipole",
     ]
-    g_additional_route_parameters = ["force", "nosymm", "guess"]
+    g_additional_route_parameters = ["force", "nosymm", "guess", "stable", "scf"]
     g_additional_opt_options = [
         "maxstep",
         "maxcycles",

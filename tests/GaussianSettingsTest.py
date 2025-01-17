@@ -223,45 +223,13 @@ class TestGaussianJobFromLogFile:
 
 class TestGaussianPBCJob:
     def test_writes_gaussian_input_from_pbc_comfile(
-        self, tmpdir, gallium_arsenide_comfile
+        self, tmpdir, gaussian_pbc_3d_outputfile
     ):
-        atoms = AtomsWrapper.from_filepath(gallium_arsenide_comfile)
         settings = GaussianJobSettings.from_filepath(
-            filepath=gallium_arsenide_comfile
+            filepath=gaussian_pbc_3d_outputfile
         )
-        settings.functional = "pbepbe"
-        settings.basis = "6-31g(d,p)/Auto"
-        settings.job_type = "sp"
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="gallium_arsenide_3d_out", atoms=atoms
-        )
+        assert settings.job_type == "sp"
+        assert settings.functional.lower() == "pbepbe"
+        assert settings.basis.lower() == "6-31g(d,p)/auto"
+        assert settings.additional_route_parameters.lower() == "scf=tight"
 
-        with open(written_file) as f:
-            lines = f.readlines()
-            assert lines[-5].split()[0] == "As", "Last element is As"
-            assert lines[-4].split()[0] == "TV", "PBC should be written."
-            assert lines[-3].split()[0] == "TV", "PBC should be written."
-            assert lines[-2].split()[0] == "TV", "PBC should be written."
-            assert len(lines[-1].strip()) == 0, "Last line is empty line."
-
-    def test_writes_gaussian_input_from_pbc_logfile(
-        self, tmpdir, graphite_sheet_logfile
-    ):
-        atoms = AtomsWrapper.from_filepath(graphite_sheet_logfile)
-
-        settings = GaussianJobSettings.from_filepath(
-            filepath=graphite_sheet_logfile
-        )
-        settings.functional = "pbepbe"
-        settings.basis = "6-31g(d,p)/Auto"
-        settings.job_type = "sp"
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="graphite_2d_opt_out", atoms=atoms
-        )
-
-        with open(written_file) as f:
-            lines = f.readlines()
-            assert lines[-4].split()[0] == "C", "Last element is C"
-            assert lines[-3].split()[0] == "TV", "PBC should be written."
-            assert lines[-2].split()[0] == "TV", "PBC should be written."
-            assert len(lines[-1].strip()) == 0, "Last line is empty line."

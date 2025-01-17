@@ -441,3 +441,24 @@ class TestGaussianInputWriter:
         # can further check that the written file is the same as the model file
         assert cmp(written_file, model_custom_basis_for_all_elements_input)
 
+    def test_writes_gaussian_input_from_pbc_logfile(
+        self, tmpdir, graphite_sheet_logfile
+    ):
+        atoms = AtomsWrapper.from_filepath(graphite_sheet_logfile)
+
+        settings = GaussianJobSettings.from_filepath(
+            filepath=graphite_sheet_logfile
+        )
+        settings.functional = "pbepbe"
+        settings.basis = "6-31g(d,p)/Auto"
+        settings.job_type = "sp"
+        written_file = settings.write_gaussian_input(
+            output_dir=tmpdir, job_label="graphite_2d_opt_out", atoms=atoms
+        )
+
+        with open(written_file) as f:
+            lines = f.readlines()
+            assert lines[-4].split()[0] == "C", "Last element is C"
+            assert lines[-3].split()[0] == "TV", "PBC should be written."
+            assert lines[-2].split()[0] == "TV", "PBC should be written."
+            assert len(lines[-1].strip()) == 0, "Last line is empty line."
