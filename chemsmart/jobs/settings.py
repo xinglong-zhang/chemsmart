@@ -56,7 +56,6 @@ class MolecularJobSettings:
         self.light_elements_basis = light_elements_basis
 
         if custom_solvent is not None:
-            print("*******")
             if not isinstance(custom_solvent, str):
                 raise ValueError(
                     "Custom solvent parameters must be a string! It can be either a string"
@@ -66,10 +65,12 @@ class MolecularJobSettings:
             if os.path.exists(custom_solvent) and os.path.isfile(
                 custom_solvent
             ):
-                print("((((((")
                 self.set_custom_solvent_via_file(custom_solvent)
             else:
                 self.custom_solvent = custom_solvent
+            # check that the last line of custom_solvent is empty, if not, add an empty line
+            if self.custom_solvent[-1] != "\n":
+                self.custom_solvent += "\n"
             logger.debug(f"Custom solvent parameters: {self.custom_solvent}")
         else:
             self.custom_solvent = custom_solvent
