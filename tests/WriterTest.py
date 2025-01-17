@@ -282,7 +282,6 @@ class TestGaussianInputWriter:
         )
         sp_settings = sp_settings.merge(job_settings)
 
-
         job = GaussianSinglePointJob.from_filename(
             filename=gaussian_singlet_opt_outfile,
             settings=sp_settings,
@@ -294,7 +293,9 @@ class TestGaussianInputWriter:
         )
         # write input file
         g16_writer.write(target_directory=tmpdir)
-        g16_file = os.path.join(tmpdir, "gaussian_sp_from_log_with_custom_solvent.com")
+        g16_file = os.path.join(
+            tmpdir, "gaussian_sp_from_log_with_custom_solvent.com"
+        )
         assert os.path.isfile(g16_file)
         assert cmp(
             g16_file,
@@ -323,7 +324,6 @@ class TestGaussianInputWriter:
         )
         ts_settings = ts_settings.merge(job_settings)
 
-
         job = GaussianTSJob.from_filename(
             filename=gaussian_singlet_opt_outfile,
             settings=ts_settings,
@@ -335,25 +335,28 @@ class TestGaussianInputWriter:
         )
         # write input file
         g16_writer.write(target_directory=tmpdir)
-        g16_file = os.path.join(tmpdir, "gaussian_sp_from_log_with_custom_basis.com")
+        g16_file = os.path.join(
+            tmpdir, "gaussian_sp_from_log_with_custom_basis.com"
+        )
         assert os.path.isfile(g16_file)
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
         )
 
-
     # @pytest.mark.slow
     def test_write_ts_with_custom_basis_using_api(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_ts_genecp_outfile,
-            jobrunner_no_scratch,
-            genecp_text_file_from_api,
-            gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_ts_genecp_outfile,
+        jobrunner_no_scratch,
+        genecp_text_file_from_api,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
     ):
-        custom_basis_from_api_tmp_path = os.path.join(tmpdir, "custom_basis_from_api.txt")
+        custom_basis_from_api_tmp_path = os.path.join(
+            tmpdir, "custom_basis_from_api.txt"
+        )
         copy(genecp_text_file_from_api, custom_basis_from_api_tmp_path)
 
         project_settings = GaussianProjectSettings.from_project(
@@ -384,7 +387,9 @@ class TestGaussianInputWriter:
         )
         # write input file
         g16_writer.write(target_directory=tmpdir)
-        g16_file = os.path.join(tmpdir, "gaussian_sp_from_log_with_custom_basis_from_api.com")
+        g16_file = os.path.join(
+            tmpdir, "gaussian_sp_from_log_with_custom_basis_from_api.com"
+        )
         assert os.path.isfile(g16_file)
         print(g16_file)
         assert cmp(

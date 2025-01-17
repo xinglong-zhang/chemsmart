@@ -396,6 +396,7 @@ def gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file(
         "gaussian_sp_from_log_with_custom_solvent.com",
     )
 
+
 @pytest.fixture()
 def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file(
     gaussian_written_files_directory,
@@ -404,6 +405,7 @@ def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file(
         gaussian_written_files_directory,
         "gaussian_sp_from_log_with_custom_basis.com",
     )
+
 
 @pytest.fixture()
 def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file(
