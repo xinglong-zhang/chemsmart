@@ -340,6 +340,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
+                self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
             if self.job_type == "opt":
                 route_string += " opt"
@@ -353,6 +354,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
+                self.freq = False  # turn off freq calculation for sp job
 
         # write frequency
         if self.freq and not self.numfreq:

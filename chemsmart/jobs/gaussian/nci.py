@@ -8,3 +8,5 @@ class GaussianNCIJob(GaussianJob):
         super().__init__(
             molecule=molecule, settings=settings, label=label, **kwargs
         )
+
+        self.settings.freq = False  # turn off freq calc for NCI

@@ -18,6 +18,7 @@ class GaussianIRCJob(GaussianJob):
             **kwargs,
         )
         self.settings = settings
+        self.settings.freq = False  # turn off freq calc for IRC
 
     def _ircf_job(self):
         # create IRCf job:

@@ -23,6 +23,7 @@ class GaussianDIASJob(GaussianJob):
         self.all_molecules = molecules  # alone IRC coordinate
         self.fragment_indices = fragment_indices
         self.every_n_points = every_n_points
+        self.settings.freq = False  # turn off freq calc for DI-AS
 
     @property
     def num_images(self):
