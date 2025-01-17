@@ -1,9 +1,10 @@
 [flake8]
 ignore =
-    E226, W503, W504,
+    E226, W503, W504, F401
     # E266 too many leading '#' for block comment
     # line break before binary operator
     # line break after binary operator
+    # F401: Use an explicit re-export
 
 extend-ignore = 
     E203,
