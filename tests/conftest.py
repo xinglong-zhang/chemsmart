@@ -417,6 +417,25 @@ def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file(
     )
 
 
+@pytest.fixture()
+def gaussian_modred_with_custom_basis_for_all_atoms_from_api(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_modred_with_custom_basis_for_all_atoms_from_api.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_opt_from_graphite_2d_pbc_log(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory, "graphite_2d_opt_from_log.com"
+    )
+
+
 # text path and associated files
 @pytest.fixture
 def text_directory(gaussian_test_directory):

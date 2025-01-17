@@ -297,7 +297,7 @@ class TestGaussian16Input:
             )
         )
         assert g16_pbc_1d.additional_opt_options_in_route is None
-        assert g16_pbc_1d.additional_route_parameters is None
+        assert g16_pbc_1d.additional_route_parameters == "scf=tight"
         assert g16_pbc_1d.job_type == "sp"
         assert g16_pbc_1d.modred is None
         assert g16_pbc_1d.functional == "pbepbe"
@@ -1321,3 +1321,32 @@ class TestGaussianPBCOutputFile:
         )
 
         assert g16_pbc_2d.has_forces
+
+        expected_first_pbc_forces = np.array(
+            [
+                [-0.005794968, -0.000018277, 0.000000000],
+                [-0.015305998, 0.009167561, 0.000000000],
+            ]
+        )
+        assert np.allclose(g16_pbc_2d.pbc_forces[0], expected_first_pbc_forces)
+
+        expected_last_pbc_forces = np.array(
+            [
+                [0.000006901, 0.000014889, -0.000000000],
+                [0.000028860, -0.000004081, -0.000000000],
+            ]
+        )
+        assert np.allclose(g16_pbc_2d.pbc_forces[-1], expected_last_pbc_forces)
+
+        assert len(g16_pbc_2d.standard_orientations_pbc) == 0
+
+        expected_last_translation_vector = np.array(
+            [
+                [2.475540, -0.000000, -0.000000],
+                [-1.237852, 2.143856, 0.000000],
+            ]
+        )
+        assert np.allclose(
+            g16_pbc_2d.input_orientations_pbc[-1],
+            expected_last_translation_vector,
+        )

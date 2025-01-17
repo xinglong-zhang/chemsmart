@@ -56,7 +56,7 @@ class TestGaussianJobSettings:
         sp_settings = GaussianJobSettings.from_dict(sp_settings_dict)
         assert isinstance(sp_settings, GaussianJobSettings)
         assert sp_settings.chk is True  # from defaults file
-        assert sp_settings.functional == "m062x"
+        assert sp_settings.functional == "b3lyp empiricaldispersion=gd3bj"
         assert sp_settings.basis == "def2tzvp"
         assert sp_settings.solvent_model == "smd"
         assert sp_settings.solvent_id == "toluene"

@@ -2,7 +2,7 @@ import os
 from filecmp import cmp
 from shutil import copy
 
-import pytest
+from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.jobs.gaussian import GaussianOptJob, GaussianSinglePointJob
 from chemsmart.jobs.gaussian import GaussianModredJob
@@ -344,7 +344,6 @@ class TestGaussianInputWriter:
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
         )
 
-    @pytest.mark.slow
     def test_write_ts_with_custom_basis_using_api(
         self,
         tmpdir,
@@ -385,28 +384,36 @@ class TestGaussianInputWriter:
             tmpdir, "gaussian_sp_from_log_with_custom_basis_from_api.com"
         )
         assert os.path.isfile(g16_file)
-        print(g16_file)
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
         )
 
-    @pytest.mark.slow
-    def test_it_writes_opt_with_custom_basis_for_all_elements_in_structure_using_api(
-        self, tmpdir, com_filepath, model_custom_basis_for_all_elements_input
+    def test_write_modred_with_custom_basis_for_all_elements_in_structure_using_api(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        modred_genecp_inputfile,
+        jobrunner_no_scratch,
+        gaussian_modred_with_custom_basis_for_all_atoms_from_api,
     ):
-        # supports writing custom basis from file path
-        atoms = AtomsWrapper.from_filepath(filepath=com_filepath)
-        gaussian_settings = GaussianJobSettings.from_comfile(com_filepath)
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        modred_settings = project_settings.modred_settings()
+        job_settings = GaussianJobSettings.from_filepath(
+            modred_genecp_inputfile
+        )
+        modred_settings = modred_settings.merge(job_settings)
 
-        # update basis settings (or given such basis set settings)
-        gaussian_settings.basis = "gen"
-        gaussian_settings.heavy_elements = [
+        modred_settings.modred = [[1, 2], [3, 4, 5]]
+        modred_settings.basis = "genecp"
+        modred_settings.heavy_elements = [
             "C",
             "H",
             "O",
             "N",
-            "Cl",
+            "Pd",
             "P",
             "S",
             "F",
@@ -414,74 +421,68 @@ class TestGaussianInputWriter:
             "I",
         ]
         # more than all elements in the system but will be filtered to only those in the system for input preparation
-        gaussian_settings.heavy_elements_basis = "def2-TZVPPD"
-        gaussian_settings.light_elements_basis = (
-            None  # light element basis not specified as
-        )
-        # all use custom basis from heavy_elements_basis
+        modred_settings.heavy_elements_basis = "def2-TZVPPD"
+        modred_settings.light_elements_basis = None  # light element basis not specified as all use custom basis from heavy_elements_basis
 
-        written_file = gaussian_settings.write_gaussian_input(
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="custom_basis_for_all_elements",
+        molecule = Molecule.from_filepath(modred_genecp_inputfile)
+        job = GaussianModredJob(
+            molecule=molecule,
+            settings=modred_settings,
+            label="gaussian_modred_with_custom_basis_for_all_atoms_from_api",
         )
-        written_settings = GaussianJobSettings.from_filepath(
-            filepath=written_file
-        )
-        written_atoms = AtomsWrapper.from_filepath(filepath=written_file)
-
-        # compare to the model file
-        model_file_settings = GaussianJobSettings.from_filepath(
-            filepath=model_custom_basis_for_all_elements_input
-        )
-        model_file_atoms = AtomsWrapper.from_filepath(
-            filepath=model_custom_basis_for_all_elements_input
+        assert isinstance(job, GaussianModredJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
         )
 
-        assert written_settings == model_file_settings
-        assert written_atoms == atoms == model_file_atoms
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(
+            tmpdir,
+            "gaussian_modred_with_custom_basis_for_all_atoms_from_api.com",
+        )
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_modred_with_custom_basis_for_all_atoms_from_api,
+        )
 
-        # also check that the correct basis name is in the input file
-        with open(written_file) as f:
-            lines = f.readlines()
-            all_lines_string = "".join(lines)
-            assert "def2-TZVPPD" in all_lines_string
-            assert (
-                "H     0" in all_lines_string
-            )  # all these elements have been specified in custom basis
-            assert "C     0" in all_lines_string
-            assert "O     0" in all_lines_string
-            assert "Cl     0" in all_lines_string
-            assert (
-                "N     0" not in all_lines_string
-            )  # these are in the list of heavy elements but not in the system
-            assert "P     0" not in all_lines_string
-            assert "S     0" not in all_lines_string
-            assert "F     0" not in all_lines_string
-            assert "Br     0" not in all_lines_string
-            assert "I     0" not in all_lines_string
-
-        # can further check that the written file is the same as the model file
-        assert cmp(written_file, model_custom_basis_for_all_elements_input)
-
-    def test_writes_gaussian_input_from_pbc_logfile(
-        self, tmpdir, graphite_sheet_logfile
+    def test_write_gaussian_input_from_pbc_logfile(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_pbc_2d_outputfile,
+        jobrunner_no_scratch,
+        gaussian_written_opt_from_graphite_2d_pbc_log,
     ):
-        atoms = AtomsWrapper.from_filepath(graphite_sheet_logfile)
-
-        settings = GaussianJobSettings.from_filepath(
-            filepath=graphite_sheet_logfile
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
         )
-        settings.functional = "pbepbe"
-        settings.basis = "6-31g(d,p)/Auto"
-        settings.job_type = "sp"
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="graphite_2d_opt_out", atoms=atoms
+        opt_settings = project_settings.opt_settings()
+        file_settings = GaussianJobSettings.from_filepath(
+            filepath=gaussian_pbc_2d_outputfile
         )
+        opt_settings = opt_settings.merge(file_settings)
 
-        with open(written_file) as f:
-            lines = f.readlines()
-            assert lines[-4].split()[0] == "C", "Last element is C"
-            assert lines[-3].split()[0] == "TV", "PBC should be written."
-            assert lines[-2].split()[0] == "TV", "PBC should be written."
-            assert len(lines[-1].strip()) == 0, "Last line is empty line."
+        molecule = Molecule.from_filepath(gaussian_pbc_2d_outputfile)
+        g16_outputfile = Gaussian16Output(gaussian_pbc_2d_outputfile)
+        assert g16_outputfile.list_of_pbc_conditions == [1, 1, 0]
+        assert g16_outputfile.input_translation_vectors == [
+            [2.47532, 0.0, 0.0],
+            [-1.21995, 2.13345, 0.0],
+        ]
+
+        job = GaussianSinglePointJob(
+            molecule=molecule,
+            settings=opt_settings,
+            label="graphite_2d_opt_from_log",
+        )
+        assert isinstance(job, GaussianSinglePointJob)
+
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "graphite_2d_opt_from_log.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(g16_file, gaussian_written_opt_from_graphite_2d_pbc_log)

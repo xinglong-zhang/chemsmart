@@ -123,5 +123,5 @@ G   1   1.00
 ! Te-Xe(ecp-28), Po-Rn(ecp-46): K. A. Peterson, D. Figgen, E. Goll, H. Stoll, M. Dolg, J. Chem. Phys., 2003, 119, 11113?11123.
 ! Rb(ecp-28), Cs(ecp-46): T.Leininger, A.Nicklass, W.Kuechle, H.Stoll, M.Dolg, A.Bergner, Chem. Phys. Lett., 1996, 255, 274?280.
 ! Sr(ecp-28), Ba(ecp-46): M. Kaupp, P. V. Schleyer, H. Stoll and H. Preuss, J. Chem. Phys., 1991, 94, 1360?1366.
-! 
+!
 

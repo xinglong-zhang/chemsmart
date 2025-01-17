@@ -137,44 +137,10 @@ class GaussianInputWriter(InputWriter):
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
         logger.debug("Writing gen/genecp basis set information.")
-        gen_genecp_file = self.settings.gen_genecp_file
-        heavy_elements = self.settings.heavy_elements
-        heavy_elements_basis = self.settings.heavy_elements_basis
-        light_elements = self.settings.get_light_elements(self.job.molecule)
-        light_elements_basis = self.settings.light_elements_basis
         if self.settings.genecp:
-            if gen_genecp_file and heavy_elements and heavy_elements_basis:
-                raise ValueError(
-                    "Please provide either gen_genecp_file or heavy_elements and heavy_elements_basis."
-                )
-            if gen_genecp_file:
-                assert os.path.exists(
-                    gen_genecp_file
-                ), f"File {gen_genecp_file} not found!"
-                genecp_section = GenGenECPSection.from_genecp_path(
-                    gen_genecp_file
-                )
-            elif heavy_elements and heavy_elements_basis:
-                logger.info(
-                    f"GENECP elements specified:\n"
-                    f"Heavy elements: {heavy_elements}\n"
-                    f"Heavy elements basis: {heavy_elements_basis}\n"
-                    f"Light elements: {light_elements}\n"
-                    f"Light elements basis: {light_elements_basis}\n"
-                    "Using basis set exchange api to get gen/genecp basis set for heavy atoms.\n"
-                )
-                heavy_elements_in_structure = prune_list_of_elements(
-                    heavy_elements, self.job.molecule
-                )
-
-                genecp_section = GenGenECPSection.from_bse_api(
-                    light_elements=light_elements,
-                    light_elements_basis=light_elements_basis,
-                    heavy_elements=heavy_elements_in_structure,
-                    heavy_elements_basis=heavy_elements_basis,
-                )
-            else:
-                return
+            genecp_section = self.settings.get_genecp_section(
+                molecule=self.job.molecule
+            )
             f.write(genecp_section.string)
             # check that the last line of genecp_section.string is empty, if not, add an empty line
             if genecp_section.string_list[-1] != "\n":

@@ -73,7 +73,7 @@ class MolecularJobSettings:
                 self.custom_solvent += "\n"
             logger.debug(f"Custom solvent parameters: {self.custom_solvent}")
         else:
-            self.custom_solvent = custom_solvent
+            self.custom_solvent = None
 
         self.forces = forces
 
