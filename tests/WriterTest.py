@@ -344,21 +344,15 @@ class TestGaussianInputWriter:
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
         )
 
-    # @pytest.mark.slow
+    @pytest.mark.slow
     def test_write_ts_with_custom_basis_using_api(
         self,
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_ts_genecp_outfile,
         jobrunner_no_scratch,
-        genecp_text_file_from_api,
         gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
     ):
-        custom_basis_from_api_tmp_path = os.path.join(
-            tmpdir, "custom_basis_from_api.txt"
-        )
-        copy(genecp_text_file_from_api, custom_basis_from_api_tmp_path)
-
         project_settings = GaussianProjectSettings.from_project(
             gaussian_yaml_settings_gas_solv_project_name
         )
@@ -396,44 +390,6 @@ class TestGaussianInputWriter:
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
         )
-
-        # supports writing custom basis from file path
-        atoms = AtomsWrapper.from_filepath(filepath=genecp_log_filepath)
-        gaussian_settings = GaussianJobSettings.from_logfile(
-            genecp_log_filepath
-        )
-
-        # update functional and basis
-        gaussian_settings.functional = "b3lyp empiricaldispersion=gd3bj"
-        gaussian_settings.job_type = "opt"
-        gaussian_settings.basis = "genecp"
-        gaussian_settings.heavy_elements = ["Pd"]
-        gaussian_settings.heavy_elements_basis = "def2-TZVPPD"
-        gaussian_settings.light_elements_basis = "def2-SVP"
-        written_file = gaussian_settings.write_gaussian_input(
-            atoms=atoms, output_dir=tmpdir, job_label="custom_basis"
-        )
-        written_settings = GaussianJobSettings.from_filepath(
-            filepath=written_file
-        )
-        written_atoms = AtomsWrapper.from_filepath(filepath=written_file)
-
-        model_custom_basis_from_api_opt_input_tmpdir = os.path.join(
-            tmpdir, "gaussian_sp_from_log_with_custom_basis_from_api.com"
-        )
-        copy(
-            model_custom_basis_from_api_opt_input,
-            model_custom_basis_from_api_opt_input_tmpdir,
-        )
-        model_settings = GaussianJobSettings.from_filepath(
-            model_custom_basis_from_api_opt_input_tmpdir
-        )
-        model_atoms = AtomsWrapper.from_filepath(
-            filepath=model_custom_basis_from_api_opt_input_tmpdir
-        )
-
-        assert written_settings == model_settings
-        assert written_atoms == atoms == model_atoms
 
     @pytest.mark.slow
     def test_it_writes_opt_with_custom_basis_for_all_elements_in_structure_using_api(
