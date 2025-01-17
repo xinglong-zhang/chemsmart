@@ -422,11 +422,6 @@ def text_directory(gaussian_test_directory):
 
 
 @pytest.fixture
-def genecp_text_file_from_api(text_directory):
-    return os.path.join(text_directory, "genecp_txt_from_api.txt")
-
-
-@pytest.fixture
 def genecp_text_file_from_web(text_directory):
     return os.path.join(text_directory, "test_genecp.txt")
 
