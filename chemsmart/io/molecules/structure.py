@@ -273,11 +273,9 @@ class Molecule:
         """Creates Molecule object from pubchem based on an identifier (CID, SMILES, or name).
         Args:
         identifier (str): The compound identifier (name, CID, or SMILES string).
-        identifier_type (str): The type of the identifier. Can be "name", "cid", or "smiles".
         output_format (str): The desired format of the response. Default is "json".
                              Other options include "sdf" or "xml".
         Raises:
-            ValueError: If an invalid `identifier_type` is provided.
             requests.exceptions.RequestException: For network or HTTP-related issues.
         """
         from chemsmart.io.molecules.pubchem import pubchem_search

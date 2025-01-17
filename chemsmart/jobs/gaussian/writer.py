@@ -176,13 +176,14 @@ class GaussianInputWriter(InputWriter):
             else:
                 return
             f.write(genecp_section.string)
-            f.write("\n")
+            # check that the last line of genecp_section.string is empty, if not, add an empty line
+            if genecp_section.string_list[-1] != "\n":
+                f.write("\n")
 
     def _append_custom_solvent_parameters(self, f):
         """Write the custom solvent parameters if present in the job settings."""
         logger.debug("Writing custom solvent parameters.")
         custom_solvent = self.settings.custom_solvent
-        print(custom_solvent)
         if custom_solvent is not None:
             f.write(custom_solvent)
             f.write("\n")
