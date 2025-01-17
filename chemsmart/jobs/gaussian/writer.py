@@ -114,6 +114,7 @@ class GaussianInputWriter(InputWriter):
                 )
                 for prepend_string in prepend_string_list:
                     f.write(f"{prepend_string} F\n")
+                f.write("\n")
             elif isinstance(modredundant, dict):
                 # for scanning job
                 # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
@@ -127,11 +128,12 @@ class GaussianInputWriter(InputWriter):
                     f.write(
                         f"{prepend_string} S {self.settings.modred['num_steps']} {self.settings.modred['step_size']}\n"
                     )
+                f.write("\n")
             else:
                 raise ValueError(
                     "modredundant must be a list or dictionary with 'num_steps', 'step_size', and 'coords'."
                 )
-            f.write("\n")
+
 
     def _append_gen_genecp_basis(self, f):
         """Write the genecp basis set information if present in the job settings."""
@@ -207,18 +209,19 @@ class GaussianInputWriter(InputWriter):
         """Write any additional information that needs to be appended to the input file."""
         logger.debug("Writing other additional information.")
         append_additional_info = self.settings.append_additional_info
-        if isinstance(append_additional_info, str) and os.path.exists(
-            os.path.expanduser(append_additional_info)
-        ):
-            # path to the file for additional append info
-            with open(append_additional_info) as g:
-                for line in g.readlines():
-                    f.write(line)
-        else:
-            # ensures that the additional append info can be supplied in free string format
-            line_elem = append_additional_info.strip().split("\n")
-            for line in line_elem:
-                f.write(f"{line}\n")
+        if append_additional_info is not None:
+            if isinstance(append_additional_info, str) and os.path.exists(
+                os.path.expanduser(append_additional_info)
+            ):
+                # path to the file for additional append info
+                with open(append_additional_info) as g:
+                    for line in g.readlines():
+                        f.write(line)
+            else:
+                # ensures that the additional append info can be supplied in free string format
+                line_elem = append_additional_info.strip().split("\n")
+                for line in line_elem:
+                    f.write(f"{line}\n")
 
     def _write_link_section(self, f):
         """Write the link section for the input file."""

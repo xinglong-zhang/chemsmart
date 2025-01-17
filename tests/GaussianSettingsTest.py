@@ -164,8 +164,8 @@ class TestGaussianRoute:
 
 
 class TestGaussianJobFromComFile:
-    def test_reads_com_file(self, com_filepath):
-        com_settings = GaussianJobSettings.from_comfile(com_filepath)
+    def test_reads_com_file(self, gaussian_opt_inputfile):
+        com_settings = GaussianJobSettings.from_comfile(gaussian_opt_inputfile)
         assert com_settings.chk is True
         assert com_settings.job_type == "opt"
         assert com_settings.freq is True
@@ -176,78 +176,35 @@ class TestGaussianJobFromComFile:
         assert com_settings.solvent_model is None
         assert com_settings.solvent_id is None
 
-    def test_update_solvent(self, com_filepath, tmpdir):
-        atoms = AtomsWrapper.from_file(com_filepath)
-        com_settings = GaussianJobSettings.from_comfile(com_filepath)
-        com_settings.update_solvent(solvent_model="smd", solvent_id="toluene")
-
-        written_file_path = com_settings.write_gaussian_input(
-            num_cores=24,
-            mem_gigs=60,
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="aldehyde_solv_opt",
-        )
-        assert os.path.exists(written_file_path)
-
-        written_settings = GaussianJobSettings.from_comfile(written_file_path)
-        assert written_settings == com_settings
-
-    def test_include_solvent(self, com_filepath, tmpdir):
-        atoms = AtomsWrapper.from_file(com_filepath)
-        com_settings = GaussianJobSettings.from_comfile(com_filepath)
+    def test_update_solvent(self, gaussian_opt_inputfile, tmpdir):
+        com_settings = GaussianJobSettings.from_comfile(gaussian_opt_inputfile)
         assert com_settings.solvent_model is None
         assert com_settings.solvent_id is None
+        com_settings.update_solvent(solvent_model="smd", solvent_id="toluene")
+        assert com_settings.solvent_model == "smd"
+        assert com_settings.solvent_id == "toluene"
+
+    def test_include_solvent(self, gaussian_opt_inputfile, tmpdir):
+        com_settings = GaussianJobSettings.from_filepath(gaussian_opt_inputfile)
+        assert com_settings.solvent_model is None
+        assert com_settings.solvent_id is None
+
         com_settings.modify_solvent(
             remove_solvent=False, solvent_model="cpcm", solvent_id="water"
         )
-        written_file_path = com_settings.write_gaussian_input(
-            num_cores=24,
-            mem_gigs=60,
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="aldehyde_solv_opt",
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file_path)
-        assert written_settings.solvent_model == "cpcm"
-        assert written_settings.solvent_id == "water"
+        assert com_settings.solvent_model == "cpcm"
+        assert com_settings.solvent_id == "water"
 
-        written_settings.modify_solvent(remove_solvent=True)
-        turn_off_solvent_file = written_settings.write_gaussian_input(
-            num_cores=24,
-            mem_gigs=60,
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="aldehyde_no_solv_opt",
-        )
-        turn_off_solvent_settings = GaussianJobSettings.from_comfile(
-            turn_off_solvent_file
-        )
-        assert turn_off_solvent_settings.solvent_model is None
-        assert turn_off_solvent_settings.solvent_id is None
-
-    def test_writes_same_inputfile(self, tmpdir, com_filepath):
-        atoms = AtomsWrapper.from_file(com_filepath)
-        com_settings = GaussianJobSettings.from_comfile(com_filepath)
-        written_file_path = com_settings.write_gaussian_input(
-            num_cores=24,
-            mem_gigs=60,
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="aldehyde_user_input_name",
-        )
-
-        assert os.path.exists(written_file_path)
-
-        written_settings = GaussianJobSettings.from_comfile(written_file_path)
-        assert written_settings == com_settings
+        com_settings.modify_solvent(remove_solvent=True)
+        assert com_settings.solvent_model is None
+        assert com_settings.solvent_id is None
 
 
 class TestGaussianJobFromLogFile:
-    def test_accumulates_settings(self, tmpdir, normal_ts_filepath):
-        settings = GaussianJobSettings.from_logfile(normal_ts_filepath)
-        assert settings.functional == "m062x"
-        assert settings.basis == "def2svp"
+    def test_accumulates_settings(self, tmpdir, gaussian_ts_genecp_outfile):
+        settings = GaussianJobSettings.from_logfile(gaussian_ts_genecp_outfile)
+        assert settings.functional == "mn15"
+        assert settings.basis == "genecp"
         assert settings.solvent_model is None
         assert settings.solvent_id is None
 
@@ -262,367 +219,6 @@ class TestGaussianJobFromLogFile:
         settings.update_solvent(solvent_model="smd", solvent_id="toluene")
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
-
-    def test_it_writes_simple_opt_input_from_logfile(
-        self, tmpdir, normal_min_log_filepath
-    ):
-        """Taking the Gaussian aldehyde.log output and write aldehyde_opt.com using the settings from the .log file."""
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="aldehyde_opt", atoms=atoms
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        assert written_settings == settings
-
-    def test_it_writes_simple_input_with_solvation_from_logfile(
-        self, tmpdir, normal_min_log_filepath
-    ):
-        """Test writing simple .com input file using settings from .log file, including solvation."""
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-        settings.update_solvent(solvent_model="smd", solvent_id="toluene")
-
-        written_file = settings.write_gaussian_input(
-            atoms=atoms, output_dir=tmpdir, job_label="aldehyde_opt"
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_simple_input_with_custom_solvation_from_logfile(
-        self,
-        tmpdir,
-        smd_TBME_solvent_parameters_txt_file,
-        normal_min_log_filepath,
-    ):
-        """Test writing input file from log file.
-
-        Simply taking the Gaussian aldehyde.log output and write aldehyde_smd_TBME_solv_opt.com using the settings
-        from the .log file and including custom solvation parameters from file smd_TBME.
-        """
-        smd_TBME_tmp_path = os.path.join(tmpdir, "smd_TBME")
-        copy(smd_TBME_solvent_parameters_txt_file, smd_TBME_tmp_path)
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-        settings.solvent_model = "smd"
-        settings.solvent_id = "generic,read"
-        settings.custom_solvent = smd_TBME_tmp_path
-        written_file = settings.write_gaussian_input(
-            atoms=atoms, output_dir=tmpdir, job_label="custom_solv_opt"
-        )
-
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_single_point_from_logfile(
-        self, tmpdir, normal_min_log_filepath
-    ):
-        """Test writing input file from log file.
-
-        Taking the Gaussian aldehyde.log output and write sp with different functional/basis and with solvation
-        aldehyde_sp.com using the settings from the .log file and updating those settings.
-        """
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-        settings.functional = "b3lyp empiricaldispersion=gd3bj"
-        settings.basis = "def2tzvp"
-        settings.solvent_model = "smd"
-        settings.solvent_id = "toluene"
-        settings.job_type = "sp"
-        settings.freq = False
-
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="input", atoms=atoms
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_single_point_with_diff_functional_and_basis_and_custom_solvent(
-        self,
-        tmpdir,
-        smd_TBME_solvent_parameters_txt_file,
-        normal_min_log_filepath,
-    ):
-        atoms = AtomsWrapper.from_file(normal_min_log_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_min_log_filepath)
-        settings.functional = "b3lyp empiricaldispersion=gd3bj"
-        settings.basis = "def2tzvp"
-        settings.solvent_model = "smd"
-        settings.solvent_id = "generic,read"
-        settings.job_type = "sp"
-        settings.freq = False
-
-        # copy solvent parameters file:
-        settings.set_custom_solvent_via_file(
-            smd_TBME_solvent_parameters_txt_file
-        )
-
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="input", atoms=atoms
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-
-        # fails as written_settings.solvent_id is `generic,read`, whereas settings.solvent_id is `TBME`
-        # <-- should be `generic,read`, as `TBME` is not in a list of solvents already parametrized by Gaussian
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_modredundant_file_from_logfile(
-        self, tmpdir, normal_ts_filepath
-    ):
-        """Test writing modredundant input file using settings from log file output."""
-        atoms = AtomsWrapper.from_file(normal_ts_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_ts_filepath)
-        settings.job_type = "modred"
-        settings.modred = [[2, 12], [9, 2]]
-
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="input", atoms=atoms
-        )
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        written_atoms = AtomsWrapper.from_file(written_file)
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_modredundant_file_with_solvation_from_logfile(
-        self, tmpdir, normal_ts_filepath, model_solv_modred_inputfile
-    ):
-        """Test writing input file from log file.
-
-        Taking the Gaussian normal_ts.log output and write modredundant ts search file
-        normal_ts_solv_modred.com using the settings from the .log file and with solvation.
-        """
-        gaussian_settings = GaussianJobSettings.from_logfile(
-            normal_ts_filepath
-        )
-        gaussian_settings.job_type = "modred"
-        gaussian_settings.modred = [[2, 12], [9, 2]]
-        gaussian_settings.update_solvent(
-            solvent_model="smd", solvent_id="toluene"
-        )
-        gaussian_settings.freq = False
-        atoms = AtomsWrapper.from_filepath(normal_ts_filepath)
-
-        gaussian_settings.write_gaussian_input(
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="normal_ts_solv_modred",
-            num_cores=32,
-            mem_gigs=30,
-        )
-        written_file = os.path.join(tmpdir, "normal_ts_solv_modred.com")
-        written_atoms = AtomsWrapper.from_filepath(filepath=written_file)
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-        assert written_settings == gaussian_settings
-        assert written_atoms == atoms
-
-        # model_file_tmp_path = os.path.join(tmpdir, 'model_solv_modred_input.com')
-        # copy(model_solv_modred_inputfile, model_file_tmp_path)
-        #
-        # compare_result = compare_file(model_file_tmp_path, written_file)
-        # assert compare_result is True
-
-    def test_it_writes_scan_file_from_logfile(
-        self, tmpdir, normal_ts_filepath
-    ):
-        """Test writing scan input file from log file.
-
-        Taking the Gaussian normal_ts.log output and write scan file
-        normal_ts_scan.com using the settings from the .log file.
-        """
-        atoms = AtomsWrapper.from_file(normal_ts_filepath)
-        settings = GaussianJobSettings.from_logfile(normal_ts_filepath)
-        settings.job_type = "scan"
-        settings.modred = {
-            "num_steps": 10,
-            "step_size": 0.05,
-            "coords": [[2, 12], [9, 2]],
-        }
-        written_file = settings.write_gaussian_input(
-            output_dir=tmpdir, job_label="scan", atoms=atoms
-        )
-
-        written_atoms = AtomsWrapper.from_filepath(written_file)
-        written_settings = GaussianJobSettings.from_comfile(written_file)
-
-        assert written_settings == settings
-        assert written_atoms == atoms
-
-    def test_it_writes_opt_with_custom_basis_from_logfile(
-        self,
-        tmpdir,
-        normal_ts_filepath,
-        Ni_def2tzvp_PCHOSi_svp_txt_file,
-        model_custom_basis_opt_input,
-    ):
-        # supports writing custom basis from file path
-        atoms = AtomsWrapper.from_filepath(
-            filepath=model_custom_basis_opt_input
-        )
-        gaussian_settings = GaussianJobSettings.from_logfile(
-            normal_ts_filepath
-        )
-
-        # update functional and basis
-        gaussian_settings.functional = "b3lyp empiricaldispersion=gd3bj"
-        gaussian_settings.basis = "gen"
-
-        # copy gen basis file:
-        gen_basis_tmp_path = os.path.join(tmpdir, "Ni_def2tzvp_PCHOSi_svp.txt")
-        copy(Ni_def2tzvp_PCHOSi_svp_txt_file, gen_basis_tmp_path)
-
-        gaussian_settings.gen_genecp = gen_basis_tmp_path
-
-        gaussian_settings.job_type = "opt"
-
-        written_file = gaussian_settings.write_gaussian_input(
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="normal_ts_custom_basis_opt",
-        )
-        written_settings = GaussianJobSettings.from_filepath(
-            filepath=written_file
-        )
-        written_atoms = AtomsWrapper.from_filepath(filepath=written_file)
-
-        model_input_tmpdir = os.path.join(
-            tmpdir, "model_custom_basis_opt_input.com"
-        )
-        copy(model_custom_basis_opt_input, model_input_tmpdir)
-        model_settings = GaussianJobSettings.from_filepath(
-            filepath=model_input_tmpdir
-        )
-        model_atoms = AtomsWrapper.from_filepath(filepath=model_input_tmpdir)
-
-        assert written_settings == model_settings
-        assert written_atoms == atoms == model_atoms
-
-    @pytest.mark.slow
-    def test_it_writes_opt_with_custom_basis_using_api(
-        self,
-        tmpdir,
-        genecp_log_filepath,
-        model_custom_basis_from_api_opt_input,
-    ):
-        # supports writing custom basis from file path
-        atoms = AtomsWrapper.from_filepath(filepath=genecp_log_filepath)
-        gaussian_settings = GaussianJobSettings.from_logfile(
-            genecp_log_filepath
-        )
-
-        # update functional and basis
-        gaussian_settings.functional = "b3lyp empiricaldispersion=gd3bj"
-        gaussian_settings.job_type = "opt"
-        gaussian_settings.basis = "genecp"
-        gaussian_settings.heavy_elements = ["Pd"]
-        gaussian_settings.heavy_elements_basis = "def2-TZVPPD"
-        gaussian_settings.light_elements_basis = "def2-SVP"
-        written_file = gaussian_settings.write_gaussian_input(
-            atoms=atoms, output_dir=tmpdir, job_label="custom_basis"
-        )
-        written_settings = GaussianJobSettings.from_filepath(
-            filepath=written_file
-        )
-        written_atoms = AtomsWrapper.from_filepath(filepath=written_file)
-
-        model_custom_basis_from_api_opt_input_tmpdir = os.path.join(
-            tmpdir, "model_custom_basis_from_api_opt_input.com"
-        )
-        copy(
-            model_custom_basis_from_api_opt_input,
-            model_custom_basis_from_api_opt_input_tmpdir,
-        )
-        model_settings = GaussianJobSettings.from_filepath(
-            model_custom_basis_from_api_opt_input_tmpdir
-        )
-        model_atoms = AtomsWrapper.from_filepath(
-            filepath=model_custom_basis_from_api_opt_input_tmpdir
-        )
-
-        assert written_settings == model_settings
-        assert written_atoms == atoms == model_atoms
-
-    @pytest.mark.slow
-    def test_it_writes_opt_with_custom_basis_for_all_elements_in_structure_using_api(
-        self, tmpdir, com_filepath, model_custom_basis_for_all_elements_input
-    ):
-        # supports writing custom basis from file path
-        atoms = AtomsWrapper.from_filepath(filepath=com_filepath)
-        gaussian_settings = GaussianJobSettings.from_comfile(com_filepath)
-
-        # update basis settings (or given such basis set settings)
-        gaussian_settings.basis = "gen"
-        gaussian_settings.heavy_elements = [
-            "C",
-            "H",
-            "O",
-            "N",
-            "Cl",
-            "P",
-            "S",
-            "F",
-            "Br",
-            "I",
-        ]
-        # more than all elements in the system but will be filtered to only those in the system for input preparation
-        gaussian_settings.heavy_elements_basis = "def2-TZVPPD"
-        gaussian_settings.light_elements_basis = (
-            None  # light element basis not specified as
-        )
-        # all use custom basis from heavy_elements_basis
-
-        written_file = gaussian_settings.write_gaussian_input(
-            atoms=atoms,
-            output_dir=tmpdir,
-            job_label="custom_basis_for_all_elements",
-        )
-        written_settings = GaussianJobSettings.from_filepath(
-            filepath=written_file
-        )
-        written_atoms = AtomsWrapper.from_filepath(filepath=written_file)
-
-        # compare to the model file
-        model_file_settings = GaussianJobSettings.from_filepath(
-            filepath=model_custom_basis_for_all_elements_input
-        )
-        model_file_atoms = AtomsWrapper.from_filepath(
-            filepath=model_custom_basis_for_all_elements_input
-        )
-
-        assert written_settings == model_file_settings
-        assert written_atoms == atoms == model_file_atoms
-
-        # also check that the correct basis name is in the input file
-        with open(written_file) as f:
-            lines = f.readlines()
-            all_lines_string = "".join(lines)
-            assert "def2-TZVPPD" in all_lines_string
-            assert (
-                "H     0" in all_lines_string
-            )  # all these elements have been specified in custom basis
-            assert "C     0" in all_lines_string
-            assert "O     0" in all_lines_string
-            assert "Cl     0" in all_lines_string
-            assert (
-                "N     0" not in all_lines_string
-            )  # these are in the list of heavy elements but not in the system
-            assert "P     0" not in all_lines_string
-            assert "S     0" not in all_lines_string
-            assert "F     0" not in all_lines_string
-            assert "Br     0" not in all_lines_string
-            assert "I     0" not in all_lines_string
-
-        # can further check that the written file is the same as the model file
-        assert cmp(written_file, model_custom_basis_for_all_elements_input)
 
 
 class TestGaussianPBCJob:

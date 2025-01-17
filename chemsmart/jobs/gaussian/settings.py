@@ -81,10 +81,6 @@ class GaussianJobSettings(MolecularJobSettings):
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
         self.gen_genecp_file = gen_genecp_file
 
-        if append_additional_info is None:
-            append_additional_info = ""
-        self.append_additional_info = append_additional_info
-
         if forces is True and freq is True:
             raise ValueError(
                 "Frequency and Force calculations cannot be performed by Gaussian at the same time!\n"

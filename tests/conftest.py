@@ -333,6 +333,17 @@ def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "solv.yaml")
 
 
+# gaussian written files
+@pytest.fixture
+def gaussian_written_files_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "written_files")
+
+@pytest.fixture()
+def gaussian_written_opt_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_opt.com")
+
+
+
 ############ Orca Fixtures ##################
 # master orca test directory
 @pytest.fixture()
