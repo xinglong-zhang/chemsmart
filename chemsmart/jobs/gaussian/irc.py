@@ -1,5 +1,6 @@
 from copy import deepcopy
 import logging
+from typing import Type
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
 
@@ -8,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 class GaussianIRCJob(GaussianJob):
     TYPE = "g16irc"
-    _SETTINGS_CLS = GaussianIRCJobSettings
 
     def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(
@@ -19,6 +19,10 @@ class GaussianIRCJob(GaussianJob):
         )
         self.settings = settings
         self.settings.freq = False  # turn off freq calc for IRC
+
+    @classmethod
+    def settings_class(cls) -> Type[GaussianIRCJobSettings]:
+        return GaussianIRCJobSettings
 
     def _ircf_job(self):
         # create IRCf job:

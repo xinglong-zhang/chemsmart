@@ -33,8 +33,7 @@ fmt:              ## Format code using black & isort.
 .PHONY: lint
 lint:             ## Run pep8, black, mypy linters.
 	$(ENV_PREFIX)ruff check chemsmart/
-	$(ENV_PREFIX)black -l 79 --check chemsmart/
-	$(ENV_PREFIX)black -l 79 --check tests/
+	$(ENV_PREFIX)black -l 79 --check .
 	$(ENV_PREFIX)mypy --ignore-missing-imports chemsmart/
 
 .PHONY: test

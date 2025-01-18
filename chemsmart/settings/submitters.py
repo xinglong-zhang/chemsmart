@@ -1,7 +1,7 @@
 import inspect
 import logging
 from abc import abstractmethod
-
+from typing import Optional
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -46,7 +46,7 @@ class RunScript:
 class Submitter(RegistryMixin):
     """Abstract base class for job submission."""
 
-    NAME = NotImplemented
+    NAME: Optional[str] = None
 
     def __init__(self, name, job, server, **kwargs):
         self.name = name

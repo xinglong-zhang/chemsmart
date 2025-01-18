@@ -1,6 +1,7 @@
 import ase
 import logging
 import os
+from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
@@ -11,13 +12,12 @@ logger = logging.getLogger(__name__)
 
 class GaussianJob(Job):
     PROGRAM = "Gaussian"
-    _SETTINGS_CLS = GaussianJobSettings
 
     def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(molecule=molecule, label=label, **kwargs)
-        if not isinstance(settings, self._SETTINGS_CLS):
+        if not isinstance(settings, GaussianJobSettings):
             raise ValueError(
-                f"Settings must be instance of {self._SETTINGS_CLS} for {self}, but is {settings} instead!"
+                f"Settings must be instance of {GaussianJobSettings} for {self}, but is {settings} instead!"
             )
         if not isinstance(molecule, Molecule):
             raise ValueError(
@@ -32,6 +32,10 @@ class GaussianJob(Job):
         self.settings = settings
         self.atoms = molecule
         self.label = label
+
+    @classmethod
+    def settings_class(cls) -> Type[GaussianJobSettings]:
+        return GaussianJobSettings
 
     @property
     def inputfile(self):

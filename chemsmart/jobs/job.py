@@ -20,7 +20,7 @@ class Job(RegistryMixin):
     """
 
     TYPE: Optional[str] = None
-    PROGRAM = NotImplemented
+    PROGRAM: Optional[str] = None
 
     def __init__(self, molecule, label, local=False, skip_completed=True):
         self.molecule = molecule
