@@ -23,6 +23,7 @@ install:          ## Install the project in dev mode.
 	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
 	@echo "Don't forget to run 'make virtualenv' if you got errors."
 	$(ENV_PREFIX)pip install -e .[test]
+	$(ENV_PREFIX)pip install types-PyYAML  # Add this line to install the types-PyYAML package
 
 .PHONY: fmt
 fmt:              ## Format code using black & isort.
@@ -32,7 +33,7 @@ fmt:              ## Format code using black & isort.
 
 .PHONY: lint
 lint:             ## Run pep8, black, mypy linters.
-	$(ENV_PREFIX)ruff check chemsmart/
+	$(ENV_PREFIX)ruff check .
 	$(ENV_PREFIX)black -l 79 --check .
 	$(ENV_PREFIX)mypy --ignore-missing-imports chemsmart/
 
