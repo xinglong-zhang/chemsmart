@@ -2,7 +2,7 @@
 
 chemsmart welcomes contributions from the community.
 
-**You need PYTHON 3.10!**
+**You need PYTHON 3.9+!**
 
 This instructions are for linux base systems. (Linux, MacOS, BSD, etc.)
 ## Setting up your own fork of this repo.
