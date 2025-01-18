@@ -92,6 +92,3 @@ source = ["chemsmart"]
 site_name = "chemsmart"
 theme = "readthedocs"
 
-[tool.mypy]
-ignore_missing_imports = True
-
