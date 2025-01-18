@@ -18,9 +18,9 @@ from chemsmart.utils.periodictable import PeriodicTable
 pt = PeriodicTable()
 
 if sys.version_info >= (3, 10):
-    from shutil import _USE_CP_SENDFILE
+    from shutil import _USE_CP_SENDFILE  # noqa F811
 
-    _USE_CP_SENDFILE = False
+    _USE_CP_SENDFILE = False  # noqa F811
     # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
     # only works in Python 3.10
 
