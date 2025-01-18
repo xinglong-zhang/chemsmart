@@ -40,6 +40,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Clear existing cache
+        run: |
+          rm -rf ~/.cache/pip
+          rm -rf ./.gradle/caches/
+          rm -rf ~/.m2/repository/
+
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
