@@ -140,9 +140,10 @@ class GaussianJobRunner(JobRunner):
         return command
 
     def _create_process(self, job, command, env):
-        with open(self.job_outputfile, "w") as out, open(
-            self.job_errfile, "w"
-        ) as err:
+        with (
+            open(self.job_outputfile, "w") as out,
+            open(self.job_errfile, "w") as err,
+        ):
             logger.info(
                 f"Command executed: {command}\n"
                 f"Writing output file to: {self.job_outputfile}\n"

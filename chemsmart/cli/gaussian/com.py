@@ -45,5 +45,5 @@ def com(ctx, skip_completed, **kwargs):
         settings=opt_settings,
         label=label,
         skip_completed=skip_completed,
-        **kwargs
+        **kwargs,
     )
