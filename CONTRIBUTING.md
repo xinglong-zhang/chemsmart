@@ -80,7 +80,7 @@ Targets:
 help:             ## Show the help.
 install:          ## Install the project in dev mode.
 fmt:              ## Format code using black & isort.
-lint:             ## Run pep8, black, mypy linters.
+lint:             ## Run pep8, black linters.
 test: lint        ## Run tests and generate coverage report.
 watch:            ## Run tests on every change.
 clean:            ## Clean unused files.

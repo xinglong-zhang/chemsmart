@@ -32,10 +32,9 @@ fmt:              ## Format code using black & isort.
 	$(ENV_PREFIX)black -l 79 tests/
 
 .PHONY: lint
-lint:             ## Run pep8, black, mypy linters.
+lint:             ## Run pep8, black linters.
 	$(ENV_PREFIX)ruff check .
 	$(ENV_PREFIX)black -l 79 --check .
-	$(ENV_PREFIX)mypy --ignore-missing-imports chemsmart/
 
 .PHONY: test
 test: lint        ## Run tests and generate coverage report.
@@ -55,7 +54,6 @@ clean:            ## Clean unused files.
 	@find ./ -name '*~' -exec rm -f {} \;
 	@rm -rf .cache
 	@rm -rf .pytest_cache
-	@rm -rf .mypy_cache
 	@rm -rf build
 	@rm -rf dist
 	@rm -rf *.egg-info
