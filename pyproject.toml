@@ -71,7 +71,7 @@ profile = "black"
 line-length = 79
 
 [tool.mypy]
-python_version = 3.10
+python_version = "3.10"
 strict = true
 ignore_missing_imports = true
 exclude = ["build", "dist", ".venv", ".ruff_cache"]
