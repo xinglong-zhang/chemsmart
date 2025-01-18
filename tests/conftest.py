@@ -639,7 +639,7 @@ def server_yaml_file(utils_test_directory):
 
 @pytest.fixture()
 def pbs_server(server_yaml_file):
-    return Server.from_servername(server_yaml_file)
+    return Server.from_yaml(server_yaml_file)
 
 
 @pytest.fixture()
