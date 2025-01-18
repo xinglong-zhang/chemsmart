@@ -6,6 +6,7 @@ import time
 import shutil
 from contextlib import suppress
 from abc import abstractmethod
+from typing import Optional
 from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,8 @@ class Job(RegistryMixin):
         skip_completed (bool): If True, completed jobs will not be rerun. Defaults to True.
     """
 
-    TYPE = NotImplemented
+    TYPE: Optional[str] = None
     PROGRAM = NotImplemented
-    # ALIASES = []
-    # RUNNERS = []
 
     def __init__(self, molecule, label, local=False, skip_completed=True):
         self.molecule = molecule

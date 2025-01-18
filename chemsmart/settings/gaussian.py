@@ -14,7 +14,12 @@ user_settings = ChemsmartUserSettings()
 
 
 logger = logging.getLogger(__name__)
-project_settings_registry = []
+project_settings_registry: list[str] = []
+# Type annotation required for Python's type checker (e.g., mypy)
+# which has stricter requirements when working in contexts where type inference
+# is insufficient or ambiguous.
+# This is not due to Python 3.9 itself, but type checking rules enforced by tools
+# like mypy or stricter typing practices.
 
 
 class GaussianProjectSettings(RegistryMixin):

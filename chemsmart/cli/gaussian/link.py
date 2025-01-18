@@ -3,7 +3,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.gaussian.gaussian import click_gaussian_jobtype_options
-from chemsmart.cli.gaussian import gaussian
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.cli import get_setting_from_jobtype
 from chemsmart.utils.utils import check_charge_and_multiplicity

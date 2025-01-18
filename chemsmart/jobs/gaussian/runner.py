@@ -1,7 +1,7 @@
 import logging
 import os
+import sys
 import shlex
-import shutil
 import subprocess
 from contextlib import suppress
 from functools import lru_cache
@@ -17,8 +17,11 @@ from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
 
-shutil._USE_CP_SENDFILE = False
-# to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
+if sys.version_info >= (3, 10):
+    from shutil import _USE_CP_SENDFILE
+    _USE_CP_SENDFILE = False
+    # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
+    # only works in Python 3.10
 
 logger = logging.getLogger(__name__)
 
