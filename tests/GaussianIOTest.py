@@ -600,7 +600,7 @@ class TestGaussian16Output:
             [-0.000000478, 0.000001912, -0.000001255],
         )
         assert np.allclose(
-            g16_genecp.forces_in_eV_per_A[0][0],
+            g16_genecp.forces_in_eV_per_angstrom[0][0],
             [
                 -0.002864142 * units.Hartree / units.Bohr,
                 0.002344278 * units.Hartree / units.Bohr,
@@ -1284,7 +1284,7 @@ class TestGaussianPBCOutputFile:
         )
 
         assert np.allclose(
-            g16_pbc_2d.forces_in_eV_per_A[-1],
+            g16_pbc_2d.forces_in_eV_per_angstrom[-1],
             np.array(
                 [
                     [1.5884e-05, 6.7630e-06, 0.0000e00],

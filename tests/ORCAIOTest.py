@@ -2,11 +2,13 @@ import math
 import os
 import numpy as np
 import pytest
+from ase import units
+from ase.build import molecule
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import Molecule, CoordinateBlock
 from chemsmart.io.orca.output import ORCAEngradFile
 
 
@@ -212,11 +214,31 @@ class TestORCAOutput:
             ]
         )
         assert np.allclose(orca_out.forces[-1], orca_out_last_forces, rtol=1e-6)
+        orca_out_first_forces_in_eV_per_angstrom = np.array(
+            [
+                np.array([-0.000000001, 0.000000112, -0.002606324]) * units.Hartree / units.Bohr,
+                np.array([-0.013427516, 0.000000001, 0.001404818]) * units.Hartree / units.Bohr,
+                np.array([0.013427527, 0.000000001, 0.001404820]) * units.Hartree / units.Bohr,
+            ]
+        )
+        assert np.allclose(
+            orca_out.forces_in_eV_per_angstrom[0], orca_out_first_forces_in_eV_per_angstrom, rtol=1e-6
+        )
 
-    def test_water_optimized_output(
-        self, water_output_gas_path
-    ):  # noqa: PLR0915
+        assert isinstance(orca_out.input_coordinates_block, CoordinateBlock)
+        molecule = orca_out.input_coordinates_block.molecule
+        assert isinstance(molecule, Molecule)
+        assert all(molecule.symbols == ["O", "H", "H"])
+        assert orca_out.input_coordinates_block.coordinate_block == [
+            "O  0.0000  0.0000  0.0626",
+            "H  -0.7920  0.0000  -0.4973",
+            "H  0.7920  0.0000  -0.4973",
+        ]
+        assert orca_out.molecule.empirical_formula == "H2O"
+
+    def test_water_optimized_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
             "B(H1,O0)": 0.9627,

@@ -68,12 +68,10 @@ class ORCAOutput(ORCAFileMixin):
             if "CARTESIAN GRADIENT" in line:
                 forces = []
                 for line_j in self.contents[i + 3 :]:
-                    print(line_j)
                     if len(line_j) == 0:
                         break
                     line_elements = line_j.split()
                     if len(line_elements) == 6:
-                        print(line_elements)
                         forces.append(
                             [
                                 float(line_elements[-3]),
@@ -82,7 +80,39 @@ class ORCAOutput(ORCAFileMixin):
                             ]
                         )
                 list_of_all_forces.append(np.array(forces))
+        if len(list_of_all_forces) == 0:
+            return None
         return list_of_all_forces
+
+    @cached_property
+    def input_coordinates_block(self):
+        """Obtain the coordinate block from the input that is printed in the outputfile."""
+        return self._get_input_structure_coordinates_block_in_output()
+
+    def _get_input_structure_coordinates_block_in_output(self):
+        """In ORCA output file, the input structure is rewritten and for single points,
+        is same as the output structure.
+
+        An example of the relevant part of the output describing the structure is:
+        | 20> * xyz 0 1
+        | 21>   O   -0.00000000323406      0.00000000000000      0.08734060152197
+        | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
+        | 23>   H   0.75520524233942      0.00000000000000     -0.50967030177046
+        | 24> *.
+        """
+        coordinates_block_lines_list = []
+        pattern = re.compile(orca_input_coordinate_in_output)
+        for i, line in enumerate(self.contents):
+            if "INPUT FILE" in line:
+                for line in self.contents[i:]:
+                    match = pattern.match(line)
+                    if match:
+                        coord_line = "  ".join(line.split()[-4:])  # get the last 4 elements
+                        coordinates_block_lines_list.append(coord_line)
+                    if len(line) == 0:
+                        break
+        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+        return cb
 
     @cached_property
     def optimized_output_lines(self):
@@ -345,6 +375,42 @@ class ORCAOutput(ORCAFileMixin):
                 return True
         return None
 
+    def all_structures(self):
+        """Obtain all structures in ORCA output file, including intermediate points."""
+
+        def create_molecule_list(
+            orientations, orientations_pbc, num_structures=None
+        ):
+            """Helper function to create Molecule objects."""
+            num_structures = num_structures or len(orientations)
+            return [
+                Molecule(
+                    symbols=self.symbols,
+                    positions=orientations[i],
+                    translation_vectors=orientations_pbc[i],
+                    charge=self.charge,
+                    multiplicity=self.multiplicity,
+                    frozen_atoms=self.frozen_atoms_masks,
+                    pbc_conditions=self.list_of_pbc_conditions,
+                    energy=self.energies_in_eV[i],
+                    forces=self.forces_in_eV_per_angstrom[i],
+                )
+                for i in range(num_structures)
+            ]
+
+        return self._get_all_structures()
+
+    def _get_all_structures(self):
+        structure_lines = []
+        for i, line_i in enumerate(self.contents):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line_i:
+                for line_j in self.contents[i + 4 :]:
+                    if len(line_j) == 0:
+                        break
+                    structure_lines.append(line_j)
+        return structure_lines
+
+
     ################################################
     #######  GET OPTIMIZED PARAMETERS ##############
     ################################################
@@ -383,17 +449,6 @@ class ORCAOutput(ORCAFileMixin):
         ## the above result will return a dictionary storing the optimized parameters:
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
         return optimized_geometry
-
-    def all_structures(self):
-        """Obtain all structures in ORCA output file, including intermediate points."""
-        structure_lines = []
-        for i, line_i in enumerate(self.contents):
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line_i:
-                for line_j in self.contents[i + 4 :]:
-                    if len(line_j) == 0:
-                        break
-                    structure_lines.append(line_j)
-        return structure_lines
 
     @property
     def final_structure(self):
@@ -443,6 +498,7 @@ class ORCAOutput(ORCAFileMixin):
         for i, line in enumerate(self.contents):
             if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
                 for line_j in self.contents[i:]:
+                    print(line_j)
                     pattern = re.compile(standard_coord_pattern)
                     if len(line_j) == 0:
                         break
@@ -457,9 +513,9 @@ class ORCAOutput(ORCAFileMixin):
             return self.final_structure
         # Final structure is none as no "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" line appear if the job
         # is not an optimisation job. In this case, get the atoms object from the SP output file.
-        return self._get_atoms_from_sp_output_file()
+        return self._get_molecule_from_sp_output_file()
 
-    def _get_atoms_from_sp_output_file(self):
+    def _get_molecule_from_sp_output_file(self):
         molecule = None
 
         # if sp output file contains line read from .xyz
@@ -485,7 +541,8 @@ class ORCAOutput(ORCAFileMixin):
         return molecule
 
     def _get_input_structure_in_output(self):
-        """In ORCA output file, the input structure is rewritten and for single points, is same as the output structure.
+        """In ORCA output file, the input structure is rewritten and for single points,
+        is same as the output structure.
 
         An example of the relevant part of the output describing the structure is:
         | 20> * xyz 0 1

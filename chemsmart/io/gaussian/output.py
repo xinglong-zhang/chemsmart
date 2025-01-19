@@ -128,24 +128,6 @@ class Gaussian16Output(GaussianFileMixin):
         return cb
 
     @cached_property
-    def input_translation_vectors(self):
-        """Obtain the translation vectors from the input that is printed in the outputfile."""
-        tvs = []
-        if self.input_coordinates_block is not None:
-            cb = self.input_coordinates_block
-            if cb.translation_vectors is not None:
-                tvs = cb.translation_vectors
-        return tvs
-
-    @cached_property
-    def symbols(self):
-        return self.input_coordinates_block.chemical_symbols
-
-    @cached_property
-    def list_of_pbc_conditions(self):
-        return self.input_coordinates_block.pbc_conditions
-
-    @cached_property
     def all_structures(self):
         """
         Obtain all the structures from the output file.
@@ -168,7 +150,7 @@ class Gaussian16Output(GaussianFileMixin):
                     frozen_atoms=self.frozen_atoms_masks,
                     pbc_conditions=self.list_of_pbc_conditions,
                     energy=self.energies_in_eV[i],
-                    forces=self.forces_in_eV_per_A[i],
+                    forces=self.forces_in_eV_per_angstrom[i],
                 )
                 for i in range(num_structures)
             ]
@@ -734,6 +716,8 @@ class Gaussian16Output(GaussianFileMixin):
                         )
                 list_of_all_forces.append(np.array(forces))
                 list_of_all_forces_pbc.append(np.array(forces_pbc))
+        if len(list_of_all_forces) == 0:
+            return None, None
         return list_of_all_forces, list_of_all_forces_pbc
 
     @cached_property
@@ -742,16 +726,8 @@ class Gaussian16Output(GaussianFileMixin):
         return list_of_all_forces_pbc
 
     @cached_property
-    def forces_in_eV_per_A(self):
-        """Convert forces from Hartrees/Bohr to eV/Angstrom."""
-        forces_in_eV_per_A = []
-        for forces in self.forces:
-            forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
-        return forces_in_eV_per_A
-
-    @cached_property
     def num_forces(self):
-        return len(self.forces_in_eV_per_A)
+        return len(self.forces_in_eV_per_angstrom)
 
     @cached_property
     def input_orientations(self):
