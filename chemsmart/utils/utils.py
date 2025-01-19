@@ -193,6 +193,7 @@ def str_indices_range_to_list(str_indices):
             list_indices.append(i)
     return list_indices
 
+
 def string2index_1based(stridx: str) -> Union[int, slice, str]:
     """Wrapper for string2index to use 1-based indexing."""
 
@@ -201,7 +202,7 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
         return index - 1 if index is not None else None
 
     # If it's not a slice, handle as a single integer or string
-    if ':' not in stridx:
+    if ":" not in stridx:
         try:
             if int(stridx) < 0:
                 return int(stridx)
@@ -219,7 +220,7 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
         # Handle slice input (e.g., "1:5" or "1:5:2")
         try:
             # Split slice into components and convert to integers or None
-            i = [None if s == '' else int(s) for s in stridx.split(':')]
+            i = [None if s == "" else int(s) for s in stridx.split(":")]
             # Adjust start and stop to 0-based only if start value is > 0
             if i[0] is not None and i[0] > 0:
                 i[0] = adjust_to_0based(i[0])

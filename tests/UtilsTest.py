@@ -85,6 +85,7 @@ class TestUtils:
             41,
         ]
 
+
 class TestGetListFromStringRange:
     def test_get_list_from_string_range(self):
         s1 = "[1-3,28-31,34-41]"
@@ -216,4 +217,3 @@ class TestString2Index1Based:
         # Mixed invalid formats
         with pytest.raises(ValueError):
             string2index_1based("1:x:2")
-
