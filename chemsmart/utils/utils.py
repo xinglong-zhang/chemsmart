@@ -6,7 +6,7 @@ import copy
 import numpy as np
 from functools import lru_cache, wraps
 from itertools import groupby
-from ase.io import string2index
+from typing import Union
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -161,8 +161,8 @@ def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
     return masks
 
 
-def str_indices_to_list(str_indices):
-    """Convert a supplied string of indices to a list of indices. All 0-indexed.
+def str_indices_range_to_list(str_indices):
+    """Convert a supplied string of indices to a list of indices. All 1-indexed.
 
     Supported formats: e.g.,
         '1:9' -> gives [1,2,3,4,5,6,7,8]
@@ -170,33 +170,70 @@ def str_indices_to_list(str_indices):
         '1-9' -> gives [1,2,3,4,5,6,7,8]
         '[1-9]' -> gives [1,2,3,4,5,6,7,8].
     """
-    try:
-        indices_slice = string2index(str_indices)
-        list_indices = list(range(*indices_slice.indices(100000)))
-        # randomly large number (100000) to provide an upper bound onn the total number of components in the structure
-    except (TypeError, ValueError, AttributeError):
-        list_indices = []
-        if "[" in str_indices:
-            str_indices = str_indices.replace("[", "")
-        if "]" in str_indices:
-            str_indices = str_indices.replace("]", "")
-        if "," in str_indices:
-            str_indices_split = str_indices.split(",")
-            for i in str_indices_split:
-                list_indices.append(int(i))
-        if ":" in str_indices:
-            str_indices_split = str_indices.split(":")
-            start_index = int(str_indices_split[0])
-            end_index = int(str_indices_split[-1])
-            for i in range(start_index, end_index):
-                list_indices.append(i)
-        if "-" in str_indices:
-            str_indices_split = str_indices.split("-")
-            start_index = int(str_indices_split[0])
-            end_index = int(str_indices_split[-1])
-            for i in range(start_index, end_index):
-                list_indices.append(i)
+    list_indices = []
+    if "[" in str_indices:
+        str_indices = str_indices.replace("[", "")
+    if "]" in str_indices:
+        str_indices = str_indices.replace("]", "")
+    if "," in str_indices:
+        str_indices_split = str_indices.split(",")
+        for i in str_indices_split:
+            list_indices.append(int(i))
+    if ":" in str_indices:
+        str_indices_split = str_indices.split(":")
+        start_index = int(str_indices_split[0])
+        end_index = int(str_indices_split[-1])
+        for i in range(start_index, end_index):
+            list_indices.append(i)
+    if "-" in str_indices:
+        str_indices_split = str_indices.split("-")
+        start_index = int(str_indices_split[0])
+        end_index = int(str_indices_split[-1])
+        for i in range(start_index, end_index):
+            list_indices.append(i)
     return list_indices
+
+def string2index_1based(stridx: str) -> Union[int, slice, str]:
+    """Wrapper for string2index to use 1-based indexing."""
+
+    def adjust_to_0based(index):
+        """Adjust a 1-based index to 0-based. Handles None gracefully."""
+        return index - 1 if index is not None else None
+
+    # If it's not a slice, handle as a single integer or string
+    if ':' not in stridx:
+        try:
+            if int(stridx) < 0:
+                return int(stridx)
+            else:
+                # Convert to integer and adjust to 0-based
+                return int(stridx) - 1
+        except ValueError:
+            # If it's not an integer, check if it's alphanumeric
+            if stridx.isnumeric():
+                return stridx  # Return as-is if it is a number
+            else:
+                # Raise error for invalid input
+                raise ValueError(f"Invalid input: {stridx}")
+    else:
+        # Handle slice input (e.g., "1:5" or "1:5:2")
+        try:
+            # Split slice into components and convert to integers or None
+            i = [None if s == '' else int(s) for s in stridx.split(':')]
+            # Adjust start and stop to 0-based only if start value is > 0
+            if i[0] is not None and i[0] > 0:
+                i[0] = adjust_to_0based(i[0])
+            if i[1] is not None and i[1] > 0:
+                i[1] = adjust_to_0based(i[1])
+            # Return slice with adjusted start and stop values
+            return slice(
+                i[0],
+                i[1],
+                i[2] if len(i) > 2 else None,  # Step remains unchanged
+            )
+        except ValueError:
+            # Raise error for invalid slice format
+            raise ValueError(f"Invalid slice input: {stridx}")
 
 
 def get_value_by_number(num, data):

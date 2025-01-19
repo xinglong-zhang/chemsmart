@@ -18,8 +18,8 @@ from chemsmart.utils.repattern import (
     mp2_energy_pattern,
     oniom_energy_pattern,
 )
-from ase.io.formats import string2index
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.utils import string2index_1based
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
@@ -1356,7 +1356,7 @@ class Gaussian16Output(GaussianFileMixin):
             return None, None, None
 
     def get_molecule(self, index="-1"):
-        index = string2index(index)
+        index = string2index_1based(index)
         return self.all_structures[index]
 
     def to_dataset(self, **kwargs):

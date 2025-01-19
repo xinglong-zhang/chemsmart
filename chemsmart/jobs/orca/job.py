@@ -7,7 +7,7 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.settings import ORCAJobSettings
-from chemsmart.utils.utils import string2index
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ class ORCAJob(Job):
             filepath=filename, index=":", return_list=True
         )
         logger.info(f"Num of images read: {len(atoms)}.")
-        atoms = atoms[string2index(index)]  # python 0-indexed
+        atoms = atoms[string2index_1based(index)]  # python 0-indexed
 
         # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
         return cls(

@@ -882,12 +882,12 @@ class TestGaussian16Output:
             g16_genecp.get_molecule().positions, last_structure_positions
         )
 
-        assert len(g16_genecp.get_molecule(index=":3")) == 3
+        assert len(g16_genecp.get_molecule(index="1:4")) == 3
         assert np.allclose(
-            g16_genecp.get_molecule(index=":3")[-1].positions[0],
+            g16_genecp.get_molecule(index=":4")[-1].positions[0],
             [3.69135800, -0.83587500, -0.25754700],
         )
-        assert len(g16_genecp.get_molecule(index="3:")) == 8
+        assert len(g16_genecp.get_molecule(index="4:")) == 8
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)

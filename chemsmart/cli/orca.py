@@ -3,6 +3,7 @@ import logging
 import os
 
 import click
+from chemsmart.utils.utils import string2index_1based
 
 from pyatoms.utils.cli import MyGroup
 
@@ -123,8 +124,6 @@ def orca(  # noqa: PLR0912, PLR0915
     additional_route_parameters,
     pubchem,
 ):
-    from ase.io.formats import string2index
-
     from pyatoms.io.ase.atoms import AtomsWrapper
     from pyatoms.settings.projects.orca import ORCAProjectSettings
 
@@ -194,7 +193,7 @@ def orca(  # noqa: PLR0912, PLR0915
         label = f"{label}_{ctx.invoked_subcommand}"
 
     # return list of atoms
-    atoms = atoms[string2index(index)]
+    atoms = atoms[string2index_1based(index)]
 
     if not isinstance(atoms, list):
         # if somehow atoms is not a list, make it a list

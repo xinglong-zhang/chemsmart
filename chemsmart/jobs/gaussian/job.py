@@ -5,7 +5,7 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-from chemsmart.utils.utils import string2index
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ class GaussianJob(Job):
             filepath=filename, index=":", return_list=True
         )
         logger.info(f"Num of images read: {len(molecules)}.")
-        molecules = molecules[string2index(index)]
+        molecules = molecules[string2index_1based(index)]
 
         # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
         return cls(

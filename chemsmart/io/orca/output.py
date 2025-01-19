@@ -4,12 +4,11 @@ import os
 import re
 import numpy as np
 from ase import units
-from ase.io.formats import string2index
 from functools import cached_property
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import CoordinateBlock
-from chemsmart.utils.utils import is_float
+from chemsmart.utils.utils import is_float, string2index_1based
 from chemsmart.utils.repattern import (
     standard_coord_pattern,
     orca_input_coordinate_in_output,
@@ -553,7 +552,7 @@ class ORCAOutput(ORCAFileMixin):
             return (
                 self.last_structure
             )  # for job that does not terminate normally
-        except ValueError or IndexError:
+        except (ValueError, IndexError):
             return (
                 self._get_molecule_from_sp_output_file()
             )  # no structure can be created from output thus use input structure
@@ -568,7 +567,7 @@ class ORCAOutput(ORCAFileMixin):
         return self.final_structure
 
     def get_molecule(self, index="-1"):
-        index = string2index(index)
+        index = string2index_1based(index)
         return self.all_structures[index]
 
     def _get_molecule_from_sp_output_file(self):

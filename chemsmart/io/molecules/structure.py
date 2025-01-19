@@ -5,7 +5,7 @@ import copy
 import logging
 import numpy as np
 from ase.symbols import Symbols
-from ase.io.formats import string2index
+from chemsmart.utils.utils import string2index_1based
 from functools import cached_property, lru_cache
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.mixins import FileMixin
@@ -666,8 +666,8 @@ class XYZFile(FileMixin):
             # Store the molecule data
             all_molecules.append(molecule)
 
-        molecules = all_molecules[string2index(index)]
-        comments = comments[string2index(index)]
+        molecules = all_molecules[string2index_1based(index)]
+        comments = comments[string2index_1based(index)]
         if return_list and isinstance(molecules, Molecule):
             return [molecules], [comments]
         return molecules, comments

@@ -1,9 +1,12 @@
 import numpy as np
+import pytest
 from chemsmart.utils.utils import is_float
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.utils import content_blocks_by_paragraph
 from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import str_indices_range_to_list
+from chemsmart.utils.utils import string2index_1based
 
 
 class TestUtils:
@@ -81,3 +84,136 @@ class TestUtils:
             40,
             41,
         ]
+
+class TestGetListFromStringRange:
+    def test_get_list_from_string_range(self):
+        s1 = "[1-3,28-31,34-41]"
+        s1_list = get_list_from_string_range(string_of_range=s1)
+        assert s1_list == [
+            1,
+            2,
+            3,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+        ]
+
+        s2 = "1-3,28-31,34-41"
+        s2_list = get_list_from_string_range(string_of_range=s2)
+        assert s2_list == [
+            1,
+            2,
+            3,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+        ]
+
+        s3 = "1,3,33,37,42,43,44,45"
+        s3_list = get_list_from_string_range(string_of_range=s3)
+        assert s3_list == [1, 3, 33, 37, 42, 43, 44, 45]
+
+    def test_get_list_from_string(self):
+        s1 = "1:9"
+        s1_list = str_indices_range_to_list(str_indices=s1)
+        assert s1_list == [1, 2, 3, 4, 5, 6, 7, 8]
+
+        s2 = "1,2,4"
+        s2_list = str_indices_range_to_list(str_indices=s2)
+        assert s2_list == [1, 2, 4]
+
+        s3 = "1-9"
+        s3_list = str_indices_range_to_list(str_indices=s3)
+        assert s3_list == [1, 2, 3, 4, 5, 6, 7, 8]
+
+        s4 = "[1-9]"
+        s4_list = str_indices_range_to_list(str_indices=s4)
+        assert s4_list == [1, 2, 3, 4, 5, 6, 7, 8]
+
+        s6 = "2:3"
+        s6_list = str_indices_range_to_list(str_indices=s6)
+        assert s6_list == [2]
+
+
+class TestString2Index1Based:
+    def test_single_integer(self):
+        assert string2index_1based("1") == 0  # 1-based -> 0-based
+        assert string2index_1based("5") == 4  # 1-based -> 0-based
+        assert string2index_1based("10") == 9  # 1-based -> 0-based
+
+    def test_slice(self):
+        result = string2index_1based("1:5")
+        assert isinstance(result, slice)
+        assert result.start == 0  # 1-based start -> 0-based
+        assert result.stop == 4  # 1-based stop remains same
+        assert result.step is None
+
+        result = string2index_1based("3:10")
+        assert isinstance(result, slice)
+        assert result.start == 2  # 1-based start -> 0-based
+        assert result.stop == 9
+        assert result.step is None
+
+    def test_slice_with_step(self):
+        result = string2index_1based("1:10:2")
+        assert isinstance(result, slice)
+        assert result.start == 0  # 1-based -> 0-based
+        assert result.stop == 9
+        assert result.step == 2
+
+        result = string2index_1based("2:8:3")
+        assert isinstance(result, slice)
+        assert result.start == 1  # 1-based -> 0-based
+        assert result.stop == 7
+        assert result.step == 3
+
+    def test_open_ended_slice(self):
+        result = string2index_1based("5:")
+        assert isinstance(result, slice)
+        assert result.start == 4  # 1-based -> 0-based
+        assert result.stop is None
+        assert result.step is None
+
+        result = string2index_1based(":5")
+        assert isinstance(result, slice)
+        assert result.start is None
+        assert result.stop == 4  # 1-based stop remains same
+        assert result.step is None
+
+        result = string2index_1based(":")
+        assert isinstance(result, slice)
+        assert result.start is None
+        assert result.stop is None
+        assert result.step is None
+
+    def test_invalid_inputs(self):
+        # Invalid integer
+        with pytest.raises(ValueError):
+            string2index_1based("invalid")
+
+        # Slice with non-integer values
+        with pytest.raises(ValueError):
+            string2index_1based("a:b")
+
+        # Mixed invalid formats
+        with pytest.raises(ValueError):
+            string2index_1based("1:x:2")
+
