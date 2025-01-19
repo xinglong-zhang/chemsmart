@@ -194,6 +194,24 @@ class TestORCAOutput:
         assert orca_out.scf_maxiter == 125
         assert orca_out.converged is True
         assert orca_out.normal_termination is True
+        assert orca_out.has_forces
+        orca_out_first_forces = np.array(
+            [
+                [-0.000000001,    0.000000112,   -0.002606324],
+                [-0.013427516,    0.000000001,    0.001404818],
+                [0.013427527,    0.000000001,    0.001404820],
+            ]
+        )
+
+        assert np.allclose(orca_out.forces[0], orca_out_first_forces, rtol=1e-6)
+        orca_out_last_forces = np.array(
+            [
+                [0.000000006,   -0.000000045,   -0.000004686],
+                [0.000014391 ,   0.000000001   , 0.000009665],
+                [-0.000014359 ,   0.000000001   , 0.000009654],
+            ]
+        )
+        assert np.allclose(orca_out.forces[-1], orca_out_last_forces, rtol=1e-6)
 
     def test_water_optimized_output(
         self, water_output_gas_path

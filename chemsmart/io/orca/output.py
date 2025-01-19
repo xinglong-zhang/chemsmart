@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 class ORCAOutput(ORCAFileMixin):
-    """ORCA output file with .out extension."""
+    """ORCA output file with .out extension.
+    ORCA does NOT support any PBC calculations as of version 6.0.1."""
 
     def __init__(self, filename):
         self.filename = filename
@@ -45,6 +46,43 @@ class ORCAOutput(ORCAFileMixin):
             _line_contains_success_indicators(line)
             for line in self.contents[::-1]
         )
+
+    @cached_property
+    def has_forces(self):
+        """Check if the output file contains forces."""
+        for line in self.contents:
+            if "CARTESIAN GRADIENT" in line:
+                return True
+        return False
+
+    @cached_property
+    def forces(self):
+        return self._get_forces_for_molecules()
+
+    def _get_forces_for_molecules(self):
+        """Obtain a list of cartesian forces.
+        Each force is stored as a np array of shape (num_atoms, 3).
+        Intrinsic units as used in ORCA: Hartrees/Bohr."""
+        list_of_all_forces = []
+        for i, line in enumerate(self.contents):
+            if "CARTESIAN GRADIENT" in line:
+                forces = []
+                for line_j in self.contents[i + 3 :]:
+                    print(line_j)
+                    if len(line_j) == 0:
+                        break
+                    line_elements = line_j.split()
+                    if len(line_elements) == 6:
+                        print(line_elements)
+                        forces.append(
+                            [
+                                float(line_elements[-3]),
+                                float(line_elements[-2]),
+                                float(line_elements[-1]),
+                            ]
+                        )
+                list_of_all_forces.append(np.array(forces))
+        return list_of_all_forces
 
     @cached_property
     def optimized_output_lines(self):
@@ -346,6 +384,17 @@ class ORCAOutput(ORCAFileMixin):
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
         return optimized_geometry
 
+    def all_structures(self):
+        """Obtain all structures in ORCA output file, including intermediate points."""
+        structure_lines = []
+        for i, line_i in enumerate(self.contents):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line_i:
+                for line_j in self.contents[i + 4 :]:
+                    if len(line_j) == 0:
+                        break
+                    structure_lines.append(line_j)
+        return structure_lines
+
     @property
     def final_structure(self):
         if self.optimized_output_lines is not None:
@@ -426,7 +475,11 @@ class ORCAOutput(ORCAFileMixin):
                 if os.path.exists(xyz_filepath):
                     molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break
-        # If atoms are not found, get them from the output file
+            else:
+                # if the .xyz file is not found, get the structure directly from the
+                # "CARTESIAN COORDINATES (ANGSTROEM)" section in the output file
+                molecule = self._get_sp_structure()
+        # If molecule is not found, get it from the input lines in the output file
         if molecule is None:
             molecule = self._get_input_structure_in_output()
         return molecule

@@ -1,14 +1,13 @@
+import ase
 import logging
 import os
 import shutil
 from contextlib import suppress
-
-import ase
-
-from pyatoms.io.ase.atoms import AtomsWrapper
-from pyatoms.jobs.job import Job
-from pyatoms.jobs.orca.settings import ORCAJobSettings
-from pyatoms.utils.utils import string2index
+from typing import Type
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.settings import ORCAJobSettings
+from chemsmart.utils.utils import string2index
 
 logger = logging.getLogger(__name__)
 
@@ -16,27 +15,30 @@ logger = logging.getLogger(__name__)
 class ORCAJob(Job):
     PROGRAM_TYPE = "ORCA"
 
-    def __init__(self, folder, atoms, settings=None, label=None, **kwargs):
-        super().__init__(
-            folder=folder,
-            write_jobtype_file=False,
-            num_tasks_per_node=1,
-            **kwargs,
-        )
+    def __init__(self, molecule, settings=None, label=None, **kwargs):
+        super().__init__(molecule=molecule, label=label, **kwargs)
+
         if not isinstance(settings, ORCAJobSettings):
             raise ValueError(
-                f"ORCAJobSettings required, but is {settings} instead!"
+                f"Settings must be instance of {ORCAJobSettings} for {self}, but is {settings} instead!"
             )
-
-        atoms = atoms.copy()
+        if not isinstance(molecule, Molecule):
+            raise ValueError(
+                f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
+            )
+        molecule = molecule.copy()
         settings = settings.copy()
 
         if label is None:
-            label = atoms.get_chemical_formula(empirical=True)
+            label = molecule.get_chemical_formula(empirical=True)
 
         self.settings = settings
-        self.atoms = atoms
+        self.atoms = molecule
         self.label = label
+
+    @classmethod
+    def settings_class(cls) -> Type[ORCAJobSettings]:
+        return ORCAJobSettings
 
     @property
     def inputfile(self):
@@ -60,16 +62,14 @@ class ORCAJob(Job):
 
     @property
     def all_intermediate_optimization_points(self):
-        return self._intermediate_optimization_points()
-
-    def write_all_intermediate_points(self):
-        all_atoms = self.all_intermediate_optimization_points
-        intermediate_points_path = os.path.join(
-            self.label + "_intermediate_points.xyz"
+        intermediate_optimization_points_path = os.path.join(
+            self.label + "_intermediate_opt_points.xyz"
         )
-        ase.io.write(intermediate_points_path, all_atoms)
+        all_points = self._intermediate_optimization_points()
+        ase.io.write(intermediate_optimization_points_path, all_points)
+        return all_points
 
-    def optimized_atoms(self):
+    def optimized_structure(self):
         output = self._output()
         if output is not None and output.normal_termination:
             return output.get_atoms(index="-1")
@@ -79,7 +79,7 @@ class ORCAJob(Job):
         output = self._output()
         if output is None:
             return []
-        return output.get_atoms(index=":")
+        return output.all_structures
 
     def _compute_resources_required(self):
         return self._compute_units(num_units=1)

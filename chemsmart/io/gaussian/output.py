@@ -707,10 +707,10 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def forces(self):
-        list_of_all_forces, _ = self._get_forces_for_atoms_and_pbc()
+        list_of_all_forces, _ = self._get_forces_for_molecules_and_pbc()
         return list_of_all_forces
 
-    def _get_forces_for_atoms_and_pbc(self):
+    def _get_forces_for_molecules_and_pbc(self):
         """Obtain a list of cartesian forces.
         Each force is stored as a np array of shape (num_atoms, 3).
         Intrinsic units as used in Gaussian: Hartrees/Bohr."""
@@ -738,7 +738,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def pbc_forces(self):
-        _, list_of_all_forces_pbc = self._get_forces_for_atoms_and_pbc()
+        _, list_of_all_forces_pbc = self._get_forces_for_molecules_and_pbc()
         return list_of_all_forces_pbc
 
     @cached_property

@@ -1,7 +1,7 @@
-from pyatoms.jobs.orca.job import ORCAJob
+from chemsmart.jobs.orca.job import ORCAJob
 
 
-class ORCAGeomOptJob(ORCAJob):
+class ORCAOptJob(ORCAJob):
     TYPE = "orcaopt"
 
     def __init__(self, folder, atoms, settings, **kwargs):
