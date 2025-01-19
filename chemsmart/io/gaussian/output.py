@@ -345,24 +345,20 @@ class Gaussian16Output(GaussianFileMixin):
     # Below gives computing time/resources used
     @cached_property
     def cpu_runtime_by_jobs_core_hours(self):
-        cpu_runtime = []
+        cpu_runtimes = []
         for line in self.contents:
             if line.startswith("Job cpu time:"):
+                cpu_runtime = []
                 n_days = float(line.split("days")[0].strip().split()[-1])
+                cpu_runtime.append(n_days * 24)
                 n_hours = float(line.split("hours")[0].strip().split()[-1])
+                cpu_runtime.append(n_hours)
                 n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                cpu_runtime.append(n_minutes / 60)
                 n_seconds = float(line.split("seconds")[0].strip().split()[-1])
-                total_seconds = (
-                    n_days * 24 * 60 * 60
-                    + n_hours * 60 * 60
-                    + n_minutes * 60
-                    + n_seconds
-                )
-                total_hours = round(
-                    total_seconds / 3600, 4
-                )  # round to 1 nearest hour
-                cpu_runtime.append(total_hours)
-        return cpu_runtime
+                cpu_runtime.append(n_seconds / 3600)
+                cpu_runtimes.append(sum(cpu_runtime))
+        return cpu_runtimes
 
     @cached_property
     def service_units_by_jobs(self):
@@ -371,7 +367,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def total_core_hours(self):
-        return round(sum(self.cpu_runtime_by_jobs_core_hours), 4)
+        return round(sum(self.cpu_runtime_by_jobs_core_hours), 1)
 
     @cached_property
     def total_service_unit(self):
@@ -379,26 +375,24 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def elapsed_walltime_by_jobs(self):
-        elapsed_walltime = []
+        elapsed_walltimes = []
         for line in self.contents:
             if line.startswith("Elapsed time:"):
+                elapsed_walltime = []
                 n_days = float(line.split("days")[0].strip().split()[-1])
+                elapsed_walltime.append(n_days * 24)
                 n_hours = float(line.split("hours")[0].strip().split()[-1])
+                elapsed_walltime.append(n_hours)
                 n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                elapsed_walltime.append(n_minutes / 60)
                 n_seconds = float(line.split("seconds")[0].strip().split()[-1])
-                total_seconds = (
-                    n_days * 24 * 60 * 60
-                    + n_hours * 60 * 60
-                    + n_minutes * 60
-                    + n_seconds
-                )
-                total_hours = round(total_seconds / 3600, 4)
-                elapsed_walltime.append(total_hours)
-        return elapsed_walltime
+                elapsed_walltime.append(n_seconds / 3600)
+                elapsed_walltimes.append(sum(elapsed_walltime))
+        return elapsed_walltimes
 
     @cached_property
     def total_elapsed_walltime(self):
-        return round(sum(self.elapsed_walltime_by_jobs), 4)
+        return round(sum(self.elapsed_walltime_by_jobs), 1)
 
     #### FREQUENCY CALCULATIONS
     @cached_property
@@ -661,15 +655,6 @@ class Gaussian16Output(GaussianFileMixin):
             return self.mp2_energies
         elif len(self.oniom_energies) != 0:
             return self.oniom_energies
-
-    @cached_property
-    def energies_in_eV(self):
-        """Convert energies from Hartree to eV."""
-        return [energy * units.Hartree for energy in self.energies]
-
-    @property
-    def num_energies(self):
-        return len(self.energies_in_eV)
 
     # check for convergence criterion not met (happens for some output files)
     @property

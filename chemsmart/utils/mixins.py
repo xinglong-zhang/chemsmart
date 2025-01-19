@@ -64,6 +64,15 @@ class FileMixin:
     def list_of_pbc_conditions(self):
         return self.input_coordinates_block.pbc_conditions
 
+    @cached_property
+    def energies_in_eV(self):
+        """Convert energies from Hartree to eV."""
+        return [energy * units.Hartree for energy in self.energies]
+
+    @property
+    def num_energies(self):
+        return len(self.energies_in_eV)
+
 
 class GaussianFileMixin(FileMixin):
     """Mixin class for Gaussian files."""

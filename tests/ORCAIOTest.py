@@ -3,7 +3,6 @@ import os
 import numpy as np
 import pytest
 from ase import units
-from ase.build import molecule
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.input import ORCAInput
@@ -247,6 +246,11 @@ class TestORCAOutput:
             "H  0.7920  0.0000  -0.4973",
         ]
         assert orca_out.molecule.empirical_formula == "H2O"
+        assert len(orca_out.energies) == 6
+        assert orca_out.energies[0] == -76.322282695198
+        assert orca_out.energies[-1] == -76.323311011349
+        assert orca_out.total_core_hours == orca_out.total_service_unit == 0.0
+        assert orca_out.total_elapsed_walltime == 0.0
 
     def test_water_optimized_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
@@ -259,7 +263,7 @@ class TestORCAOutput:
         }
         molecule = orca_out.final_structure
         assert isinstance(molecule, Molecule)
-        assert all(molecule.symbols == ["O", "H", "H"])
+        assert molecule.symbols == ["O", "H", "H"]
         assert orca_out.molecule.empirical_formula == "H2O"
         assert np.allclose(
             orca_out.optimized_geometry,
@@ -742,7 +746,7 @@ class TestORCAOutput:
             orca_out.gibbs_free_energy, -2076.7559939028233202, rel_tol=1e-6
         )
         assert isinstance(orca_out.molecule, Molecule)
-        assert orca_out.total_run_time_hours == 0.0028
+        assert orca_out.total_elapsed_walltime == 0.0
 
     def test_read_sp_output(self, water_sp_gas_path):
         orca_out = ORCAOutput(filename=water_sp_gas_path)
@@ -784,6 +788,7 @@ class TestORCAOutput:
         assert orca_out.converged is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.normal_termination is True
+        assert orca_out.total_elapsed_walltime == 0.0
 
     def test_read_sp_full_print_output(self, dlpno_ccsdt_sp_full_print):
         orca_out = ORCAOutput(filename=dlpno_ccsdt_sp_full_print)

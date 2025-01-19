@@ -397,6 +397,13 @@ class TestGaussian16Output:
             0.17825,
         ]
 
+        assert (
+            g16_output.total_core_hours
+            == g16_output.total_service_unit
+            == 361.7
+        )
+        assert g16_output.total_elapsed_walltime == 6.4
+
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)

@@ -1,7 +1,7 @@
 from pyatoms.jobs.orca.job import ORCAJob
 
 
-class ORCAModredundantJob(ORCAJob):
+class ORCAModredJob(ORCAJob):
     TYPE = "orcamodred"
 
     def __init__(self, folder, atoms, settings, **kwargs):

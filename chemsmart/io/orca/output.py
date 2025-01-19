@@ -2,9 +2,10 @@ import logging
 import math
 import os
 import re
-from functools import cached_property
 import numpy as np
 from ase import units
+from ase.io.formats import string2index
+from functools import cached_property
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import CoordinateBlock
@@ -12,9 +13,9 @@ from chemsmart.utils.utils import is_float
 from chemsmart.utils.repattern import (
     standard_coord_pattern,
     orca_input_coordinate_in_output,
+    orca_nproc_used_line_pattern,
 )
 from chemsmart.utils.periodictable import PeriodicTable
-
 
 p = PeriodicTable()
 
@@ -83,6 +84,20 @@ class ORCAOutput(ORCAFileMixin):
         if len(list_of_all_forces) == 0:
             return None
         return list_of_all_forces
+
+    @cached_property
+    def energies(self):
+        """Return energies of the system from ORCA output file."""
+        return self._get_energies()
+
+    def _get_energies(self):
+        """Obtain a list of energies for each geometry optimization point."""
+        energies = []
+        for i, line in enumerate(self.contents):
+            if "FINAL SINGLE POINT ENERGY" in line:
+                energy = float(line.split()[-1])
+                energies.append(energy)
+        return energies
 
     @cached_property
     def input_coordinates_block(self):
@@ -377,40 +392,75 @@ class ORCAOutput(ORCAFileMixin):
                 return True
         return None
 
+    @cached_property
     def all_structures(self):
         """Obtain all structures in ORCA output file, including intermediate points."""
 
-        def create_molecule_list(
-            orientations, orientations_pbc, num_structures=None
-        ):
+        def create_molecule_list(orientations, num_structures):
             """Helper function to create Molecule objects."""
-            num_structures = num_structures or len(orientations)
+            if self.forces_in_eV_per_angstrom is not None:
+                forces = self.forces_in_eV_per_angstrom
+            else:
+                forces = [None] * num_structures
+
             return [
                 Molecule(
                     symbols=self.symbols,
                     positions=orientations[i],
-                    translation_vectors=orientations_pbc[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
-                    frozen_atoms=self.frozen_atoms_masks,
-                    pbc_conditions=self.list_of_pbc_conditions,
                     energy=self.energies_in_eV[i],
-                    forces=self.forces_in_eV_per_angstrom[i],
+                    forces=forces[i],
                 )
                 for i in range(num_structures)
             ]
 
-        return self._get_all_structures()
+        all_structures = self._get_all_structures()
+        orientations = [m.positions for m in all_structures]
+
+        if self.normal_termination:
+            if (
+                len(orientations) == 1
+            ):  # normal termination and has only one structure --> SP Job
+                return all_structures
+            num_structures_to_use = len(orientations) - 1
+            orientations = orientations[:-1]
+            molecules_list = create_molecule_list(
+                orientations=orientations,
+                num_structures=num_structures_to_use,
+            )
+            optimized_molecule = Molecule(
+                symbols=self.symbols,
+                positions=orientations[-1],
+                charge=self.charge,
+                multiplicity=self.multiplicity,
+                energy=self.energies_in_eV[-1],
+                forces=None,
+            )  # last gradient/forces calculation is not done, if the geometry is optimized
+            molecules_list.append(optimized_molecule)
+            return molecules_list
+        else:
+            # remove last structure if the job did not terminate normally
+            num_structures_to_use = len(orientations) - 1
+        return create_molecule_list(
+            orientations,
+            num_structures=num_structures_to_use,
+        )
 
     def _get_all_structures(self):
-        structure_lines = []
-        for i, line_i in enumerate(self.contents):
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line_i:
-                for line_j in self.contents[i + 4 :]:
+        structures = []
+        for i, line in enumerate(self.contents):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                coordinate_lines = []
+                for line_j in self.contents[i:]:
+                    pattern = re.compile(standard_coord_pattern)
                     if len(line_j) == 0:
                         break
-                    structure_lines.append(line_j)
-        return structure_lines
+                    if pattern.match(line_j):
+                        coordinate_lines.append(line_j)
+                cb = CoordinateBlock(coordinate_block=coordinate_lines)
+                structures.append(cb.molecule)
+        return structures
 
     ################################################
     #######  GET OPTIMIZED PARAMETERS ##############
@@ -451,11 +501,12 @@ class ORCAOutput(ORCAFileMixin):
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
         return optimized_geometry
 
-    @property
-    def final_structure(self):
-        if self.optimized_output_lines is not None:
+    @cached_property
+    def optimized_structure(self):
+        if self.normal_termination:
+            return self.all_structures[-1]
+        else:
             return self._get_optimized_final_structure()
-        return self._get_sp_structure()
 
     def _get_optimized_final_structure(self):
         """Obtain the final optimized structure from ORCA geometry optimization job.
@@ -494,27 +545,31 @@ class ORCAOutput(ORCAFileMixin):
         cb = CoordinateBlock(coordinate_block=coordinate_lines)
         return cb.molecule
 
-    def _get_sp_structure(self):
-        coordinate_lines = []
-        for i, line in enumerate(self.contents):
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
-                for line_j in self.contents[i:]:
-                    print(line_j)
-                    pattern = re.compile(standard_coord_pattern)
-                    if len(line_j) == 0:
-                        break
-                    if pattern.match(line_j):
-                        coordinate_lines.append(line_j)
-        cb = CoordinateBlock(coordinate_block=coordinate_lines)
-        return cb.molecule
+    @property
+    def final_structure(self):
+        if self.optimized_output_lines is not None:
+            return self.optimized_structure
+        try:
+            return (
+                self.last_structure
+            )  # for job that does not terminate normally
+        except ValueError or IndexError:
+            return (
+                self._get_molecule_from_sp_output_file()
+            )  # no structure can be created from output thus use input structure
+
+    @cached_property
+    def last_structure(self):
+        """Return last structure, whether the output file has completed successfully or not."""
+        return self.all_structures[-1]
 
     @property
     def molecule(self):
-        if self.final_structure is not None:
-            return self.final_structure
-        # Final structure is none as no "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" line appear if the job
-        # is not an optimisation job. In this case, get the atoms object from the SP output file.
-        return self._get_molecule_from_sp_output_file()
+        return self.final_structure
+
+    def get_molecule(self, index="-1"):
+        index = string2index(index)
+        return self.all_structures[index]
 
     def _get_molecule_from_sp_output_file(self):
         molecule = None
@@ -533,12 +588,8 @@ class ORCAOutput(ORCAFileMixin):
                     molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break
             else:
-                # if the .xyz file is not found, get the structure directly from the
-                # "CARTESIAN COORDINATES (ANGSTROEM)" section in the output file
-                molecule = self._get_sp_structure()
-        # If molecule is not found, get it from the input lines in the output file
-        if molecule is None:
-            molecule = self._get_input_structure_in_output()
+                # If molecule is not found, get it from the input lines in the output file
+                molecule = self._get_input_structure_in_output()
         return molecule
 
     def _get_input_structure_in_output(self):
@@ -1756,32 +1807,58 @@ class ORCAOutput(ORCAFileMixin):
                         return entropy_hartree * units.Hartree
         return None
 
-    @property
-    def total_run_time_hours(self):
+    # Below gives computing time/resources used by ORCA
+    @cached_property
+    def elapsed_walltime_by_jobs(self):
+        elapsed_walltimes = []
         for line in self.contents:
-            elapsed_walltime = []
             if line.startswith("TOTAL RUN TIME:"):
-                n_days = float(
-                    line.lower().split("days")[0].strip().split()[-1]
-                )
-                n_hours = float(
-                    line.lower().split("hours")[0].strip().split()[-1]
-                )
-                n_minutes = float(
-                    line.lower().split("minutes")[0].strip().split()[-1]
-                )
-                n_seconds = float(
-                    line.lower().split("seconds")[0].strip().split()[-1]
-                )
-                total_seconds = (
-                    n_days * 24 * 60 * 60
-                    + n_hours * 60 * 60
-                    + n_minutes * 60
-                    + n_seconds
-                )
-                total_hours = round(total_seconds / 3600, 4)
-                elapsed_walltime.append(total_hours)
-        return sum(elapsed_walltime)
+                elapsed_walltime = []
+                n_days = float(line.split("days")[0].strip().split()[-1])
+                elapsed_walltime.append(n_days * 24)
+                n_hours = float(line.split("hours")[0].strip().split()[-1])
+                elapsed_walltime.append(n_hours)
+                n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                elapsed_walltime.append(n_minutes / 60)
+                n_seconds = float(line.split("seconds")[0].strip().split()[-1])
+                elapsed_walltime.append(n_seconds / 3600)
+                elapsed_walltimes.append(sum(elapsed_walltime))
+        return elapsed_walltimes
+
+    @cached_property
+    def total_elapsed_walltime(self):
+        return round(sum(self.elapsed_walltime_by_jobs), 1)
+
+    @cached_property
+    def cpu_runtime_by_jobs_core_hours(self):
+        """CPU run time in core hours is total run time in hours times num
+        of parallel processors."""
+        # find the number of processors used
+        for line in self.contents:
+            if (
+                "Program running with" in line
+                and "parallel MPI-processes" in line
+            ):
+                match = re.search(orca_nproc_used_line_pattern, line)
+                if match:
+                    n_processors = int(match.group(1))
+                    cpu_times = n_processors * self.total_elapsed_walltime
+                    return cpu_times
+            else:
+                return self.total_elapsed_walltime
+
+    @cached_property
+    def service_units_by_jobs(self):
+        """SUs defined as the JOB CPU time in hours."""
+        return round(self.cpu_runtime_by_jobs_core_hours, 2)
+
+    @cached_property
+    def total_core_hours(self):
+        return round(self.cpu_runtime_by_jobs_core_hours, 2)
+
+    @cached_property
+    def total_service_unit(self):
+        return self.total_core_hours
 
 
 class ORCAEngradFile(ORCAFileMixin):
