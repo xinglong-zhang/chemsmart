@@ -107,7 +107,9 @@ class ORCAOutput(ORCAFileMixin):
                 for line in self.contents[i:]:
                     match = pattern.match(line)
                     if match:
-                        coord_line = "  ".join(line.split()[-4:])  # get the last 4 elements
+                        coord_line = "  ".join(
+                            line.split()[-4:]
+                        )  # get the last 4 elements
                         coordinates_block_lines_list.append(coord_line)
                     if len(line) == 0:
                         break
@@ -409,7 +411,6 @@ class ORCAOutput(ORCAFileMixin):
                         break
                     structure_lines.append(line_j)
         return structure_lines
-
 
     ################################################
     #######  GET OPTIMIZED PARAMETERS ##############

@@ -199,30 +199,42 @@ class TestORCAOutput:
         assert orca_out.has_forces
         orca_out_first_forces = np.array(
             [
-                [-0.000000001,    0.000000112,   -0.002606324],
-                [-0.013427516,    0.000000001,    0.001404818],
-                [0.013427527,    0.000000001,    0.001404820],
+                [-0.000000001, 0.000000112, -0.002606324],
+                [-0.013427516, 0.000000001, 0.001404818],
+                [0.013427527, 0.000000001, 0.001404820],
             ]
         )
 
-        assert np.allclose(orca_out.forces[0], orca_out_first_forces, rtol=1e-6)
+        assert np.allclose(
+            orca_out.forces[0], orca_out_first_forces, rtol=1e-6
+        )
         orca_out_last_forces = np.array(
             [
-                [0.000000006,   -0.000000045,   -0.000004686],
-                [0.000014391 ,   0.000000001   , 0.000009665],
-                [-0.000014359 ,   0.000000001   , 0.000009654],
-            ]
-        )
-        assert np.allclose(orca_out.forces[-1], orca_out_last_forces, rtol=1e-6)
-        orca_out_first_forces_in_eV_per_angstrom = np.array(
-            [
-                np.array([-0.000000001, 0.000000112, -0.002606324]) * units.Hartree / units.Bohr,
-                np.array([-0.013427516, 0.000000001, 0.001404818]) * units.Hartree / units.Bohr,
-                np.array([0.013427527, 0.000000001, 0.001404820]) * units.Hartree / units.Bohr,
+                [0.000000006, -0.000000045, -0.000004686],
+                [0.000014391, 0.000000001, 0.000009665],
+                [-0.000014359, 0.000000001, 0.000009654],
             ]
         )
         assert np.allclose(
-            orca_out.forces_in_eV_per_angstrom[0], orca_out_first_forces_in_eV_per_angstrom, rtol=1e-6
+            orca_out.forces[-1], orca_out_last_forces, rtol=1e-6
+        )
+        orca_out_first_forces_in_eV_per_angstrom = np.array(
+            [
+                np.array([-0.000000001, 0.000000112, -0.002606324])
+                * units.Hartree
+                / units.Bohr,
+                np.array([-0.013427516, 0.000000001, 0.001404818])
+                * units.Hartree
+                / units.Bohr,
+                np.array([0.013427527, 0.000000001, 0.001404820])
+                * units.Hartree
+                / units.Bohr,
+            ]
+        )
+        assert np.allclose(
+            orca_out.forces_in_eV_per_angstrom[0],
+            orca_out_first_forces_in_eV_per_angstrom,
+            rtol=1e-6,
         )
 
         assert isinstance(orca_out.input_coordinates_block, CoordinateBlock)
