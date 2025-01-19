@@ -1,7 +1,7 @@
 import logging
 import os
+import sys
 import shlex
-import shutil
 import subprocess
 from contextlib import suppress
 from functools import lru_cache
@@ -17,8 +17,12 @@ from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
 
-shutil._USE_CP_SENDFILE = False
-# to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
+if sys.version_info >= (3, 10):
+    from shutil import _USE_CP_SENDFILE  # noqa F811
+
+    _USE_CP_SENDFILE = False  # noqa F811
+    # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
+    # only works in Python 3.10
 
 logger = logging.getLogger(__name__)
 
@@ -136,12 +140,13 @@ class GaussianJobRunner(JobRunner):
         return command
 
     def _create_process(self, job, command, env):
-        with open(self.job_outputfile, "w") as out, open(
-            self.job_errfile, "w"
-        ) as err:
+        with (
+            open(self.job_outputfile, "w") as out,
+            open(self.job_errfile, "w") as err,
+        ):
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {self.job_outputfile}\n "
+                f"Writing output file to: {self.job_outputfile}\n"
                 f"And err file to: {self.job_errfile}"
             )
             logger.debug(f"Environments for running: {self.executable.env}")

@@ -99,11 +99,14 @@ class GenGenECPSection:
                 f'Given gen/genecp path at "{genecp_path}" is not found!'
             )
 
-        string = ""
         genecp_path = os.path.abspath(genecp_path)
         with open(genecp_path) as f:
-            for line in f.readlines():
-                string += line
+            string = ""
+            lines = f.readlines()
+            if lines[-1] == "\n":
+                lines = lines[:-1]
+            for line in lines:
+                string += line  # this method of concatenation is automatically adds a "\n" at the end
         return cls(string)
 
     @classmethod

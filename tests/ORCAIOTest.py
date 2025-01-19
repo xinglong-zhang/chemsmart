@@ -2,11 +2,12 @@ import math
 import os
 import numpy as np
 import pytest
+from ase import units
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import Molecule, CoordinateBlock
 from chemsmart.io.orca.output import ORCAEngradFile
 
 
@@ -194,11 +195,66 @@ class TestORCAOutput:
         assert orca_out.scf_maxiter == 125
         assert orca_out.converged is True
         assert orca_out.normal_termination is True
+        assert orca_out.has_forces
+        orca_out_first_forces = np.array(
+            [
+                [-0.000000001, 0.000000112, -0.002606324],
+                [-0.013427516, 0.000000001, 0.001404818],
+                [0.013427527, 0.000000001, 0.001404820],
+            ]
+        )
 
-    def test_water_optimized_output(
-        self, water_output_gas_path
-    ):  # noqa: PLR0915
+        assert np.allclose(
+            orca_out.forces[0], orca_out_first_forces, rtol=1e-6
+        )
+        orca_out_last_forces = np.array(
+            [
+                [0.000000006, -0.000000045, -0.000004686],
+                [0.000014391, 0.000000001, 0.000009665],
+                [-0.000014359, 0.000000001, 0.000009654],
+            ]
+        )
+        assert np.allclose(
+            orca_out.forces[-1], orca_out_last_forces, rtol=1e-6
+        )
+        orca_out_first_forces_in_eV_per_angstrom = np.array(
+            [
+                np.array([-0.000000001, 0.000000112, -0.002606324])
+                * units.Hartree
+                / units.Bohr,
+                np.array([-0.013427516, 0.000000001, 0.001404818])
+                * units.Hartree
+                / units.Bohr,
+                np.array([0.013427527, 0.000000001, 0.001404820])
+                * units.Hartree
+                / units.Bohr,
+            ]
+        )
+        assert np.allclose(
+            orca_out.forces_in_eV_per_angstrom[0],
+            orca_out_first_forces_in_eV_per_angstrom,
+            rtol=1e-6,
+        )
+
+        assert isinstance(orca_out.input_coordinates_block, CoordinateBlock)
+        molecule = orca_out.input_coordinates_block.molecule
+        assert isinstance(molecule, Molecule)
+        assert all(molecule.symbols == ["O", "H", "H"])
+        assert orca_out.input_coordinates_block.coordinate_block == [
+            "O  0.0000  0.0000  0.0626",
+            "H  -0.7920  0.0000  -0.4973",
+            "H  0.7920  0.0000  -0.4973",
+        ]
+        assert orca_out.molecule.empirical_formula == "H2O"
+        assert len(orca_out.energies) == 6
+        assert orca_out.energies[0] == -76.322282695198
+        assert orca_out.energies[-1] == -76.323311011349
+        assert orca_out.total_core_hours == orca_out.total_service_unit == 0.0
+        assert orca_out.total_elapsed_walltime == 0.0
+
+    def test_water_optimized_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
             "B(H1,O0)": 0.9627,
@@ -207,7 +263,7 @@ class TestORCAOutput:
         }
         molecule = orca_out.final_structure
         assert isinstance(molecule, Molecule)
-        assert all(molecule.symbols == ["O", "H", "H"])
+        assert molecule.symbols == ["O", "H", "H"]
         assert orca_out.molecule.empirical_formula == "H2O"
         assert np.allclose(
             orca_out.optimized_geometry,
@@ -690,7 +746,7 @@ class TestORCAOutput:
             orca_out.gibbs_free_energy, -2076.7559939028233202, rel_tol=1e-6
         )
         assert isinstance(orca_out.molecule, Molecule)
-        assert orca_out.total_run_time_hours == 0.0028
+        assert orca_out.total_elapsed_walltime == 0.0
 
     def test_read_sp_output(self, water_sp_gas_path):
         orca_out = ORCAOutput(filename=water_sp_gas_path)
@@ -732,6 +788,7 @@ class TestORCAOutput:
         assert orca_out.converged is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.normal_termination is True
+        assert orca_out.total_elapsed_walltime == 0.0
 
     def test_read_sp_full_print_output(self, dlpno_ccsdt_sp_full_print):
         orca_out = ORCAOutput(filename=dlpno_ccsdt_sp_full_print)

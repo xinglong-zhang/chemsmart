@@ -1,7 +1,7 @@
 from pyatoms.jobs.orca.job import ORCAJob
 
 
-class ORCAPESScanJob(ORCAJob):
+class ORCAScanJob(ORCAJob):
     TYPE = "orcascan"
 
     def __init__(self, folder, atoms, settings, **kwargs):

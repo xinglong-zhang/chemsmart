@@ -1,9 +1,10 @@
 import inspect
 import logging
 from abc import abstractmethod
-
+from typing import Optional
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin
 
 user_settings = ChemsmartUserSettings()
 
@@ -42,7 +43,11 @@ class RunScript:
         f.write(contents)
 
 
-class Submitter:
+class Submitter(RegistryMixin):
+    """Abstract base class for job submission."""
+
+    NAME: Optional[str] = None
+
     def __init__(self, name, job, server, **kwargs):
         self.name = name
         self.job = job
@@ -86,8 +91,8 @@ class Submitter:
     def submit_script(self):
         """Submission script for the job."""
         if self.job.label is not None:
-            return f"chemsmart_sub_{self.job.label}.x"
-        return "chemsmart_sub.x"
+            return f"chemsmart_sub_{self.job.label}.sh"
+        return "chemsmart_sub.sh"
 
     @property
     def run_script(self):
@@ -105,17 +110,18 @@ class Submitter:
         else:
             # Need to add programs here to be supported for other types of programs
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")
+        return executable
 
-    def write(self):
+    def write(self, cli_args):
         """Write the submission script for the job."""
         if self.job.is_complete():
             logger.warning("Submitting an already complete job.")
-        self._write_runscript()
+        self._write_runscript(cli_args)
         self._write_submitscript()
 
-    def _write_runscript(self):
+    def _write_runscript(self, cli_args):
         """Write the run script for the job."""
-        runscript = RunScript(self.run_script, self.job.cli_args)
+        runscript = RunScript(self.run_script, cli_args)
         logger.debug(f"Writing run script to: {runscript.filename}")
         runscript.write()
 
@@ -126,10 +132,12 @@ class Submitter:
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)
+            self._write_extra_commands(f)
             self._write_change_to_job_directory(f)
             self._write_job_command(f)
 
-    def _write_bash_header(self, f):
+    @staticmethod
+    def _write_bash_header(f):
         f.write("#!/bin/bash\n\n")
 
     @abstractmethod
@@ -143,12 +151,13 @@ class Submitter:
         self._write_program_specific_environment_variables(f)
 
     def _write_program_specific_conda_env(self, f):
+        """Different programs may require different conda environments."""
         if self.executable.conda_env is not None:
             logger.debug(
                 f"Writing conda environment: {self.executable.conda_env}"
             )
-            for line in self.executable.conda_env.split("\n"):
-                logger.debug(f"Writing line: {line}")
+            f.write("# conda environment\n")
+            for line in self.executable.conda_env:
                 f.write(line)
             f.write("\n")
 
@@ -156,8 +165,8 @@ class Submitter:
         """Different programs may require loading different modules."""
         if self.executable.modules is not None:
             logger.debug(f"Writing modules: {self.executable.modules}")
-            for line in self.executable.modules.split("\n"):
-                logger.debug(f"Writing line: {line}")
+            f.write("# modules\n")
+            for line in self.executable.modules:
                 f.write(line)
             f.write("\n")
 
@@ -165,8 +174,16 @@ class Submitter:
         """Different programs may require sourcing different scripts."""
         if self.executable.scripts is not None:
             logger.debug(f"Writing scripts: {self.executable.scripts}")
-            for line in self.executable.scripts.split("\n"):
-                logger.debug(f"Writing line: {line}")
+            f.write("# program specific scripts\n")
+            for line in self.executable.scripts:
+                f.write(line)
+            f.write("\n")
+
+    def _write_extra_commands(self, f):
+        """Extra commands that may be required for the job.
+        These extra commands are needed for all jobs across all programs."""
+        if self.server.extra_commands is not None:
+            for line in self.server.extra_commands:
                 f.write(line)
             f.write("\n")
 
@@ -175,9 +192,7 @@ class Submitter:
         May need to run different programs in different scratch folder e.g. Gaussian vs ORCA.
         """
         if self.executable.envars is not None:
-            logger.debug(
-                f"Writing environment variables: {self.executable.envars}"
-            )
+            f.write("# Writing program specific environment variables\n")
             for key, value in self.executable.env.items():
                 f.write(f"export {key}={value}\n")
             f.write("\n")
@@ -186,14 +201,25 @@ class Submitter:
     def _write_change_to_job_directory(self, f):
         raise NotImplementedError
 
-    @abstractmethod
     def _write_job_command(self, f):
-        f.write(f"chmod +x ./{self.job_run_script}\n")
-        f.write(f"./{self.job_run_script} &\n")
+        f.write(f"chmod +x ./{self.run_script}\n")
+        f.write(f"./{self.run_script} &\n")
         f.write("wait\n")
+
+    @classmethod
+    def from_scheduler_type(cls, scheduler_type, **kwargs):
+        submitters = cls.subclasses()
+        for submitter in submitters:
+            if submitter.NAME == scheduler_type:
+                return submitter(**kwargs)
+        raise ValueError(
+            f"Could not find any submitters for scheduler type: {scheduler_type}."
+        )
 
 
 class PBSSubmitter(Submitter):
+    NAME = "PBS"
+
     def __init__(self, name="PBS", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -201,25 +227,31 @@ class PBSSubmitter(Submitter):
         f.write(f"#PBS -N {self.job.label}\n")
         f.write(f"#PBS -o {self.job.label}.pbsout\n")
         f.write(f"#PBS -e {self.job.label}.pbserr\n")
+        if self.server.num_gpus > 0:
+            f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
         f.write(
-            f"#PBS -l select=1:ncpus={self.server.num_cores}:ngpus={self.server.num_gpus}:"
-            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}\n"
+            f"#PBS -l select=1:ncpus={self.server.num_cores}:mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}\n"
         )
         # using only one node here
-        f.write(f"#PBS -q {self.server.queue_name}\n")
-        f.write(f"#PBS -l walltime={self.server.num_hours}\n")
+        if self.server.queue_name:
+            f.write(f"#PBS -q {self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#PBS -l walltime={self.server.num_hours}\n")
         if user_settings.data.get("PROJECT"):
             f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
-
         if user_settings.data.get("EMAIL"):
             f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
             f.write("#PBS -m abe\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $PBS_O_WORKDIR\n\n")
 
 
 class SLURMSubmitter(Submitter):
+    NAME = "SLURM"
+
     def __init__(self, name="SLURM", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -227,24 +259,30 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --job-name={self.job.label}\n")
         f.write(f"#SBATCH --output={self.job.label}.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}.slurmerr\n")
+        if self.server.num_gpus:
+            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
         f.write(
-            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} "
-            f"--ntasks-per-gpu={self.server.num_gpus} --mem={self.server.mem_gb}G\n"
+            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
         )
-        f.write(f"#SBATCH --partition={self.server.queue_name}\n")
-        f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if self.server.queue_name:
+            f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
         if user_settings.data.get("PROJECT"):
             f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
-
         if user_settings.data.get("EMAIL"):
             f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
-            f.write("#SBATCH --mail-type=abe\n")
+            f.write("#SBATCH --mail-type=END,FAIL\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $SLURM_SUBMIT_DIR\n\n")
 
 
 class SLFSubmitter(Submitter):
+    NAME = "SLF"
+
     def __init__(self, name="SLF", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -252,17 +290,24 @@ class SLFSubmitter(Submitter):
         f.write(f"#BSUB -J {self.job.label}\n")
         f.write(f"#BSUB -o {self.job.label}.bsubout\n")
         f.write(f"#BSUB -e {self.job.label}.bsuberr\n")
-        f.write(
-            f"#BSUB -nnodes {self.server.num_nodes} -P {user_settings.data['PROJECT']}\n"
-        )
+        project_number = user_settings.data.get("PROJECT")
+        if project_number is not None:
+            f.write(f"#BSUB -P {project_number}\n")
+        f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
+        if self.server.num_gpus:
+            f.write(f"#BSUB -gpu num={self.server.num_gpus}\n")
         f.write(f"#BSUB -W {self.server.num_hours}\n")
         f.write("#BSUB -alloc_flags gpumps\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $LS_SUBCWD\n\n")
 
 
 class FUGAKUSubmitter(Submitter):
+    NAME = "FUGAKU"
+
     def __init__(self, name="FUGAKU", job=None, server=None, **kwargs):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
@@ -276,6 +321,8 @@ class FUGAKUSubmitter(Submitter):
         f.write("#PJM -e pjm.%j.err\n")
         f.write("#PJM -x PJM_LLIO_GFSCACHE=/vol0005:/vol0004\n")
         f.write("#PJM -S\n")
+        f.write("\n")
+        f.write("\n")
 
     def _write_change_to_job_directory(self, f):
         f.write("cd $PJM_O_WORKDIR\n\n")

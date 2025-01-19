@@ -97,7 +97,7 @@ for subcommand in subcommands:
     run.add_command(subcommand)
 
 if __name__ == "__main__":
-    obj = {}
+    obj: dict[str, str] = {}
     try:
         run(obj=obj)
     except KeyboardInterrupt as e:

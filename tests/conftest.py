@@ -1,6 +1,7 @@
 import os
 import pytest
-
+from chemsmart.settings.server import Server
+from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -76,6 +77,11 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
         gaussian_inputs_test_directory, "model_scan_input.com"
     )
     return gaussian_scan_inputfile
+
+
+@pytest.fixture
+def hf_com_filepath(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "hf.com")
 
 
 # Gaussian input files for genecp
@@ -299,6 +305,163 @@ def esp_cube_file(cube_test_directory):
     return esp_cube_file
 
 
+# gaussian yaml files
+@pytest.fixture
+def gaussian_yaml_settings_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "project_yaml")
+
+
+@pytest.fixture
+def gaussian_yaml_settings_defaults(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, "defaults.yaml")
+
+
+@pytest.fixture
+def gaussian_yaml_settings_gas_solv(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, "gas_solv.yaml")
+
+
+@pytest.fixture()
+def gaussian_yaml_settings_gas_solv_project_name(
+    gaussian_yaml_settings_directory,
+):
+    return os.path.join(gaussian_yaml_settings_directory, "gas_solv")
+
+
+@pytest.fixture
+def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
+    return os.path.join(gaussian_yaml_settings_directory, "solv.yaml")
+
+
+# gaussian written files
+@pytest.fixture
+def gaussian_written_files_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "written_files")
+
+
+@pytest.fixture()
+def gaussian_written_opt_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_opt.com")
+
+
+@pytest.fixture()
+def gaussian_written_opt_file_with_route(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_opt_with_route.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_written_modred_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_modred.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_scan.com")
+
+
+@pytest.fixture()
+def gaussian_written_ts_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_ts.com")
+
+
+@pytest.fixture()
+def gaussian_written_ts_from_nhc_singlet_log_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_ts_from_log.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_solvent_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_solvent.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_custom_solvent.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_custom_basis.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_custom_basis_from_api.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_modred_with_custom_basis_for_all_atoms_from_api(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_modred_with_custom_basis_for_all_atoms_from_api.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_opt_from_graphite_2d_pbc_log(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory, "graphite_2d_opt_from_log.com"
+    )
+
+
+# text path and associated files
+@pytest.fixture
+def text_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "text")
+
+
+@pytest.fixture
+def genecp_text_file_from_web(text_directory):
+    return os.path.join(text_directory, "test_genecp.txt")
+
+
+@pytest.fixture
+def gen_text_file_from_web(text_directory):
+    return os.path.join(txt_path, "test_gen.txt")
+
+
+@pytest.fixture
+def smd_TBME_solvent_parameters_text_file(txt_path):
+    return os.path.join(txt_path, "smd_TBME.txt")
+
+
+@pytest.fixture
+def Ni_def2tzvp_PCHOSi_svp_text_file(txt_path):
+    return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
+
+
 ############ Orca Fixtures ##################
 # master orca test directory
 @pytest.fixture()
@@ -469,3 +632,21 @@ def utils_test_directory(test_data_directory):
 @pytest.fixture()
 def server_yaml_file(utils_test_directory):
     return os.path.join(utils_test_directory, "server.yaml")
+
+
+### Server and JobRunner fixtures
+
+
+@pytest.fixture()
+def pbs_server(server_yaml_file):
+    return Server.from_yaml(server_yaml_file)
+
+
+@pytest.fixture()
+def jobrunner_no_scratch(pbs_server):
+    return FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def jobrunner_scratch(pbs_server):
+    return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)

@@ -14,7 +14,10 @@ class ChemsmartUserSettings:
     def __init__(self):
         self.yaml = os.path.join(self.USER_CONFIG_DIR, self.USER_YAML_FILE)
         self.config_dir = self.USER_CONFIG_DIR
-        self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
+        try:
+            self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
+        except FileNotFoundError:
+            self.data = {}
 
     @property
     def user_server_dir(self):

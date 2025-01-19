@@ -18,7 +18,14 @@ class TestServer:
         assert server.submit_command == "qsub"
         assert server.scratch_dir is None
         assert server.use_hosts is True
-        assert server.extra_commands is None
+        assert (
+            server.extra_commands
+            == """export PATH=$HOME/bin/chemsmart:$PATH
+export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
+export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
+export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
+"""
+        )
 
     def test_gaussian_executable(self, server_yaml_file):
         gaussian_executable = GaussianExecutable.from_servername(
@@ -41,7 +48,8 @@ module load libfabric/1.11.0.4.125
         assert gaussian_executable.modules == gaussian_modules
 
         assert (
-            gaussian_executable.scripts == "source GAUSS_DIR=~/programs/g16\n"
+            gaussian_executable.scripts
+            == 'tcsh -c "source ~/programs/g16/bsd/g16.login"\n'
         )
 
         gassian_envars = """export SCRATCH=~/scratch

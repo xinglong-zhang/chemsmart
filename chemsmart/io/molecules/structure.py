@@ -5,7 +5,7 @@ import copy
 import logging
 import numpy as np
 from ase.symbols import Symbols
-from ase.io.formats import string2index
+from chemsmart.utils.utils import string2index_1based
 from functools import cached_property, lru_cache
 from chemsmart.utils.utils import file_cache
 from chemsmart.utils.mixins import FileMixin
@@ -80,6 +80,12 @@ class Molecule:
         return len(self.chemical_symbols)
 
     def __getitem__(self, idx):
+        """Interprets the input idx as 1-based indices by index Adjustment (i - 1).
+        The method assumes that idx contains 1-based indices (e.g., [1, 2, 3]),
+        so it subtracts 1 to convert them to Python's zero-based indexing.
+        Retrieves the corresponding elements from self.symbols and self.positions using the provided indices.
+        reates and returns a new instance of the same class, containing the selected symbols and positions.
+        """
         symbols = [self.symbols[i - 1] for i in idx]
         positions = [self.positions[i - 1] for i in idx]
         return type(self)(symbols=symbols, positions=positions)
@@ -144,7 +150,6 @@ class Molecule:
         if os.path.getsize(filepath) == 0:
             return None
 
-        # try:
         molecule = cls._read_filepath(
             filepath, index=index, return_list=return_list, **kwargs
         )
@@ -152,10 +157,6 @@ class Molecule:
             return [molecule]
         else:
             return molecule
-        # except Exception as e:
-        #     raise FileReadError(
-        #         f"Failed to create molecule from {filepath}."
-        #     ) from e
 
     @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):
@@ -221,6 +222,7 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_gaussian_logfile(filepath, index):
+        """Returns a list of molecules."""
         from chemsmart.io.gaussian.output import Gaussian16Output
 
         g16_output = Gaussian16Output(filename=filepath)
@@ -271,11 +273,9 @@ class Molecule:
         """Creates Molecule object from pubchem based on an identifier (CID, SMILES, or name).
         Args:
         identifier (str): The compound identifier (name, CID, or SMILES string).
-        identifier_type (str): The type of the identifier. Can be "name", "cid", or "smiles".
         output_format (str): The desired format of the response. Default is "json".
                              Other options include "sdf" or "xml".
         Raises:
-            ValueError: If an invalid `identifier_type` is provided.
             requests.exceptions.RequestException: For network or HTTP-related issues.
         """
         from chemsmart.io.molecules.pubchem import pubchem_search
@@ -311,7 +311,23 @@ class Molecule:
             pbc_conditions=atoms.get_pbc(),
         )
 
-    def write_coordinates(self, f):
+    def write_coordinates(self, f, program=None):
+        """Write the coordinates of the molecule to a file.
+        No empty end line at the end of the file."""
+        if program.lower() == "gaussian":
+            self._write_gaussian_coordinates(f)
+            self._write_gaussian_pbc_coordinates(f)
+        elif program.lower() == "orca":
+            self._write_orca_coordinates(f)
+            self._write_orca_pbc_coordinates(f)
+        # elif program.lower() == "gromacs":
+        # can implement other programs formats to write the coordinates for
+        else:
+            raise ValueError(
+                f"Program {program} is not supported for writing coordinates."
+            )
+
+    def _write_gaussian_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
@@ -328,6 +344,27 @@ class Molecule:
                 f.write(
                     f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
                 )
+
+    def _write_gaussian_pbc_coordinates(self, f):
+        """Write the coordinates of the molecule with PBC conditions to a file."""
+        if self.pbc_conditions is not None:
+            assert (
+                self.translation_vectors is not None
+            ), "Translation vectors should not be None when PBC conditions are given!"
+            for i in range(len(self.translation_vectors)):
+                f.write(
+                    f"TV    {self.translation_vectors[i][0]:15.10f} "
+                    f"{self.translation_vectors[i][1]:15.10f} "
+                    f"{self.translation_vectors[i][2]:15.10f}\n"
+                )
+
+    def _write_orca_coordinates(self, f):
+        # TODO: implement
+        pass
+
+    def _write_orca_pbc_coordinates(self, f):
+        # TODO: implement
+        pass
 
     def __repr__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"
@@ -438,6 +475,10 @@ class CoordinateBlock:
                 symbols.append(chemical_symbol)
             except ValueError:
                 symbols.append(p.to_element(element_str=str(line_elements[0])))
+        if len(symbols) == 0:
+            raise ValueError(
+                f"No symbols found in the coordinate block: {self.coordinate_block}!"
+            )
         return symbols
 
     def _get_atomic_numbers_positions_and_constraints(self):
@@ -491,6 +532,10 @@ class CoordinateBlock:
                 z_coordinate = float(line_elements[3])
             position = [x_coordinate, y_coordinate, z_coordinate]
             positions.append(position)
+        if any(len(i) == 0 for i in [atomic_numbers, positions]):
+            raise ValueError(
+                f"No atomic numbers or positions found in the coordinate block: {self.coordinate_block}!"
+            )
         return atomic_numbers, np.array(positions), constraints
 
     def _get_atomic_numbers(self):
@@ -577,6 +622,10 @@ class SDFFile(FileMixin):
                 cart_coords.append((x, y, z))
 
         cart_coords = np.array(cart_coords)
+
+        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
+            raise ValueError("No coordinates found in the SDF file!")
+
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
@@ -602,6 +651,8 @@ class XYZFile(FileMixin):
         while i < len(self.contents):
             # Read number of atoms
             num_atoms = int(self.contents[i].strip())
+            if num_atoms == 0:
+                raise ValueError("Number of atoms in the xyz file is zero!")
             i += 1
             # Read comment line
             comment = self.contents[i].strip()
@@ -615,8 +666,8 @@ class XYZFile(FileMixin):
             # Store the molecule data
             all_molecules.append(molecule)
 
-        molecules = all_molecules[string2index(index)]
-        comments = comments[string2index(index)]
+        molecules = all_molecules[string2index_1based(index)]
+        comments = comments[string2index_1based(index)]
         if return_list and isinstance(molecules, Molecule):
             return [molecules], [comments]
         return molecules, comments

@@ -297,7 +297,7 @@ class TestGaussian16Input:
             )
         )
         assert g16_pbc_1d.additional_opt_options_in_route is None
-        assert g16_pbc_1d.additional_route_parameters is None
+        assert g16_pbc_1d.additional_route_parameters == "scf=tight"
         assert g16_pbc_1d.job_type == "sp"
         assert g16_pbc_1d.modred is None
         assert g16_pbc_1d.functional == "pbepbe"
@@ -396,6 +396,13 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+
+        assert (
+            g16_output.total_core_hours
+            == g16_output.total_service_unit
+            == 361.7
+        )
+        assert g16_output.total_elapsed_walltime == 6.4
 
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
@@ -600,7 +607,7 @@ class TestGaussian16Output:
             [-0.000000478, 0.000001912, -0.000001255],
         )
         assert np.allclose(
-            g16_genecp.forces_in_eV_per_A[0][0],
+            g16_genecp.forces_in_eV_per_angstrom[0][0],
             [
                 -0.002864142 * units.Hartree / units.Bohr,
                 0.002344278 * units.Hartree / units.Bohr,
@@ -875,12 +882,12 @@ class TestGaussian16Output:
             g16_genecp.get_molecule().positions, last_structure_positions
         )
 
-        assert len(g16_genecp.get_molecule(index=":3")) == 3
+        assert len(g16_genecp.get_molecule(index="1:4")) == 3
         assert np.allclose(
-            g16_genecp.get_molecule(index=":3")[-1].positions[0],
+            g16_genecp.get_molecule(index=":4")[-1].positions[0],
             [3.69135800, -0.83587500, -0.25754700],
         )
-        assert len(g16_genecp.get_molecule(index="3:")) == 8
+        assert len(g16_genecp.get_molecule(index="4:")) == 8
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
@@ -1284,7 +1291,7 @@ class TestGaussianPBCOutputFile:
         )
 
         assert np.allclose(
-            g16_pbc_2d.forces_in_eV_per_A[-1],
+            g16_pbc_2d.forces_in_eV_per_angstrom[-1],
             np.array(
                 [
                     [1.5884e-05, 6.7630e-06, 0.0000e00],
@@ -1321,3 +1328,32 @@ class TestGaussianPBCOutputFile:
         )
 
         assert g16_pbc_2d.has_forces
+
+        expected_first_pbc_forces = np.array(
+            [
+                [-0.005794968, -0.000018277, 0.000000000],
+                [-0.015305998, 0.009167561, 0.000000000],
+            ]
+        )
+        assert np.allclose(g16_pbc_2d.pbc_forces[0], expected_first_pbc_forces)
+
+        expected_last_pbc_forces = np.array(
+            [
+                [0.000006901, 0.000014889, -0.000000000],
+                [0.000028860, -0.000004081, -0.000000000],
+            ]
+        )
+        assert np.allclose(g16_pbc_2d.pbc_forces[-1], expected_last_pbc_forces)
+
+        assert len(g16_pbc_2d.standard_orientations_pbc) == 0
+
+        expected_last_translation_vector = np.array(
+            [
+                [2.475540, -0.000000, -0.000000],
+                [-1.237852, 2.143856, 0.000000],
+            ]
+        )
+        assert np.allclose(
+            g16_pbc_2d.input_orientations_pbc[-1],
+            expected_last_translation_vector,
+        )

@@ -20,3 +20,41 @@ from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
 
 jobs = GaussianJob.subclasses()
+
+__all__ = [
+    "GaussianCrestJob",
+    "GaussianCrestOptJob",
+    "GaussianCrestTSJob",
+    "GaussianCustomJob",
+    "GaussianDIASJob",
+    "GaussianOptJob",
+    "GaussianIRCJob",
+    "GaussianComJob",
+    "GaussianGeneralJob",
+    "GaussianJob",
+    "GaussianLinkJob",
+    "GaussianModredJob",
+    "GaussianNCIJob",
+    "GaussianRESPJob",
+    "GaussianJobRunner",
+    "GaussianSAOptJob",
+    "GaussianScanJob",
+    "GaussianSinglePointJob",
+    "GaussianTDDFTJob",
+    "GaussianTSJob",
+    "GaussianUVVISJob",
+    "GaussianWBIJob",
+    "jobs",
+]
+
+# signals to the linter these imports are intentional
+# imports as explicitly used
+
+# If I comment all these out, I get the following error during run:
+#   File "/Users/xinglongzhang/bin/chemsmart/chemsmart/jobs/runner.py", line 192, in from_job
+#     raise ValueError(
+# ValueError: Could not find any runners for job:
+# GaussianOptJob<folder=/Users/xinglongzhang/pyatoms_tests, label=final_prd_opt_scan_gas_opt_opt>.
+# Runners in registry: [].
+#  Fake: True
+#

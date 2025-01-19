@@ -2,7 +2,7 @@
 
 chemsmart welcomes contributions from the community.
 
-**You need PYTHON3!**
+**You need PYTHON 3.10!**
 
 This instructions are for linux base systems. (Linux, MacOS, BSD, etc.)
 ## Setting up your own fork of this repo.
@@ -80,7 +80,7 @@ Targets:
 help:             ## Show the help.
 install:          ## Install the project in dev mode.
 fmt:              ## Format code using black & isort.
-lint:             ## Run pep8, black, mypy linters.
+lint:             ## Run pep8, black linters.
 test: lint        ## Run tests and generate coverage report.
 watch:            ## Run tests on every change.
 clean:            ## Clean unused files.

@@ -1,25 +1,28 @@
 import ase
 import logging
 import os
+from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-from chemsmart.utils.utils import string2index
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
 
 class GaussianJob(Job):
     PROGRAM = "Gaussian"
-    _SETTINGS_CLS = GaussianJobSettings
 
     def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(molecule=molecule, label=label, **kwargs)
-        if not isinstance(settings, self._SETTINGS_CLS):
+        if not isinstance(settings, GaussianJobSettings):
             raise ValueError(
-                f"Settings must be instance of {self._SETTINGS_CLS} for {self}, but is {settings} instead!"
+                f"Settings must be instance of {GaussianJobSettings} for {self}, but is {settings} instead!"
             )
-
+        if not isinstance(molecule, Molecule):
+            raise ValueError(
+                f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
+            )
         molecule = molecule.copy()
         settings = settings.copy()
 
@@ -29,6 +32,10 @@ class GaussianJob(Job):
         self.settings = settings
         self.atoms = molecule
         self.label = label
+
+    @classmethod
+    def settings_class(cls) -> Type[GaussianJobSettings]:
+        return GaussianJobSettings
 
     @property
     def inputfile(self):
@@ -121,7 +128,7 @@ class GaussianJob(Job):
             filepath=filename, index=":", return_list=True
         )
         logger.info(f"Num of images read: {len(molecules)}.")
-        molecules = molecules[string2index(index)]
+        molecules = molecules[string2index_1based(index)]
 
         # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
         return cls(

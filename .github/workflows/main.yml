@@ -18,14 +18,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.9]
+        python-version: ["3.10"]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version:  ${{ matrix.python-version }}
       - name: Install project
         run: make install
       - name: Run linter
@@ -40,6 +40,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Clear existing cache
+        run: |
+          rm -rf ~/.cache/pip
+          rm -rf ./.gradle/caches/
+          rm -rf ~/.m2/repository/
+
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
@@ -71,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.9]
+        python-version: ["3.10"]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -93,7 +107,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.9]
+        python-version: ["3.10"]
         os: [macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -111,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.9]
+        python-version: ["3.10"]
         os: [windows-latest]
     runs-on: ${{ matrix.os }}
     steps:

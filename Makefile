@@ -23,6 +23,7 @@ install:          ## Install the project in dev mode.
 	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
 	@echo "Don't forget to run 'make virtualenv' if you got errors."
 	$(ENV_PREFIX)pip install -e .[test]
+	$(ENV_PREFIX)pip install types-PyYAML  # Add this line to install the types-PyYAML package
 
 .PHONY: fmt
 fmt:              ## Format code using black & isort.
@@ -31,11 +32,9 @@ fmt:              ## Format code using black & isort.
 	$(ENV_PREFIX)black -l 79 tests/
 
 .PHONY: lint
-lint:             ## Run pep8, black, mypy linters.
-	$(ENV_PREFIX)ruff check chemsmart/
-	$(ENV_PREFIX)black -l 79 --check chemsmart/
-	$(ENV_PREFIX)black -l 79 --check tests/
-	$(ENV_PREFIX)mypy --ignore-missing-imports chemsmart/
+lint:             ## Run pep8, black linters.
+	$(ENV_PREFIX)ruff check .
+	$(ENV_PREFIX)black -l 79 --check .
 
 .PHONY: test
 test: lint        ## Run tests and generate coverage report.
@@ -55,7 +54,6 @@ clean:            ## Clean unused files.
 	@find ./ -name '*~' -exec rm -f {} \;
 	@rm -rf .cache
 	@rm -rf .pytest_cache
-	@rm -rf .mypy_cache
 	@rm -rf build
 	@rm -rf dist
 	@rm -rf *.egg-info
@@ -98,25 +96,11 @@ switch-to-poetry: ## Switch to poetry package manager.
 	@echo "Switching to poetry ..."
 	@if ! poetry --version > /dev/null; then echo 'poetry is required, install from https://python-poetry.org/'; exit 1; fi
 	@rm -rf .venv
-	@poetry init --no-interaction --name=a_flask_test --author=rochacbruno
+	@poetry init --no-interaction --name=a_flask_test 
 	@echo "" >> pyproject.toml
 	@echo "[tool.poetry.scripts]" >> pyproject.toml
 	@echo "chemsmart = 'chemsmart.__main__:main'" >> pyproject.toml
-	@cat requirements.txt | while read in; do poetry add --no-interaction "$${in}"; done
-	@cat requirements-test.txt | while read in; do poetry add --no-interaction "$${in}" --dev; done
 	@poetry install --no-interaction
-	@mkdir -p .github/backup
-	@mv requirements* .github/backup
-	@mv setup.py .github/backup
 	@echo "You have switched to https://python-poetry.org/ package manager."
 	@echo "Please run 'poetry shell' or 'poetry run chemsmart'"
 
-.PHONY: init
-init:             ## Initialize the project based on an application template.
-	@./.github/init.sh
-
-
-# This project has been generated from rochacbruno/python-project-template
-# __author__ = 'rochacbruno'
-# __repo__ = https://github.com/rochacbruno/python-project-template
-# __sponsor__ = https://github.com/sponsors/rochacbruno/

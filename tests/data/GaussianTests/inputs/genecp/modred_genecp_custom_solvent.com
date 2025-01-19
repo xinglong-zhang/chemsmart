@@ -167,4 +167,3 @@ SurfaceTensionAtInterface=16.1
 CarbonAromaticity=0.0
 ElectronegativeHalogenicity=0.60
 
-

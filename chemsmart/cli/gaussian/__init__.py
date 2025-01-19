@@ -15,3 +15,25 @@ from .singlepoint import sp
 from .tddft import td
 from .ts import ts
 from .wbi import wbi
+
+__all__ = [
+    "com",
+    "crest",
+    "crestopt",
+    "userjob",
+    "dias",
+    "gaussian",
+    "irc",
+    "link",
+    "modred",
+    "nci",
+    "opt",
+    "resp",
+    "scan",
+    "sp",
+    "td",
+    "ts",
+    "wbi",
+]
+# signals to the linter these imports are intentional
+# imports as explicitly used

@@ -81,10 +81,6 @@ class GaussianJobSettings(MolecularJobSettings):
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
         self.gen_genecp_file = gen_genecp_file
 
-        if append_additional_info is None:
-            append_additional_info = ""
-        self.append_additional_info = append_additional_info
-
         if forces is True and freq is True:
             raise ValueError(
                 "Frequency and Force calculations cannot be performed by Gaussian at the same time!\n"
@@ -100,7 +96,10 @@ class GaussianJobSettings(MolecularJobSettings):
         )
 
     def merge(
-        self, other, keywords=("charge", "multiplicity"), merge_all=False
+        self,
+        other,
+        keywords=("charge", "multiplicity", "title"),
+        merge_all=False,
     ):
         """Overwrite self settings with other settings.
 
@@ -341,6 +340,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
+                self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
             if self.job_type == "opt":
                 route_string += " opt"
@@ -354,6 +354,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
+                self.freq = False  # turn off freq calculation for sp job
 
         # write frequency
         if self.freq and not self.numfreq:
@@ -468,18 +469,6 @@ class GaussianJobSettings(MolecularJobSettings):
         return list(
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
-
-    def set_custom_solvent_via_file(self, filename):
-        if not os.path.exists(os.path.expanduser(filename)):
-            raise ValueError(f"File {filename} does not exist!")
-
-        # path to the file for custom_solvent parameters
-        with open(filename) as f:
-            lines = f.readlines()
-
-        lines = [line.strip() for line in lines]
-
-        self.custom_solvent = "\n".join(lines)
 
     def remove_solvent(self):
         self.solvent_model = None

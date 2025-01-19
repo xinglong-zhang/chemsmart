@@ -1,6 +1,6 @@
 import logging
 import os.path
-
+from typing import Optional
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.utils.utils import strip_out_comments
@@ -16,7 +16,7 @@ class Executable(RegistryMixin):
     Given program type, the executable will be specified in server.yaml file.
     """
 
-    PROGRAM = NotImplemented
+    PROGRAM: Optional[str] = None
 
     def __init__(
         self,
