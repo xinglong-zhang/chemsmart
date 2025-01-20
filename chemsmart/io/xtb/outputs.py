@@ -4,7 +4,7 @@ from functools import cached_property
 from ase import units
 from chemsmart.utils.mixins import FileMixin
 
-class XTBOutput(FileMixin):
+class XTBOutput(XTBFileMixin):
     def __init__(self, filename):
         self.filename = filename
 
@@ -68,9 +68,18 @@ class XTBOutput(FileMixin):
         return None
 
     @property
+    def num_unpaired_electrons(self):
+        for line in self.contents:
+            if "unpaired electrons" in line:
+                line_elements = line.strip().split()
+                num_unpaired_electrons = line_elements[-2]
+                return int(num_unpaired_electrons)
+        return None
+
+    @property
     def get_total_energy(self):
         for line in self.contents:
-            if "TOTAL ENERGY" in line:
+            if "total energy" in line:
                 line_elements = line.strip().split()
                 total_energy = line_elements[-3]
                 return int(total_energy)
@@ -83,6 +92,15 @@ class XTBOutput(FileMixin):
                 line_elements = line.strip().split()
                 fmo_gap = line_elements[-3]
                 return int(fmo_gap)
+        return None
+
+    @property
+    def get_total_charge(self):
+        for line in self.contents:
+            if "total charge" in line:
+                line_elements = line.strip().split()
+                total_charge = line_elements[-3]
+                return int(total_charge)
         return None
 
     def sum_time_hours(self, line):
