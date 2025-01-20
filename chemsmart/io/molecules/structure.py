@@ -393,7 +393,9 @@ class Molecule:
 
         # Ensure symbols and positions are available
         if self.symbols is None or self.positions is None:
-            raise ValueError("Molecule must have symbols and positions defined.")
+            raise ValueError(
+                "Molecule must have symbols and positions defined."
+            )
 
         # Create an empty RDKit molecule
         rdkit_mol = Chem.RWMol()
