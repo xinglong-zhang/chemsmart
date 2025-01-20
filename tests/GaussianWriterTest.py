@@ -11,6 +11,7 @@ from chemsmart.jobs.gaussian import GaussianTSJob
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.io.molecules.structure import Molecule
+from tests.conftest import jobrunner_scratch
 
 
 class TestGaussianInputWriter:
@@ -46,6 +47,8 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file, gaussian_written_opt_file
         )  # writes input file as expected
+        job.run(jobrunner=jobrunner_no_scratch)
+        assert job.is_complete()
 
     def test_write_opt_job_with_route(
         self,

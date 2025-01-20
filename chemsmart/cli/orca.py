@@ -57,14 +57,14 @@ def click_orca_settings_options(f):
         "-t", "--title", type=str, default=None, help="ORCA job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the atoms"
+        "-c", "--charge", type=int, default=None, help="charge of the molecule"
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the atoms",
+        help="multiplicity of the molecule",
     )
     @click.option(
         "-x",
@@ -162,7 +162,7 @@ def orca(  # noqa: PLR0912, PLR0915
         job_settings.additional_route_parameters = additional_route_parameters
         keywords += ("additional_route_parameters",)
 
-    # obtain atoms structure
+    # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -192,19 +192,19 @@ def orca(  # noqa: PLR0912, PLR0915
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
-    # return list of atoms
+    # return list of molecule
     atoms = atoms[string2index_1based(index)]
 
     if not isinstance(atoms, list):
-        # if somehow atoms is not a list, make it a list
+        # if somehow molecule is not a list, make it a list
         atoms = [atoms]
 
     # store objects
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
     ctx.obj["keywords"] = keywords
-    ctx.obj["atoms"] = (
-        atoms  # atoms as a list as some jobs requires all structures to be used
+    ctx.obj["molecule"] = (
+        atoms  # molecule as a list as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename

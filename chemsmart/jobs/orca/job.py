@@ -1,4 +1,3 @@
-import ase
 import logging
 import os
 import shutil
@@ -33,7 +32,7 @@ class ORCAJob(Job):
             label = molecule.get_chemical_formula(empirical=True)
 
         self.settings = settings
-        self.atoms = molecule
+        self.molecule = molecule
         self.label = label
 
     @classmethod
@@ -46,7 +45,7 @@ class ORCAJob(Job):
         return os.path.join(self.folder, inputfile)
 
     @property
-    def outfile(self):
+    def outputfile(self):
         outputfile = self.label + ".out"
         return os.path.join(self.folder, outputfile)
 
@@ -60,58 +59,22 @@ class ORCAJob(Job):
         errfile = self.label + ".err"
         return os.path.join(self.folder, errfile)
 
-    @property
-    def all_intermediate_optimization_points(self):
-        intermediate_optimization_points_path = os.path.join(
-            self.label + "_intermediate_opt_points.xyz"
-        )
-        all_points = self._intermediate_optimization_points()
-        ase.io.write(intermediate_optimization_points_path, all_points)
-        return all_points
-
-    def optimized_structure(self):
-        output = self._output()
-        if output is not None and output.normal_termination:
-            return output.get_atoms(index="-1")
-        return None
-
-    def _intermediate_optimization_points(self):
-        output = self._output()
-        if output is None:
-            return []
-        return output.all_structures
-
-    def _compute_resources_required(self):
-        return self._compute_units(num_units=1)
-
     def backup_files(self, backup_gbw=False):
         folder = self._create_backup_folder_name()
         self.backup_file(self.inputfile, folder=folder)
-        self.backup_file(self.outfile, folder=folder)
+        self.backup_file(self.outputfile, folder=folder)
         if backup_gbw:
             self.backup_file(self.gbwfile, folder=folder)
 
     def _output(self):
-        if not os.path.exists(self.outfile):
+        if not os.path.exists(self.outputfile):
             return None
 
         try:
-            from pyatoms.io.orca.outputs import ORCAOutput
-
-            return ORCAOutput(self.outfile)
+            from chemsmart.io.orca.output import ORCAOutput
+            return ORCAOutput(self.outputfile)
         except AttributeError:
             return None
-        else:
-            return None
-
-    def _job_is_complete(self):
-        # private method to check if the job is complete
-        if self._output() is None:
-            return False
-        return self._output().normal_termination
-
-    def is_complete(self):
-        return self._job_is_complete()
 
     def _run(self, jobrunner, queue_manager=None, **kwargs):
         self.settings.apply_on(self, jobrunner, **kwargs)
@@ -128,7 +91,7 @@ class ORCAJob(Job):
         keywords=("charge", "multiplicity"),
         **kwargs,
     ):
-        # get all atoms in a file and give the result as a list
+        # get all molecule in a file and give the result as a list
         logger.info(f"Reading images from file: {filename}.")
         atoms = AtomsWrapper.from_filepath(
             filepath=filename, index=":", return_list=True
@@ -136,7 +99,7 @@ class ORCAJob(Job):
         logger.info(f"Num of images read: {len(atoms)}.")
         atoms = atoms[string2index_1based(index)]  # python 0-indexed
 
-        # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
+        # only supply last molecule in some jobs; but require all molecule in others e.g., dias job
         return cls(
             folder=folder,
             atoms=atoms,
@@ -230,7 +193,7 @@ class ORCAInpJob(ORCAJob):
         if label is None:
             label = os.path.splitext(os.path.basename(filename))[0]
 
-        # get atoms object from supplied file
+        # get molecule object from supplied file
         atoms = AtomsWrapper.from_filepath(filepath=filename)
 
         # get settings from file

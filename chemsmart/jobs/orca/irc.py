@@ -219,8 +219,8 @@ class ORCAIRCJob(ORCAJob):
             modred_info = eval(coordinates)
             irc_settings.internal_modred = modred_info
 
-        # get atoms
-        atoms = ctx.obj["atoms"]
+        # get molecule
+        atoms = ctx.obj["molecule"]
 
         # get label for the job
         label = ctx.obj["label"]

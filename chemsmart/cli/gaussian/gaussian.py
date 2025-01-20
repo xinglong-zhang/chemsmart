@@ -50,14 +50,14 @@ def click_gaussian_settings_options(f):
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the atoms"
+        "-c", "--charge", type=int, default=None, help="charge of the molecule"
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the atoms",
+        help="multiplicity of the molecule",
     )
     @click.option(
         "-x",
@@ -314,7 +314,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
         job_settings.dieze_tag = dieze_tag
         keywords += ("dieze_tag",)
 
-    # obtain atoms structure
+    # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"

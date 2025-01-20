@@ -52,7 +52,7 @@ class ORCAJobRunner(JobRunner):
         Set up file paths if running in scratch/not running in scratch.
         """
         # keep job output file in job folder regardless of running in scratch or not
-        self.job_outputfile = job.outfile
+        self.job_outputfile = job.outputfile
 
         if self.scratch:
             logger.info("Setting up run in scratch folder.")

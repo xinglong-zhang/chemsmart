@@ -37,9 +37,9 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
     molecules = ctx.obj["molecules"]
     molecule = molecules[
         -1
-    ]  # get last atom from list of atoms from cli.gaussian.py subcommands
-    # index = '-1' would access the right structure from the list of atoms returned from cli.gaussian.py subcommands
-    # user specified index was used there to return the right atoms and store it as a list of single element/itself
+    ]  # get last molecule from list of molecules from cli.gaussian.py subcommands
+    # index = '-1' would access the right structure from the list of molecule returned from cli.gaussian.py subcommands
+    # user specified index was used there to return the right molecule and store it as a list of single element/itself
 
     # get label for the job
     label = ctx.obj["label"]

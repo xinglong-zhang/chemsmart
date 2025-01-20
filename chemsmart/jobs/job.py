@@ -53,10 +53,6 @@ class Job(RegistryMixin):
     def joblog(self):
         return os.path.join(self.folder, f"{self.label}.joblog")
 
-    @abstractmethod
-    def is_complete(self):
-        raise NotImplementedError
-
     def run(self, **kwargs):
         if self.is_complete() and self.skip_completed:
             logger.info(f"{self} is already complete, not running.")
@@ -111,3 +107,34 @@ class Job(RegistryMixin):
                 shutil.copytree(src=file, dst=newfilepath)
             else:
                 shutil.copy(src=file, dst=newfilepath)
+
+    @property
+    def all_intermediate_optimization_points(self):
+        import ase
+        intermediate_optimization_points_path = os.path.join(
+            self.label + "_intermediate_opt_points.xyz"
+        )
+        all_points = self._intermediate_optimization_points()
+        ase.io.write(intermediate_optimization_points_path, all_points)
+        return all_points
+
+    def optimized_structure(self):
+        output = self._output()
+        if output is not None and output.normal_termination:
+            return output.optimized_structure
+        return None
+
+    def _intermediate_optimization_points(self):
+        output = self._output()
+        if output is None:
+            return []
+        return output.all_structures
+
+    def _job_is_complete(self):
+        # private method to check if the job is complete
+        if self._output() is None:
+            return False
+        return self._output().normal_termination
+
+    def is_complete(self):
+        return self._job_is_complete()
