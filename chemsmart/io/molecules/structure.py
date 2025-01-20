@@ -385,6 +385,84 @@ class Molecule:
                 )
         return bond_distances
 
+    def to_rdkit(self):
+        """Convert Molecule object to RDKit Mol."""
+        from rdkit import Chem
+        from rdkit.Chem import rdchem
+        from rdkit.Geometry import Point3D
+
+        # Ensure symbols and positions are available
+        if self.symbols is None or self.positions is None:
+            raise ValueError("Molecule must have symbols and positions defined.")
+
+        # Create an empty RDKit molecule
+        rdkit_mol = Chem.RWMol()
+
+        # Add atoms and store their indices
+        atom_indices = []
+        for symbol in self.symbols:
+            atom = Chem.Atom(symbol)
+            idx = rdkit_mol.AddAtom(atom)
+            atom_indices.append(idx)
+
+        # Create a conformer for the molecule and add 3D coordinates
+        conformer = rdchem.Conformer(len(atom_indices))
+        for idx, (x, y, z) in enumerate(self.positions):
+            conformer.SetAtomPosition(idx, Point3D(x, y, z))
+
+        # Add the conformer to the molecule
+        rdkit_mol.AddConformer(conformer)
+
+        # Infer and add bonds based on distance thresholds
+        # self._infer_bonds(rdkit_mol)
+        #
+        # # Add bonds if known (for simplicity, bonds are inferred based on distance)
+        # for i in range(len(atom_indices)):
+        #     for j in range(i + 1, len(atom_indices)):
+        #         dist = np.linalg.norm(self.positions[i] - self.positions[j])
+        #         if dist <= self._get_bond_threshold(self.symbols[i], self.symbols[j]):
+        #             rdkit_mol.AddBond(i, j, Chem.BondType.SINGLE)
+        #
+
+        # I comment the following out since we do not want to modify the molecule
+        # Validate the RDKit molecule
+        # try:
+        #     Chem.SanitizeMol(rdkit_mol)
+        # except Chem.AtomValenceException as e:
+        #     raise ValueError(f"Sanitization failed: {e}") from e
+
+        return rdkit_mol
+
+    # def _infer_bonds(self, rdkit_mol):
+    #     """Infer bonds based on atomic distances and add them to the RDKit molecule."""
+    #     from rdkit.Chem import BondType
+    #
+    #     num_atoms = len(self.positions)
+    #     for i in range(num_atoms):
+    #         for j in range(i + 1, num_atoms):
+    #             # Calculate interatomic distance
+    #             distance = np.linalg.norm(self.positions[i] - self.positions[j])
+    #
+    #             # Determine bond length threshold
+    #             max_bond_distance = self._get_bond_threshold(
+    #                 self.symbols[i], self.symbols[j]
+    #             )
+    #
+    #             # Add bond if distance is within threshold and bond does not exist
+    #             if distance <= max_bond_distance:
+    #                 if not rdkit_mol.GetBondBetweenAtoms(i, j):
+    #                     rdkit_mol.AddBond(i, j, BondType.SINGLE)
+    #
+    # @staticmethod
+    # def _get_bond_threshold(symbol1, symbol2):
+    #     """Calculate bond length threshold based on covalent radii."""
+    #     from chemsmart.utils.periodictable import PeriodicTable as pt
+    #
+    #     pt = pt()
+    #     r1 = pt.covalent_radius(symbol1)
+    #     r2 = pt.covalent_radius(symbol2)
+    #     return r1 + r2 + 0.4  # Add a small margin
+
 
 class CoordinateBlock:
     """Class to create coordinate block object to abstract the geometry."""

@@ -4,6 +4,7 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.molecules.structure import XYZFile
+from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 
 class TestCoordinateBlock:
@@ -106,6 +107,10 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+
+        # test conversion to RDKit molecule
+        rdkit_molecule = molecule.to_rdkit()
+        assert isinstance(rdkit_molecule, RDKitMolecule)
 
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
