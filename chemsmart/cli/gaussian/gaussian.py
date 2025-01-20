@@ -74,7 +74,7 @@ def click_gaussian_settings_options(f):
         "--index",
         type=str,
         default=None,
-        help="index of atom of ase db to be used",
+        help="index of molecule to use; default to the last molecule structure.",
     )
     @click.option(
         "-o",
@@ -366,7 +366,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
-    ctx.obj["filename"] = filename
     ctx.obj["filename"] = filename
 
 

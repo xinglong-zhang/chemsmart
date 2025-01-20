@@ -18,7 +18,9 @@ class GaussianUVVISJob(GaussianJob):
         # add equilibrium solvation if necessary
         gs_geom_opt_settings = deepcopy(self.settings)
         return GaussianOptJob(
-            folder=self.folder, atoms=self.molecule, settings=gs_geom_opt_settings
+            folder=self.folder,
+            atoms=self.molecule,
+            settings=gs_geom_opt_settings,
         )
 
     def _run_gs_geom_opt(self, jobrunner, queue_manager=None):

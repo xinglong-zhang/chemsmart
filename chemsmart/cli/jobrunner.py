@@ -6,7 +6,7 @@ import click
 logger = logging.getLogger(__name__)
 
 
-def jobrunner_options(f):
+def click_jobrunner_options(f):
     @click.option(
         "-s",
         "--server",

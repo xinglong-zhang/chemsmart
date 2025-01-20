@@ -110,6 +110,7 @@ class Job(RegistryMixin):
     @property
     def all_intermediate_optimization_points(self):
         import ase
+
         intermediate_optimization_points_path = os.path.join(
             self.label + "_intermediate_opt_points.xyz"
         )

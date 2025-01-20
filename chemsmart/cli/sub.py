@@ -4,7 +4,7 @@ import logging
 
 import click
 
-from chemsmart.cli.jobrunner import jobrunner_options
+from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.utils.logger import create_logger
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @click.group(name="sub", cls=MyGroup)
 @click.pass_context
-@jobrunner_options
+@click_jobrunner_options
 @logger_options
 @click.option("-t", "--time-hours", type=float, default=None)
 @click.option("-q", "--queue", type=str, help="queue")

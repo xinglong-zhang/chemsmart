@@ -3,9 +3,9 @@ import logging
 import os
 
 import click
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.utils import string2index_1based
-
-from pyatoms.utils.cli import MyGroup
+from chemsmart.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +15,6 @@ def click_orca_options(f):
 
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
-    )
-    @click.option(
-        "--scratch/--no-scratch",
-        type=bool,
-        default=True,
-        help="To run in scratch or without scratch folder.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -81,7 +75,7 @@ def click_orca_settings_options(f):
         "--index",
         type=str,
         default="-1",
-        help="index of atom to use; default is last atom",
+        help="index of molecule to use; default to the last molecule structure.",
     )
     @click.option(
         "-r",
@@ -108,10 +102,9 @@ def click_orca_settings_options(f):
     help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
 )
 @click.pass_context
-def orca(  # noqa: PLR0912, PLR0915
+def orca(
     ctx,
     project,
-    scratch,
     filename,
     label,
     append_label,
@@ -124,14 +117,16 @@ def orca(  # noqa: PLR0912, PLR0915
     additional_route_parameters,
     pubchem,
 ):
-    from pyatoms.io.ase.atoms import AtomsWrapper
-    from pyatoms.settings.projects.orca import ORCAProjectSettings
+
+    import os
+    from chemsmart.jobs.orca.settings import ORCAJobSettings
+    from chemsmart.settings.orca import ORCAProjectSettings
 
     # get project settings
-    project_settings = ORCAProjectSettings.from_project_name(project)
+    project_settings = ORCAProjectSettings.from_project(project)
 
     # obtain ORCA Settings from filename, if supplied; otherwise return defaults
-    from pyatoms.jobs.orca.settings import ORCAJobSettings
+    from chemsmart.jobs.orca.settings import ORCAJobSettings
 
     if filename is None:
         job_settings = ORCAJobSettings.default()
@@ -162,7 +157,7 @@ def orca(  # noqa: PLR0912, PLR0915
         job_settings.additional_route_parameters = additional_route_parameters
         keywords += ("additional_route_parameters",)
 
-    # obtain molecule structure
+    # obtain molecules structure
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -173,12 +168,10 @@ def orca(  # noqa: PLR0912, PLR0915
         )
 
     if filename:
-        atoms = AtomsWrapper.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
+        molecules = Molecule.from_filepath(filepath=filename, return_list=True)
 
     if pubchem:
-        atoms = AtomsWrapper.from_pubchem(identifier=pubchem, return_list=True)
+        molecules = Molecule.from_pubchem(identifier=pubchem)
 
     # update labels
     if label is not None and append_label is not None:
@@ -192,24 +185,22 @@ def orca(  # noqa: PLR0912, PLR0915
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
-    # return list of molecule
-    atoms = atoms[string2index_1based(index)]
+    # return list of molecules
+    molecules = molecules[string2index_1based(index)]
 
-    if not isinstance(atoms, list):
-        # if somehow molecule is not a list, make it a list
-        atoms = [atoms]
+    if not isinstance(molecules, list):
+        # if somehow molecules is not a list, make it a list
+        molecules = [molecules]
 
     # store objects
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
     ctx.obj["keywords"] = keywords
-    ctx.obj["molecule"] = (
-        atoms  # molecule as a list as some jobs requires all structures to be used
+    ctx.obj["molecules"] = (
+        molecules  # molecules as a list as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
-    jobrunner = ctx.obj["jobrunner"]
-    jobrunner.scratch = scratch
 
 
 @orca.result_callback()

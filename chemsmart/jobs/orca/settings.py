@@ -49,6 +49,7 @@ class ORCAJobSettings(MolecularJobSettings):
         light_elements_basis=None,
         custom_solvent=None,
         forces=False,
+        input_string=None,
         **kwargs,
     ):
         super().__init__(
@@ -73,6 +74,7 @@ class ORCAJobSettings(MolecularJobSettings):
             light_elements_basis=light_elements_basis,
             custom_solvent=custom_solvent,
             forces=forces,
+            input_string=input_string,
             **kwargs,
         )
 
@@ -273,11 +275,15 @@ class ORCAJobSettings(MolecularJobSettings):
             light_elements_basis=None,
             custom_solvent=None,
             forces=False,
+            input_string=None,
         )
 
     def write_orca_input_from_job(self, job, jobrunner, **kwargs):
         return self.write_orca_input(
-            atoms=job.molecule, jobrunner=jobrunner, job_label=job.label, **kwargs
+            atoms=job.molecule,
+            jobrunner=jobrunner,
+            job_label=job.label,
+            **kwargs,
         )
 
     def write_orca_input(

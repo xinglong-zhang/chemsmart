@@ -264,6 +264,7 @@ class GaussianJobSettings(MolecularJobSettings):
             custom_solvent=None,
             append_additional_info=None,
             forces=False,
+            input_string=None,
         )
 
     @classmethod
