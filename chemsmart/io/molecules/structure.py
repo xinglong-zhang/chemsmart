@@ -413,17 +413,6 @@ class Molecule:
         # Add the conformer to the molecule
         rdkit_mol.AddConformer(conformer)
 
-        # Infer and add bonds based on distance thresholds
-        # self._infer_bonds(rdkit_mol)
-        #
-        # # Add bonds if known (for simplicity, bonds are inferred based on distance)
-        # for i in range(len(atom_indices)):
-        #     for j in range(i + 1, len(atom_indices)):
-        #         dist = np.linalg.norm(self.positions[i] - self.positions[j])
-        #         if dist <= self._get_bond_threshold(self.symbols[i], self.symbols[j]):
-        #             rdkit_mol.AddBond(i, j, Chem.BondType.SINGLE)
-        #
-
         # I comment the following out since we do not want to modify the molecule
         # Validate the RDKit molecule
         # try:
@@ -432,36 +421,6 @@ class Molecule:
         #     raise ValueError(f"Sanitization failed: {e}") from e
 
         return rdkit_mol
-
-    # def _infer_bonds(self, rdkit_mol):
-    #     """Infer bonds based on atomic distances and add them to the RDKit molecule."""
-    #     from rdkit.Chem import BondType
-    #
-    #     num_atoms = len(self.positions)
-    #     for i in range(num_atoms):
-    #         for j in range(i + 1, num_atoms):
-    #             # Calculate interatomic distance
-    #             distance = np.linalg.norm(self.positions[i] - self.positions[j])
-    #
-    #             # Determine bond length threshold
-    #             max_bond_distance = self._get_bond_threshold(
-    #                 self.symbols[i], self.symbols[j]
-    #             )
-    #
-    #             # Add bond if distance is within threshold and bond does not exist
-    #             if distance <= max_bond_distance:
-    #                 if not rdkit_mol.GetBondBetweenAtoms(i, j):
-    #                     rdkit_mol.AddBond(i, j, BondType.SINGLE)
-    #
-    # @staticmethod
-    # def _get_bond_threshold(symbol1, symbol2):
-    #     """Calculate bond length threshold based on covalent radii."""
-    #     from chemsmart.utils.periodictable import PeriodicTable as pt
-    #
-    #     pt = pt()
-    #     r1 = pt.covalent_radius(symbol1)
-    #     r2 = pt.covalent_radius(symbol2)
-    #     return r1 + r2 + 0.4  # Add a small margin
 
 
 class CoordinateBlock:
