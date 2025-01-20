@@ -62,6 +62,13 @@ def click_orca_settings_options(f):
         help="multiplicity of the molecule",
     )
     @click.option(
+        "-A",
+        "--ab-initio",
+        type=str,
+        default=None,
+        help="Ab initio method to be used.",
+    )
+    @click.option(
         "-x",
         "--functional",
         type=str,
@@ -69,13 +76,107 @@ def click_orca_settings_options(f):
         help="New functional to run.",
     )
     @click.option(
+        "-D",
+        "--dispersion",
+        type=str,
+        default=None,
+        help="Dispersion for DFT functional.",
+    )
+    @click.option(
         "-b", "--basis", type=str, default=None, help="New basis set to run."
+    )
+    @click.option(
+        "-a",
+        "--aux-basis",
+        type=str,
+        default=None,
+        help="Auxiliary basis set.",
+    )
+    @click.option(
+        "-e",
+        "--extrapolation-basis",
+        type=str,
+        default=None,
+        help="Extrapolation basis set.",
+    )
+    @click.option(
+        "-d",
+        "--defgrid",
+        type=click.Choice(
+            ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
+        ),
+        default="defgrid2",  # default used in ORCA is defgrid2
+        help="Grid for numerical integration. Choices are ['defgrid1', 'defgrid2', 'defgrid3']",
+    )
+    @click.option(
+        "--scf-tol",
+        type=click.Choice(
+            [
+                "NormalSCF",
+                "LooseSCF",
+                "SloppySCF",
+                "StrongSCF",
+                "TightSCF",
+                "VeryTightSCF",
+                "ExtremeSCF",
+            ]
+        ),
+        default=None,
+        help="SCF convergence tolerance.",
+    )
+    @click.option(
+        "--scf-algorithm",
+        type=click.Choice(
+            ["GDIIS", "DIIS", "SOSCF", "AutoTRAH"], case_sensitive=False
+        ),  # SOSCF is an approximately quadratically convergent variant of the SCF procedure
+        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle, we invoke TRAH-SCF
+        # automatically (AutoTRAH).
+        default=None,
+        help="SCF algorithm to use.",
+    )
+    @click.option(
+        "--scf-maxiter",
+        type=int,
+        default=None,
+        help="Maximum number of SCF iterations.",
+    )
+    @click.option(
+        "--scf-convergence",
+        type=float,
+        default=None,
+        help="SCF convergence criterion.",
+    )
+    @click.option(
+        "--dipole/--no-dipole",
+        default=None,
+        type=bool,
+        help="Dipole moment calculation.",
+    )
+    @click.option(
+        "--quadrupole/--no-quadrupole",
+        default=None,
+        type=bool,
+        help="Quadrupole moment calculation.",
+    )
+    @click.option(
+        "--mdci-cutoff",
+        type=click.Choice(["loose", "normal", "tight"], case_sensitive=False),
+        default=None,
+        help="MDCI cutoff. Choices are ['loose', 'normal', 'tight']",
+    )
+    @click.option(
+        "--mdci-density",
+        type=click.Choice(
+            ["none", "unrelaxed", "relaxed"], case_sensitive=False
+        ),
+        default=None,
+        help="MDCI density. Choices are ['none', 'unrelaxed', 'relaxed']",
     )
     @click.option(
         "-i",
         "--index",
         type=str,
-        default="-1",
+        default=None,
         help="index of molecule to use; default to the last molecule structure.",
     )
     @click.option(
@@ -84,6 +185,44 @@ def click_orca_settings_options(f):
         type=str,
         default=None,
         help="additional route parameters",
+    )
+    @click.option(
+        "--forces/--no-forces", default=False, help="Forces calculation."
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_orca_jobtype_options(f):
+    """Common click options for ORCA link/crest jobs."""
+
+    @click.option(
+        "-j",
+        "--jobtype",
+        type=str,
+        default=None,
+        help='ORCA job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+    )
+    @click.option(
+        "-c",
+        "--coordinates",
+        default=None,
+        help="list of coordinates to be fixed for modred or scan job",
+    )
+    @click.option(
+        "-s",
+        "--step-size",
+        default=None,
+        help="step size of coordinates to scan",
+    )
+    @click.option(
+        "-n",
+        "--num-steps",
+        default=None,
+        help="step size of coordinates to scan",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -128,14 +267,20 @@ def orca(
     # obtain ORCA Settings from filename, if supplied; otherwise return defaults
 
     if filename is None:
+        # for cases where filename is not supplied, eg, get structure from pubchem
         job_settings = ORCAJobSettings.default()
         logger.info(
             f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
         )
-    else:
+    elif filename.endswith((".com", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = ORCAJobSettings.from_filepath(filename)
-        logger.info(f"Job settings from {filename}:\n{job_settings.__dict__}")
+    elif filename.endswith(".xyz"):
+        job_settings = ORCAJobSettings.default()
+    else:
+        raise ValueError(
+            f"Unrecognised filetype {filename} to obtain ORCAJobSettings"
+        )
 
     # Update keywords
     keywords = (
@@ -156,7 +301,7 @@ def orca(
         job_settings.additional_route_parameters = additional_route_parameters
         keywords += ("additional_route_parameters",)
 
-    # obtain molecules structure
+    # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -167,10 +312,20 @@ def orca(
         )
 
     if filename:
-        molecules = Molecule.from_filepath(filepath=filename, return_list=True)
+        molecules = Molecule.from_filepath(
+            filepath=filename, index=";", return_list=True
+        )
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from {filename}!"
+        logger.debug(f"Obtained molecules {molecules} from {filename}")
 
     if pubchem:
-        molecules = Molecule.from_pubchem(identifier=pubchem)
+        molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from PubChem {pubchem}!"
+        logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
     # update labels
     if label is not None and append_label is not None:
@@ -184,20 +339,19 @@ def orca(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
-    # return list of molecules
-    molecules = molecules[string2index_1based(index)]
+    # if user has specified an index to use to access particular structure
+    # then return that structure as a list
+    if index is not None:
+        # return list of molecules
+        molecules = molecules[string2index_1based(index)]
 
-    if not isinstance(molecules, list):
-        # if somehow molecules is not a list, make it a list
-        molecules = [molecules]
+    logger.debug(f"Obtained molecules: {molecules}")
 
     # store objects
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
     ctx.obj["keywords"] = keywords
-    ctx.obj["molecules"] = (
-        molecules  # molecules as a list as some jobs requires all structures to be used
-    )
+    ctx.obj["molecules"] = molecules
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
 

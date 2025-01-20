@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 
 import click
 
@@ -112,6 +113,11 @@ def click_gaussian_settings_options(f):
         default=None,
         help="dieze tag for gaussian job; possible options include "
         '"n", "p", "t" to get "#n", "#p", "#t", respectively',
+    )
+    @click.option(
+        "--forces/--no-forces",
+        default=False,
+        help="Whether to calculate forces.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -237,7 +243,7 @@ def click_gaussian_td_options(f):
     help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
 )
 @click.pass_context
-def gaussian(  # noqa: PLR0912, PLR0915
+def gaussian(
     ctx,
     project,
     filename,
@@ -254,9 +260,9 @@ def gaussian(  # noqa: PLR0912, PLR0915
     append_additional_info,
     custom_solvent,
     dieze_tag,
+    forces,
     pubchem,
 ):
-    import os
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -315,6 +321,9 @@ def gaussian(  # noqa: PLR0912, PLR0915
     if dieze_tag is not None:
         job_settings.dieze_tag = dieze_tag
         keywords += ("dieze_tag",)
+    if forces:
+        job_settings.forces = forces
+        keywords += ("forces",)
 
     # obtain molecule structure
     if filename is None and pubchem is None:
@@ -359,6 +368,8 @@ def gaussian(  # noqa: PLR0912, PLR0915
     if index is not None:
         list_of_indices = get_list_from_string_range(index)
         molecules = [molecules[i - 1] for i in list_of_indices]
+
+    logger.debug(f"Obtained molecules: {molecules}")
 
     # store objects
     ctx.obj["project_settings"] = project_settings

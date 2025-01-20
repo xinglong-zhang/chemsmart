@@ -41,6 +41,7 @@ class ORCAJobSettings(MolecularJobSettings):
         mdci_cutoff=None,
         mdci_density=None,
         job_type=None,
+        title=None,
         solvent_model=None,
         solvent_id=None,
         additional_route_parameters=None,
@@ -66,6 +67,7 @@ class ORCAJobSettings(MolecularJobSettings):
             freq=freq,
             numfreq=numfreq,
             job_type=job_type,
+            title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
             additional_route_parameters=additional_route_parameters,
@@ -267,6 +269,7 @@ class ORCAJobSettings(MolecularJobSettings):
             mdci_cutoff=None,
             mdci_density=None,
             job_type=None,
+            title=None,
             solvent_model=None,
             solvent_id=None,
             additional_route_parameters=None,
@@ -280,6 +283,77 @@ class ORCAJobSettings(MolecularJobSettings):
             forces=False,
             input_string=None,
         )
+
+    @property
+    def route_string(self):
+        if self.route_to_be_written is not None:
+            route_string = self._get_route_string_from_user_input()
+        else:
+            route_string = self._get_route_string_from_jobtype()
+        logger.debug(f"Route for settings {self}: {route_string}")
+        return route_string
+
+    def _get_route_string_from_user_input(self):
+        route_string = self.route_to_be_written
+        if not route_string.startswith("!"):
+            route_string = f"! {route_string}"
+        return route_string
+
+    def _get_route_string_from_jobtype(self):
+        """Get the ORCA job route string from the ORCA job type."""
+        route_string = ""
+        if not route_string.startswith("!"):
+            route_string += "! "
+
+        # route string depends on job type
+        # determine if route string requires 'opt' keyword
+        if self.job_type in ("opt", "modred", "scan"):
+            route_string += "Opt"
+        elif self.job_type == "ts":
+            route_string += (
+                "OptTS"  # Orca keyword for transition state optimization
+            )
+        elif self.job_type == "irc":
+            route_string += "IRC"
+        elif self.job_type == "sp":
+            route_string += ""
+
+        # add frequency calculation
+        # not okay if both freq and numfreq are True
+        if self.freq and self.numfreq:
+            raise ValueError("Cannot specify both freq and numfreq!")
+
+        if self.freq:
+            route_string += " Freq"
+        elif self.numfreq:
+            route_string += " NumFreq"  # requires numerical frequency,
+            # e.g., in SMD model where analytic Hessian is not available
+
+        # write level of theory
+        level_of_theory = self._get_level_of_theory()
+        route_string += f" {level_of_theory}"
+
+        # write grid information
+        if self.defgrid is not None:
+            route_string += (
+                f" {self.defgrid}"  # default is 'defgrid2', if not specified
+            )
+
+        # write convergence criteria in simple input/route
+        if self.scf_tol is not None:
+            if not self.scf_tol.lower().endswith("scf"):
+                self.scf_tol += "SCF"
+            route_string += f" {self.scf_tol}"
+
+        # write convergence algorithm if not default
+        if self.scf_algorithm is not None:
+            route_string += f" {self.scf_algorithm}"
+
+        # write solvent if solvation is turned on
+        if self.solv:
+            route_string += f" CPCM({self.solvent_id})"
+
+        return route_string
 
     def write_orca_input_from_job(self, job, jobrunner, **kwargs):
         return self.write_orca_input(
@@ -344,65 +418,6 @@ class ORCAJobSettings(MolecularJobSettings):
             self.route_to_be_written = f"! {self.route_to_be_written}"
         route_string = self.route_to_be_written
         f.write(f"{route_string}\n")
-
-    def _write_route_section_default(self, f):
-        route_string = self._write_route_string(job_type=self.job_type)
-        f.write(f"{route_string}\n")
-
-    def _write_route_string(self, job_type):  # noqa: PLR0912
-        route_string = ""
-        if not route_string.startswith("!"):
-            route_string += "! "
-
-        # route string depends on job type
-        # determine if route string requires 'opt' keyword
-        if job_type in ("opt", "modred", "scan"):
-            route_string += "Opt"
-        elif job_type == "ts":
-            route_string += (
-                "OptTS"  # Orca keyword for transition state optimization
-            )
-        elif job_type == "irc":
-            route_string += "IRC"
-        elif job_type == "sp":
-            route_string += ""
-
-        # add frequency calculation
-        # not okay if both freq and numfreq are True
-        if self.freq and self.numfreq:
-            raise ValueError("Cannot specify both freq and numfreq!")
-
-        if self.freq:
-            route_string += " Freq"
-        elif self.numfreq:
-            route_string += " NumFreq"  # requires numerical frequency,
-            # e.g., in SMD model where analytic Hessian is not available
-
-        # write level of theory
-        level_of_theory = self._get_level_of_theory()
-        route_string += f" {level_of_theory}"
-
-        # write grid information
-        if self.defgrid is not None:
-            route_string += (
-                f" {self.defgrid}"  # default is 'defgrid2', if not specified
-            )
-
-        # write convergence criteria in simple input/route
-        if self.scf_tol is not None:
-            if not self.scf_tol.lower().endswith("scf"):
-                self.scf_tol += "SCF"
-            route_string += f" {self.scf_tol}"
-
-        # write convergence algorithm if not default
-        if self.scf_algorithm is not None:
-            route_string += f" {self.scf_algorithm}"
-
-        # write solvent if solvation is turned on
-        if self.solv:
-            route_string += f" CPCM({self.solvent_id})"
-
-        return route_string
 
     def _get_level_of_theory(self):
         level_of_theory = ""
@@ -618,6 +633,34 @@ class ORCAJobSettings(MolecularJobSettings):
             coordinates += string
         f.write(coordinates)
         f.write("*\n")
+
+    def remove_solvent(self):
+        self.solvent_model = None
+        self.solvent_id = None
+
+    def update_solvent(self, solvent_model=None, solvent_id=None):
+        """Update solvent model and solvent identity for implicit solvation.
+
+        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
+        """
+        # update only if not None; do not update to default value of None
+        if solvent_model is not None:
+            if solvent_model.lower() not in gaussian_solvation_models:
+                raise ValueError(
+                    f"The specified solvent model {solvent_model} is not in \n"
+                    f"the available solvent models: {gaussian_solvation_models}"
+                )
+
+            self.solvent_model = solvent_model
+
+        if solvent_id is not None:
+            self.solvent_id = solvent_id
+
+    def modify_solvent(self, remove_solvent=False, **kwargs):
+        if not remove_solvent:
+            self.update_solvent(**kwargs)
+        else:
+            self.remove_solvent()
 
     def apply_on(self, job, jobrunner):
         if (

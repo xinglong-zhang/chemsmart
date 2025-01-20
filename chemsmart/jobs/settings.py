@@ -23,6 +23,7 @@ class MolecularJobSettings:
         freq=True,
         numfreq=False,
         job_type=None,
+        title=None,
         solvent_model=None,
         solvent_id=None,
         additional_route_parameters=None,
@@ -47,6 +48,7 @@ class MolecularJobSettings:
         self.freq = freq
         self.numfreq = numfreq
         self.job_type = job_type
+        self.title = title
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.additional_route_parameters = additional_route_parameters

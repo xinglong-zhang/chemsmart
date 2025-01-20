@@ -59,6 +59,7 @@ class GaussianJobSettings(MolecularJobSettings):
             freq=freq,
             numfreq=numfreq,
             job_type=job_type,
+            title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
             additional_route_parameters=additional_route_parameters,
@@ -74,7 +75,6 @@ class GaussianJobSettings(MolecularJobSettings):
             **kwargs,
         )
         self.chk = chk
-        self.title = title
         self.dieze_tag = dieze_tag
         self.additional_opt_options_in_route = additional_opt_options_in_route
         self.append_additional_info = append_additional_info
