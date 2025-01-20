@@ -33,6 +33,7 @@ class MolecularJobSettings:
         light_elements_basis=None,
         custom_solvent=None,
         forces=False,
+        input_string=None,
         **kwargs,
     ):
         self.ab_initio = ab_initio
@@ -76,6 +77,7 @@ class MolecularJobSettings:
             self.custom_solvent = None
 
         self.forces = forces
+        self.input_string = input_string
 
     def set_custom_solvent_via_file(self, filename):
         if not os.path.exists(os.path.expanduser(filename)):
