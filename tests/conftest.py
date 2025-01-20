@@ -472,7 +472,7 @@ def orca_test_directory(test_data_directory):
 # orca input files path and associated files
 @pytest.fixture()
 def inpfile_path(orca_test_directory):
-    test_inpfile_path = os.path.join(orca_test_directory, "orca_inputs")
+    test_inpfile_path = os.path.join(orca_test_directory, "inputs")
     return os.path.abspath(test_inpfile_path)
 
 
@@ -497,13 +497,13 @@ def sdf_file(test_data_directory):
 # orca input files path and associated files
 @pytest.fixture()
 def orca_inputs_directory(orca_test_directory):
-    orca_inputs_directory = os.path.join(orca_test_directory, "orca_inputs")
+    orca_inputs_directory = os.path.join(orca_test_directory, "inputs")
     return os.path.abspath(orca_inputs_directory)
 
 
 @pytest.fixture()
 def orca_dias_directory(orca_test_directory):
-    orca_dias_directory = os.path.join(orca_test_directory, "orca_dias")
+    orca_dias_directory = os.path.join(orca_test_directory, "dias")
     return os.path.abspath(orca_dias_directory)
 
 
@@ -529,7 +529,7 @@ def orca_faulty_solv(orca_inputs_directory):
 
 @pytest.fixture()
 def orca_outputs_directory(orca_test_directory):
-    orca_outputs_directory = os.path.join(orca_test_directory, "orca_outputs")
+    orca_outputs_directory = os.path.join(orca_test_directory, "outputs")
     return os.path.abspath(orca_outputs_directory)
 
 
@@ -572,7 +572,7 @@ def water_engrad_path(orca_outputs_directory):
 @pytest.fixture()
 def orca_errors_directory(orca_test_directory):
     orca_errors_directory = os.path.join(
-        orca_test_directory, "orca_error_files"
+        orca_test_directory, "error_files"
     )
     return os.path.abspath(orca_errors_directory)
 
