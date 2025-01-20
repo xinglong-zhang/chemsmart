@@ -1,11 +1,7 @@
 import logging
 import os.path
 
-from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.writer import InputWriter
-from chemsmart.utils.utils import (
-    get_prepend_string_list_from_modred_free_format,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +61,12 @@ class ORCAInputWriter(InputWriter):
 
     def _write_processors(self, f):
         logger.debug("Writing processors.")
-        f.write(f"# Number of processors")
+        f.write("# Number of processors")
         f.write(f"%pal nprocs {self.jobrunner.num_cores} end\n")
 
     def _write_memory(self, f):
         logger.debug("Writing memory.")
-        f.write(f"# Memory per core")
+        f.write("# Memory per core")
         mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
         f.write(f"%maxcore {mpc}\n")
 
@@ -86,8 +82,8 @@ class ORCAInputWriter(InputWriter):
         if mdci_cutoff is not None:
             # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
             assert mdci_cutoff in ["loose", "normal", "tight"], (
-                f"mdci_cutoff must be one of the allowed values: "
-                f"['loose', 'normal', 'tight']"
+                "mdci_cutoff must be one of the allowed values: "
+                "['loose', 'normal', 'tight']"
             )
             f.write("%mdci\n")
             if mdci_cutoff.lower() == "loose":
@@ -108,8 +104,8 @@ class ORCAInputWriter(InputWriter):
             if mdci_density is not None:
                 # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
                 assert mdci_density in ["none", "unrelaxed", "relaxed"], (
-                    f"mdci_density must be one of the allowed values: "
-                    f"['none', 'unrelaxed', 'relaxed']"
+                    "mdci_density must be one of the allowed values: "
+                    "['none', 'unrelaxed', 'relaxed']"
                 )
                 if mdci_density.lower() == "none":
                     f.write("  Density None  # no density\n")

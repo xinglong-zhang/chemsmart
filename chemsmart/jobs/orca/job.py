@@ -3,6 +3,7 @@ import os
 import shutil
 from contextlib import suppress
 from typing import Type
+
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.settings import ORCAJobSettings

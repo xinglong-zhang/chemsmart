@@ -1,6 +1,7 @@
 import os
-from chemsmart.settings.server import Server
+
 from chemsmart.settings.executable import GaussianExecutable
+from chemsmart.settings.server import Server
 
 
 class TestServer:

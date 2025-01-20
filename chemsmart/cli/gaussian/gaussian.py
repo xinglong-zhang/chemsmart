@@ -1,6 +1,7 @@
-import click
 import functools
 import logging
+
+import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
@@ -256,6 +257,7 @@ def gaussian(  # noqa: PLR0912, PLR0915
     pubchem,
 ):
     import os
+
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
 

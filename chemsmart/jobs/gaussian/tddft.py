@@ -1,4 +1,5 @@
 from typing import Type
+
 from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
 

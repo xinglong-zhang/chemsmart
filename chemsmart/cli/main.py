@@ -1,10 +1,13 @@
 """CLI interface for chemsmart project."""
 
-import click
 import logging
+
+import click
+
+from chemsmart.utils.cli import MyGroup
+
 from .run import run
 from .sub import sub
-from chemsmart.utils.cli import MyGroup
 
 
 @click.group(cls=MyGroup)

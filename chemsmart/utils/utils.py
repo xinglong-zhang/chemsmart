@@ -1,12 +1,13 @@
+import copy
+import hashlib
 import os
 import re
 import time
-import hashlib
-import copy
-import numpy as np
 from functools import lru_cache, wraps
 from itertools import groupby
 from typing import Union
+
+import numpy as np
 
 
 def file_cache(copy_result=True, maxsize=64):

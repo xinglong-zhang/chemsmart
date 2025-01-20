@@ -2,10 +2,11 @@ import copy
 import logging
 import os
 import re
-from chemsmart.jobs.settings import MolecularJobSettings
-from chemsmart.io.gaussian.gengenecp import GenGenECPSection
-from chemsmart.utils.periodictable import PeriodicTable
+
 from chemsmart.io.gaussian import GaussianRefs
+from chemsmart.io.gaussian.gengenecp import GenGenECPSection
+from chemsmart.jobs.settings import MolecularJobSettings
+from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
 gaussian_ab_initio = GaussianRefs().gaussian_ab_initio

@@ -1,14 +1,15 @@
 import math
 import os
+
 import numpy as np
 import pytest
 from ase import units
+
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.molecules.structure import Molecule, CoordinateBlock
-from chemsmart.io.orca.output import ORCAEngradFile
+from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.route import ORCARoute
 
 
 class TestORCARoute:

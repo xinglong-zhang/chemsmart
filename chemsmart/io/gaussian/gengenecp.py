@@ -1,11 +1,11 @@
 import logging
 import os
 
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import (
     content_blocks_by_paragraph,
     write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
-from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
 

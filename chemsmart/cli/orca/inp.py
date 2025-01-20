@@ -1,10 +1,12 @@
-import click
 import logging
+
+import click
+
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.orca.orca import orca
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
-from chemsmart.cli.orca.orca import orca
 
 logger = logging.getLogger(__name__)
 

@@ -3,9 +3,10 @@ import logging
 import os
 
 import click
+
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.utils import string2index_1based
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,6 @@ def orca(
     pubchem,
 ):
 
-    import os
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
 
@@ -126,7 +126,6 @@ def orca(
     project_settings = ORCAProjectSettings.from_project(project)
 
     # obtain ORCA Settings from filename, if supplied; otherwise return defaults
-    from chemsmart.jobs.orca.settings import ORCAJobSettings
 
     if filename is None:
         job_settings = ORCAJobSettings.default()

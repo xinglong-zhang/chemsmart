@@ -1,7 +1,9 @@
 import os
+
 import pytest
-from chemsmart.settings.server import Server
+
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -571,9 +573,7 @@ def water_engrad_path(orca_outputs_directory):
 
 @pytest.fixture()
 def orca_errors_directory(orca_test_directory):
-    orca_errors_directory = os.path.join(
-        orca_test_directory, "error_files"
-    )
+    orca_errors_directory = os.path.join(orca_test_directory, "error_files")
     return os.path.abspath(orca_errors_directory)
 
 

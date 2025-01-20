@@ -1,5 +1,7 @@
 import os
+
 import numpy as np
+
 from chemsmart.utils.mixins import FileMixin
 
 

@@ -1,24 +1,25 @@
-import re
 import logging
-from itertools import islice
+import re
 from functools import cached_property
+from itertools import islice
+
 import numpy as np
 from ase import units
+
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.mixins import GaussianFileMixin
-from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     eV_pattern,
-    nm_pattern,
     f_pattern,
     float_pattern,
-    normal_mode_pattern,
     frozen_coordinates_pattern,
-    scf_energy_pattern,
     mp2_energy_pattern,
+    nm_pattern,
+    normal_mode_pattern,
     oniom_energy_pattern,
+    scf_energy_pattern,
 )
-from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import string2index_1based
 
 p = PeriodicTable()

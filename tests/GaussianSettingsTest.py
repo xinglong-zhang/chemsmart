@@ -1,6 +1,6 @@
-from chemsmart.jobs.settings import read_molecular_job_yaml
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.settings import read_molecular_job_yaml
 
 
 class TestGaussianJobSettings:

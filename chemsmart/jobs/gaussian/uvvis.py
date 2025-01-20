@@ -1,7 +1,7 @@
 from copy import deepcopy
 
-from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.job import GaussianJob
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
 

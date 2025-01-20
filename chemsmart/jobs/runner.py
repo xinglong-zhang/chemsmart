@@ -3,9 +3,10 @@ import logging
 import os
 from abc import abstractmethod
 from functools import lru_cache
-from chemsmart.utils.mixins import RegistryMixin
+
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin
 
 user_settings = ChemsmartUserSettings()
 

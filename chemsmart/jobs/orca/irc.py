@@ -1,7 +1,6 @@
 import logging
 
 import click
-
 from pyatoms.cli.job import click_job_options
 from pyatoms.jobs.orca.job import ORCAJob
 from pyatoms.utils.cli import MyCommand

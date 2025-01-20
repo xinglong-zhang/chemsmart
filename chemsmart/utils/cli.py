@@ -1,10 +1,11 @@
 """Utility functions for command line interface."""
 
-import typing as t
-import click
-from click import Context
 import copy
 import logging
+import typing as t
+
+import click
+from click import Context
 
 logger = logging.getLogger(__name__)
 

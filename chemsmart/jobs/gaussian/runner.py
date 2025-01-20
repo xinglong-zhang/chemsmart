@@ -1,18 +1,18 @@
 import logging
 import os
-import sys
 import shlex
 import subprocess
+import sys
 from contextlib import suppress
-from functools import lru_cache
 from datetime import datetime
+from functools import lru_cache
 from glob import glob
 from random import random
 from shutil import copy, rmtree
 
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
-from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()

@@ -1,10 +1,11 @@
-import click
 import logging
 
+import click
+
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
-from chemsmart.cli.gaussian.gaussian import gaussian
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,8 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
     # Set atoms to freeze
 
     from chemsmart.utils.utils import (
-        get_list_from_string_range,
         convert_list_to_gaussian_frozen_list,
+        get_list_from_string_range,
     )
 
     if freeze_atoms is not None:

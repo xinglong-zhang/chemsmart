@@ -2,12 +2,15 @@ import copy
 import logging
 import os
 from contextlib import suppress
-from chemsmart.jobs.settings import MolecularJobSettings
-from chemsmart.jobs.settings import read_molecular_job_yaml
+
+from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
+from chemsmart.jobs.settings import (
+    MolecularJobSettings,
+    read_molecular_job_yaml,
+)
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
-from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
 
 logger = logging.getLogger(__name__)
 

@@ -2,12 +2,14 @@ import logging
 import multiprocessing
 import typing
 from functools import partial
+
 import numpy as np
 from ase import Atoms
-from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.io.ase import AseAtomsAdaptor
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import reverse_cuthill_mckee
+
 from chemsmart.io.molecules.structure import Molecule
 
 logger = logging.getLogger(__name__)

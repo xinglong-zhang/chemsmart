@@ -7,11 +7,10 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.utils.logger import create_logger
-from chemsmart.settings.server import Server
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.cli import CtxObjArguments
+from chemsmart.settings.server import Server
+from chemsmart.utils.cli import CtxObjArguments, MyGroup
+from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 
