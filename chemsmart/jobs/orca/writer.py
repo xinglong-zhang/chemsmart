@@ -57,7 +57,6 @@ class ORCAInputWriter(InputWriter):
         logger.debug("Writing ORCA route section.")
         route_string = self.settings.route_string
         f.write(route_string + "\n")
-        f.write("\n")
 
     def _write_processors(self, f):
         logger.debug("Writing processors.")
@@ -68,7 +67,7 @@ class ORCAInputWriter(InputWriter):
         logger.debug("Writing memory.")
         f.write("# Memory per core\n")
         mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
-        f.write(f"%maxcore {mpc}\n")
+        f.write(f"%maxcore {round(mpc)}\n")
 
     def _write_scf_iterations(self, f):
         logger.debug("Writing SCF iterations.")
@@ -76,10 +75,10 @@ class ORCAInputWriter(InputWriter):
             f.write(f"%scf maxiter {self.settings.scf_maxiter} end\n")
 
     def _write_mdci_block(self, f):
-        logger.debug("Writing MDCI block.")
         mdci_cutoff = self.settings.mdci_cutoff
         mdci_density = self.settings.mdci_density
         if mdci_cutoff is not None:
+            logger.debug("Writing MDCI block.")
             # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
             assert mdci_cutoff in ["loose", "normal", "tight"], (
                 "mdci_cutoff must be one of the allowed values: "
@@ -117,12 +116,12 @@ class ORCAInputWriter(InputWriter):
 
     def _write_elprop_block(self, f):
         """Write the elprop block for the ORCA input file."""
-        logger.debug("Writing elprop block.")
         dipole = self.settings.dipole
         quadrupole = self.settings.quadrupole
-        if dipole is not None or quadrupole is not None:
+        if dipole or quadrupole:
+            logger.debug("Writing elprop block.")
             f.write("%elprop\n")
-            if dipole is True:
+            if dipole:
                 f.write("  Dipole True\n")
             else:
                 f.write("  Dipole False\n")
