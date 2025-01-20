@@ -35,47 +35,106 @@ class ORCAInputWriter(InputWriter):
         f.close()
 
     def _write_all(self, f):
-        self._write_gaussian_header(f)
+        """Write the entire input file."""
         self._write_route_section(f)
-        self._write_gaussian_title(f)
+        self._write_processors(f)
+        self._write_memory(f)
+        self._write_scf_iterations(f)
+        self._write_mdci_block(f)
+        self._write_elprop_block(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
-        self._append_modredundant(f)
-        self._append_gen_genecp_basis(f)  # then write genecp info
-        self._append_custom_solvent_parameters(
-            f
-        )  # followed by user defined solvent parameters
-        self._append_job_specific_info(f)
-        self._append_other_additional_info(f)
-        if isinstance(self.job.settings, GaussianLinkJobSettings):
-            self._write_link_section(f)
+        # other functionalities in ORCA input job may be implemented here
+        # self._append_modredundant(f)
+        # self._append_gen_genecp_basis(f)  # then write genecp info
+        # self._append_custom_solvent_parameters(
+        #     f
+        # )  # followed by user defined solvent parameters
+        # self._append_job_specific_info(f)
+        # self._append_other_additional_info(f)
 
     def _write_self(self, f):
         """Write the input file itself for direct run."""
         f.write(self.job.settings.input_string)
 
-    def _write_gaussian_header(self, f):
-        logger.debug("Writing Gaussian header.")
-        if self.job.settings.chk:
-            logger.debug(f"Writing chk file: {self.job.label}.chk")
-            f.write(f"%chk={self.job.label}.chk\n")
-        num_cores = self.jobrunner.num_cores if not None else 12
-        mem_gb = self.jobrunner.mem_gb if not None else 16
-        logger.debug(f"Writing nprocshared={num_cores} and mem={mem_gb}GB.")
-        f.write(f"%nprocshared={num_cores}\n")
-        f.write(f"%mem={mem_gb}GB\n")
-
     def _write_route_section(self, f):
-        logger.debug("Writing route section.")
-        route_string = self.job.settings.route_string
+        logger.debug("Writing ORCA route section.")
+        route_string = self.settings.route_string
         f.write(route_string + "\n")
         f.write("\n")
 
-    def _write_gaussian_title(self, f):
-        logger.debug("Writing Gaussian title.")
-        title = self.job.settings.title
-        f.write(f"{title}\n")
-        f.write("\n")
+    def _write_processors(self, f):
+        logger.debug("Writing processors.")
+        f.write(f"# Number of processors")
+        f.write(f"%pal nprocs {self.jobrunner.num_cores} end\n")
+
+    def _write_memory(self, f):
+        logger.debug("Writing memory.")
+        f.write(f"# Memory per core")
+        mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
+        f.write(f"%maxcore {mpc}\n")
+
+    def _write_scf_iterations(self, f):
+        logger.debug("Writing SCF iterations.")
+        if self.settings.scf_maxiter is not None:
+            f.write(f"%scf maxiter {self.settings.scf_maxiter} end\n")
+
+    def _write_mdci_block(self, f):
+        logger.debug("Writing MDCI block.")
+        mdci_cutoff = self.settings.mdci_cutoff
+        mdci_density = self.settings.mdci_density
+        if mdci_cutoff is not None:
+            # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
+            assert mdci_cutoff in ["loose", "normal", "tight"], (
+                f"mdci_cutoff must be one of the allowed values: "
+                f"['loose', 'normal', 'tight']"
+            )
+            f.write("%mdci\n")
+            if mdci_cutoff.lower() == "loose":
+                f.write("  # loose cutoff\n")
+                f.write("  TCutPairs 1e-3\n")
+                f.write("  TCutPNO 1e-6\n")
+                f.write("  TCutMKN 1e-3\n")
+            elif mdci_cutoff.lower() == "normal":
+                f.write("  # normal cutoff\n")
+                f.write("  TCutPairs 1e-4\n")
+                f.write("  TCutPNO 3.33e-7\n")
+                f.write("  TCutMKN 1e-3\n")
+            elif mdci_cutoff.lower() == "tight":
+                f.write("  # tight cutoff\n")
+                f.write("  TCutPairs 1e-5\n")
+                f.write("  TCutPNO 1e-7\n")
+                f.write("  TCutMKN 1e-4\n")
+            if mdci_density is not None:
+                # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
+                assert mdci_density in ["none", "unrelaxed", "relaxed"], (
+                    f"mdci_density must be one of the allowed values: "
+                    f"['none', 'unrelaxed', 'relaxed']"
+                )
+                if mdci_density.lower() == "none":
+                    f.write("  Density None  # no density\n")
+                elif mdci_density.lower() == "unrelaxed":
+                    f.write("  Density Unrelaxed  # unrelaxed density\n")
+                elif mdci_density.lower() == "relaxed":
+                    f.write("  Density Relaxed  # relaxed density\n")
+            f.write("end\n")
+
+    def _write_elprop_block(self, f):
+        """Write the elprop block for the ORCA input file."""
+        logger.debug("Writing elprop block.")
+        dipole = self.settings.dipole
+        quadrupole = self.settings.quadrupole
+        if dipole is not None or quadrupole is not None:
+            f.write("%elprop\n")
+            if dipole is True:
+                f.write("  Dipole True\n")
+            else:
+                f.write("  Dipole False\n")
+            if quadrupole is True:
+                f.write("  Quadrupole True\n")
+            else:
+                f.write("  Quadrupole False\n")
+            f.write("end\n")
 
     def _write_charge_and_multiplicity(self, f):
         logger.debug("Writing charge and multiplicity.")
@@ -84,130 +143,12 @@ class ORCAInputWriter(InputWriter):
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
-        f.write(f"{charge} {multiplicity}\n")
+        f.write(f"* xyz {charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
         logger.debug(
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
-        self.job.molecule.write_coordinates(f, program="gaussian")
-        f.write("\n")
-
-    def _append_modredundant(self, f):
-        """Write modred section if present in the job settings.
-        Given a list or list of lists, write the modred section for the constraints.
-        Given a dictionary with 'num_steps', 'step_size', and 'coords', write the scan section.
-        """
-        logger.debug("Writing modred section.")
-        modredundant = self.job.settings.modred
-        if modredundant is not None:
-            if isinstance(modredundant, list):
-                # for modredunant job
-                # modred = [[1,2], [3,4]]
-                prepend_string_list = (
-                    get_prepend_string_list_from_modred_free_format(
-                        input_modred=modredundant
-                    )
-                )
-                for prepend_string in prepend_string_list:
-                    f.write(f"{prepend_string} F\n")
-                f.write("\n")
-            elif isinstance(modredundant, dict):
-                # for scanning job
-                # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
-                coords_list = modredundant["coords"]
-                prepend_string_list = (
-                    get_prepend_string_list_from_modred_free_format(
-                        input_modred=coords_list
-                    )
-                )
-                for prepend_string in prepend_string_list:
-                    f.write(
-                        f"{prepend_string} S {self.settings.modred['num_steps']} {self.settings.modred['step_size']}\n"
-                    )
-                f.write("\n")
-            else:
-                raise ValueError(
-                    "modredundant must be a list or dictionary with 'num_steps', 'step_size', and 'coords'."
-                )
-
-    def _append_gen_genecp_basis(self, f):
-        """Write the genecp basis set information if present in the job settings."""
-        logger.debug("Writing gen/genecp basis set information.")
-        if self.settings.genecp:
-            genecp_section = self.settings.get_genecp_section(
-                molecule=self.job.molecule
-            )
-            f.write(genecp_section.string)
-            # check that the last line of genecp_section.string is empty, if not, add an empty line
-            if genecp_section.string_list[-1] != "\n":
-                f.write("\n")
-
-    def _append_custom_solvent_parameters(self, f):
-        """Write the custom solvent parameters if present in the job settings."""
-        logger.debug("Writing custom solvent parameters.")
-        custom_solvent = self.settings.custom_solvent
-        if custom_solvent is not None:
-            f.write(custom_solvent)
-            f.write("\n")
-
-    def _append_job_specific_info(self, f):
-        """Write any job specific information that needs to be appended to the input file."""
-        logger.debug("Writing job specific information.")
-        job_type = self.settings.job_type
-        job_label = self.job.label
-        if job_type == "nci":
-            # appending for nci job
-            f.write(f"{job_label}.wfn\n")
-            f.write("\n")
-        elif job_type == "wbi":
-            # appending for wbi job
-            f.write("$nbo bndidx $end\n")
-            f.write("\n")
-        elif job_type == "resp":
-            # appending for resp job
-            f.write(f"{job_label}.gesp\n")
-            f.write("\n")
-
-    def _append_other_additional_info(self, f):
-        """Write any additional information that needs to be appended to the input file."""
-        logger.debug("Writing other additional information.")
-        append_additional_info = self.settings.append_additional_info
-        if append_additional_info is not None:
-            if isinstance(append_additional_info, str) and os.path.exists(
-                os.path.expanduser(append_additional_info)
-            ):
-                # path to the file for additional append info
-                with open(append_additional_info) as g:
-                    for line in g.readlines():
-                        f.write(line)
-            else:
-                # ensures that the additional append info can be supplied in free string format
-                line_elem = append_additional_info.strip().split("\n")
-                for line in line_elem:
-                    f.write(f"{line}\n")
-
-    def _write_link_section(self, f):
-        """Write the link section for the input file."""
-        logger.debug("Writing link section.")
-        if self.settings.link:
-            f.write("--Link1--\n")
-            self._write_gaussian_header(f)
-            self._write_link_route(f)
-            self._write_gaussian_title(f)
-            self._write_charge_and_multiplicity(f)
-            f.write("\n")
-            self._append_modredundant(f)
-            self._append_gen_genecp_basis(f)  # then write genecp info
-            self._append_custom_solvent_parameters(
-                f
-            )  # followed by user defined solvent parameters
-            self._append_job_specific_info(f)
-            self._append_other_additional_info(f)
-
-    def _write_link_route(self, f):
-        """Write the route section for the link job."""
-        logger.debug("Writing link route section.")
-        f.write(f"{self.settings.link_route_string}\n")
-        f.write("\n")
+        self.job.molecule.write_coordinates(f, program="orca")
+        f.write("*\n")
