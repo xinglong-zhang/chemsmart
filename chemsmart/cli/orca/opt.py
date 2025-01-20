@@ -2,8 +2,8 @@ import logging
 
 import click
 
-from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.orca.orca import orca
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -16,10 +16,17 @@ logger = logging.getLogger(__name__)
     "-f",
     "--freeze-atoms",
     type=str,
-    help="Indices of atoms to freeze for constrained optimization.",
+    help="Indices of atoms to freeze for constrained optimization. 1-indexed.",
+)
+@click.option(
+    "-i",
+    "--invert-constraints/--no-invert-constraints",
+    default=False,
+    type=bool,
+    help="Invert the constraints for frozen atoms in optimization.",
 )
 @click.pass_context
-def opt(ctx, freeze_atoms, skip_completed, **kwargs):
+def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -31,6 +38,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
+    opt_settings.invert_constraints = invert_constraints
 
     check_charge_and_multiplicity(opt_settings)
 

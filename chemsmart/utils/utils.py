@@ -162,6 +162,17 @@ def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
     return masks
 
 
+def convert_list_to_orca_frozen_list(list_of_indices, molecule):
+    """Convert a list of indices to a list of indices for Orca frozen list.
+    Use 0-indexed list.
+    """
+    num_atoms_in_molecule = len(molecule.chemical_symbols)
+    masks = [0] * num_atoms_in_molecule
+    for i in list_of_indices:
+        masks[i] = -1
+    return masks
+
+
 def str_indices_range_to_list(str_indices):
     """Convert a supplied string of indices to a list of indices. All 1-indexed.
 

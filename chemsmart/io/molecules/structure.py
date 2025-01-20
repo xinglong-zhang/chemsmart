@@ -364,16 +364,13 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        if self.frozen_atoms is None:
-            for i, (s, (x, y, z)) in enumerate(
-                zip(self.chemical_symbols, self.positions)
-            ):
-                f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
 
-        else:
-            # TODO
-            # need to check if and how ORCA implements frozen atoms
-            pass
+        # if self.frozen_atoms is None:
+        # commented above out since with frozen atom or not, the geometry is written the same way
+        for i, (s, (x, y, z)) in enumerate(
+            zip(self.chemical_symbols, self.positions)
+        ):
+            f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
 
     def _write_orca_pbc_coordinates(self, f):
         # ORCA cannot do PBC calculations

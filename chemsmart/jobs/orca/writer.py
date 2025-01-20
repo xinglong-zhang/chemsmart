@@ -43,6 +43,9 @@ class ORCAInputWriter(InputWriter):
         self._write_mdci_block(f)
         self._write_elprop_block(f)
         self._write_modred_block(f)
+        self._write_hessian_block(f)
+        self._write_irc_block(f)
+        self._write_constrained_atoms(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
         # other functionalities in ORCA input job may be implemented here
@@ -177,7 +180,8 @@ class ORCAInputWriter(InputWriter):
         elif isinstance(modred, dict):
             self._write_modred_if_dict(f, modred)
 
-    def _write_modred_if_list(self, f, modred):
+    @staticmethod
+    def _write_modred_if_list(f, modred):
         f.write("  Constraints\n")
         # append for modred jobs
         # 'self.modred' as list of lists, or a single list if only one fixed constraint
@@ -189,7 +193,8 @@ class ORCAInputWriter(InputWriter):
         # write 'end' for each modred specified
         f.write("  end\n")
 
-    def _write_modred_if_dict(self, f, modred):
+    @staticmethod
+    def _write_modred_if_dict(f, modred):
         f.write("  Scan\n")
         # append for scanning job
         # self.modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
@@ -205,6 +210,25 @@ class ORCAInputWriter(InputWriter):
             )
         # write 'end' for each modred specified
         f.write("  end\n")
+
+    def _write_hessian_block(self, f):
+        # optional in subclasses
+        pass
+
+    def _write_irc_block(self, f):
+        pass
+
+    def _write_constrained_atoms(self, f):
+        """Write constraints on atoms in a molecule, if specified via frozen_atoms."""
+        molecule = self.job.molecule
+        if molecule.frozen_atoms:
+            f.write("%geom\n")
+            for i, val in enumerate(molecule.frozen_atoms):
+                if val == -1:
+                    f.write(f"  {{ C {i} C }}\n")  # ORCA is 0-indexed
+            if self.settings.invert_constraints:
+                f.write("  InvertConstraints True\n")
+            f.write("end\n")
 
     def _write_charge_and_multiplicity(self, f):
         logger.debug("Writing charge and multiplicity.")

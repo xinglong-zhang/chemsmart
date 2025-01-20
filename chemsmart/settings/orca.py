@@ -1,10 +1,7 @@
 import logging
 import os
 
-from chemsmart.jobs.orca.settings import (
-    ORCAIRCJobSettings,
-    ORCAJobSettings,
-)
+from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCAJobSettings
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 

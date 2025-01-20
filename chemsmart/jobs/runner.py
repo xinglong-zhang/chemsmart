@@ -32,7 +32,7 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=False,
+        scratch=None,
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -175,7 +175,7 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=False, fake=False, **kwargs):
+    def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
         jobtype = job.TYPE
 

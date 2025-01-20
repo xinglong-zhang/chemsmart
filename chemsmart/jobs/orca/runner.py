@@ -43,7 +43,7 @@ class ORCAJobRunner(JobRunner):
 
     FAKE = False
 
-    def __init__(self, server, scratch=True, fake=False, **kwargs):
+    def __init__(self, server, scratch=None, fake=False, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
@@ -353,7 +353,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
         "orcairc",
     ]
 
-    def __init__(self, server, num_nodes, scratch=False, **kwargs):
+    def __init__(self, server, num_nodes, scratch=None, **kwargs):
         super().__init__(
             server=server, num_nodes=num_nodes, scratch=scratch, **kwargs
         )

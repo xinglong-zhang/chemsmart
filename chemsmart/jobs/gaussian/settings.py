@@ -3,11 +3,11 @@ import logging
 import os
 import re
 
-from chemsmart.io.gaussian.gengenecp import GenGenECPSection
-from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.io.gaussian import (
     GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
 )
+from chemsmart.io.gaussian.gengenecp import GenGenECPSection
+from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()

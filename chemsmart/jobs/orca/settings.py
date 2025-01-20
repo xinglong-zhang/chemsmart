@@ -2,13 +2,12 @@ import copy
 import logging
 import os
 from contextlib import suppress
-from chemsmart.jobs.settings import (
-    MolecularJobSettings,
-)
+
+from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS as orca_solvation_models
+from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
-from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS as orca_solvation_models
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,7 @@ class ORCAJobSettings(MolecularJobSettings):
         custom_solvent=None,
         forces=False,
         input_string=None,
+        invert_constraints=False,
         **kwargs,
     ):
         super().__init__(
@@ -92,6 +92,7 @@ class ORCAJobSettings(MolecularJobSettings):
         self.mdci_density = mdci_density
         self.dipole = dipole
         self.quadrupole = quadrupole
+        self.invert_constraints = invert_constraints
 
         if forces is True and (freq is True or numfreq is True):
             raise ValueError(
@@ -277,6 +278,7 @@ class ORCAJobSettings(MolecularJobSettings):
             custom_solvent=None,
             forces=False,
             input_string=None,
+            invert_constraints=False,
         )
 
     @property
@@ -435,57 +437,6 @@ class ORCAJobSettings(MolecularJobSettings):
             level_of_theory += f" {self.extrapolation_basis}"
         return level_of_theory
 
-    def _write_modred_block(self, f):
-        if self.modred:
-            f.write("%geom\n")
-            self._write_modred(f)
-            f.write("end\n")
-
-    def _write_modred(self, f):
-        if isinstance(self.modred, list):
-            self._write_modred_if_list(f, self.modred)
-        elif isinstance(self.modred, dict):
-            self._write_modred_if_dict(f, self.modred)
-
-    def _write_modred_if_list(self, f, modred):
-        f.write("  Constraints\n")
-        # append for modred jobs
-        # 'self.modred' as list of lists, or a single list if only one fixed constraint
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=modred, program_type="orca"
-        )
-        for prepend_string in prepend_string_list:
-            f.write(f"  {{{prepend_string} C}}\n")
-        # write 'end' for each modred specified
-        f.write("  end\n")
-
-    def _write_modred_if_dict(self, f, modred):
-        f.write("  Scan\n")
-        # append for scanning job
-        # self.modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
-        coords_list = modred["coords"]
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coords_list, program_type="orca"
-        )
-        for prepend_string in prepend_string_list:
-            f.write(
-                f"  {prepend_string} = {modred['dist_start']}, {modred['dist_end']}, "
-                f"{modred['num_steps']}  # Scanning from {modred['dist_start']} Angstrom "
-                f"to {modred['dist_end']} Angstrom in {modred['num_steps']} points. \n"
-            )
-        # write 'end' for each modred specified
-        f.write("  end\n")
-
-    def _write_hessian_block(self, f):
-        # optional in subclasses
-        pass
-
-    def _write_irc_block(self, f):
-        pass
-
-    def _write_constrained_atoms(self, f):
-        pass
-
     def _write_geometry(self, f, atoms):
         # check that both charge and multiplicity are specified
         assert self.charge is not None, "No charge found!"
@@ -504,34 +455,6 @@ class ORCAJobSettings(MolecularJobSettings):
             coordinates += string
         f.write(coordinates)
         f.write("*\n")
-
-    def remove_solvent(self):
-        self.solvent_model = None
-        self.solvent_id = None
-
-    def update_solvent(self, solvent_model=None, solvent_id=None):
-        """Update solvent model and solvent identity for implicit solvation.
-
-        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
-        """
-        # update only if not None; do not update to default value of None
-        if solvent_model is not None:
-            if solvent_model.lower() not in orca_solvation_models:
-                raise ValueError(
-                    f"The specified solvent model {solvent_model} is not in \n"
-                    f"the available solvent models: {orca_solvation_models}"
-                )
-
-            self.solvent_model = solvent_model
-
-        if solvent_id is not None:
-            self.solvent_id = solvent_id
-
-    def modify_solvent(self, remove_solvent=False, **kwargs):
-        if not remove_solvent:
-            self.update_solvent(**kwargs)
-        else:
-            self.remove_solvent()
 
     def apply_on(self, job, jobrunner):
         if (
