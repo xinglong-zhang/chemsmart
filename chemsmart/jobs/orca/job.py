@@ -59,12 +59,12 @@ class ORCAJob(Job):
         errfile = self.label + ".err"
         return os.path.join(self.folder, errfile)
 
-    def backup_files(self, backup_gbw=False):
+    def _backup_files(self, backup_gbw=False, **kwargs):
         folder = self._create_backup_folder_name()
-        self.backup_file(self.inputfile, folder=folder)
-        self.backup_file(self.outputfile, folder=folder)
+        self.backup_file(self.inputfile, folder=folder, **kwargs)
+        self.backup_file(self.outputfile, folder=folder, **kwargs)
         if backup_gbw:
-            self.backup_file(self.gbwfile, folder=folder)
+            self.backup_file(self.gbwfile, folder=folder, **kwargs)
 
     def _output(self):
         if not os.path.exists(self.outputfile):

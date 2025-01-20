@@ -74,15 +74,14 @@ class Job(RegistryMixin):
         folder = f"{prefix}.{ts}"
         return os.path.join(self.folder, folder)
 
-    def backup(self, dest_folder=None):
+    def backup(self, **kwargs):
         """Backup the current folder to a new folder.
         Return the new folder path.
         """
-        if self.folder is None:
-            return None
+        self._backup_files(**kwargs)
 
-        shutil.copytree(src=self.folder, dst=dest_folder)
-        return dest_folder
+    def _backup_files(self):
+        raise NotImplementedError
 
     def backup_file(self, file, folder=None, remove=False):
         if not os.path.exists(file):
