@@ -2,15 +2,13 @@ import copy
 import logging
 import os
 from contextlib import suppress
-
-from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
 from chemsmart.jobs.settings import (
     MolecularJobSettings,
-    read_molecular_job_yaml,
 )
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
+from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS as orca_solvation_models
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +92,6 @@ class ORCAJobSettings(MolecularJobSettings):
         self.mdci_density = mdci_density
         self.dipole = dipole
         self.quadrupole = quadrupole
-        self.solv = (
-            self.solvent_model is not None and self.solvent_id is not None
-        )
 
         if forces is True and (freq is True or numfreq is True):
             raise ValueError(
@@ -350,18 +345,22 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
-        if self.solv:
+        if self.solvent_model is not None and self.solvent_id is not None:
+            route_string += f" {self.solvent_model}({self.solvent_id})"
+        elif self.solvent_model is not None and self.solvent_id is None:
+            raise ValueError(
+                "Warning: Solvent model is specified but solvent identity is missing!"
+            )
+        elif self.solvent_model is None and self.solvent_id is not None:
+            logger.warning(
+                "Warning: Solvent identity is specified but solvent model is missing!\n"
+                "Defaulting to CPCM model."
+            )
             route_string += f" CPCM({self.solvent_id})"
+        else:
+            pass
 
         return route_string
-
-    def write_orca_input_from_job(self, job, jobrunner, **kwargs):
-        return self.write_orca_input(
-            atoms=job.molecule,
-            jobrunner=jobrunner,
-            job_label=job.label,
-            **kwargs,
-        )
 
     def write_orca_input(
         self,
@@ -407,18 +406,6 @@ class ORCAJobSettings(MolecularJobSettings):
             self._write_geometry(f, atoms=atoms)
             f.close()
 
-    def _write_route_section(self, f):
-        if self.route_to_be_written is not None:
-            self._write_route_section_from_user_input(f)
-        else:
-            self._write_route_section_default(f)
-
-    def _write_route_section_from_user_input(self, f):
-        if not self.route_to_be_written.startswith("!"):
-            self.route_to_be_written = f"! {self.route_to_be_written}"
-        route_string = self.route_to_be_written
-        f.write(f"{route_string}\n")
-
     def _get_level_of_theory(self):
         level_of_theory = ""
         if self.ab_initio is not None and self.functional is not None:
@@ -447,71 +434,6 @@ class ORCAJobSettings(MolecularJobSettings):
         if self.extrapolation_basis is not None:
             level_of_theory += f" {self.extrapolation_basis}"
         return level_of_theory
-
-    def _write_nproc_block(self, f, jobrunner):
-        # write number of processors
-        num_cores_per_node = jobrunner.server.NUM_CORES
-        n_proc = jobrunner.num_nodes * num_cores_per_node
-        f.write("# Number of processors\n")
-        f.write(f"%pal nprocs {n_proc} end\n")
-
-    def _write_mem_block(self, f, jobrunner):
-        # write memory
-        try:
-            mem = (
-                float(jobrunner.server.MAX_MEM_GIGS)
-                * 1000
-                / float(jobrunner.server.NUM_CORES)
-            )
-            mem_per_core = int(round(mem, -2))
-            f.write("# Memory per core\n")
-            f.write(f"%maxcore {mem_per_core}\n")
-        except Exception:
-            f.write("# Memory per core\n")
-            f.write(
-                "%maxcore 2000\n"
-            )  # defaults to 2000 if server max mem and num cores not set
-
-    def _write_scf_block(self, f):
-        # write SCF block
-        if self.scf_convergence or self.scf_maxiter:
-            f.write("%scf\n")
-            self._write_scf_maxiter(f)
-            self._write_scf_convergence(f)
-            f.write("end\n")
-
-    def _write_scf_maxiter(self, f):
-        # write SCF scf_maxiter
-        if self.scf_maxiter:
-            f.write(f"  maxiter {self.scf_maxiter}\n")
-
-    def _write_scf_convergence(self, f):
-        if self.scf_convergence:
-            scf_conv = self.scf_convergence.lower().strip()
-            # check that the convergence is in the list given by ORCA
-            if scf_conv.endswith("scf"):
-                scf_conv = scf_conv[:-3]
-            if scf_conv not in ORCA_SCF_CONVERGENCE:
-                raise ValueError(
-                    f"Warning: SCF convergence {self.scf_convergence} is not supported by ORCA!\n"
-                    f"Available SCF convergence options are: {ORCA_SCF_CONVERGENCE}"
-                )
-            f.write(f"convergence {scf_conv}\n")
-
-    def _write_solvent_block(self, f):
-        if self.solv and self.solvent_model.lower() == "smd":
-            f.write("%cpcm\n")
-            # write details when using SMD solvent model
-            f.write("  SMD true\n")
-            f.write(f'  SMDsolvent "{self.solvent_id}"\n')
-            if self.custom_solvent is not None:
-                # write custom solvent part, for both SMD and CPCM solvent model
-                # NOTE: orca does not support custom solvent due to requirement that solvent name in the input file
-                #       must match the name in the available solvents library
-                line_elem = self.custom_solvent.strip().split("\n")
-                for line in line_elem:
-                    f.write(f"  {line}\n")
-            f.write("end\n")
 
     def _write_modred_block(self, f):
         if self.modred:
@@ -558,61 +480,10 @@ class ORCAJobSettings(MolecularJobSettings):
         # optional in subclasses
         pass
 
-    def _write_mdci_block(self, f):
-        if self.mdci_cutoff or self.mdci_density:
-            # write orca block for MDCI options
-            f.write("%mdci\n")
-            if self.mdci_cutoff:
-                if self.mdci_cutoff.lower() == "loose":
-                    f.write("  # loose cutoff\n")
-                    f.write("  TCutPairs 1e-3\n")
-                    f.write("  TCutPNO 1e-6\n")
-                    f.write("  TCutMKN 1e-3\n")
-                elif self.mdci_cutoff.lower() == "normal":
-                    f.write("  # normal cutoff\n")
-                    f.write("  TCutPairs 1e-4\n")
-                    f.write("  TCutPNO 3.33e-7\n")
-                    f.write("  TCutMKN 1e-3\n")
-                elif self.mdci_cutoff.lower() == "tight":
-                    f.write("  # tight cutoff\n")
-                    f.write("  TCutPairs 1e-5\n")
-                    f.write("  TCutPNO 1e-7\n")
-                    f.write("  TCutMKN 1e-4\n")
-                else:
-                    raise ValueError(
-                        f"Warning: MDCI cutoff {self.mdci_cutoff} is not supported by ORCA!\n"
-                    )
-            if self.mdci_density:
-                if self.mdci_density.lower() == "none":
-                    f.write("  Density None  # no density\n")
-                elif self.mdci_density.lower() == "unrelaxed":
-                    f.write("  Density Unrelaxed  # unrelaxed density\n")
-                elif self.mdci_density.lower() == "relaxed":
-                    f.write("  Density Relaxed  # relaxed density\n")
-                else:
-                    raise ValueError(
-                        f"Warning: MDCI density {self.mdci_density} is not supported by ORCA!\n"
-                    )
-            f.write("end\n")
-
-    def _write_elprop_block(self, f):
-        if self.dipole is not None or self.quadrupole is not None:
-            # write orca block for elprop options
-            f.write("%elprop\n")
-            if self.dipole is True:
-                f.write("  Dipole True\n")
-            elif self.dipole is False:
-                f.write("  Dipole False\n")
-            if self.quadrupole is True:
-                f.write("  Quadrupole True\n")
-            elif self.quadrupole is False:
-                f.write("  Quadrupole False\n")
-            f.write("end\n")
-
     def _write_irc_block(self, f):
         pass
 
-    def _write_constrained_atoms(self, f, atoms):
+    def _write_constrained_atoms(self, f):
         pass
 
     def _write_geometry(self, f, atoms):
@@ -645,10 +516,10 @@ class ORCAJobSettings(MolecularJobSettings):
         """
         # update only if not None; do not update to default value of None
         if solvent_model is not None:
-            if solvent_model.lower() not in gaussian_solvation_models:
+            if solvent_model.lower() not in orca_solvation_models:
                 raise ValueError(
                     f"The specified solvent model {solvent_model} is not in \n"
-                    f"the available solvent models: {gaussian_solvation_models}"
+                    f"the available solvent models: {orca_solvation_models}"
                 )
 
             self.solvent_model = solvent_model
@@ -708,25 +579,12 @@ class ORCAJobSettings(MolecularJobSettings):
                 runfolder_inputfile
             ), f"inputfile {runfolder_inputfile} is not found"
 
-    @classmethod
-    def from_user_yaml(cls, filename, **kwargs):
-        logger.info(f"Reading project settings from {filename}")
-        config = read_molecular_job_yaml(filename, program="orca")
-        return cls.from_user_config(config, **kwargs)
-
-    @classmethod
-    def from_user_config(cls, config, job_type):
-        """Generate ORCAJobSettings from a master dict containing all the settings for each job type.
-
-        Args:
-            config (dict): Master dict containing all the settings for each job type.
-            job_type (str): Job type to be generated.
-        """
-        return cls(**config[job_type])
-
-    @classmethod
-    def from_dict(cls, settings_dict):
-        return cls(**settings_dict)
+    def _check_solvent(self, solvent_model):
+        if solvent_model.lower() not in orca_solvation_models:
+            raise ValueError(
+                f"The specified solvent model {solvent_model} is not in \n"
+                f"the available solvent models: {orca_solvation_models}"
+            )
 
 
 class ORCATSJobSettings(ORCAJobSettings):

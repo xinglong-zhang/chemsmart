@@ -3,19 +3,15 @@ import logging
 import os
 import re
 
-from chemsmart.io.gaussian import GaussianRefs
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
+from chemsmart.io.gaussian import (
+    GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
+)
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
-gaussian_ab_initio = GaussianRefs().gaussian_ab_initio
-gaussian_functionals = GaussianRefs().gaussian_dft_fuctionals
-gaussian_bases = GaussianRefs().gaussian_basis_sets
-gaussian_solvation_models = GaussianRefs().gaussian_solvation_models
-gassian_additional_route_parameters = (
-    GaussianRefs().gaussian_additional_route_parameters
-)
+
 
 logger = logging.getLogger(__name__)
 
@@ -471,37 +467,12 @@ class GaussianJobSettings(MolecularJobSettings):
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
 
-    def remove_solvent(self):
-        self.solvent_model = None
-        self.solvent_id = None
-
-    def update_solvent(self, solvent_model=None, solvent_id=None):
-        """Update solvent model and solvent identity for implicit solvation.
-
-        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
-        """
-        # update only if not None; do not update to default value of None
-        if solvent_model is not None:
-            if solvent_model.lower() not in gaussian_solvation_models:
-                raise ValueError(
-                    f"The specified solvent model {solvent_model} is not in \n"
-                    f"the available solvent models: {gaussian_solvation_models}"
-                )
-
-            self.solvent_model = solvent_model
-
-        if solvent_id is not None:
-            self.solvent_id = solvent_id
-
-    def modify_solvent(self, remove_solvent=False, **kwargs):
-        if not remove_solvent:
-            self.update_solvent(**kwargs)
-        else:
-            self.remove_solvent()
-
-    @classmethod
-    def from_dict(cls, settings_dict):
-        return cls(**settings_dict)
+    def _check_solvent(self, solvent_model):
+        if solvent_model.lower() not in gaussian_solvation_models:
+            raise ValueError(
+                f"The specified solvent model {solvent_model} is not in \n"
+                f"the available solvent models: {gaussian_solvation_models}"
+            )
 
 
 class GaussianIRCJobSettings(GaussianJobSettings):

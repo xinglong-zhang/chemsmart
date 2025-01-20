@@ -2,6 +2,9 @@ import logging
 import os.path
 
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.utils.utils import (
+    get_prepend_string_list_from_modred_free_format,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +38,11 @@ class ORCAInputWriter(InputWriter):
         self._write_route_section(f)
         self._write_processors(f)
         self._write_memory(f)
-        self._write_scf_iterations(f)
+        self._write_scf_block(f)
+        self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
+        self._write_modred_block(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
         # other functionalities in ORCA input job may be implemented here
@@ -69,10 +74,39 @@ class ORCAInputWriter(InputWriter):
         mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
         f.write(f"%maxcore {round(mpc)}\n")
 
-    def _write_scf_iterations(self, f):
-        logger.debug("Writing SCF iterations.")
-        if self.settings.scf_maxiter is not None:
-            f.write(f"%scf maxiter {self.settings.scf_maxiter} end\n")
+    def _write_scf_block(self, f):
+        logger.debug("Writing SCF black.")
+        if self.settings.scf_convergence or self.settings.scf_maxiter:
+            f.write("%scf\n")
+            self._write_scf_maxiter(f)
+            self._write_scf_convergence(f)
+            f.write("end\n")
+
+    def _write_scf_maxiter(self, f):
+        """Write the SCF maxiter for the ORCA input file."""
+        scf_maxiter = self.scf_maxiter if self.scf_maxiter is not None else 200
+        f.write(f"  maxiter {scf_maxiter}\n")
+
+    def _write_scf_convergence(self, f):
+        if self.settings.scf_convergence:
+            from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
+
+            scf_conv = self.settings.scf_convergence.lower().strip()
+            # check that the convergence is in the list given by ORCA
+            if scf_conv.endswith("scf"):
+                scf_conv = scf_conv[:-3]
+                if scf_conv not in ORCA_SCF_CONVERGENCE:
+                    raise ValueError(
+                        f"Warning: SCF convergence {self.scf_convergence} is not supported by ORCA!\n"
+                        f"Available SCF convergence options are: {ORCA_SCF_CONVERGENCE}"
+                    )
+            f.write(f"  convergence {scf_conv}\n")
+
+    def _write_solvent_block(self, f):
+        """Write the solvent block for the ORCA input file."""
+        # to implement if there is more complex solvents to be specified via
+        # %cpcm block, %cosmo block, or %smd block that cannot be capture by route
+        pass
 
     def _write_mdci_block(self, f):
         mdci_cutoff = self.settings.mdci_cutoff
@@ -130,6 +164,47 @@ class ORCAInputWriter(InputWriter):
             else:
                 f.write("  Quadrupole False\n")
             f.write("end\n")
+
+    def _write_modred_block(self, f):
+        if self.settings.modred:
+            f.write("%geom\n")
+            self._write_modred(f, modred=self.settings.modred)
+            f.write("end\n")
+
+    def _write_modred(self, f, modred):
+        if isinstance(modred, list):
+            self._write_modred_if_list(f, modred)
+        elif isinstance(modred, dict):
+            self._write_modred_if_dict(f, modred)
+
+    def _write_modred_if_list(self, f, modred):
+        f.write("  Constraints\n")
+        # append for modred jobs
+        # 'self.modred' as list of lists, or a single list if only one fixed constraint
+        prepend_string_list = get_prepend_string_list_from_modred_free_format(
+            input_modred=modred, program_type="orca"
+        )
+        for prepend_string in prepend_string_list:
+            f.write(f"  {{{prepend_string} C}}\n")
+        # write 'end' for each modred specified
+        f.write("  end\n")
+
+    def _write_modred_if_dict(self, f, modred):
+        f.write("  Scan\n")
+        # append for scanning job
+        # self.modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
+        coords_list = modred["coords"]
+        prepend_string_list = get_prepend_string_list_from_modred_free_format(
+            input_modred=coords_list, program_type="orca"
+        )
+        for prepend_string in prepend_string_list:
+            f.write(
+                f"  {prepend_string} = {modred['dist_start']}, {modred['dist_end']}, "
+                f"{modred['num_steps']}  # Scanning from {modred['dist_start']} Angstrom "
+                f"to {modred['dist_end']} Angstrom in {modred['num_steps']} points. \n"
+            )
+        # write 'end' for each modred specified
+        f.write("  end\n")
 
     def _write_charge_and_multiplicity(self, f):
         logger.debug("Writing charge and multiplicity.")

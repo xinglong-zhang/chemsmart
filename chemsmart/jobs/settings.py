@@ -82,6 +82,32 @@ class MolecularJobSettings:
         self.forces = forces
         self.input_string = input_string
 
+    def remove_solvent(self):
+        self.solvent_model = None
+        self.solvent_id = None
+
+    def update_solvent(self, solvent_model=None, solvent_id=None):
+        """Update solvent model and solvent identity for implicit solvation.
+
+        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
+        """
+        # update only if not None; do not update to default value of None
+        if solvent_model is not None:
+            self._check_solvent(solvent_model)
+            self.solvent_model = solvent_model
+
+        if solvent_id is not None:
+            self.solvent_id = solvent_id
+
+    def _check_solvent(self, solvent_model):
+        pass
+
+    def modify_solvent(self, remove_solvent=False, **kwargs):
+        if not remove_solvent:
+            self.update_solvent(**kwargs)
+        else:
+            self.remove_solvent()
+
     def set_custom_solvent_via_file(self, filename):
         if not os.path.exists(os.path.expanduser(filename)):
             raise ValueError(f"File {filename} does not exist!")
@@ -93,6 +119,10 @@ class MolecularJobSettings:
         lines = [line.strip() for line in lines]
 
         self.custom_solvent = "\n".join(lines)
+
+    @classmethod
+    def from_dict(cls, settings_dict):
+        return cls(**settings_dict)
 
 
 def read_molecular_job_yaml(filename, program="gaussian"):
