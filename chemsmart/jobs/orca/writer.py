@@ -61,12 +61,12 @@ class ORCAInputWriter(InputWriter):
 
     def _write_processors(self, f):
         logger.debug("Writing processors.")
-        f.write("# Number of processors")
+        f.write("# Number of processors\n")
         f.write(f"%pal nprocs {self.jobrunner.num_cores} end\n")
 
     def _write_memory(self, f):
         logger.debug("Writing memory.")
-        f.write("# Memory per core")
+        f.write("# Memory per core\n")
         mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
         f.write(f"%maxcore {mpc}\n")
 

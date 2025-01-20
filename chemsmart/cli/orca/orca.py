@@ -251,10 +251,24 @@ def orca(
     title,
     charge,
     multiplicity,
+    ab_initio,
     functional,
+    dispersion,
     basis,
+    aux_basis,
+    extrapolation_basis,
+    defgrid,
+    scf_tol,
+    scf_algorithm,
+    scf_maxiter,
+    scf_convergence,
+    dipole,
+    quadrupole,
+    mdci_cutoff,
+    mdci_density,
     index,
     additional_route_parameters,
+    forces,
     pubchem,
 ):
 
@@ -291,15 +305,60 @@ def orca(
         job_settings.charge = charge
     if multiplicity is not None:
         job_settings.multiplicity = multiplicity
+    if title is not None:
+        job_settings.title = title
+        keywords += ("title",)
+    if ab_initio is not None:
+        job_settings.ab_initio = ab_initio
+        keywords += ("ab_initio",)
     if functional is not None:
         job_settings.functional = functional
         keywords += ("functional",)  # update keywords
+    if dispersion is not None:
+        job_settings.dispersion = dispersion
+        keywords += ("dispersion",)
     if basis is not None:
         job_settings.basis = basis
         keywords += ("basis",)
+    if aux_basis is not None:
+        job_settings.aux_basis = aux_basis
+        keywords += ("aux_basis",)
+    if extrapolation_basis is not None:
+        job_settings.extrapolation_basis = extrapolation_basis
+        keywords += ("extrapolation_basis",)
+    if defgrid is not None:
+        job_settings.defgrid = defgrid
+        keywords += ("defgrid",)
+    if scf_tol is not None:
+        job_settings.scf_tol = scf_tol
+        keywords += ("scf_tol",)
+    if scf_algorithm is not None:
+        job_settings.scf_algorithm = scf_algorithm
+        keywords += ("scf_algorithm",)
+    if scf_maxiter is not None:
+        job_settings.scf_maxiter = scf_maxiter
+        keywords += ("scf_maxiter",)
+    if scf_convergence is not None:
+        job_settings.scf_convergence = scf_convergence
+        keywords += ("scf_convergence",)
+    if dipole is not None:
+        job_settings.dipole = dipole
+        keywords += ("dipole",)
+    if quadrupole is not None:
+        job_settings.quadrupole = quadrupole
+        keywords += ("quadrupole",)
+    if mdci_cutoff is not None:
+        job_settings.mdci_cutoff = mdci_cutoff
+        keywords += ("mdci_cutoff",)
+    if mdci_density is not None:
+        job_settings.mdci_density = mdci_density
+        keywords += ("mdci_density",)
     if additional_route_parameters is not None:
         job_settings.additional_route_parameters = additional_route_parameters
         keywords += ("additional_route_parameters",)
+    if forces is not None:
+        job_settings.forces = forces
+        keywords += ("forces",)
 
     # obtain molecule structure
     if filename is None and pubchem is None:

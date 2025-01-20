@@ -95,24 +95,33 @@ class MolecularJobSettings:
         self.custom_solvent = "\n".join(lines)
 
 
-def read_molecular_job_yaml(filename):
+def read_molecular_job_yaml(filename, program="gaussian"):
     # read in defaults, if exists
     file_directory = os.path.dirname(filename)
     default_file = os.path.join(file_directory, "defaults.yaml")
+    default_config = {}
     if os.path.exists(default_file):
         with open(default_file) as f:
             default_config = yaml.safe_load(f)
-        # logger.info(
-        #     f"Using the following pre-set defaults: \n{default_config}"
-        # )
-    # else:
-    #     logger.warning("Default file settings does not exist.\n")
-    #     # from chemsmart.jobs.orca.settings import ORCAJobSettings
-    #
-    #     # default_config = ORCAJobSettings.default().__dict__
-    #     logger.warning(
-    #         f"Using the following pre-set defaults: \n{default_config}"
-    #     )
+        logger.debug(
+            f"Using the following pre-set defaults: \n{default_config}"
+        )
+    else:
+        logger.warning("Default file settings does not exist.\n")
+        if program == "gaussian":
+            from chemsmart.settings.gaussian import GaussianJobSettings
+
+            default_config = GaussianJobSettings.default().__dict__
+        elif program == "orca":
+            from chemsmart.settings.orca import ORCAJobSettings
+
+            default_config = ORCAJobSettings.default().__dict__
+        else:
+            # other programs may be implemented in future
+            pass
+        logger.debug(
+            f"Using the following pre-set defaults: \n{default_config}"
+        )
 
     # job types
     gas_phase_jobs = [

@@ -711,7 +711,7 @@ class ORCAJobSettings(MolecularJobSettings):
     @classmethod
     def from_user_yaml(cls, filename, **kwargs):
         logger.info(f"Reading project settings from {filename}")
-        config = read_molecular_job_yaml(filename)
+        config = read_molecular_job_yaml(filename, program="orca")
         return cls.from_user_config(config, **kwargs)
 
     @classmethod

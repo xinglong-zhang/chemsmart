@@ -108,9 +108,9 @@ class ORCAProjectSettings(RegistryMixin):
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            f"Place new gaussian project settings .yaml file in {user_settings.user_gaussian_settings_dir}.\n\n"
+            f"Place new ORCA project settings .yaml file in {user_settings.user_orca_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
-            f"Currently available projects: {user_settings.all_available_gaussian_projects}"
+            f"Currently available projects: {user_settings.all_available_orca_projects}"
         )
 
     @classmethod
@@ -124,7 +124,7 @@ class ORCAProjectSettings(RegistryMixin):
     def _from_user_project_name(cls, project_name):
         """Get .yaml project settings file from user directory based on project name."""
         project_name_yaml_path = os.path.join(
-            ChemsmartUserSettings().user_gaussian_settings_dir,
+            ChemsmartUserSettings().user_orca_settings_dir,
             f"{project_name}.yaml",
         )
         user_settings_manager = ORCAProjectSettingsManager(
@@ -247,7 +247,7 @@ class YamlORCAProjectSettingsBuilder:
     def _read_config(self):
         from chemsmart.jobs.settings import read_molecular_job_yaml
 
-        return read_molecular_job_yaml(self.filename)
+        return read_molecular_job_yaml(self.filename, program="orca")
 
     def _project_settings_for_job(self, job_type):
         # Define a dictionary to map job_type to corresponding settings class
