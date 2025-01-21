@@ -38,7 +38,7 @@ export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
         assert gaussian_executable.local_run is True
 
         gaussian_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
-conda activate ~/anaconda3/envs/pyatoms-dev2
+conda activate ~/anaconda3/envs/chemsmart
 """
         assert gaussian_executable.conda_env == gaussian_conda_env
 
