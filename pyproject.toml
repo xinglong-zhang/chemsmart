@@ -16,7 +16,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "ase~=3.3.24.0",
+    "ase~=3.24.0",
     "basis-set-exchange",
     "click~=8.1.8",
     "crest",
