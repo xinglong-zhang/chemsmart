@@ -20,7 +20,8 @@ from chemsmart.settings.server import Server
 ############ Gaussian Fixtures ##################
 @pytest.fixture()
 def test_data_directory():
-    return os.path.abspath("data")
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    return os.path.abspath(os.path.join(current_directory, "data"))
 
 
 # master gaussian test directory
