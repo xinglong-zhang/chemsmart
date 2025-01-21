@@ -1,12 +1,12 @@
 import functools
 import logging
-import click
 
+import click
 
 logger = logging.getLogger(__name__)
 
 
-def jobrunner_options(f):
+def click_jobrunner_options(f):
     @click.option(
         "-s",
         "--server",
@@ -33,11 +33,13 @@ def jobrunner_options(f):
     @click.option(
         "--fake/--no-fake",
         default=False,
+        type=bool,
         help="If true, fake jobrunners will be used.",
     )
     @click.option(
         "--scratch/--no-scratch",
-        default=True,  # Default behavior is to use scratch
+        default=None,
+        type=bool,
         help="Run in scratch mode or without scratch folder.",
     )
     @functools.wraps(f)

@@ -1,15 +1,14 @@
 import logging
 import os
 import shlex
-import sys
 import subprocess
+import sys
 from functools import lru_cache
 
-from chemsmart.utils.mixins import cached_property
-from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.settings.submitters import Submitter
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin, cached_property
 
 user_settings = ChemsmartUserSettings()
 
@@ -279,8 +278,8 @@ class Server(RegistryMixin):
     @staticmethod
     def _check_running_jobs(job):
         """Check if the job is already running."""
-        from chemsmart.utils.cluster import ClusterHelper
         from chemsmart.jobs.gaussian import GaussianJob
+        from chemsmart.utils.cluster import ClusterHelper
 
         if not isinstance(job, GaussianJob) or job.label is None:
             return

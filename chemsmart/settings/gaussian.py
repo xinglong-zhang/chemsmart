@@ -2,13 +2,12 @@ import logging
 import os
 
 from chemsmart.jobs.gaussian.settings import (
-    GaussianJobSettings,
     GaussianIRCJobSettings,
+    GaussianJobSettings,
     GaussianTDDFTJobSettings,
 )
-
-from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin
 
 user_settings = ChemsmartUserSettings()
 
@@ -249,7 +248,7 @@ class YamlGaussianProjectSettingsBuilder:
     def _read_config(self):
         from chemsmart.jobs.settings import read_molecular_job_yaml
 
-        return read_molecular_job_yaml(self.filename)
+        return read_molecular_job_yaml(self.filename, program="gaussian")
 
     def _project_settings_for_job(self, job_type):
         # Define a dictionary to map job_type to corresponding settings class

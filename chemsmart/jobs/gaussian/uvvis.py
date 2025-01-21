@@ -1,7 +1,7 @@
 from copy import deepcopy
 
-from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.job import GaussianJob
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
 
@@ -18,7 +18,9 @@ class GaussianUVVISJob(GaussianJob):
         # add equilibrium solvation if necessary
         gs_geom_opt_settings = deepcopy(self.settings)
         return GaussianOptJob(
-            folder=self.folder, atoms=self.atoms, settings=gs_geom_opt_settings
+            folder=self.folder,
+            atoms=self.molecule,
+            settings=gs_geom_opt_settings,
         )
 
     def _run_gs_geom_opt(self, jobrunner, queue_manager=None):
@@ -38,7 +40,7 @@ class GaussianUVVISJob(GaussianJob):
             sp_settings.job_type = "sp"
             sp_settings.freq = False
             return GaussianSinglePointJob(
-                folder=self.folder, atoms=self.atoms, settings=sp_settings
+                folder=self.folder, atoms=self.molecule, settings=sp_settings
             )
         return None
 

@@ -1,10 +1,10 @@
-import ase
 import logging
 import os
 from typing import Type
+
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.job import Job
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.job import Job
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class GaussianJob(Job):
             label = molecule.get_chemical_formula(empirical=True)
 
         self.settings = settings
-        self.atoms = molecule
+        self.molecule = molecule
         self.label = label
 
     @classmethod
@@ -57,33 +57,12 @@ class GaussianJob(Job):
         errfile = self.label + ".err"
         return os.path.join(self.folder, errfile)
 
-    @property
-    def all_intermediate_optimization_points(self):
-        intermediate_optimization_points_path = os.path.join(
-            self.label + "_intermediate_opt_points.xyz"
-        )
-        all_points = self._intermediate_optimization_points()
-        ase.io.write(intermediate_optimization_points_path, all_points)
-        return all_points
-
-    def optimized_structure(self):
-        output = self._output()
-        if output is not None and output.normal_termination:
-            return output.optimized_structure
-        return None
-
-    def _intermediate_optimization_points(self):
-        output = self._output()
-        if output is None:
-            return []
-        return output.all_structures
-
-    def backup_files(self, backup_chk=False):
+    def _backup_files(self, backup_chk=False, **kwargs):
         folder = self._create_backup_folder_name()
-        self.backup_file(self.inputfile, folder=folder)
-        self.backup_file(self.outputfile, folder=folder)
+        self.backup_file(self.inputfile, folder=folder, **kwargs)
+        self.backup_file(self.outputfile, folder=folder, **kwargs)
         if backup_chk:
-            self.backup_file(self.chkfile, folder=folder)
+            self.backup_file(self.chkfile, folder=folder, **kwargs)
 
     def _output(self):
         if not os.path.exists(self.outputfile):
@@ -100,15 +79,6 @@ class GaussianJob(Job):
 
             return Gaussian16OutputWithPBC(filename=self.outputfile)
 
-    def _job_is_complete(self):
-        # private method to check if the job is complete
-        if self._output() is None:
-            return False
-        return self._output().normal_termination
-
-    def is_complete(self):
-        return self._job_is_complete()
-
     def _run(self, jobrunner):
         jobrunner.run(self)
 
@@ -122,7 +92,7 @@ class GaussianJob(Job):
         keywords=("charge", "multiplicity"),
         **kwargs,
     ):
-        # get all atoms in a file and give the result as a list
+        # get all molecule in a file and give the result as a list
         logger.info(f"Reading images from file: {filename}.")
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
@@ -130,7 +100,7 @@ class GaussianJob(Job):
         logger.info(f"Num of images read: {len(molecules)}.")
         molecules = molecules[string2index_1based(index)]
 
-        # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
+        # only supply last molecule in some jobs; but require all molecule in others e.g., dias job
         return cls(
             molecule=molecules,
             settings=settings,

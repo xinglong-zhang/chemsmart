@@ -3,9 +3,10 @@ import logging
 import os
 from abc import abstractmethod
 from functools import lru_cache
-from chemsmart.utils.mixins import RegistryMixin
+
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin
 
 user_settings = ChemsmartUserSettings()
 
@@ -31,7 +32,7 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=False,
+        scratch=None,
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -174,7 +175,7 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=False, fake=False, **kwargs):
+    def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
         jobtype = job.TYPE
 

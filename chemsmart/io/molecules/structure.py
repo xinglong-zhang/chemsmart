@@ -1,15 +1,16 @@
-import os
-import re
-import ase
 import copy
 import logging
+import os
+import re
+from functools import cached_property, lru_cache
+
+import ase
 import numpy as np
 from ase.symbols import Symbols
-from chemsmart.utils.utils import string2index_1based
-from functools import cached_property, lru_cache
-from chemsmart.utils.utils import file_cache
+
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
+from chemsmart.utils.utils import file_cache, string2index_1based
 
 p = pt()
 
@@ -359,11 +360,20 @@ class Molecule:
                 )
 
     def _write_orca_coordinates(self, f):
-        # TODO: implement
-        pass
+        assert self.symbols is not None, "Symbols to write should not be None!"
+        assert (
+            self.positions is not None
+        ), "Positions to write should not be None!"
+
+        # if self.frozen_atoms is None:
+        # commented above out since with frozen atom or not, the geometry is written the same way
+        for i, (s, (x, y, z)) in enumerate(
+            zip(self.chemical_symbols, self.positions)
+        ):
+            f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
 
     def _write_orca_pbc_coordinates(self, f):
-        # TODO: implement
+        # ORCA cannot do PBC calculations
         pass
 
     def __repr__(self):

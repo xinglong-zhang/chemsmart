@@ -1,6 +1,6 @@
-from chemsmart.jobs.settings import read_molecular_job_yaml
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.settings import read_molecular_job_yaml
 
 
 class TestGaussianJobSettings:
@@ -32,7 +32,7 @@ class TestGaussianJobSettings:
         self, gaussian_yaml_settings_gas_solv
     ):
         all_project_settings = read_molecular_job_yaml(
-            gaussian_yaml_settings_gas_solv
+            gaussian_yaml_settings_gas_solv, program="gaussian"
         )
         opt_settings_dict = all_project_settings["opt"]
         opt_settings = GaussianJobSettings.from_dict(opt_settings_dict)
@@ -63,7 +63,7 @@ class TestGaussianJobSettings:
 
     def test_get_settings_from_yaml_solv(self, gaussian_yaml_settings_solv):
         all_project_settings = read_molecular_job_yaml(
-            gaussian_yaml_settings_solv
+            gaussian_yaml_settings_solv, program="gaussian"
         )
         opt_settings_dict = all_project_settings["opt"]
         opt_settings = GaussianJobSettings.from_dict(opt_settings_dict)

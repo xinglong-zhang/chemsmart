@@ -3,14 +3,17 @@ from filecmp import cmp
 from shutil import copy
 
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.jobs.gaussian.writer import GaussianInputWriter
-from chemsmart.jobs.gaussian import GaussianOptJob, GaussianSinglePointJob
-from chemsmart.jobs.gaussian import GaussianModredJob
-from chemsmart.jobs.gaussian import GaussianScanJob
-from chemsmart.jobs.gaussian import GaussianTSJob
-from chemsmart.settings.gaussian import GaussianProjectSettings
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.gaussian import (
+    GaussianModredJob,
+    GaussianOptJob,
+    GaussianScanJob,
+    GaussianSinglePointJob,
+    GaussianTSJob,
+)
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+from chemsmart.settings.gaussian import GaussianProjectSettings
 
 
 class TestGaussianInputWriter:
@@ -46,6 +49,8 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file, gaussian_written_opt_file
         )  # writes input file as expected
+        job.run(jobrunner=jobrunner_no_scratch)
+        assert job.is_complete()
 
     def test_write_opt_job_with_route(
         self,

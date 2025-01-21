@@ -1,12 +1,15 @@
 import numpy as np
 import pytest
-from chemsmart.utils.utils import is_float
+
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
-from chemsmart.utils.utils import content_blocks_by_paragraph
-from chemsmart.utils.utils import get_list_from_string_range
-from chemsmart.utils.utils import str_indices_range_to_list
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.utils import (
+    content_blocks_by_paragraph,
+    get_list_from_string_range,
+    is_float,
+    str_indices_range_to_list,
+    string2index_1based,
+)
 
 
 class TestUtils:

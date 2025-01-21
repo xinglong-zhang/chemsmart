@@ -1,7 +1,7 @@
 import functools
 import logging
-import click
 
+import click
 
 logger = logging.getLogger(__name__)
 

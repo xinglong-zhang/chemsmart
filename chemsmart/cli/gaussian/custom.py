@@ -1,10 +1,11 @@
-import click
 import logging
 
+import click
+
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
-from chemsmart.cli.gaussian.gaussian import gaussian
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,9 @@ def userjob(ctx, route, append_info, **kwargs):
     molecules = ctx.obj["molecules"]
     molecule = molecules[
         -1
-    ]  # get last atom from list of atoms from cli.gaussian.py subcommands
-    # index = '-1' would access the right structure from the list of atoms returned from cli.gaussian.py subcommands
-    # user specified index was used there to return the right atoms and store it as a list of single element/itself
+    ]  # get last molecule from list of molecules from cli.gaussian.py subcommands
+    # index = '-1' would access the right structure from the list of molecule returned from cli.gaussian.py subcommands
+    # user specified index was used there to return the right molecule and store it as a list of single element/itself
 
     # get label for the job
     label = ctx.obj["label"]

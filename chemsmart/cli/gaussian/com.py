@@ -1,10 +1,12 @@
-import click
 import logging
+
+import click
+
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
-from chemsmart.cli.gaussian.gaussian import gaussian
 
 logger = logging.getLogger(__name__)
 

@@ -1,12 +1,13 @@
+import copy
+import hashlib
 import os
 import re
 import time
-import hashlib
-import copy
-import numpy as np
 from functools import lru_cache, wraps
 from itertools import groupby
 from typing import Union
+
+import numpy as np
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -158,6 +159,17 @@ def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
     masks = [0] * num_atoms_in_molecule
     for i in list_of_indices:
         masks[i - 1] = -1
+    return masks
+
+
+def convert_list_to_orca_frozen_list(list_of_indices, molecule):
+    """Convert a list of indices to a list of indices for Orca frozen list.
+    Use 0-indexed list.
+    """
+    num_atoms_in_molecule = len(molecule.chemical_symbols)
+    masks = [0] * num_atoms_in_molecule
+    for i in list_of_indices:
+        masks[i] = -1
     return masks
 
 

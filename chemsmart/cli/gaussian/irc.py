@@ -1,9 +1,11 @@
-import click
 import logging
-from chemsmart.utils.utils import check_charge_and_multiplicity
+
+import click
+
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
-from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
@@ -78,42 +80,33 @@ def irc(
     project_settings = ctx.obj["project_settings"]
     irc_project_settings = project_settings.irc_settings()
 
-    # get settings from cli for irc
-    from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
-
-    irc_settings = GaussianIRCJobSettings(
-        predictor=predictor,
-        recorrect=recorrect,
-        recalc_step=recalc_step,
-        maxpoints=maxpoints,
-        maxcycles=maxcycles,
-        stepsize=stepsize,
-        flat_irc=flat_irc,
-        **kwargs,
-    )
-    irc_keywords = [
-        "predictor",
-        "recorrect",
-        "recalc_step",
-        "direction",
-        "maxpoints",
-        "maxcycles",
-        "stepsize",
-        "flat_irc",
-    ]
-
-    # merge project settings with user settings from cli
-    irc_settings = irc_project_settings.merge(
-        irc_settings, keywords=irc_keywords
-    )
-
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project irc settings with job settings from cli keywords from cli.gaussian.py subcommands
-    irc_settings = irc_settings.merge(job_settings, keywords=keywords)
+    # merge project irc settings with job settings from cli keywords from cli.orca.py subcommands
+    irc_settings = irc_project_settings.merge(job_settings, keywords=keywords)
+
+    # update irc_settings if any attribute is specified in cli options
+    # suppose project has a non None value, and user does not specify a value (None),
+    # then the project value should be used and unmodified, ie, should not be merged.
+    # update value only if user specifies a value for the attribute:
+    if predictor is not None:
+        irc_settings.predictor = predictor
+    if recorrect is not None:
+        irc_settings.recorrect = recorrect
+    if recalc_step is not None:
+        irc_settings.recalc_step = recalc_step
+    if maxpoints is not None:
+        irc_settings.maxpoints = maxpoints
+    if maxcycles is not None:
+        irc_settings.maxcycles = maxcycles
+    if stepsize is not None:
+        irc_settings.stepsize = stepsize
+    if flat_irc is not None:
+        irc_settings.flat_irc = flat_irc
+
     check_charge_and_multiplicity(irc_settings)
 
     # get molecule

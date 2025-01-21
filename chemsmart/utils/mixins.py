@@ -1,10 +1,12 @@
+import inspect
 import os
 import re
-import inspect
-from ase import units
 from functools import cached_property
-from chemsmart.io.orca.route import ORCARoute
+
+from ase import units
+
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.orca.route import ORCARoute
 
 
 class FileMixin:

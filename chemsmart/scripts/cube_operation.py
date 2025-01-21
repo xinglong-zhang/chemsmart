@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import logging
 import os
+
 import click
 
 from chemsmart.io.gaussian.cube import CubeFileOperator

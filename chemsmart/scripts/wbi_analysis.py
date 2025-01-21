@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 import logging
 import os
+
 import click
-from chemsmart.utils.logger import create_logger
+
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
-from chemsmart.utils.utils import (
-    get_value_by_number,
-)
+from chemsmart.utils.logger import create_logger
+from chemsmart.utils.utils import get_value_by_number
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"

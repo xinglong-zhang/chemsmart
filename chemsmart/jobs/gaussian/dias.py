@@ -1,5 +1,5 @@
-from chemsmart.utils.utils import get_list_from_string_range
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.utils.utils import get_list_from_string_range
 
 
 class GaussianDIASJob(GaussianJob):

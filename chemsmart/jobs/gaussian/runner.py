@@ -1,18 +1,18 @@
 import logging
 import os
-import sys
 import shlex
 import subprocess
+import sys
 from contextlib import suppress
-from functools import lru_cache
 from datetime import datetime
+from functools import lru_cache
 from glob import glob
 from random import random
 from shutil import copy, rmtree
 
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
-from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
@@ -57,7 +57,7 @@ class GaussianJobRunner(JobRunner):
 
     FAKE = False
 
-    def __init__(self, server, scratch=True, fake=False, **kwargs):
+    def __init__(self, server, scratch=None, fake=False, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
@@ -212,7 +212,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=True, fake=True, **kwargs):
+    def __init__(self, server, scratch=None, fake=True, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     def run(self, job, **kwargs):

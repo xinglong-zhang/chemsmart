@@ -26,7 +26,7 @@ class GaussianInputWriter(InputWriter):
         job_inputfile = os.path.join(folder, f"{self.job.label}.com")
         logger.debug(f"Writing Gaussian input file: {job_inputfile}")
         f = open(job_inputfile, "w")
-        if self.job.settings.input_string:
+        if self.settings.input_string:
             # write the file itself for direct run
             self._write_self(f)
         else:
@@ -47,16 +47,16 @@ class GaussianInputWriter(InputWriter):
         )  # followed by user defined solvent parameters
         self._append_job_specific_info(f)
         self._append_other_additional_info(f)
-        if isinstance(self.job.settings, GaussianLinkJobSettings):
+        if isinstance(self.settings, GaussianLinkJobSettings):
             self._write_link_section(f)
 
     def _write_self(self, f):
         """Write the input file itself for direct run."""
-        f.write(self.job.settings.input_string)
+        f.write(self.settings.input_string)
 
     def _write_gaussian_header(self, f):
         logger.debug("Writing Gaussian header.")
-        if self.job.settings.chk:
+        if self.settings.chk:
             logger.debug(f"Writing chk file: {self.job.label}.chk")
             f.write(f"%chk={self.job.label}.chk\n")
         num_cores = self.jobrunner.num_cores if not None else 12
@@ -67,13 +67,13 @@ class GaussianInputWriter(InputWriter):
 
     def _write_route_section(self, f):
         logger.debug("Writing route section.")
-        route_string = self.job.settings.route_string
+        route_string = self.settings.route_string
         f.write(route_string + "\n")
         f.write("\n")
 
     def _write_gaussian_title(self, f):
         logger.debug("Writing Gaussian title.")
-        title = self.job.settings.title
+        title = self.settings.title
         f.write(f"{title}\n")
         f.write("\n")
 
@@ -100,7 +100,7 @@ class GaussianInputWriter(InputWriter):
         Given a dictionary with 'num_steps', 'step_size', and 'coords', write the scan section.
         """
         logger.debug("Writing modred section.")
-        modredundant = self.job.settings.modred
+        modredundant = self.settings.modred
         if modredundant is not None:
             if isinstance(modredundant, list):
                 # for modredunant job

@@ -1,6 +1,8 @@
-import click
 import functools
 import logging
+import os
+
+import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
@@ -50,14 +52,14 @@ def click_gaussian_settings_options(f):
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the atoms"
+        "-c", "--charge", type=int, default=None, help="charge of the molecule"
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the atoms",
+        help="multiplicity of the molecule",
     )
     @click.option(
         "-x",
@@ -74,7 +76,7 @@ def click_gaussian_settings_options(f):
         "--index",
         type=str,
         default=None,
-        help="index of atom of ase db to be used",
+        help="index of molecule to use; default to the last molecule structure.",
     )
     @click.option(
         "-o",
@@ -112,6 +114,11 @@ def click_gaussian_settings_options(f):
         help="dieze tag for gaussian job; possible options include "
         '"n", "p", "t" to get "#n", "#p", "#t", respectively',
     )
+    @click.option(
+        "--forces/--no-forces",
+        default=False,
+        help="Whether to calculate forces.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -133,19 +140,19 @@ def click_gaussian_jobtype_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="list of coordinates to be fixed for modred or scan job",
+        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
     )
     @click.option(
         "-s",
         "--step-size",
         default=None,
-        help="step size of coordinates to scan",
+        help="Step size of coordinates to scan.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="step size of coordinates to scan",
+        help="Step size of coordinates to scan.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -236,7 +243,7 @@ def click_gaussian_td_options(f):
     help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
 )
 @click.pass_context
-def gaussian(  # noqa: PLR0912, PLR0915
+def gaussian(
     ctx,
     project,
     filename,
@@ -253,9 +260,10 @@ def gaussian(  # noqa: PLR0912, PLR0915
     append_additional_info,
     custom_solvent,
     dieze_tag,
+    forces,
     pubchem,
 ):
-    import os
+
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
 
@@ -313,8 +321,11 @@ def gaussian(  # noqa: PLR0912, PLR0915
     if dieze_tag is not None:
         job_settings.dieze_tag = dieze_tag
         keywords += ("dieze_tag",)
+    if forces:
+        job_settings.forces = forces
+        keywords += ("forces",)
 
-    # obtain atoms structure
+    # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -358,6 +369,8 @@ def gaussian(  # noqa: PLR0912, PLR0915
         list_of_indices = get_list_from_string_range(index)
         molecules = [molecules[i - 1] for i in list_of_indices]
 
+    logger.debug(f"Obtained molecules: {molecules}")
+
     # store objects
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
@@ -366,7 +379,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
-    ctx.obj["filename"] = filename
     ctx.obj["filename"] = filename
 
 

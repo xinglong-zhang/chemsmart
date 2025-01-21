@@ -1,8 +1,9 @@
 import logging
 import re
-from chemsmart.utils.mixins import ORCAFileMixin
-from chemsmart.io.orca.route import ORCARoute
+
 from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.repattern import standard_coord_pattern
 
 logger = logging.getLogger(__name__)

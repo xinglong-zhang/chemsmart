@@ -1,9 +1,9 @@
-import ase
 import logging
 import os
 import shutil
 from contextlib import suppress
 from typing import Type
+
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.settings import ORCAJobSettings
@@ -33,7 +33,7 @@ class ORCAJob(Job):
             label = molecule.get_chemical_formula(empirical=True)
 
         self.settings = settings
-        self.atoms = molecule
+        self.molecule = molecule
         self.label = label
 
     @classmethod
@@ -46,7 +46,7 @@ class ORCAJob(Job):
         return os.path.join(self.folder, inputfile)
 
     @property
-    def outfile(self):
+    def outputfile(self):
         outputfile = self.label + ".out"
         return os.path.join(self.folder, outputfile)
 
@@ -60,67 +60,30 @@ class ORCAJob(Job):
         errfile = self.label + ".err"
         return os.path.join(self.folder, errfile)
 
-    @property
-    def all_intermediate_optimization_points(self):
-        intermediate_optimization_points_path = os.path.join(
-            self.label + "_intermediate_opt_points.xyz"
-        )
-        all_points = self._intermediate_optimization_points()
-        ase.io.write(intermediate_optimization_points_path, all_points)
-        return all_points
-
-    def optimized_structure(self):
-        output = self._output()
-        if output is not None and output.normal_termination:
-            return output.get_atoms(index="-1")
-        return None
-
-    def _intermediate_optimization_points(self):
-        output = self._output()
-        if output is None:
-            return []
-        return output.all_structures
-
-    def _compute_resources_required(self):
-        return self._compute_units(num_units=1)
-
-    def backup_files(self, backup_gbw=False):
+    def _backup_files(self, backup_gbw=False, **kwargs):
         folder = self._create_backup_folder_name()
-        self.backup_file(self.inputfile, folder=folder)
-        self.backup_file(self.outfile, folder=folder)
+        self.backup_file(self.inputfile, folder=folder, **kwargs)
+        self.backup_file(self.outputfile, folder=folder, **kwargs)
         if backup_gbw:
-            self.backup_file(self.gbwfile, folder=folder)
+            self.backup_file(self.gbwfile, folder=folder, **kwargs)
 
     def _output(self):
-        if not os.path.exists(self.outfile):
+        if not os.path.exists(self.outputfile):
             return None
 
         try:
-            from pyatoms.io.orca.outputs import ORCAOutput
+            from chemsmart.io.orca.output import ORCAOutput
 
-            return ORCAOutput(self.outfile)
+            return ORCAOutput(self.outputfile)
         except AttributeError:
             return None
-        else:
-            return None
 
-    def _job_is_complete(self):
-        # private method to check if the job is complete
-        if self._output() is None:
-            return False
-        return self._output().normal_termination
-
-    def is_complete(self):
-        return self._job_is_complete()
-
-    def _run(self, jobrunner, queue_manager=None, **kwargs):
-        self.settings.apply_on(self, jobrunner, **kwargs)
+    def _run(self, jobrunner):
         jobrunner.run(self)
 
     @classmethod
     def from_filename(
         cls,
-        folder,
         filename,
         settings=None,
         index="-1",
@@ -128,54 +91,61 @@ class ORCAJob(Job):
         keywords=("charge", "multiplicity"),
         **kwargs,
     ):
-        # get all atoms in a file and give the result as a list
-        logger.info(f"Reading images from file: {filename}.")
-        atoms = AtomsWrapper.from_filepath(
+        molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
         )
-        logger.info(f"Num of images read: {len(atoms)}.")
-        atoms = atoms[string2index_1based(index)]  # python 0-indexed
+        logger.info(f"Num of images read: {len(molecules)}.")
+        molecules = molecules[string2index_1based(index)]
 
-        # only supply last atoms in some jobs; but require all atoms in others e.g., dias job
+        # only supply last molecule in some jobs; but require all molecule in others e.g., dias job
         return cls(
-            folder=folder,
-            atoms=atoms,
+            molecule=molecules,
             settings=settings,
             label=label,
             **kwargs,
         )
 
     @classmethod
-    def from_pubchem(
-        cls, folder, identifier, settings=None, label=None, **kwargs
+    def from_pubchem(cls, identifier, settings=None, label=None, **kwargs):
+        molecules = Molecule.from_pubchem(identifier=identifier)
+        return cls(
+            molecule=molecules,
+            settings=settings,
+            label=label,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_jobtype(
+        cls, jobtype, molecule, settings=None, label=None, **kwargs
     ):
-        atoms = AtomsWrapper.from_pubchem(identifier=identifier)
-        return cls(
-            folder=folder,
-            atoms=atoms,
-            settings=settings,
-            label=label,
-            **kwargs,
-        )
+        if jobtype.lower() == "opt":
+            from chemsmart.jobs.orca.opt import ORCAOptJob
 
-    @classmethod
-    def from_label(cls, folder, label, atoms=None, settings=None, **kwargs):
-        if atoms is None:
-            inpfile = os.path.join(folder, label + ".inp")
-            if not os.path.exists(inpfile):
-                pass
-            atoms = AtomsWrapper.from_filepath(inpfile)
+            logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
 
-        if settings is None:
-            settings = ORCAJobSettings.default()
-
-        return cls(
-            folder=folder,
-            label=label,
-            atoms=atoms,
-            settings=settings,
-            **kwargs,
-        )
+            return ORCAOptJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        elif jobtype.lower() == "inp":
+            return ORCAInpJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        elif jobtype.lower() == "orca":
+            return ORCAGeneralJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Invalid job type: {jobtype}")
 
 
 class ORCAInpJob(ORCAJob):
@@ -183,20 +153,54 @@ class ORCAInpJob(ORCAJob):
 
     TYPE = "orcainp"
 
-    def __init__(self, folder, atoms, settings=None, **kwargs):
+    def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(
-            folder=folder, atoms=atoms, settings=settings, **kwargs
+            molecule=molecule, settings=settings, label=label, **kwargs
         )
+
+    @classmethod
+    def from_filename(cls, filename, settings=None, label=None, **kwargs):
+
+        # first check that the file is orca format with .inp extension
+        logger.debug(f"Checking if {filename} is an ORCA input file.")
+        assert filename.endswith(".inp"), "Input file must be .inp file."
+
+        molecule = Molecule.from_filepath(filepath=filename)
+
+        # job.label as the filename (without extension) used
+        if label is None:
+            label = os.path.splitext(os.path.basename(filename))[0]
+
+        # set file
+        from chemsmart.io.orca.input import ORCAInput
+
+        orca_file = ORCAInput(filename=filename)
+        input_lines = orca_file.content_lines_string
+
+        # get settings from file
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        # store file lines in settings for direct writing of settings.input_string
+        settings = ORCAJobSettings.from_filepath(filename)
+        settings.input_string = input_lines
+
+        logger.debug(
+            f"Supplied file {filename} settings are: \n{settings.__dict__}"
+        )
+
+        logger.debug(f"Writing input lines: \n{input_lines}")
+
+        return cls(molecule=molecule, settings=settings, label=label, **kwargs)
 
     def _run(self, jobrunner, queue_manager=None, **kwargs):
         """Override the _run method of parent to run the job as is."""
-        # instead of applying setting and write the input file, create the input file from the supplied .inp file
-        # and run it as is
+        # instead of applying setting and write the input file, create the input file
+        # from the supplied .inp file and run it as is
         self._copy_input(jobrunner=jobrunner)
         jobrunner.run(self)
 
     def _copy_input(self, jobrunner):
-        """Coy the supplied orca .inp file."""
+        """Copy the supplied orca .inp file."""
         if (
             jobrunner.scratch
             and jobrunner.scratch_dir is not None
@@ -209,41 +213,30 @@ class ORCAInpJob(ORCAJob):
                 logger.info(f"Folder in scratch {job_scratch_dir} is made.")
             shutil.copy(self.inputfile, job_scratch_dir)
             scratch_inputfile = os.path.join(
-                job_scratch_dir, self.label + ".inp"
+                job_scratch_dir, f"{self.label}.inp"
             )
             assert os.path.exists(
                 scratch_inputfile
             ), f"inputfile {scratch_inputfile} is not found"
-        elif jobrunner.scratch and not os.path.exists(jobrunner.scratch_dir):
+        elif jobrunner.scratch and jobrunner.scratch_dir is not None:
             # if running job in scratch, but scratch dir is not found, then run the job in the run folder
-            logger.info(
+            logger.warning(
                 f"{jobrunner.scratch_dir} does not exist! Running job in {self.folder}."
             )
         else:
             logger.info(f"Running job in {self.folder}.")
 
-    @classmethod
-    def from_filename(
-        cls, folder, filename, settings=None, label=None, **kwargs
-    ):
-        # job.label as the filename (without extension) used
-        if label is None:
-            label = os.path.splitext(os.path.basename(filename))[0]
 
-        # get atoms object from supplied file
-        atoms = AtomsWrapper.from_filepath(filepath=filename)
+class ORCAGeneralJob(ORCAJob):
+    """ORCAGeneralJob subclasses ORCAJob, this is needed to prevent recursive loop.
 
-        # get settings from file
-        from pyatoms.jobs.orca.settings import ORCAJobSettings
+    For example, recursive loop occurs in class ORCACrestJob(ORCAJob) that
+    subclasses ORCAJob and calls and runs ORCAGeneralJob.
+    """
 
-        settings = ORCAJobSettings.from_inpfile(inp_path=filename)
-        logger.info(
-            f"Supplied file {filename} settings are: \n{settings.__dict__}"
-        )
-        return cls(
-            folder=folder,
-            atoms=atoms,
-            settings=settings,
-            label=label,
-            **kwargs,
+    TYPE = "orcajob"
+
+    def __init__(self, molecule, settings=None, label=None, **kwargs):
+        super().__init__(
+            molecule=molecule, settings=settings, label=label, **kwargs
         )

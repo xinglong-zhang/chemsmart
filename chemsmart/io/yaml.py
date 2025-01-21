@@ -1,6 +1,5 @@
 import logging
 
-
 from chemsmart.utils.mixins import YAMLFileMixin
 
 logger = logging.getLogger(__name__)
