@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_orca_jobtype_options
 @click.pass_context
-def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
+def scan(ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs):
     if jobtype is None:
         jobtype = "scan"
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    scan_settings = get_setting_from_jobtype_for_orca(project_settings, jobtype, coordinates, step_size, num_steps)
+    scan_settings = get_setting_from_jobtype_for_orca(project_settings, jobtype, coordinates, dist_start, dist_end, num_steps)
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`

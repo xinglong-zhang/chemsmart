@@ -223,7 +223,7 @@ def get_setting_from_jobtype_for_gaussian(
     return settings
 
 def get_setting_from_jobtype_for_orca(
-    project_settings, jobtype, coordinates, step_size, num_steps
+    project_settings, jobtype, coordinates, dist_start, dist_end, num_steps
 ):
     if jobtype is None:
         raise ValueError("Jobtype must be provided for Crest and Link job.")
@@ -243,11 +243,12 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.irc_settings()
     elif jobtype.lower() == "scan":
         assert all(
-            v is not None for v in [coordinates, step_size, num_steps]
+            v is not None for v in [coordinates, dist_start, dist_end, num_steps]
         ), (
-            "Scanning coordinates, step size and number of steps of scan required!\n"
-            "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
-            "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
+                "Scanning coordinates, starting distance, ending distance and number of steps of scan required!\n"
+                "Use the flags `-c -a -b -n` for coordinates, starting distance, ending distance and num-steps respectively.\n"
+                "Example usage: `-c [[2,3],[6,7]] -x 3.0 -y 1.2 -n 15` to scan the distance "
+                "between atom 3 and atom 4 and distance between atom 5 and 6 from distance 3.0 Angstrom to 1.2 Angstrom in 15 points. "
         )
         settings = project_settings.scan_settings()
     elif jobtype.lower() == "sp":
@@ -266,8 +267,9 @@ def get_setting_from_jobtype_for_orca(
         elif jobtype == "scan":
             scan_info = {
                 "coords": modred_info,
+                "dist_start": float(dist_start),
+                "dist_end": float(dist_end),
                 "num_steps": int(num_steps),
-                "step_size": float(step_size),
             }
             settings.modred = scan_info
 
