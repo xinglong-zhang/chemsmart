@@ -171,7 +171,7 @@ class CtxObjArguments:
         return [i for i in command_line if len(i) != 0]
 
 
-def get_setting_from_jobtype(
+def get_setting_from_jobtype_for_gaussian(
     project_settings, jobtype, coordinates, step_size, num_steps
 ):
     if jobtype is None:
@@ -222,6 +222,56 @@ def get_setting_from_jobtype(
 
     return settings
 
+def get_setting_from_jobtype_for_orca(
+    project_settings, jobtype, coordinates, step_size, num_steps
+):
+    if jobtype is None:
+        raise ValueError("Jobtype must be provided for Crest and Link job.")
+
+    settings = None
+
+    if jobtype.lower() == "opt":
+        settings = project_settings.opt_settings()
+    elif jobtype.lower() == "ts":
+        settings = project_settings.ts_settings()
+    elif jobtype.lower() == "modred":
+        assert (
+            coordinates is not None
+        ), "Coordinates must be provided for modred job."
+        settings = project_settings.modred_settings()
+    elif jobtype.lower() == "irc":
+        settings = project_settings.irc_settings()
+    elif jobtype.lower() == "scan":
+        assert all(
+            v is not None for v in [coordinates, step_size, num_steps]
+        ), (
+            "Scanning coordinates, step size and number of steps of scan required!\n"
+            "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
+            "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
+        )
+        settings = project_settings.scan_settings()
+    elif jobtype.lower() == "sp":
+        settings = project_settings.sp_settings()
+    elif jobtype.lower() == "td":
+        settings = project_settings.td_settings()
+    elif jobtype.lower() == "wbi":
+        settings = project_settings.wbi_settings()
+    elif jobtype.lower() == "nci":
+        settings = project_settings.nci_settings()
+
+    if coordinates is not None:
+        modred_info = eval(coordinates)
+        if jobtype == "modred":
+            settings.modred = modred_info
+        elif jobtype == "scan":
+            scan_info = {
+                "coords": modred_info,
+                "num_steps": int(num_steps),
+                "step_size": float(step_size),
+            }
+            settings.modred = scan_info
+
+    return settings
 
 
 

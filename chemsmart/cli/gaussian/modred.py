@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand, get_setting_from_jobtype
+from chemsmart.utils.cli import MyCommand, get_setting_from_jobtype_for_orca, get_setting_from_jobtype_for_gaussian
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
@@ -23,9 +23,7 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    modred_settings = get_setting_from_jobtype(
-        project_settings, jobtype, coordinates, step_size, num_steps
-    )
+    modred_settings = get_setting_from_jobtype_for_gaussian(project_settings, jobtype, coordinates, step_size, num_steps)
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
