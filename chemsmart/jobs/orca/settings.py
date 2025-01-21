@@ -513,38 +513,6 @@ class ORCATSJobSettings(ORCAJobSettings):
         f.write(f"{route_string}\n")
 
 
-class ORCAConstrainedOptJobSettings(ORCAJobSettings):
-    def __init__(
-        self, constrained_atoms=None, invert_constraints=False, **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.constrained_atoms = constrained_atoms
-        self.invert_constraints = invert_constraints
-
-    def _write_constrained_atoms(self, f, atoms=None):
-        if self.constrained_atoms is not None:
-            if isinstance(self.constrained_atoms, str):
-                from chemsmart.utils.utils import (
-                    get_list_from_string_range,
-                )
-
-                frozen_atoms_list = get_list_from_string_range(
-                    self.constrained_atoms
-                )
-            elif isinstance(self.constrained_atoms, list):
-                frozen_atoms_list = self.constrained_atoms
-            else:
-                raise ValueError(
-                    f"constrained_atoms must be a string or a list, but got {type(self.constrained_atoms)}"
-                )
-            f.write("%geom\n")
-            for i in frozen_atoms_list:
-                f.write(f"  {{ C {i-1} C }}\n")  # convert to 0-indexed
-            if self.invert_constraints:
-                f.write("  InvertConstraints True\n")
-            f.write("end\n")
-
-
 class ORCAIRCJobSettings(ORCAJobSettings):
     def __init__(
         self,
