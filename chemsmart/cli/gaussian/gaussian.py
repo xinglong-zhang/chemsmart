@@ -140,19 +140,19 @@ def click_gaussian_jobtype_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="list of coordinates to be fixed for modred or scan job",
+        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
     )
     @click.option(
         "-s",
         "--step-size",
         default=None,
-        help="step size of coordinates to scan",
+        help="Step size of coordinates to scan.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="step size of coordinates to scan",
+        help="Step size of coordinates to scan.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
