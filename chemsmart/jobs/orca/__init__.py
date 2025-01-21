@@ -1,5 +1,5 @@
 from .irc import ORCAIRCJob
-from .job import ORCAJob
+from .job import ORCAJob, ORCAInpJob, ORCAGeneralJob
 from .modred import ORCAModredJob
 from .opt import ORCAOptJob
 from .runner import ORCAJobRunner
@@ -14,6 +14,8 @@ __all__ = [
     "ORCAOptJob",
     "ORCAIRCJob",
     "ORCAJob",
+    "ORCAInpJob",
+    "ORCAGeneralJob",
     "ORCAModredJob",
     "ORCAJobRunner",
     "ORCAScanJob",

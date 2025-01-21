@@ -160,6 +160,11 @@ class ORCAInpJob(ORCAJob):
 
     @classmethod
     def from_filename(cls, filename, settings=None, label=None, **kwargs):
+
+        # first check that the file is orca format with .inp extension
+        logger.debug(f"Checking if {filename} is an ORCA input file.")
+        assert filename.endswith(".inp"), f"Input file must be .inp file."
+
         # job.label as the filename (without extension) used
         if label is None:
             label = os.path.splitext(os.path.basename(filename))[0]
@@ -173,7 +178,7 @@ class ORCAInpJob(ORCAJob):
         # get settings from file
         from chemsmart.jobs.orca.settings import ORCAJobSettings
 
-        # store file lines in settings
+        # store file lines in settings for direct writing of settings.input_string
         settings = ORCAJobSettings.from_filepath(filename)
         settings.input_string = input_lines
 
@@ -184,41 +189,15 @@ class ORCAInpJob(ORCAJob):
 
         return cls(molecule=None, settings=settings, label=label, **kwargs)
 
-
-class ORCAGeneralJob(ORCAJob):
-    """ORCAGeneralJob subclasses ORCAJob, this is needed to prevent recursive loop.
-
-    For example, recursive loop occurs in class ORCACrestJob(ORCAJob) that
-    subclasses ORCAJob and calls and runs ORCAGeneralJob.
-    """
-
-    TYPE = "orca"
-
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
-        )
-
-
-class ORCAInpJob(ORCAJob):
-    """Runs any given .inp ORCA input file as is."""
-
-    TYPE = "orcainp"
-
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
-        )
-
     def _run(self, jobrunner, queue_manager=None, **kwargs):
         """Override the _run method of parent to run the job as is."""
-        # instead of applying setting and write the input file, create the input file from the supplied .inp file
-        # and run it as is
+        # instead of applying setting and write the input file, create the input file
+        # from the supplied .inp file and run it as is
         self._copy_input(jobrunner=jobrunner)
         jobrunner.run(self)
 
     def _copy_input(self, jobrunner):
-        """Coy the supplied orca .inp file."""
+        """Copy the supplied orca .inp file."""
         if (
             jobrunner.scratch
             and jobrunner.scratch_dir is not None
@@ -230,42 +209,30 @@ class ORCAInpJob(ORCAJob):
                 os.mkdir(job_scratch_dir)
                 logger.info(f"Folder in scratch {job_scratch_dir} is made.")
             shutil.copy(self.inputfile, job_scratch_dir)
-            scratch_inputfile = os.path.join(
-                job_scratch_dir, self.label + ".inp"
-            )
+            scratch_inputfile = os.path.join(job_scratch_dir, f"{self.label}.inp")
             assert os.path.exists(
                 scratch_inputfile
             ), f"inputfile {scratch_inputfile} is not found"
         elif jobrunner.scratch and jobrunner.scratch_dir is not None:
             # if running job in scratch, but scratch dir is not found, then run the job in the run folder
-            logger.info(
+            logger.warning(
                 f"{jobrunner.scratch_dir} does not exist! Running job in {self.folder}."
             )
         else:
             logger.info(f"Running job in {self.folder}.")
 
-    # @classmethod
-    # def from_filename(
-    #     cls, folder, filename, settings=None, label=None, **kwargs
-    # ):
-    #     # job.label as the filename (without extension) used
-    #     if label is None:
-    #         label = os.path.splitext(os.path.basename(filename))[0]
-    #
-    #     # get molecule object from supplied file
-    #     atoms = AtomsWrapper.from_filepath(filepath=filename)
-    #
-    #     # get settings from file
-    #     from pyatoms.jobs.orca.settings import ORCAJobSettings
-    #
-    #     settings = ORCAJobSettings.from_inpfile(inp_path=filename)
-    #     logger.info(
-    #         f"Supplied file {filename} settings are: \n{settings.__dict__}"
-    #     )
-    #     return cls(
-    #         folder=folder,
-    #         atoms=atoms,
-    #         settings=settings,
-    #         label=label,
-    #         **kwargs,
-    #     )
+
+class ORCAGeneralJob(ORCAJob):
+    """ORCAGeneralJob subclasses ORCAJob, this is needed to prevent recursive loop.
+
+    For example, recursive loop occurs in class ORCACrestJob(ORCAJob) that
+    subclasses ORCAJob and calls and runs ORCAGeneralJob.
+    """
+
+    TYPE = "orcajob"
+
+    def __init__(self, molecule, settings=None, label=None, **kwargs):
+        super().__init__(
+            molecule=molecule, settings=settings, label=label, **kwargs
+        )
+

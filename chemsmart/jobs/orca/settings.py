@@ -2,9 +2,7 @@ import copy
 import logging
 import os
 import re
-from contextlib import suppress
-
-from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS as orca_solvation_models
+from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
@@ -104,17 +102,8 @@ class ORCAJobSettings(MolecularJobSettings):
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
     ):
-        """Overwrite self settings with other settings.
+        """Overwrite self settings with other settings."""
 
-        Args:
-            keywords (list): Specific list of keywords to merge.
-                Defaults to charge and multiplicity.
-                If None, all settings will be merged (Caution: may cause issue if e.g., genecp log file used to prepare
-                input without genecp).
-            other (JobSettings, dict): Settings to merge. Can also take the form of a dictionary
-            merge_all (bool): If True, merge all settings from other into self.
-                If False, only merge settings specified. Defaults to False.
-        """
         other_dict = other if isinstance(other, dict) else other.__dict__
 
         if merge_all:
@@ -156,11 +145,11 @@ class ORCAJobSettings(MolecularJobSettings):
     def from_comfile(cls, com_path):
         """Return orca job settings from supplied gaussian file."""
         com_path = os.path.abspath(com_path)
-        from pyatoms.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.input import Gaussian16Input
 
         logger.info(f"Return Settings object from {com_path}")
         gaussian_settings_from_comfile = Gaussian16Input(
-            comfile=com_path
+            filename=com_path
         ).read_settings()
         orca_default_settings = cls.default()
         return orca_default_settings.merge(
@@ -179,12 +168,10 @@ class ORCAJobSettings(MolecularJobSettings):
             OrcaJobSetting class.
         """
         log_path = os.path.abspath(log_path)
-        from pyatoms.io.gaussian.outputs import Gaussian16Output
+        from chemsmart.io.gaussian.output import Gaussian16Output
 
         logger.info(f"Return Settings object from {log_path}")
-        gaussian_settings_from_logfile = Gaussian16Output(
-            log_path, **kwargs
-        ).read_settings()
+        gaussian_settings_from_logfile = Gaussian16Output(log_path).read_settings()
         orca_default_settings = cls.default()
         orca_settings_from_logfile = orca_default_settings.merge(
             gaussian_settings_from_logfile, merge_all=True
@@ -202,11 +189,11 @@ class ORCAJobSettings(MolecularJobSettings):
     def from_inpfile(cls, inp_path):
         """Return orca job settings from supplied orca .inp file."""
         inp_path = os.path.abspath(inp_path)
-        from pyatoms.io.orca.inputs import ORCAInput
+        from chemsmart.io.orca.input import ORCAInput
 
         logger.info(f"Return settings object from {inp_path}")
         orca_settings_from_inpfile = ORCAInput(
-            inpfile=inp_path
+            filename=inp_path
         ).read_settings()
         logger.info(f"with settings: {orca_settings_from_inpfile.__dict__}")
         return orca_settings_from_inpfile
@@ -215,10 +202,10 @@ class ORCAJobSettings(MolecularJobSettings):
     def from_outfile(cls, out_path):
         """Return orca job settings from supplied orca .out file."""
         out_path = os.path.abspath(out_path)
-        from pyatoms.io.orca.outputs import ORCAOutput
+        from chemsmart.io.orca.output import ORCAOutput
 
         logger.info(f"Return Settings object from {out_path}")
-        return ORCAOutput(outputfile=out_path).read_settings()
+        return ORCAOutput(filename=out_path).read_settings()
 
     @classmethod
     def from_xyzfile(cls):
@@ -365,50 +352,6 @@ class ORCAJobSettings(MolecularJobSettings):
 
         return route_string
 
-    def write_orca_input(
-        self,
-        atoms,
-        jobrunner=None,
-        job_label=None,
-        output_dir=None,
-        make_dir_if_not_present=True,
-    ):
-        """Write Orca input to a file."""
-        logger.info(f"Writing orca input file with settings: {self.__dict__}")
-
-        if output_dir is None:
-            output_dir = "."
-        if not os.path.isdir(output_dir) and make_dir_if_not_present:
-            os.mkdir(output_dir)
-
-        # get basename/job_label for inputs/outputs writing
-        assert (
-            job_label is not None
-        ), f"Basename of Orca file to be written {job_label} cannot be None!"
-
-        atoms = AtomsWrapper.from_atoms(atoms)
-        input_filename = job_label + ".inp"
-        filepath = os.path.join(output_dir, input_filename)
-        logger.info(f"Writing inputfile {filepath} to folder {output_dir}\n")
-        logger.info(f"Writing orca file with settings: {self.__dict__}\n")
-
-        with open(filepath, "w") as f:  # will close() when we leave this block
-            self._write_route_section(f)
-            self._write_nproc_block(f, jobrunner=jobrunner)
-            self._write_mem_block(f, jobrunner=jobrunner)
-            self._write_scf_block(f)
-            self._write_solvent_block(f)
-            self._write_modred_block(f)
-            self._write_hessian_block(f)  # writes if defined in subclass
-            self._write_mdci_block(f)
-            self._write_elprop_block(f)
-            self._write_irc_block(f)  # writes if defined in subclass
-            self._write_constrained_atoms(
-                f, atoms=atoms
-            )  # writes if defined in subclass
-            self._write_geometry(f, atoms=atoms)
-            f.close()
-
     def _get_level_of_theory(self):
         level_of_theory = ""
         if self.ab_initio is not None and self.functional is not None:
@@ -457,57 +400,11 @@ class ORCAJobSettings(MolecularJobSettings):
         f.write(coordinates)
         f.write("*\n")
 
-    def apply_on(self, job, jobrunner):
-        if (
-            jobrunner.scratch
-            and jobrunner.scratch_dir is not None
-            and os.path.exists(jobrunner.scratch_dir)
-        ):
-            job_scratch_dir = os.path.join(jobrunner.scratch_dir, job.label)
-            with suppress(FileExistsError):
-                os.mkdir(job_scratch_dir)
-                logger.info(f"Folder in scratch {job_scratch_dir} is made.")
-            self.write_orca_input_from_job(
-                output_dir=job_scratch_dir, job=job, jobrunner=jobrunner
-            )
-            scratch_inputfile = os.path.join(
-                job_scratch_dir, f"{job.label}.inp"
-            )
-            assert os.path.exists(
-                scratch_inputfile
-            ), f"inputfile {scratch_inputfile} is not found"
-        elif jobrunner.scratch and not os.path.exists(jobrunner.scratch_dir):
-            logger.info(
-                f"{jobrunner.scratch_dir} does not exist! Running job in {job.folder}."
-            )
-            self.write_orca_input_from_job(
-                output_dir=job.folder, job=job, jobrunner=jobrunner
-            )
-            inputfilename = os.path.basename(
-                job.inputfile
-            )  # job.inputfile is the full path to the inputfile
-            runfolder_inputfile = os.path.join(job.folder, inputfilename)
-            assert os.path.exists(
-                runfolder_inputfile
-            ), f"inputfile {runfolder_inputfile} is not found"
-        else:
-            logger.info(f"Running job in {job.folder}.")
-            self.write_orca_input_from_job(
-                output_dir=job.folder, job=job, jobrunner=jobrunner
-            )
-            inputfilename = os.path.basename(
-                job.inputfile
-            )  # job.inputfile is the full path to the inputfile
-            runfolder_inputfile = os.path.join(job.folder, inputfilename)
-            assert os.path.exists(
-                runfolder_inputfile
-            ), f"inputfile {runfolder_inputfile} is not found"
-
     def _check_solvent(self, solvent_model):
-        if solvent_model.lower() not in orca_solvation_models:
+        if solvent_model.lower() not in ORCA_ALL_SOLVENT_MODELS:
             raise ValueError(
                 f"The specified solvent model {solvent_model} is not in \n"
-                f"the available solvent models: {orca_solvation_models}"
+                f"the available solvent models: {ORCA_ALL_SOLVENT_MODELS}"
             )
 
 
@@ -627,7 +524,7 @@ class ORCAConstrainedOptJobSettings(ORCAJobSettings):
     def _write_constrained_atoms(self, f, atoms=None):
         if self.constrained_atoms is not None:
             if isinstance(self.constrained_atoms, str):
-                from pyatoms.io.gaussian.utils import (
+                from chemsmart.utils.utils import (
                     get_list_from_string_range,
                 )
 

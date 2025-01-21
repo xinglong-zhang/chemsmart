@@ -3,9 +3,7 @@ import logging
 import os
 import re
 
-from chemsmart.io.gaussian import (
-    GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
-)
+from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
@@ -105,7 +103,8 @@ class GaussianJobSettings(MolecularJobSettings):
                 If None, all settings will be merged (Caution: may cause issue if e.g.,
                 genecp log file used to prepare input without genecp).
             other (JobSettings, dict): Settings to merge. Can also take the form of a dictionary
-            merge_all (bool): If True, merge all settings. If False, only merge the settings specified in keywords.
+            merge_all (bool): If True, merge all settings.
+            If False, only merge the settings specified in keywords.
         """
         other_dict = other if isinstance(other, dict) else other.__dict__
 
@@ -195,7 +194,6 @@ class GaussianJobSettings(MolecularJobSettings):
 
         Args:
             filename (str): file path of the .log file to be supplied.
-            kwargs (dict): additional keyword arguments to be supplied to Gaussian16Output.
         """
         log_path = os.path.abspath(filename)
         from chemsmart.io.gaussian.output import (
@@ -271,7 +269,7 @@ class GaussianJobSettings(MolecularJobSettings):
         if filepath.endswith(".inp"):
             return cls.from_inpfile(filepath)
         if filepath.endswith(".log"):
-            return cls.from_logfile(filepath, **kwargs)
+            return cls.from_logfile(filepath)
         raise ValueError(f"Could not create {cls} from {filepath}")
 
     @property
@@ -468,10 +466,10 @@ class GaussianJobSettings(MolecularJobSettings):
         )
 
     def _check_solvent(self, solvent_model):
-        if solvent_model.lower() not in gaussian_solvation_models:
+        if solvent_model.lower() not in GAUSSIAN_SOLVATION_MODELS:
             raise ValueError(
                 f"The specified solvent model {solvent_model} is not in \n"
-                f"the available solvent models: {gaussian_solvation_models}"
+                f"the available solvent models: {GAUSSIAN_SOLVATION_MODELS}"
             )
 
 

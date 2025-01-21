@@ -8,6 +8,9 @@ from chemsmart.io.orca import (
     ORCA_ALL_EXTRAPOLATION_BASIS_SETS,
     ORCA_ALL_FUNCTIONALS,
 )
+from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
+from chemsmart.io.orca import ORCA_ALL_SCF_ALGORITHMS
+from chemsmart.io.orca import ORCA_ALL_JOB_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +81,8 @@ class ORCARoute:
 
     @property
     def scf_tol(self):
-        from chemsmart.io.orca import ORCA_SCF_CONVERGENCE as convs
-
         for route_input in self.route_inputs:
-            if any(conv in route_input for conv in convs):
+            if any(conv in route_input for conv in ORCA_SCF_CONVERGENCE):
                 if route_input.endswith("scf"):
                     return route_input[:-3]
                 return route_input
@@ -89,19 +90,15 @@ class ORCARoute:
 
     @property
     def scf_algorithm(self):
-        from chemsmart.io.orca import ORCA_ALL_SCF_ALGORITHMS as algs
-
         for route_input in self.route_inputs:
-            if any(alg in route_input for alg in algs):
+            if any(alg in route_input for alg in ORCA_ALL_SCF_ALGORITHMS):
                 return route_input
         return None
 
     @property
     def job_type(self):
-        from chemsmart.io.orca import ORCA_ALL_JOB_TYPES as ORCA_JOB_TYPES
-
         for route_input in self.route_inputs:
-            if route_input in ORCA_JOB_TYPES:
+            if route_input in ORCA_ALL_JOB_TYPES:
                 return route_input
         return "sp"
 
