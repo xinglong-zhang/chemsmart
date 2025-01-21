@@ -216,7 +216,119 @@ class ORCAInputWriter(InputWriter):
         pass
 
     def _write_irc_block(self, f):
-        pass
+        """Writes the IRC block options.
+
+        IRC block input example below:
+        ! IRC
+        %irc
+            MaxIter    20
+            PrintLevel 1
+            Direction  both # both - default
+                            # forward
+                            # backward
+                            # down
+        # Initial displacement
+            InitHess   read # by default ORCA uses the Hessian from AnFreq or NumFreq, or computes a new one
+                            # read    - reads the Hessian that is defined via Hess_Filename
+                            # calc_anfreq  - computes the analytic Hessian
+                            # calc_numfreq - computes the numeric Hessian
+            Hess_Filename "h2o.hess"  # Hessian for initial displacement, must be used together with InitHess = read
+            hessMode   0  # Hessian mode that is used for the initial displacement. Default 0
+            Init_Displ DE      # DE (default) - energy difference
+                               # length       - step size
+            Scale_Init_Displ 0.1 # step size for initial displacement from TS. Default 0.1 a.u.
+            DE_Init_Displ    2.0 # energy difference that is expected for initial displacement
+                                 #  based on provided Hessian (Default: 2 mEh)
+        # Steps
+            Follow_CoordType cartesian # default and only option
+            Scale_Displ_SD    0.15  # Scaling factor for scaling the 1st SD step
+            Adapt_Scale_Displ true  # modify Scale_Displ_SD when the step size becomes smaller or larger
+            SD_ParabolicFit   true  # Do a parabolic fit for finding an optimal SD step length
+            Interpolate_only  true  # Only allow interpolation for parabolic fit, not extrapolation
+            Do_SD_Corr        true  # Apply a correction to the 1st SD step
+            Scale_Displ_SD_Corr  0.333 # Scaling factor for scaling the correction step to the SD step.
+                                       # It is multiplied by the length of the final 1st SD step
+            SD_Corr_ParabolicFit true  # Do a parabolic fit for finding an optimal correction
+                                       # step length
+        # Convergence thresholds - similar to LooseOpt
+            TolRMSG   5.e-4      # RMS gradient (a.u.)
+            TolMaxG   2.e-3      # Max. element of gradient (a.u.)
+        # Output options
+            Monitor_Internals   # Up to three internal coordinates can be defined
+                {B 0 1}         # for which the values are printed during the IRC run.
+                {B 1 5}         # Possible are (B)onds, (A)ngles, (D)ihedrals and (I)mpropers
+            end
+        end.
+        """
+        irc_settings_keys = self.settings.__dict__.keys()
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        parent_settings_keys = ORCAJobSettings().__dict__.keys()
+        irc_specific_keys = set(irc_settings_keys) - set(parent_settings_keys)
+
+        if not any(
+            getattr(self.settings, key) is not None
+            for key in irc_specific_keys
+        ):
+            return
+
+        # write irc block if any option value is not None:
+        f.write("%irc\n")
+        for key in irc_specific_keys:
+            value = getattr(self.settings, key)
+            if value is None:
+                continue  # ignore the rest of the code and go to next in the for loop
+            # only write into IRC input if the value is not None
+            if key == "internal_modred":
+                pass  # internal_modred is not an option in ORCA IRC file
+            elif key == "inithess":
+                f.write(f"  {key} {value}\n")
+                if value.lower() == "read":  # if initial hessian is to be read
+                    assert (
+                        self.settings.hess_filename is not None
+                    ), "No Hessian file is given!"
+                    assert os.path.exists(
+                        self.settings.hess_filename
+                    ), f"Hessian file {self.settings.hess_filename} is not found!"
+                    f.write(
+                        f'  Hess_Filename "{self.settings.hess_filename}"  # Hessian file\n'
+                    )
+            elif (
+                key == "hess_filename"
+            ):  # already used/written, if initial hessian is to be read
+                pass
+            elif key == "monitor_internals":
+                if value is True:
+                    f.write("  True\n")
+                    assert (
+                        self.settings.internal_modred is not None
+                    ), 'No internal modred is specified for IRC job "monitor_intervals" option!'
+                    prepend_string_list = (
+                        get_prepend_string_list_from_modred_free_format(
+                            self.settings.internal_modred, program_type="orca"
+                        )
+                    )
+                    for prepend_string in prepend_string_list:
+                        f.write(f"  {{ {prepend_string} }}\n")
+                    f.write("  end\n")
+            elif key == "adapt_scale_displ":
+                if value is True:
+                    f.write("  Adapt_Scale_Displ True\n")
+            elif key == "sd_parabolicfit":
+                if value is True:
+                    f.write("  SD_ParabolicFit True\n")
+            elif key == "interpolate_only":
+                if value is True:
+                    f.write("  Interpolate_only True\n")
+            elif key == "do_sd_corr":
+                if value is True:
+                    f.write("  Do_SD_Corr True\n")
+            elif key == "sd_corr_parabolicfit":
+                if value is True:
+                    f.write("  SD_Corr_ParabolicFit True\n")
+            else:  # all other keys with given values
+                f.write(f"  {key} {value}\n")
+        f.write("end\n")
 
     def _write_constrained_atoms(self, f):
         """Write constraints on atoms in a molecule, if specified via frozen_atoms."""

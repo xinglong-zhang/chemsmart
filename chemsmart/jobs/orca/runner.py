@@ -208,9 +208,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
     ]
 
     def __init__(self, server, scratch=None, fake=True, **kwargs):
-        super().__init__(
-            server=server, scratch=scratch, fake=fake, **kwargs
-        )
+        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     def run(self, job):
         self._prerun(job=job)
@@ -219,7 +217,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
         self._postrun(job=job)
         return returncode
 
-    
+
 class FakeORCA:
     def __init__(self, file_to_run):
         if not os.path.exists(file_to_run):

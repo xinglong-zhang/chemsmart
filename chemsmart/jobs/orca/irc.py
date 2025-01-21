@@ -1,9 +1,9 @@
 import logging
 
 import click
-from pyatoms.cli.job import click_job_options
-from pyatoms.jobs.orca.job import ORCAJob
-from pyatoms.utils.cli import MyCommand
+from chemsmart.cli.job import click_job_options
+from chemsmart.jobs.orca.job import ORCAJob
+from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 class ORCAIRCJob(ORCAJob):
     TYPE = "orcairc"
 
-    def __init__(self, folder, atoms, settings, **kwargs):
+    def __init__(self, molecule, settings, label, **kwargs):
         super().__init__(
-            folder=folder, atoms=atoms, settings=settings, **kwargs
+            molecule=molecule, settings=settings, label=label, **kwargs
         )
 
     @staticmethod

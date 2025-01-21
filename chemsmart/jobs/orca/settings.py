@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+import re
 from contextlib import suppress
 
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS as orca_solvation_models
@@ -696,13 +697,16 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         self.monitor_internals = monitor_internals
         self.internal_modred = internal_modred
 
-    def _write_route_section_default(self, f):
-        # modify route string for IRC job
-        route_string = self._write_route_string(job_type="irc")
-        route_string = route_string.replace(
-            "Freq ", ""
-        )  # turn off freq calc in irc job
-        f.write(f"{route_string}\n")
+    @property
+    def route_string(self):
+        """Get the ORCA job route string for ORCA IRC job; overrides parent property."""
+        self.job_type = "irc"
+        route_string = self._get_route_string_from_jobtype()
+        if "freq" in route_string.lower():
+            route_string = re.sub(
+                r"freq", "", route_string, flags=re.IGNORECASE
+            )
+        return route_string
 
     def _write_irc_block(self, f):
         """Writes the IRC block options.

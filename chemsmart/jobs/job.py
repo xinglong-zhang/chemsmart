@@ -23,7 +23,9 @@ class Job(RegistryMixin):
     TYPE: Optional[str] = None
     PROGRAM: Optional[str] = None
 
-    def __init__(self, molecule, label, local=False, skip_completed=True):
+    def __init__(
+        self, molecule, label, local=False, skip_completed=True, **kwargs
+    ):
         self.molecule = molecule
         self.label = label
         self.local = local
