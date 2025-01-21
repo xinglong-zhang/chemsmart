@@ -67,7 +67,7 @@ jobs:
           black --line-length 79 --check .
       - name: Test with pytest and calculate coverage
         run: |
-          pytest --cov-report "xml:coverage.xml"  --cov=.
+          pytest --cov-report "xml:coverage.xml"  --cov=. chemsmart/tests
       - name: Create Coverage
         if: ${{ github.event_name == 'pull_request' }}
         uses: orgoro/coverage@v3
@@ -135,4 +135,4 @@ jobs:
       - name: Install project
         run: pip install -e .[test]
       - name: run tests
-        run: pytest -s -vvvv -l --tb=long tests
+        run: pytest -s -vvvv -l --tb=long chemsmart/tests
