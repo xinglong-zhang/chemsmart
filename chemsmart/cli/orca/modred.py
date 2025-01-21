@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_orca_jobtype_options
 @click.pass_context
-def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
+def modred(ctx, jobtype, coordinates, **kwargs):
     if jobtype is None:
         jobtype = "modred"
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     modred_settings = get_setting_from_jobtype(
-        project_settings, jobtype, coordinates, step_size, num_steps
+        project_settings, jobtype, coordinates, program="orca", **kwargs
     )
 
     # job setting from filename or default, with updates from user in cli specified in keywords

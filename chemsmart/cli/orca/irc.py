@@ -10,7 +10,7 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-@orca.command(cls=MyCommand)
+@orca.command("irc",cls=MyCommand)
 @click_job_options
 @click.option(
     "--maxiter",

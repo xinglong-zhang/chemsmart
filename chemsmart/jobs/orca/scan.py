@@ -1,10 +1,11 @@
-from pyatoms.jobs.orca.job import ORCAJob
+from chemsmart.jobs.orca.job import ORCAJob
 
 
 class ORCAScanJob(ORCAJob):
     TYPE = "orcascan"
 
-    def __init__(self, folder, atoms, settings, **kwargs):
+    def __init__(self, molecule, settings, label, **kwargs):
         super().__init__(
-            folder=folder, atoms=atoms, settings=settings, **kwargs
+            molecule=molecule, settings=settings, label=label, **kwargs
         )
+

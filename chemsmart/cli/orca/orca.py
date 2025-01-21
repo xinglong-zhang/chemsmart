@@ -212,12 +212,8 @@ def click_orca_jobtype_options(f):
         default=None,
         help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
     )
-    @click.option(
-        "-s",
-        "--step-size",
-        default=None,
-        help="Step size of coordinates to scan.",
-    )
+    @click.option('-x', '--dist-start', default=None, help='starting distance to scan, in Angstroms.')
+    @click.option('-y', '--dist-end', default=None, help='ending distance to scan, in Angstroms.')
     @click.option(
         "-n",
         "--num-steps",

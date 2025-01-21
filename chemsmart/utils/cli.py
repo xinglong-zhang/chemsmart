@@ -58,58 +58,6 @@ class MyCommand(click.Command):
         return super().invoke(ctx)
 
 
-def get_setting_from_jobtype(
-    project_settings, jobtype, coordinates, step_size, num_steps
-):
-    if jobtype is None:
-        raise ValueError("Jobtype must be provided for Crest and Link job.")
-
-    settings = None
-
-    if jobtype.lower() == "opt":
-        settings = project_settings.opt_settings()
-    elif jobtype.lower() == "ts":
-        settings = project_settings.ts_settings()
-    elif jobtype.lower() == "modred":
-        assert (
-            coordinates is not None
-        ), "Coordinates must be provided for modred job."
-        settings = project_settings.modred_settings()
-    elif jobtype.lower() == "irc":
-        settings = project_settings.irc_settings()
-    elif jobtype.lower() == "scan":
-        assert all(
-            v is not None for v in [coordinates, step_size, num_steps]
-        ), (
-            "Scanning coordinates, step size and number of steps of scan required!\n"
-            "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
-            "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
-        )
-        settings = project_settings.scan_settings()
-    elif jobtype.lower() == "sp":
-        settings = project_settings.sp_settings()
-    elif jobtype.lower() == "td":
-        settings = project_settings.td_settings()
-    elif jobtype.lower() == "wbi":
-        settings = project_settings.wbi_settings()
-    elif jobtype.lower() == "nci":
-        settings = project_settings.nci_settings()
-
-    if coordinates is not None:
-        modred_info = eval(coordinates)
-        if jobtype == "modred":
-            settings.modred = modred_info
-        elif jobtype == "scan":
-            scan_info = {
-                "coords": modred_info,
-                "num_steps": int(num_steps),
-                "step_size": float(step_size),
-            }
-            settings.modred = scan_info
-
-    return settings
-
-
 class CtxObjArguments:
     def __init__(self, commands, entry_point=None):
         self.commands = copy.copy(commands)
@@ -221,3 +169,97 @@ class CtxObjArguments:
         command_line = self._reconstruct_family(parent)
         # logger.info(f'Cmd: {command_line}')
         return [i for i in command_line if len(i) != 0]
+
+
+def get_setting_from_jobtype(
+    project_settings, jobtype, coordinates, program="gaussian", **kwargs
+):
+    if jobtype is None:
+        raise ValueError("Jobtype must be provided for Modred, Scan, Crest and Link job.")
+
+    settings = None
+
+    if jobtype.lower() == "opt":
+        settings = project_settings.opt_settings()
+    elif jobtype.lower() == "ts":
+        settings = project_settings.ts_settings()
+    elif jobtype.lower() == "modred":
+        assert (
+                coordinates is not None
+        ), "Coordinates must be provided for modred job."
+        settings = project_settings.modred_settings()
+    elif jobtype.lower() == "irc":
+        settings = project_settings.irc_settings()
+    elif jobtype.lower() == "scan":
+        if program.lower() == "gaussian":
+            _check_scan_input(coordinates, program=program, **kwargs)
+        elif program.lower() == "orca":
+            _check_scan_input(coordinates, program=program, **kwargs)
+        settings = project_settings.scan_settings()
+    elif jobtype.lower() == "sp":
+        settings = project_settings.sp_settings()
+    elif jobtype.lower() == "td":
+        settings = project_settings.td_settings()
+    elif jobtype.lower() == "wbi":
+        settings = project_settings.wbi_settings()
+    elif jobtype.lower() == "nci":
+        settings = project_settings.nci_settings()
+
+    if coordinates is not None:
+        if jobtype == "modred":
+            modred_info = eval(coordinates)
+            settings.modred = modred_info
+        elif jobtype == "scan":
+            scan_info = _get_scan_info(coordinates, **kwargs)
+            settings.modred = scan_info
+
+    return settings
+
+
+def _check_scan_input(coordinates, program, step_size, num_steps, dist_start, dist_stop, **kwargs):
+    if program.lower() == "gaussian":
+        dist_start = None
+        dist_stop = None
+        assert all(
+            v is not None for v in [coordinates, step_size, num_steps]
+        ), (
+            "Scanning coordinates, step size and number of steps of scan required!\n"
+            "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
+            "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15` to scan the distances between atoms 2 and 3;"
+            "and distance between atoms 6 and 7 in 15 points, at 0.1 Å each."
+        )
+    elif program.lower() == "orca":
+        step_size = None
+        assert all(
+            v is not None for v in [coordinates, dist_start, dist_stop]
+        ), (
+            "Scanning coordinates, starting distance, ending distance and number of steps of scan required!\n"
+            "Use the flags `-c -a -b -n` for coordinates, starting distance, ending distance and num-steps respectively.\n"
+            "Example usage: `-c [[2,3],[6,7]] -x 3.0 -y 1.2 -n 15` to scan the distance "
+            "between atom 3 and atom 4 and distance between atom 5 and 6 from distance 3.0 Å to 1.2 Å in 15 points. "
+        )
+    else:
+        # add more programs here
+        pass
+
+def _get_scan_info(coordinates, program="gaussian", **kwargs):
+    scan_info = eval(coordinates)
+    if program.lower() == "gaussian":
+        scan_info = {
+            "coords": scan_info,
+            "num_steps": int(kwargs["num_steps"]),
+            "step_size": float(kwargs["step_size"]),
+        }
+    elif program.lower() == "orca":
+        scan_info = {
+            "coords": scan_info,
+            "dist_start": float(kwargs["dist_start"]),
+            "dist_stop": float(kwargs["dist_stop"]),
+            "num_steps": int(kwargs["num_steps"]),
+        }
+    else:
+        # add more programs here
+        pass
+
+    return scan_info
+

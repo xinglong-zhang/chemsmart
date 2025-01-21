@@ -50,7 +50,7 @@ def link(
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     link_settings = get_setting_from_jobtype(
-        project_settings, jobtype, coordinates, step_size, num_steps
+        project_settings, jobtype, coordinates, step_size, num_steps, program="gaussian", **kwargs
     )
 
     # job setting from filename or default, with updates from user in cli specified in keywords

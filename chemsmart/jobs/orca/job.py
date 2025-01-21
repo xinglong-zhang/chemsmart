@@ -163,7 +163,9 @@ class ORCAInpJob(ORCAJob):
 
         # first check that the file is orca format with .inp extension
         logger.debug(f"Checking if {filename} is an ORCA input file.")
-        assert filename.endswith(".inp"), f"Input file must be .inp file."
+        assert filename.endswith(".inp"), "Input file must be .inp file."
+
+        molecule = Molecule.from_filepath(filepath=filename)
 
         # job.label as the filename (without extension) used
         if label is None:
@@ -185,9 +187,10 @@ class ORCAInpJob(ORCAJob):
         logger.debug(
             f"Supplied file {filename} settings are: \n{settings.__dict__}"
         )
+
         logger.debug(f"Writing input lines: \n{input_lines}")
 
-        return cls(molecule=None, settings=settings, label=label, **kwargs)
+        return cls(molecule=molecule, settings=settings, label=label, **kwargs)
 
     def _run(self, jobrunner, queue_manager=None, **kwargs):
         """Override the _run method of parent to run the job as is."""
