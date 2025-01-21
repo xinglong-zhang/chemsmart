@@ -82,7 +82,7 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
     return gaussian_scan_inputfile
 
 
-@pytest.fixture
+@pytest.fixture()
 def hf_com_filepath(gaussian_inputs_test_directory):
     return os.path.join(gaussian_inputs_test_directory, "hf.com")
 
@@ -101,17 +101,17 @@ def gaussian_opt_genecp_inputfile(gaussian_inputs_genecp_directory):
     return gaussian_opt_genecp_input
 
 
-@pytest.fixture
+@pytest.fixture()
 def modred_gen_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_gen.com")
 
 
-@pytest.fixture
+@pytest.fixture()
 def modred_genecp_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_genecp.com")
 
 
-@pytest.fixture
+@pytest.fixture()
 def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(
         gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
@@ -245,33 +245,33 @@ def gaussian_pbc_3d_outputfile(gaussian_pbc_outputs_test_directory):
 
 
 # text path and associated files
-@pytest.fixture
+@pytest.fixture()
 def txt_path(gaussian_test_directory):
     test_txt_path = os.path.join(gaussian_test_directory, "text")
     return os.path.abspath(test_txt_path)
 
 
-@pytest.fixture
+@pytest.fixture()
 def reference_genecp_txt_file_from_api(txt_path):
     return os.path.join(txt_path, "genecp_txt_from_api.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def genecp_txt_file_from_web(txt_path):
     return os.path.join(txt_path, "test_genecp.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gen_txt_file_from_web(txt_path):
     return os.path.join(txt_path, "test_gen.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def smd_TBME_solvent_parameters_txt_file(txt_path):
     return os.path.join(txt_path, "smd_TBME.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def Ni_def2tzvp_PCHOSi_svp_txt_file(txt_path):
     return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
 
@@ -309,17 +309,17 @@ def esp_cube_file(cube_test_directory):
 
 
 # gaussian yaml files
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "project_yaml")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_defaults(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "defaults.yaml")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_gas_solv(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "gas_solv.yaml")
 
@@ -331,13 +331,13 @@ def gaussian_yaml_settings_gas_solv_project_name(
     return os.path.join(gaussian_yaml_settings_directory, "gas_solv")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "solv.yaml")
 
 
 # gaussian written files
-@pytest.fixture
+@pytest.fixture()
 def gaussian_written_files_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "written_files")
 
@@ -440,27 +440,27 @@ def gaussian_written_opt_from_graphite_2d_pbc_log(
 
 
 # text path and associated files
-@pytest.fixture
+@pytest.fixture()
 def text_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "text")
 
 
-@pytest.fixture
+@pytest.fixture()
 def genecp_text_file_from_web(text_directory):
     return os.path.join(text_directory, "test_genecp.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gen_text_file_from_web(text_directory):
     return os.path.join(txt_path, "test_gen.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def smd_TBME_solvent_parameters_text_file(txt_path):
     return os.path.join(txt_path, "smd_TBME.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def Ni_def2tzvp_PCHOSi_svp_text_file(txt_path):
     return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
 
