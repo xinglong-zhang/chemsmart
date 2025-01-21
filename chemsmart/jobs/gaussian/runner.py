@@ -2,7 +2,6 @@ import logging
 import os
 import shlex
 import subprocess
-import sys
 from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
@@ -16,13 +15,6 @@ from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
-
-if sys.version_info >= (3, 10):
-    from shutil import _USE_CP_SENDFILE  # noqa F811
-
-    _USE_CP_SENDFILE = False  # noqa F811
-    # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
-    # only works in Python 3.10
 
 logger = logging.getLogger(__name__)
 
