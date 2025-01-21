@@ -45,15 +45,6 @@ jobs:
           rm -rf ~/.cache/pip
           rm -rf ./.gradle/caches/
           rm -rf ~/.m2/repository/
-
-      - name: Cache dependencies
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
@@ -62,7 +53,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install flake8 pytest pytest-cov
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
