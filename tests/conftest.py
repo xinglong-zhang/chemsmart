@@ -93,17 +93,17 @@ def gaussian_opt_genecp_inputfile(gaussian_inputs_genecp_directory):
 
 
 @pytest.fixture
-def modred_gen_comfile(gaussian_inputs_genecp_directory):
+def modred_gen_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_gen.com")
 
 
 @pytest.fixture
-def modred_genecp_comfile(gaussian_inputs_genecp_directory):
+def modred_genecp_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_genecp.com")
 
 
 @pytest.fixture
-def modred_genecp_custom_solvent_comfile(gaussian_inputs_genecp_directory):
+def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(
         gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
     )
@@ -139,6 +139,61 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
     return gaussian_quintet_opt_outfile
 
 
+# Gaussian output files for genecp
+@pytest.fixture()
+def gaussian_ts_genecp_outfile(gaussian_outputs_test_directory):
+    gaussian_ts_genecp_output = os.path.join(
+        gaussian_outputs_test_directory, "pd_genecp_ts.log"
+    )
+    return gaussian_ts_genecp_output
+
+
+# Gaussian output file for frozen coordinates
+@pytest.fixture()
+def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_frozen_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "frozen_coordinates_opt.log"
+    )
+    return gaussian_frozen_opt_outfile
+
+
+# Gaussian output file for Hirshfeld charges
+@pytest.fixture()
+def gaussian_hirshfeld_outfile(gaussian_outputs_test_directory):
+    gaussian_hirshfeld_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "oxetane_hirshfeld_sp_smd_n_n-DiMethylFormamide.log",
+    )
+    return gaussian_hirshfeld_outfile
+
+
+@pytest.fixture()
+def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
+    gaussian_hirshfeld_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "oxetane_rc_hirshfeld_sp_smd_n_n-DiMethylFormamide.log",
+    )
+    return gaussian_hirshfeld_outfile
+
+
+# Gaussian output file for MP2 calculations
+@pytest.fixture()
+def gaussian_mp2_outputfile(gaussian_outputs_test_directory):
+    gaussian_mp2_outfile = os.path.join(
+        gaussian_outputs_test_directory, "water_mp2.log"
+    )
+    return gaussian_mp2_outfile
+
+
+# Gaussian output file for (failed) ONIOM calculations
+@pytest.fixture()
+def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
+    gaussian_oniom_outfile = os.path.join(
+        gaussian_outputs_test_directory, "failed_oniom_b3lypd3_in_uff.log"
+    )
+    return gaussian_oniom_outfile
+
+
 # Gaussian pbc input files
 @pytest.fixture()
 def gaussian_pbc_test_directory(gaussian_test_directory):
@@ -156,6 +211,28 @@ def gaussian_pbc_1d_inputfile(gaussian_pbc_inputs_test_directory):
         gaussian_pbc_inputs_test_directory, "neoprene_1d.com"
     )
     return gaussian_pbc_1d_inputfile
+
+
+# Gaussian PBC output files
+@pytest.fixture()
+def gaussian_pbc_outputs_test_directory(gaussian_pbc_test_directory):
+    return os.path.join(gaussian_pbc_test_directory, "log")
+
+
+@pytest.fixture()
+def gaussian_pbc_2d_outputfile(gaussian_pbc_outputs_test_directory):
+    gaussian_pbc_2d_outputfile = os.path.join(
+        gaussian_pbc_outputs_test_directory, "graphite_2d_opt.log"
+    )
+    return gaussian_pbc_2d_outputfile
+
+
+@pytest.fixture()
+def gaussian_pbc_3d_outputfile(gaussian_pbc_outputs_test_directory):
+    gaussian_pbc_3d_outputfile = os.path.join(
+        gaussian_pbc_outputs_test_directory, "gallium_arsenide_3d.log"
+    )
+    return gaussian_pbc_3d_outputfile
 
 
 # text path and associated files
@@ -361,3 +438,24 @@ def orca_yaml_settings_gas_solv(orca_yaml_settings_directory):
 @pytest.fixture()
 def orca_yaml_settings_solv(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "solv.yaml")
+
+
+# test for structure.py
+@pytest.fixture()
+def structure_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "StructuresTest")
+
+
+@pytest.fixture()
+def xyz_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "xyz")
+
+
+@pytest.fixture()
+def single_molecule_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crest_best.xyz")
+
+
+@pytest.fixture()
+def multiple_molecules_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crest_conformers.xyz")

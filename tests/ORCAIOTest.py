@@ -110,7 +110,7 @@ class TestORCAInput:
         assert orca_inp.coordinate_type == "xyz"
         assert orca_inp.charge == 0
         assert orca_inp.multiplicity == 1
-        assert orca_inp.molecule.natoms == 3
+        assert orca_inp.molecule.num_atoms == 3
         assert orca_inp.molecule.chemical_symbols == ["O", "H", "H"]
         assert isinstance(orca_inp.molecule, Molecule)
         assert all(orca_inp.molecule.symbols == ["O", "H", "H"])
@@ -126,7 +126,7 @@ class TestORCAInput:
         assert orca_inp.coordinate_type == "xyz"
         assert orca_inp.charge == 0
         assert orca_inp.multiplicity == 1
-        assert orca_inp.molecule.natoms == 3
+        assert orca_inp.molecule.num_atoms == 3
         assert orca_inp.molecule.chemical_symbols == ["O", "H", "H"]
         assert isinstance(orca_inp.molecule, Molecule)
         assert all(orca_inp.molecule.symbols == ["O", "H", "H"])
@@ -777,7 +777,7 @@ class TestORCAOutput:
         assert np.isclose(orca_out.lumo_energy, 1.56267, rtol=1e-5)
         assert np.isclose(orca_out.fmo_gap, 10.968637, rtol=1e-5)
 
-    def test_read_hirshfelf_full_print_output(self, hirshfeld_full_print):
+    def test_read_hirshfeld_full_print_output(self, hirshfeld_full_print):
         orca_out = ORCAOutput(filename=hirshfeld_full_print)
         assert orca_out.route_string == "! Hirshfeld".lower()
         assert orca_out.functional is None
@@ -1616,7 +1616,7 @@ class TestORCAOutput:
             "F77": -0.150262,
             "F78": -0.152801,
         }
-        assert orca_out.hirshfeld_spins == {
+        assert orca_out.hirshfeld_spin_densities == {
             "O1": 0.0,
             "O2": 0.0,
             "O3": 0.0,

@@ -70,7 +70,11 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def molecule(self):
-        return self.cb.molecule
+        molecule = self.cb.molecule
+        # update charge and spin multiplicity
+        molecule.charge = self.charge
+        molecule.spin_multiplicity = self.multiplicity
+        return molecule
 
     @property
     def scf_maxiter(self):

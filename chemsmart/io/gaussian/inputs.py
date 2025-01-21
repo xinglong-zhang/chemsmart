@@ -83,12 +83,15 @@ class Gaussian16Input(GaussianFileMixin):
         return self._get_route()
 
     @property
-    def gen_genecp(self):
+    def gen_genecp_group(self):
+        """Block of strings in the input file specifying the gen/genecp group."""
         return self._get_gen_genecp_group()
 
     @property
     def genecp_section(self):
-        return GenGenECPSection.from_genecp_group(genecp_group=self.gen_genecp)
+        return GenGenECPSection.from_genecp_group(
+            genecp_group=self.gen_genecp_group
+        )
 
     @property
     def light_elements(self):
@@ -117,11 +120,15 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def molecule(self):
-        return self.coordinate_block.molecule
+        molecule = self.coordinate_block.molecule
+        # update the charge and multiplicity of the molecule
+        molecule.charge = self.charge
+        molecule.multiplicity = self.multiplicity
+        return molecule
 
     @property
-    def natoms(self):
-        return self.molecule.natoms
+    def num_atoms(self):
+        return self.molecule.num_atoms
 
     @property
     def constrained_atoms(self):
@@ -227,15 +234,27 @@ class Gaussian16Input(GaussianFileMixin):
     def _get_gen_genecp_group(self):
         if "gen" not in self.basis:
             return None
-        if "modred" in self.route and "solvent=generic" in self.route:
+        if (
+            "modred" in self.route_string
+            and "solvent=generic" in self.route_string
+        ):
             return self.content_groups[4:-1]
-        if "modred" in self.route and "solvent=generic" not in self.route:
+        if (
+            "modred" in self.route_string
+            and "solvent=generic" not in self.route_string
+        ):
             return self.content_groups[
                 4:
             ]  # need to change if there are additional append info after these
-        if "modred" not in self.route and "solvent=generic" in self.route:
+        if (
+            "modred" not in self.route_string
+            and "solvent=generic" in self.route_string
+        ):
             return self.content_groups[3:-1]
-        if "modred" not in self.route and "solvent=generic" not in self.route:
+        if (
+            "modred" not in self.route_string
+            and "solvent=generic" not in self.route_string
+        ):
             return self.content_groups[3:]
         return None
 

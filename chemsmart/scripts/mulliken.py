@@ -39,32 +39,32 @@ def entry_point(filename, numbers):
         outputfile = ORCAOutput(filename=filename)
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
-    hirshfeld_charges = outputfile.hirshfeld_charges
-    logger.info("\nHirshfeld Charges:")
-    for hkey, hvalue in hirshfeld_charges.items():
+    mulliken_charges = outputfile.mulliken_atomic_charges
+    logger.info("\nMulliken Charges:")
+    for hkey, hvalue in mulliken_charges.items():
         logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
     logger.info("\n")
 
-    hirshfeld_spins = outputfile.hirshfeld_spin_densities
-    logger.info("\nHirshfeld Spins:")
-    for hkey, hvalue in hirshfeld_spins.items():
+    mulliken_spins = outputfile.mulliken_spin_densities
+    logger.info("\nMulliken Spin densities:")
+    for hkey, hvalue in mulliken_spins.items():
         logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
     logger.info("\n")
 
     if numbers is not None:
         for n in numbers:
-            charge_value = get_value_by_number(n, hirshfeld_charges)
-            hk = get_key_by_value_and_number(
-                charge_value, n, hirshfeld_charges
-            )
-            logger.info(f"Hirshfeld Charge at {hk} is {charge_value:.3f}.")
+            charge_value = get_value_by_number(n, mulliken_charges)
+            hk = get_key_by_value_and_number(charge_value, n, mulliken_charges)
+            logger.info(f"Mulliken Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 
     if numbers is not None:
         for n in numbers:
-            spin_value = get_value_by_number(n, hirshfeld_spins)
-            hk = get_key_by_value_and_number(spin_value, n, hirshfeld_spins)
-            logger.info(f"Hirshfeld Spin at {hk} is {spin_value:.3f}.")
+            spin_value = get_value_by_number(n, mulliken_spins)
+            hk = get_key_by_value_and_number(spin_value, n, mulliken_spins)
+            logger.info(
+                f"Mulliken Spin densities at {hk} is {mulliken_spins:.3f}."
+            )
         logger.info("\n")
 
 

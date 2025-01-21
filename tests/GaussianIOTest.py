@@ -2,6 +2,7 @@ import os.path
 import numpy as np
 from chemsmart.io.gaussian.inputs import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.gaussian.output import Gaussian16OutputWithPBC
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 from ase.symbols import Symbols
@@ -30,7 +31,8 @@ class TestGaussian16Input:
         ]  # list of chemical symbols
         assert isinstance(g16_input.molecule.symbols, Symbols)
         assert g16_input.molecule.symbols.formula == "C6H4COHCl"
-        assert g16_input.molecule.natoms == 14
+        assert g16_input.molecule.num_atoms == 14
+        assert g16_input.num_atoms == 14
         assert g16_input.molecule.empirical_formula == "C7H5ClO"
         assert all(
             np.isclose(
@@ -115,6 +117,23 @@ class TestGaussian16Input:
         assert g16_scan.functional == "m062x"
         assert g16_scan.basis == "def2svp"
 
+    def test_read_genecp_inputfile(self, gaussian_opt_genecp_inputfile):
+        assert os.path.exists(gaussian_opt_genecp_inputfile)
+        g16_genecp = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16_genecp.molecule.symbols.formula == "PdC2O2C2O2H6"
+        assert g16_genecp.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_genecp.additional_opt_options_in_route is None
+        assert g16_genecp.additional_route_parameters is None
+        assert g16_genecp.job_type == "opt"
+        assert g16_genecp.functional == "mn15"
+        assert g16_genecp.basis == "genecp"
+        assert g16_genecp.genecp_section.genecp_type == "genecp"
+        assert g16_genecp.genecp_section.light_elements == ["H", "C", "O"]
+        assert g16_genecp.genecp_section.heavy_elements == ["Pd"]
+        assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
+        assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
+        assert g16_genecp.molecule.frozen_atoms is None
+
     def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
         g16_pbc_1d = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
@@ -141,6 +160,10 @@ class TestGaussian16Output:
     ):
         assert os.path.exists(td_outputfile)
         g16_output = Gaussian16Output(filename=td_outputfile)
+        assert (
+            g16_output.route_string
+            == "# cam-b3lyp gen td(singlets,nstates=50,root=1)"
+        )
         assert g16_output.num_atoms == 49
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
@@ -306,6 +329,687 @@ class TestGaussian16Output:
         assert g16_output.somo_energy == -0.18764 * units.Hartree
         assert g16_output.fmo_gap is None
 
+    def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
+        assert os.path.exists(gaussian_ts_genecp_outfile)
+        g16_genecp = Gaussian16Output(filename=gaussian_ts_genecp_outfile)
+        assert g16_genecp.normal_termination
+        assert g16_genecp.gen_genecp == "genecp"
+        assert (
+            len(g16_genecp.vibrational_frequencies)
+            == g16_genecp.num_atoms * 3 - 6
+            == 138
+        )
+        assert g16_genecp.vibrational_frequencies[0] == -1138.1183
+        assert g16_genecp.vibrational_frequencies[1] == 19.1625
+        assert g16_genecp.vibrational_frequencies[-1] == 3291.3845
+        assert (
+            len(g16_genecp.reduced_masses)
+            == g16_genecp.num_atoms * 3 - 6
+            == 138
+        )
+        assert g16_genecp.reduced_masses[0] == 1.1629
+        assert g16_genecp.reduced_masses[1] == 7.3337
+        assert g16_genecp.reduced_masses[-1] == 1.0952
+        assert (
+            len(g16_genecp.force_constants)
+            == g16_genecp.num_atoms * 3 - 6
+            == 138
+        )
+        assert g16_genecp.force_constants[0] == 0.8875
+        assert g16_genecp.force_constants[1] == 0.0016
+        assert g16_genecp.force_constants[-1] == 6.9902
+        assert (
+            len(g16_genecp.ir_intensities)
+            == g16_genecp.num_atoms * 3 - 6
+            == 138
+        )
+        assert g16_genecp.ir_intensities[0] == 3338.6551
+        assert g16_genecp.ir_intensities[1] == 0.1952
+        assert g16_genecp.ir_intensities[-1] == 2.0786
+        assert (
+            len(g16_genecp.vibrational_mode_symmetries)
+            == g16_genecp.num_atoms * 3 - 6
+            == 138
+        )
+        # all members are "A"
+        assert all(
+            sym == "A" for sym in g16_genecp.vibrational_mode_symmetries
+        )
+        assert (
+            g16_genecp.num_vib_modes == g16_genecp.num_vib_frequencies == 138
+        )
+        assert np.allclose(
+            g16_genecp.vibrational_modes[0],
+            np.array(
+                [
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, -0.01, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, -0.01, 0.0],
+                    [0.0, -0.0, -0.01],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, 0.06, 0.01],
+                    [-0.03, 0.06, 0.01],
+                    [0.0, -0.01, 0.0],
+                    [-0.01, 0.02, 0.0],
+                    [-0.0, -0.0, 0.01],
+                    [0.84, -0.47, 0.23],
+                    [-0.03, 0.05, -0.01],
+                    [0.0, 0.0, 0.0],
+                    [0.0, -0.0, 0.0],
+                    [-0.0, -0.01, -0.0],
+                    [0.01, -0.0, 0.0],
+                    [0.01, 0.01, 0.0],
+                    [-0.06, 0.01, -0.02],
+                    [0.01, -0.02, -0.0],
+                    [0.0, 0.0, 0.0],
+                    [-0.01, 0.01, -0.0],
+                    [0.02, 0.05, 0.01],
+                    [-0.01, -0.01, -0.0],
+                    [-0.0, -0.01, -0.0],
+                    [-0.01, -0.01, -0.01],
+                    [-0.01, -0.01, -0.0],
+                    [0.0, -0.01, 0.0],
+                    [-0.01, -0.01, -0.0],
+                    [-0.0, -0.0, -0.0],
+                ]
+            ),
+            rtol=1e-4,
+        )
+        assert len(g16_genecp.forces) == 11
+        assert g16_genecp.forces[0].shape == (g16_genecp.num_atoms, 3)
+        assert np.allclose(
+            g16_genecp.forces[0][0], [-0.002864142, 0.002344278, -0.003585424]
+        )
+        assert np.allclose(
+            g16_genecp.forces[0][-1], [0.002024907, 0.001926310, 0.008510237]
+        )
+        assert np.allclose(
+            g16_genecp.forces[-1][0], [0.000000455, 0.000001531, 0.000000084]
+        )
+        assert np.allclose(
+            g16_genecp.forces[-1][-1],
+            [-0.000000478, 0.000001912, -0.000001255],
+        )
+        assert np.allclose(
+            g16_genecp.forces_in_eV_per_A[0][0],
+            [
+                -0.002864142 * units.Hartree / units.Bohr,
+                0.002344278 * units.Hartree / units.Bohr,
+                -0.003585424 * units.Hartree / units.Bohr,
+            ],
+        )
+        assert len(g16_genecp.input_orientations) == 12
+        assert np.allclose(
+            g16_genecp.input_orientations[0],
+            np.array(
+                [
+                    [3.72556, -0.854649, -0.217208],
+                    [4.885749, -1.558052, 0.105027],
+                    [6.080932, -1.298797, -0.536227],
+                    [6.145274, -0.307411, -1.501841],
+                    [5.004473, 0.391844, -1.84732],
+                    [3.786861, 0.111065, -1.237449],
+                    [4.838296, -2.330332, 0.858004],
+                    [6.963547, -1.863235, -0.278271],
+                    [7.079418, -0.088285, -1.995881],
+                    [5.03615, 1.151681, -2.614332],
+                    [2.505974, -1.037436, 0.571314],
+                    [2.56567, -1.227338, 1.957192],
+                    [1.219386, -0.921784, 0.042266],
+                    [3.510114, -1.303531, 2.478662],
+                    [1.051683, -0.825776, -1.02621],
+                    [0.318539, -1.129958, 2.129746],
+                    [-0.566752, -1.159165, 2.762021],
+                    [2.648939, 0.741301, -1.667406],
+                    [2.483149, 2.125401, -1.34257],
+                    [3.438094, 2.57224, -1.048449],
+                    [2.115399, 2.616803, -2.249064],
+                    [1.461967, 2.211518, -0.235457],
+                    [0.142239, 1.869461, -0.512744],
+                    [1.832056, 2.477652, 1.076731],
+                    [-0.8136, 1.718584, 0.50609],
+                    [-0.148409, 1.696957, -1.548689],
+                    [0.894194, 2.401597, 2.095144],
+                    [2.856474, 2.738449, 1.304251],
+                    [-0.404149, 2.005665, 1.819225],
+                    [-2.065762, 2.021708, 0.190945],
+                    [-1.120902, 1.929883, 2.629083],
+                    [1.483719, -1.309963, 2.709837],
+                    [0.144064, -0.909348, 0.827524],
+                    [-1.622566, -0.266572, 0.148648],
+                    [-3.927221, -3.336699, -1.055001],
+                    [-2.236825, -2.169488, -0.253601],
+                    [-3.265798, 2.409445, -0.178222],
+                    [-3.445303, 0.193621, -0.519209],
+                    [-4.2222, -0.961582, -0.931433],
+                    [-3.417102, -2.281826, -0.74205],
+                    [-3.941817, 1.395953, -0.545514],
+                    [-5.352071, 1.644776, -1.021478],
+                    [-5.145709, -1.05139, -0.343722],
+                    [-5.471368, 1.286147, -2.042],
+                    [-6.059441, 1.115128, -0.386089],
+                    [-5.554991, 2.710827, -0.981945],
+                    [-4.503509, -0.893396, -1.990975],
+                    [1.190887, 2.624408, 3.109776],
+                ]
+            ),
+        )
+        assert np.allclose(
+            g16_genecp.input_orientations[-1],
+            np.array(
+                [
+                    [3.785053, -0.796959, -0.248477],
+                    [4.936026, -1.536354, 0.075967],
+                    [6.165061, -1.283486, -0.527552],
+                    [6.270151, -0.270499, -1.482714],
+                    [5.138549, 0.458377, -1.840965],
+                    [3.900464, 0.196499, -1.246085],
+                    [4.857476, -2.339908, 0.811943],
+                    [7.037222, -1.881031, -0.256517],
+                    [7.22763, -0.061328, -1.964013],
+                    [5.183685, 1.234043, -2.60889],
+                    [2.52992, -1.02106, 0.506892],
+                    [2.553976, -1.381448, 1.862919],
+                    [1.248504, -0.829209, -0.025882],
+                    [3.511848, -1.51029, 2.378812],
+                    [1.099561, -0.558883, -1.070392],
+                    [0.293033, -1.32343, 2.013095],
+                    [-0.628222, -1.434285, 2.592938],
+                    [2.804106, 0.881335, -1.680539],
+                    [2.604367, 2.233236, -1.266643],
+                    [3.548501, 2.650646, -0.877792],
+                    [2.313292, 2.8026, -2.162191],
+                    [1.513044, 2.275613, -0.228027],
+                    [0.205942, 1.943357, -0.607426],
+                    [1.79619, 2.464054, 1.128646],
+                    [-0.808259, 1.728058, 0.340403],
+                    [-0.011975, 1.783515, -1.670228],
+                    [0.787047, 2.334516, 2.090623],
+                    [2.817576, 2.708082, 1.436991],
+                    [-0.49976, 1.967624, 1.696475],
+                    [-2.044445, 1.966017, -0.060408],
+                    [-1.279683, 1.83513, 2.452811],
+                    [1.455439, -1.564035, 2.594152],
+                    [0.154615, -0.931073, 0.737489],
+                    [-1.69539, -0.250282, 0.106815],
+                    [-4.144333, -3.345632, -0.467348],
+                    [-2.354097, -2.100792, 0.012125],
+                    [-3.210154, 2.424655, -0.457068],
+                    [-3.524079, 0.186639, -0.477053],
+                    [-4.358173, -0.979869, -0.6909],
+                    [-3.599183, -2.270983, -0.366868],
+                    [-3.954507, 1.421173, -0.656572],
+                    [-5.37177, 1.656816, -1.110191],
+                    [-5.263398, -0.969009, -0.059797],
+                    [-5.558552, 1.150352, -2.068467],
+                    [-6.081454, 1.241112, -0.379721],
+                    [-5.540001, 2.733122, -1.218723],
+                    [-4.703494, -1.060835, -1.736338],
+                    [1.015959, 2.500207, 3.145815],
+                ]
+            ),
+        )
+
+        assert np.allclose(
+            g16_genecp.input_orientations[-1],
+            g16_genecp.input_orientations[-2],
+        )  # structures for freq calc and the last opt step
+
+        assert np.allclose(
+            g16_genecp.input_orientations[-2],
+            g16_genecp.input_orientations[-3],
+        )  # structures for the second last and last opt steps
+
+        assert len(g16_genecp.standard_orientations) == 12
+        assert np.allclose(
+            g16_genecp.standard_orientations[0],
+            np.array(
+                [
+                    [3.670165, -0.853719, -0.227367],
+                    [4.837265, -1.551256, 0.082421],
+                    [6.028496, -1.272847, -0.558157],
+                    [6.081717, -0.267891, -1.510325],
+                    [4.933981, 0.425985, -1.843459],
+                    [3.720429, 0.126285, -1.234499],
+                    [4.798477, -2.334095, 0.824918],
+                    [6.916657, -1.832993, -0.310071],
+                    [7.012647, -0.033894, -2.003613],
+                    [4.957067, 1.196435, -2.60012],
+                    [2.454241, -1.057887, 0.561567],
+                    [2.519139, -1.266096, 1.944578],
+                    [1.165344, -0.946317, 0.037286],
+                    [3.465544, -1.341105, 2.462655],
+                    [0.994075, -0.837253, -1.02937],
+                    [0.271694, -1.19075, 2.123928],
+                    [-0.611688, -1.236306, 2.757905],
+                    [2.575957, 0.752326, -1.653049],
+                    [2.398935, 2.130374, -1.308979],
+                    [3.350696, 2.581514, -1.011129],
+                    [2.024594, 2.630825, -2.207793],
+                    [1.379879, 2.192477, -0.198307],
+                    [0.062478, 1.842683, -0.477007],
+                    [1.75099, 2.443964, 1.116479],
+                    [-0.889398, 1.669597, 0.542007],
+                    [-0.229305, 1.681751, -1.514494],
+                    [0.816437, 2.345853, 2.136048],
+                    [2.773674, 2.710601, 1.34503],
+                    [-0.479106, 1.94236, 1.857928],
+                    [-2.144958, 1.966006, 0.23408],
+                    [-1.193094, 1.849294, 2.668426],
+                    [1.439881, -1.368422, 2.698666],
+                    [0.091968, -0.95398, 0.825263],
+                    [-1.681933, -0.317519, 0.159523],
+                    [-3.962799, -3.391046, -1.080221],
+                    [-2.280601, -2.220091, -0.267119],
+                    [-3.349271, 2.348209, -0.126839],
+                    [-3.510318, 0.135742, -0.49755],
+                    [-4.278163, -1.020503, -0.923579],
+                    [-3.4611, -2.336103, -0.754171],
+                    [-4.017363, 1.333927, -0.506257],
+                    [-5.430948, 1.576846, -0.975342],
+                    [-5.199346, -1.126381, -0.334895],
+                    [-5.549725, 1.231103, -2.000362],
+                    [-6.132043, 1.03243, -0.345505],
+                    [-5.643056, 2.640443, -0.92079],
+                    [-4.562767, -0.940374, -1.981404],
+                    [1.113773, 2.557428, 3.152894],
+                ]
+            ),
+        )
+
+        last_structure_positions = np.array(
+            [
+                [3.738125, -0.799262, -0.33422],
+                [4.88285, -1.590061, -0.131866],
+                [6.120627, -1.239348, -0.664417],
+                [6.241126, -0.072719, -1.42203],
+                [5.11621, 0.713671, -1.659267],
+                [3.869481, 0.355676, -1.136943],
+                [4.792375, -2.511643, 0.447817],
+                [6.987624, -1.879741, -0.492953],
+                [7.205597, 0.214468, -1.845689],
+                [5.17365, 1.613668, -2.275798],
+                [2.472231, -1.148636, 0.352523],
+                [2.476846, -1.74526, 1.622674],
+                [1.198691, -0.858815, -0.154214],
+                [3.427248, -1.968556, 2.119805],
+                [1.064719, -0.405795, -1.135583],
+                [0.214191, -1.704367, 1.751149],
+                [-0.715188, -1.912566, 2.289781],
+                [2.780751, 1.112162, -1.456551],
+                [2.578422, 2.369462, -0.810716],
+                [3.518074, 2.706377, -0.341283],
+                [2.300966, 3.090811, -1.594029],
+                [1.47304, 2.230989, 0.2044],
+                [0.170519, 1.977876, -0.245295],
+                [1.737958, 2.173055, 1.576517],
+                [-0.857089, 1.601699, 0.635529],
+                [-0.033147, 2.01122, -1.322326],
+                [0.715409, 1.878715, 2.48663],
+                [2.755566, 2.353372, 1.936817],
+                [-0.566695, 1.594058, 2.01651],
+                [-2.087111, 1.913135, 0.267447],
+                [-1.35723, 1.332419, 2.726778],
+                [1.367959, -2.050215, 2.29513],
+                [0.094194, -1.090098, 0.564326],
+                [-1.745423, -0.299056, 0.041066],
+                [-4.193282, -3.230814, -1.108266],
+                [-2.406973, -2.099882, -0.390937],
+                [-3.246217, 2.440636, -0.056249],
+                [-3.564925, 0.243581, -0.479381],
+                [-4.398654, -0.862143, -0.908862],
+                [-3.647121, -2.193895, -0.810501],
+                [-3.99004, 1.492341, -0.441352],
+                [-5.400401, 1.811767, -0.864176],
+                [-5.312433, -0.959801, -0.297868],
+                [-5.575158, 1.48526, -1.899811],
+                [-6.120992, 1.275751, -0.228973],
+                [-5.564679, 2.890946, -0.781104],
+                [-4.72977, -0.753691, -1.956403],
+                [0.930185, 1.852433, 3.557361],
+            ]
+        )
+
+        assert np.allclose(
+            g16_genecp.standard_orientations[-1],
+            last_structure_positions,
+        )
+
+        assert np.allclose(
+            g16_genecp.standard_orientations[-1],
+            g16_genecp.standard_orientations[-2],
+        )  # structures for freq calc and the last opt step
+
+        assert np.allclose(
+            g16_genecp.standard_orientations[-2],
+            g16_genecp.standard_orientations[-3],
+        )  # structures for the second last and last opt steps
+
+        assert (
+            g16_genecp.optimized_structure.empirical_formula == "C21H19N3O4Pd"
+        )
+        assert g16_genecp.additional_opt_options_in_route == "maxstep=10"
+        assert g16_genecp.additional_route_parameters is None
+        assert g16_genecp.job_type == "ts"
+        assert g16_genecp.functional == "mn15"
+        assert g16_genecp.basis == "genecp"
+        assert g16_genecp.optimized_structure.frozen_atoms is None
+        assert (
+            len(g16_genecp.all_structures) == 11
+        )  # 11 structures altogether, as shown in GaussView
+        assert g16_genecp.optimized_structure.positions.shape == (48, 3)
+        assert np.allclose(
+            g16_genecp.optimized_structure.positions,
+            last_structure_positions,
+        )
+        assert np.allclose(
+            g16_genecp.get_molecule().positions, last_structure_positions
+        )
+
+        assert len(g16_genecp.get_molecule(index=":3")) == 3
+        assert np.allclose(
+            g16_genecp.get_molecule(index=":3")[-1].positions[0],
+            [3.69135800, -0.83587500, -0.25754700],
+        )
+        assert len(g16_genecp.get_molecule(index="3:")) == 8
+
+    def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
+        assert os.path.exists(gaussian_frozen_opt_outfile)
+        g16_frozen = Gaussian16Output(filename=gaussian_frozen_opt_outfile)
+        assert g16_frozen.normal_termination
+        assert g16_frozen.num_atoms == 14
+        assert g16_frozen.tddft_transitions == []
+        assert len(g16_frozen.alpha_occ_eigenvalues) == 36
+        assert (
+            g16_frozen.alpha_occ_eigenvalues[0] == -102.65018 * units.Hartree
+        )
+        assert g16_frozen.alpha_occ_eigenvalues[-1] == -0.31442 * units.Hartree
+        assert len(g16_frozen.alpha_virtual_eigenvalues) == 119
+        assert (
+            g16_frozen.alpha_virtual_eigenvalues[0] == -0.03944 * units.Hartree
+        )
+        assert (
+            g16_frozen.alpha_virtual_eigenvalues[-1] == 3.66749 * units.Hartree
+        )
+        assert g16_frozen.has_frozen_coordinates
+        assert g16_frozen.frozen_coordinate_indices == [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+        ]
+        assert g16_frozen.frozen_elements == [
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+        ]
+        assert g16_frozen.free_elements == ["C", "O", "H", "Cl"]
+        assert g16_frozen.frozen_atoms_masks == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        assert g16_frozen.optimized_structure.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        assert (
+            g16_frozen.optimized_structure.energy
+            == -804.614710796 * units.Hartree
+        )
+        assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
+        assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
+        assert np.allclose(
+            g16_frozen.vibrational_modes[0],
+            np.array(
+                [
+                    [0.0, -0.0, 0.37],
+                    [0.0, -0.0, 0.91],
+                    [-0.0, 0.0, 0.18],
+                    [-0.0, 0.0, 0.02],
+                ]
+            ),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            g16_frozen.vibrational_modes[-1],
+            np.array(
+                [
+                    [-0.03, -0.08, -0.00],
+                    [0.0, -0.0, 0.0],
+                    [0.37, 0.93, 0.00],
+                    [-0.00, -0.00, -0.00],
+                ]
+            ),
+            rtol=1e-4,
+        )
+
+    def test_read_hirshfeld_charges_outputfile(
+        self, gaussian_hirshfeld_outfile
+    ):
+        assert os.path.exists(gaussian_hirshfeld_outfile)
+        g16_hirshfeld = Gaussian16Output(filename=gaussian_hirshfeld_outfile)
+        assert g16_hirshfeld.normal_termination
+        assert g16_hirshfeld.num_atoms == 33
+        assert len(g16_hirshfeld.mulliken_atomic_charges) == 33
+        assert g16_hirshfeld.mulliken_atomic_charges["O1"] == -0.359649
+        assert g16_hirshfeld.mulliken_atomic_charges["O2"] == -0.317260
+        assert g16_hirshfeld.mulliken_atomic_charges["C3"] == -0.090440
+        assert g16_hirshfeld.mulliken_atomic_charges["H33"] == 0.183443
+        assert len(g16_hirshfeld.mulliken_atomic_charges_heavy_atoms) == 15
+        assert (
+            g16_hirshfeld.mulliken_atomic_charges_heavy_atoms["O1"]
+            == -0.359649
+        )
+        assert (
+            g16_hirshfeld.mulliken_atomic_charges_heavy_atoms["O2"]
+            == -0.317260
+        )
+        assert (
+            g16_hirshfeld.mulliken_atomic_charges_heavy_atoms["C3"] == 0.064107
+        )
+
+        assert len(g16_hirshfeld.hirshfeld_charges) == 33
+        assert g16_hirshfeld.hirshfeld_charges["O1"] == -0.222183
+        assert g16_hirshfeld.hirshfeld_charges["O2"] == -0.175602
+        assert g16_hirshfeld.hirshfeld_charges["C3"] == -0.030469
+        assert g16_hirshfeld.hirshfeld_charges["H33"] == 0.050255
+        assert g16_hirshfeld.hirshfeld_spin_densities["O1"] == 0.000000
+        assert g16_hirshfeld.hirshfeld_spin_densities["O2"] == 0.000000
+        assert g16_hirshfeld.hirshfeld_spin_densities["C3"] == 0.000000
+        assert g16_hirshfeld.hirshfeld_spin_densities["H33"] == 0.000000
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["O1"],
+            np.array([-0.121486, -0.118753, -0.104620]),
+        )
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["O2"],
+            np.array([0.024882, -0.086174, 0.133652]),
+        )
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["C3"],
+            np.array([-0.008461, -0.029311, -0.015572]),
+        )
+        assert np.allclose(
+            g16_hirshfeld.hirshfeld_dipoles["H33"],
+            np.array([-0.143072, 0.058847, -0.063056]),
+        )
+        assert g16_hirshfeld.hirshfeld_cm5_charges["O1"] == -0.309536
+        assert g16_hirshfeld.hirshfeld_cm5_charges["O2"] == -0.278764
+        assert g16_hirshfeld.hirshfeld_cm5_charges["C3"] == -0.089643
+        assert len(g16_hirshfeld.hirshfeld_charges_heavy_atoms) == 15
+        assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["O1"] == -0.222183
+        assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["O2"] == -0.175602
+        assert g16_hirshfeld.hirshfeld_charges_heavy_atoms["C3"] == 0.011726
+        assert (
+            g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O1"] == -0.309536
+        )
+        assert (
+            g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["O2"] == -0.278764
+        )
+        assert (
+            g16_hirshfeld.hirshfeld_cm5_charges_heavy_atoms["C3"] == 0.012018
+        )
+
+    def test_read_hirshfeld_rc_charges_outputfile(
+        self, gaussian_rc_hirshfeld_outfile
+    ):
+        assert os.path.exists(gaussian_rc_hirshfeld_outfile)
+        g16_rc_hirshfeld = Gaussian16Output(
+            filename=gaussian_rc_hirshfeld_outfile
+        )
+        assert g16_rc_hirshfeld.normal_termination
+        assert g16_rc_hirshfeld.charge == 1
+        assert g16_rc_hirshfeld.multiplicity == 2
+        assert g16_rc_hirshfeld.num_atoms == 33
+        assert len(g16_rc_hirshfeld.mulliken_atomic_charges) == 33
+        assert g16_rc_hirshfeld.mulliken_atomic_charges["O1"] == 0.020200
+        assert g16_rc_hirshfeld.mulliken_atomic_charges["O2"] == -0.317365
+        assert g16_rc_hirshfeld.mulliken_atomic_charges["C3"] == -0.087929
+        assert g16_rc_hirshfeld.mulliken_atomic_charges["H33"] == 0.183814
+        assert len(g16_rc_hirshfeld.mulliken_atomic_charges_heavy_atoms) == 15
+        assert (
+            g16_rc_hirshfeld.mulliken_atomic_charges_heavy_atoms["O1"]
+            == 0.020200
+        )
+        assert (
+            g16_rc_hirshfeld.mulliken_atomic_charges_heavy_atoms["O2"]
+            == -0.317365
+        )
+        assert (
+            g16_rc_hirshfeld.mulliken_atomic_charges_heavy_atoms["C3"]
+            == 0.112863
+        )
+
+        assert len(g16_rc_hirshfeld.mulliken_spin_densities) == 33
+        assert g16_rc_hirshfeld.mulliken_spin_densities["O1"] == 0.684808
+        assert g16_rc_hirshfeld.mulliken_spin_densities["O2"] == 0.002091
+        assert g16_rc_hirshfeld.mulliken_spin_densities["C3"] == 0.013665
+        assert g16_rc_hirshfeld.mulliken_spin_densities["H33"] == -0.000003
+        assert (
+            g16_rc_hirshfeld.mulliken_spin_densities_heavy_atoms["O1"]
+            == 0.684808
+        )
+        assert (
+            g16_rc_hirshfeld.mulliken_spin_densities_heavy_atoms["O2"]
+            == 0.002091
+        )
+        assert (
+            g16_rc_hirshfeld.mulliken_spin_densities_heavy_atoms["C3"]
+            == 0.018679
+        )
+        assert g16_rc_hirshfeld.hirshfeld_charges["O1"] == 0.100231
+        assert g16_rc_hirshfeld.hirshfeld_charges["O2"] == -0.169411
+        assert g16_rc_hirshfeld.hirshfeld_charges["C3"] == -0.000709
+        assert g16_rc_hirshfeld.hirshfeld_charges["H33"] == 0.050632
+        assert g16_rc_hirshfeld.hirshfeld_charges_heavy_atoms["O1"] == 0.100231
+        assert (
+            g16_rc_hirshfeld.hirshfeld_charges_heavy_atoms["O2"] == -0.169411
+        )
+        assert g16_rc_hirshfeld.hirshfeld_charges_heavy_atoms["C3"] == 0.078562
+        assert g16_rc_hirshfeld.hirshfeld_spin_densities["O1"] == 0.610176
+        assert g16_rc_hirshfeld.hirshfeld_spin_densities["O2"] == 0.003115
+        assert g16_rc_hirshfeld.hirshfeld_spin_densities["C3"] == 0.019163
+        assert g16_rc_hirshfeld.hirshfeld_spin_densities["H33"] == 0.000005
+        assert (
+            g16_rc_hirshfeld.hirshfeld_spin_densities_heavy_atoms["O1"]
+            == 0.610176
+        )
+        assert (
+            g16_rc_hirshfeld.hirshfeld_spin_densities_heavy_atoms["O2"]
+            == 0.003115
+        )
+        assert (
+            g16_rc_hirshfeld.hirshfeld_spin_densities_heavy_atoms["C3"]
+            == 0.021583
+        )
+
+    def test_read_mp2_outputfile(self, gaussian_mp2_outputfile):
+        assert os.path.exists(gaussian_mp2_outputfile)
+        g16_mp2 = Gaussian16Output(filename=gaussian_mp2_outputfile)
+        assert g16_mp2.normal_termination
+        assert g16_mp2.num_atoms == 3
+        assert g16_mp2.tddft_transitions == []
+        assert len(g16_mp2.alpha_occ_eigenvalues) == 5
+        assert g16_mp2.alpha_occ_eigenvalues[0] == -20.56810 * units.Hartree
+        assert g16_mp2.alpha_occ_eigenvalues[-1] == -0.51014 * units.Hartree
+        assert len(g16_mp2.alpha_virtual_eigenvalues) == 87
+        assert g16_mp2.alpha_virtual_eigenvalues[0] == 0.02937 * units.Hartree
+        assert (
+            g16_mp2.alpha_virtual_eigenvalues[-1] == 15.70360 * units.Hartree
+        )
+        assert len(g16_mp2.mp2_energies) == 5
+        assert g16_mp2.mp2_energies[0] == -76.32896706205
+        assert g16_mp2.scf_energies[0] == -76.0599359638
+
+    def test_read_oniom_outputfile(self, gaussian_oniom_outputfile):
+        assert os.path.exists(gaussian_oniom_outputfile)
+        g16_oniom = Gaussian16Output(filename=gaussian_oniom_outputfile)
+        assert g16_oniom.normal_termination is False
+        assert g16_oniom.num_atoms == 483
+        assert len(g16_oniom.oniom_energies) == 2
+        assert g16_oniom.oniom_energies[0] == -5278.927903743607
+        assert g16_oniom.oniom_energies[1] == -5300.535127673756
+        assert g16_oniom.scf_energies[0] == -5303.01662026
+        assert (
+            g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
+        )
+
 
 class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(
@@ -391,3 +1095,79 @@ class TestGaussianCubeFile:
             (0.0, 1.2911, 0.0),
             (0.0, 0.0, 1.2911),
         )
+
+
+class TestGaussianPBCOutputFile:
+    def test_read_2d_pbc_output(self, gaussian_pbc_2d_outputfile):
+        assert os.path.exists(gaussian_pbc_2d_outputfile)
+        g16_pbc_2d = Gaussian16OutputWithPBC(
+            filename=gaussian_pbc_2d_outputfile
+        )
+        assert g16_pbc_2d.normal_termination is False
+        assert g16_pbc_2d.num_atoms == 2
+        assert np.array_equal(g16_pbc_2d.pbc, [1, 1, 0])
+        assert g16_pbc_2d.dim == 2
+        assert np.allclose(
+            g16_pbc_2d.input_translation_vectors,
+            np.array(
+                [
+                    [2.475315, 0.0, 0.0],
+                    [-1.219952, 2.133447, 0.0],
+                ]
+            ),
+        )
+        assert np.allclose(
+            g16_pbc_2d.final_translation_vector,
+            np.array([[2.47554, -0.0, -0.0], [-1.237852, 2.143856, 0.0]]),
+        )
+        assert len(g16_pbc_2d.energies) == 5
+        assert g16_pbc_2d.energies[0] == -76.1487231466
+        assert g16_pbc_2d.energies_in_eV[0] == -76.1487231466 * units.Hartree
+        assert np.allclose(
+            g16_pbc_2d.forces[-1],
+            np.array(
+                [
+                    [1.5884e-05, 6.7630e-06, 0.0000e00],
+                    [-1.5884e-05, -6.7630e-06, -0.0000e00],
+                ]
+            ),
+        )
+
+        assert np.allclose(
+            g16_pbc_2d.forces_in_eV_per_A[-1],
+            np.array(
+                [
+                    [1.5884e-05, 6.7630e-06, 0.0000e00],
+                    [-1.5884e-05, -6.7630e-06, -0.0000e00],
+                ]
+            )
+            * units.Hartree
+            / units.Bohr,
+        )
+
+        assert np.allclose(
+            g16_pbc_2d.last_structure.positions,
+            np.array(
+                [[-0.001724, -0.714621, -0.0], [0.001724, 0.714621, 0.0]]
+            ),
+        )  # last structure that has energy and forces
+
+        assert np.isclose(
+            g16_pbc_2d.last_structure.energy,
+            -76.1490641879 * units.Hartree,
+            rtol=1e-5,
+        )
+        assert np.allclose(
+            g16_pbc_2d.last_structure.forces,
+            np.array(
+                [
+                    [0.000015884, 0.000006763, 0.000000000],
+                    [-0.000015884, -0.000006763, -0.000000000],
+                ]
+            )
+            * units.Hartree
+            / units.Bohr,
+            rtol=1e-5,
+        )
+
+        assert g16_pbc_2d.has_forces

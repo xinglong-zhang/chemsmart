@@ -2,6 +2,13 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
+frozen_coordinates_pattern = (
+    r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
+)
+scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
+mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
+oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
 
 # standard coordinate pattern with (symbol x y z)
 standard_coord_pattern = (
