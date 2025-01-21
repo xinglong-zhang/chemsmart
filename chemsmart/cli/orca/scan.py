@@ -2,11 +2,8 @@ import logging
 
 import click
 
-from chemsmart.cli.orca.orca import (
-    click_orca_jobtype_options,
-    orca,
-)
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
 from chemsmart.utils.cli import MyCommand, get_setting_from_jobtype_for_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
