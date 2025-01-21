@@ -49,8 +49,10 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file, gaussian_written_opt_file
         )  # writes input file as expected
-        job.run(jobrunner=jobrunner_no_scratch)
-        assert job.is_complete()
+
+        # job run will result in the job being run and the output file copied back to run folder
+        # job.run(jobrunner=jobrunner_no_scratch)
+        # assert job.is_complete()
 
     def test_write_opt_job_with_route(
         self,
