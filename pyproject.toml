@@ -49,7 +49,7 @@ homepage = "https://github.com/xinglong-zhang/chemsmart/"
 "Source" = "https://github.com/xinglong-zhang/chemsmart/"
 
 [tool.setuptools.packages.find]
-exclude = ["tests", ".github"]
+exclude = [".github"]
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]

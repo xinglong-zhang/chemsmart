@@ -2,7 +2,6 @@ import logging
 import os
 import shlex
 import subprocess
-import sys
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
@@ -14,13 +13,6 @@ from chemsmart.settings.executable import ORCAExecutable
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
-
-if sys.version_info >= (3, 10):
-    from shutil import _USE_CP_SENDFILE  # noqa F811
-
-    _USE_CP_SENDFILE = False  # noqa F811
-    # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
-    # only works in Python 3.10
 
 logger = logging.getLogger(__name__)
 
@@ -168,29 +160,6 @@ class ORCAJobRunner(JobRunner):
                     f"Removing scratch directory: {self.running_directory}."
                 )
                 rmtree(self.running_directory)
-
-            # writer = SubmitscriptWriter(job)
-            # submit_script = writer.job_submit_script
-            # run_script = writer.job_run_script
-            # err_filepath = os.path.join(job.folder, f"{job.errfile}")
-            # joblogerr_filepath = os.path.join(job.folder, "log.err")
-            # jobloginfo_filepath = os.path.join(job.folder, "log.info")
-            # pbs_errfile = os.path.join(job.folder, "pbs.err")
-            # pbs_infofile = os.path.join(job.folder, "pbs.info")
-            #
-            # files_to_remove = [
-            #     submit_script,
-            #     run_script,
-            #     err_filepath,
-            #     joblogerr_filepath,
-            #     jobloginfo_filepath,
-            #     pbs_errfile,
-            #     pbs_infofile,
-            # ]
-            #
-            # for f in files_to_remove:
-            #     with suppress(FileNotFoundError):
-            #         os.remove(f)
 
 
 class FakeORCAJobRunner(ORCAJobRunner):
