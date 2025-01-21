@@ -38,13 +38,13 @@ lint:             ## Run pep8, black linters.
 
 .PHONY: test
 test: lint        ## Run tests and generate coverage report.
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc cov= -l --tb=short --maxfail=1 chemsmart/tests
+	$(ENV_PREFIX)pytest -v --cov-config .coveragerc cov=chemsmart -l --tb=short --maxfail=1 tests
 	$(ENV_PREFIX)coverage xml
 	$(ENV_PREFIX)coverage html
 
 .PHONY: watch
 watch:            ## Run tests on every change.
-	ls **/**.py | entr $(ENV_PREFIX)pytest -s -vvv -l --tb=long --maxfail=1 chemsmart/tests
+	ls **/**.py | entr $(ENV_PREFIX)pytest -s -vvv -l --tb=long --maxfail=1 tests
 
 .PHONY: clean
 clean:            ## Clean unused files.
