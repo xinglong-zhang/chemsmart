@@ -1,5 +1,5 @@
 from .irc import ORCAIRCJob
-from .job import ORCAJob, ORCAInpJob, ORCAGeneralJob
+from .job import ORCAGeneralJob, ORCAInpJob, ORCAJob
 from .modred import ORCAModredJob
 from .opt import ORCAOptJob
 from .runner import ORCAJobRunner
