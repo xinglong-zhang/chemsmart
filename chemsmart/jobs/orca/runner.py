@@ -193,6 +193,33 @@ class ORCAJobRunner(JobRunner):
             #         os.remove(f)
 
 
+class FakeORCAJobRunner(ORCAJobRunner):
+    # creates job runner process
+    # combines information about server and program
+    FAKE = True
+    JOBTYPES = [
+        "orcainp",
+        "orcaopt",
+        "orcamodred",
+        "orcascan",
+        "orcats",
+        "orcasp",
+        "orcairc",
+    ]
+
+    def __init__(self, server, scratch=None, fake=True, **kwargs):
+        super().__init__(
+            server=server, scratch=scratch, fake=fake, **kwargs
+        )
+
+    def run(self, job):
+        self._prerun(job=job)
+        self._write_input(job=job)
+        returncode = FakeORCA(self.job_inputfile).run()
+        self._postrun(job=job)
+        return returncode
+
+    
 class FakeORCA:
     def __init__(self, file_to_run):
         if not os.path.exists(file_to_run):
@@ -210,7 +237,7 @@ class FakeORCA:
 
     @property
     def input_filepath(self):
-        return os.path.join(self.file_folder, self.file_to_run)
+        return self.file_to_run
 
     @property
     def output_filepath(self):
@@ -253,7 +280,7 @@ class FakeORCA:
 
     @property
     def atomic_coordinates(self):
-        return self.molecule.coordinates.coordinates
+        return self.molecule.positions
 
     @property
     def empirical_formula(self):
@@ -337,29 +364,3 @@ class FakeORCA:
             g.write(
                 "TOTAL RUN TIME: 0 days 0 hours 0 minutes 0 seconds xx msec\n"
             )
-
-
-class FakeORCAJobRunner(ORCAJobRunner):
-    # creates job runner process
-    # combines information about server and program
-    FAKE = True
-    JOBTYPES = [
-        "orcainp",
-        "orcaopt",
-        "orcamodred",
-        "orcascan",
-        "orcats",
-        "orcasp",
-        "orcairc",
-    ]
-
-    def __init__(self, server, num_nodes, scratch=None, **kwargs):
-        super().__init__(
-            server=server, num_nodes=num_nodes, scratch=scratch, **kwargs
-        )
-
-    def run(self, job):
-        self._prerun(job=job)
-        returncode = FakeORCA(self.job_inputfile).run()
-        self._postrun(job=job)
-        return returncode
