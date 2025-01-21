@@ -38,6 +38,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Generate a token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AUTH_BOT_APP_ID }}
+          private-key: ${{ secrets.AUTH_BOT_APP_PRIVATE_KEY }}
       - name: Clear existing cache
         run: |
           rm -rf ~/.cache/pip
@@ -116,6 +122,7 @@ jobs:
         run: make test
 
   tests_win:
+    # make does not work for windows
     needs: linter
     strategy:
       fail-fast: false
@@ -135,4 +142,4 @@ jobs:
       - name: Install project
         run: pip install -e .[test]
       - name: run tests
-        run: pytest -s -vvvv -l --tb=long tests
+        run: pytest -s -vvvv -l --tb=long tests/
