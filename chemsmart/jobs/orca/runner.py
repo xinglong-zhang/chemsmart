@@ -169,29 +169,6 @@ class ORCAJobRunner(JobRunner):
                 )
                 rmtree(self.running_directory)
 
-            # writer = SubmitscriptWriter(job)
-            # submit_script = writer.job_submit_script
-            # run_script = writer.job_run_script
-            # err_filepath = os.path.join(job.folder, f"{job.errfile}")
-            # joblogerr_filepath = os.path.join(job.folder, "log.err")
-            # jobloginfo_filepath = os.path.join(job.folder, "log.info")
-            # pbs_errfile = os.path.join(job.folder, "pbs.err")
-            # pbs_infofile = os.path.join(job.folder, "pbs.info")
-            #
-            # files_to_remove = [
-            #     submit_script,
-            #     run_script,
-            #     err_filepath,
-            #     joblogerr_filepath,
-            #     jobloginfo_filepath,
-            #     pbs_errfile,
-            #     pbs_infofile,
-            # ]
-            #
-            # for f in files_to_remove:
-            #     with suppress(FileNotFoundError):
-            #         os.remove(f)
-
 
 class FakeORCAJobRunner(ORCAJobRunner):
     # creates job runner process

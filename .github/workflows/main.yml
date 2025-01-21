@@ -61,6 +61,10 @@ jobs:
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           # we will use length 79 instead
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=79 --statistics
+      - name: Lint with ruff
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          ruff check . --max-line-length=79 --ignore-noqa  --statistics
       - name: Test with pytest and calculate coverage
         run: |
           pytest --cov-report "xml:coverage.xml"  --cov=.
