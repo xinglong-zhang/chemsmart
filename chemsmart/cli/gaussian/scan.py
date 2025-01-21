@@ -9,7 +9,6 @@ from chemsmart.cli.gaussian.gaussian import (
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
-    get_setting_from_jobtype_for_orca,
     get_setting_from_jobtype_for_gaussian,
 )
 from chemsmart.utils.utils import check_charge_and_multiplicity

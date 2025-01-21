@@ -1,7 +1,6 @@
 import logging
 import os.path
 
-from chemsmart.jobs.orca import ORCATSJob
 from chemsmart.jobs.orca.settings import ORCATSJobSettings, ORCAIRCJobSettings
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.utils import (
