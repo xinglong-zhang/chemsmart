@@ -1,8 +1,8 @@
 from chemsmart.jobs.orca.job import ORCAJob
 
 
-class ORCAScanJob(ORCAJob):
-    TYPE = "orcascan"
+class ORCATSJob(ORCAJob):
+    TYPE = "orcats"
 
     def __init__(self, molecule, settings, label, **kwargs):
         super().__init__(

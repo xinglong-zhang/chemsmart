@@ -5,7 +5,7 @@ from .opt import ORCAOptJob
 from .runner import ORCAJobRunner
 from .scan import ORCAScanJob
 from .singlepoint import ORCASinglePointJob
-from .tssearch import ORCATSJob
+from .ts import ORCATSJob
 
 jobs = ORCAJob.subclasses()
 

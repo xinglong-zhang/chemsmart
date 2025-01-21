@@ -171,7 +171,9 @@ class ORCAJobSettings(MolecularJobSettings):
         from chemsmart.io.gaussian.output import Gaussian16Output
 
         logger.info(f"Return Settings object from {log_path}")
-        gaussian_settings_from_logfile = Gaussian16Output(log_path).read_settings()
+        gaussian_settings_from_logfile = Gaussian16Output(
+            log_path
+        ).read_settings()
         orca_default_settings = cls.default()
         orca_settings_from_logfile = orca_default_settings.merge(
             gaussian_settings_from_logfile, merge_all=True
@@ -428,7 +430,7 @@ class ORCATSJobSettings(ORCAJobSettings):
         self.inhess_filename = inhess_filename
         self.hybrid_hess = hybrid_hess
         self.hybrid_hess_atoms = (
-            hybrid_hess_atoms  # supplied a list; 0-indexed
+            hybrid_hess_atoms  # supplied a list; 1-indexed as per user
         )
         self.numhess = numhess
         self.recalc_hess = recalc_hess
@@ -441,76 +443,14 @@ class ORCATSJobSettings(ORCAJobSettings):
         )
         self.full_scan = full_scan  # full scan or not;  do or not abort scan after highest point is reached
 
-    def _write_hessian_block(self, f):
-        # write orca block for hessian options
-        f.write("%geom\n")
-
-        # Read initial Hessian from file if desired
-        if self.inhess:
-            f.write("  InHess Read  # Read Hessian from file\n")
-            assert (
-                self.inhess_filename is not None
-            ), "No Hessian file is given!"
-            assert os.path.exists(
-                self.inhess_filename
-            ), f"Hessian file {self.inhess_filename} is not found!"
-            f.write(f'  InHessName "{self.inhess_filename}"  # Hessian file\n')
-
-        # Hybrid Hessian for speed up of TS search
-        # TS mode is complicated and delocalized, e.g. in a concerted proton transfer reaction, can use hybrid Hessian,
-        # to calc numerical second derivatives only for atoms involved in the TS mode
-        if self.hybrid_hess:
-            assert (
-                self.hybrid_hess_atoms is not None
-            ), "No atoms are specified for hybrid Hessian calculation!"
-            hybrid_hess_atoms_string = " ".join(
-                [str(i) for i in self.hybrid_hess_atoms]
-            )
-            f.write(
-                f"  Hybrid_Hess {{{hybrid_hess_atoms_string}}} end  # Use hybrid Hessian\n"
-            )
-
-        # Hessian options
-        f.write(
-            "  Calc_Hess True  # calc initial Hessian\n"
-        )  # for ts job, initial hessian is required
-        f.write(
-            f"  NumHess {self.numhess}  # Request numerical Hessian (if analytical not available)\n"
-        )
-        f.write(
-            f"  Recalc_Hess {self.recalc_hess}   # Recalculate the Hessian every 5 step\n"
-        )
-
-        # trust radius update
-        if self.trust_radius is not None:
-            f.write(f"  Trust {self.trust_radius}\n")
-            if self.trust_radius < 0:
-                f.write("  # use fixed trust radius (default: -0.3 au)\n")
-            elif self.trust_radius > 0:
-                f.write("  # use trust radius update, i.e. 0.3 means:\n")
-                f.write(
-                    "  # start with trust radius 0.3 and use trust radius update\n"
-                )
-
-        # TS search type
-        if self.tssearch_type.lower() == "scants":
-            # for scanTS, also include in the scanning coordinates
-            assert (
-                self.scants_modred is not None
-            ), "No modred is specified for scanTS!"
-            self._write_modred_if_dict(f, self.scants_modred)
-
-        # full scan or not
-        if self.full_scan:
-            f.write("  fullScan True\n")
-        f.write("end\n")
-
-    def _write_route_section_default(self, f):
-        # route string for TS search depends on TS search type
-        route_string = self._write_route_string(job_type="ts")
+    @property
+    def route_string(self):
+        """Get the ORCA job route string for ORCA TS job; overrides parent property."""
+        self.job_type = "ts"
+        route_string = self._get_route_string_from_jobtype()
         if self.tssearch_type.lower() == "scants":
             route_string = route_string.replace("OptTS", "ScanTS")
-        f.write(f"{route_string}\n")
+        return route_string
 
 
 class ORCAIRCJobSettings(ORCAJobSettings):

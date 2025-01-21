@@ -212,7 +212,9 @@ class ORCAInpJob(ORCAJob):
                 os.mkdir(job_scratch_dir)
                 logger.info(f"Folder in scratch {job_scratch_dir} is made.")
             shutil.copy(self.inputfile, job_scratch_dir)
-            scratch_inputfile = os.path.join(job_scratch_dir, f"{self.label}.inp")
+            scratch_inputfile = os.path.join(
+                job_scratch_dir, f"{self.label}.inp"
+            )
             assert os.path.exists(
                 scratch_inputfile
             ), f"inputfile {scratch_inputfile} is not found"
@@ -238,4 +240,3 @@ class ORCAGeneralJob(ORCAJob):
         super().__init__(
             molecule=molecule, settings=settings, label=label, **kwargs
         )
-

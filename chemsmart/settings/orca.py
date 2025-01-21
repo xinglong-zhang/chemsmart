@@ -1,7 +1,11 @@
 import logging
 import os
 
-from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCAJobSettings
+from chemsmart.jobs.orca.settings import (
+    ORCAIRCJobSettings,
+    ORCAJobSettings,
+    ORCATSJobSettings,
+)
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -18,7 +22,7 @@ project_settings_registry: list[str] = []
 
 
 class ORCAProjectSettings(RegistryMixin):
-    """Most general Gaussian settings class with key defaults."""
+    """Most general ORCA settings class with key defaults."""
 
     PROJECT_NAME = "general"
     functional = None
@@ -26,63 +30,66 @@ class ORCAProjectSettings(RegistryMixin):
     large_basis = None
 
     def main_settings(self):
-        """Gaussian main settings with key default values."""
+        """ORCA main settings with key default values."""
         default_orca_job_settings = ORCAJobSettings.default()
         default_orca_job_settings.functional = self.functional
         default_orca_job_settings.basis = self.small_basis
         return default_orca_job_settings
 
     def opt_settings(self):
-        """Gaussian default settings for opt job."""
+        """ORCA default settings for opt job."""
         settings = self.main_settings().copy()
         settings.job_type = "opt"
         return settings
 
     def modred_settings(self):
-        """Gaussian default settings for modred job."""
+        """ORCA default settings for modred job."""
         settings = self.main_settings().copy()
         settings.job_type = "modred"
         return settings
 
     def ts_settings(self):
-        """Gaussian default settings for ts job."""
+        """ORCA default settings for ts job."""
         settings = self.main_settings().copy()
+        settings = ORCATSJobSettings(
+            **settings.__dict__
+        )  # convert settings to ORCATSJobSettings
         settings.job_type = "ts"
         return settings
 
     def irc_settings(self):
-        """Gaussian default settings for irc job."""
+        """ORCA default settings for irc job."""
         settings = self.main_settings().copy()
         settings = ORCAIRCJobSettings(
             **settings.__dict__
-        )  # convert settings to GaussianIRCJobSettings
+        )  # convert settings to ORCAIRCJobSettings
         settings.job_type = "irc"
         settings.freq = False
         return settings
 
     def scan_settings(self):
-        """Gaussian default settings for scan job."""
+        """ORCA default settings for scan job."""
         settings = self.main_settings().copy()
         settings.job_type = "scan"
         settings.freq = False
         return settings
 
     def nci_settings(self):
-        """Gaussian default settings for nci job."""
+        """ORCA default settings for nci job."""
         settings = self.main_settings().copy()
         settings.job_type = "nci"
         settings.freq = False
         return settings
 
     def wbi_settings(self):
-        """Gaussian default settings for WBI job."""
+        """ORCA default settings for WBI job."""
         settings = self.main_settings().copy()
         settings.job_type = "wbi"
         settings.freq = False
         return settings
 
     def sp_settings(self):
-        """Gaussian default settings for sp job."""
+        """ORCA default settings for sp job."""
         settings = self.main_settings().copy()
         settings.job_type = "sp"
         settings.freq = False  # turn off freq calculation for sp job
@@ -248,9 +255,7 @@ class YamlORCAProjectSettingsBuilder:
 
     def _project_settings_for_job(self, job_type):
         # Define a dictionary to map job_type to corresponding settings class
-        settings_mapping = {
-            "irc": ORCAIRCJobSettings,
-        }
+        settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
 
         try:
             job_type_config = self._read_config().get(job_type)
@@ -260,8 +265,8 @@ class YamlORCAProjectSettingsBuilder:
                 ).from_dict(job_type_config)
         except KeyError as e:
             raise RuntimeError(
-                f"Gaussian settings for job {job_type} cannot be found!\n"
-                f"Available Gaussian jobs with settings are: {self._read_config().keys()}"
+                f"ORCA settings for job {job_type} cannot be found!\n"
+                f"Available ORCA jobs with settings are: {self._read_config().keys()}"
             ) from e
 
     def _parse_project_name(self):
@@ -269,10 +274,10 @@ class YamlORCAProjectSettingsBuilder:
 
 
 class ORCAProjectSettingsManager:
-    """Manages Gaussian project settings specified in the form of yaml files in a folder.
+    """Manages ORCA project settings specified in the form of yaml files in a folder.
 
     Args:
-        filename: yaml filename in the default Gaussian projects folder.
+        filename: yaml filename in the default ORCA projects folder.
     """
 
     def __init__(self, filename):

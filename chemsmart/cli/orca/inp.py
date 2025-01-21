@@ -18,4 +18,6 @@ def inp(ctx, skip_completed, **kwargs):
 
     from chemsmart.jobs.orca.job import ORCAInpJob
 
-    return ORCAInpJob.from_filename(filename=filename, skip_completed=skip_completed, **kwargs)
+    return ORCAInpJob.from_filename(
+        filename=filename, skip_completed=skip_completed, **kwargs
+    )
