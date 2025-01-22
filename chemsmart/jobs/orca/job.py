@@ -107,9 +107,9 @@ class ORCAJob(Job):
 
     @classmethod
     def from_pubchem(cls, identifier, settings=None, label=None, **kwargs):
-        molecules = Molecule.from_pubchem(identifier=identifier)
+        molecule = Molecule.from_pubchem(identifier=identifier)
         return cls(
-            molecule=molecules,
+            molecule=molecule,
             settings=settings,
             label=label,
             **kwargs,
