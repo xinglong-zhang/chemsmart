@@ -1333,7 +1333,6 @@ class Gaussian16Output(GaussianFileMixin):
                     all_hirshfeld_spin_densities_heavy_atoms.append(
                         hirshfeld_spin_densities_heavy_atoms
                     )
-                # print(hirshfeld_spin_densities_heavy_atoms)
 
         if (
             all_hirshfeld_charges_heavy_atoms

@@ -173,7 +173,6 @@ class CubeFileOperator:
     def add_values(self):
         cube1_values_by_lines = self.cube1.values_by_lines
         cube2_values_by_lines = self.cube2.values_by_lines
-        print(cube1_values_by_lines)
 
         # Ensure both lists have the same structure
         self._check_value_lines()
