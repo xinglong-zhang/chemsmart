@@ -1,3 +1,4 @@
+import filecmp
 import os
 from filecmp import cmp
 from shutil import copy
@@ -400,6 +401,8 @@ class TestGaussianInputWriter:
             tmpdir, "gaussian_sp_from_log_with_custom_basis_from_api.com"
         )
         assert os.path.isfile(g16_file)
+        # somehow the cmp function fails on Github action
+        filecmp.clear_cache()
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
@@ -459,6 +462,8 @@ class TestGaussianInputWriter:
             "gaussian_modred_with_custom_basis_for_all_atoms_from_api.com",
         )
         assert os.path.isfile(g16_file)
+        # somehow the cmp function fails on Github action
+        filecmp.clear_cache()
         assert cmp(
             g16_file,
             gaussian_modred_with_custom_basis_for_all_atoms_from_api,
