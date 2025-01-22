@@ -25,7 +25,7 @@ base_function()
 
 ```bash
 $ python -m chemsmart
-#or
+# or
 $ chemsmart
 ```
 
