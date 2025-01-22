@@ -1,0 +1,42 @@
+SERVER:
+    SCHEDULER: PBS
+    QUEUE_NAME: normal
+    NUM_HOURS: 24
+    MEM_GB: 400
+    NUM_CORES: 64
+    NUM_GPUS: 0
+    NUM_THREADS: 64
+    SUBMIT_COMMAND: qsub
+    PROJECT: 13003611
+    ##PROJECT: 13002374
+    SCRATCH_DIR: null
+    USE_HOSTS: true
+    EXTRA_COMMANDS: |
+        export PATH=$HOME/bin/chemsmart:$PATH
+        export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
+        export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
+        export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
+GAUSSIAN:
+    EXEFOLDER: ~/programs/g16 
+    LOCAL_RUN: True  # local run True to use serial_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart
+    MODULES: |
+        module purge
+        module load craype-x86-rome
+        module load libfabric/1.11.0.4.125
+    SCRIPTS: |
+        tcsh -c "source ~/programs/g16/bsd/g16.login"
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+        export GAUSS_EXEDIR=~/programs/g16
+        export g16root=~/programs/g16
+           
+ORCA:
+    EXEFOLDER: ~/programs/orca_6_0_0
+    LOCAL_RUN: False  # local run False to use parallel_command
+    ENVARS: |
+        export PATH=~/programs/openmpi-4.1.6/build/bin:$PATH
+        export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH

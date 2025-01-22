@@ -24,7 +24,7 @@ class GaussianRefs:
         "m06",
         "mn15",
     ]
-    g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen"]
+    g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
     g_solvation_models = [
         "smd",
         "cpcm",
@@ -34,7 +34,13 @@ class GaussianRefs:
         "ipcm",
         "dipole",
     ]
-    g_additional_route_parameters = ["force", "nosymm", "guess"]
+    g_additional_route_parameters = [
+        "force",
+        "nosymm",
+        "guess",
+        "stable",
+        "scf",
+    ]
     g_additional_opt_options = [
         "maxstep",
         "maxcycles",
@@ -136,3 +142,15 @@ class BSEMetadata:
         'xtron', 'bsedebug', 'json', 'bdf']
         """
         return list(self.all_formats().keys())
+
+
+gaussian_ref = GaussianRefs()
+GAUSSIAN_AB_INITIO = gaussian_ref.gaussian_ab_initio
+GAUSSIAN_FUNCTIONALS = gaussian_ref.gaussian_dft_fuctionals
+GAUSSIAN_BASES = gaussian_ref.gaussian_basis_sets
+GAUSSIAN_SOLVATION_MODELS = gaussian_ref.gaussian_solvation_models
+GAUSSIAN_ADDITIONAL_OPT_OPTIONS = gaussian_ref.gaussian_additional_opt_options
+GAUSSIAN_DIEZE_TAGS = gaussian_ref.gaussian_dieze_tags
+GAUSSIAN_ADDITIONAL_ROUTE_PARAMETERS = (
+    gaussian_ref.gaussian_additional_route_parameters
+)

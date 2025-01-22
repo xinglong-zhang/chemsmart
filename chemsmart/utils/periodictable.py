@@ -1,4 +1,7 @@
-from ase.data import chemical_symbols as elements
+try:
+    from periodictable import elements
+except ImportError:
+    from ase.data import chemical_symbols as elements
 
 
 class PeriodicTable:
@@ -15,6 +18,7 @@ class PeriodicTable:
         )
 
     def sorted_periodic_table_list(self, list_of_elements):
+        """Sort the list of elements according to atomic number."""
         return sorted(
             list_of_elements, key=lambda x: self.PERIODIC_TABLE.index(x)
         )

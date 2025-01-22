@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=70.1.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chemsmart"
+version = "0.1.0"  # Update this dynamically if needed
+description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "xinglong-zhang", email = "xinglong.zhang@cuhk.edu.hk" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "ase~=3.24.0",
+    "basis-set-exchange",
+    "click~=8.1.8",
+    "crest",
+    "numpy~=1.25.2",
+    "pytest~=7.4.3",
+    "pyyaml",
+    "pymatgen>=2024.8.9",
+    "rdkit~=2023.09.2",
+    "scipy~=1.13.0",
+    "setuptools~=70.1.1",
+    "torchani",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "coverage",
+    "flake8",
+    "ruff",
+    "black",
+    "isort",
+    "pytest-cov",
+    "gitchangelog",
+    "mkdocs",
+]
+
+[project.urls]
+##"Documentation" = "https://documentation_url"
+homepage = "https://github.com/xinglong-zhang/chemsmart/"
+"Source" = "https://github.com/xinglong-zhang/chemsmart/"
+
+[tool.setuptools.packages.find]
+exclude = [".github"]
+
+[tool.flake8]
+ignore = ["E226", "W503", "W504"]
+extend-ignore = ["E203"]
+per-file-ignores = {"__init__.py" = ["F401"]}
+max-line-length = 79
+
+[tool.ruff]
+target-version = "py310"
+line-length = 79
+
+[tool.black]
+line-length = 79
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line-length = 79
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--strict-markers --disable-warnings"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["chemsmart"]
+
+[tool.mkdocs]
+site_name = "chemsmart"
+theme = "readthedocs"
+

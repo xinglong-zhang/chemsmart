@@ -1,0 +1,7 @@
+# Default Gaussian settings for calculations 
+gas: Null
+solv: 
+  functional: m062x
+  basis: def2tzvp
+  solvent_model: smd
+  solvent_id: toluene

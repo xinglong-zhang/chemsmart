@@ -1,7 +1,7 @@
 %chk=modred_genecp_custom_solvent.chk
 %nprocshared=48
 %mem=48GB
-# opt=modredundant freq mn15 genecp scrf=(smd,solvent=generic,read)
+# opt=modred freq mn15 genecp scrf=(smd,solvent=generic,read)
 
 From inputfile oa_dichlorohydroxypyridine_uncoordinate_mpaa_c2_modred.log
 
@@ -166,5 +166,4 @@ HBondBasicity=0.10
 SurfaceTensionAtInterface=16.1
 CarbonAromaticity=0.0
 ElectronegativeHalogenicity=0.60
-
 
