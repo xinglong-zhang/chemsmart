@@ -175,6 +175,14 @@ class TestString2Index1Based:
         assert result2.stop == 5
         assert result2.step is None
 
+        result = string2index_1based("-1")
+        assert isinstance(result, slice)
+        list1 = list(range(5))
+        assert list1[result] == [0]
+        assert result.start == 0  # 1-based start -> 0-based
+        assert result.stop == 1
+        assert result.step is None
+
     def test_slice(self):
         result = string2index_1based("1:5")
         assert isinstance(result, slice)
