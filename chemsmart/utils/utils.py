@@ -217,10 +217,15 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
     if ":" not in stridx:
         try:
             if int(stridx) < 0:
+                return slice(int(stridx), None)
                 return int(stridx)
             else:
-                # Convert to integer and adjust to 0-based
-                return int(stridx) - 1
+                # Convert to integer and adjust to 0-based and return as slice
+                return slice(int(stridx) - 1, int(stridx))
+            #     return int(stridx) - 1
+            # # return slice
+            # return slice(int(stridx) - 1, int(stridx))
+
         except ValueError:
             # If it's not an integer, check if it's alphanumeric
             if stridx.isnumeric():

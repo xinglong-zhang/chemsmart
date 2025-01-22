@@ -3,6 +3,7 @@ from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 class GaussianCrestJob(GaussianJob):
     """Object representing a Gaussian CREST job that takes in a list of molecules object."""
+
     TYPE = "g16crest"
 
     def __init__(

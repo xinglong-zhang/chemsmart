@@ -6,7 +6,10 @@ import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import (
+    get_list_from_string_range,
+    string2index_1based,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +79,8 @@ def click_gaussian_settings_options(f):
         "--index",
         type=str,
         default=None,
-        help="index of molecule to use; default to the last molecule structure.",
+        help="Index of molecules to use; 1-based indices. "
+        "Default to the last molecule structure. 1-based index.",
     )
     @click.option(
         "-o",
@@ -97,14 +101,16 @@ def click_gaussian_settings_options(f):
         "--append-additional-info",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the input file. E.g, scrf=read",
+        help="additional information to be appended at the end of the "
+        "input file. E.g, scrf=read",
     )
     @click.option(
         "-C",
         "--custom-solvent",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the input file. E.g, scrf=read",
+        help="additional information to be appended at the end of the "
+        "input file. E.g, scrf=read",
     )
     @click.option(
         "-d",
@@ -200,7 +206,8 @@ def click_gaussian_td_options(f):
             ["singlets", "triplets", "50-50"], case_sensitive=False
         ),
         default="singlets",
-        help='States for closed-shell singlet systems.\nOptions choice =["Singlets", "Triplets", "50-50"]',
+        help="States for closed-shell singlet systems.\n"
+        'Options choice =["Singlets", "Triplets", "50-50"]',
     )
     @click.option(
         "-r",
@@ -215,15 +222,17 @@ def click_gaussian_td_options(f):
         type=int,
         default=3,
         help="Solve for M states (the default is 3). "
-        "If 50-50, this gives the number of each type of state to solve (i.e., 3 singlets and 3 triplets).",
+        "If 50-50, this gives the number of each type of state to solve "
+        "(i.e., 3 singlets and 3 triplets).",
     )
     @click.option(
         "-e",
         "--eqsolv",
         type=str,
         default=None,
-        help="Whether to perform equilibrium or non-equilibrium PCM solvation. NonEqSolv is the default except "
-        "for excited state opt and when  excited state density is requested (e.g., Density=Current or All).",
+        help="Whether to perform equilibrium or non-equilibrium PCM solvation. "
+        "NonEqSolv is the default except for excited state opt and when "
+        "excited state density is requested (e.g., Density=Current or All).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -240,7 +249,7 @@ def click_gaussian_td_options(f):
     "--pubchem",
     type=str,
     default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
+    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
 )
 @click.pass_context
 def gaussian(
@@ -366,8 +375,12 @@ def gaussian(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        list_of_indices = get_list_from_string_range(index)
-        molecules = [molecules[i - 1] for i in list_of_indices]
+        try:
+            index = string2index_1based(index)
+            molecules = molecules[index]
+        except ValueError:
+            index = get_list_from_string_range(index)
+            molecules = [molecules[i - 1] for i in index]
 
     logger.debug(f"Obtained molecules: {molecules}")
 
