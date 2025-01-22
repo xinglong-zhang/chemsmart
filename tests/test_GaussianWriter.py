@@ -406,7 +406,6 @@ class TestGaussianInputWriter:
         assert cmp_with_ignore(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
-            shallow=False,
             ignore_string="Version",
         )
 
@@ -469,7 +468,6 @@ class TestGaussianInputWriter:
         assert cmp_with_ignore(
             g16_file,
             gaussian_modred_with_custom_basis_for_all_atoms_from_api,
-            shallow=False,
             ignore_string="Version",
         )
 

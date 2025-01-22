@@ -421,6 +421,16 @@ def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file(
 
 
 @pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file_v2(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_custom_basis_from_api_v2.com",
+    )
+
+
+@pytest.fixture()
 def gaussian_modred_with_custom_basis_for_all_atoms_from_api(
     gaussian_written_files_directory,
 ):

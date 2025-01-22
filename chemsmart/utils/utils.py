@@ -2,7 +2,6 @@ import copy
 import hashlib
 import os
 import re
-import stat
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
@@ -433,49 +432,40 @@ def check_charge_and_multiplicity(settings):
         )
 
 
-def cmp_with_ignore(f1, f2, shallow=True, ignore_string=None):
+def cmp_with_ignore(f1, f2, ignore_string=None):
     """
-    Compare two files with an option to ignore lines containing a specific string.
+    Compare two files with an option to ignore lines containing a specific string
+    or a list of strings.
 
     Arguments:
     f1 -- First file name
     f2 -- Second file name
-    shallow -- Treat files as identical if their stat signatures are identical. [default: True]
-    ignore_string -- Ignore lines containing this string during content comparison. [default: None]
-                  -- If None, defaults to original filecmp.cmp() behavior.
+    ignore_string -- Ignore lines containing this string or any member in a list of strings
+     during content comparison. [default: None]
 
     Returns:
-    True if the files are the same, False otherwise.
+    True if the files are the same except where the lines contain ignore string, False otherwise.
     """
 
-    def _sig(st):
-        return (stat.S_IFMT(st.st_mode), st.st_size, st.st_mtime)
+    if ignore_string is not None:
 
-    def _do_cmp_with_ignore(f1, f2, ignore_string):
-        with open(f1, "r") as fp1, open(f2, "r") as fp2:
-            for line1, line2 in zip(fp1, fp2):
-                # Skip lines containing the ignore_string
-                if ignore_string and (
-                    ignore_string in line1 and ignore_string in line2
-                ):
-                    continue
-                # Compare the current lines
-                if line1 != line2:
-                    return False
-            # Ensure both files have reached EOF (no extra lines in one file)
-            return fp1.read() == fp2.read()
-
-    # Perform the shallow comparison
-    # Uses file stats (os.stat()) to quickly determine if the files can be treated
-    # as identical without reading their contents.
-    s1 = _sig(os.stat(f1))
-    s2 = _sig(os.stat(f2))
-    if s1[0] != stat.S_IFREG or s2[0] != stat.S_IFREG:
-        return False
-    if shallow and s1 == s2:
-        return True
-    if s1[1] != s2[1]:
-        return False
-
-    # Perform deep comparison with line filtering
-    return _do_cmp_with_ignore(f1, f2, ignore_string)
+        if isinstance(ignore_string, str):
+            ignore_string = [ignore_string]
+        elif isinstance(ignore_string, list):
+            ignore_string = ignore_string
+        else:
+            raise ValueError(
+                "ignore_string should be either a string or a list of strings."
+            )
+    with open(f1, "r") as fp1, open(f2, "r") as fp2:
+        for line1, line2 in zip(fp1, fp2):
+            # Skip lines containing the ignore_string
+            if ignore_string and any(
+                ignore in line1 or ignore in line2 for ignore in ignore_string
+            ):
+                continue
+            # Compare the current lines
+            if line1 != line2:
+                return False
+        # Ensure both files have reached EOF (no extra lines in one file)
+        return fp1.read() == fp2.read()
