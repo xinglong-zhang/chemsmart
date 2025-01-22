@@ -1,4 +1,3 @@
-import filecmp
 import os
 from filecmp import cmp
 from shutil import copy
@@ -15,6 +14,7 @@ from chemsmart.jobs.gaussian import (
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
+from chemsmart.utils.utils import cmp_with_ignore
 
 
 class TestGaussianInputWriter:
@@ -400,13 +400,14 @@ class TestGaussianInputWriter:
         g16_file = os.path.join(
             tmpdir, "gaussian_sp_from_log_with_custom_basis_from_api.com"
         )
-        assert os.path.isfile(g16_file)
-        # somehow the cmp function fails on Github action
-        filecmp.clear_cache()
-        assert cmp(
+
+        # compare the written input file with the expected input file, except
+        # the line containing the version number (basis set exchange api may be different)
+        assert cmp_with_ignore(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
             shallow=False,
+            ignore_string="Version",
         )
 
     def test_write_modred_with_custom_basis_for_all_elements_in_structure_using_api(
@@ -462,12 +463,14 @@ class TestGaussianInputWriter:
             "gaussian_modred_with_custom_basis_for_all_atoms_from_api.com",
         )
         assert os.path.isfile(g16_file)
-        # somehow the cmp function fails on Github action
-        filecmp.clear_cache()
-        assert cmp(
+
+        # compare the written input file with the expected input file, except
+        # the line containing the version number (basis set exchange api may be different)
+        assert cmp_with_ignore(
             g16_file,
             gaussian_modred_with_custom_basis_for_all_atoms_from_api,
             shallow=False,
+            ignore_string="Version",
         )
 
     def test_write_gaussian_input_from_pbc_logfile(
