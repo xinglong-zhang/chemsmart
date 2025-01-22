@@ -47,7 +47,7 @@ class TestGaussianInputWriter:
         g16_file = os.path.join(tmpdir, "gaussian_opt.com")
         assert os.path.isfile(g16_file)
         assert cmp(
-            g16_file, gaussian_written_opt_file
+            g16_file, gaussian_written_opt_file, shallow=False
         )  # writes input file as expected
 
         # job run will result in the job being run and the output file copied back to run folder
@@ -85,7 +85,9 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_opt.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_opt_file_with_route)
+        assert cmp(
+            g16_file, gaussian_written_opt_file_with_route, shallow=False
+        )
 
     def test_write_modred_job(
         self,
@@ -117,7 +119,7 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_modred.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_modred_file)
+        assert cmp(g16_file, gaussian_written_modred_file, shallow=False)
 
     def test_write_scan_job(
         self,
@@ -153,7 +155,7 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_scan.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_scan_file)
+        assert cmp(g16_file, gaussian_written_scan_file, shallow=False)
 
     def test_write_ts_job(
         self,
@@ -184,7 +186,7 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_ts.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_ts_file)
+        assert cmp(g16_file, gaussian_written_ts_file, shallow=False)
 
     def test_write_opt_input_from_logfile(
         self,
@@ -220,7 +222,11 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_ts_from_log.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_ts_from_nhc_singlet_log_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_ts_from_nhc_singlet_log_file,
+            shallow=False,
+        )
 
     def test_write_sp_input_with_solvation_from_logfile(
         self,
@@ -259,6 +265,7 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_solvent_file,
+            shallow=False,
         )
 
     def test_write_sp_with_custom_solvation_from_logfile(
@@ -307,6 +314,7 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file,
+            shallow=False,
         )
 
     def test_write_ts_with_custom_basis_from_logfile(
@@ -349,6 +357,7 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
+            shallow=False,
         )
 
     def test_write_ts_with_custom_basis_using_api(
@@ -394,6 +403,7 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file,
             gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
+            shallow=False,
         )
 
     def test_write_modred_with_custom_basis_for_all_elements_in_structure_using_api(
@@ -452,6 +462,7 @@ class TestGaussianInputWriter:
         assert cmp(
             g16_file,
             gaussian_modred_with_custom_basis_for_all_atoms_from_api,
+            shallow=False,
         )
 
     def test_write_gaussian_input_from_pbc_logfile(
@@ -492,4 +503,8 @@ class TestGaussianInputWriter:
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "graphite_2d_opt_from_log.com")
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_opt_from_graphite_2d_pbc_log)
+        assert cmp(
+            g16_file,
+            gaussian_written_opt_from_graphite_2d_pbc_log,
+            shallow=False,
+        )

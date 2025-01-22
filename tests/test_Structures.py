@@ -449,7 +449,6 @@ Cl         0   -3.0556310000   -0.1578960000   -0.0001400000"""
         ]
         molecule = g16_file.molecule
         tmp_file = os.path.join(tmpdir, "tmp.txt")
-        print(tmp_file)
         f = open(tmp_file, "w")
         molecule.write_coordinates(f, program="gaussian")
         f.close()
@@ -467,9 +466,6 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
         with open(tmp_file, "r") as g:
             written_coordinates = g.read()
         assert os.path.exists(tmp_file)
-        for a, b in zip(coordinates, written_coordinates):
-            print(a)
-            print(type(a))
         assert all([a == b for a, b in zip(coordinates, written_coordinates)])
 
 

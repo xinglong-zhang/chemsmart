@@ -2,6 +2,8 @@ from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 
 class GaussianCrestJob(GaussianJob):
+    """Object representing a Gaussian CREST job that takes in a list of molecules object."""
+
     TYPE = "g16crest"
 
     def __init__(
@@ -12,8 +14,11 @@ class GaussianCrestJob(GaussianJob):
         num_confs_to_run=None,
         **kwargs,
     ):
+        if not isinstance(molecules, list) and len(molecules) == 0:
+            raise ValueError("Molecules must be a list of Molecule objects.")
+
         super().__init__(
-            molecule=molecules,
+            molecule=molecules[0],
             settings=settings,
             label=label,
             **kwargs,
