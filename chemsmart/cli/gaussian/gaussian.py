@@ -6,10 +6,7 @@ import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import (
-    get_list_from_string_range,
-    string2index_1based,
-)
+from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
 
@@ -372,13 +369,23 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
+    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
         try:
+            # try to get molecule using python style string indexing,
+            # but in 1-based
+            from chemsmart.utils.utils import string2index_1based
+
             index = string2index_1based(index)
             molecules = molecules[index]
+            if not isinstance(molecules, list):
+                molecules = [molecules]
         except ValueError:
+            # except user defined indices such as s='[1-3,28-31,34-41]'
+            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
             index = get_list_from_string_range(index)
             molecules = [molecules[i - 1] for i in index]
 
