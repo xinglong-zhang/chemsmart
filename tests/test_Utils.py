@@ -4,6 +4,7 @@ import pytest
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.utils import (
+    cmp_with_ignore,
     content_blocks_by_paragraph,
     get_list_from_string_range,
     is_float,
@@ -34,6 +35,28 @@ class TestUtils:
                 [-0.544821, -1.169457, 0.000127],
                 atol=1e-4,
             )
+        )
+
+    def test_cmp_with_ignore_string(
+        self,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file_v2,
+    ):
+        assert cmp_with_ignore(
+            gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
+            gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file_v2,
+            ignore_string="Version",
+        )
+
+    def test_cmp_with_ignore_list(
+        self,
+        gaussian_written_opt_file,
+        gaussian_written_opt_file_with_route,
+    ):
+        assert cmp_with_ignore(
+            gaussian_written_opt_file,
+            gaussian_written_opt_file_with_route,
+            ignore_string=["#", "job"],
         )
 
     def test_get_list_from_string_range(self):
