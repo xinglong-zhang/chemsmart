@@ -158,30 +158,10 @@ class TestGetListFromStringRange:
 
 
 class TestString2Index1Based:
-    def test_single_integer_as_slice(self):
-        result = string2index_1based("1")
-        assert isinstance(result, slice)
-        list1 = list(range(5))
-        assert list1[result] == [0]
-        assert result.start == 0  # 1-based start -> 0-based
-        assert result.stop == 1
-        assert result.step is None
-
-        result2 = string2index_1based("5")
-        assert isinstance(result2, slice)
-        list2 = list(range(5))
-        assert list2[result2] == [4]
-        assert result2.start == 4  # 1-based start -> 0-based
-        assert result2.stop == 5
-        assert result2.step is None
-
-        result = string2index_1based("-1")
-        assert isinstance(result, slice)
-        list1 = list(range(5))
-        assert list1[result] == [0]
-        assert result.start == 0  # 1-based start -> 0-based
-        assert result.stop == 1
-        assert result.step is None
+    def test_single_integer(self):
+        assert string2index_1based("1") == 0  # 1-based -> 0-based
+        assert string2index_1based("5") == 4  # 1-based -> 0-based
+        assert string2index_1based("10") == 9  # 1-based -> 0-based
 
     def test_slice(self):
         result = string2index_1based("1:5")

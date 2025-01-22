@@ -77,7 +77,7 @@ def click_gaussian_settings_options(f):
         type=str,
         default=None,
         help="Index of molecules to use; 1-based indices. "
-             "Default to the last molecule structure. 1-based index.",
+        "Default to the last molecule structure. 1-based index.",
     )
     @click.option(
         "-o",
@@ -99,7 +99,7 @@ def click_gaussian_settings_options(f):
         type=str,
         default=None,
         help="additional information to be appended at the end of the "
-             "input file. E.g, scrf=read",
+        "input file. E.g, scrf=read",
     )
     @click.option(
         "-C",
@@ -107,7 +107,7 @@ def click_gaussian_settings_options(f):
         type=str,
         default=None,
         help="additional information to be appended at the end of the "
-             "input file. E.g, scrf=read",
+        "input file. E.g, scrf=read",
     )
     @click.option(
         "-d",
@@ -203,8 +203,8 @@ def click_gaussian_td_options(f):
             ["singlets", "triplets", "50-50"], case_sensitive=False
         ),
         default="singlets",
-        help='States for closed-shell singlet systems.\n'
-             'Options choice =["Singlets", "Triplets", "50-50"]',
+        help="States for closed-shell singlet systems.\n"
+        'Options choice =["Singlets", "Triplets", "50-50"]',
     )
     @click.option(
         "-r",
@@ -220,7 +220,7 @@ def click_gaussian_td_options(f):
         default=3,
         help="Solve for M states (the default is 3). "
         "If 50-50, this gives the number of each type of state to solve "
-             "(i.e., 3 singlets and 3 triplets).",
+        "(i.e., 3 singlets and 3 triplets).",
     )
     @click.option(
         "-e",
@@ -228,8 +228,8 @@ def click_gaussian_td_options(f):
         type=str,
         default=None,
         help="Whether to perform equilibrium or non-equilibrium PCM solvation. "
-             "NonEqSolv is the default except for excited state opt and when "
-             "excited state density is requested (e.g., Density=Current or All).",
+        "NonEqSolv is the default except for excited state opt and when "
+        "excited state density is requested (e.g., Density=Current or All).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -369,11 +369,25 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
+    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        list_of_indices = get_list_from_string_range(index)
-        molecules = [molecules[i - 1] for i in list_of_indices]
+        try:
+            # try to get molecule using python style string indexing,
+            # but in 1-based
+            from chemsmart.utils.utils import string2index_1based
+
+            index = string2index_1based(index)
+            molecules = molecules[index]
+            if not isinstance(molecules, list):
+                molecules = [molecules]
+        except ValueError:
+            # except user defined indices such as s='[1-3,28-31,34-41]'
+            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
+            index = get_list_from_string_range(index)
+            molecules = [molecules[i - 1] for i in index]
 
     logger.debug(f"Obtained molecules: {molecules}")
 
