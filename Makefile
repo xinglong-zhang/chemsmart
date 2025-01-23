@@ -1,40 +1,81 @@
 .ONESHELL:
-ENV_PREFIX=$(shell python -c "if __import__('pathlib').Path('.venv/bin/pip').exists(): print('.venv/bin/')")
-USING_POETRY=$(shell grep "tool.poetry" pyproject.toml && echo "yes")
+ENV_PREFIX=$(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart "; fi)
+
+SHELL := /bin/bash
+USE_CONDA ?= true  # Default to true if not explicitly set
+
+
 
 .PHONY: help
-help:             ## Show the help.
+help:             ## Show the help menu.
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Targets:"
-	@fgrep "##" Makefile | fgrep -v fgrep
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+# === Environment Setup ===
+
+.PHONY: venv
+venv:  ## Create a virtual environment (Conda or Poetry).
+	@echo "Debug: USE_CONDA=$(USE_CONDA)"
+	@if [ "$(USE_CONDA)" = "true" ]; then \
+		echo "Using Conda"; \
+		make conda-env; \
+	else \
+		echo "Using Poetry"; \
+		make poetry-env; \
+	fi
+
+.PHONY: conda-env
+conda-env:  ## Create a Conda environment.
+	@echo "Creating Conda environment 'chemsmart'..."
+	@if ! conda env list | grep -q chemsmart; then \
+		conda create -n chemsmart python=3.10 -y; \
+	fi
+	conda run -n chemsmart pip install -U pip
+	conda run -n chemsmart pip install poetry
+	conda run -n chemsmart poetry install
+	@echo "Conda environment 'chemsmart' is ready. Activate it with 'conda activate chemsmart'."
+
+.PHONY: poetry-env
+poetry-env:  ## Create a virtual environment using Poetry.
+	@if ! command -v poetry > /dev/null; then \
+		echo "Poetry is required. Please install it from https://python-poetry.org/."; \
+		exit 1; \
+	fi
+	poetry install
 
 
-.PHONY: show
-show:             ## Show the current environment.
-	@echo "Current environment:"
-	@if [ "$(USING_POETRY)" ]; then poetry env info && exit; fi
-	@echo "Running using $(ENV_PREFIX)"
-	@$(ENV_PREFIX)python -V
-	@$(ENV_PREFIX)python -m site
+# === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in dev mode.
-	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
-	@echo "Don't forget to run 'make virtualenv' if you got errors."
+install:          ## Install the project in development mode.
 	$(ENV_PREFIX)pip install -e .[test]
-	$(ENV_PREFIX)pip install types-PyYAML  # Add this line to install the types-PyYAML package
+	$(ENV_PREFIX)pip install types-PyYAML
+
+.PHONY: show
+	@echo "Current environment:"
+	@if [ "$(USE_CONDA)" = "true" ]; then \
+		conda env list | grep '*'; \
+	fi
+	$(ENV_PREFIX)python -V
+	$(ENV_PREFIX)python -m site
+
+# === Code Quality ===
 
 .PHONY: fmt
-fmt:              ## Format code using black & isort.
-	$(ENV_PREFIX)isort chemsmart/
+fmt:              ## Format code using black and isort.
+	$(ENV_PREFIX)isort --skip pyproject.toml --gitignore .
 	$(ENV_PREFIX)black -l 79 chemsmart/
 	$(ENV_PREFIX)black -l 79 tests/
 
 .PHONY: lint
-lint:             ## Run pep8, black linters.
+lint:             ## Run linters (ruff and black).
 	$(ENV_PREFIX)ruff check .
 	$(ENV_PREFIX)black -l 79 --check .
+
+# === Testing ===
 
 .PHONY: test
 test: lint        ## Run tests and generate coverage report.
@@ -42,65 +83,13 @@ test: lint        ## Run tests and generate coverage report.
 	$(ENV_PREFIX)coverage xml
 	$(ENV_PREFIX)coverage html
 
-.PHONY: watch
-watch:            ## Run tests on every change.
-	ls **/**.py | entr $(ENV_PREFIX)pytest -s -vvv -l --tb=long --maxfail=1 tests/
+# === Cleanup ===
 
 .PHONY: clean
-clean:            ## Clean unused files.
-	@find ./ -name '*.pyc' -exec rm -f {} \;
-	@find ./ -name '__pycache__' -exec rm -rf {} \;
-	@find ./ -name 'Thumbs.db' -exec rm -f {} \;
-	@find ./ -name '*~' -exec rm -f {} \;
-	@rm -rf .cache
-	@rm -rf .pytest_cache
-	@rm -rf build
-	@rm -rf dist
-	@rm -rf *.egg-info
-	@rm -rf htmlcov
-	@rm -rf .tox/
-	@rm -rf docs/_build
-
-.PHONY: virtualenv
-virtualenv:       ## Create a virtual environment.
-	@if [ "$(USING_POETRY)" ]; then poetry install && exit; fi
-	@echo "creating virtualenv ..."
-	@rm -rf .venv
-	@python3 -m venv .venv
-	@./.venv/bin/pip install -U pip
-	@./.venv/bin/pip install -e .[test]
-	@echo
-	@echo "!!! Please run 'source .venv/bin/activate' to enable the environment !!!"
-
-.PHONY: release
-release:          ## Create a new tag for release.
-	@echo "WARNING: This operation will create s version tag and push to github"
-	@read -p "Version? (provide the next x.y.z semver) : " TAG
-	@echo "$${TAG}" > chemsmart/VERSION
-	@$(ENV_PREFIX)gitchangelog > HISTORY.md
-	@git add chemsmart/VERSION HISTORY.md
-	@git commit -m "release: version $${TAG} 🚀"
-	@echo "creating git tag : $${TAG}"
-	@git tag $${TAG}
-	@git push -u origin HEAD --tags
-	@echo "Github Actions will detect the new tag and release the new version."
-
-.PHONY: docs
-docs:             ## Build the documentation.
-	@echo "building documentation ..."
-	@$(ENV_PREFIX)mkdocs build
-	URL="site/index.html"; xdg-open $$URL || sensible-browser $$URL || x-www-browser $$URL || gnome-open $$URL || open $$URL
-
-.PHONY: switch-to-poetry
-switch-to-poetry: ## Switch to poetry package manager.
-	@echo "Switching to poetry ..."
-	@if ! poetry --version > /dev/null; then echo 'poetry is required, install from https://python-poetry.org/'; exit 1; fi
-	@rm -rf .venv
-	@poetry init --no-interaction --name=a_flask_test 
-	@echo "" >> pyproject.toml
-	@echo "[tool.poetry.scripts]" >> pyproject.toml
-	@echo "chemsmart = 'chemsmart.__main__:main'" >> pyproject.toml
-	@poetry install --no-interaction
-	@echo "You have switched to https://python-poetry.org/ package manager."
-	@echo "Please run 'poetry shell' or 'poetry run chemsmart'"
+clean: ## Remove temporary and unnecessary files.
+	@find ./ -name '*.pyc' -exec rm -f {} + 2>/dev/null
+	@find ./ -name '__pycache__' -exec rm -rf {} + 2>/dev/null
+	@find ./ -name 'Thumbs.db' -exec rm -f {} + 2>/dev/null
+	@find ./ -name '*~' -exec rm -f {} + 2>/dev/null
+	@rm -rf .cache .pytest_cache build dist *.egg-info htmlcov .tox docs/_build 2>/dev/null
 
