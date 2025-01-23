@@ -29,7 +29,20 @@ to create a conda environment named `chemsmart`, which installs all the required
 
 Help options are available by typing `make help`.
 
-After the virtual conda environment is created, one can run `make install` which installs the package and sets up the user-specific directory `~/.chemsmart` automatically.
+After the virtual conda environment is created, one can run
+
+```bash
+make install
+```
+which installs the packages and dependencies required for chemsmart.
+
+Next, run
+```bash
+make configure
+```
+to sets up the user-specific directory `~/.chemsmart` automatically. You will be prompt to enter the paths to g16 and ORCA software, which will be added automatically.
+
+The configuration also adds the environment variables for chemsmart to the user `~/.bashrc` file.
 
 -----
 The `~/.chemsmart/usersettings.yaml` file contains informations such as project number or account number that are required in a typical submission script that specifies the account for use at some HPC servers. It can also contain options specifying user's email to inform user of the job start and job end once a job is submitted. A typical `~/.chemsmart/usersettings.yaml` file looks like this:
@@ -142,7 +155,7 @@ solv:
 ```
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
-The `make install` will also add the required paths to the user `~/.bashrc` file. User may need to do 
+The `make configure` will also add the required paths to the user `~/.bashrc` file. User may need to do 
 
 ```bash
 source ~/.bashrc
@@ -151,14 +164,33 @@ source ~/.bashrc
 to effect the changes.
 
 ---
-Once `make install` is done, one can optionally run `make fmt` and `make lint` to format and lint the codes (this should have been handled by the developers). Also optionally, one can run `make test` to make sure that all tests in chemsmart pass.
+Once `make configure` is done, one can optionally run 
+```bash
+make fmt
+```
+and
+
+```bash
+make lint
+```
+to format and lint the codes (this should have been handled by the developers). Also optionally, one can run 
+
+```bash
+make test
+```
+
+to make sure that all tests in chemsmart pass.
 
 ---
-Finally one can clean up by running `make clean`
+Finally one can clean up by running
+
+```bash
+make clean
+```
 
 ## Testing Installations
 
-Installations is deemed successfully if the command `make install` does not return any errors. Installation will also create a `~/.chemsmart` containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
+Installations is deemed successfully if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
 
 ```bash
 chemsmart --help
@@ -167,7 +199,7 @@ to get the options for running chemsmart package.
 
 ## Usage
 
-With setup by `make install`, one is able to run different Gaussian jobs via command-line interface (CLI).
+With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).
 
 To submit (and run) a geometry optimization job, do:
 

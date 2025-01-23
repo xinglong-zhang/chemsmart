@@ -6,6 +6,7 @@ import click
 
 from chemsmart.utils.cli import MyGroup
 
+from .config import config
 from .run import run
 from .sub import sub
 
@@ -24,6 +25,7 @@ def entry_point(ctx, verbose):
 
 entry_point.add_command(run)
 entry_point.add_command(sub)
+entry_point.add_command(config)
 
 
 def main():  # pragma: no cover
