@@ -1,0 +1,21 @@
+# Default Gaussian settings for calculations 
+gas:
+  functional: m062x  # quotes required for string with spaces
+  basis: def2svp
+  solvent_model: smd
+  solvent_id: dichloroethane
+solv: 
+  functional: m062x
+  basis: def2tzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: dichloroethane
+td:
+  functional: cam-b3lyp
+  basis: genecp
+  heavy_elements: ['I']
+  heavy_elements_basis: def2-SVPD
+  light_elements_basis: def2SVP
+  freq: False
+  ##solvent_model: smd
+  ##solvent_id: DiethylEther

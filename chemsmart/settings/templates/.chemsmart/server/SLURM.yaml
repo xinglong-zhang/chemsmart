@@ -1,0 +1,34 @@
+SERVER:
+    SCHEDULER: SLURM
+    QUEUE_NAME: normal
+    NUM_HOURS: 24
+    MEM_GB: 400
+    NUM_CORES: 64
+    NUM_GPUS: 0
+    NUM_THREADS: 64
+    SUBMIT_COMMAND: sbatch
+    ##PROJECT: 13003611
+    ##PROJECT: 13002374
+    SCRATCH_DIR: null
+    USE_HOSTS: true
+GAUSSIAN:
+    EXEFOLDER: ~/bin/g16 
+    LOCAL_RUN: True  # local run True to use serial_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate chemsmart
+    MODULES: |
+        module purge
+        module load craype-x86-rome
+        module load libfabric/1.11.0.4.125
+    SCRIPTS: |
+        source GAUSS_DIR=~/bin/g16
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+        export GAUSS_EXEDIR=~/bin/g16
+        export g16root=~/bin/g16
+           
+ORCA:
+    EXEFOLDER: ~/bin/orca_6_0_0
+    LOCAL_RUN: False  # local run False to use parallel_command

@@ -1,0 +1,19 @@
+# Default ORCA settings for calculations
+gas:
+  functional: M062X  # quotes required for string with spaces
+  basis: def2-SVP
+solv:
+  ab_initio: DLPNO-CCSD(T)
+  functional: Null
+  basis: Extrapolate(2/3,cc)
+  aux_basis: AutoAux
+  defgrid: DEFGRID3
+  freq: False
+  scf_tol: TightSCF
+  scf_algorithm: KDIIS
+  scf_maxiter: 500
+  mdci_cutoff: Normal
+  mdci_density: None    # note this is "None" string and not Null of NoneType
+  dipole: False
+  solvent_model: SMD
+  solvent_id: "toluene"

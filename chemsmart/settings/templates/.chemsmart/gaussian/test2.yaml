@@ -1,0 +1,15 @@
+# Default Gaussian settings for calculations
+gas:
+  functional: b3lyp  # quotes required for string with spaces
+  basis: genecp
+  additional_route_parameters: empiricaldispersion=gd3bj
+  heavy_elements: ['Pd', 'Ag', 'Br', 'Cu', 'Mn']
+  heavy_elements_basis: def2-TZVPPD
+  light_elements_basis: def2-SVP
+solv:
+  functional: b3lyp
+  freq: False
+  basis: def2qzvp
+  additional_route_parameters: empiricaldispersion=gd3bj
+  solvent_model: smd
+  solvent_id: TetraHydroFuran
