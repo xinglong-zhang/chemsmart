@@ -132,3 +132,6 @@ dmypy.json
 
 # templates
 .github/templates/*
+
+# poetry
+poetry.lock
