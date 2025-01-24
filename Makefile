@@ -58,6 +58,8 @@ install:          ## Install the project in development mode.
 configure:        ## Run chemsmart configuration interactively.
 	@echo "Running chemsmart configuration..."
 	chemsmart config
+	@echo "Running chemsmart server configuration..."
+	chemsmart config server
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
 	if [ -n "$$gaussian_folder" ]; then \
 		echo "Configuring Gaussian with folder: $$gaussian_folder"; \
