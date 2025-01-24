@@ -12,10 +12,7 @@ SERVER:
     SCRATCH_DIR: null
     USE_HOSTS: true
     EXTRA_COMMANDS: |
-        export PATH=$HOME/bin/chemsmart:$PATH
-        export PATH=$HOME/bin/chemsmart/chemsmart/cli:$PATH
-        export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
-        export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
+        #extra commands to activate chemsmart environment in submission script
 GAUSSIAN:
     EXEFOLDER: ~/bin/g16 
     LOCAL_RUN: True  # local run True to use serial_command

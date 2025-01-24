@@ -11,12 +11,14 @@ SERVER:
     ##PROJECT: 13002374
     SCRATCH_DIR: null
     USE_HOSTS: true
+    EXTRA_COMMANDS: |
+        #extra commands to activate chemsmart environment in submission script
 GAUSSIAN:
     EXEFOLDER: ~/bin/g16 
     LOCAL_RUN: True  # local run True to use serial_command
     SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
-        source ~/anaconda3/etc/profile.d/conda.sh
+        source ~/miniconda3/etc/profile.d/conda.sh
         conda activate chemsmart
     MODULES: |
         module purge
