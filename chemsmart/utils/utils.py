@@ -2,6 +2,7 @@ import copy
 import hashlib
 import os
 import re
+import subprocess
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
@@ -469,3 +470,19 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
                 return False
         # Ensure both files have reached EOF (no extra lines in one file)
         return fp1.read() == fp2.read()
+
+
+def run_command(command):
+    """Runs a shell command using subprocess.Popen and captures its output."""
+    try:
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            print(f"Error running {command}: {stderr.strip()}")
+            return None
+        return stdout.strip()
+    except Exception as e:
+        print(f"Exception while running {command}: {e}")
+        return None

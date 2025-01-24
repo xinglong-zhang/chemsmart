@@ -32,7 +32,7 @@ GAUSSIAN:
         export g16root=~/bin/g16
            
 ORCA:
-    EXEFOLDER: ~/bin/orca
+    EXEFOLDER: ~/bin/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command
     SCRATCH: True  # set scratch to False to run in job folder
 
