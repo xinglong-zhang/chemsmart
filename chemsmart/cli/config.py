@@ -177,7 +177,8 @@ def add_lines_in_yaml_files(target_directory, lines_in_positions, lines_to_add):
 @click.pass_context
 def config(ctx):
     cfg = Config()
-    ctx["cfg"] = cfg
+    ctx.ensure_object(dict)  # Initialize the Click context object if not already initialized
+    ctx.obj["cfg"] = cfg
     """Set up configuration files and environment variables."""
     if ctx.invoked_subcommand is None:
         # Run the default environment setup when no subcommand is provided
@@ -193,7 +194,7 @@ def config(ctx):
     required=True,
     help="Path to the Gaussian g16 folder.",
 )
-def server(ctx, folder):
+def server(ctx):
     """Configures server settings in ~/.chemsmart/server/*yaml files.
 
     Add conda env vars after the lines
@@ -204,7 +205,7 @@ def server(ctx, folder):
     Examples:
         chemsmart config server
     """
-    cfg = ctx["cfg"]
+    cfg = ctx.obj["cfg"]
     logger.info(f"Configuring servers in ~/.chemsmart/server/*yaml files.")
     add_lines_in_yaml_files(cfg.chemsmart_server, ["# extra commands to activate chemsmart environment in submission script"], ctx["env_vars"])
 
@@ -226,7 +227,7 @@ def gaussian(ctx, folder):
     Examples:
         chemsmart config gaussian --folder <G16FOLDER>
     """
-    cfg = ctx["cfg"]
+    cfg = ctx.obj["cfg"]
     logger.info(f"Configuring Gaussian with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/bin/g16", folder)
 
@@ -248,7 +249,7 @@ def orca(ctx, folder):
     Examples:
         chemsmart config gaussian --folder <G16FOLDER>
     """
-    cfg = ctx["cfg"]
+    cfg = ctx.obj["cfg"]
     logger.info(f"Configuring Gaussian with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/bin/orca_6_0_0", folder)
 
