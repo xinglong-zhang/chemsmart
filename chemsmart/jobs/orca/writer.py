@@ -187,7 +187,7 @@ class ORCAInputWriter(InputWriter):
         # append for modred jobs
         # 'self.modred' as list of lists, or a single list if only one fixed constraint
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=modred, program_type="orca"
+            input_modred=modred, program="orca"
         )
         for prepend_string in prepend_string_list:
             f.write(f"  {{{prepend_string} C}}\n")
@@ -200,7 +200,7 @@ class ORCAInputWriter(InputWriter):
         # append for scanning job
         coords_list = modred["coordinates"]
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coords_list, program_type="orca"
+            input_modred=coords_list, program="orca"
         )
         for prepend_string in prepend_string_list:
             if prepend_string.lower().startswith("b"):
@@ -388,7 +388,7 @@ class ORCAInputWriter(InputWriter):
                     ), 'No internal modred is specified for IRC job "monitor_intervals" option!'
                     prepend_string_list = (
                         get_prepend_string_list_from_modred_free_format(
-                            self.settings.internal_modred, program_type="orca"
+                            self.settings.internal_modred, program="orca"
                         )
                     )
                     for prepend_string in prepend_string_list:
