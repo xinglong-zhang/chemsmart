@@ -338,11 +338,11 @@ def convert_modred_list_to_string(modred_list):
 
 
 def get_prepend_string_list_from_modred_free_format(
-    input_modred, program_type="gaussian"
+    input_modred, program="gaussian"
 ):
     """Get prepend string list from either a list of lists or a list.
     e.g., [[1,2],[5,6]] or [1,2] -> ['B 1 2', 'B 5 6']
-    program_type: gaussian or orca, variable to decide the index to start from
+    program: gaussian or orca, variable to decide the index to start from
     Gaussian starts from 1, while orca starts from 0
     For chemsmart applications in homogeneous catalysis, we will use 1-indexing throughout,
     since this is what we usually see when we use GaussView or Avogadro to visualise the structures.
@@ -359,24 +359,24 @@ def get_prepend_string_list_from_modred_free_format(
         num_list = len(input_modred)
         for i in range(num_list):
             prepend_string = get_prepend_string_for_modred(input_modred[i])
-            if program_type == "gaussian":
+            if program == "gaussian":
                 modred_string = convert_modred_list_to_string(input_modred[i])
-            elif program_type == "orca":
+            elif program == "orca":
                 modred_string = convert_modred_list_to_string(
                     [a - 1 for a in input_modred[i]]
                 )
             else:
                 raise ValueError(
-                    f"Program type should be either gaussian or orca, but the given type is {program_type}!"
+                    f"Program type should be either gaussian or orca, but the given type is {program}!"
                 )
             each_frozen_string = f"{prepend_string} {modred_string}"
             prepend_string_list.append(each_frozen_string)
     elif isinstance(input_modred[0], int):
         # for a single list; e.g.: [2,3]
         prepend_string = get_prepend_string_for_modred(input_modred)
-        if program_type == "gaussian":
+        if program == "gaussian":
             modred_string = convert_modred_list_to_string(input_modred)
-        elif program_type == "orca":
+        elif program == "orca":
             modred_string = convert_modred_list_to_string(
                 [a - 1 for a in input_modred]
             )

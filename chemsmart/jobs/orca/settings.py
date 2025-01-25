@@ -601,7 +601,7 @@ class ORCAIRCJobSettings(ORCAJobSettings):
                     ), 'No internal modred is specified for IRC job "monitor_intervals" option!'
                     prepend_string_list = (
                         get_prepend_string_list_from_modred_free_format(
-                            self.internal_modred, program_type="orca"
+                            self.internal_modred, program="orca"
                         )
                     )
                     for prepend_string in prepend_string_list:
