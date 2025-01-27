@@ -3,7 +3,8 @@ ENV_PREFIX=$(shell if conda env list | grep -q chemsmart; then echo "conda run -
 
 SHELL := /bin/bash
 USE_CONDA ?= true  # Default to true if not explicitly set
-
+MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
+CHEMSMART_PATH := $(MAKEFILE_DIR)/chemsmart/cli/chemsmart  # Relative to the Makefile directory
 
 
 .PHONY: help
