@@ -23,14 +23,16 @@ git clone https://github.com/xinglong-zhang/chemsmart.git
 First, cd into chemsmart folder. For linux and MacOS systems which support `make`, users can run 
 
 ```bash
-make venv
+make env
 ```
-to create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
+to create a running environments.
+
+By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
 If conda is not installed, one can run
 
 ```bash
-make venv USE_CONDA=false
+make env USE_CONDA=false
 ```
 
 or 
