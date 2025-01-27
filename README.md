@@ -36,9 +36,9 @@ make venv USE_CONDA=false
 or 
 
 ```bash
-make poetry-env
+make virtualenv
 ```
-to install using poetry. It is however recommanded that `conda` be used.
+to install using virtualenv. It is however recommanded that `conda` be used.
 
 Help options are available by typing `make help`.
 
