@@ -20,32 +20,45 @@ Once conda has been installed successfully, one can clone this package to a loca
 ```bash
 git clone https://github.com/xinglong-zhang/chemsmart.git
 ```
-For linux and MacOS systems which support `make`, users can run 
+First, cd into chemsmart folder. For linux and MacOS systems which support `make`, users can run 
 
 ```bash
 make venv
 ```
 to create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
+If conda is not installed, one can run
+
+```bash
+make venv USE_CONDA=false
+```
+
+or 
+
+```bash
+make virtualenv
+```
+to install using virtualenv. It is however recommanded that `conda` be used.
+
 Help options are available by typing `make help`.
 
-After the virtual conda environment is created, one can run
+After the virtual conda environment is created and activated via `conda activate chemsmart`, one can run
 
 ```bash
 make install
 ```
-which installs the packages and dependencies required for chemsmart.
+which installs the packages and dependencies required for `chemsmart` package.
 
 Next, run
 ```bash
 make configure
 ```
-to sets up the user-specific directory `~/.chemsmart` automatically. You will be prompt to enter the paths to g16 and ORCA software, which will be added automatically.
+to sets up the user-specific directory `~/.chemsmart` automatically. You will be prompt to enter the paths to g16 and ORCA software, which will then be added automatically. The correct `conda` path for the user will also be updated.
 
 The configuration also adds the environment variables for chemsmart to the user `~/.bashrc` file.
 
 -----
-The `~/.chemsmart/usersettings.yaml` file contains informations such as project number or account number that are required in a typical submission script that specifies the account for use at some HPC servers. It can also contain options specifying user's email to inform user of the job start and job end once a job is submitted. A typical `~/.chemsmart/usersettings.yaml` file looks like this:
+The `~/.chemsmart/usersettings.yaml` file contains informations such as project number or account number that are required in a typical submission script that specifies the account for use at some HPC servers. It can also contain options specifying user's email to inform user of the job start and job end once a job is submitted. If more features are needed, please submit a request via `Issues`. A typical `~/.chemsmart/usersettings.yaml` file looks like this:
 ```text
 PROJECT: 1234567  # alias ACCOUNT FOR SLURM
 EMAIL: abc@gmail.com
@@ -154,6 +167,9 @@ solv:
   solvent_id: "toluene"
 ```
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
+
+---
+Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the server configurations on which chemsmart is to be used (e.g., modules, scratch directories etc). Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
 
 The `make configure` will also add the required paths to the user `~/.bashrc` file. User may need to do 
 
