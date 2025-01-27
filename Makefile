@@ -24,8 +24,8 @@ env:  ## Create a virtual environment (Conda or Poetry).
 		echo "Using Conda"; \
 		make conda-env; \
 	else \
-		echo "Using Poetry"; \
-		make poetry-env; \
+		echo "Using virtualenv"; \
+		make virtualenv; \
 	fi
 
 .PHONY: conda-env
@@ -35,18 +35,18 @@ conda-env:  ## Create a Conda environment.
 		conda create -n chemsmart python=3.10 -y; \
 	fi
 	conda run -n chemsmart pip install -U pip
-	conda run -n chemsmart pip install poetry
-	conda run -n chemsmart poetry install
 	@echo "Conda environment 'chemsmart' is ready. Activate it with 'conda activate chemsmart'."
 
-.PHONY: poetry-env
-poetry-env:  ## Create a virtual environment using Poetry.
-	@if ! command -v poetry > /dev/null; then \
-		echo "Poetry is required. Please install it from https://python-poetry.org/."; \
+.PHONY: virtualenv
+virtualenv:  ## Create a virtual environment using virtualenv.
+	@if ! command -v python3 > /dev/null; then \
+		echo "Python 3 is required but not installed. Exiting."; \
 		exit 1; \
 	fi
-	poetry install
-
+	@if [ ! -d "venv" ]; then \
+		python3 -m venv venv; \
+	fi
+	@source venv/bin/activate && pip install -U pip
 
 # === Project Setup ===
 
@@ -58,25 +58,26 @@ install:          ## Install the project in development mode.
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
 	@echo "Running chemsmart configuration..."
-	chemsmart config
+	$(ENV_PREFIX)$(CHEMSMART_PATH) config || { echo "Error: chemsmart configuration failed."; exit 1; }
 	@echo "Running chemsmart server configuration..."
-	chemsmart config server
+	$(ENV_PREFIX)$(CHEMSMART_PATH) config server || { echo "Error: chemsmart server configuration failed."; exit 1; }
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
 	if [ -n "$$gaussian_folder" ]; then \
 		echo "Configuring Gaussian with folder: $$gaussian_folder"; \
-		chemsmart config gaussian --folder $$gaussian_folder; \
+		$(ENV_PREFIX)$(CHEMSMART_PATH) config gaussian --folder $$gaussian_folder; \
 	else \
 		echo "Skipping Gaussian configuration."; \
 	fi
 	@read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
 	if [ -n "$$orca_folder" ]; then \
 		echo "Configuring ORCA with folder: $$orca_folder"; \
-		chemsmart config orca --folder $$orca_folder; \
+		$(ENV_PREFIX)$(CHEMSMART_PATH) config orca --folder $$orca_folder; \
 	else \
 		echo "Skipping ORCA configuration."; \
 	fi
 
 .PHONY: show
+show: ## Display the current environment information.
 	@echo "Current environment:"
 	@if [ "$(USE_CONDA)" = "true" ]; then \
 		conda env list | grep '*'; \
