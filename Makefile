@@ -3,6 +3,9 @@ ENV_PREFIX=$(shell if conda env list | grep -q chemsmart; then echo "conda run -
 
 SHELL := /bin/bash
 USE_CONDA ?= true  # Default to true if not explicitly set
+MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
+CHEMSMART_PATH := $(MAKEFILE_DIR)/chemsmart/cli/chemsmart  # Relative to the Makefile directory
+
 
 .PHONY: help
 help:             ## Show the help menu.
@@ -55,20 +58,20 @@ install:          ## Install the project in development mode.
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
 	@echo "Running chemsmart configuration..."
-	chemsmart config
+	$(ENV_PREFIX)$(CHEMSMART_PATH) config || { echo "Error: chemsmart configuration failed."; exit 1; }
 	@echo "Running chemsmart server configuration..."
-	chemsmart config server
+	$(ENV_PREFIX)$(CHEMSMART_PATH) config server || { echo "Error: chemsmart server configuration failed."; exit 1; }
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
 	if [ -n "$$gaussian_folder" ]; then \
 		echo "Configuring Gaussian with folder: $$gaussian_folder"; \
-		chemsmart config gaussian --folder $$gaussian_folder; \
+		$(ENV_PREFIX)$(CHEMSMART_PATH) config gaussian --folder $$gaussian_folder; \
 	else \
 		echo "Skipping Gaussian configuration."; \
 	fi
 	@read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
 	if [ -n "$$orca_folder" ]; then \
 		echo "Configuring ORCA with folder: $$orca_folder"; \
-		chemsmart config orca --folder $$orca_folder; \
+		$(ENV_PREFIX)$(CHEMSMART_PATH) config orca --folder $$orca_folder; \
 	else \
 		echo "Skipping ORCA configuration."; \
 	fi
