@@ -20,12 +20,25 @@ Once conda has been installed successfully, one can clone this package to a loca
 ```bash
 git clone https://github.com/xinglong-zhang/chemsmart.git
 ```
-For linux and MacOS systems which support `make`, users can run 
+First, cd into chemsmart folder. For linux and MacOS systems which support `make`, users can run 
 
 ```bash
 make venv
 ```
 to create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
+
+If conda is not installed, one can run
+
+```bash
+make venv USE_CONDA=false
+```
+
+or 
+
+```bash
+make poetry-env
+```
+to install using poetry. It is however recommanded that `conda` be used.
 
 Help options are available by typing `make help`.
 
