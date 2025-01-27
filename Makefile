@@ -4,8 +4,6 @@ ENV_PREFIX=$(shell if conda env list | grep -q chemsmart; then echo "conda run -
 SHELL := /bin/bash
 USE_CONDA ?= true  # Default to true if not explicitly set
 
-
-
 .PHONY: help
 help:             ## Show the help menu.
 	@echo "Usage: make <target>"
@@ -17,14 +15,14 @@ help:             ## Show the help menu.
 # === Environment Setup ===
 
 .PHONY: venv
-venv:  ## Create a virtual environment (Conda or Poetry).
+venv:  ## Create a Conda environment if USE_CONDA=true.
 	@echo "Debug: USE_CONDA=$(USE_CONDA)"
-	@if [ $(USE_CONDA) = "true" ]; then \
+	@if [ "$(USE_CONDA)" = "true" ]; then \
 		echo "Using Conda"; \
 		make conda-env; \
 	else \
-		echo "Using Poetry"; \
-		make poetry-env; \
+		echo "Using virtualenv"; \
+		make virtualenv-env; \
 	fi
 
 .PHONY: conda-env
@@ -34,18 +32,18 @@ conda-env:  ## Create a Conda environment.
 		conda create -n chemsmart python=3.10 -y; \
 	fi
 	conda run -n chemsmart pip install -U pip
-	conda run -n chemsmart pip install poetry
-	conda run -n chemsmart poetry install
 	@echo "Conda environment 'chemsmart' is ready. Activate it with 'conda activate chemsmart'."
 
-.PHONY: poetry-env
-poetry-env:  ## Create a virtual environment using Poetry.
-	@if ! command -v poetry > /dev/null; then \
-		echo "Poetry is required. Please install it from https://python-poetry.org/."; \
+.PHONY: virtualenv
+virtualenv:  ## Create a virtual environment using virtualenv.
+	@if ! command -v python3 > /dev/null; then \
+		echo "Python 3 is required but not installed. Exiting."; \
 		exit 1; \
 	fi
-	poetry install
-
+	@if [ ! -d "venv" ]; then \
+		python3 -m venv venv; \
+	fi
+	@source venv/bin/activate && pip install -U pip
 
 # === Project Setup ===
 
@@ -76,6 +74,7 @@ configure:        ## Run chemsmart configuration interactively.
 	fi
 
 .PHONY: show
+show: ## Display the current environment information.
 	@echo "Current environment:"
 	@if [ "$(USE_CONDA)" = "true" ]; then \
 		conda env list | grep '*'; \
