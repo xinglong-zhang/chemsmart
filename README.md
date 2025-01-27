@@ -23,7 +23,7 @@ git clone https://github.com/xinglong-zhang/chemsmart.git
 For linux and MacOS systems which support `make`, users can run 
 
 ```bash
-make venv
+make env
 ```
 to create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
