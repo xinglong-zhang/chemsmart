@@ -19,7 +19,7 @@ help:             ## Show the help menu.
 .PHONY: venv
 venv:  ## Create a virtual environment (Conda or Poetry).
 	@echo "Debug: USE_CONDA=$(USE_CONDA)"
-	@if [ "$(USE_CONDA)" = "true" ]; then \
+	@if [ $(USE_CONDA) = "true" ]; then \
 		echo "Using Conda"; \
 		make conda-env; \
 	else \
