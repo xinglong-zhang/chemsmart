@@ -22,7 +22,7 @@ venv:  ## Create a Conda environment if USE_CONDA=true.
 		make conda-env; \
 	else \
 		echo "Using virtualenv"; \
-		make virtualenv-env; \
+		make virtualenv; \
 	fi
 
 .PHONY: conda-env
