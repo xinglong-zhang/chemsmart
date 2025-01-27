@@ -87,7 +87,6 @@ clean:            ## Clean unused files.
 virtualenv:       ## Create a virtual environment.
 release:          ## Create a new tag for release.
 docs:             ## Build the documentation.
-switch-to-poetry: ## Switch to poetry package manager.
 init:             ## Initialize the project based on an application template.
 ```
 
