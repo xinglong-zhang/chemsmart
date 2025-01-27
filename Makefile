@@ -14,10 +14,10 @@ help:             ## Show the help menu.
 
 # === Environment Setup ===
 
-.PHONY: venv
-venv:  ## Create a Conda environment if USE_CONDA=true.
+.PHONY: env
+env:  ## Create a virtual environment (Conda or Poetry).
 	@echo "Debug: USE_CONDA=$(USE_CONDA)"
-	@if [ "$(USE_CONDA)" = "true" ]; then \
+	@if [ $(USE_CONDA) = "true" ]; then \
 		echo "Using Conda"; \
 		make conda-env; \
 	else \
