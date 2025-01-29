@@ -463,6 +463,8 @@ class GaussianJobSettings(MolecularJobSettings):
         # heavy atoms list supplied from settings contains all heavy atoms needed for
         # heavy_atom_basis but in each structure, some heave atoms supplied from settings
         # may not appear in the structure
+        if self.heavy_elements is None:
+            return None
         return list(
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )

@@ -70,17 +70,15 @@ class GaussianInputWriter(InputWriter):
         route_string = self.settings.route_string
         # if project settings has heavy elements but molecule has no heavy elements,
         # then replace the basis set with light elements basis
-        heavy_elements_in_structure = self.settings.prune_heavy_elements(
-            self.job.molecule
-        )
-        if (
-            len(heavy_elements_in_structure) == 0
-            and self.settings.heavy_elements_basis
-        ):
-            route_string = route_string.replace(
-                self.settings.basis,
-                self.settings.light_elements_basis,
+        if self.settings.heavy_elements_basis is not None:
+            heavy_elements_in_structure = self.settings.prune_heavy_elements(
+                self.job.molecule
             )
+            if heavy_elements_in_structure is None:
+                route_string = route_string.replace(
+                    self.settings.basis,
+                    self.settings.light_elements_basis,
+                )
         f.write(route_string + "\n")
         f.write("\n")
 
@@ -159,8 +157,12 @@ class GaussianInputWriter(InputWriter):
             )
 
             # for the given project setting, if heavy elements are not found in the structure,
+            # and no user-specified gen_genecp_file is supplied, then
             # use light elements basis, e.g., organic reactant molecules in TM catalysis
-            if len(heavy_elements_in_structure) == 0:
+            if (
+                heavy_elements_in_structure is None
+                and self.settings.gen_genecp_file is None
+            ):
                 # replace gen or genecp keyword in route by light elements basis
                 pass
 
