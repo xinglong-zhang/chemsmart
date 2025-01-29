@@ -76,7 +76,10 @@ class GaussianInputWriter(InputWriter):
             )
             if (
                 heavy_elements_in_structure is None
+                # returns None if no heavy elements given in settings
                 or len(heavy_elements_in_structure) == 0
+                # returns empty list if no heavy elements found in structure
+                # (heavy elements specified in settings)
             ):
                 route_string = route_string.replace(
                     self.settings.basis,
