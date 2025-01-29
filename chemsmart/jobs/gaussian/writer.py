@@ -74,7 +74,10 @@ class GaussianInputWriter(InputWriter):
             heavy_elements_in_structure = self.settings.prune_heavy_elements(
                 self.job.molecule
             )
-            if heavy_elements_in_structure is None:
+            if (
+                heavy_elements_in_structure is None
+                or len(heavy_elements_in_structure) == 0
+            ):
                 route_string = route_string.replace(
                     self.settings.basis,
                     self.settings.light_elements_basis,
@@ -161,8 +164,8 @@ class GaussianInputWriter(InputWriter):
             # use light elements basis, e.g., organic reactant molecules in TM catalysis
             if (
                 heavy_elements_in_structure is None
-                and self.settings.gen_genecp_file is None
-            ):
+                or len(heavy_elements_in_structure) == 0
+            ) and self.settings.gen_genecp_file is None:
                 # replace gen or genecp keyword in route by light elements basis
                 pass
 
