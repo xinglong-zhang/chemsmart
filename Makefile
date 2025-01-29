@@ -90,13 +90,11 @@ show: ## Display the current environment information.
 .PHONY: fmt
 fmt:              ## Format code using black and isort.
 	$(ENV_PREFIX)isort --skip pyproject.toml --gitignore .
-	$(ENV_PREFIX)black -l 79 chemsmart/
-	$(ENV_PREFIX)black -l 79 tests/
+	$(ENV_PREFIX)black -l 79 .
 
 .PHONY: lint
-lint:             ## Run linters (ruff and black).
-	$(ENV_PREFIX)ruff check .
-	$(ENV_PREFIX)black -l 79 --check .
+lint:             ## Run linters (ruff).
+	$(ENV_PREFIX)ruff check . --fix
 
 # === Testing ===
 

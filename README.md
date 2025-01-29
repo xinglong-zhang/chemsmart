@@ -25,7 +25,7 @@ First, cd into chemsmart folder. For linux and MacOS systems which support `make
 ```bash
 make env
 ```
-to create a running environments.
+to create a running environment.
 
 By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
