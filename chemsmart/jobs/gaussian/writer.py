@@ -68,6 +68,19 @@ class GaussianInputWriter(InputWriter):
     def _write_route_section(self, f):
         logger.debug("Writing route section.")
         route_string = self.settings.route_string
+        # if project settings has heavy elements but molecule has no heavy elements,
+        # then replace the basis set with light elements basis
+        heavy_elements_in_structure = self.settings.prune_heavy_elements(
+            self.job.molecule
+        )
+        if (
+            len(heavy_elements_in_structure) == 0
+            and self.settings.heavy_elements_basis
+        ):
+            route_string = route_string.replace(
+                self.settings.basis,
+                self.settings.light_elements_basis,
+            )
         f.write(route_string + "\n")
         f.write("\n")
 
@@ -139,10 +152,24 @@ class GaussianInputWriter(InputWriter):
             genecp_section = self.settings.get_genecp_section(
                 molecule=self.job.molecule
             )
-            f.write(genecp_section.string)
-            # check that the last line of genecp_section.string is empty, if not, add an empty line
-            if genecp_section.string_list[-1] != "\n":
-                f.write("\n")
+
+            # write genecp section only if heavy elements are in the molecule
+            heavy_elements_in_structure = self.settings.prune_heavy_elements(
+                self.job.molecule
+            )
+
+            # for the given project setting, if heavy elements are not found in the structure,
+            # use light elements basis, e.g., organic reactant molecules in TM catalysis
+            if len(heavy_elements_in_structure) == 0:
+                # replace gen or genecp keyword in route by light elements basis
+                pass
+
+            else:
+                f.write(genecp_section.string)
+                # check that the last line of genecp_section.string is empty,
+                # if not, add an empty line
+                if genecp_section.string_list[-1] != "\n":
+                    f.write("\n")
 
     def _append_custom_solvent_parameters(self, f):
         """Write the custom solvent parameters if present in the job settings."""

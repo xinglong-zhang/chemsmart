@@ -243,7 +243,7 @@ class GaussianJobSettings(MolecularJobSettings):
             chk=True,
             job_type=None,
             title="Gaussian job with default settings",
-            freq=False,
+            freq=True,
             numfreq=False,
             dieze_tag=None,
             solvent_model=None,
@@ -437,7 +437,8 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Light elements basis: {self.light_elements_basis}\n"
             )
             # Method 1 for getting genecp
-            # Need to supply self.heavy_elements, self.heavy_elements_basis and self.light_elements_basis
+            # Need to supply self.heavy_elements, self.heavy_elements_basis
+            # and self.light_elements_basis
             heavy_elements_in_structure = self.prune_heavy_elements(molecule)
 
             genecp_section = GenGenECPSection.from_bse_api(
@@ -459,8 +460,9 @@ class GaussianJobSettings(MolecularJobSettings):
         return genecp_section
 
     def prune_heavy_elements(self, molecule):
-        # heavy atoms list supplied from settings contains all heavy atoms needed for heavy_atom_basis but in each
-        # structure, some heave atoms supplied from settings may not appear in the structure
+        # heavy atoms list supplied from settings contains all heavy atoms needed for
+        # heavy_atom_basis but in each structure, some heave atoms supplied from settings
+        # may not appear in the structure
         return list(
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
