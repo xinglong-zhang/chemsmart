@@ -251,7 +251,7 @@ class ORCAJobSettings(MolecularJobSettings):
             charge=None,
             multiplicity=None,
             gbw=True,
-            freq=False,
+            freq=True,
             numfreq=False,
             mdci_cutoff=None,
             mdci_density=None,
