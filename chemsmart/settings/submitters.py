@@ -73,7 +73,8 @@ class Submitter(RegistryMixin):
         ]
         if len(submitter_cls) == 0:
             raise ValueError(
-                f"No submitter of defined name: {self.name}.\nAvailable submitters: {Submitter.subclasses()}"
+                f"No submitter of defined name: {self.name}.\n"
+                f"Available submitters: {Submitter.subclasses()}"
             )
 
         assert len(submitter_cls) == 1
@@ -231,7 +232,8 @@ class PBSSubmitter(Submitter):
         if self.server.num_gpus > 0:
             f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
         f.write(
-            f"#PBS -l select=1:ncpus={self.server.num_cores}:mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}\n"
+            f"#PBS -l select=1:ncpus={self.server.num_cores}:"
+            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}G\n"
         )
         # using only one node here
         if self.server.queue_name:
