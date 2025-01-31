@@ -226,7 +226,6 @@ class PBSSubmitter(Submitter):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
     def _write_scheduler_options(self, f):
-        f.write(f"#PBS -N {self.job.label}\n")
         f.write(f"#PBS -o {self.job.label}.pbsout\n")
         f.write(f"#PBS -e {self.job.label}.pbserr\n")
         if self.server.num_gpus > 0:
