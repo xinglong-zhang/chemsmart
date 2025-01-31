@@ -158,24 +158,35 @@ class Gaussian16Output(GaussianFileMixin):
 
         # If the job terminated normally
         if self.normal_termination:
-            if np.allclose(
-                self.input_orientations[-1],
-                self.input_orientations[-2],
-                rtol=1e-5,
-            ):
-                self.input_orientations.pop(-1)
-            if np.allclose(
-                self.standard_orientations[-1],
-                self.standard_orientations[-2],
-                rtol=1e-5,
-            ):
-                self.standard_orientations.pop(-1)
-
             # Use Standard orientations if available, otherwise Input orientations
-            if len(self.standard_orientations) != 0:
+            if self.standard_orientations:
+                # log file has "Standard orientation:"
+                # and standard_orientations is not None
+                try:
+                    if np.allclose(
+                        self.standard_orientations[-1],
+                        self.standard_orientations[-2],
+                        rtol=1e-5,
+                    ):
+                        self.standard_orientations.pop(-1)
+                except IndexError:
+                    # for single point jobs, there will be only one structure
+                    pass
                 orientations = self.standard_orientations
                 orientations_pbc = self.standard_orientations_pbc
             else:
+                if self.input_orientations is not None:
+                    # if the log file has "Input orientation:"
+                    try:
+                        if np.allclose(
+                            self.input_orientations[-1],
+                            self.input_orientations[-2],
+                            rtol=1e-5,
+                        ):
+                            self.input_orientations.pop(-1)
+                    except IndexError:
+                        # for single point jobs, there will be only one structure
+                        pass
                 orientations = self.input_orientations
                 orientations_pbc = self.input_orientations_pbc
             return create_molecule_list(orientations, orientations_pbc)
@@ -217,7 +228,7 @@ class Gaussian16Output(GaussianFileMixin):
     def molecule(self):
         return self.last_structure
 
-    ######################### the following properties relate to intermediate geometry optimizations
+    ###### the following properties relate to intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
 
     @cached_property
@@ -475,7 +486,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_modes(self):
         """Obtain list of vibrational normal modes corresponding to the vibrational frequency.
-        Returns a list of normal modes, each of num_atoms x 3 (in dx, dy, and dz for each element) vibration.
+        Returns a list of normal modes, each of num_atoms x 3
+        (in dx, dy, and dz for each element) vibration.
         """
         list_of_vib_modes = []
         for i, line in enumerate(self.contents):
@@ -753,6 +765,8 @@ class Gaussian16Output(GaussianFileMixin):
                     )
                 else:
                     input_orientations_pbc.append(None)
+        if len(input_orientations) == 0:
+            return None, None
         return input_orientations, input_orientations_pbc
 
     @cached_property
@@ -794,6 +808,8 @@ class Gaussian16Output(GaussianFileMixin):
                     )
                 else:
                     standard_orientations_pbc.append(None)
+        if len(standard_orientations) == 0:
+            return None, None
         return standard_orientations, standard_orientations_pbc
 
     @cached_property

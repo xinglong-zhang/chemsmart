@@ -1236,6 +1236,10 @@ class TestGaussianWBIOutput:
             g16_output.get_electronic_configuration("Ni1")
             == "[core]4S(0.27)3d(8.70)4p(0.51)"
         )
+        assert g16_output.input_orientations is None
+        assert g16_output.standard_orientations is not None
+        assert len(g16_output.standard_orientations) == 1
+        assert len(g16_output.all_structures) == 1
 
 
 class TestGaussianCubeFile:
