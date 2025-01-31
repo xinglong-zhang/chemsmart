@@ -1,11 +1,11 @@
 import logging
 import os
 
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import (
     content_blocks_by_paragraph,
     write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
-from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
 
@@ -99,19 +99,22 @@ class GenGenECPSection:
                 f'Given gen/genecp path at "{genecp_path}" is not found!'
             )
 
-        string = ""
         genecp_path = os.path.abspath(genecp_path)
         with open(genecp_path) as f:
-            for line in f.readlines():
-                string += line
+            string = ""
+            lines = f.readlines()
+            if lines[-1] == "\n":
+                lines = lines[:-1]
+            for line in lines:
+                string += line  # this method of concatenation is automatically adds a "\n" at the end
         return cls(string)
 
     @classmethod
     def from_comfile(cls, comfile):
-        from chemsmart.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.input import Gaussian16Input
 
-        comfile = Gaussian16Input(comfile=comfile)
-        return cls.from_genecp_group(comfile.gen_genecp)
+        comfile = Gaussian16Input(filename=comfile)
+        return cls.from_genecp_group(comfile.gen_genecp_group)
 
     @classmethod
     def from_genecp_group(cls, genecp_group):

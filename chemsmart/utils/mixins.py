@@ -1,8 +1,12 @@
+import inspect
 import os
 import re
 from functools import cached_property
-from chemsmart.io.orca.route import ORCARoute
+
+from ase import units
+
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.orca.route import ORCARoute
 
 
 class FileMixin:
@@ -33,6 +37,43 @@ class FileMixin:
     def content_lines_string(self):
         with open(self.filepath, "r") as f:
             return f.read()
+
+    @cached_property
+    def forces_in_eV_per_angstrom(self):
+        """Convert forces from Hartrees/Bohr to eV/Angstrom."""
+        if self.forces is None:
+            return [None] * len(self.energies)
+        forces_in_eV_per_A = []
+        for forces in self.forces:
+            forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
+        return forces_in_eV_per_A
+
+    @cached_property
+    def input_translation_vectors(self):
+        """Obtain the translation vectors from the input that is printed in the outputfile."""
+        tvs = []
+        if self.input_coordinates_block is not None:
+            cb = self.input_coordinates_block
+            if cb.translation_vectors is not None:
+                tvs = cb.translation_vectors
+        return tvs
+
+    @cached_property
+    def symbols(self):
+        return self.input_coordinates_block.chemical_symbols
+
+    @cached_property
+    def list_of_pbc_conditions(self):
+        return self.input_coordinates_block.pbc_conditions
+
+    @cached_property
+    def energies_in_eV(self):
+        """Convert energies from Hartree to eV."""
+        return [energy * units.Hartree for energy in self.energies]
+
+    @property
+    def num_energies(self):
+        return len(self.energies_in_eV)
 
 
 class GaussianFileMixin(FileMixin):
@@ -69,6 +110,73 @@ class GaussianFileMixin(FileMixin):
         raise NotImplementedError("Subclasses must implement `_get_route`.")
 
     @property
+    def modred(self):
+        return self._get_modredundant_conditions()
+
+    def _get_modredundant_conditions(self):
+        modred = None
+        if (
+            "modred" in self.route_string
+            and self.modredundant_group is not None
+        ):
+            for line in self.modredundant_group:
+                if "F" in line or "f" in line:
+                    modred = self._get_modred_frozen_coords(
+                        self.modredundant_group
+                    )
+                    self.job_type = "modred"
+                elif "S" in line or "s" in line:
+                    modred = self._get_modred_scan_coords(
+                        self.modredundant_group
+                    )
+                    self.job_type = "scan"
+                return modred
+
+    @staticmethod
+    def _get_modred_frozen_coords(modred_list_of_string):
+        modred = []
+        for raw_line in modred_list_of_string:
+            line = raw_line[2:-2]
+            line_elems = line.split()
+            assert all(
+                line_elem.isdigit() for line_elem in line_elems
+            ), f"modred coordinates should be integers, but is {line_elems} instead."
+            each_modred_list = [int(line_elem) for line_elem in line_elems]
+            modred.append(each_modred_list)
+        return modred
+
+    @staticmethod
+    def _get_modred_scan_coords(modred_list_of_string):
+        modred = {}
+        coords = []
+        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        for raw_line in modred_list_of_string:
+            line = raw_line.strip()[2:]
+            line_elems = line.split("S")
+
+            # obtain coords
+            coords_string = line_elems[0]
+            each_coords_list = coords_string.split()
+            assert all(
+                line_elem.isdigit() for line_elem in each_coords_list
+            ), f"modred coordinates should be integers, but is {line_elems[0]} instead."
+            each_modred_list = [
+                int(line_elem) for line_elem in each_coords_list
+            ]
+            coords.append(each_modred_list)
+            modred["coords"] = coords
+
+            # obtain num_steps and step_size (assumed the same for each scan coordinate)
+            steps_string = line_elems[-1]
+            steps_list = steps_string.split()
+            num_steps = int(steps_list[0])
+            step_size = float(steps_list[1])
+            modred["num_steps"] = num_steps
+            modred["step_size"] = step_size
+
+        return modred
+
+    @property
     def route_object(self):
         try:
             route_object = GaussianRoute(route_string=self.route_string)
@@ -87,6 +195,10 @@ class GaussianFileMixin(FileMixin):
     @job_type.setter
     def job_type(self, value):
         self.route_object.job_type = value
+
+    @property
+    def chk(self):
+        return self._get_chk()
 
     @property
     def freq(self):
@@ -109,7 +221,11 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.basis
 
     @property
-    def solv_on(self):
+    def force(self):
+        return self.route_object.force
+
+    @property
+    def solvent_on(self):
         return self.route_object.solv
 
     @property
@@ -127,6 +243,40 @@ class GaussianFileMixin(FileMixin):
     @property
     def additional_route_parameters(self):
         return self.route_object.additional_route_parameters
+
+    def read_settings(self):
+        from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+
+        filename = os.path.basename(self.filename)
+
+        title = f"Job prepared from Gaussian file {filename}"
+
+        return GaussianJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            basis=self.basis,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            chk=self.chk,
+            job_type=self.job_type,
+            title=title,
+            freq=self.freq,
+            numfreq=self.numfreq,
+            dieze_tag=self.dieze_tag,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            additional_opt_options_in_route=self.additional_opt_options_in_route,
+            additional_route_parameters=self.additional_route_parameters,
+            route_to_be_written=None,
+            modred=self.modred,
+            gen_genecp_file=None,
+            heavy_elements=self.heavy_elements,
+            heavy_elements_basis=self.heavy_elements_basis,
+            light_elements_basis=self.light_elements_basis,
+            custom_solvent=self.custom_solvent,
+            append_additional_info=None,
+            forces=False,
+        )
 
 
 class ORCAFileMixin(FileMixin):
@@ -276,6 +426,102 @@ class ORCAFileMixin(FileMixin):
     @property
     def numfreq(self):
         return self.route_object.numfreq
+
+    def read_settings(self):
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        dv = ORCAJobSettings.default()
+        return ORCAJobSettings(
+            ab_initio=self.ab_initio,
+            functional=self.functional,
+            dispersion=self.dispersion,
+            basis=self.basis,
+            aux_basis=self.aux_basis,
+            extrapolation_basis=self.extrapolation_basis,
+            defgrid=self.defgrid,
+            scf_tol=self.scf_tol,
+            scf_algorithm=self.scf_algorithm,
+            scf_maxiter=self.scf_maxiter,
+            scf_convergence=self.scf_convergence,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            gbw=dv.gbw,
+            freq=self.freq,
+            numfreq=self.numfreq,
+            dipole=self.dipole,
+            quadrupole=self.quadrupole,
+            mdci_cutoff=self.mdci_cutoff,
+            mdci_density=self.mdci_density,
+            job_type=self.job_type,
+            solvent_model=self.solvent_model,
+            solvent_id=self.solvent_id,
+            additional_route_parameters=dv.additional_route_parameters,
+            route_to_be_written=dv.route_to_be_written,
+            modred=dv.modred,
+            gen_genecp_file=dv.gen_genecp_file,
+            heavy_elements=dv.heavy_elements,
+            heavy_elements_basis=dv.heavy_elements_basis,
+            light_elements_basis=dv.light_elements_basis,
+            custom_solvent=dv.custom_solvent,
+            forces=dv.forces,
+        )
+
+
+class YAMLFileMixin(FileMixin):
+    """Mixin class for YAML files."""
+
+    @cached_property
+    def yaml_contents_dict(self):
+        import yaml
+
+        return yaml.safe_load(self.content_lines_string)
+
+    @property
+    def yaml_contents_keys(self):
+        return self.yaml_contents_dict.keys()
+
+    @property
+    def yaml_contents_values(self):
+        return self.yaml_contents_dict.values()
+
+    def yaml_contents_by_key(self, key):
+        return self.yaml_contents_dict[key]
+
+
+class RegistryMeta(type):
+    """Metaclass to ensure all subclasses are registered in the root class's _REGISTRY."""
+
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        # Only initialize _REGISTRY in the root parent class
+        if not hasattr(cls, "_REGISTRY"):
+            cls._REGISTRY = []
+
+
+class RegistryMixin(metaclass=RegistryMeta):
+    """Mixin to register subclasses in a shared registry."""
+
+    REGISTERABLE = True
+
+    @classmethod
+    def subclasses(cls, allow_abstract=False):
+        return cls._subclasses(cls, cls._REGISTRY, allow_abstract)
+
+    @staticmethod
+    def _subclasses(parent_cls, registry, allow_abstract):
+        return [
+            c
+            for c in registry
+            if issubclass(c, parent_cls)
+            and c != parent_cls
+            and (not inspect.isabstract(c) or allow_abstract)
+        ]
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.REGISTERABLE:
+            # Append the subclass to the root _REGISTRY
+            cls._REGISTRY.append(cls)
 
 
 # class BlockMixin:

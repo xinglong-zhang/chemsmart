@@ -1,7 +1,7 @@
 %chk=modred_genecp.chk
 %nprocshared=48
 %mem=48GB
-# opt=modredundant freq mn15 genecp
+# opt=modred freq mn15 genecp
 
 From inputfile PdOAc2.log
 

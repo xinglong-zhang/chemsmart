@@ -1,7 +1,7 @@
 %chk=normal_ts_scan.chk
 %nprocshared=32
 %mem=30GB
-# opt=modredundant m062x def2svp
+# opt=modred m062x def2svp
 
 From inputfile normal_ts.log
 

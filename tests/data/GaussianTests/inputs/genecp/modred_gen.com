@@ -1,7 +1,7 @@
 %chk=modred_gen.chk
 %nprocshared=48
 %mem=48GB
-# opt=modredundant freq mn15 gen
+# opt=modred freq mn15 gen
 
 From inputfile PdOAc2.log
 

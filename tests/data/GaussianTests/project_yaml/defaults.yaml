@@ -1,0 +1,24 @@
+# Default Gaussian settings for calculations 
+chk: True
+freq: True
+job_type: Null
+title: 'Gaussian job'
+functional: Null  # default value; will get updated by project settings
+basis : Null  # default value; will get updated by project settings
+charge : Null  # default value; will get updated by user at runtime
+multiplicity : Null  # default value; will get updated by user at runtime
+route_to_be_written : Null  # user-defined route
+solvent_model : Null  # default value
+solvent_id : Null  # default value
+dieze_tag : Null
+additional_opt_options_in_route : Null
+additional_route_parameters : Null
+route_to_be_written: Null  # user-defined route
+modred: Null
+gen_genecp: Null
+heavy_elements: Null
+heavy_elements_basis: Null
+light_elements_basis: Null
+custom_solvent: Null
+append_additional_info: Null
+forces : False

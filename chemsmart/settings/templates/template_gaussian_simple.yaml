@@ -1,0 +1,10 @@
+# Default Gaussian settings for calculations 
+gas:
+  functional: m062x  # quotes required for string with spaces
+  basis: def2svp
+solv: 
+  functional: m062x
+  basis: def2tzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: chloroform

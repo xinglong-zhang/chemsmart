@@ -1,25 +1,26 @@
-import re
 import logging
-from itertools import islice
+import re
 from functools import cached_property
+from itertools import islice
+
 import numpy as np
 from ase import units
+
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.mixins import GaussianFileMixin
-from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     eV_pattern,
-    nm_pattern,
     f_pattern,
     float_pattern,
-    normal_mode_pattern,
     frozen_coordinates_pattern,
-    scf_energy_pattern,
     mp2_energy_pattern,
+    nm_pattern,
+    normal_mode_pattern,
     oniom_energy_pattern,
+    scf_energy_pattern,
 )
-from ase.io.formats import string2index
-from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.utils import string2index_1based
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
@@ -43,6 +44,31 @@ class Gaussian16Output(GaussianFileMixin):
 
         logger.info(f"File {self.filename} has error termination.")
         return False
+
+    @property
+    def heavy_elements(self):
+        """TODO"""
+        return None
+
+    @property
+    def heavy_elements_basis(self):
+        """TODO"""
+        return None
+
+    @property
+    def light_elements(self):
+        """TODO"""
+        return None
+
+    @property
+    def light_elements_basis(self):
+        """TODO"""
+        return None
+
+    @property
+    def custom_solvent(self):
+        """TODO"""
+        return None
 
     @cached_property
     def num_steps(self):
@@ -103,14 +129,6 @@ class Gaussian16Output(GaussianFileMixin):
         return cb
 
     @cached_property
-    def symbols(self):
-        return self.input_coordinates_block.chemical_symbols
-
-    @cached_property
-    def list_of_pbc_conditions(self):
-        return self.input_coordinates_block.pbc_conditions
-
-    @cached_property
     def all_structures(self):
         """
         Obtain all the structures from the output file.
@@ -118,61 +136,86 @@ class Gaussian16Output(GaussianFileMixin):
         Include their corresponding energy and forces if present.
         """
 
-        def create_molecule_list(orientations, num_structures=None):
+        def create_molecule_list(
+            orientations, orientations_pbc, num_structures=None
+        ):
             """Helper function to create Molecule objects."""
             num_structures = num_structures or len(orientations)
             return [
                 Molecule(
                     symbols=self.symbols,
                     positions=orientations[i],
+                    translation_vectors=orientations_pbc[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
                     frozen_atoms=self.frozen_atoms_masks,
                     pbc_conditions=self.list_of_pbc_conditions,
                     energy=self.energies_in_eV[i],
-                    forces=self.forces_in_eV_per_A[i],
+                    forces=self.forces_in_eV_per_angstrom[i],
                 )
                 for i in range(num_structures)
             ]
 
         # If the job terminated normally
         if self.normal_termination:
-            # Handle special case: both "opt" and "freq" present in route
-            if "opt" in self.route_string and "freq" in self.route_string:
-                assert np.allclose(
-                    self.input_orientations[-1],
-                    self.input_orientations[-2],
-                    rtol=1e-5,
-                ), "The last two input orientations should be the same."
-                assert np.allclose(
-                    self.standard_orientations[-1],
-                    self.standard_orientations[-2],
-                    rtol=1e-5,
-                ), "The last two standard orientations should be the same."
-                self.input_orientations.pop(-1)
-                self.standard_orientations.pop(-1)
-
             # Use Standard orientations if available, otherwise Input orientations
-            orientations = (
-                self.standard_orientations
-                if self.standard_orientations
-                else self.input_orientations
-            )
-            return create_molecule_list(orientations)
+            if self.standard_orientations:
+                # log file has "Standard orientation:"
+                # and standard_orientations is not None
+                try:
+                    if np.allclose(
+                        self.standard_orientations[-1],
+                        self.standard_orientations[-2],
+                        rtol=1e-5,
+                    ):
+                        self.standard_orientations.pop(-1)
+                except IndexError:
+                    # for single point jobs, there will be only one structure
+                    pass
+                orientations = self.standard_orientations
+                orientations_pbc = self.standard_orientations_pbc
+            else:
+                if self.input_orientations is not None:
+                    # if the log file has "Input orientation:"
+                    try:
+                        if np.allclose(
+                            self.input_orientations[-1],
+                            self.input_orientations[-2],
+                            rtol=1e-5,
+                        ):
+                            self.input_orientations.pop(-1)
+                    except IndexError:
+                        # for single point jobs, there will be only one structure
+                        pass
+                orientations = self.input_orientations
+                orientations_pbc = self.input_orientations_pbc
+            return create_molecule_list(orientations, orientations_pbc)
 
-        # If the job did not terminate normally
-        num_structures_to_use = min(
-            max(len(self.input_orientations), len(self.standard_orientations)),
-            len(self.energies),
-            len(self.forces),
-        )
-        orientations = (
-            self.standard_orientations
-            if self.standard_orientations
-            else self.input_orientations
-        )
+        # If the job did not terminate normally, the last structure is ignored
+        if self.standard_orientations:
+            num_structures_to_use = min(
+                len(self.standard_orientations),
+                len(self.energies),
+                len(self.forces),
+            )
+        if self.input_orientations:
+            num_structures_to_use = min(
+                len(self.input_orientations),
+                len(self.energies),
+                len(self.forces),
+            )
+        # Use Standard orientations if available, otherwise Input orientations
+        if self.standard_orientations:
+            orientations = self.standard_orientations
+            orientations_pbc = self.standard_orientations_pbc
+        else:
+            orientations = self.input_orientations
+            orientations_pbc = self.input_orientations_pbc
+
         return create_molecule_list(
-            orientations, num_structures=num_structures_to_use
+            orientations,
+            orientations_pbc,
+            num_structures=num_structures_to_use,
         )
 
     @cached_property
@@ -188,7 +231,11 @@ class Gaussian16Output(GaussianFileMixin):
         """Return last structure, whether the output file has completed successfully or not."""
         return self.all_structures[-1]
 
-    ######################### the following properties relate to intermediate geometry optimizations
+    @property
+    def molecule(self):
+        return self.last_structure
+
+    ###### the following properties relate to intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
 
     @cached_property
@@ -229,6 +276,9 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     #########################
+    @property
+    def modredundant_group(self):
+        return self._get_modredundant_group()
 
     def _get_route(self):
         lines = self.contents
@@ -253,6 +303,20 @@ class Gaussian16Output(GaussianFileMixin):
                 else:
                     route = None
                 return route
+        return None
+
+    def _get_modredundant_group(self):
+        if "modred" in self.route_string:
+            for i, line in enumerate(self.contents):
+                if line.startswith(
+                    "The following ModRedundant input section has been read:"
+                ):
+                    for j_line in self.contents[i + 1 :]:
+                        modredundant_group = []
+                        if len(j_line) == 0:
+                            break
+                        modredundant_group.append(j_line)
+                    return modredundant_group
         return None
 
     @property
@@ -300,24 +364,20 @@ class Gaussian16Output(GaussianFileMixin):
     # Below gives computing time/resources used
     @cached_property
     def cpu_runtime_by_jobs_core_hours(self):
-        cpu_runtime = []
+        cpu_runtimes = []
         for line in self.contents:
             if line.startswith("Job cpu time:"):
+                cpu_runtime = []
                 n_days = float(line.split("days")[0].strip().split()[-1])
+                cpu_runtime.append(n_days * 24)
                 n_hours = float(line.split("hours")[0].strip().split()[-1])
+                cpu_runtime.append(n_hours)
                 n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                cpu_runtime.append(n_minutes / 60)
                 n_seconds = float(line.split("seconds")[0].strip().split()[-1])
-                total_seconds = (
-                    n_days * 24 * 60 * 60
-                    + n_hours * 60 * 60
-                    + n_minutes * 60
-                    + n_seconds
-                )
-                total_hours = round(
-                    total_seconds / 3600, 4
-                )  # round to 1 nearest hour
-                cpu_runtime.append(total_hours)
-        return cpu_runtime
+                cpu_runtime.append(n_seconds / 3600)
+                cpu_runtimes.append(sum(cpu_runtime))
+        return cpu_runtimes
 
     @cached_property
     def service_units_by_jobs(self):
@@ -326,7 +386,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def total_core_hours(self):
-        return round(sum(self.cpu_runtime_by_jobs_core_hours), 4)
+        return round(sum(self.cpu_runtime_by_jobs_core_hours), 1)
 
     @cached_property
     def total_service_unit(self):
@@ -334,26 +394,24 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def elapsed_walltime_by_jobs(self):
-        elapsed_walltime = []
+        elapsed_walltimes = []
         for line in self.contents:
             if line.startswith("Elapsed time:"):
+                elapsed_walltime = []
                 n_days = float(line.split("days")[0].strip().split()[-1])
+                elapsed_walltime.append(n_days * 24)
                 n_hours = float(line.split("hours")[0].strip().split()[-1])
+                elapsed_walltime.append(n_hours)
                 n_minutes = float(line.split("minutes")[0].strip().split()[-1])
+                elapsed_walltime.append(n_minutes / 60)
                 n_seconds = float(line.split("seconds")[0].strip().split()[-1])
-                total_seconds = (
-                    n_days * 24 * 60 * 60
-                    + n_hours * 60 * 60
-                    + n_minutes * 60
-                    + n_seconds
-                )
-                total_hours = round(total_seconds / 3600, 4)
-                elapsed_walltime.append(total_hours)
-        return elapsed_walltime
+                elapsed_walltime.append(n_seconds / 3600)
+                elapsed_walltimes.append(sum(elapsed_walltime))
+        return elapsed_walltimes
 
     @cached_property
     def total_elapsed_walltime(self):
-        return round(sum(self.elapsed_walltime_by_jobs), 4)
+        return round(sum(self.elapsed_walltime_by_jobs), 1)
 
     #### FREQUENCY CALCULATIONS
     @cached_property
@@ -435,7 +493,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_modes(self):
         """Obtain list of vibrational normal modes corresponding to the vibrational frequency.
-        Returns a list of normal modes, each of num_atoms x 3 (in dx, dy, and dz for each element) vibration.
+        Returns a list of normal modes, each of num_atoms x 3
+        (in dx, dy, and dz for each element) vibration.
         """
         list_of_vib_modes = []
         for i, line in enumerate(self.contents):
@@ -617,15 +676,6 @@ class Gaussian16Output(GaussianFileMixin):
         elif len(self.oniom_energies) != 0:
             return self.oniom_energies
 
-    @cached_property
-    def energies_in_eV(self):
-        """Convert energies from Hartree to eV."""
-        return [energy * units.Hartree for energy in self.energies]
-
-    @property
-    def num_energies(self):
-        return len(self.energies_in_eV)
-
     # check for convergence criterion not met (happens for some output files)
     @property
     def convergence_criterion_not_met(self):
@@ -644,70 +694,130 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def forces(self):
+        list_of_all_forces, _ = self._get_forces_for_molecules_and_pbc()
+        return list_of_all_forces
+
+    def _get_forces_for_molecules_and_pbc(self):
         """Obtain a list of cartesian forces.
         Each force is stored as a np array of shape (num_atoms, 3).
         Intrinsic units as used in Gaussian: Hartrees/Bohr."""
         list_of_all_forces = []
+        list_of_all_forces_pbc = []
         for i, line in enumerate(self.contents):
             if "Forces (Hartrees/Bohr)" in line:
                 forces = []
+                forces_pbc = []
                 for j_line in self.contents[i + 3 :]:
                     if "---------------------------" in j_line:
                         break
                     if j_line.startswith("-2"):
-                        # remove those pbc forces
-                        continue
-                    forces.append([float(val) for val in j_line.split()[2:5]])
+                        # line indicates forces for pbc
+                        forces_pbc.append(
+                            [float(val) for val in j_line.split()[1:4]]
+                        )
+                    else:
+                        forces.append(
+                            [float(val) for val in j_line.split()[2:5]]
+                        )
                 list_of_all_forces.append(np.array(forces))
-        return list_of_all_forces
+                list_of_all_forces_pbc.append(np.array(forces_pbc))
+        if len(list_of_all_forces) == 0:
+            return None, None
+        return list_of_all_forces, list_of_all_forces_pbc
 
     @cached_property
-    def forces_in_eV_per_A(self):
-        """Convert forces from Hartrees/Bohr to eV/Angstrom."""
-        forces_in_eV_per_A = []
-        for forces in self.forces:
-            forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
-        return forces_in_eV_per_A
+    def pbc_forces(self):
+        _, list_of_all_forces_pbc = self._get_forces_for_molecules_and_pbc()
+        return list_of_all_forces_pbc
 
     @cached_property
     def num_forces(self):
-        return len(self.forces_in_eV_per_A)
+        return len(self.forces_in_eV_per_angstrom)
 
     @cached_property
     def input_orientations(self):
         """Obtain structures in Input Orientation from Gaussian output file."""
+
+        input_orientations, _ = self._get_input_orientations_and_pbc()
+        return input_orientations
+
+    @cached_property
+    def input_orientations_pbc(self):
+        """Obtain structures in Input Orientation with PBC from Gaussian output file."""
+        _, input_orientations_pbc = self._get_input_orientations_and_pbc()
+        return input_orientations_pbc
+
+    def _get_input_orientations_and_pbc(self):
         input_orientations = []
+        input_orientations_pbc = []
         for i, line in enumerate(self.contents):
             if line.startswith("Input orientation:"):
                 input_orientation = []
+                input_orientation_pbc = []
                 for j_line in self.contents[i + 5 :]:
                     if "-----------------" in j_line:
                         break
                     if j_line.split()[1] == "-2":  # atomic number = -2 for TV
-                        continue
-                    input_orientation.append(
-                        [float(val) for val in j_line.split()[3:6]]
-                    )
+                        input_orientation_pbc.append(
+                            [float(val) for val in j_line.split()[3:6]]
+                        )
+                    else:
+                        input_orientation.append(
+                            [float(val) for val in j_line.split()[3:6]]
+                        )
                 input_orientations.append(np.array(input_orientation))
-        return input_orientations
+                if len(input_orientation_pbc) != 0:
+                    input_orientations_pbc.append(
+                        np.array(input_orientation_pbc)
+                    )
+                else:
+                    input_orientations_pbc.append(None)
+        if len(input_orientations) == 0:
+            return None, None
+        return input_orientations, input_orientations_pbc
 
     @cached_property
     def standard_orientations(self):
         """Obtain structures in Standard Orientation from Gaussian output file."""
+        standard_orientations, _ = self._get_standard_orientations_and_pbc()
+        return standard_orientations
+
+    @cached_property
+    def standard_orientations_pbc(self):
+        """Obtain structures in Standard Orientation with PBC from Gaussian output file."""
+        _, standard_orientations_pbc = (
+            self._get_standard_orientations_and_pbc()
+        )
+        return standard_orientations_pbc
+
+    def _get_standard_orientations_and_pbc(self):
         standard_orientations = []
+        standard_orientations_pbc = []
         for i, line in enumerate(self.contents):
             if line.startswith("Standard orientation:"):
                 standard_orientation = []
+                standard_orientation_pbc = []
                 for j_line in self.contents[i + 5 :]:
                     if "-----------------" in j_line:
                         break
                     if j_line.split()[1] == "-2":  # atomic number = -2 for TV
-                        continue
-                    standard_orientation.append(
-                        [float(val) for val in j_line.split()[3:6]]
-                    )
+                        standard_orientation_pbc.append(
+                            [float(val) for val in j_line.split()[3:6]]
+                        )
+                    else:
+                        standard_orientation.append(
+                            [float(val) for val in j_line.split()[3:6]]
+                        )
                 standard_orientations.append(np.array(standard_orientation))
-        return standard_orientations
+                if len(standard_orientation_pbc) != 0:
+                    standard_orientations_pbc.append(
+                        np.array(standard_orientation_pbc)
+                    )
+                else:
+                    standard_orientations_pbc.append(None)
+        if len(standard_orientations) == 0:
+            return None, None
+        return standard_orientations, standard_orientations_pbc
 
     @cached_property
     def tddft_transitions(self):
@@ -1246,7 +1356,6 @@ class Gaussian16Output(GaussianFileMixin):
                     all_hirshfeld_spin_densities_heavy_atoms.append(
                         hirshfeld_spin_densities_heavy_atoms
                     )
-                print(hirshfeld_spin_densities_heavy_atoms)
 
         if (
             all_hirshfeld_charges_heavy_atoms
@@ -1270,7 +1379,7 @@ class Gaussian16Output(GaussianFileMixin):
             return None, None, None
 
     def get_molecule(self, index="-1"):
-        index = string2index(index)
+        index = string2index_1based(index)
         return self.all_structures[index]
 
     def to_dataset(self, **kwargs):

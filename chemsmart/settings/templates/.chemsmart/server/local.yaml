@@ -1,0 +1,38 @@
+SERVER:
+    SCHEDULER: Null
+    QUEUE_NAME: Null
+    NUM_HOURS: Null
+    MEM_GB: 400
+    NUM_CORES: 12
+    NUM_GPUS: 0
+    NUM_THREADS: 12
+    SUBMIT_COMMAND: Null
+    PROJECT: 13003611
+    ##PROJECT: 13002374
+    SCRATCH: Null
+    USE_HOSTS: True
+    EXTRA_COMMANDS: |
+        #extra commands to activate chemsmart environment in submission script
+GAUSSIAN:
+    EXEFOLDER: ~/bin/g16 
+    LOCAL_RUN: True  # local run True to use serial_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate chemsmart
+    MODULES: |
+        module purge
+        module load craype-x86-rome
+        module load libfabric/1.11.0.4.125
+    SCRIPTS: |
+        source GAUSS_DIR=~/bin/g16
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+        export GAUSS_EXEDIR=~/bin/g16
+        export g16root=~/bin/g16
+           
+ORCA:
+    EXEFOLDER: ~/bin/orca_6_0_0
+    LOCAL_RUN: False  # local run False to use parallel_command
+    SCRATCH: True  # set scratch to False to run in job folder
+
