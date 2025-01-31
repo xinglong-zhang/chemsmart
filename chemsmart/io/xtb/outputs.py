@@ -1,7 +1,9 @@
 import logging
 import re
 from functools import cached_property
+from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.mixins import XTBFileMixin
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +11,7 @@ class XTBOutput(XTBFileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    @cached_property
+    @property
     def contents(self):
         with open(self.filename) as f:
             return [line.strip() for line in f.readlines()]
@@ -21,8 +23,15 @@ class XTBOutput(XTBFileMixin):
             if "[ERROR]" in line:
                 logger.info(f"File {self.filename} has error termination.")
                 return False
-            if "finished run" in line:
+            if "* finished run" in line:
                 logger.info(f"File {self.filename} terminated normally.")
+                return True
+        return False
+
+    @cached_property
+    def geometry_optimization_convergence(self):
+        for line in self.contents:
+            if "GEOMETRY OPTIMIZATION CONVERGED" in line:
                 return True
         return False
 
@@ -88,23 +97,23 @@ class XTBOutput(XTBFileMixin):
                 elif "Dielectric constant" in line:
                     solvation_info["dielectric_constant"] = float(line.split()[-1])
                 elif "Free energy shift" in line:
-                    logger.info('Free energy shift in Eh')
+                    """Free energy shift in Eh"""
                     solvation_info["free_energy_shift"] = float(line.split()[-4])
                 elif "Temperature" in line:
-                    logger.info('Temperature in K')
+                    """Temperature in K"""
                     solvation_info["temperature"] = float(line.split()[-2])
                 elif "Density" in line:
-                    logger.info('Density in kg/L')
+                    """Density in kg/L"""
                     solvation_info["density"] = float(line.split()[-2])
                 elif "Solvent mass" in line:
-                    logger.info('Solvent mass in g/mol')
+                    """Solvent mass in g/mol"""
                     solvation_info["solvent_mass"] = float(line.split()[-2])
                 elif "H-bond correction" in line:
                     solvation_info["H_bond_correction"] = line.split()[-1] == "true"
                 elif "Ion screening" in line:
                     solvation_info["ion_screening"] = line.split()[-1] == "true"
                 elif "Surface tension" in line:
-                    logger.info('Surface tension in Eh')
+                    """Surface tension in Eh"""
                     solvation_info["surface_tension"] = float(line.split()[-4])
             if solvation_info:
                 return solvation_info
@@ -127,11 +136,28 @@ class XTBOutput(XTBFileMixin):
         return None
 
     @property
+    def optimized_structure(self):
+        """Return optimized structure."""
+        if self.geometry_optimization_convergence:
+            coordinates_blocks = []
+            for i, line in enumerate(self.contents):
+                if ("final structure:") in line:
+                    coordinates_block = []
+                    for j_line in self.contents[i + 4:]:
+                        if len(j_line) == 0:
+                            break
+                        coordinates_block.append(
+                            [float(x) for x in j_line.split()[1:4]]
+                        )
+                    coordinates_blocks.append(np.array(coordinates_block))
+            return coordinates_blocks
+
+    @property
     def total_energy(self):
         for line in self.contents:
             if "TOTAL ENERGY" in line:
                 total_energy = line.split()[-3]
-                logger.info('Total energy in Eh')
+                """Total energy in Eh"""
                 return float(total_energy)
         return None
 
@@ -140,7 +166,7 @@ class XTBOutput(XTBFileMixin):
         for line in self.contents:
             if "HOMO-LUMO GAP" in line:
                 fmo_gap = line.split()[-3]
-                logger.info('homo-lumo gap in eV')
+                """homo-lumo gap in eV"""
                 return float(fmo_gap)
         return None
 
@@ -149,7 +175,7 @@ class XTBOutput(XTBFileMixin):
         for line in self.contents:
             if "(HOMO)" in line:
                 homo_energy = line.split()[-2]
-                logger.info('homo energy in eV')
+                """homo energy in eV"""
                 return float(homo_energy)
         return None
 
@@ -158,7 +184,7 @@ class XTBOutput(XTBFileMixin):
         for line in self.contents:
             if "(LUMO)" in line:
                 lumo_energy = line.split()[-2]
-                logger.info('lumo energy in eV')
+                """lumo energy in eV"""
                 return float(lumo_energy)
         return None
 
@@ -169,6 +195,46 @@ class XTBOutput(XTBFileMixin):
                 total_charge = line.split()[-3]
                 return float(total_charge)
         return None
+
+    @property
+    def molecular_dipole(self):
+        dipole_lines = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("molecular dipole:"):
+                for j_line in self.contents[i + 2: i + 4]:
+                    dipole_lines.append(j_line.split(":")[1].strip().split())
+        if len(dipole_lines) == 0:
+            return None
+        dipole_data = {
+            "q_only": [float(x) for x in dipole_lines[0][0:3]],
+            "full": [float(x) for x in dipole_lines[1][0:3]],
+        }
+        return dipole_data
+
+    @property
+    def total_dipole(self):
+        for i, line in enumerate(self.contents):
+            if line.startswith("molecular dipole:"):
+                if "full:" in self.contents[i + 3]:
+                    total_dipole = self.contents[i + 3].split()[-1]
+                    return float(total_dipole)
+        return None
+
+    @property
+    def molecular_quadrupole(self):
+        quadrupole_lines = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("molecular quadrupole (traceless):"):
+                for j_line in self.contents[i + 2: i + 5]:
+                    quadrupole_lines.append(j_line.split(":")[1].strip().split())
+        if len(quadrupole_lines) == 0:
+            return None
+        quadrupole_data = {
+            "q_only": [float(x) for x in quadrupole_lines[0][0:6]],
+            "q+dip": [float(x) for x in quadrupole_lines[1][0:6]],
+            "full": [float(x) for x in quadrupole_lines[2][0:6]],
+        }
+        return quadrupole_data
 
     def sum_time_hours(self, line):
         n_days = float(line.split(" d,")[0].split()[-1])
@@ -203,7 +269,6 @@ class XTBOutput(XTBFileMixin):
         if cpu_runtime:
             return cpu_runtime
         return None
-
 
     @property
     def total_wall_time(self):
