@@ -42,7 +42,7 @@ class FileMixin:
     def forces_in_eV_per_angstrom(self):
         """Convert forces from Hartrees/Bohr to eV/Angstrom."""
         if self.forces is None:
-            return None
+            return [None] * len(self.energies)
         forces_in_eV_per_A = []
         for forces in self.forces:
             forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
