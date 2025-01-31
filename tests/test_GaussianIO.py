@@ -1353,8 +1353,6 @@ class TestGaussianPBCOutputFile:
         )
         assert np.allclose(g16_pbc_2d.pbc_forces[-1], expected_last_pbc_forces)
 
-        assert len(g16_pbc_2d.standard_orientations_pbc) == 0
-
         expected_last_translation_vector = np.array(
             [
                 [2.475540, -0.000000, -0.000000],
@@ -1365,3 +1363,8 @@ class TestGaussianPBCOutputFile:
             g16_pbc_2d.input_orientations_pbc[-1],
             expected_last_translation_vector,
         )
+
+        # this log file tests/data/GaussianTests/pbc/log/graphite_2d_opt.log
+        # has only "Input orientation:" but no "Standard orientation:"
+        assert g16_pbc_2d.standard_orientations is None
+        assert g16_pbc_2d.standard_orientations_pbc is None

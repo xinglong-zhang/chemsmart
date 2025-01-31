@@ -192,11 +192,18 @@ class Gaussian16Output(GaussianFileMixin):
             return create_molecule_list(orientations, orientations_pbc)
 
         # If the job did not terminate normally, the last structure is ignored
-        num_structures_to_use = min(
-            max(len(self.input_orientations), len(self.standard_orientations)),
-            len(self.energies),
-            len(self.forces),
-        )
+        if self.standard_orientations:
+            num_structures_to_use = min(
+                len(self.standard_orientations),
+                len(self.energies),
+                len(self.forces),
+            )
+        if self.input_orientations:
+            num_structures_to_use = min(
+                len(self.input_orientations),
+                len(self.energies),
+                len(self.forces),
+            )
         # Use Standard orientations if available, otherwise Input orientations
         if self.standard_orientations:
             orientations = self.standard_orientations
