@@ -49,7 +49,7 @@ class Server(RegistryMixin):
     def scheduler(self):
         return self.kwargs.get("SCHEDULER", None)
 
-    @cached_property
+    @property
     def queue_name(self):
         return self._queue_name
 
