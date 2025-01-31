@@ -535,35 +535,26 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def has_frozen_coordinates(self):
         """Check if the output file has frozen coordinates."""
-        has_frozen = []
-        for i, line_i in enumerate(self.contents):
-            if "Derivative Info." in line_i:
-                for _j, line_j in enumerate(self.contents[i + 2 :]):
-                    if "-----------------------------------" in line_j:
-                        break
-                    if line_j.split()[-2] == "Frozen":
-                        has_frozen.append(True)
-                    elif line_j.split()[-2] == "D2E/DX2":
-                        has_frozen.append(False)
-        return any(has_frozen)
+        return self.frozen_coordinate_indices is not None
 
     @cached_property
     def frozen_coordinate_indices(self):
         """Obtain list of frozen coordinate indices from the input format.
         Use 1-index to be the same as atom numbering."""
         frozen_coordinate_indices = []
-        if self.has_frozen_coordinates:
-            for i, line_i in enumerate(self.contents):
-                if "Symbolic Z-matrix:" in line_i:
-                    if len(line_i) == 0:
-                        break
-                    for j, line_j in enumerate(self.contents[i + 2 :]):
-                        line_j_elem = line_j.split()
-                        if (
-                            re.match(frozen_coordinates_pattern, line_j)
-                            and line_j_elem[1] == "-1"
-                        ):
-                            frozen_coordinate_indices.append(j + 1)
+        for i, line_i in enumerate(self.contents):
+            if "Symbolic Z-matrix:" in line_i:
+                if len(line_i) == 0:
+                    break
+                for j, line_j in enumerate(self.contents[i + 2 :]):
+                    line_j_elem = line_j.split()
+                    if (
+                        re.match(frozen_coordinates_pattern, line_j)
+                        and line_j_elem[1] == "-1"
+                    ):
+                        frozen_coordinate_indices.append(j + 1)
+        if len(frozen_coordinate_indices) == 0:
+            return None
         return frozen_coordinate_indices
 
     @cached_property
