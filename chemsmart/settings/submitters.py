@@ -237,7 +237,7 @@ class PBSSubmitter(Submitter):
         if self.server.queue_name:
             f.write(f"#PBS -q {self.server.queue_name}\n")
         if self.server.num_hours:
-            f.write(f"#PBS -l walltime={self.server.num_hours}\n")
+            f.write(f"#PBS -l walltime={self.server.num_hours}:00:00\n")
         if user_settings is not None:
             if user_settings.data.get("PROJECT"):
                 f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
