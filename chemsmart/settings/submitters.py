@@ -73,7 +73,8 @@ class Submitter(RegistryMixin):
         ]
         if len(submitter_cls) == 0:
             raise ValueError(
-                f"No submitter of defined name: {self.name}.\nAvailable submitters: {Submitter.subclasses()}"
+                f"No submitter of defined name: {self.name}.\n"
+                f"Available submitters: {Submitter.subclasses()}"
             )
 
         assert len(submitter_cls) == 1
@@ -231,13 +232,14 @@ class PBSSubmitter(Submitter):
         if self.server.num_gpus > 0:
             f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
         f.write(
-            f"#PBS -l select=1:ncpus={self.server.num_cores}:mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}\n"
+            f"#PBS -l select=1:ncpus={self.server.num_cores}:"
+            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}G\n"
         )
         # using only one node here
         if self.server.queue_name:
             f.write(f"#PBS -q {self.server.queue_name}\n")
         if self.server.num_hours:
-            f.write(f"#PBS -l walltime={self.server.num_hours}\n")
+            f.write(f"#PBS -l walltime={self.server.num_hours}:00:00\n")
         if user_settings is not None:
             if user_settings.data.get("PROJECT"):
                 f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
