@@ -895,7 +895,9 @@ class TestGaussian16Output:
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
-        g16_frozen = Gaussian16Output(filename=gaussian_frozen_opt_outfile)
+        g16_frozen = Gaussian16Output(
+            filename=gaussian_frozen_opt_outfile, use_frozen=True
+        )
         assert g16_frozen.normal_termination
         assert g16_frozen.num_atoms == 14
         assert g16_frozen.tddft_transitions == []
@@ -999,6 +1001,146 @@ class TestGaussian16Output:
             ),
             rtol=1e-4,
         )
+
+        g16_hide_frozen = Gaussian16Output(
+            filename=gaussian_frozen_opt_outfile, use_frozen=False
+        )
+        assert g16_hide_frozen.normal_termination
+        assert g16_hide_frozen.num_atoms == 14
+        assert g16_hide_frozen.tddft_transitions == []
+        assert len(g16_hide_frozen.alpha_occ_eigenvalues) == 36
+        assert (
+            g16_hide_frozen.alpha_occ_eigenvalues[0]
+            == -102.65018 * units.Hartree
+        )
+        assert (
+            g16_hide_frozen.alpha_occ_eigenvalues[-1]
+            == -0.31442 * units.Hartree
+        )
+        assert len(g16_hide_frozen.alpha_virtual_eigenvalues) == 119
+        assert (
+            g16_hide_frozen.alpha_virtual_eigenvalues[0]
+            == -0.03944 * units.Hartree
+        )
+        assert (
+            g16_hide_frozen.alpha_virtual_eigenvalues[-1]
+            == 3.66749 * units.Hartree
+        )
+        assert g16_frozen.modred is None
+
+        # has frozen coordinates
+        assert g16_hide_frozen.has_frozen_coordinates
+        assert g16_hide_frozen.frozen_coordinate_indices == [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+        ]
+        assert g16_hide_frozen.free_coordinate_indices == [11, 12, 13, 14]
+        assert g16_hide_frozen.frozen_elements == [
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+        ]
+        assert g16_hide_frozen.free_elements == ["C", "O", "H", "Cl"]
+        assert g16_hide_frozen.frozen_atoms_masks == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+
+        # since use_frozen is False, this is not included in the output structure
+        assert g16_hide_frozen.optimized_structure.frozen_atoms is None
+
+        assert (
+            g16_hide_frozen.optimized_structure.energy
+            == -804.614710796 * units.Hartree
+        )
+        assert (
+            g16_hide_frozen.num_vib_modes
+            == g16_hide_frozen.num_vib_frequencies
+            == 12
+        )
+        assert np.allclose(
+            g16_hide_frozen.vibrational_modes[0],
+            np.array(
+                [
+                    [0.0, -0.0, 0.37],
+                    [0.0, -0.0, 0.91],
+                    [-0.0, 0.0, 0.18],
+                    [-0.0, 0.0, 0.02],
+                ]
+            ),
+            rtol=1e-4,
+        )
+        assert g16_hide_frozen.modred is None
+
+    def test_read_modred_outputfile(self, gaussian_failed_modred_outfile):
+        assert os.path.exists(gaussian_failed_modred_outfile)
+        g16_modred = Gaussian16Output(
+            filename=gaussian_failed_modred_outfile, use_frozen=True
+        )
+        assert not g16_modred.normal_termination
+        assert g16_modred.num_atoms == 10
+        assert g16_modred.tddft_transitions == []
+        assert len(g16_modred.alpha_occ_eigenvalues) == 23
+        assert g16_modred.alpha_occ_eigenvalues[0] == -19.70039 * units.Hartree
+        assert g16_modred.alpha_occ_eigenvalues[-1] == -0.30022 * units.Hartree
+        assert len(g16_modred.alpha_virtual_eigenvalues) == 81
+        assert (
+            g16_modred.alpha_virtual_eigenvalues[0] == 0.03581 * units.Hartree
+        )
+        assert (
+            g16_modred.alpha_virtual_eigenvalues[-1] == 3.95271 * units.Hartree
+        )
+        assert g16_modred.modred == [[4, 8], [5, 8], [4, 6]]
+
+    def test_read_scan_outputfile(self, gaussian_failed_scan_outfile):
+        assert os.path.exists(gaussian_failed_scan_outfile)
+        g16_scan = Gaussian16Output(
+            filename=gaussian_failed_scan_outfile, use_frozen=True
+        )
+        assert not g16_scan.normal_termination
+        assert g16_scan.num_atoms == 110
+        assert len(g16_scan.alpha_occ_eigenvalues) == 217
+        assert g16_scan.alpha_occ_eigenvalues[0] == -19.75707 * units.Hartree
+        assert g16_scan.alpha_occ_eigenvalues[-1] == -0.33917 * units.Hartree
+        assert len(g16_scan.alpha_virtual_eigenvalues) == 895
+        assert (
+            g16_scan.alpha_virtual_eigenvalues[0] == -0.15548 * units.Hartree
+        )
+        assert (
+            g16_scan.alpha_virtual_eigenvalues[-1] == 3.80727 * units.Hartree
+        )
+        assert g16_scan.modred == {
+            "coords": [[1, 19]],
+            "num_steps": 10,
+            "step_size": -0.1,
+        }
 
     def test_read_hirshfeld_charges_outputfile(
         self, gaussian_hirshfeld_outfile

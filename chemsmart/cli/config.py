@@ -75,6 +75,12 @@ class Config:
         return conda_path
 
     @property
+    def conda_folder(self):
+        """Define the path to the conda folder."""
+        # Go up 2 directories from the conda path
+        return os.path.dirname(os.path.dirname(self.conda_path))
+
+    @property
     def env_vars(self):
         """Define the environment variables to be added to the shell config."""
         return [
@@ -225,7 +231,7 @@ def server(ctx):
     )
 
     # update conda path
-    update_yaml_files(cfg.chemsmart_server, "~/miniconda3", cfg.conda_path)
+    update_yaml_files(cfg.chemsmart_server, "~/miniconda3", cfg.conda_folder)
 
 
 @config.command()
