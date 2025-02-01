@@ -28,51 +28,33 @@ class XTBOutput(XTBFileMixin):
                 return True
         return False
 
-    @cached_property
-    def geometry_optimization_convergence(self):
-        for line in self.contents:
-            if "GEOMETRY OPTIMIZATION CONVERGED" in line:
-                return True
-        return False
-
-    @property
-    def route_string(self):
+    def _get_route(self):
         for line in self.contents:
             if "program call" in line:
                 return line.split(":")[-1].strip()
         return None
 
+    def _extract_setup_information(self, keyword):
+        for line in self.contents:
+            if keyword in line:
+                return int(line.split()[-2])
+        return None
+
     @property
     def num_basis_functions(self):
-        for line in self.contents:
-            if "# basis functions" in line:
-                num_basis_functions = line.split()[-2]
-                return int(num_basis_functions)
-        return None
+        return self._extract_setup_information("# basis functions")
 
     @property
     def num_atomic_orbital(self):
-        for line in self.contents:
-            if "# atomic orbitals" in line:
-                num_atomic_orbital = line.split()[-2]
-                return int(num_atomic_orbital)
-        return None
+        return self._extract_setup_information("# atomic orbitals")
 
     @property
     def num_shells(self):
-        for line in self.contents:
-            if "# shells" in line:
-                num_shells = line.split()[-2]
-                return int(num_shells)
-        return None
+        return self._extract_setup_information("# shells")
 
     @property
     def num_electrons(self):
-        for line in self.contents:
-            if "# electrons" in line:
-                num_electrons = line.split()[-2]
-                return int(num_electrons)
-        return None
+        return self._extract_setup_information("# electrons")
 
     @property
     def solvation(self):
@@ -121,54 +103,11 @@ class XTBOutput(XTBFileMixin):
 
     @property
     def net_charge(self):
-        for line in self.contents:
-            if "net charge" in line:
-                net_charge = line.split()[-2]
-                return int(net_charge)
-        return None
+        return self._extract_setup_information("net charge")
 
     @property
     def unpaired_electrons(self):
-        for line in self.contents:
-            if "unpaired electrons" in line:
-                unpaired_electrons = line.split()[-2]
-                return int(unpaired_electrons)
-        return None
-
-    @property
-    def optimized_structure(self):
-        """Return optimized structure."""
-        if self.geometry_optimization_convergence:
-            coordinates_blocks = []
-            for i, line in enumerate(self.contents):
-                if ("final structure:") in line:
-                    coordinates_block = []
-                    for j_line in self.contents[i + 4:]:
-                        if len(j_line) == 0:
-                            break
-                        coordinates_block.append(
-                            [float(x) for x in j_line.split()[1:4]]
-                        )
-                    coordinates_blocks.append(np.array(coordinates_block))
-            return coordinates_blocks
-
-    @property
-    def total_energy(self):
-        for line in self.contents:
-            if "TOTAL ENERGY" in line:
-                total_energy = line.split()[-3]
-                """Total energy in Eh"""
-                return float(total_energy)
-        return None
-
-    @property
-    def fmo_gap(self):
-        for line in self.contents:
-            if "HOMO-LUMO GAP" in line:
-                fmo_gap = line.split()[-3]
-                """homo-lumo gap in eV"""
-                return float(fmo_gap)
-        return None
+        return self._extract_setup_information("unpaired electrons")
 
     @property
     def homo_energy(self):
@@ -188,13 +127,59 @@ class XTBOutput(XTBFileMixin):
                 return float(lumo_energy)
         return None
 
+    def _extract_summary_information(self, keyword):
+        for line in reversed(self.contents):
+            if keyword in line:
+                return float(line.split()[-3])
+        return None
+
+    @property
+    def scc_energy(self):
+        return self._extract_summary_information("SCC energy")
+
+    @property
+    def isotropic_es(self):
+        return self._extract_summary_information("-> isotropic ES")
+
+    @property
+    def anisotropic_es(self):
+        return self._extract_summary_information("-> anisotropic ES")
+
+    @property
+    def anisotropic_xc(self):
+        return self._extract_summary_information("-> anisotropic XC")
+
+    @property
+    def dispersion(self):
+        return self._extract_summary_information("-> dispersion")
+
+    @property
+    def gsolv(self):
+        return self._extract_summary_information("-> Gsolv")
+
+    @property
+    def gelec(self):
+        return self._extract_summary_information("-> Gelec")
+
+    @property
+    def gsasa(self):
+        return self._extract_summary_information("-> Gsasa")
+
+    @property
+    def ghb(self):
+        return self._extract_summary_information("-> Ghb")
+
+    @property
+    def gshift(self):
+        return self._extract_summary_information("-> Gshift")
+
+    @property
+    def repulsion_energy(self):
+        return self._extract_summary_information("repulsion energy")
+
     @property
     def total_charge(self):
-        for line in self.contents:
-            if "total charge" in line:
-                total_charge = line.split()[-3]
-                return float(total_charge)
-        return None
+        return self._extract_summary_information("total charge")
 
     @property
     def molecular_dipole(self):
@@ -217,6 +202,7 @@ class XTBOutput(XTBFileMixin):
             if line.startswith("molecular dipole:"):
                 if "full:" in self.contents[i + 3]:
                     total_dipole = self.contents[i + 3].split()[-1]
+                    """Total dipole in Debye"""
                     return float(total_dipole)
         return None
 
@@ -235,6 +221,21 @@ class XTBOutput(XTBFileMixin):
             "full": [float(x) for x in quadrupole_lines[2][0:6]],
         }
         return quadrupole_data
+
+    @property
+    def total_energy(self):
+        """Total energy in Eh"""
+        return self._extract_summary_information("TOTAL ENERGY")
+
+    @property
+    def gradient_norm(self):
+        """Gradient norm in Eh/α"""
+        return self._extract_summary_information("GRADIENT NORM")
+
+    @property
+    def fmo_gap(self):
+        """Homo-Lumo gap in eV"""
+        return self._extract_summary_information("HOMO-LUMO GAP")
 
     def sum_time_hours(self, line):
         n_days = float(line.split(" d,")[0].split()[-1])
@@ -272,36 +273,242 @@ class XTBOutput(XTBFileMixin):
 
     @property
     def total_wall_time(self):
-        if self.elapsed_walltime_by_jobs("total"):
-            return round(sum(self.elapsed_walltime_by_jobs("total")), 6)
+        if self.elapsed_walltime_by_jobs("total:"):
+            return round(sum(self.elapsed_walltime_by_jobs("total:")), 6)
         return None
 
     @property
     def total_cpu_time(self):
-        if self.cpu_runtime_by_jobs("total"):
-            return round(sum(self.cpu_runtime_by_jobs("total")), 6)
+        if self.cpu_runtime_by_jobs("total:"):
+            return round(sum(self.cpu_runtime_by_jobs("total:")), 6)
         return None
 
     @property
     def scf_wall_time(self):
-        if self.elapsed_walltime_by_jobs("SCF"):
-            return round(sum(self.elapsed_walltime_by_jobs("SCF")), 6)
+        if self.elapsed_walltime_by_jobs("SCF:"):
+            return round(sum(self.elapsed_walltime_by_jobs("SCF:")), 6)
         return None
 
     @property
     def scf_cpu_time(self):
-        if self.cpu_runtime_by_jobs("SCF"):
-            return round(sum(self.cpu_runtime_by_jobs("SCF")), 6)
+        if self.cpu_runtime_by_jobs("SCF:"):
+            return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
+        return None
+
+
+    """
+    GEOMETRY OPTIMIZATION
+    """
+    @cached_property
+    def geometry_optimization_convergence(self):
+        for line in self.contents:
+            if "GEOMETRY OPTIMIZATION CONVERGED" in line:
+                return True
+            elif "FAILED TO CONVERGE GEOMETRY OPTIMIZATION" in line:
+                return False
+        return False
+
+    @property
+    def degrees_of_freedom(self):
+        return self._extract_setup_information("degrees of freedom")
+
+    @property
+    def optimized_structure_block(self):
+        """Return optimized structure."""
+        if self.geometry_optimization_convergence:
+            coordinates_blocks = []
+            for i, line in enumerate(self.contents):
+                if "final structure:" in line:
+                    for j_line in self.contents[i + 2:]:
+                        if "Bond Distances (Angstroems)" in j_line:
+                            break
+                        coordinates_blocks.append(j_line)
+            return coordinates_blocks
+        return None
+
+    @property
+    def molecular_mass(self):
+        if not self.geometry_optimization_convergence:
+            return None
+        for line in self.contents:
+            if "molecular mass/u" in line:
+                molecular_mass = line.split(":")[1].strip()
+                return float(molecular_mass)
+        return None
+
+    @property
+    def center_of_mass(self):
+        if not self.geometry_optimization_convergence:
+            return None
+        for line in self.contents:
+            if "center of mass at/Å" in line:
+                return [float(x) for x in line.split(":")[1].strip().split()]
+        return None
+
+    @property
+    def moments_of_inertia(self):
+        if not self.geometry_optimization_convergence:
+            return None
+        for line in self.contents:
+            if "moments of inertia/u·Å²" in line:
+                return [float(x) for x in line.split(":")[1].strip().split()]
+        return None
+
+    @property
+    def rotational_constants(self):
+        if not self.geometry_optimization_convergence:
+            return None
+        for line in self.contents:
+            if "rotational constants/cm⁻¹" in line:
+                return [float(x) for x in line.split(":")[1].strip().split()]
         return None
 
     @property
     def optimizer_wall_time(self):
-        if self.elapsed_walltime_by_jobs("optimizer"):
-            return round(sum(self.elapsed_walltime_by_jobs("optimizer")), 6)
+        if self.elapsed_walltime_by_jobs("ANC optimizer:"):
+            return round(sum(self.elapsed_walltime_by_jobs("ANC optimizer:")), 6)
         return None
 
     @property
     def optimizer_cpu_time(self):
-        if self.cpu_runtime_by_jobs("optimizer"):
-            return round(sum(self.cpu_runtime_by_jobs("optimizer")), 6)
+        if self.cpu_runtime_by_jobs("ANC optimizer:"):
+            return round(sum(self.cpu_runtime_by_jobs("ANC optimizer:")), 6)
+        return None
+
+
+    """
+    CALCULATION OF VIBRATIONAL FREQUENCIES
+    """
+    @cached_property
+    def vibrational_frequencies(self):
+        """Read the vibrational frequencies from the XTB output file.
+        The first six frequencies correspond to the rotations and translations of the molecule."""
+        found_frequency_printout = False
+        for i, line in enumerate(self.contents):
+            if "Frequency Printout" in line:
+                found_frequency_printout = True
+                continue
+            if found_frequency_printout and line.startswith("projected vibrational frequencies (cm⁻¹)"):
+                frequencies = []
+                for j_line in self.contents[i + 1:]:
+                    if "reduced masses (amu)" in j_line:
+                        break
+                    freq_line = j_line.split(":")[1].strip().split()
+                    for freq in freq_line:
+                        frequencies.append(float(freq))
+                return frequencies
+        return None
+
+    @cached_property
+    def reduced_masses(self):
+        """Obtain list of reduced masses corresponding to the vibrational frequency."""
+        for i, line in enumerate(self.contents):
+            if line.startswith("reduced masses (amu)"):
+                reduced_masses = []
+                for j_line in self.contents[i + 1:]:
+                    if "IR intensities (km·mol⁻¹)" in j_line:
+                        break
+                    reduced_mass_line = j_line.split()[1::2]
+                    for reduced_mass in reduced_mass_line:
+                        reduced_masses.append(float(reduced_mass))
+                return reduced_masses
+        return None
+
+    @cached_property
+    def ir_intensities(self):
+        """Obtain list of IR intensities corresponding to the vibrational frequency."""
+        for i, line in enumerate(self.contents):
+            if line.startswith("IR intensities (km·mol⁻¹)"):
+                ir_intensities = []
+                for j_line in self.contents[i + 1:]:
+                    if "Raman intensities (Ä⁴*amu⁻¹)" in j_line:
+                        break
+                    ir_intensity_line = j_line.split()[1::2]
+                    for ir_intensity in ir_intensity_line:
+                        ir_intensities.append(float(ir_intensity))
+                return ir_intensities
+        return None
+
+    @cached_property
+    def raman_intensities(self):
+        """Obtain list of Raman intensities corresponding to the vibrational frequency."""
+        for i, line in enumerate(self.contents):
+            if line.startswith("Raman intensities (Ä⁴*amu⁻¹)"):
+                raman_intensities = []
+                for j_line in self.contents[i + 1:]:
+                    if "output can be read by thermo" in j_line:
+                        break
+                    raman_intensity_line = j_line.split()[1::2]
+                    for raman_intensity in raman_intensity_line:
+                        try:
+                            raman_intensities.append(float(raman_intensity))
+                        except ValueError:
+                            pass
+                return raman_intensities
+        return None
+
+    @property
+    def num_frequencies(self):
+        return self._extract_setup_information("# frequencies")
+
+    @property
+    def num_imaginary_frequencies(self):
+        return self._extract_setup_information("# imaginary freq.")
+
+    @property
+    def symmetry(self):
+        for line in self.contents:
+            if line.startswith(":"):
+                if "symmetry" in line:
+                    return line.split()[-2]
+        return None
+
+    @property
+    def rotational_number(self):
+        return self._extract_setup_information("rotational number")
+
+    @property
+    def scaling_factor(self):
+        for line in self.contents:
+            if line.startswith(":"):
+                if "scaling factor" in line:
+                    return float(line.split()[-2])
+        return None
+
+    @property
+    def zero_point_energy(self):
+        """Zero point energy in Eh"""
+        return self._extract_summary_information("zero point energy")
+
+    @property
+    def grrho_without_zpve(self):
+        """Free energy in Eh within the rigid-rotor-harmonic-oscillator (RRHO) approximation,
+        excluding zero-point vibrational energy (ZPVE)"""
+        return self._extract_summary_information("G(RRHO) w/o ZPVE")
+
+    @property
+    def grrho_contribution(self):
+        """Contribution of RRHO approximation to free energy in Eh"""
+        return self._extract_summary_information("G(RRHO) contrib.")
+
+    @property
+    def total_enthalpy(self):
+        """Total enthalpy in Eh"""
+        return self._extract_summary_information("TOTAL ENTHALPY")
+
+    @property
+    def total_free_energy(self):
+        """Total free energy in Eh"""
+        return self._extract_summary_information("TOTAL FREE ENERGY")
+
+    @property
+    def hessian_wall_time(self):
+        if self.elapsed_walltime_by_jobs("analytical hessian:"):
+            return round(sum(self.elapsed_walltime_by_jobs("analytical hessian:")), 6)
+        return None
+
+    @property
+    def hessian_cpu_time(self):
+        if self.cpu_runtime_by_jobs("analytical hessian:"):
+            return round(sum(self.cpu_runtime_by_jobs("analytical hessian:")), 6)
         return None
