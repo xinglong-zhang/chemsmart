@@ -27,8 +27,17 @@ logger = logging.getLogger(__name__)
 
 
 class Gaussian16Output(GaussianFileMixin):
-    def __init__(self, filename):
+    """Class to parse Gaussian 16 output files.
+    Args:
+        filename (str): Path to the Gaussian output file.
+        use_frozen (bool): To include frozen coordinates in the Molecule.
+        Defaults to False, since we do not want the frozen coordinates
+        data be passed if .log file is used to create a molecule for run.
+    """
+
+    def __init__(self, filename, use_frozen=False):
         self.filename = filename
+        self.use_frozen = use_frozen
 
     @property
     def normal_termination(self):
@@ -141,6 +150,10 @@ class Gaussian16Output(GaussianFileMixin):
         ):
             """Helper function to create Molecule objects."""
             num_structures = num_structures or len(orientations)
+            if self.use_frozen:
+                frozen_atoms = self.frozen_atoms_masks
+            else:
+                frozen_atoms = None
             return [
                 Molecule(
                     symbols=self.symbols,
@@ -148,7 +161,7 @@ class Gaussian16Output(GaussianFileMixin):
                     translation_vectors=orientations_pbc[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
-                    frozen_atoms=self.frozen_atoms_masks,
+                    frozen_atoms=frozen_atoms,
                     pbc_conditions=self.list_of_pbc_conditions,
                     energy=self.energies_in_eV[i],
                     forces=self.forces_in_eV_per_angstrom[i],
@@ -192,6 +205,7 @@ class Gaussian16Output(GaussianFileMixin):
             return create_molecule_list(orientations, orientations_pbc)
 
         # If the job did not terminate normally, the last structure is ignored
+        num_structures_to_use = len(self.energies)
         if self.standard_orientations:
             num_structures_to_use = min(
                 len(self.standard_orientations),
@@ -307,16 +321,17 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_modredundant_group(self):
         if "modred" in self.route_string:
+            modredundant_group = []
             for i, line in enumerate(self.contents):
                 if line.startswith(
                     "The following ModRedundant input section has been read:"
                 ):
                     for j_line in self.contents[i + 1 :]:
-                        modredundant_group = []
+
                         if len(j_line) == 0:
                             break
                         modredundant_group.append(j_line)
-                    return modredundant_group
+            return modredundant_group
         return None
 
     @property
@@ -604,28 +619,18 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def frozen_atoms_masks(self):
-        """Obtain list of frozen atoms masks from the input format.
-        -1 is used for frozen atoms and 0 for free atoms."""
-        frozen_atoms_masks = []
-        if self.has_frozen_coordinates:
-            for i, line_i in enumerate(self.contents):
-                if "Symbolic Z-matrix:" in line_i:
-                    if len(line_i) == 0:
-                        break
-                    for j, line_j in enumerate(self.contents[i + 2 :]):
-                        line_j_elem = line_j.split()
-                        if (
-                            re.match(frozen_coordinates_pattern, line_j)
-                            and line_j_elem[1] == "-1"
-                        ):
-                            frozen_atoms_masks.append(-1)
-                        elif (
-                            re.match(frozen_coordinates_pattern, line_j)
-                            and line_j_elem[1] == "0"
-                        ):
-                            frozen_atoms_masks.append(0)
-            return frozen_atoms_masks
-        return None
+        """Obtain list of frozen atoms masks (-1 = frozen, 0 = free)
+        using precomputed frozen_coordinate_indices and free_coordinate_indices.
+        """
+        if not self.has_frozen_coordinates:
+            return None
+
+        # Initialize all as free (0), then mark frozen (-1)
+        masks = [0] * self.num_atoms  # 0-based list
+        for idx in self.frozen_coordinate_indices:
+            masks[idx - 1] = -1  # Convert 1-based index to 0-based
+
+        return masks
 
     @cached_property
     def scf_energies(self):

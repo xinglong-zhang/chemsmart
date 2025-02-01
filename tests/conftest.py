@@ -166,6 +166,24 @@ def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
     return gaussian_frozen_opt_outfile
 
 
+# Gaussian output file for modred
+@pytest.fixture()
+def gaussian_failed_modred_outfile(gaussian_outputs_test_directory):
+    gaussian_modred_outfile = os.path.join(
+        gaussian_outputs_test_directory, "cage_free_failed_modred.log"
+    )
+    return gaussian_modred_outfile
+
+
+# Gaussian output for scan
+@pytest.fixture()
+def gaussian_failed_scan_outfile(gaussian_outputs_test_directory):
+    gaussian_scan_outfile = os.path.join(
+        gaussian_outputs_test_directory, "cationic_failed_scan.log"
+    )
+    return gaussian_scan_outfile
+
+
 # Gaussian output file for Hirshfeld charges
 @pytest.fixture()
 def gaussian_hirshfeld_outfile(gaussian_outputs_test_directory):
