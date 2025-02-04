@@ -83,6 +83,12 @@ class Molecule:
         self.velocities = velocities
         self.info = info
 
+        # Ensure symbols and positions are available
+        if self.symbols is None or self.positions is None:
+            raise ValueError(
+                "Molecule must have symbols and positions defined."
+            )
+
         # check that the number of symbols are not empty
         if len(self.symbols) == 0:
             raise ValueError("The number of symbols should not be empty!")
@@ -398,6 +404,11 @@ class Molecule:
     def __str__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"
 
+    @cached_property
+    def distance_matrix(self):
+        """ "Compute pairwise distance matrix."""
+        return cdist(self.positions, self.positions)
+
     def bond_lengths(self):
         # get all bond distances in the molecule
         return self.get_all_distances()
@@ -419,7 +430,7 @@ class Molecule:
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
 
-    def to_rdkit(self):
+    def to_rdkit_old(self):
         """Convert Molecule object to RDKit Mol."""
 
         # Ensure symbols and positions are available
@@ -453,16 +464,72 @@ class Molecule:
         # except Chem.AtomValenceException as e:
         #     raise ValueError(f"Sanitization failed: {e}") from e
 
-        # **Explicitly compute implicit valences** (Fix for getNumImplicitHs issue)
-        rdkit_mol.UpdatePropertyCache(strict=False)
+        # # **Explicitly compute implicit valences** (Fix for getNumImplicitHs issue)
+        # rdkit_mol.UpdatePropertyCache(strict=False)
 
-        # Detect chirality from 3D geometry
-        Chem.FindMolChiralCenters(rdkit_mol)
+        # # Detect chirality from 3D geometry
+        # Chem.FindMolChiralCenters(rdkit_mol)
+        #
+        # # Assign bond stereochemistry (important for E/Z isomers)
+        # Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True)
 
-        # Assign bond stereochemistry (important for E/Z isomers)
-        Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True)
+        Chem.AssignStereochemistryFrom3D(rdkit_mol)
 
         return rdkit_mol
+
+    def to_rdkit(self, bond_cutoff_buffer=0.3):
+        """Convert Molecule object to RDKit Mol with proper stereochemistry handling."""
+
+        # Create molecule and add atoms
+        rdkit_mol = Chem.RWMol()
+        for symbol in self.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+
+        # Add bonds using distance-based detection (same as graph method)
+        # dist_matrix = np.linalg.norm(
+        #     self.positions[:, None, :] - self.positions[None, :, :], axis=-1
+        # )
+
+        for i in range(len(self.symbols)):
+            for j in range(i + 1, len(self.symbols)):
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], bond_cutoff_buffer
+                )
+                if self.distance_matrix[i, j] < cutoff:
+                    rdkit_mol.AddBond(i, j, Chem.BondType.SINGLE)
+
+        # Add conformer with 3D coordinates
+        conformer = rdchem.Conformer(len(self.symbols))
+        for i, pos in enumerate(self.positions):
+            conformer.SetAtomPosition(i, Point3D(*pos))
+        rdkit_mol.AddConformer(conformer)
+
+        # Partial sanitization for stereochemistry detection
+        # Chem.SanitizeMol(rdkit_mol,
+        #                  Chem.SANITIZE_ALL ^ Chem.SANITIZE_ADJUSTHS ^ Chem.SANITIZE_SETAROMATICITY)
+
+        # Detect stereochemistry from 3D coordinates
+        Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
+        Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
+
+        # Force update of stereo flags
+        Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
+
+        return rdkit_mol.GetMol()
+
+    @cached_property
+    def bond_orders(self):
+        """Return a list of bond orders."""
+        return self._get_bond_orders()
+
+    def _get_bond_orders(self):
+        """Return a list of bond orders."""
+        bond_orders = []
+        rdkit_mol = self.to_rdkit()
+        bonds = rdkit_mol.GetBonds()
+        for bond in bonds:
+            bond_orders.append(bond.GetBondTypeAsDouble())
+        return bond_orders
 
     def to_graph(self, bond_cutoff_buffer=0.3) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph.
@@ -477,8 +544,8 @@ class Molecule:
         G = nx.Graph()
         positions = self.positions
 
-        # Calculate pairwise distances
-        dist_matrix = cdist(positions, positions)
+        # # Calculate pairwise distances
+        # dist_matrix = cdist(positions, positions)
 
         for i, symbol in enumerate(self.chemical_symbols):
             G.add_node(i, element=symbol)
@@ -493,7 +560,7 @@ class Molecule:
                 bond_cutoff = get_bond_cutoff(
                     element_i, element_j, buffer=bond_cutoff_buffer
                 )
-                if dist_matrix[i, j] < bond_cutoff:
+                if self.distance_matrix[i, j] < bond_cutoff:
                     G.add_edge(i, j)
         return G
 
