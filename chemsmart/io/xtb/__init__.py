@@ -26,9 +26,9 @@ class XTBRefs:
         "write"
     ]
 
-    XTB_METHODS = ["GFN1-xTB", "GFN2-xTB", "GFN-FF"]
+    XTB_METHODS = ["GFN0-xTB", "GFN1-xTB", "GFN2-xTB", "GFN-FF"]
 
-    XTB_OPTIMIZATION_LEVEL = [
+    XTB_OPT_LEVEL = [
         "crude",
         "sloppy",
         "loose",
