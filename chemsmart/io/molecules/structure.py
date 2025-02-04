@@ -538,21 +538,25 @@ class Molecule:
 
     @cached_property
     def bond_orders(self):
-        """Return a list of bond orders from the molecular graph."""
+        """Return a list of bond orders from the molecular graph.
+        Note that in conformers analysis, the bond orders should
+        be the same for all conformers. In those cases, its best
+        to use get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
+        or get_bond_orders_from_graph(bond_cutoff_buffer=0.0) directly."""
         try:
             return self.get_bond_orders_from_graph()
         except Exception:
             return self.get_bond_orders_from_rdkit_mol()
 
-    def get_bond_orders_from_rdkit_mol(self):
+    def get_bond_orders_from_rdkit_mol(self, **kwargs):
         """Return a list of bond orders from the RDKit molecule."""
         return [
-            bond.GetBondTypeAsDouble() for bond in self.to_rdkit().GetBonds()
+            bond.GetBondTypeAsDouble() for bond in self.to_rdkit(**kwargs).GetBonds()
         ]
 
-    def get_bond_orders_from_graph(self):
+    def get_bond_orders_from_graph(self, **kwargs):
         """Return a list of bond orders from the molecular graph."""
-        graph = self.to_graph()
+        graph = self.to_graph(**kwargs)
         bond_orders = []
         for bond in graph.edges.values():
             bond_orders.append(bond["bond_order"])

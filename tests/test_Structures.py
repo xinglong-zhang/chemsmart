@@ -145,6 +145,26 @@ class TestStructures:
         assert isinstance(molecules, list)
         assert len(molecules) == 18
 
+        # test molecule bond orders
+        first_mol = molecules[0]
+        last_mol =  molecules[-1]
+        assert isinstance(first_mol, Molecule)
+        assert isinstance(last_mol, Molecule)
+        first_bond_orders = first_mol.get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
+        last_bond_orders = last_mol.get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
+        assert first_bond_orders == last_bond_orders
+
+        # note that for conformers, due to the buffer values, the bond orders
+        # may have changed, due to different distances in conformers,
+        #  although, this is not supposed to be
+        assert first_mol.bond_orders != last_mol.bond_orders
+
+        first_rdkit_mol = first_mol.to_rdkit()
+        last_rdkit_mol = last_mol.to_rdkit()
+
+        assert isinstance(first_rdkit_mol, Chem.Mol)
+        assert isinstance(last_rdkit_mol, Chem.Mol)
+
         # obtain the last structure as molecule
         molecule = xyz_file.get_molecule(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
