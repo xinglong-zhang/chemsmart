@@ -463,53 +463,6 @@ class Molecule:
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
 
-    def to_rdkit_old(self):
-        """Convert Molecule object to RDKit Mol."""
-
-        # Ensure symbols and positions are available
-        if self.symbols is None or self.positions is None:
-            raise ValueError(
-                "Molecule must have symbols and positions defined."
-            )
-
-        # Create an empty RDKit molecule
-        rdkit_mol = Chem.RWMol()
-
-        # Add atoms and store their indices
-        atom_indices = []
-        for symbol in self.symbols:
-            atom = Chem.Atom(symbol)
-            idx = rdkit_mol.AddAtom(atom)
-            atom_indices.append(idx)
-
-        # Create a conformer for the molecule and add 3D coordinates
-        conformer = rdchem.Conformer(len(atom_indices))
-        for idx, (x, y, z) in enumerate(self.positions):
-            conformer.SetAtomPosition(idx, Point3D(x, y, z))
-
-        # Add the conformer to the molecule
-        rdkit_mol.AddConformer(conformer)
-
-        # I comment the following out since we do not want to modify the molecule
-        # Validate the RDKit molecule
-        # try:
-        #     Chem.SanitizeMol(rdkit_mol)
-        # except Chem.AtomValenceException as e:
-        #     raise ValueError(f"Sanitization failed: {e}") from e
-
-        # # **Explicitly compute implicit valences** (Fix for getNumImplicitHs issue)
-        # rdkit_mol.UpdatePropertyCache(strict=False)
-
-        # # Detect chirality from 3D geometry
-        # Chem.FindMolChiralCenters(rdkit_mol)
-        #
-        # # Assign bond stereochemistry (important for E/Z isomers)
-        # Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True)
-
-        Chem.AssignStereochemistryFrom3D(rdkit_mol)
-
-        return rdkit_mol
-
     def to_rdkit(self, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
         Args:
@@ -546,18 +499,11 @@ class Molecule:
                         cutoff_buffer = 0.1
                     else:
                         cutoff_buffer = bond_cutoff_buffer
-                print(f"bond cutoff buffer: {cutoff_buffer}")
                 cutoff = get_bond_cutoff(
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
-                print(
-                    f"bond cutoff: {cutoff} between {self.symbols[i]} and {self.symbols[j]}"
-                )
                 bond_order = self.determine_bond_order(
                     bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
-                )
-                print(
-                    f"bond order: {bond_order} between {self.symbols[i]} and {self.symbols[j]}"
                 )
                 if bond_order > 0:
                     bond_type = {
@@ -567,8 +513,6 @@ class Molecule:
                         3: Chem.BondType.TRIPLE,
                     }[bond_order]
                     rdkit_mol.AddBond(i, j, bond_type)
-            # # reset bond cutoff buffer
-            # bond_cutoff_buffer = bond_cutoff_buffer
 
         # Create a conformer and set 3D coordinates
         conformer = rdchem.Conformer(len(self.symbols))
@@ -587,11 +531,6 @@ class Molecule:
         Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
         Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
 
-        # # **Explicitly set chiral tags**
-        # for atom in rdkit_mol.GetAtoms():
-        #     if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
-        #         atom.SetProp("_CIPCode", atom.GetProp("_CIPCode"))  # Preserve RDKit's chirality perception
-
         # Force update of stereo flags
         Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
 
@@ -600,10 +539,19 @@ class Molecule:
     @cached_property
     def bond_orders(self):
         """Return a list of bond orders from the molecular graph."""
+        try:
+            return self.get_bond_orders_from_graph()
+        except Exception:
+            return self.get_bond_orders_from_rdkit_mol()
 
-        # return [
-        #     bond.GetBondTypeAsDouble() for bond in self.to_rdkit().GetBonds()
-        # ]
+    def get_bond_orders_from_rdkit_mol(self):
+        """Return a list of bond orders from the RDKit molecule."""
+        return [
+            bond.GetBondTypeAsDouble() for bond in self.to_rdkit().GetBonds()
+        ]
+
+    def get_bond_orders_from_graph(self):
+        """Return a list of bond orders from the molecular graph."""
         graph = self.to_graph()
         bond_orders = []
         for bond in graph.edges.values():
