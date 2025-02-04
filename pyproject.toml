@@ -7,7 +7,7 @@ name = "chemsmart"
 version = "0.1.0"  # Update this dynamically if needed
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "~=3.10"
 authors = [{ name = "xinglong-zhang", email = "xinglong.zhang@cuhk.edu.hk" }]
 license = { file = "LICENSE" }
 classifiers = [
