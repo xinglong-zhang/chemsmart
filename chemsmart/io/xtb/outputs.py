@@ -1,17 +1,14 @@
 import logging
 import re
 from functools import cached_property
-from chemsmart.io.molecules.structure import CoordinateBlock
-from chemsmart.utils.mixins import XTBFileMixin
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
-class XTBOutput(XTBFileMixin):
+class XTBOutput:
     def __init__(self, filename):
         self.filename = filename
 
-    @property
+    @cached_property
     def contents(self):
         with open(self.filename) as f:
             return [line.strip() for line in f.readlines()]
