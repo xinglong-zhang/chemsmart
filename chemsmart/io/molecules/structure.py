@@ -510,7 +510,7 @@ class Molecule:
 
         return rdkit_mol
 
-    def to_rdkit(self, bond_cutoff_buffer=0.0, adjust_H=True):
+    def to_rdkit(self, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
         Args:
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
@@ -527,30 +527,10 @@ class Molecule:
         # Add atoms to the RDKit molecule
         for symbol in self.symbols:
             rdkit_mol.AddAtom(Chem.Atom(symbol))
-            
+
         # add bonds
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
-                # Apply specific adjustments for H-H bonds
-                # Adjust cutoff buffer based on H presence
-                # if bonds contain hydrogen, use a different bond cutoff buffer
-                # if adjust_H and self.symbols[i] == "H" and self.symbols[j] == "H":
-                #     cutoff_buffer = max(H_cutoff_buffer, 0.2)
-                #     # Ensure at least 0.2 for H-H
-                #     # bond length of H-H is 0.74 Å
-                #     # covalent radius of H is 0.31 Å
-                # # elif adjust_H and (self.symbols[i] == "H" or self.symbols[j] == "H"):
-                # #     cutoff_buffer = max(bond_cutoff_buffer, 0.1)
-                # #     # Ensure at least 0.1 if H is present
-                # #     # C-H bond distance of ~ 1.09 Å
-                # #     # N-H bond distance of ~ 1.01 Å
-                # #     # O-H bond distance of ~ 0.96 Å
-                # #     # covalent radius of C is  0.76,
-                # #     # covalent radius of N is 0.71,
-                # #     # covalent radius of O is 0.66,
-                # else:
-                #     cutoff_buffer = H_cutoff_buffer # Use the adjusted or user value
-
                 if adjust_H:
                     if self.symbols[i] == "H" and self.symbols[j] == "H":
                         # bond length of H-H is 0.74 Å
@@ -607,10 +587,10 @@ class Molecule:
         Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
         Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
 
-        # **Explicitly set chiral tags**
-        for atom in rdkit_mol.GetAtoms():
-            if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
-                atom.SetProp("_CIPCode", atom.GetProp("_CIPCode"))  # Preserve RDKit's chirality perception
+        # # **Explicitly set chiral tags**
+        # for atom in rdkit_mol.GetAtoms():
+        #     if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
+        #         atom.SetProp("_CIPCode", atom.GetProp("_CIPCode"))  # Preserve RDKit's chirality perception
 
         # Force update of stereo flags
         Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
@@ -626,11 +606,11 @@ class Molecule:
         # ]
         graph = self.to_graph()
         bond_orders = []
-        for i, j, data in graph.edges(data=True):
-            bond_orders.append(data["bond_order"])
+        for bond in graph.edges.values():
+            bond_orders.append(bond["bond_order"])
         return bond_orders
 
-    def to_graph(self, bond_cutoff_buffer=0.0, adjust_H=True) -> nx.Graph:
+    def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph.
         Bond cutoff value determines the maximum distance between two atoms
         to add a graph edge between them. Bond cutoff is obtained using Covalent
@@ -655,11 +635,13 @@ class Molecule:
                     self.chemical_symbols[j],
                 )
 
+                cutoff_buffer = bond_cutoff_buffer
+
                 if adjust_H:
                     if element_i == "H" and element_j == "H":
                         # bond length of H-H is 0.74 Å
                         # covalent radius of H is 0.31 Å
-                        cutoff_buffer = 0.2
+                        cutoff_buffer = 0.12
                     elif element_i == "H" or element_j == "H":
                         # C-H bond distance of ~ 1.09 Å
                         # N-H bond distance of ~ 1.01 Å
@@ -667,9 +649,8 @@ class Molecule:
                         # covalent radius of C is  0.76,
                         # covalent radius of N is 0.71,
                         # covalent radius of O is 0.66,
-                        cutoff_buffer = 0.1
-                    else:
-                        cutoff_buffer = bond_cutoff_buffer
+                        cutoff_buffer = 0.05
+
                 cutoff = get_bond_cutoff(
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
