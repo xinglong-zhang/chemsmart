@@ -605,8 +605,8 @@ class Molecule:
                         3: Chem.BondType.TRIPLE,
                     }[bond_order]
                     rdkit_mol.AddBond(i, j, bond_type)
-            # reset bond cutoff buffer
-            bond_cutoff_buffer = bond_cutoff_buffer
+            # # reset bond cutoff buffer
+            # bond_cutoff_buffer = bond_cutoff_buffer
 
         # Create a conformer and set 3D coordinates
         conformer = rdchem.Conformer(len(self.symbols))
@@ -625,6 +625,11 @@ class Molecule:
         Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
         Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
 
+        # **Explicitly set chiral tags**
+        for atom in rdkit_mol.GetAtoms():
+            if atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
+                atom.SetProp("_CIPCode", atom.GetProp("_CIPCode"))  # Preserve RDKit's chirality perception
+
         # Force update of stereo flags
         Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
 
@@ -632,10 +637,16 @@ class Molecule:
 
     @cached_property
     def bond_orders(self):
-        """Return a list of bond orders from RDKit molecule."""
-        return [
-            bond.GetBondTypeAsDouble() for bond in self.to_rdkit().GetBonds()
-        ]
+        """Return a list of bond orders from the molecular graph."""
+
+        # return [
+        #     bond.GetBondTypeAsDouble() for bond in self.to_rdkit().GetBonds()
+        # ]
+        graph = self.to_graph()
+        bond_orders = []
+        for i, j, data in graph.edges(data=True):
+            bond_orders.append(data["bond_order"])
+        return bond_orders
 
     def to_graph(self, bond_cutoff_buffer=0.0, adjust_H=True) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph.
@@ -661,19 +672,59 @@ class Molecule:
                     self.chemical_symbols[i],
                     self.chemical_symbols[j],
                 )
+
                 if adjust_H:
-                    # Adjust cutoff buffer based on H presence
-                    # if bonds contain hydrogen, use a different bond cutoff buffer
-                    if self.symbols[i] == "H" and self.symbols[j] == "H":
-                        bond_cutoff_buffer = 0.2
-                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
-                        bond_cutoff_buffer = 0.1
-                bond_cutoff = get_bond_cutoff(
-                    element_i, element_j, buffer=bond_cutoff_buffer
+                    if element_i == "H" and element_j == "H":
+                        # bond length of H-H is 0.74 Å
+                        # covalent radius of H is 0.31 Å
+                        cutoff_buffer = 0.2
+                    elif element_i == "H" or element_j == "H":
+                        # C-H bond distance of ~ 1.09 Å
+                        # N-H bond distance of ~ 1.01 Å
+                        # O-H bond distance of ~ 0.96 Å
+                        # covalent radius of C is  0.76,
+                        # covalent radius of N is 0.71,
+                        # covalent radius of O is 0.66,
+                        cutoff_buffer = 0.1
+                    else:
+                        cutoff_buffer = bond_cutoff_buffer
+                print(f"bond cutoff buffer: {cutoff_buffer}")
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer
+                )
+                print(
+                    f"bond cutoff: {cutoff} between {self.symbols[i]} and {self.symbols[j]}"
                 )
                 bond_order = self.determine_bond_order(
-                    self.distance_matrix[i, j], bond_cutoff
+                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
                 )
+                print(
+                    f"bond order: {bond_order} between {self.symbols[i]} and {self.symbols[j]}"
+                )
+                # if bond_order > 0:
+                #     bond_type = {
+                #         1: Chem.BondType.SINGLE,
+                #         1.5: Chem.BondType.AROMATIC,
+                #         2: Chem.BondType.DOUBLE,
+                #         3: Chem.BondType.TRIPLE,
+                #     }[bond_order]
+                #     rdkit_mol.AddBond(i, j, bond_type)
+                #
+                # if adjust_H:
+                #     # Adjust cutoff buffer based on H presence
+                #     # if bonds contain hydrogen, use a different bond cutoff buffer
+                #     if self.symbols[i] == "H" and self.symbols[j] == "H":
+                #         bond_cutoff_buffer = 0.2
+                #     elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                #         bond_cutoff_buffer = 0.1
+                #     else:
+                #         bond_cutoff_buffer = bond_cutoff_buffer
+                # bond_cutoff = get_bond_cutoff(
+                #     element_i, element_j, buffer=bond_cutoff_buffer
+                # )
+                # bond_order = self.determine_bond_order(
+                #     self.distance_matrix[i, j], bond_cutoff
+                # )
                 if bond_order > 0:
                     G.add_edge(i, j, bond_order=bond_order)
         return G
