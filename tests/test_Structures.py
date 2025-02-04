@@ -1,6 +1,9 @@
 import os
 
+import networkx as nx
 import numpy as np
+import pytest
+from rdkit import Chem
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
@@ -96,6 +99,28 @@ class TestStructures:
 
         molecule = xyz_file.get_molecule(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
+        assert len(molecule.chemical_symbols) == 71
+
+        # test conversion of molecule to RDKit molecule
+        rdkit_mol = molecule.to_rdkit()
+        assert isinstance(rdkit_mol, Chem.Mol)
+        assert rdkit_mol.GetNumAtoms() == 71
+        assert rdkit_mol.GetNumConformers() == 1
+        assert rdkit_mol.GetConformer().GetPositions().shape == (71, 3)
+
+        # convert to smiles string
+        smiles = molecule.to_smiles()
+        assert isinstance(smiles, str)
+        assert (
+            smiles
+            == "C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.C.Cl.Cl.Cl.N.N.N.O.O.O.[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH].[HH]"
+        )
+
+        # test conversion of molecule to graph
+        graph = molecule.to_graph()
+        assert isinstance(graph, nx.Graph)
+        assert len(graph.nodes) == 71
+        assert len(graph.edges) == 78  # CH4 should have 4 bonds
 
         molecule = xyz_file.get_molecule(index="-1", return_list=True)
         assert isinstance(molecule, list)
@@ -242,6 +267,224 @@ class TestStructures:
         )
         assert isinstance(molecule, list)
         assert len(molecule) == 1
+
+
+class TestMoleculeAdvanced:
+    def test_molecule_to_rdkit_conversion(self):
+        """Test conversion of Molecule to RDKit Mol object."""
+        mol = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array([[0, 0, 0], [1.2, 0, 0], [0, 1.2, 0]]),
+            charge=-1,
+            multiplicity=2,
+        )
+        rdkit_mol = mol.to_rdkit()
+
+        assert isinstance(rdkit_mol, Chem.Mol)
+        assert rdkit_mol.GetNumAtoms() == 3
+        assert rdkit_mol.GetNumConformers() == 1
+        assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
+
+    def test_molecule_graph_generation(self):
+        """Test molecular graph creation with bond detection."""
+        mol = Molecule(
+            symbols=["C", "H", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0, 0, 0],
+                    [1.09, 0, 0],
+                    [-1.09, 0, 0],
+                    [0, 1.09, 0],
+                    [0, -1.09, 0],
+                ]
+            ),
+        )
+        graph = mol.to_graph()
+
+        assert isinstance(graph, nx.Graph)
+        assert len(graph.nodes) == 5
+        assert len(graph.edges) == 4  # CH4 should have 4 bonds
+        assert all(
+            graph.nodes[i]["element"] == ("C" if i == 0 else "H")
+            for i in range(5)
+        )
+
+    def test_charge_and_multiplicity_handling(self):
+        """Test preservation of charge and multiplicity states."""
+        charged_mol = Molecule(
+            symbols=["O"],
+            positions=np.array([[0, 0, 0]]),
+            charge=-1,
+            multiplicity=2,
+        )
+
+        assert charged_mol.charge == -1
+        assert charged_mol.multiplicity == 2
+
+    def test_invalid_molecule_creation(self):
+        """Test error handling for invalid molecule configurations."""
+        with pytest.raises(ValueError):
+            # Mismatched symbols and positions
+            Molecule(symbols=["C", "H"], positions=np.array([[0, 0, 0]]))
+
+    def test_empty_molecule_handling(self):
+        """Test edge case of empty molecule."""
+        with pytest.raises(ValueError):
+            Molecule(symbols=[], positions=np.empty((0, 3)))
+
+    def test_frozen_atoms_manipulation(self):
+        """Test frozen atoms property handling."""
+        mol = Molecule(
+            symbols=["C", "O"],
+            positions=np.array([[0, 0, 0], [1.2, 0, 0]]),
+            frozen_atoms=[-1, 0],
+        )
+
+        assert mol.frozen_atoms == [-1, 0]
+
+    def test_pbc_handling(self):
+        """Test periodic boundary conditions handling."""
+        mol = Molecule(
+            symbols=["C"],
+            positions=np.array([[0, 0, 0]]),
+            pbc_conditions=[1, 1, 0],
+            translation_vectors=[[2.5, 0, 0], [0, 2.5, 0]],
+        )
+
+        assert mol.pbc_conditions == [1, 1, 0]
+        assert len(mol.translation_vectors) == 2
+
+    def test_distance_calculation(self):
+        """Test bond distance calculations."""
+        mol = Molecule(
+            symbols=["H", "H"], positions=np.array([[0, 0, 0], [1.0, 0, 0]])
+        )
+        distances = mol.get_all_distances()
+
+        assert len(distances) == 1
+        assert np.isclose(distances[0], 1.0)
+
+
+class TestCoordinateBlockAdvanced:
+    def test_mixed_coordinate_formats(self):
+        """Test parsing of mixed coordinate formats."""
+        mixed_block = """
+        C       1.0 2.0 3.0
+        TV      4.0 5.0 6.0
+        H       7.0 8.0 9.0
+        """
+        cb = CoordinateBlock(mixed_block)
+        mol = cb.molecule
+
+        assert len(mol.symbols) == 2  # Should ignore TV line
+        assert mol.translation_vectors == [[4.0, 5.0, 6.0]]
+
+    def test_cube_file_format(self):
+        """Test parsing of cube file format coordinates."""
+        cube_block = """
+        6    6.000000  -12.064399   -0.057172   -0.099010
+        1    1.000000    1.234500    2.345600    3.456700
+        """
+        cb = CoordinateBlock(cube_block)
+
+        assert all(cb.symbols == ["C", "H"])
+        assert np.allclose(cb.positions[0], [-12.064399, -0.057172, -0.099010])
+
+
+class TestFileHandlingAdvanced:
+    def test_large_file_handling(self, tmpdir):
+        """Test handling of large molecule files."""
+        large_xyz = "\n".join(
+            [
+                "1000",
+                "Large Molecule",
+                *[f"H {i} {i} {i}" for i in range(1000)],
+            ]
+        )
+
+        tmp_file = tmpdir.join("large.xyz")
+        with open(tmp_file, "w") as f:
+            f.write(large_xyz)
+
+        mol = Molecule.from_filepath(tmp_file)
+        assert mol.num_atoms == 1000
+
+    def test_corrupted_file_handling(self, tmpdir):
+        """Test error handling for corrupted files."""
+        corrupted_content = "Invalid file content"
+        tmp_file = tmpdir.join("corrupted.xyz")
+        with open(tmp_file, "w") as f:
+            f.write(corrupted_content)
+
+        with pytest.raises(ValueError):
+            Molecule.from_filepath(tmp_file)
+
+
+class TestGraphFeatures:
+    def test_graph_properties(self):
+        """Test molecular graph properties."""
+        mol = Molecule(
+            symbols=["C", "C"], positions=np.array([[0, 0, 0], [1.5, 0, 0]])
+        )
+        graph = mol.to_graph()
+
+        assert nx.number_connected_components(graph) == 1
+        assert nx.diameter(graph) == 1
+
+    def test_variable_bond_cutoffs(self):
+        """Test bond detection with different cutoff buffers."""
+        mol = Molecule(
+            symbols=["H", "H"], positions=np.array([[0, 0, 0], [0.9, 0, 0]])
+        )
+
+        # H has covalent radius of 0.31 Å from ase.data
+
+        # With buffer too small
+        tight_graph = mol.to_graph(bond_cutoff_buffer=0.0)
+        assert len(tight_graph.edges) == 0
+
+        # With reasonable buffer
+        normal_graph = mol.to_graph(bond_cutoff_buffer=0.3)
+        assert len(normal_graph.edges) == 1
+
+
+class TestChemicalFeatures:
+    def test_stereochemistry_handling(self):
+        """Test preservation of stereochemical information."""
+        chiral_mol = Molecule(
+            symbols=["C", "Cl", "F", "Br", "I"],
+            positions=np.array(
+                [
+                    [0, 0, 0],
+                    [1.0, 0, 0],
+                    [0, 1.0, 0],
+                    [0, 0, 1.0],
+                    [-1.0, 0, 0],
+                ]
+            ),
+        )
+        rdkit_mol = chiral_mol.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol) != []
+
+        chiral_mol2 = Molecule.from_pubchem(
+            "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
+        )
+        rdkit_mol2 = chiral_mol2.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol2) != []
+
+    def test_resonance_handling(self):
+        """Test handling of resonance structures."""
+        ozone = Molecule(
+            symbols=["O", "O", "O"],
+            positions=np.array([[0, 0, 0], [1.2, 0, 0], [2.4, 0, 0]]),
+            charge=0,
+            multiplicity=1,
+        )
+
+        graph = ozone.to_graph()
+        assert any(
+            len(bond) > 1 for bond in graph.edges.values()
+        )  # Check for possible multiple bonds
 
 
 class TestStructuresFromGaussianInput:

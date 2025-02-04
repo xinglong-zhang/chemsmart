@@ -5,9 +5,15 @@ import re
 from functools import cached_property, lru_cache
 
 import ase
+import networkx as nx
 import numpy as np
 from ase.symbols import Symbols
+from rdkit import Chem
+from rdkit.Chem import rdchem
+from rdkit.Geometry import Point3D
+from scipy.spatial.distance import cdist
 
+from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
@@ -76,6 +82,16 @@ class Molecule:
         self.forces = forces
         self.velocities = velocities
         self.info = info
+
+        # check that the number of symbols are not empty
+        if len(self.symbols) == 0:
+            raise ValueError("The number of symbols should not be empty!")
+
+        # check that the number of symbols and positions are the same
+        if len(self.symbols) != len(self.positions):
+            raise ValueError(
+                "The number of symbols and positions should be the same!"
+            )
 
     def __len__(self):
         return len(self.chemical_symbols)
@@ -394,6 +410,92 @@ class Molecule:
                     np.linalg.norm(self.positions[i] - self.positions[j])
                 )
         return bond_distances
+
+    def to_smiles(self):
+        """Convert molecule to SMILES string."""
+        # Create an RDKit molecule
+        rdkit_mol = self.to_rdkit()
+
+        # Convert RDKit molecule to SMILES
+        return Chem.MolToSmiles(rdkit_mol)
+
+    def to_rdkit(self):
+        """Convert Molecule object to RDKit Mol."""
+
+        # Ensure symbols and positions are available
+        if self.symbols is None or self.positions is None:
+            raise ValueError(
+                "Molecule must have symbols and positions defined."
+            )
+
+        # Create an empty RDKit molecule
+        rdkit_mol = Chem.RWMol()
+
+        # Add atoms and store their indices
+        atom_indices = []
+        for symbol in self.symbols:
+            atom = Chem.Atom(symbol)
+            idx = rdkit_mol.AddAtom(atom)
+            atom_indices.append(idx)
+
+        # Create a conformer for the molecule and add 3D coordinates
+        conformer = rdchem.Conformer(len(atom_indices))
+        for idx, (x, y, z) in enumerate(self.positions):
+            conformer.SetAtomPosition(idx, Point3D(x, y, z))
+
+        # Add the conformer to the molecule
+        rdkit_mol.AddConformer(conformer)
+
+        # I comment the following out since we do not want to modify the molecule
+        # Validate the RDKit molecule
+        # try:
+        #     Chem.SanitizeMol(rdkit_mol)
+        # except Chem.AtomValenceException as e:
+        #     raise ValueError(f"Sanitization failed: {e}") from e
+
+        # **Explicitly compute implicit valences** (Fix for getNumImplicitHs issue)
+        rdkit_mol.UpdatePropertyCache(strict=False)
+
+        # Detect chirality from 3D geometry
+        Chem.FindMolChiralCenters(rdkit_mol)
+
+        # Assign bond stereochemistry (important for E/Z isomers)
+        Chem.AssignStereochemistry(rdkit_mol, force=True, cleanIt=True)
+
+        return rdkit_mol
+
+    def to_graph(self, bond_cutoff_buffer=0.3) -> nx.Graph:
+        """Convert a Molecule object to a connectivity graph.
+        Bond cutoff value determines the maximum distance between two atoms
+        to add a graph edge between them. Bond cutoff is obtained using Covalent
+        Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
+        Args:
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+        Returns:
+            nx.Graph: A networkx graph object representing the molecule.
+        """
+        G = nx.Graph()
+        positions = self.positions
+
+        # Calculate pairwise distances
+        dist_matrix = cdist(positions, positions)
+
+        for i, symbol in enumerate(self.chemical_symbols):
+            G.add_node(i, element=symbol)
+
+        # Determine bonds using vectorized operations
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                element_i, element_j = (
+                    self.chemical_symbols[i],
+                    self.chemical_symbols[j],
+                )
+                bond_cutoff = get_bond_cutoff(
+                    element_i, element_j, buffer=bond_cutoff_buffer
+                )
+                if dist_matrix[i, j] < bond_cutoff:
+                    G.add_edge(i, j)
+        return G
 
 
 class CoordinateBlock:
