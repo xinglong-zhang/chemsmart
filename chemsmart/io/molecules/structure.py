@@ -146,7 +146,8 @@ class Molecule:
     @property
     def pbc(self):
         """Return the periodic boundary conditions."""
-        return all(i == 0 for i in self.pbc_conditions)
+        if self.pbc_conditions is not None:
+            return all(i == 0 for i in self.pbc_conditions)
 
     @property
     def is_chiral(self):
@@ -551,7 +552,8 @@ class Molecule:
     def get_bond_orders_from_rdkit_mol(self, **kwargs):
         """Return a list of bond orders from the RDKit molecule."""
         return [
-            bond.GetBondTypeAsDouble() for bond in self.to_rdkit(**kwargs).GetBonds()
+            bond.GetBondTypeAsDouble()
+            for bond in self.to_rdkit(**kwargs).GetBonds()
         ]
 
     def get_bond_orders_from_graph(self, **kwargs):
@@ -612,6 +614,32 @@ class Molecule:
                 if bond_order > 0:
                     G.add_edge(i, j, bond_order=bond_order)
         return G
+
+    def to_ase(self):
+        """Convert molecule object to ASE atoms object."""
+        from .atoms import AtomsChargeMultiplicity
+
+        # atoms = ase.Atoms(
+        #     symbols=self.chemical_symbols,
+        #     positions=self.positions,
+        #     pbc=self.pbc,
+        #     cell=self.translation_vectors,
+        # )
+        return AtomsChargeMultiplicity(
+            symbols=self.chemical_symbols,
+            positions=self.positions,
+            pbc=self.pbc,
+            cell=self.translation_vectors,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+        )
+
+    def to_pymatgen(self):
+        """Convert molecule object to pymatgen IStructure."""
+
+        from pymatgen.io.ase import AseAtomsAdaptor
+
+        return AseAtomsAdaptor.get_molecule(atoms=self.to_ase())
 
 
 class CoordinateBlock:

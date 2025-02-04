@@ -1,24 +1,23 @@
-"""Molecular structure grouping using structural similarity matching."""
-
-from typing import List
-
-import networkx as nx
-import numpy as np
-
-from chemsmart.io.molecules.structure import Molecule
-
+"""Molecular structure grouping using different grouping strategies."""
 
 import logging
 import multiprocessing
+from abc import ABC, abstractmethod
 from functools import partial
 from typing import Iterable, List, Tuple
 
+import networkx as nx
 import numpy as np
 from ase import Atoms
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.io.ase import AseAtomsAdaptor
+from rdkit import Chem
+from rdkit.Chem import DataStructs
+from scipy.linalg import svd
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import reverse_cuthill_mckee
+
+from chemsmart.io.molecules.structure import Molecule
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +31,242 @@ class StructureGrouperConfig:
         self.angle_tol = angle_tol
 
 
-class BaseGrouper:
-    """Base class for molecular structure grouping."""
+class BaseGrouper(ABC):
+    """Abstract base class for molecular structure grouping.
+    Specific type of base class that cannot be directly instantiated and
+    designed to define a common interface that subclasses must implement"""
 
-    def __init__(self, objects, comparator, num_procs=1):
+    def __init__(self, objects, num_procs=1):
         self.objects = objects
-        self.comparator = comparator
         self.num_procs = max(1, num_procs)
         self._validate_inputs()
 
     def _validate_inputs(self):
-        if not callable(self.comparator):
-            raise ValueError("Comparator must be a callable function")
         if not isinstance(self.objects, Iterable):
             raise TypeError("Objects must be an iterable collection")
 
+    def _to_rdkit(self):
+        """Convert objects to RDKit molecules."""
+        rdkit_mols = []
+        for mol in self.objects:
+            rdkit_mol = mol.to_rdkit()
+            if rdkit_mol is not None:
+                rdkit_mols.append(rdkit_mol)
+        self.objects = rdkit_mols
+
+    @abstractmethod
     def group(self) -> Tuple[List[List[Atoms]], List[List[int]]]:
         """Main grouping interface."""
-        raise NotImplementedError
+        pass
 
     def unique(self) -> List[Atoms]:
         """Get unique representative structures."""
         groups, _ = self.group()
         return [group[0] for group in groups]
+
+
+# -----------------------------------------------
+# RDKit Molecule Grouper
+# -----------------------------------------------
+class RDKitMoleculeGrouper(BaseGrouper):
+    """Groups molecules using RDKit fingerprint similarity."""
+
+    def __init__(self, objects, num_proc=1, threshold=0.8):
+        super().__init__(objects=objects, num_procs=num_proc)
+        self.threshold = threshold  # Similarity threshold
+
+        # convert to RDKit molecules
+        if not all(isinstance(mol, Chem.Mol) for mol in self.objects):
+            self._to_rdkit()
+
+    def group(self):
+        fingerprints = [Chem.RDKFingerprint(mol) for mol in self.objects]
+        similarity_matrix = np.array(
+            [
+                [
+                    DataStructs.FingerprintSimilarity(fp1, fp2)
+                    for fp2 in fingerprints
+                ]
+                for fp1 in fingerprints
+            ]
+        )
+
+        G = nx.Graph()
+        for i, mol in enumerate(self.objects):
+            G.add_node(i)
+
+        for i in range(len(self.objects)):
+            for j in range(i + 1, len(self.objects)):
+                if similarity_matrix[i, j] > self.threshold:
+                    G.add_edge(i, j)
+
+        return list(nx.connected_components(G))
+
+
+# -----------------------------------------------
+# RCM-Based Grouper
+# -----------------------------------------------
+class RCMMoleculeGrouper(BaseGrouper):
+    """Groups molecules using Reverse Cuthill-McKee (RCM) ordering."""
+
+    def __init__(self, objects, num_procs=1):
+        super().__init__(objects=objects, num_procs=num_procs)
+
+        # convert to RDKit molecules
+        if not all(isinstance(mol, Chem.Mol) for mol in self.objects):
+            self._to_rdkit()
+
+    def group(self):
+        adjacency_matrices = [
+            self._get_adjacency_matrix(mol) for mol in self.objects
+        ]
+        groups = []
+
+        for i, A in enumerate(adjacency_matrices):
+            perm = reverse_cuthill_mckee(csr_matrix(A), symmetric_mode=True)
+            groups.append(list(perm))
+
+        return groups
+
+    def _get_adjacency_matrix(self, mol):
+        """Generate adjacency matrix from an RDKit molecule."""
+        num_atoms = mol.GetNumAtoms()
+        A = np.zeros((num_atoms, num_atoms))
+
+        for bond in mol.GetBonds():
+            i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            A[i, j] = A[j, i] = 1  # Undirected graph
+
+        return A
+
+
+# -----------------------------------------------
+# RMSD-Based Grouper
+# -----------------------------------------------
+class RMSDMoleculeGrouper(BaseGrouper):
+    """Groups molecules based on RMSD (Root Mean Square Deviation)."""
+
+    def __init__(self, objects, rmsd_threshold=0.5, num_procs=1):
+        super().__init__(objects, num_procs)
+        self.rmsd_threshold = rmsd_threshold
+
+    def group(self):
+        distance_matrix = self._compute_rmsd_matrix()
+        threshold = self.rmsd_threshold
+        G = nx.Graph()
+
+        for i in range(len(self.objects)):
+            G.add_node(i)
+
+        for i in range(len(self.objects)):
+            for j in range(i + 1, len(self.objects)):
+                if distance_matrix[i, j] < threshold:
+                    G.add_edge(i, j)
+
+        return list(nx.connected_components(G))
+
+    def _compute_rmsd_matrix(self):
+        """Compute RMSD distance matrix for molecules."""
+        num_mols = len(self.objects)
+        rmsd_matrix = np.zeros((num_mols, num_mols))
+
+        for i in range(num_mols):
+            for j in range(i + 1, num_mols):
+                rmsd_matrix[i, j] = rmsd_matrix[j, i] = self._calculate_rmsd(
+                    self.objects[i], self.objects[j]
+                )
+
+        return rmsd_matrix
+
+    def _calculate_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
+        """Calculate RMSD between two Molecule objects after optimal alignment
+        using Kabsch algorithm."""
+        pos1 = mol1.positions
+        pos2 = mol2.positions
+
+        # Center molecules
+        pos1_centered = pos1 - np.mean(pos1, axis=0)
+        pos2_centered = pos2 - np.mean(pos2, axis=0)
+
+        # Compute optimal rotation using the Kabsch algorithm
+        H = pos1_centered.T @ pos2_centered
+        U, _, Vt = svd(H)
+        R = Vt.T @ U.T
+
+        # Ensure proper rotation matrix (avoid reflections)
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = Vt.T @ U.T
+
+        # Rotate pos1 to align with pos2
+        pos1_aligned = pos1_centered @ R
+
+        # Compute RMSD
+        return np.sqrt(
+            np.mean(np.sum((pos1_aligned - pos2_centered) ** 2, axis=1))
+        )
+
+
+# -----------------------------------------------
+# Pymatgen-Based Grouper
+# -----------------------------------------------
+class PMGMoleculeGrouper(BaseGrouper):
+    """Groups molecules using Pymatgen's StructureMatcher."""
+
+    def __init__(
+        self,
+        objects,
+        config: StructureGrouperConfig,
+        num_procs=1,
+    ):
+        super().__init__(objects, num_procs)
+        self.config = config
+
+    def group(self):
+        matcher = StructureMatcher(
+            ltol=self.config.ltol,
+            stol=self.config.stol,
+            angle_tol=self.config.angle_tol,
+            scale=False,
+            primitive_cell=False,  # Disable primitive cell reduction
+            attempt_supercell=False,  # Disable supercell matching
+        )
+        grouped = []
+
+        for i, mol1 in enumerate(self.objects):
+            matched = False
+            for group in grouped:
+                if matcher.fit(mol1, self.objects[group[0]]):
+                    group.append(i)
+                    matched = True
+                    break
+            if not matched:
+                grouped.append([i])
+
+        return grouped
+
+
+# -----------------------------------------------
+# Grouper Factory
+# -----------------------------------------------
+class StructureGrouperFactory:
+    """Factory for creating appropriate grouper instances."""
+
+    @staticmethod
+    def create_grouper(
+        structures: Iterable[Atoms],
+        strategy: str = "rdkit",
+        num_procs: int = 1,
+    ) -> BaseGrouper:
+        if strategy == "rdkit":
+            return RDKitMoleculeGrouper(structures, num_procs)
+        if strategy == "rcm":
+            return RCMMoleculeGrouper(structures, num_procs)
+        if strategy == "rmsd":
+            return RMSDMoleculeGrouper(structures, num_procs=num_procs)
+        if strategy == "pymatgen":
+            return PMGMoleculeGrouper(structures, num_procs)
+        raise ValueError(f"Unknown grouping strategy: {strategy}")
 
 
 class MatrixGrouper(BaseGrouper):
@@ -72,8 +284,7 @@ class MatrixGrouper(BaseGrouper):
         with multiprocessing.Pool(self.num_procs) as pool:
             for i in range(n):
                 row = pool.map(
-                    partial(self.comparator, self.objects[i]),
-                    self.objects[i:]
+                    partial(self.comparator, self.objects[i]), self.objects[i:]
                 )
                 matrix[i, i:] = row
                 matrix[i:, i] = row
@@ -102,7 +313,9 @@ class MatrixGrouper(BaseGrouper):
         if current_group:
             groups.append(sorted(current_group))
 
-        structure_groups = [[self.objects[i] for i in group] for group in groups]
+        structure_groups = [
+            [self.objects[i] for i in group] for group in groups
+        ]
         return structure_groups, groups
 
 
@@ -119,15 +332,19 @@ class SequentialGrouper(BaseGrouper):
             groups.append(matches)
             indices = [i for i in indices if i not in matches]
 
-        structure_groups = [[self.objects[i] for i in group] for group in groups]
+        structure_groups = [
+            [self.objects[i] for i in group] for group in groups
+        ]
         return structure_groups, groups
 
-    def _find_matches(self, pivot_idx: int, candidates: List[int]) -> List[int]:
+    def _find_matches(
+        self, pivot_idx: int, candidates: List[int]
+    ) -> List[int]:
         """Find all matches for a pivot structure using parallel processing."""
         with multiprocessing.Pool(self.num_procs) as pool:
             results = pool.map(
                 partial(self.comparator, self.objects[pivot_idx]),
-                (self.objects[i] for i in candidates)
+                (self.objects[i] for i in candidates),
             )
         return [candidates[i] for i, match in enumerate(results) if match]
 
@@ -141,8 +358,8 @@ class StructureComparator:
             stol=config.stol,
             angle_tol=config.angle_tol,
             scale=False,
-            primitive_cell = False,  # Disable primitive cell reduction
-            attempt_supercell = False,  # Disable supercell matching
+            primitive_cell=False,  # Disable primitive cell reduction
+            attempt_supercell=False,  # Disable supercell matching
         )
 
     def __call__(self, struct1, struct2) -> bool:
@@ -163,10 +380,10 @@ class StructureGrouperFactory:
 
     @staticmethod
     def create_grouper(
-            structures: Iterable[Atoms],
-            config: StructureGrouperConfig,
-            strategy: str = "matrix",
-            num_procs: int = 1
+        structures: Iterable[Atoms],
+        config: StructureGrouperConfig,
+        strategy: str = "matrix",
+        num_procs: int = 1,
     ) -> BaseGrouper:
         adaptor = AseAtomsAdaptor()
         pmg_structures = [adaptor.get_structure(a) for a in structures]

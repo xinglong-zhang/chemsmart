@@ -3,8 +3,9 @@ import os
 import networkx as nx
 import numpy as np
 import pytest
+from ase import Atoms
+from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
-
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
 
@@ -141,17 +142,29 @@ class TestStructures:
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        molecules = xyz_file.get_molecule(index=":", return_list=True)
+        all_molecules = xyz_file.get_molecule(index=":", return_list=True)
+
+        # set correct charge and multiplicity for molecules as needed by pymatgen checks
+        molecules = []
+        for molecule in all_molecules:
+            molecule.charge = 1
+            molecule.multiplicity = 1
+            molecules.append(molecule)
+
         assert isinstance(molecules, list)
         assert len(molecules) == 18
 
         # test molecule bond orders
         first_mol = molecules[0]
-        last_mol =  molecules[-1]
+        last_mol = molecules[-1]
         assert isinstance(first_mol, Molecule)
         assert isinstance(last_mol, Molecule)
-        first_bond_orders = first_mol.get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
-        last_bond_orders = last_mol.get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
+        first_bond_orders = first_mol.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        last_bond_orders = last_mol.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
         assert first_bond_orders == last_bond_orders
 
         # note that for conformers, due to the buffer values, the bond orders
@@ -164,6 +177,22 @@ class TestStructures:
 
         assert isinstance(first_rdkit_mol, Chem.Mol)
         assert isinstance(last_rdkit_mol, Chem.Mol)
+
+        # test conversion to ase Atoms
+        first_ase_atoms = first_mol.to_ase()
+        last_ase_atoms = last_mol.to_ase()
+        assert isinstance(first_ase_atoms, Atoms)
+        assert isinstance(last_ase_atoms, Atoms)
+
+        # test conversion to pymatgen Structure
+        assert first_mol.charge == 1
+        assert first_mol.multiplicity == 1
+        assert first_ase_atoms.charge == 1
+        assert first_ase_atoms.spin_multiplicity == 1
+        first_py_structure = first_mol.to_pymatgen()
+        last_py_structure = last_mol.to_pymatgen()
+        assert isinstance(first_py_structure, PMGMolecule)
+        assert isinstance(last_py_structure, PMGMolecule)
 
         # obtain the last structure as molecule
         molecule = xyz_file.get_molecule(index="-1", return_list=False)
