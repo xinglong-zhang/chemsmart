@@ -203,6 +203,30 @@ def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
     return gaussian_hirshfeld_outfile
 
 
+@pytest.fixture()
+def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_ozone_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "ozone.log"
+    )
+    return gaussian_ozone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_acetone_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_acetone_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "acetone.log"
+    )
+    return gaussian_acetone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_benzene_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_benzene_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "benzene.log"
+    )
+    return gaussian_benzene_opt_outfile
+
+
 # Gaussian output file for MP2 calculations
 @pytest.fixture()
 def gaussian_mp2_outputfile(gaussian_outputs_test_directory):

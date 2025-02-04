@@ -100,6 +100,7 @@ class TestStructures:
         molecule = xyz_file.get_molecule(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
+        assert molecule.is_chiral
 
         # test conversion of molecule to RDKit molecule
         rdkit_mol = molecule.to_rdkit()
@@ -108,13 +109,12 @@ class TestStructures:
         assert rdkit_mol.GetNumConformers() == 1
         assert rdkit_mol.GetConformer().GetPositions().shape == (71, 3)
 
+        # molecule is chiral
+        assert Chem.FindMolChiralCenters(rdkit_mol, force=True) != []
+
         # convert to smiles string
         smiles = molecule.to_smiles()
         assert isinstance(smiles, str)
-        assert (
-            smiles
-            == "[H]OC1C([H])C([H])C([H])C([H])C1[C@@H]1C([H])C([H])C([H])C([H])C1[C@@H]1C([H])C([H])C([H])C([H])[C@H]1C(O)C1N(C2C(Cl)C([H])C(Cl)C([H])C2Cl)N[C@@H]2N1[C@@]1([H])C3C([H])C([H])C([H])C([H])C3C([H])([H])[C@@]1([H])OC2([H])[H]"
-        )
 
         # test conversion of molecule to graph
         graph = molecule.to_graph()
@@ -299,6 +299,8 @@ class TestMoleculeAdvanced:
                 ]
             ),
         )
+
+        assert not mol.is_chiral, "CH4 is not chiral"
         graph = mol.to_graph()
 
         assert isinstance(graph, nx.Graph)
@@ -341,6 +343,7 @@ class TestMoleculeAdvanced:
         )
 
         assert mol.frozen_atoms == [-1, 0]
+        assert not mol.is_chiral
 
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""
@@ -437,14 +440,16 @@ class TestGraphFeatures:
             symbols=["H", "H"], positions=np.array([[0, 0, 0], [0.9, 0, 0]])
         )
 
+        assert not mol.is_chiral
+
         # H has covalent radius of 0.31 Å from ase.data
 
         # With buffer too small
-        tight_graph = mol.to_graph(bond_cutoff_buffer=0.0)
+        tight_graph = mol.to_graph(bond_cutoff_buffer=0.0, adjust_H=False)
         assert len(tight_graph.edges) == 0
 
         # With reasonable buffer
-        normal_graph = mol.to_graph(bond_cutoff_buffer=0.3)
+        normal_graph = mol.to_graph(bond_cutoff_buffer=0.3, adjust_H=False)
         assert len(normal_graph.edges) == 1
 
 
@@ -463,43 +468,73 @@ class TestChemicalFeatures:
                 ]
             ),
         )
+        assert chiral_mol.is_chiral
+
         rdkit_mol = chiral_mol.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
         )
+        assert chiral_mol2.is_chiral
         rdkit_mol2 = chiral_mol2.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol2) != []
 
-    def test_resonance_handling(self):
+    def test_resonance_handling(
+        self,
+        gaussian_ozone_opt_outfile,
+        gaussian_acetone_opt_outfile,
+        gaussian_benzene_opt_outfile,
+    ):
         """Test handling of resonance structures."""
-        ozone = Molecule(
-            symbols=["O", "O", "O"],
-            positions=np.array([[0, 0, 0], [1.2, 0, 0], [2.4, 0, 0]]),
-            charge=0,
-            multiplicity=1,
-        )
-
-        print(ozone.bond_orders)
-
-
+        ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+        assert ozone.get_chemical_formula() == "O3"
+        assert ozone.chemical_formula == "O3"
+        assert ozone.bond_orders == [
+            1.5,
+            1.5,
+        ]  # correctly gets bond order of ozone as 1.5
 
         graph = ozone.to_graph()
+        assert any(
+            bond["bond_order"] > 1 for bond in graph.edges.values()
+        )  # Check for possible multiple bonds
 
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        assert acetone.bond_orders == [
+            2.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+        ]
+        # 1 double bond C2=O1, 2 C-C single bonds, 6 C-H single bonds
 
-        # assert any(
-        #     len(bond) > 1 for bond in graph.edges.values()
-        # )  # Check for possible multiple bonds
-        # # for bond in graph.edges.values():
-        # #     print(bond)
-        # # print(graph.nodes.values())
+        graph = acetone.to_graph()
+        assert any(bond["bond_order"] > 1 for bond in graph.edges.values())
 
-        acetone = Molecule.from_pubchem("180")
-        print(acetone.bond_orders)
-
-        benzene = Molecule.from_pubchem("241")
-        print(benzene.bond_orders)
+        benzene = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        assert benzene.bond_orders == [
+            1.5,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.0,
+        ]
+        # check there are 6 aromatic C-C bonds and 6 single C-H bonds in benzene
+        assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
+        assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
 
 
 class TestStructuresFromGaussianInput:

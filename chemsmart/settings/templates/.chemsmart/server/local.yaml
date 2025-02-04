@@ -2,7 +2,7 @@ SERVER:
     SCHEDULER: Null
     QUEUE_NAME: Null
     NUM_HOURS: Null
-    MEM_GB: 400
+    MEM_GB: 40
     NUM_CORES: 12
     NUM_GPUS: 0
     NUM_THREADS: 12

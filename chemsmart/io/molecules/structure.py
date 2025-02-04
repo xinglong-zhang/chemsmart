@@ -28,11 +28,7 @@ class Molecule:
 
     Parameters:
 
-    symbols: follows from :class:`ase.symbols.Symbols`
-        str (formula) or list of str
-        Can be a string formula, a list of symbols or a list of
-        Atom objects.  Examples: 'H2O', 'COPt12', ['H', 'H', 'O'],
-        [Atom('Ne', (x, y, z)), ...].
+    symbols: a list of symbols.
     positions: a numpy array of atomic positions
         The shape of the array should be (n, 3) where n is the number
         of atoms in the molecule.
@@ -83,6 +79,19 @@ class Molecule:
         self.velocities = velocities
         self.info = info
 
+        # Define bond order classification multipliers (avoiding redundancy)
+        # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
+        #                 1/Ls^3 : 1/Ld^3 : 1/Lt^3 = 2 : 3 : 4
+        # From experimental data, the aromatic bond length in benzene is ~1.39 Å,
+        # which is between single (C–C, ~1.54 Å) and double (C=C, ~1.34 Å) bonds.
+        # Interpolate the aromatic bond length as L_ar ≈ L_s × (4/5)**1/3
+        self.bond_length_multipliers = {
+            "single": 1.0,
+            "aromatic": (4 / 5) ** (1.0 / 3),  # Aromatic bond approx.
+            "double": (2 / 3) ** (1.0 / 3),
+            "triple": (1 / 2) ** (1.0 / 3),
+        }
+
         # Ensure symbols and positions are available
         if self.symbols is None or self.positions is None:
             raise ValueError(
@@ -120,6 +129,10 @@ class Molecule:
         )
 
     @property
+    def chemical_formula(self):
+        return self.get_chemical_formula()
+
+    @property
     def chemical_symbols(self):
         """Return a list of chemical symbols strings"""
         if self.symbols is not None:
@@ -135,9 +148,14 @@ class Molecule:
         """Return the periodic boundary conditions."""
         return all(i == 0 for i in self.pbc_conditions)
 
+    @property
+    def is_chiral(self):
+        """Check if molecule is chiral or not."""
+        return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
-            return self.symbols.get_chemical_formula(
+            return Symbols.fromsymbols(self.symbols).get_chemical_formula(
                 mode=mode, empirical=empirical
             )
 
@@ -409,6 +427,21 @@ class Molecule:
         """ "Compute pairwise distance matrix."""
         return cdist(self.positions, self.positions)
 
+    def determine_bond_order(self, bond_length, bond_cutoff):
+        """Determine the bond order based on bond length and cutoff."""
+        for bond_type, multiplier in [
+            ("triple", 3),
+            ("double", 2),
+            ("aromatic", 1.5),
+            ("single", 1),
+        ]:
+            if (
+                bond_length
+                < bond_cutoff * self.bond_length_multipliers[bond_type]
+            ):
+                return multiplier
+        return 0  # No bond
+
     def bond_lengths(self):
         # get all bond distances in the molecule
         return self.get_all_distances()
@@ -477,32 +510,112 @@ class Molecule:
 
         return rdkit_mol
 
-    def to_rdkit(self, bond_cutoff_buffer=0.3):
-        """Convert Molecule object to RDKit Mol with proper stereochemistry handling."""
+    def to_rdkit(self, bond_cutoff_buffer=0.0, adjust_H=True):
+        """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
+        Args:
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            From testing, see test_resonance_handling, it seems that a value of 0.1Å
+            works for ozone, acetone, benzene, and probably other molecules, too.
+            adjust_Hs (bool): Adjust bond distances to H atoms.
+        Returns:
+            RDKit Mol: RDKit molecule object.
+        """
 
         # Create molecule and add atoms
         rdkit_mol = Chem.RWMol()
+
+        # Add atoms to the RDKit molecule
         for symbol in self.symbols:
             rdkit_mol.AddAtom(Chem.Atom(symbol))
 
-        # Add bonds using distance-based detection (same as graph method)
-        # dist_matrix = np.linalg.norm(
-        #     self.positions[:, None, :] - self.positions[None, :, :], axis=-1
-        # )
+        # # Check if the molecule contains Hydrogen
+        # contains_H = any(symbol == "H" for symbol in self.symbols)
 
+        # # Set adjusted bond cutoff buffer without overwriting user input
+        # # Adjust cutoff buffer based on H presence
+        # # if bonds contain hydrogen, use a different bond cutoff buffer
+        # if adjust_H and contains_H:
+        #     H_cutoff_buffer = max(bond_cutoff_buffer, 0.1)
+        #     # Ensure at least 0.1 if H is present
+        #     # C-H bond distance of ~ 1.09 Å
+        #     # N-H bond distance of ~ 1.01 Å
+        #     # O-H bond distance of ~ 0.96 Å
+        #     # covalent radius of C is  0.76,
+        #     # covalent radius of N is 0.71,
+        #     # covalent radius of O is 0.66,
+        # else:
+        #     H_cutoff_buffer = bond_cutoff_buffer  # Use user-specified value
+
+        # add bonds
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
-                cutoff = get_bond_cutoff(
-                    self.symbols[i], self.symbols[j], bond_cutoff_buffer
-                )
-                if self.distance_matrix[i, j] < cutoff:
-                    rdkit_mol.AddBond(i, j, Chem.BondType.SINGLE)
+                # Apply specific adjustments for H-H bonds
+                # Adjust cutoff buffer based on H presence
+                # if bonds contain hydrogen, use a different bond cutoff buffer
+                # if adjust_H and self.symbols[i] == "H" and self.symbols[j] == "H":
+                #     cutoff_buffer = max(H_cutoff_buffer, 0.2)
+                #     # Ensure at least 0.2 for H-H
+                #     # bond length of H-H is 0.74 Å
+                #     # covalent radius of H is 0.31 Å
+                # # elif adjust_H and (self.symbols[i] == "H" or self.symbols[j] == "H"):
+                # #     cutoff_buffer = max(bond_cutoff_buffer, 0.1)
+                # #     # Ensure at least 0.1 if H is present
+                # #     # C-H bond distance of ~ 1.09 Å
+                # #     # N-H bond distance of ~ 1.01 Å
+                # #     # O-H bond distance of ~ 0.96 Å
+                # #     # covalent radius of C is  0.76,
+                # #     # covalent radius of N is 0.71,
+                # #     # covalent radius of O is 0.66,
+                # else:
+                #     cutoff_buffer = H_cutoff_buffer # Use the adjusted or user value
 
-        # Add conformer with 3D coordinates
+                if adjust_H:
+                    if self.symbols[i] == "H" and self.symbols[j] == "H":
+                        # bond length of H-H is 0.74 Å
+                        # covalent radius of H is 0.31 Å
+                        cutoff_buffer = 0.2
+                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                        # C-H bond distance of ~ 1.09 Å
+                        # N-H bond distance of ~ 1.01 Å
+                        # O-H bond distance of ~ 0.96 Å
+                        # covalent radius of C is  0.76,
+                        # covalent radius of N is 0.71,
+                        # covalent radius of O is 0.66,
+                        cutoff_buffer = 0.1
+                    else:
+                        cutoff_buffer = bond_cutoff_buffer
+                print(f"bond cutoff buffer: {cutoff_buffer}")
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer
+                )
+                print(
+                    f"bond cutoff: {cutoff} between {self.symbols[i]} and {self.symbols[j]}"
+                )
+                bond_order = self.determine_bond_order(
+                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                )
+                print(
+                    f"bond order: {bond_order} between {self.symbols[i]} and {self.symbols[j]}"
+                )
+                if bond_order > 0:
+                    bond_type = {
+                        1: Chem.BondType.SINGLE,
+                        1.5: Chem.BondType.AROMATIC,
+                        2: Chem.BondType.DOUBLE,
+                        3: Chem.BondType.TRIPLE,
+                    }[bond_order]
+                    rdkit_mol.AddBond(i, j, bond_type)
+            # reset bond cutoff buffer
+            bond_cutoff_buffer = bond_cutoff_buffer
+
+        # Create a conformer and set 3D coordinates
         conformer = rdchem.Conformer(len(self.symbols))
         for i, pos in enumerate(self.positions):
             conformer.SetAtomPosition(i, Point3D(*pos))
         rdkit_mol.AddConformer(conformer)
+
+        # Compute valences (Fix for getNumImplicitHs issue)
+        rdkit_mol.UpdatePropertyCache(strict=False)
 
         # Partial sanitization for stereochemistry detection
         # Chem.SanitizeMol(rdkit_mol,
@@ -519,19 +632,12 @@ class Molecule:
 
     @cached_property
     def bond_orders(self):
-        """Return a list of bond orders."""
-        return self._get_bond_orders()
+        """Return a list of bond orders from RDKit molecule."""
+        return [
+            bond.GetBondTypeAsDouble() for bond in self.to_rdkit().GetBonds()
+        ]
 
-    def _get_bond_orders(self):
-        """Return a list of bond orders."""
-        bond_orders = []
-        rdkit_mol = self.to_rdkit()
-        bonds = rdkit_mol.GetBonds()
-        for bond in bonds:
-            bond_orders.append(bond.GetBondTypeAsDouble())
-        return bond_orders
-
-    def to_graph(self, bond_cutoff_buffer=0.3) -> nx.Graph:
+    def to_graph(self, bond_cutoff_buffer=0.0, adjust_H=True) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph.
         Bond cutoff value determines the maximum distance between two atoms
         to add a graph edge between them. Bond cutoff is obtained using Covalent
@@ -544,24 +650,32 @@ class Molecule:
         G = nx.Graph()
         positions = self.positions
 
-        # # Calculate pairwise distances
-        # dist_matrix = cdist(positions, positions)
-
+        # add nodes
         for i, symbol in enumerate(self.chemical_symbols):
             G.add_node(i, element=symbol)
 
-        # Determine bonds using vectorized operations
+        # Add edges (bonds) with bond order
         for i in range(len(positions)):
             for j in range(i + 1, len(positions)):
                 element_i, element_j = (
                     self.chemical_symbols[i],
                     self.chemical_symbols[j],
                 )
+                if adjust_H:
+                    # Adjust cutoff buffer based on H presence
+                    # if bonds contain hydrogen, use a different bond cutoff buffer
+                    if self.symbols[i] == "H" and self.symbols[j] == "H":
+                        bond_cutoff_buffer = 0.2
+                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                        bond_cutoff_buffer = 0.1
                 bond_cutoff = get_bond_cutoff(
                     element_i, element_j, buffer=bond_cutoff_buffer
                 )
-                if self.distance_matrix[i, j] < bond_cutoff:
-                    G.add_edge(i, j)
+                bond_order = self.determine_bond_order(
+                    self.distance_matrix[i, j], bond_cutoff
+                )
+                if bond_order > 0:
+                    G.add_edge(i, j, bond_order=bond_order)
         return G
 
 
