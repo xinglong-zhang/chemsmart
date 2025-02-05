@@ -540,6 +540,12 @@ class Molecule:
         return rdkit_mol.GetMol()
 
     @cached_property
+    def rdkit_fingerprints(self):
+        """Return RDKit molecular fingerprints."""
+        rdkit_mol = self.to_rdkit()
+        return Chem.RDKFingerprint(rdkit_mol)
+
+    @cached_property
     def bond_orders(self):
         """Return a list of bond orders from the molecular graph.
         Note that in conformers analysis, the bond orders should

@@ -1,6 +1,7 @@
 """Submission of jobs to queuing system via cli."""
 
 import logging
+from email.policy import default
 
 import click
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-v",
     "--verbose/--no-verbose",
+    default=True,
     help="Turns on logging to stream output and debug logging.",
 )
 @click.option(
