@@ -1,9 +1,10 @@
 import copy
 import logging
+import multiprocessing
 import os
 import re
 from functools import cached_property, lru_cache
-import multiprocessing
+
 import ase
 import networkx as nx
 import numpy as np
@@ -638,7 +639,9 @@ class Molecule:
             bond_orders.append(bond["bond_order"])
         return bond_orders
 
-    def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True, num_procs=4) -> nx.Graph:
+    def to_graph(
+        self, bond_cutoff_buffer=0.05, adjust_H=True, num_procs=4
+    ) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph.
         Bond cutoff value determines the maximum distance between two atoms
         to add a graph edge between them. Bond cutoff is obtained using Covalent
@@ -658,8 +661,17 @@ class Molecule:
 
         # Prepare bond calculation tasks
         tasks = [
-            (i, j, self.chemical_symbols, positions, self.distance_matrix, bond_cutoff_buffer, adjust_H)
-            for i in range(len(positions)) for j in range(i + 1, len(positions))
+            (
+                i,
+                j,
+                self.chemical_symbols,
+                positions,
+                self.distance_matrix,
+                bond_cutoff_buffer,
+                adjust_H,
+            )
+            for i in range(len(positions))
+            for j in range(i + 1, len(positions))
         ]
 
         # Use multiprocessing to compute bonds in parallel
@@ -680,7 +692,15 @@ class Molecule:
 
     def _compute_bond(self, args):
         """Helper function to compute bond order for multiprocessing."""
-        i, j, symbols, positions, distance_matrix, bond_cutoff_buffer, adjust_H = args
+        (
+            i,
+            j,
+            symbols,
+            positions,
+            distance_matrix,
+            bond_cutoff_buffer,
+            adjust_H,
+        ) = args
 
         element_i, element_j = symbols[i], symbols[j]
         cutoff_buffer = bond_cutoff_buffer

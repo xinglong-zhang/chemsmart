@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
+
 from chemsmart.utils.grouper import (
     ConnectivityGrouper,
     FormulaGrouper,
-    HybridMoleculeGrouper,
     RCMSimilarityGrouper,
     RDKitFingerprintGrouper,
     RDKitIsomorphismGrouper,
@@ -164,8 +164,12 @@ class TestGrouper:
         ), "Molecules should form two groups based on connectivity."
 
     @pytest.mark.slow
-    def test_connectivity_grouper_for_large_number_of_mols(self, conformers_from_rdkit):
-        grouper3 = ConnectivityGrouper(conformers_from_rdkit, num_procs=self.NUM_PROCS)
+    def test_connectivity_grouper_for_large_number_of_mols(
+        self, conformers_from_rdkit
+    ):
+        grouper3 = ConnectivityGrouper(
+            conformers_from_rdkit, num_procs=self.NUM_PROCS
+        )
         # based on connectivity, should all be the same even for 300 conformers
         groups, group_indices = grouper3.group()
         unique_structures = grouper3.unique()
@@ -204,7 +208,9 @@ class TestGrouper:
         self, conformers_from_rdkit
     ):
 
-        grouper = RCMSimilarityGrouper(conformers_from_rdkit, num_procs=self.NUM_PROCS)
+        grouper = RCMSimilarityGrouper(
+            conformers_from_rdkit, num_procs=self.NUM_PROCS
+        )
         groups, group_indices = grouper.group()
         assert len(groups) == 296
         assert len(group_indices) == 296
@@ -214,7 +220,9 @@ class TestGrouper:
         assert len(unique_structures) == 296
 
         grouper2 = RCMSimilarityGrouper(
-            conformers_from_rdkit, similarity_threshold=1.0, num_procs=self.NUM_PROCS
+            conformers_from_rdkit,
+            similarity_threshold=1.0,
+            num_procs=self.NUM_PROCS,
         )
         # increased threshold, so should have less distinct groups
         groups, group_indices = grouper2.group()
@@ -248,44 +256,6 @@ class TestGrouper:
         assert np.isclose(rmsd, 1.72375)
         unique_structures = grouper4.unique()
         assert len(unique_structures) == 3
-
-    def test_hybrid_molecule_grouper(self, methanol_molecules, methanol_and_ethanol):
-        grouper = HybridMoleculeGrouper(methanol_molecules)
-        groups, group_indices = grouper.group()
-        assert (
-            len(groups) == 1
-        ), "Molecules should form one group based on hybrid method."
-        assert (
-            len(group_indices) == 1
-        ), "Molecules should form one group based on hybrid method."
-        unique_structures = grouper.unique()
-        assert (
-            len(unique_structures) == 1
-        ), "Molecules should form one group based on hybrid method."
-
-        grouper2 = HybridMoleculeGrouper(methanol_and_ethanol)
-        groups, group_indices = grouper2.group()
-        assert (
-            len(groups) == 2
-        ), "Molecules should form two groups based on hybrid method."
-        assert (
-            len(group_indices) == 2
-        ), "Molecules should form two groups based on hybrid method."
-        unique_structures = grouper2.unique()
-        assert (
-            len(unique_structures) == 2
-        ), "Molecules should form two groups based on hybrid method."
-
-    def test_hybrid_molecule_grouper_for_large_number_of_mols(self, conformers_from_rdkit):
-
-        grouper3 = HybridMoleculeGrouper(conformers_from_rdkit, num_procs=self.NUM_PROCS)
-        groups, group_indices = grouper3.group()
-        assert len(groups) == 296
-        assert len(group_indices) == 296
-        rmsd = grouper3._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 1.72375)
-        unique_structures = grouper3.unique()
-        assert len(unique_structures) == 296
 
     def test_structure_grouper_factory(self):
         factory = StructureGrouperFactory()

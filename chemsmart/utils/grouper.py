@@ -228,7 +228,8 @@ class RCMSimilarityGrouper(MoleculeGrouper):
     0.50 - 0.80	More relaxed: Groups molecules with broad structural similarities.
                             Good for structural analogs or scaffold-based grouping.
     < 0.50	Very lenient: Even molecules with weak similarity are grouped.
-                            Not recommended unless looking for very broad chemical families."""
+                            Not recommended unless looking for very broad chemical families.
+    """
 
     def __init__(
         self,
@@ -404,58 +405,6 @@ class RMSDGrouper(MoleculeGrouper):
         return p, q, R, t, rmsd
 
 
-class HybridMoleculeGrouper(MoleculeGrouper):
-    """Hybrid grouping strategy combining multiple approaches.
-    Combines geometric and substructure similarities, useful for comprehensive analysis
-    requiring both bond arrangement and overall structure."""
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        num_procs: int = 1,
-        strategies: List[Tuple[str, dict]] = None,
-    ):
-        super().__init__(molecules, num_procs)
-        self.strategies = strategies or [
-            ("formula", {}),
-            ("connectivity", {"bond_cutoff_buffer": 0.0}),
-            ("geometry", {"rmsd_threshold": 0.5}),
-        ]
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        current_groups = [[m] for m in self.molecules]
-
-        for strategy, params in self.strategies:
-            current_groups = self._apply_strategy(
-                current_groups, strategy, params
-            )
-
-        return current_groups, [list(range(len(g))) for g in current_groups]
-
-    def _apply_strategy(
-        self, groups: List[List["Molecule"]], strategy: str, params: dict
-    ) -> List[List["Molecule"]]:
-        new_groups = []
-        for group in groups:
-            if len(group) == 1:
-                new_groups.append(group)
-                continue
-
-            if strategy == "formula":
-                subgrouper = FormulaGrouper(group, **params)
-            elif strategy == "connectivity":
-                subgrouper = ConnectivityGrouper(group, **params)
-            elif strategy == "rmsd":
-                subgrouper = RMSDGrouper(group, **params)
-            else:
-                raise ValueError(f"Unknown strategy: {strategy}")
-
-            subgroups, _ = subgrouper.group()
-            new_groups.extend(subgroups)
-
-        return new_groups
-
-
 class FormulaGrouper(MoleculeGrouper):
     """Group by chemical formula.
     Ideal for grouping molecules based solely on their chemical formula, making it suitable
@@ -521,7 +470,12 @@ class ConnectivityGrouper(MoleculeGrouper):
 
             # Prepare graph representations of remaining molecules
             mol_graphs = [
-                (idx, mol.to_graph(bond_cutoff_buffer=0.0, num_procs=self.num_procs))
+                (
+                    idx,
+                    mol.to_graph(
+                        bond_cutoff_buffer=0.0, num_procs=self.num_procs
+                    ),
+                )
                 for idx, mol in remaining
             ]
 
@@ -562,7 +516,6 @@ class StructureGrouperFactory:
             "isomorphism": RDKitIsomorphismGrouper,
             "rcm": RCMSimilarityGrouper,
             "rmsd": RMSDGrouper,
-            "hybrid": HybridMoleculeGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
         }
