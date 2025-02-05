@@ -1,5 +1,3 @@
-from tokenize import group
-
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
@@ -9,7 +7,6 @@ from chemsmart.utils.grouper import (
     GeometryGrouper,
     HybridMoleculeGrouper,
     PymatgenMoleculeGrouper,
-    RCMAdjacencyGrouper,
     RCMSimilarityGrouper,
     RDKitFingerprintGrouper,
     RDKitIsomorphismGrouper,
@@ -66,7 +63,9 @@ class TestGrouper:
             len(group_indices) == 2
         ), "Molecules should form two groups based on geometry."
         rmsd = grouper2._calculate_rmsd((0, 1))
-        assert rmsd is np.inf, "RMSD is set to be infinity for different molecules."
+        assert (
+            rmsd is np.inf
+        ), "RMSD is set to be infinity for different molecules."
         unique_structures = grouper2.unique()
         assert (
             len(unique_structures) == 2
@@ -146,7 +145,6 @@ class TestGrouper:
         assert (
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
-
 
     def test_hybrid_molecule_grouper(self):
         grouper = HybridMoleculeGrouper()

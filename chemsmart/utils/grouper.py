@@ -3,6 +3,7 @@
 import logging
 import multiprocessing
 from abc import ABC, abstractmethod
+from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Optional, Tuple
 
 import networkx as nx
@@ -227,7 +228,9 @@ class RCMSimilarityGrouper(MoleculeGrouper):
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Cluster molecules using RCM on similarity matrix."""
-        with multiprocessing.Pool(self.num_procs) as pool:
+        with ThreadPool(self.num_procs) as pool:
+            # Use ThreadPool instead of Pool since the latter
+            # cannot pickle non-python objects
             fps = pool.map(
                 Chem.RDKFingerprint, (m.to_rdkit() for m in self.molecules)
             )
@@ -236,10 +239,10 @@ class RCMSimilarityGrouper(MoleculeGrouper):
         similarity_matrix = np.zeros((n, n))
         indices = [(i, j) for i in range(n) for j in range(i, n)]
 
-        with multiprocessing.Pool(self.num_procs) as pool:
+        with ThreadPool(self.num_procs) as pool:
             similarities = pool.starmap(
-                self._tanimoto_similarity,
-                [(fps[i], fps[j]) for i, j in indices],
+                Chem.DataStructs.TanimotoSimilarity,
+                [(fps[idx[0]], fps[idx[1]]) for idx in indices],
             )
 
         for (i, j), sim in zip(indices, similarities):
@@ -507,7 +510,7 @@ class ConnectivityGrouper(MoleculeGrouper):
     Useful for identifying molecules with similar bond arrangements and structures, useful
     in scenarios where molecular connectivity is critical."""
 
-    def __init__(self, molecules: List["Molecule"], bond_cutoff: float = 1.5):
+    def __init__(self, molecules: List[Molecule], bond_cutoff: float = 1.5):
         super().__init__(molecules)
         self.bond_cutoff = bond_cutoff
 
