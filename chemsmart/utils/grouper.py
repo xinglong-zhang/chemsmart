@@ -327,12 +327,6 @@ class RMSDMoleculeGrouper(MoleculeGrouper):
         if self.align_molecules:
             logger.info("Aligning molecules using Kabsch algorithm.")
             pos1, pos2, _, _, _ = self._kabsch_align(pos1, pos2)
-            # print(f"pos1 {pos1}")
-            # print(f"pos2 {pos2}")
-            # print(f"pos1 - pos2 {(pos1 - pos2)**2}")
-            # print(np.sum((pos1 - pos2) ** 2, axis=1))
-            # print(np.sum(np.sum((pos1 - pos2) ** 2, axis=1))/6)
-            # print(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
@@ -373,58 +367,6 @@ class RMSDMoleculeGrouper(MoleculeGrouper):
         rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
 
         return p, q, R, t, rmsd
-
-
-    # def __init__(self, molecules, rmsd_threshold=0.5, num_procs=1):
-    #     super().__init__(molecules, num_procs)
-    #     self.rmsd_threshold = rmsd_threshold
-    #
-    # def _calculate_rmsd(self, mol1, mol2):
-    #     """Calculate RMSD between two molecules.
-    #     Apply Kabsch algorithm to align the two molecules and calculate RMSD.
-    #     """
-    #     # Center molecules
-    #     pos1, pos2 = mol1.positions - mol1.positions.mean(
-    #         axis=0
-    #     ), mol2.positions - mol2.positions.mean(axis=0)
-    #     # Compute covariance matrix
-    #     H = pos1.T @ pos2
-    #     # SVD
-    #     U, _, Vt = svd(H)
-    #     # Rotation matrix
-    #     R = Vt.T @ U.T
-    #     if np.linalg.det(R) < 0:
-    #         Vt[-1, :] *= -1
-    #         R = Vt.T @ U.T
-    #     # Apply rotation
-    #     pos1_aligned = pos1 @ R
-    #     return np.sqrt(np.mean(np.sum((pos1_aligned - pos2) ** 2, axis=1)))
-    #
-    # def group(self):
-    #     indices = [
-    #         (i, j)
-    #         for i in range(len(self.molecules))
-    #         for j in range(i + 1, len(self.molecules))
-    #     ]
-    #
-    #     with multiprocessing.Pool(self.num_procs) as pool:
-    #         distances = pool.starmap(
-    #             self._calculate_rmsd,
-    #             [(self.molecules[i], self.molecules[j]) for i, j in indices],
-    #         )
-    #         print(distances)
-    #
-    #     G = nx.Graph()
-    #     G.add_nodes_from(range(len(self.molecules)))
-    #     for (i, j), rmsd in zip(indices, distances):
-    #         if rmsd < self.rmsd_threshold:
-    #             G.add_edge(i, j)
-    #
-    #     return list(nx.connected_components(G))
-    #
-    # def unique(self) -> List:
-    #     # overrides parent method
-    #     return self.group()
 
 
 class PymatgenMoleculeGrouper(MoleculeGrouper):
