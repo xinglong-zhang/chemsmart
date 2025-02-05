@@ -34,7 +34,7 @@ methanol_and_ethanol = [methanol, ethanol]
 
 
 class TestGrouper:
-    def test_geometry_grouper(self):
+    def test_geometry_rmsd_grouper(self):
         # subclass RMSDGrouper
         assert np.any(
             methanol.positions != methanol_rot1.positions
@@ -146,17 +146,42 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
 
+    def test_pymatgen_molecule_grouper(self):
+        # need to add charge and multiplicity for pymatgen molecule
+        methanol.charge = 0
+        methanol.multiplicity = 1
+        methanol_rot1.charge = 0
+        methanol_rot1.multiplicity = 1
+        methanol_molecules = [methanol, methanol_rot1]
+        grouper = PymatgenMoleculeGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on pymatgen molecule."
+        assert (
+            len(group_indices) == 1
+        ), "Molecules should form one group based on pymatgen molecule."
+        unique_structures = grouper.unique()
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on pymatgen molecule."
+        grouper2 = PymatgenMoleculeGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on pymatgen molecule."
+        assert (
+            len(group_indices) == 2
+        ), "Molecules should form two groups based on pymatgen molecule."
+        unique_structures = grouper2.unique()
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on pymatgen molecule."
+
     def test_hybrid_molecule_grouper(self):
         grouper = HybridMoleculeGrouper()
         assert grouper is not None
 
-    def test_pymatgen_molecule_grouper(self):
-        grouper = PymatgenMoleculeGrouper()
-        assert grouper is not None
-
-    def test_rmsd_molecule_grouper(self):
-        grouper = RMSDGrouper()
-        assert grouper is not None
 
     def test_structure_grouper_factory(self):
         factory = StructureGrouperFactory()

@@ -194,6 +194,8 @@ class TestStructures:
         last_py_structure = last_mol.to_pymatgen()
         assert isinstance(first_py_structure, PMGMolecule)
         assert isinstance(last_py_structure, PMGMolecule)
+        assert first_py_structure.charge == 1
+        assert first_py_structure.spin_multiplicity == 1
 
         # obtain the last structure as molecule
         molecule = xyz_file.get_molecule(index="-1", return_list=False)
