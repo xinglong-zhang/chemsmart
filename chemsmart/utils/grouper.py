@@ -8,7 +8,6 @@ from typing import Iterable, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
-from pymatgen.analysis.structure_matcher import StructureMatcher
 from rdkit import Chem
 from rdkit.Chem import DataStructs, rdMolHash
 from scipy.sparse import csr_matrix
@@ -390,46 +389,6 @@ class RMSDGrouper(MoleculeGrouper):
         return p, q, R, t, rmsd
 
 
-class PymatgenMoleculeGrouper(MoleculeGrouper):
-    """Group molecules using pymatgen's StructureMatcher.
-    Useful for analyzing crystal structures based on unit cell parameters and
-    composition, relevant in material science.
-    Cells are turned off herein."""
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        config: StructureGrouperConfig = StructureGrouperConfig(),
-        num_procs: int = 1,
-    ):
-        super().__init__(molecules, num_procs)
-        self.config = config
-        self.structures = [m.to_pymatgen() for m in self.molecules]
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group using pymatgen's structure matching."""
-        matcher = StructureMatcher(
-            ltol=self.config.ltol,
-            stol=self.config.stol,
-            angle_tol=self.config.angle_tol,
-            scale=False,
-            primitive_cell=False,
-            attempt_supercell=False,
-        )
-
-        groups = matcher.group_structures(self.structures)
-        mol_groups = []
-        index_groups = []
-        structure_indices = {id(s): i for i, s in enumerate(self.structures)}
-
-        for group in groups:
-            indices = [structure_indices[id(s)] for s in group]
-            mol_groups.append([self.molecules[i] for i in indices])
-            index_groups.append(indices)
-
-        return mol_groups, index_groups
-
-
 class HybridMoleculeGrouper(MoleculeGrouper):
     """Hybrid grouping strategy combining multiple approaches.
     Combines geometric and substructure similarities, useful for comprehensive analysis
@@ -471,8 +430,8 @@ class HybridMoleculeGrouper(MoleculeGrouper):
                 subgrouper = FormulaGrouper(group, **params)
             elif strategy == "connectivity":
                 subgrouper = ConnectivityGrouper(group, **params)
-            elif strategy == "geometry":
-                subgrouper = GeometryGrouper(group, **params)
+            elif strategy == "rmsd":
+                subgrouper = RMSDGrouper(group, **params)
             else:
                 raise ValueError(f"Unknown strategy: {strategy}")
 
@@ -554,14 +513,6 @@ class ConnectivityGrouper(MoleculeGrouper):
         )
 
 
-class GeometryGrouper(RMSDGrouper):
-    """Specialized geometry-based grouper (inherits from RMSDGrouper).
-    Best for grouping based on 3D structural similarity, essential in applications like drug
-    design where precise molecular shape matters."""
-
-    pass
-
-
 class StructureGrouperFactory:
     @staticmethod
     def create_grouper(structures, strategy="rdkit", num_procs=1):
@@ -570,11 +521,9 @@ class StructureGrouperFactory:
             "isomorphism": RDKitIsomorphismGrouper,
             "rcm": RCMSimilarityGrouper,
             "rmsd": RMSDGrouper,
-            "pymatgen": PymatgenMoleculeGrouper,
             "hybrid": HybridMoleculeGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
-            "geometry": GeometryGrouper,
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
