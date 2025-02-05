@@ -214,7 +214,21 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 class RCMSimilarityGrouper(MoleculeGrouper):
     """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix.
     Utilize molecular fingerprinting to focus on connectivity and similarity,
-    suitable when detailed structural matching is needed."""
+    suitable when detailed structural matching is needed.
+    Tanimoto similarity is a measure of how similar two molecular fingerprints are,
+    ranging from 0 (completely different) to 1 (identical).
+    Default = 0.9 ensures molecules have a strong structural resemblance while
+    allowing minor variations.
+
+    Threshold	Effect	Use Case
+    0.95 - 1.0	Very strict: Only almost identical molecules are grouped.
+                            Ideal for highly similar molecules (e.g., stereoisomers).
+    0.80 - 0.95	Moderately strict: Groups structurally similar molecules.
+                            Useful for clustering molecules with minor functional group differences.
+    0.50 - 0.80	More relaxed: Groups molecules with broad structural similarities.
+                            Good for structural analogs or scaffold-based grouping.
+    < 0.50	Very lenient: Even molecules with weak similarity are grouped.
+                            Not recommended unless looking for very broad chemical families."""
 
     def __init__(
         self,
@@ -283,7 +297,8 @@ class RCMSimilarityGrouper(MoleculeGrouper):
 class RMSDGrouper(MoleculeGrouper):
     """Group molecules based on RMSD (Root Mean Square Deviation) of atomic positions.
     Effective for precise 3D comparisons, ideal in contexts like crystallography or drug
-    binding where exact spatial alignment is crucial."""
+    binding where exact spatial alignment is crucial.
+    """
 
     def __init__(
         self,
@@ -403,7 +418,7 @@ class HybridMoleculeGrouper(MoleculeGrouper):
         super().__init__(molecules, num_procs)
         self.strategies = strategies or [
             ("formula", {}),
-            ("connectivity", {"bond_cutoff": 1.5}),
+            ("connectivity", {"bond_cutoff_buffer": 0.0}),
             ("geometry", {"rmsd_threshold": 0.5}),
         ]
 
@@ -473,11 +488,9 @@ class ConnectivityGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: List[Molecule],
-        bond_cutoff: float = 1.5,
         num_procs: int = 1,
     ):
         super().__init__(molecules, num_procs)
-        self.bond_cutoff = bond_cutoff
 
     def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
         """Check if two molecular graphs are isomorphic."""
@@ -502,12 +515,13 @@ class ConnectivityGrouper(MoleculeGrouper):
         while remaining:
             pivot_idx, pivot_mol = remaining.pop(0)
             pivot_graph = pivot_mol.to_graph(
-                bond_cutoff_buffer=self.bond_cutoff
+                bond_cutoff_buffer=0.0,  # do not modify bond
+                num_procs=self.num_procs,
             )
 
             # Prepare graph representations of remaining molecules
             mol_graphs = [
-                (idx, mol.to_graph(bond_cutoff_buffer=self.bond_cutoff))
+                (idx, mol.to_graph(bond_cutoff_buffer=0.0, num_procs=self.num_procs))
                 for idx, mol in remaining
             ]
 
