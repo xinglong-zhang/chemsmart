@@ -78,6 +78,7 @@ class Molecule:
         self.forces = forces
         self.velocities = velocities
         self.info = info
+        self._num_atoms = len(self.symbols)
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -141,7 +142,11 @@ class Molecule:
     @property
     def num_atoms(self):
         """Return the number of atoms in the molecule."""
-        return len(self.chemical_symbols)
+        return self._num_atoms
+
+    @num_atoms.setter
+    def num_atoms(self, value):
+        self._num_atoms = value
 
     @property
     def pbc(self):
@@ -354,30 +359,65 @@ class Molecule:
         )
 
     @classmethod
-    def from_rdkit_mol(cls, mol):
-        """Convert an RDKit molecule to a custom Molecule object.
+    def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
+        """Creates a Molecule instance from an RDKit Mol object, assuming a single conformer."""
+        if rdMol is None:
+            raise ValueError("Invalid RDKit molecule provided.")
 
-        Args:
-            mol (rdkit.Chem.rdchem.Mol): Input RDKit molecule.
-
-        Returns:
-            Molecule: Instance of the Molecule class.
-
-        Raises:
-            ValueError: If the molecule has no conformers.
-        """
-        # Check if the molecule has a conformer
-        if mol.GetNumConformers() == 0:
-            raise ValueError("Molecule has no conformers. Add a conformer first.")
+        num_confs = rdMol.GetNumConformers()
+        if num_confs == 0:
+            raise ValueError(
+                "RDKit molecule has no conformers. Ensure 3D coordinates are generated."
+            )
+        if num_confs > 1:
+            raise ValueError(
+                f"Expected a single conformer but found {num_confs}. Please provide a single conformer."
+            )
 
         # Extract atomic symbols
-        symbols = [atom.GetSymbol() for atom in mol.GetAtoms()]
+        symbols = [atom.GetSymbol() for atom in rdMol.GetAtoms()]
 
-        # Extract 3D coordinates from the first conformer
-        conformer = mol.GetConformer()
-        positions = conformer.GetPositions() # Convert numpy array to list of lists
+        # Extract atomic positions from the first conformer (assuming single conformer)
+        conf = rdMol.GetConformer(0)
+        positions = np.array(
+            [
+                [
+                    conf.GetAtomPosition(i).x,
+                    conf.GetAtomPosition(i).y,
+                    conf.GetAtomPosition(i).z,
+                ]
+                for i in range(rdMol.GetNumAtoms())
+            ]
+        )
 
-        return cls(symbols=symbols, positions=positions)
+        # Get molecular charge
+        charge = Chem.GetFormalCharge(rdMol)
+
+        # Estimate multiplicity (multiplicity = 2S + 1, where S is total spin)
+        num_radical_electrons = sum(
+            atom.GetNumRadicalElectrons() for atom in rdMol.GetAtoms()
+        )
+        multiplicity = (
+            num_radical_electrons + 1 if num_radical_electrons > 0 else 1
+        )  # Default to singlet
+
+        # Store additional RDKit properties
+        info = {
+            "smiles": Chem.MolToSmiles(rdMol),
+            "num_bonds": rdMol.GetNumBonds(),
+        }
+
+        rdkit_mol = cls(
+            symbols=symbols,
+            positions=positions,
+            charge=charge,
+            multiplicity=multiplicity,
+            info=info,
+        )
+
+        rdkit_mol.num_atoms = rdMol.GetNumAtoms()
+
+        return rdkit_mol
 
     def write_coordinates(self, f, program=None):
         """Write the coordinates of the molecule to a file.

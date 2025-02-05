@@ -1,7 +1,5 @@
 import numpy as np
-from rdkit import Chem
-from rdkit.Chem import rdDistGeom
-from chemsmart.io.molecules.structure import Molecule
+
 from chemsmart.utils.grouper import (
     ConnectivityGrouper,
     FormulaGrouper,
@@ -15,6 +13,8 @@ from chemsmart.utils.grouper import (
 
 
 class TestGrouper:
+    NUM_PROCS = 10
+
     def test_rmsd_grouper(self, methanol_molecules, methanol_and_ethanol):
         methanol = methanol_molecules[0]
         methanol_rot1 = methanol_molecules[1]
@@ -53,7 +53,58 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on geometry."
 
-    def test_formula_grouper(self, methanol_molecules, methanol_and_ethanol):
+    def test_rmsd_grouper_for_large_number_of_mols(
+        self, conformers_from_rdkit
+    ):
+
+        grouper = RMSDGrouper(conformers_from_rdkit, num_procs=self.NUM_PROCS)
+        groups, group_indices = grouper.group()
+        assert len(groups) == 296
+        assert len(group_indices) == 296
+        rmsd = grouper._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 296
+
+        grouper2 = RMSDGrouper(
+            conformers_from_rdkit, rmsd_threshold=1.0, num_procs=self.NUM_PROCS
+        )
+        # increased threshold, so should have less distinct groups
+        groups, group_indices = grouper2.group()
+        assert len(groups) == 160
+        assert len(group_indices) == 160
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper2.unique()
+        assert len(unique_structures) == 160
+
+        grouper3 = RMSDGrouper(
+            conformers_from_rdkit, rmsd_threshold=1.5, num_procs=self.NUM_PROCS
+        )
+        # even greater threshold, so should have even less distinct groups
+        groups, group_indices = grouper3.group()
+        assert len(groups) == 10
+        assert len(group_indices) == 10
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper3.unique()
+        assert len(unique_structures) == 10
+
+        grouper4 = RMSDGrouper(
+            conformers_from_rdkit, rmsd_threshold=2.0, num_procs=self.NUM_PROCS
+        )
+        # even greater threshold, so should have even less distinct groups
+        groups, group_indices = grouper4.group()
+        assert len(groups) == 3
+        assert len(group_indices) == 3
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper4.unique()
+        assert len(unique_structures) == 3
+
+    def test_formula_grouper(
+        self, methanol_molecules, methanol_and_ethanol, conformers_from_rdkit
+    ):
         grouper = FormulaGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         unique_structures = grouper.unique()
@@ -75,7 +126,16 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on formula."
 
-    def test_connectivity_grouper(self, methanol_molecules, methanol_and_ethanol):
+        grouper3 = FormulaGrouper(conformers_from_rdkit)
+        # based on Formula, should all be the same even for 300 conformers
+        groups, group_indices = grouper3.group()
+        unique_structures = grouper3.unique()
+        assert len(groups) == 1
+        assert len(unique_structures) == 1
+
+    def test_connectivity_grouper(
+        self, methanol_molecules, methanol_and_ethanol, conformers_from_rdkit
+    ):
         grouper = ConnectivityGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         assert (
@@ -102,7 +162,16 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on connectivity."
 
-    def test_rcm_similarity_grouper(self, methanol_molecules, methanol_and_ethanol):
+        grouper3 = ConnectivityGrouper(conformers_from_rdkit)
+        # based on connectivity, should all be the same even for 300 conformers
+        groups, group_indices = grouper3.group()
+        unique_structures = grouper3.unique()
+        assert len(groups) == 1
+        assert len(unique_structures) == 1
+
+    def test_rcm_similarity_grouper(
+        self, methanol_molecules, methanol_and_ethanol
+    ):
         grouper = RCMSimilarityGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         assert (
@@ -127,6 +196,55 @@ class TestGrouper:
         assert (
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
+
+    def test_rcm_similarity_grouper_for_large_number_of_mols(
+        self, conformers_from_rdkit
+    ):
+
+        grouper = RCMSimilarityGrouper(conformers_from_rdkit, num_procs=10)
+        groups, group_indices = grouper.group()
+        assert len(groups) == 296
+        assert len(group_indices) == 296
+        rmsd = grouper._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 296
+
+        grouper2 = RCMSimilarityGrouper(
+            conformers_from_rdkit, rmsd_threshold=1.0, num_procs=10
+        )
+        # increased threshold, so should have less distinct groups
+        groups, group_indices = grouper2.group()
+        assert len(groups) == 160
+        assert len(group_indices) == 160
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper2.unique()
+        assert len(unique_structures) == 160
+
+        grouper3 = RCMSimilarityGrouper(
+            conformers_from_rdkit, rmsd_threshold=1.5, num_procs=10
+        )
+        # even greater threshold, so should have even less distinct groups
+        groups, group_indices = grouper3.group()
+        assert len(groups) == 10
+        assert len(group_indices) == 10
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper3.unique()
+        assert len(unique_structures) == 10
+
+        grouper4 = RCMSimilarityGrouper(
+            conformers_from_rdkit, rmsd_threshold=2.0, num_procs=10
+        )
+        # even greater threshold, so should have even less distinct groups
+        groups, group_indices = grouper4.group()
+        assert len(groups) == 3
+        assert len(group_indices) == 3
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert np.isclose(rmsd, 1.72375)
+        unique_structures = grouper4.unique()
+        assert len(unique_structures) == 3
 
     def test_hybrid_molecule_grouper(self):
         grouper = HybridMoleculeGrouper()

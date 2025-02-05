@@ -1,13 +1,12 @@
 import os
 
 import pytest
+import rdkit.Chem.rdDistGeom as rdDistGeom
+from rdkit import Chem
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.settings.server import Server
-from chemsmart.io.molecules.structure import Molecule
-from rdkit import Chem
-import rdkit.Chem.rdDistGeom as rdDistGeom
-
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -727,6 +726,7 @@ def methanol_molecules():
 
     return methanol_molecules
 
+
 @pytest.fixture()
 def methanol_and_ethanol():
     # molecules for testing
@@ -736,21 +736,42 @@ def methanol_and_ethanol():
     # ethanol
     ethanol = Molecule.from_pubchem(identifier="CCO")
 
-
     methanol_and_ethanol = [methanol, ethanol]
     return methanol_and_ethanol
 
+
 @pytest.fixture()
 def conformers_from_rdkit():
-    # complex conformers
-    # modified CHEMBL12747, ionized
-    m = Chem.MolFromSmiles('O=C([O-])CCn1c(=O)c(=O)[nH]c2cc([N+](=O)[O-])c(-n3ccc(C=NOCc4ccccc4)c3)cc21')
-    mh = Chem.AddHs(m)
+    """Generate multiple conformers for a complex molecule using RDKit."""
+    smiles = "O=C([O-])CCn1c(=O)c(=O)[nH]c2cc([N+](=O)[O-])c(-n3ccc(C=NOCc4ccccc4)c3)cc21"
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)
+
+    # Generate 3D conformers
     ps = rdDistGeom.ETKDGv3()
-    ps.randomSeed = 0xd06f00d
+    ps.randomSeed = 0xD06F00D
     ps.numThreads = 10
-    cids = rdDistGeom.EmbedMultipleConfs(mh,300,ps)
-    conformers = [Chem.Mol(mh,confId) for confId in cids]
+    conf_ids = rdDistGeom.EmbedMultipleConfs(mol, numConfs=300, params=ps)
 
+    # Ensure each conformer is extracted into its own unique RDKit Mol object
+    conformers = []
+    for conf_id in conf_ids:
+        single_conf_mol = Chem.Mol(mol)  # Copy molecule structure
+        single_conf_mol.RemoveAllConformers()  # Remove all existing conformers
+        single_conf_mol.AddConformer(
+            mol.GetConformer(conf_id), assignId=True
+        )  # Add only this conformer
+        conformers.append(single_conf_mol)
 
+    # Verify that each conformer contains exactly one conformer
+    for conf in conformers:
+        assert (
+            conf.GetNumConformers() == 1
+        ), "Each conformer should contain exactly one conformer."
 
+    # Convert to Molecule instances
+    conformers_from_rdkit = [
+        Molecule.from_rdkit_mol(conf) for conf in conformers
+    ]
+
+    return conformers_from_rdkit

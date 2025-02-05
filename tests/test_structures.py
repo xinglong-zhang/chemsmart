@@ -194,6 +194,8 @@ class TestStructures:
         assert np.all(last_mol.symbols == last_mol_conv.symbols)
         assert np.all(first_mol.positions == first_mol_conv.positions)
         assert np.all(last_mol.positions == last_mol_conv.positions)
+        assert first_mol.num_atoms == first_mol_conv.num_atoms == 71
+        assert last_mol.num_atoms == last_mol_conv.num_atoms == 71
 
         # test conversion to ase Atoms
         first_ase_atoms = first_mol.to_ase()
