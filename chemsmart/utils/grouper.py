@@ -467,50 +467,77 @@ class FormulaGrouper(MoleculeGrouper):
 class ConnectivityGrouper(MoleculeGrouper):
     """Group by molecular connectivity.
     Useful for identifying molecules with similar bond arrangements and structures, useful
-    in scenarios where molecular connectivity is critical."""
+    in scenarios where molecular connectivity is critical.
+    """
 
-    def __init__(self, molecules: List[Molecule], bond_cutoff: float = 1.5):
-        super().__init__(molecules)
+    def __init__(
+        self,
+        molecules: List[Molecule],
+        bond_cutoff: float = 1.5,
+        num_procs: int = 1,
+    ):
+        super().__init__(molecules, num_procs)
         self.bond_cutoff = bond_cutoff
 
-    def group(self):
-        groups = []
-        remaining = list(enumerate(self.molecules))
-
-        while remaining:
-            pivot_idx, pivot_mol = remaining.pop(0)
-            current_group = [pivot_mol]
-            current_indices = [pivot_idx]
-
-            pivot_graph = pivot_mol.to_graph(
-                bond_cutoff_buffer=self.bond_cutoff
-            )
-
-            to_remove = []
-            for i, (idx, mol) in enumerate(remaining):
-                mol_graph = mol.to_graph(bond_cutoff_buffer=self.bond_cutoff)
-                if self._are_isomorphic(pivot_graph, mol_graph):
-                    current_group.append(mol)
-                    current_indices.append(idx)
-                    to_remove.append(i)
-
-            for i in reversed(to_remove):
-                remaining.pop(i)
-
-            groups.append((current_group, current_indices))
-
-        mol_groups = [g[0] for g in groups]
-        idx_groups = [g[1] for g in groups]
-        return mol_groups, idx_groups
-
     def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
-        """Check if two molecular graphs are isomorphic"""
+        """Check if two molecular graphs are isomorphic."""
         return nx.is_isomorphic(
             g1,
             g2,
             node_match=lambda a, b: a["element"] == b["element"],
             edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
         )
+
+    def _check_isomorphism(
+        self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int
+    ) -> Tuple[int, bool]:
+        """Helper function for multiprocessing: Checks isomorphism for a molecule."""
+        return idx, self._are_isomorphic(pivot_graph, mol_graph)
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules based on molecular connectivity using multiprocessing."""
+        groups = []
+        remaining = list(enumerate(self.molecules))
+
+        while remaining:
+            pivot_idx, pivot_mol = remaining.pop(0)
+            pivot_graph = pivot_mol.to_graph(
+                bond_cutoff_buffer=self.bond_cutoff
+            )
+
+            # Prepare graph representations of remaining molecules
+            mol_graphs = [
+                (idx, mol.to_graph(bond_cutoff_buffer=self.bond_cutoff))
+                for idx, mol in remaining
+            ]
+
+            # Parallel isomorphism check
+            with multiprocessing.Pool(self.num_procs) as pool:
+                results = pool.starmap(
+                    self._check_isomorphism,
+                    [(pivot_graph, g, idx) for idx, g in mol_graphs],
+                )
+
+            # Collect molecules that are isomorphic to the pivot
+            current_group = [pivot_mol]
+            current_indices = [pivot_idx]
+            to_remove = {idx for idx, is_iso in results if is_iso}
+
+            remaining = [
+                (idx, mol) for idx, mol in remaining if idx not in to_remove
+            ]
+            current_group.extend(
+                mol for idx, mol in mol_graphs if idx in to_remove
+            )
+            current_indices.extend(
+                idx for idx, _ in mol_graphs if idx in to_remove
+            )
+
+            groups.append((current_group, current_indices))
+
+        mol_groups = [g[0] for g in groups]
+        idx_groups = [g[1] for g in groups]
+        return mol_groups, idx_groups
 
 
 class StructureGrouperFactory:
