@@ -1,3 +1,5 @@
+from tokenize import group
+
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
@@ -26,11 +28,12 @@ methanol = Molecule.from_pubchem(identifier="CO")
 ase_atoms = methanol.to_ase()
 ase_atoms.rotate(90, [0, 0, 1])
 methanol_rot1 = Molecule.from_ase_atoms(ase_atoms)
-# g = open("methanol_rot1.xyz", "w")
-# methanol_rot1.write_coordinates(g)
 
 # ethanol
 ethanol = Molecule.from_pubchem(identifier="CCO")
+
+methanol_molecules = [methanol, methanol_rot1]
+methanol_and_ethanol = [methanol, ethanol]
 
 
 class TestGrouper:
@@ -39,8 +42,7 @@ class TestGrouper:
         assert np.any(
             methanol.positions != methanol_rot1.positions
         ), "Rotated molecule should have different positions."
-        molecules = list([methanol, methanol_rot1])
-        grouper = GeometryGrouper(molecules)
+        grouper = GeometryGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         assert (
             len(groups) == 1
@@ -55,11 +57,36 @@ class TestGrouper:
             len(unique_structures) == 1
         ), "Molecules should form one group based on geometry."
 
+        grouper2 = GeometryGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on geometry."
+        assert (
+            len(group_indices) == 2
+        ), "Molecules should form two groups based on geometry."
+        rmsd = grouper2._calculate_rmsd((0, 1))
+        assert rmsd is np.inf, "RMSD is set to be infinity for different molecules."
+        unique_structures = grouper2.unique()
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on geometry."
+
     def test_formula_grouper(self):
-        molecules = list([methanol, ethanol])
-        grouper = FormulaGrouper(molecules)
-        groups = grouper.group()
+        grouper = FormulaGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
         unique_structures = grouper.unique()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on formula."
+
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on formula."
+
+        grouper2 = FormulaGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        unique_structures = grouper2.unique()
         assert (
             len(groups) == 2
         ), "Molecules should form two groups based on formula."
@@ -68,16 +95,58 @@ class TestGrouper:
         ), "Molecules should form two groups based on formula."
 
     def test_connectivity_grouper(self):
-        grouper = ConnectivityGrouper()
-        assert grouper is not None
+        grouper = ConnectivityGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on connectivity."
+        assert (
+            len(group_indices) == 1
+        ), "Molecules should form one group based on connectivity."
+        unique_structures = grouper.unique()
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on connectivity."
 
-    def test_rcm_adjacency_grouper(self):
-        grouper = RCMAdjacencyGrouper()
-        assert grouper is not None
+        grouper2 = ConnectivityGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on connectivity."
+        assert (
+            len(group_indices) == 2
+        ), "Molecules should form two groups based on connectivity."
+        unique_structures = grouper2.unique()
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on connectivity."
 
     def test_rcm_similarity_grouper(self):
-        grouper = RCMSimilarityGrouper()
-        assert grouper is not None
+        grouper = RCMSimilarityGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on RCM similarity."
+        assert (
+            len(group_indices) == 1
+        ), "Molecules should form one group based on RCM similarity."
+        unique_structures = grouper.unique()
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on RCM similarity."
+        grouper2 = RCMSimilarityGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on RCM similarity."
+        assert (
+            len(group_indices) == 2
+        ), "Molecules should form two groups based on RCM similarity."
+        unique_structures = grouper2.unique()
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on RCM similarity."
+
 
     def test_hybrid_molecule_grouper(self):
         grouper = HybridMoleculeGrouper()

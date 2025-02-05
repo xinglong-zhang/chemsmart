@@ -211,35 +211,6 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             return False
 
 
-class RCMAdjacencyGrouper(MoleculeGrouper):
-    """Group molecules using Reverse Cuthill-McKee algorithm on adjacency matrix.
-    Utilize molecular fingerprinting to focus on connectivity and similarity,
-    suitable when detailed structural matching is needed."""
-
-    def __init__(self, molecules, num_procs=1):
-        super().__init__(molecules, num_procs)
-        self.molecules = [
-            mol.to_rdkit() for mol in self.molecules if mol.to_rdkit()
-        ]
-
-    def _get_adjacency_matrix(self, mol):
-        num_atoms = mol.GetNumAtoms()
-        A = np.zeros((num_atoms, num_atoms))
-        for bond in mol.GetBonds():
-            i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-            A[i, j] = A[j, i] = 1
-        return A
-
-    def group(self):
-        with multiprocessing.Pool(self.num_procs) as pool:
-            adj_matrices = pool.map(self._get_adjacency_matrix, self.molecules)
-
-        return [
-            reverse_cuthill_mckee(csr_matrix(A), symmetric_mode=True)
-            for A in adj_matrices
-        ]
-
-
 class RCMSimilarityGrouper(MoleculeGrouper):
     """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix.
     Utilize molecular fingerprinting to focus on connectivity and similarity,
@@ -594,8 +565,7 @@ class StructureGrouperFactory:
         groupers = {
             "fingerprint": RDKitFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
-            "rcm_adjacency": RCMAdjacencyGrouper,
-            "rcm_similarity": RCMSimilarityGrouper,
+            "rcm": RCMSimilarityGrouper,
             "rmsd": RMSDGrouper,
             "pymatgen": PymatgenMoleculeGrouper,
             "hybrid": HybridMoleculeGrouper,
