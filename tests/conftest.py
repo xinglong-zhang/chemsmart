@@ -4,6 +4,10 @@ import pytest
 
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.settings.server import Server
+from chemsmart.io.molecules.structure import Molecule
+from rdkit import Chem
+import rdkit.Chem.rdDistGeom as rdDistGeom
+
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -703,3 +707,50 @@ def jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def jobrunner_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+
+
+## conformers for testing
+@pytest.fixture()
+def methanol_molecules():
+    # molecules for testing
+    # methanol
+    methanol = Molecule.from_pubchem(identifier="CO")
+    # f = open("methanol.xyz", "w")
+    # methanol.write_coordinates(f)
+
+    # rotated methanol
+    ase_atoms = methanol.to_ase()
+    ase_atoms.rotate(90, [0, 0, 1])
+    methanol_rot1 = Molecule.from_ase_atoms(ase_atoms)
+
+    methanol_molecules = [methanol, methanol_rot1]
+
+    return methanol_molecules
+
+@pytest.fixture()
+def methanol_and_ethanol():
+    # molecules for testing
+    # methanol
+    methanol = Molecule.from_pubchem(identifier="CO")
+
+    # ethanol
+    ethanol = Molecule.from_pubchem(identifier="CCO")
+
+
+    methanol_and_ethanol = [methanol, ethanol]
+    return methanol_and_ethanol
+
+@pytest.fixture()
+def conformers_from_rdkit():
+    # complex conformers
+    # modified CHEMBL12747, ionized
+    m = Chem.MolFromSmiles('O=C([O-])CCn1c(=O)c(=O)[nH]c2cc([N+](=O)[O-])c(-n3ccc(C=NOCc4ccccc4)c3)cc21')
+    mh = Chem.AddHs(m)
+    ps = rdDistGeom.ETKDGv3()
+    ps.randomSeed = 0xd06f00d
+    ps.numThreads = 10
+    cids = rdDistGeom.EmbedMultipleConfs(mh,300,ps)
+    conformers = [Chem.Mol(mh,confId) for confId in cids]
+
+
+

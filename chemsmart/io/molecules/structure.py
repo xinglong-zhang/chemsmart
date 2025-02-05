@@ -353,6 +353,32 @@ class Molecule:
             pbc_conditions=atoms.get_pbc(),
         )
 
+    @classmethod
+    def from_rdkit_mol(cls, mol):
+        """Convert an RDKit molecule to a custom Molecule object.
+
+        Args:
+            mol (rdkit.Chem.rdchem.Mol): Input RDKit molecule.
+
+        Returns:
+            Molecule: Instance of the Molecule class.
+
+        Raises:
+            ValueError: If the molecule has no conformers.
+        """
+        # Check if the molecule has a conformer
+        if mol.GetNumConformers() == 0:
+            raise ValueError("Molecule has no conformers. Add a conformer first.")
+
+        # Extract atomic symbols
+        symbols = [atom.GetSymbol() for atom in mol.GetAtoms()]
+
+        # Extract 3D coordinates from the first conformer
+        conformer = mol.GetConformer()
+        positions = conformer.GetPositions() # Convert numpy array to list of lists
+
+        return cls(symbols=symbols, positions=positions)
+
     def write_coordinates(self, f, program=None):
         """Write the coordinates of the molecule to a file.
         No empty end line at the end of the file."""

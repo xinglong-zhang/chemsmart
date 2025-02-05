@@ -175,9 +175,25 @@ class TestStructures:
 
         first_rdkit_mol = first_mol.to_rdkit()
         last_rdkit_mol = last_mol.to_rdkit()
-
         assert isinstance(first_rdkit_mol, Chem.Mol)
         assert isinstance(last_rdkit_mol, Chem.Mol)
+
+        # convert rdkit molecule back to Molecule object
+        first_mol_conv = Molecule.from_rdkit_mol(first_rdkit_mol)
+        last_mol_conv = Molecule.from_rdkit_mol(last_rdkit_mol)
+        assert isinstance(first_mol_conv, Molecule)
+        assert isinstance(last_mol_conv, Molecule)
+        first_bond_orders = first_mol_conv.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        last_bond_orders = last_mol_conv.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        assert first_bond_orders == last_bond_orders
+        assert np.all(first_mol.symbols == first_mol_conv.symbols)
+        assert np.all(last_mol.symbols == last_mol_conv.symbols)
+        assert np.all(first_mol.positions == first_mol_conv.positions)
+        assert np.all(last_mol.positions == last_mol_conv.positions)
 
         # test conversion to ase Atoms
         first_ase_atoms = first_mol.to_ase()

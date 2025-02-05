@@ -1,5 +1,6 @@
 import numpy as np
-
+from rdkit import Chem
+from rdkit.Chem import rdDistGeom
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.grouper import (
     ConnectivityGrouper,
@@ -12,27 +13,11 @@ from chemsmart.utils.grouper import (
     StructureGrouperFactory,
 )
 
-# molecules for testing
-# methanol
-methanol = Molecule.from_pubchem(identifier="CO")
-# f = open("methanol.xyz", "w")
-# methanol.write_coordinates(f)
-
-
-# rotated methanol
-ase_atoms = methanol.to_ase()
-ase_atoms.rotate(90, [0, 0, 1])
-methanol_rot1 = Molecule.from_ase_atoms(ase_atoms)
-
-# ethanol
-ethanol = Molecule.from_pubchem(identifier="CCO")
-
-methanol_molecules = [methanol, methanol_rot1]
-methanol_and_ethanol = [methanol, ethanol]
-
 
 class TestGrouper:
-    def test_rmsd_grouper(self):
+    def test_rmsd_grouper(self, methanol_molecules, methanol_and_ethanol):
+        methanol = methanol_molecules[0]
+        methanol_rot1 = methanol_molecules[1]
         assert np.any(
             methanol.positions != methanol_rot1.positions
         ), "Rotated molecule should have different positions."
@@ -68,7 +53,7 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on geometry."
 
-    def test_formula_grouper(self):
+    def test_formula_grouper(self, methanol_molecules, methanol_and_ethanol):
         grouper = FormulaGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         unique_structures = grouper.unique()
@@ -90,7 +75,7 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on formula."
 
-    def test_connectivity_grouper(self):
+    def test_connectivity_grouper(self, methanol_molecules, methanol_and_ethanol):
         grouper = ConnectivityGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         assert (
@@ -117,7 +102,7 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on connectivity."
 
-    def test_rcm_similarity_grouper(self):
+    def test_rcm_similarity_grouper(self, methanol_molecules, methanol_and_ethanol):
         grouper = RCMSimilarityGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
         assert (
