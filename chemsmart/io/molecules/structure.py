@@ -356,6 +356,8 @@ class Molecule:
     def write_coordinates(self, f, program=None):
         """Write the coordinates of the molecule to a file.
         No empty end line at the end of the file."""
+        if program is None:
+            program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
             self._write_gaussian_coordinates(f)
             self._write_gaussian_pbc_coordinates(f)
@@ -619,12 +621,6 @@ class Molecule:
         """Convert molecule object to ASE atoms object."""
         from .atoms import AtomsChargeMultiplicity
 
-        # atoms = ase.Atoms(
-        #     symbols=self.chemical_symbols,
-        #     positions=self.positions,
-        #     pbc=self.pbc,
-        #     cell=self.translation_vectors,
-        # )
         return AtomsChargeMultiplicity(
             symbols=self.chemical_symbols,
             positions=self.positions,

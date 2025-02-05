@@ -10,7 +10,6 @@ import numpy as np
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from rdkit import Chem
 from rdkit.Chem import DataStructs, rdMolHash
-from scipy.linalg import svd
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 
@@ -39,7 +38,7 @@ class MoleculeGrouper(ABC):
 
     def _validate_inputs(self):
         if not isinstance(self.molecules, Iterable):
-            raise TypeError("Objects must be an iterable collection")
+            raise TypeError("Molecules must be an iterable collection")
 
     @abstractmethod
     def group(self):
@@ -55,15 +54,15 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
 
     def __init__(
         self,
-        objects: List["Molecule"],
+        molecules: List["Molecule"],
         num_procs: int = 1,
         threshold: float = 0.8,
     ):
-        super().__init__(objects, num_procs)
+        super().__init__(molecules, num_procs)
         self.threshold = threshold  # Similarity threshold
 
-        # Convert objects to RDKit molecules
-        self.objects = [
+        # Convert Molecules to RDKit molecules
+        self.molecules = [
             mol.to_rdkit() for mol in self.molecules if mol.to_rdkit()
         ]
 
@@ -77,7 +76,7 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
         )
 
     def group(self):
-        fingerprints = [Chem.RDKFingerprint(mol) for mol in self.objects]
+        fingerprints = [Chem.RDKFingerprint(mol) for mol in self.molecules]
         indices = [
             (i, j)
             for i in range(len(fingerprints))
@@ -91,12 +90,16 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
             )
 
         G = nx.Graph()
-        G.add_nodes_from(range(len(self.objects)))
+        G.add_nodes_from(range(len(self.molecules)))
         for i, j, sim in similarities:
             if sim > self.threshold:
                 G.add_edge(i, j)
 
         return list(nx.connected_components(G))
+
+    def unique(self) -> List:
+        # overrides parent method
+        return self.group()
 
 
 class RDKitIsomorphismGrouper(MoleculeGrouper):
@@ -104,12 +107,12 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
     def __init__(
         self,
-        objects: List["Molecule"],
+        molecules: List["Molecule"],
         num_procs: int = 1,
         use_stereochemistry: bool = True,
         use_tautomers: bool = False,
     ):
-        super().__init__(objects, num_procs)
+        super().__init__(molecules, num_procs)
         self.use_stereochemistry = use_stereochemistry
         self.use_tautomers = use_tautomers
 
@@ -162,11 +165,13 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
 
 class RCMAdjacencyGrouper(MoleculeGrouper):
-    """Group molecules using Reverse Cuthill-McKee algorithm on adjacency matrix"""
+    """Group molecules using Reverse Cuthill-McKee algorithm on adjacency matrix.
+    Utilize molecular fingerprinting to focus on connectivity and similarity,
+    suitable when detailed structural matching is needed."""
 
-    def __init__(self, objects, num_procs=1):
-        super().__init__(objects, num_procs)
-        self.objects = [
+    def __init__(self, molecules, num_procs=1):
+        super().__init__(molecules, num_procs)
+        self.molecules = [
             mol.to_rdkit() for mol in self.molecules if mol.to_rdkit()
         ]
 
@@ -180,16 +185,22 @@ class RCMAdjacencyGrouper(MoleculeGrouper):
 
     def group(self):
         with multiprocessing.Pool(self.num_procs) as pool:
-            adj_matrices = pool.map(self._get_adjacency_matrix, self.objects)
+            adj_matrices = pool.map(self._get_adjacency_matrix, self.molecules)
 
         return [
             reverse_cuthill_mckee(csr_matrix(A), symmetric_mode=True)
             for A in adj_matrices
         ]
 
+    def unique(self) -> List:
+        # overrides parent method
+        return self.group()
+
 
 class RCMSimilarityGrouper(MoleculeGrouper):
-    """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix"""
+    """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix.
+    Utilize molecular fingerprinting to focus on connectivity and similarity,
+    suitable when detailed structural matching is needed."""
 
     def __init__(
         self, molecules: List["Molecule"], similarity_threshold: float = 0.9
@@ -250,66 +261,191 @@ class RCMSimilarityGrouper(MoleculeGrouper):
 
 
 class RMSDMoleculeGrouper(MoleculeGrouper):
-    def __init__(self, objects, rmsd_threshold=0.5, num_procs=1):
-        super().__init__(objects, num_procs)
+    """Group molecules based on RMSD (Root Mean Square Deviation) of atomic positions.
+    Effective for precise 3D comparisons, ideal in contexts like crystallography or drug
+    binding where exact spatial alignment is crucial."""
+
+    def __init__(
+        self,
+        molecules: List["Molecule"],
+        num_procs: int = 1,
+        rmsd_threshold: float = 0.5,
+        align_molecules: bool = True,
+    ):
+        super().__init__(molecules, num_procs)
         self.rmsd_threshold = rmsd_threshold
-        self.objects = [
-            mol.to_rdkit() for mol in self.molecules if mol.to_rdkit()
-        ]
+        self.align_molecules = align_molecules
 
-    def _calculate_rmsd(self, mol1, mol2):
-        """Calculate RMSD between two molecules.
-        Apply Kabsch algorithm to align the two molecules and calculate RMSD.
-        """
+    def group(self) -> Tuple[List[List["Molecule"]], List[List[int]]]:
+        groups = []
+        remaining = list(enumerate(self.molecules))
+
+        while remaining:
+            pivot_idx, pivot_mol = remaining.pop(0)
+            current_group = [pivot_mol]
+            current_indices = [pivot_idx]
+
+            to_remove = []
+            for i, (idx, mol) in enumerate(remaining):
+                #     with multiprocessing.Pool(self.num_procs) as pool:
+                #         distances = pool.starmap(
+                #             self._calculate_rmsd,
+                #             [(self.molecules[i], self.molecules[j]) for i, j in indices],
+                #         )
+                #         print(distances)
+                if self._check_similarity(pivot_mol, mol):
+                    current_group.append(mol)
+                    current_indices.append(idx)
+                    to_remove.append(i)
+
+            # Remove processed molecules
+            for i in reversed(to_remove):
+                remaining.pop(i)
+
+            groups.append((current_group, current_indices))
+
+        # Unpack results
+        mol_groups = [g[0] for g in groups]
+        idx_groups = [g[1] for g in groups]
+        return mol_groups, idx_groups
+
+    def _check_similarity(self, mol1: Molecule, mol2: Molecule) -> bool:
+        """Check if two molecules are geometrically similar"""
+        if mol1.num_atoms != mol2.num_atoms:
+            return False
+
+        if sorted(mol1.chemical_symbols) != sorted(mol2.chemical_symbols):
+            return False
+
+        return self._calculate_rmsd(mol1, mol2) < self.rmsd_threshold
+
+    def _calculate_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
+        """Calculate RMSD between two molecules"""
+        pos1 = mol1.positions
+        pos2 = mol2.positions
+
+        if self.align_molecules:
+            logger.info("Aligning molecules using Kabsch algorithm.")
+            pos1, pos2, _, _, _ = self._kabsch_align(pos1, pos2)
+            # print(f"pos1 {pos1}")
+            # print(f"pos2 {pos2}")
+            # print(f"pos1 - pos2 {(pos1 - pos2)**2}")
+            # print(np.sum((pos1 - pos2) ** 2, axis=1))
+            # print(np.sum(np.sum((pos1 - pos2) ** 2, axis=1))/6)
+            # print(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+
+        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+
+    def _kabsch_align(
+        self, P: np.ndarray, Q: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Kabsch algorithm for molecular alignment"""
         # Center molecules
-        pos1, pos2 = mol1.positions - mol1.positions.mean(
-            axis=0
-        ), mol2.positions - mol2.positions.mean(axis=0)
-        # Compute covariance matrix
-        H = pos1.T @ pos2
+        assert P.shape == Q.shape, "Matrix dimensions must match"
+
+        # Compute centroids
+        centroid_P = np.mean(P, axis=0)
+        centroid_Q = np.mean(Q, axis=0)
+
+        # Optimal translation
+        t = centroid_Q - centroid_P
+
+        # Center the points
+        p = P - centroid_P
+        q = Q - centroid_Q
+
+        # Compute the covariance matrix
+        H = np.dot(p.T, q)
+
         # SVD
-        U, _, Vt = svd(H)
-        # Rotation matrix
-        R = Vt.T @ U.T
-        if np.linalg.det(R) < 0:
-            Vt[-1, :] *= -1
-            R = Vt.T @ U.T
-        # Apply rotation
-        pos1_aligned = pos1 @ R
-        return np.sqrt(np.mean(np.sum((pos1_aligned - pos2) ** 2, axis=1)))
+        U, S, Vt = np.linalg.svd(H)
 
-    def group(self):
-        indices = [
-            (i, j)
-            for i in range(len(self.objects))
-            for j in range(i + 1, len(self.objects))
-        ]
+        # Validate right-handed coordinate system
+        if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
+            Vt[-1, :] *= -1.0
 
-        with multiprocessing.Pool(self.num_procs) as pool:
-            distances = pool.starmap(
-                self._calculate_rmsd,
-                [(self.objects[i], self.objects[j]) for i, j in indices],
-            )
+        # Optimal rotation
+        R = np.dot(Vt.T, U.T)
 
-        G = nx.Graph()
-        G.add_nodes_from(range(len(self.objects)))
-        for (i, j), rmsd in zip(indices, distances):
-            if rmsd < self.rmsd_threshold:
-                G.add_edge(i, j)
+        # rotate p
+        p = np.dot(p, R.T)
+        # RMSD
+        rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
 
-        return list(nx.connected_components(G))
+        return p, q, R, t, rmsd
+
+
+    # def __init__(self, molecules, rmsd_threshold=0.5, num_procs=1):
+    #     super().__init__(molecules, num_procs)
+    #     self.rmsd_threshold = rmsd_threshold
+    #
+    # def _calculate_rmsd(self, mol1, mol2):
+    #     """Calculate RMSD between two molecules.
+    #     Apply Kabsch algorithm to align the two molecules and calculate RMSD.
+    #     """
+    #     # Center molecules
+    #     pos1, pos2 = mol1.positions - mol1.positions.mean(
+    #         axis=0
+    #     ), mol2.positions - mol2.positions.mean(axis=0)
+    #     # Compute covariance matrix
+    #     H = pos1.T @ pos2
+    #     # SVD
+    #     U, _, Vt = svd(H)
+    #     # Rotation matrix
+    #     R = Vt.T @ U.T
+    #     if np.linalg.det(R) < 0:
+    #         Vt[-1, :] *= -1
+    #         R = Vt.T @ U.T
+    #     # Apply rotation
+    #     pos1_aligned = pos1 @ R
+    #     return np.sqrt(np.mean(np.sum((pos1_aligned - pos2) ** 2, axis=1)))
+    #
+    # def group(self):
+    #     indices = [
+    #         (i, j)
+    #         for i in range(len(self.molecules))
+    #         for j in range(i + 1, len(self.molecules))
+    #     ]
+    #
+    #     with multiprocessing.Pool(self.num_procs) as pool:
+    #         distances = pool.starmap(
+    #             self._calculate_rmsd,
+    #             [(self.molecules[i], self.molecules[j]) for i, j in indices],
+    #         )
+    #         print(distances)
+    #
+    #     G = nx.Graph()
+    #     G.add_nodes_from(range(len(self.molecules)))
+    #     for (i, j), rmsd in zip(indices, distances):
+    #         if rmsd < self.rmsd_threshold:
+    #             G.add_edge(i, j)
+    #
+    #     return list(nx.connected_components(G))
+    #
+    # def unique(self) -> List:
+    #     # overrides parent method
+    #     return self.group()
 
 
 class PymatgenMoleculeGrouper(MoleculeGrouper):
-    def __init__(self, objects, num_procs=1):
-        super().__init__(objects, num_procs)
+    """Group molecules using pymatgen's StructureMatcher.
+    Useful for analyzing crystal structures based on unit cell parameters and
+    composition, relevant in material science.
+    Cells are turned off herein."""
+
+    def __init__(self, molecules, num_procs=1):
+        super().__init__(molecules, num_procs)
         self.config = StructureGrouperConfig()
-        self.objects = [
+        self.molecules = [
             mol.to_pymatgen() for mol in self.molecules if mol.to_pymatgen()
         ]
 
     def _match_structure(self, idx1, idx2, matcher):
-        return idx1, idx2, matcher.fit(self.objects[idx1], self.objects[idx2])
+        return (
+            idx1,
+            idx2,
+            matcher.fit(self.molecules[idx1], self.molecules[idx2]),
+        )
 
     def group(self):
         matcher = StructureMatcher(
@@ -322,8 +458,8 @@ class PymatgenMoleculeGrouper(MoleculeGrouper):
         )
         indices = [
             (i, j)
-            for i in range(len(self.objects))
-            for j in range(i + 1, len(self.objects))
+            for i in range(len(self.molecules))
+            for j in range(i + 1, len(self.molecules))
         ]
 
         with multiprocessing.Pool(self.num_procs) as pool:
@@ -339,13 +475,19 @@ class PymatgenMoleculeGrouper(MoleculeGrouper):
                         group.update([i, j])
                         break
                 else:
-                    grouped.append(set([i, j]))
+                    grouped.append({i, j})
 
         return [list(group) for group in grouped]
 
+    def unique(self) -> List:
+        # overrides parent method
+        return self.group()
+
 
 class HybridMoleculeGrouper(MoleculeGrouper):
-    """Hybrid grouping strategy combining multiple approaches"""
+    """Hybrid grouping strategy combining multiple approaches.
+    Combines geometric and substructure similarities, useful for comprehensive analysis
+    requiring both bond arrangement and overall structure."""
 
     def __init__(
         self,
@@ -394,7 +536,9 @@ class HybridMoleculeGrouper(MoleculeGrouper):
 
 
 class FormulaGrouper(MoleculeGrouper):
-    """Group by chemical formula"""
+    """Group by chemical formula.
+    Ideal for grouping molecules based solely on their chemical formula, making it suitable
+    when elemental composition is the primary concern."""
 
     def group(self):
         formula_groups = {}
@@ -415,7 +559,9 @@ class FormulaGrouper(MoleculeGrouper):
 
 
 class ConnectivityGrouper(MoleculeGrouper):
-    """Group by molecular connectivity"""
+    """Group by molecular connectivity.
+    Useful for identifying molecules with similar bond arrangements and structures, useful
+    in scenarios where molecular connectivity is critical."""
 
     def __init__(self, molecules: List["Molecule"], bond_cutoff: float = 1.5):
         super().__init__(molecules)
@@ -462,7 +608,9 @@ class ConnectivityGrouper(MoleculeGrouper):
 
 
 class GeometryGrouper(RMSDMoleculeGrouper):
-    """Specialized geometry-based grouper (inherits from RMSDMoleculeGrouper)"""
+    """Specialized geometry-based grouper (inherits from RMSDMoleculeGrouper).
+    Best for grouping based on 3D structural similarity, essential in applications like drug
+    design where precise molecular shape matters."""
 
     pass
 
@@ -471,10 +619,16 @@ class StructureGrouperFactory:
     @staticmethod
     def create_grouper(structures, strategy="rdkit", num_procs=1):
         groupers = {
-            "rdkit": RDKitFingerprintGrouper,
-            "rcm": RCMAdjacencyGrouper,
+            "fingerprint": RDKitFingerprintGrouper,
+            "isomorphism": RDKitIsomorphismGrouper,
+            "rcm_adjacency": RCMAdjacencyGrouper,
+            "rcm_similarity": RCMSimilarityGrouper,
             "rmsd": RMSDMoleculeGrouper,
             "pymatgen": PymatgenMoleculeGrouper,
+            "hybrid": HybridMoleculeGrouper,
+            "formula": FormulaGrouper,
+            "connectivity": ConnectivityGrouper,
+            "geometry": GeometryGrouper,
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
