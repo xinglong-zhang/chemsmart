@@ -6,6 +6,7 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
+
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
 
