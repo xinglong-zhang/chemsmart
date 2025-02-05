@@ -465,7 +465,7 @@ class ConnectivityGrouper(MoleculeGrouper):
             pivot_idx, pivot_mol = remaining.pop(0)
             pivot_graph = pivot_mol.to_graph(
                 bond_cutoff_buffer=0.0,  # do not modify bond
-                num_procs=self.num_procs,
+                # num_procs=self.num_procs,
             )
 
             # Prepare graph representations of remaining molecules
@@ -473,7 +473,8 @@ class ConnectivityGrouper(MoleculeGrouper):
                 (
                     idx,
                     mol.to_graph(
-                        bond_cutoff_buffer=0.0, num_procs=self.num_procs
+                        bond_cutoff_buffer=0.0
+                        # num_procs=self.num_procs,
                     ),
                 )
                 for idx, mol in remaining

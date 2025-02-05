@@ -1,6 +1,5 @@
 import copy
 import logging
-import multiprocessing
 import os
 import re
 from functools import cached_property, lru_cache
@@ -639,9 +638,7 @@ class Molecule:
             bond_orders.append(bond["bond_order"])
         return bond_orders
 
-    def to_graph(
-        self, bond_cutoff_buffer=0.05, adjust_H=True, num_procs=4
-    ) -> nx.Graph:
+    def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph.
         Bond cutoff value determines the maximum distance between two atoms
         to add a graph edge between them. Bond cutoff is obtained using Covalent
@@ -651,44 +648,97 @@ class Molecule:
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
-
         G = nx.Graph()
         positions = self.positions
 
-        # Add nodes
+        # add nodes
         for i, symbol in enumerate(self.chemical_symbols):
             G.add_node(i, element=symbol)
 
-        # Prepare bond calculation tasks
-        tasks = [
-            (
-                i,
-                j,
-                self.chemical_symbols,
-                positions,
-                self.distance_matrix,
-                bond_cutoff_buffer,
-                adjust_H,
-            )
-            for i in range(len(positions))
-            for j in range(i + 1, len(positions))
-        ]
+        # Add edges (bonds) with bond order
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                element_i, element_j = (
+                    self.chemical_symbols[i],
+                    self.chemical_symbols[j],
+                )
 
-        # Use multiprocessing to compute bonds in parallel
-        with multiprocessing.Pool(processes=num_procs) as pool:
-            results = pool.map(self._compute_bond, tasks)
+                cutoff_buffer = bond_cutoff_buffer
 
-        # close pool and wait for workers
-        pool.close()
-        pool.join()
+                if adjust_H:
+                    if element_i == "H" and element_j == "H":
+                        # bond length of H-H is 0.74 Å
+                        # covalent radius of H is 0.31 Å
+                        cutoff_buffer = 0.12
+                    elif element_i == "H" or element_j == "H":
+                        # C-H bond distance of ~ 1.09 Å
+                        # N-H bond distance of ~ 1.01 Å
+                        # O-H bond distance of ~ 0.96 Å
+                        # covalent radius of C is  0.76,
+                        # covalent radius of N is 0.71,
+                        # covalent radius of O is 0.66,
+                        cutoff_buffer = 0.05
 
-        # Add edges (bonds) to the graph
-        for res in results:
-            if res is not None:
-                i, j, bond_order = res
-                G.add_edge(i, j, bond_order=bond_order)
-
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer
+                )
+                bond_order = self.determine_bond_order(
+                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                )
+                if bond_order > 0:
+                    G.add_edge(i, j, bond_order=bond_order)
         return G
+
+    # def to_graph(
+    #     self, bond_cutoff_buffer=0.05, adjust_H=True, num_procs=4
+    # ) -> nx.Graph:
+    #     """Convert a Molecule object to a connectivity graph.
+    #     Bond cutoff value determines the maximum distance between two atoms
+    #     to add a graph edge between them. Bond cutoff is obtained using Covalent
+    #     Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
+    #     Args:
+    #         bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+    #     Returns:
+    #         nx.Graph: A networkx graph object representing the molecule.
+    #     """
+    #
+    #     G = nx.Graph()
+    #     positions = self.positions
+    #
+    #     # Add nodes
+    #     for i, symbol in enumerate(self.chemical_symbols):
+    #         G.add_node(i, element=symbol)
+    #
+    #     # Prepare bond calculation tasks
+    #     tasks = [
+    #         (
+    #             i,
+    #             j,
+    #             self.chemical_symbols,
+    #             positions,
+    #             self.distance_matrix,
+    #             bond_cutoff_buffer,
+    #             adjust_H,
+    #         )
+    #         for i in range(len(positions))
+    #         for j in range(i + 1, len(positions))
+    #     ]
+    #
+    #     # Use multiprocessing to compute bonds in parallel
+    #     with multiprocessing.Pool(processes=num_procs) as pool:
+    #         results = pool.map(self._compute_bond, tasks)
+    #
+    #     # close pool and wait for workers
+    #     pool.close()
+    #     pool.join()
+    #
+    #     # Add edges (bonds) to the graph
+    #     for res in results:
+    #         if res is not None:
+    #             i, j, bond_order = res
+    #             G.add_edge(i, j, bond_order=bond_order)
+    #
+    #     return G
 
     def _compute_bond(self, args):
         """Helper function to compute bond order for multiprocessing."""
