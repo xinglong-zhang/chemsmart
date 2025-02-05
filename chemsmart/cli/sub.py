@@ -1,7 +1,6 @@
 """Submission of jobs to queuing system via cli."""
 
 import logging
-from email.policy import default
 
 import click
 

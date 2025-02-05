@@ -3,13 +3,10 @@
 import logging
 import multiprocessing
 from abc import ABC, abstractmethod
-from functools import partial
-from typing import Dict, Iterable, List, Set, Tuple, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
-import networkx as nx
 import numpy as np
 from pymatgen.analysis.structure_matcher import StructureMatcher
-from pymatgen.core import Structure
 from rdkit import Chem
 from rdkit.Chem import DataStructs, rdMolHash
 from scipy.sparse import csr_matrix

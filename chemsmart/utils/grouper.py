@@ -3,7 +3,7 @@
 import logging
 import multiprocessing
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Tuple, Optional
+from typing import Iterable, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -22,6 +22,7 @@ class StructureGrouperConfig:
     """Configuration container for parameters for pymatgen StructureMatcher.
     Default values are for heterogenous systems, may need to check for molecules.
     """
+
     def __init__(self, ltol=0.1, stol=0.18, angle_tol=1):
         self.ltol = ltol
         self.stol = stol
@@ -75,7 +76,9 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
         ]
 
     @staticmethod
-    def _get_fingerprint(mol: Molecule) -> Optional[DataStructs.ExplicitBitVect]:
+    def _get_fingerprint(
+        mol: Molecule,
+    ) -> Optional[DataStructs.ExplicitBitVect]:
         """Generate RDKit fingerprint for a molecule."""
         try:
             rdkit_mol = mol.to_rdkit()
@@ -99,7 +102,11 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group molecules based on fingerprint similarity."""
         with multiprocessing.Pool(self.num_procs) as pool:
-            fps = [fp for fp in pool.map(self._get_fingerprint, self.molecules) if fp]
+            fps = [
+                fp
+                for fp in pool.map(self._get_fingerprint, self.molecules)
+                if fp
+            ]
 
         n = len(fps)
         similarity_matrix = np.zeros((n, n))
@@ -108,14 +115,16 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
         with multiprocessing.Pool(self.num_procs) as pool:
             results = pool.starmap(
                 self._compute_similarity,
-                [(i, j, fps) for i, j in range_indices]
+                [(i, j, fps) for i, j in range_indices],
             )
 
         for (i, j), sim in zip(range_indices, results):
             similarity_matrix[i][j] = similarity_matrix[j][i] = sim
 
         # Find connected components
-        n_components, labels = connected_components(csr_matrix(similarity_matrix > self.threshold))
+        n_components, labels = connected_components(
+            csr_matrix(similarity_matrix > self.threshold)
+        )
         groups: List[List[Molecule]] = []
         indices: List[List[int]] = []
         for i in range(n_components):
@@ -134,7 +143,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         molecules: Iterable[Molecule],
         num_procs: int = 1,
         use_stereochemistry: bool = True,
-        use_tautomers: bool = False
+        use_tautomers: bool = False,
     ):
         super().__init__(molecules, num_procs)
         self.use_stereochemistry = use_stereochemistry
@@ -147,9 +156,15 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             if not rdkit_mol:
                 return None
             # Choose hashing function based on requirements
-            hash_func = (rdMolHash.HashFunction.Tautomer if self.use_tautomers else
-                         rdMolHash.HashFunction.AnonymousGraph if self.use_stereochemistry else
-                         rdMolHash.HashFunction.MolFormula)
+            hash_func = (
+                rdMolHash.HashFunction.Tautomer
+                if self.use_tautomers
+                else (
+                    rdMolHash.HashFunction.AnonymousGraph
+                    if self.use_stereochemistry
+                    else rdMolHash.HashFunction.MolFormula
+                )
+            )
             return rdMolHash.MolHash(rdkit_mol, hash_func)
         except Exception as e:
             logger.warning(f"Hash generation failed: {str(e)}")
@@ -171,9 +186,13 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 
             # Verify isomorphism if needed
             if self.use_stereochemistry or self.use_tautomers:
-                matches = [i for i in matches if self._check_isomorphism(
-                    self.molecules[pivot_idx], self.molecules[i]
-                )]
+                matches = [
+                    i
+                    for i in matches
+                    if self._check_isomorphism(
+                        self.molecules[pivot_idx], self.molecules[i]
+                    )
+                ]
 
             groups.append([self.molecules[i] for i in matches])
             index_groups.append(matches)
@@ -184,8 +203,9 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
     def _check_isomorphism(self, mol1: Molecule, mol2: Molecule) -> bool:
         """Check graph isomorphism considering stereochemistry."""
         try:
-            return (Chem.MolToInchiKey(mol1.to_rdkit()) ==
-                    Chem.MolToInchiKey(mol2.to_rdkit()))
+            return Chem.MolToInchiKey(mol1.to_rdkit()) == Chem.MolToInchiKey(
+                mol2.to_rdkit()
+            )
         except Exception as e:
             logger.warning(f"Isomorphism check failed: {str(e)}")
             return False
@@ -229,7 +249,7 @@ class RCMSimilarityGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         similarity_threshold: float = 0.9,
-        num_procs: int = 1
+        num_procs: int = 1,
     ):
         super().__init__(molecules, num_procs)
         self.similarity_threshold = similarity_threshold
@@ -237,7 +257,9 @@ class RCMSimilarityGrouper(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Cluster molecules using RCM on similarity matrix."""
         with multiprocessing.Pool(self.num_procs) as pool:
-            fps = pool.map(Chem.RDKFingerprint, (m.to_rdkit() for m in self.molecules))
+            fps = pool.map(
+                Chem.RDKFingerprint, (m.to_rdkit() for m in self.molecules)
+            )
 
         n = len(self.molecules)
         similarity_matrix = np.zeros((n, n))
@@ -246,14 +268,16 @@ class RCMSimilarityGrouper(MoleculeGrouper):
         with multiprocessing.Pool(self.num_procs) as pool:
             similarities = pool.starmap(
                 self._tanimoto_similarity,
-                [(fps[i], fps[j]) for i, j in indices]
+                [(fps[i], fps[j]) for i, j in indices],
             )
 
         for (i, j), sim in zip(indices, similarities):
             similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
         # Apply RCM clustering
-        sparse_matrix = csr_matrix(similarity_matrix > self.similarity_threshold)
+        sparse_matrix = csr_matrix(
+            similarity_matrix > self.similarity_threshold
+        )
         perm = reverse_cuthill_mckee(sparse_matrix, symmetric_mode=True)
 
         # Extract groups from permutation
@@ -262,7 +286,10 @@ class RCMSimilarityGrouper(MoleculeGrouper):
         current_group: List[int] = [perm[0]]
 
         for idx in perm[1:]:
-            if similarity_matrix[idx, current_group[0]] > self.similarity_threshold:
+            if (
+                similarity_matrix[idx, current_group[0]]
+                > self.similarity_threshold
+            ):
                 current_group.append(idx)
             else:
                 groups.append([self.molecules[i] for i in current_group])
@@ -280,7 +307,7 @@ class RCMSimilarityGrouper(MoleculeGrouper):
         return Chem.DataStructs.TanimotoSimilarity(fp1, fp2)
 
 
-class RMSDMoleculeGrouper(MoleculeGrouper):
+class RMSDGrouper(MoleculeGrouper):
     """Group molecules based on RMSD (Root Mean Square Deviation) of atomic positions.
     Effective for precise 3D comparisons, ideal in contexts like crystallography or drug
     binding where exact spatial alignment is crucial."""
@@ -290,7 +317,7 @@ class RMSDMoleculeGrouper(MoleculeGrouper):
         molecules: Iterable[Molecule],
         rmsd_threshold: float = 0.5,
         num_procs: int = 1,
-        align_molecules: bool = True
+        align_molecules: bool = True,
     ):
         super().__init__(molecules, num_procs)
         self.rmsd_threshold = rmsd_threshold
@@ -331,8 +358,16 @@ class RMSDMoleculeGrouper(MoleculeGrouper):
 
         return self._calculate_rmsd(mol1, mol2) < self.rmsd_threshold
 
-    def _calculate_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
-        """Calculate RMSD between two molecules"""
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """Calculate RMSD between two molecules."""
+        i, j = idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        if mol1.num_atoms != mol2.num_atoms or sorted(
+            mol1.chemical_symbols
+        ) != sorted(mol2.chemical_symbols):
+            return np.inf
+
         pos1 = mol1.positions
         pos2 = mol2.positions
 
@@ -388,10 +423,10 @@ class PymatgenMoleculeGrouper(MoleculeGrouper):
     Cells are turned off herein."""
 
     def __init__(
-            self,
-            molecules: Iterable[Molecule],
-            config: StructureGrouperConfig = StructureGrouperConfig(),
-            num_procs: int = 1
+        self,
+        molecules: Iterable[Molecule],
+        config: StructureGrouperConfig = StructureGrouperConfig(),
+        num_procs: int = 1,
     ):
         super().__init__(molecules, num_procs)
         self.config = config
@@ -405,7 +440,7 @@ class PymatgenMoleculeGrouper(MoleculeGrouper):
             angle_tol=self.config.angle_tol,
             scale=False,
             primitive_cell=False,
-            attempt_supercell=False
+            attempt_supercell=False,
         )
 
         groups = matcher.group_structures(self.structures)
@@ -545,8 +580,8 @@ class ConnectivityGrouper(MoleculeGrouper):
         )
 
 
-class GeometryGrouper(RMSDMoleculeGrouper):
-    """Specialized geometry-based grouper (inherits from RMSDMoleculeGrouper).
+class GeometryGrouper(RMSDGrouper):
+    """Specialized geometry-based grouper (inherits from RMSDGrouper).
     Best for grouping based on 3D structural similarity, essential in applications like drug
     design where precise molecular shape matters."""
 
@@ -561,7 +596,7 @@ class StructureGrouperFactory:
             "isomorphism": RDKitIsomorphismGrouper,
             "rcm_adjacency": RCMAdjacencyGrouper,
             "rcm_similarity": RCMSimilarityGrouper,
-            "rmsd": RMSDMoleculeGrouper,
+            "rmsd": RMSDGrouper,
             "pymatgen": PymatgenMoleculeGrouper,
             "hybrid": HybridMoleculeGrouper,
             "formula": FormulaGrouper,
