@@ -42,6 +42,7 @@ class Updater:
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_path = Path(tmp_file.name)
+            logger.debug(f"Temporary requirements file: {tmp_path}")
 
         cmd = [
             "pipreqs", str(self.package_path),
