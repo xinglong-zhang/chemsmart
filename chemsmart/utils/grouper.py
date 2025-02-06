@@ -5,7 +5,7 @@ import multiprocessing
 from abc import ABC, abstractmethod
 from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Optional, Tuple
-
+from joblib import Parallel, delayed  # More efficient parallelization
 import networkx as nx
 import numpy as np
 from rdkit import Chem
@@ -16,6 +16,12 @@ from scipy.sparse.csgraph import connected_components, reverse_cuthill_mckee
 from chemsmart.io.molecules.structure import Molecule
 
 logger = logging.getLogger(__name__)
+
+
+def to_graph_wrapper(mol: Molecule, bond_cutoff_buffer: float = 0.0, adjust_H: bool=True) -> nx.Graph:
+    """Global Helper function to call to_graph()."""
+    return mol.to_graph(bond_cutoff_buffer=bond_cutoff_buffer, adjust_H=adjust_H)
+
 
 
 class StructureGrouperConfig:
@@ -436,10 +442,14 @@ class ConnectivityGrouper(MoleculeGrouper):
 
     def __init__(
         self,
-        molecules: List[Molecule],
+        molecules: Iterable[Molecule],
         num_procs: int = 1,
+        bond_cutoff_buffer: float = 0.0,
+        adjust_H: bool=True
     ):
         super().__init__(molecules, num_procs)
+        self.bond_cutoff_buffer = bond_cutoff_buffer
+        self.adjust_H = adjust_H
 
     def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
         """Check if two molecular graphs are isomorphic."""
@@ -450,63 +460,117 @@ class ConnectivityGrouper(MoleculeGrouper):
             edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
         )
 
-    def _check_isomorphism(
-        self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int
-    ) -> Tuple[int, bool]:
+    def _check_isomorphism(self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int) -> Tuple[int, bool]:
         """Helper function for multiprocessing: Checks isomorphism for a molecule."""
         return idx, self._are_isomorphic(pivot_graph, mol_graph)
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules based on molecular connectivity using multiprocessing."""
+        """Group molecules based on molecular connectivity using optimized multiprocessing."""
         groups = []
+
+        # Precompute Graphs in Parallel (Avoid repeated conversions)
+        # Use `starmap()` instead of `map()` to unpack arguments correctly
+        with multiprocessing.Pool(self.num_procs) as pool:
+            precomputed_graphs = pool.starmap(to_graph_wrapper, [(mol, self.bond_cutoff_buffer, self.adjust_H) for mol in self.molecules])
+        pool.close()
+        pool.join()
+
         remaining = list(enumerate(self.molecules))
+        remaining = [(idx, mol, g) for (idx, mol), g in zip(remaining, precomputed_graphs)]
 
         while remaining:
-            pivot_idx, pivot_mol = remaining.pop(0)
-            pivot_graph = pivot_mol.to_graph(
-                bond_cutoff_buffer=0.0,  # do not modify bond
-                # num_procs=self.num_procs,
+            pivot_idx, pivot_mol, pivot_graph = remaining.pop(0)
+
+            # Parallel isomorphism check (Avoid Thread Locking)
+            results = Parallel(n_jobs=self.num_procs, backend="loky")(
+                delayed(self._check_isomorphism)(pivot_graph, g, idx) for idx, _, g in remaining
             )
-
-            # Prepare graph representations of remaining molecules
-            mol_graphs = [
-                (
-                    idx,
-                    mol.to_graph(
-                        bond_cutoff_buffer=0.0
-                        # num_procs=self.num_procs,
-                    ),
-                )
-                for idx, mol in remaining
-            ]
-
-            # Parallel isomorphism check
-            with multiprocessing.Pool(self.num_procs) as pool:
-                results = pool.starmap(
-                    self._check_isomorphism,
-                    [(pivot_graph, g, idx) for idx, g in mol_graphs],
-                )
 
             # Collect molecules that are isomorphic to the pivot
             current_group = [pivot_mol]
             current_indices = [pivot_idx]
             to_remove = {idx for idx, is_iso in results if is_iso}
 
-            remaining = [
-                (idx, mol) for idx, mol in remaining if idx not in to_remove
-            ]
-            current_group.extend(
-                mol for idx, mol in mol_graphs if idx in to_remove
-            )
-            current_indices.extend(
-                idx for idx, _ in mol_graphs if idx in to_remove
-            )
+            remaining = [(idx, mol, g) for idx, mol, g in remaining if idx not in to_remove]
+            current_group.extend(mol for idx, mol, _ in remaining if idx in to_remove)
+            current_indices.extend(idx for idx, _, _ in remaining if idx in to_remove)
 
             groups.append((current_group, current_indices))
 
         mol_groups = [g[0] for g in groups]
         idx_groups = [g[1] for g in groups]
         return mol_groups, idx_groups
+
+
+
+
+
+    # def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
+    #     """Check if two molecular graphs are isomorphic."""
+    #     return nx.is_isomorphic(
+    #         g1,
+    #         g2,
+    #         node_match=lambda a, b: a["element"] == b["element"],
+    #         edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
+    #     )
+    #
+    # def _check_isomorphism(
+    #     self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int
+    # ) -> Tuple[int, bool]:
+    #     """Helper function for multiprocessing: Checks isomorphism for a molecule."""
+    #     return idx, self._are_isomorphic(pivot_graph, mol_graph)
+    #
+    # def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+    #     """Group molecules based on molecular connectivity using multiprocessing."""
+    #     groups = []
+    #     remaining = list(enumerate(self.molecules))
+    #
+    #     while remaining:
+    #         pivot_idx, pivot_mol = remaining.pop(0)
+    #         pivot_graph = pivot_mol.to_graph(
+    #             bond_cutoff_buffer=0.0,  # do not modify bond
+    #             num_procs=self.num_procs,
+    #         )
+    #
+    #         # Prepare graph representations of remaining molecules
+    #         mol_graphs = [
+    #             (
+    #                 idx,
+    #                 mol.to_graph(
+    #                     bond_cutoff_buffer=0.0,
+    #                     num_procs=self.num_procs,
+    #                 ),
+    #             )
+    #             for idx, mol in remaining
+    #         ]
+    #
+    #         # Parallel isomorphism check
+    #         with multiprocessing.Pool(self.num_procs) as pool:
+    #             results = pool.starmap(
+    #                 self._check_isomorphism,
+    #                 [(pivot_graph, g, idx) for idx, g in mol_graphs],
+    #             )
+    #
+    #         # Collect molecules that are isomorphic to the pivot
+    #         current_group = [pivot_mol]
+    #         current_indices = [pivot_idx]
+    #         to_remove = {idx for idx, is_iso in results if is_iso}
+    #
+    #         remaining = [
+    #             (idx, mol) for idx, mol in remaining if idx not in to_remove
+    #         ]
+    #         current_group.extend(
+    #             mol for idx, mol in mol_graphs if idx in to_remove
+    #         )
+    #         current_indices.extend(
+    #             idx for idx, _ in mol_graphs if idx in to_remove
+    #         )
+    #
+    #         groups.append((current_group, current_indices))
+    #
+    #     mol_groups = [g[0] for g in groups]
+    #     idx_groups = [g[1] for g in groups]
+    #     return mol_groups, idx_groups
 
 
 class StructureGrouperFactory:

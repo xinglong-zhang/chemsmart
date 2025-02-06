@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from functools import cached_property, lru_cache
-
+import multiprocessing
 import ase
 import networkx as nx
 import numpy as np
@@ -12,7 +12,7 @@ from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
-
+from typing import Optional
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
@@ -496,7 +496,7 @@ class Molecule:
         """ "Compute pairwise distance matrix."""
         return cdist(self.positions, self.positions)
 
-    def determine_bond_order(self, bond_length, bond_cutoff):
+    def determine_bond_order_one_bond(self, bond_length, bond_cutoff):
         """Determine the bond order based on bond length and cutoff."""
         for bond_type, multiplier in [
             ("triple", 3),
@@ -510,6 +510,21 @@ class Molecule:
             ):
                 return multiplier
         return 0  # No bond
+
+    def determine_bond_order(self, bond_length, bond_cutoff):
+        """Vectorized determination of bond order based on bond length and cutoff."""
+        multipliers = np.array([3, 2, 1.5, 1])
+        bond_types = ["triple", "double", "aromatic", "single"]
+
+        # Compute bond order matrix
+        bond_multiplier_matrix = np.array([
+            self.bond_length_multipliers[bond_type] for bond_type in bond_types
+        ])
+
+        valid_bond = bond_length[..., np.newaxis] < (bond_cutoff[..., np.newaxis] * bond_multiplier_matrix)
+        bond_order = np.where(valid_bond, multipliers, 0).max(axis=-1)
+
+        return bond_order
 
     def bond_lengths(self):
         # get all bond distances in the molecule
@@ -639,55 +654,108 @@ class Molecule:
         return bond_orders
 
     def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
-        """Convert a Molecule object to a connectivity graph.
-        Bond cutoff value determines the maximum distance between two atoms
-        to add a graph edge between them. Bond cutoff is obtained using Covalent
-        Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
+        """Convert a Molecule object to a connectivity graph with vectorized calculations.
+
         Args:
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Whether to adjust hydrogen bond cutoffs.
+
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
-        G = nx.Graph()
-        positions = self.positions
 
-        # add nodes
-        for i, symbol in enumerate(self.chemical_symbols):
+        G = nx.Graph()
+        positions = np.array(self.positions)
+        symbols = np.array(self.chemical_symbols)
+        num_atoms = len(symbols)
+
+        # Add nodes
+        for i, symbol in enumerate(symbols):
             G.add_node(i, element=symbol)
 
-        # Add edges (bonds) with bond order
-        for i in range(len(positions)):
-            for j in range(i + 1, len(positions)):
-                element_i, element_j = (
-                    self.chemical_symbols[i],
-                    self.chemical_symbols[j],
-                )
+        # Compute distance matrix if not already available
+        distance_matrix = np.linalg.norm(positions[:, np.newaxis] - positions, axis=2)
+
+        # Compute bond cutoff matrix
+        cutoff_matrix = np.zeros((num_atoms, num_atoms))
+
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                element_i, element_j = symbols[i], symbols[j]
 
                 cutoff_buffer = bond_cutoff_buffer
-
                 if adjust_H:
                     if element_i == "H" and element_j == "H":
-                        # bond length of H-H is 0.74 Å
-                        # covalent radius of H is 0.31 Å
                         cutoff_buffer = 0.12
                     elif element_i == "H" or element_j == "H":
-                        # C-H bond distance of ~ 1.09 Å
-                        # N-H bond distance of ~ 1.01 Å
-                        # O-H bond distance of ~ 0.96 Å
-                        # covalent radius of C is  0.76,
-                        # covalent radius of N is 0.71,
-                        # covalent radius of O is 0.66,
                         cutoff_buffer = 0.05
 
-                cutoff = get_bond_cutoff(
-                    self.symbols[i], self.symbols[j], cutoff_buffer
+                cutoff_matrix[i, j] = cutoff_matrix[j, i] = get_bond_cutoff(
+                    element_i, element_j, cutoff_buffer
                 )
-                bond_order = self.determine_bond_order(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
-                )
-                if bond_order > 0:
-                    G.add_edge(i, j, bond_order=bond_order)
+
+        # Determine bond orders
+        bond_orders = self.determine_bond_order(bond_length=distance_matrix, bond_cutoff=cutoff_matrix)
+
+        # Add edges where bond order > 0
+        i_indices, j_indices = np.where(bond_orders > 0)
+
+        for i, j in zip(i_indices, j_indices):
+            if i < j:  # Avoid duplicate edges
+                G.add_edge(i, j, bond_order=bond_orders[i, j])
+
         return G
+
+    # def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
+    #     """Convert a Molecule object to a connectivity graph.
+    #     Bond cutoff value determines the maximum distance between two atoms
+    #     to add a graph edge between them. Bond cutoff is obtained using Covalent
+    #     Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
+    #     Args:
+    #         bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+    #     Returns:
+    #         nx.Graph: A networkx graph object representing the molecule.
+    #     """
+    #     G = nx.Graph()
+    #     positions = self.positions
+    #
+    #     # add nodes
+    #     for i, symbol in enumerate(self.chemical_symbols):
+    #         G.add_node(i, element=symbol)
+    #
+    #     # Add edges (bonds) with bond order
+    #     for i in range(len(positions)):
+    #         for j in range(i + 1, len(positions)):
+    #             element_i, element_j = (
+    #                 self.chemical_symbols[i],
+    #                 self.chemical_symbols[j],
+    #             )
+    #
+    #             cutoff_buffer = bond_cutoff_buffer
+    #
+    #             if adjust_H:
+    #                 if element_i == "H" and element_j == "H":
+    #                     # bond length of H-H is 0.74 Å
+    #                     # covalent radius of H is 0.31 Å
+    #                     cutoff_buffer = 0.12
+    #                 elif element_i == "H" or element_j == "H":
+    #                     # C-H bond distance of ~ 1.09 Å
+    #                     # N-H bond distance of ~ 1.01 Å
+    #                     # O-H bond distance of ~ 0.96 Å
+    #                     # covalent radius of C is  0.76,
+    #                     # covalent radius of N is 0.71,
+    #                     # covalent radius of O is 0.66,
+    #                     cutoff_buffer = 0.05
+    #
+    #             cutoff = get_bond_cutoff(
+    #                 self.symbols[i], self.symbols[j], cutoff_buffer
+    #             )
+    #             bond_order = self.determine_bond_order(
+    #                 bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+    #             )
+    #             if bond_order > 0:
+    #                 G.add_edge(i, j, bond_order=bond_order)
+    #     return G
 
     # def to_graph(
     #     self, bond_cutoff_buffer=0.05, adjust_H=True, num_procs=4
@@ -739,34 +807,34 @@ class Molecule:
     #             G.add_edge(i, j, bond_order=bond_order)
     #
     #     return G
-
-    def _compute_bond(self, args):
-        """Helper function to compute bond order for multiprocessing."""
-        (
-            i,
-            j,
-            symbols,
-            positions,
-            distance_matrix,
-            bond_cutoff_buffer,
-            adjust_H,
-        ) = args
-
-        element_i, element_j = symbols[i], symbols[j]
-        cutoff_buffer = bond_cutoff_buffer
-
-        if adjust_H:
-            if element_i == "H" and element_j == "H":
-                cutoff_buffer = 0.12
-            elif element_i == "H" or element_j == "H":
-                cutoff_buffer = 0.05
-
-        cutoff = get_bond_cutoff(element_i, element_j, cutoff_buffer)
-        bond_order = self.determine_bond_order(
-            bond_length=distance_matrix[i, j], bond_cutoff=cutoff
-        )
-
-        return (i, j, bond_order) if bond_order > 0 else None
+    #
+    # def _compute_bond(self, args):
+    #     """Helper function to compute bond order for multiprocessing."""
+    #     (
+    #         i,
+    #         j,
+    #         symbols,
+    #         positions,
+    #         distance_matrix,
+    #         bond_cutoff_buffer,
+    #         adjust_H,
+    #     ) = args
+    #
+    #     element_i, element_j = symbols[i], symbols[j]
+    #     cutoff_buffer = bond_cutoff_buffer
+    #
+    #     if adjust_H:
+    #         if element_i == "H" and element_j == "H":
+    #             cutoff_buffer = 0.12
+    #         elif element_i == "H" or element_j == "H":
+    #             cutoff_buffer = 0.05
+    #
+    #     cutoff = get_bond_cutoff(element_i, element_j, cutoff_buffer)
+    #     bond_order = self.determine_bond_order(
+    #         bond_length=distance_matrix[i, j], bond_cutoff=cutoff
+    #     )
+    #
+    #     return (i, j, bond_order) if bond_order > 0 else None
 
     def to_ase(self):
         """Convert molecule object to ASE atoms object."""

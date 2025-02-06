@@ -6,6 +6,7 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
+from rdkit.Chem import rdForceFieldHelpers
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
@@ -527,27 +528,28 @@ class TestChemicalFeatures:
     def test_stereochemistry_handling(self):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = Molecule.from_pubchem("11507")
-        print(methyl_3_hexane.bond_orders)
+        assert np.all(methyl_3_hexane.bond_orders == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
         assert len(methyl_3_hexane.bond_orders) == 22
         assert all([i == 1 for i in methyl_3_hexane.bond_orders])
         assert methyl_3_hexane.is_chiral
         chiral_mol = Molecule(
             symbols=["C", "Cl", "F", "Br", "I"],
-            positions=np.array(
-                [
-                    [0, 0, 0],
-                    [1.0, 0, 0],
-                    [0, 1.0, 0],
-                    [0, 0, 1.0],
-                    [-1.0, 0, 0],
-                ]
-            ),
+            positions=np.array([
+                [0.0, 0.0, 0.0],
+                [1.2, 0.0, -0.5],
+                [-0.6, 1.0, 0.5],
+                [-0.6, -1.0, 0.5],
+                [0.0, 0.0, 1.3],
+            ]),
         )
-        print(chiral_mol.bond_orders)
-        # assert chiral_mol.is_chiral
-        #
-        # rdkit_mol = chiral_mol.to_rdkit()
-        # assert Chem.FindMolChiralCenters(rdkit_mol) != []
+
+        # can't get the bond orders of this challenging molecule correctly
+        # bond_orders = chiral_mol.get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=-0.4)
+        # print(bond_orders)
+        assert chiral_mol.is_chiral
+
+        rdkit_mol = chiral_mol.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol) != []
 
         chiral_mol2 = Molecule.from_pubchem(
             "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
