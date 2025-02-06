@@ -1,4 +1,5 @@
 import logging
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -45,12 +46,18 @@ class Updater:
             logger.debug(f"Temporary requirements file: {tmp_path}")
 
         cmd = [
-            "pipreqs", str(self.package_path),
-            "--force", "--ignore", ignore_arg,
-            "--savepath", str(tmp_path)
+            "pipreqs",
+            str(self.package_path),
+            "--force",
+            "--ignore",
+            ignore_arg,
+            "--savepath",
+            str(tmp_path),
         ]
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         stdout, stderr = process.communicate()
 
         if process.returncode != 0:
@@ -71,20 +78,37 @@ class Updater:
         return set(pyproject_toml["project"]["dependencies"])
 
     def _get_missing_dependencies(self, requirements_path):
-        """Identify dependencies missing from pyproject.toml."""
+        """Identify dependencies missing from pyproject.toml, ignoring version numbers.
+        Only considers dependencies found in the codebase, not the entire environment.
+        """
         if not requirements_path.exists():
             logger.error("Generated requirements file not found.")
             return set()
 
+        # Read detected dependencies from pipreqs output
         with requirements_path.open("r") as f:
             detected_deps = {line.strip() for line in f if line.strip()}
 
+        # Extract existing dependencies from pyproject.toml
         existing_deps = self._get_existing_dependencies()
-        return detected_deps - existing_deps
+
+        # Function to extract only package names (ignore versions)
+        def extract_pkg_name(dep):
+            return re.split(r"[=<>~!]", dep, maxsplit=1)[0].strip()
+
+        # Convert dependencies to package names only
+        detected_pkgs = {extract_pkg_name(dep) for dep in detected_deps}
+        existing_pkgs = {extract_pkg_name(dep) for dep in existing_deps}
+
+        # Identify missing packages (only from code, not the entire environment)
+        missing_packages = detected_pkgs - existing_pkgs
+        return missing_packages
 
     def _update_toml(self, requirements_path):
         """Update pyproject.toml with missing dependencies."""
-        missing_dependencies = self._get_missing_dependencies(requirements_path)
+        missing_dependencies = self._get_missing_dependencies(
+            requirements_path
+        )
         if not missing_dependencies:
             logger.info("No new dependencies to add.")
             return
@@ -98,7 +122,9 @@ class Updater:
         with self.pyproject_path.open("w") as f:
             f.write(tomlkit.dumps(pyproject_toml))
 
-        logger.info(f"Added missing dependencies: {', '.join(missing_dependencies)}")
+        logger.info(
+            f"Added missing dependencies: {', '.join(missing_dependencies)}"
+        )
 
 
 @click.group(name="update")

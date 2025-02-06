@@ -30,6 +30,8 @@ dependencies = [
     "rdkit~=2024.09.5",
     "scipy~=1.15.1",
     "setuptools>=70.1.1",
+    "tomlkit",
+    "filelock",
 ]
 
 [project.optional-dependencies]
