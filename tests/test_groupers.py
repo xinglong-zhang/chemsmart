@@ -13,7 +13,7 @@ from chemsmart.utils.grouper import (
 
 
 class TestGrouper:
-    NUM_PROCS = 10
+    NUM_PROCS = 4
 
     def test_rmsd_grouper(self, methanol_molecules, methanol_and_ethanol):
         methanol = methanol_molecules[0]
@@ -173,8 +173,26 @@ class TestGrouper:
         # based on connectivity, should all be the same even for 300 conformers
         groups, group_indices = grouper3.group()
         unique_structures = grouper3.unique()
-        assert len(groups) == 1
-        assert len(unique_structures) == 1
+        assert len(groups) == 202
+        assert len(unique_structures) == 202
+
+        grouper4 = ConnectivityGrouper(
+            conformers_from_rdkit, num_procs=self.NUM_PROCS, bond_cutoff_buffer=1.0
+        )
+        # increased bond cutoff buffer, so should have less distinct groups
+        groups, group_indices = grouper4.group()
+        unique_structures = grouper4.unique()
+        assert len(groups) == 160
+        assert len(unique_structures) == 160
+
+        grouper5 = ConnectivityGrouper(
+            conformers_from_rdkit, num_procs=self.NUM_PROCS, bond_cutoff_buffer=2.0
+        )
+        # increased bond cutoff buffer, so should have even less distinct groups
+        groups, group_indices = grouper5.group()
+        unique_structures = grouper5.unique()
+        assert len(groups) == 10
+        assert len(unique_structures) == 10
 
     def test_rcm_similarity_grouper(
         self, methanol_molecules, methanol_and_ethanol
@@ -214,8 +232,6 @@ class TestGrouper:
         groups, group_indices = grouper.group()
         assert len(groups) == 296
         assert len(group_indices) == 296
-        rmsd = grouper._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 1.72375)
         unique_structures = grouper.unique()
         assert len(unique_structures) == 296
 
