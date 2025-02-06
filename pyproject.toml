@@ -18,6 +18,7 @@ classifiers = [
 dependencies = [
     "ase~=3.24.0",
     "basis-set-exchange",
+    "basis_set_exchange",
     "click~=8.1.8",
     "crest",
     "networkx",
