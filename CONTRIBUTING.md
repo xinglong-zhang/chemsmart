@@ -47,9 +47,15 @@ git checkout -b my_contribution_branch
 
 Edit the files using your preferred editor (we recommend PyCharm IDE).
 
-## Format the code
+## Add in additional python packages that are imported in your new codes
 
 Run
+```bash
+make update-deps
+```
+
+## Format the code
+
 Run
 ```bash
 make fmt
