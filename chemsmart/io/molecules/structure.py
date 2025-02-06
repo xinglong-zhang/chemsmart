@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from functools import cached_property, lru_cache
-import multiprocessing
+
 import ase
 import networkx as nx
 import numpy as np
@@ -12,7 +12,7 @@ from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
-from typing import Optional
+
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
@@ -517,11 +517,16 @@ class Molecule:
         bond_types = ["triple", "double", "aromatic", "single"]
 
         # Compute bond order matrix
-        bond_multiplier_matrix = np.array([
-            self.bond_length_multipliers[bond_type] for bond_type in bond_types
-        ])
+        bond_multiplier_matrix = np.array(
+            [
+                self.bond_length_multipliers[bond_type]
+                for bond_type in bond_types
+            ]
+        )
 
-        valid_bond = bond_length[..., np.newaxis] < (bond_cutoff[..., np.newaxis] * bond_multiplier_matrix)
+        valid_bond = bond_length[..., np.newaxis] < (
+            bond_cutoff[..., np.newaxis] * bond_multiplier_matrix
+        )
         bond_order = np.where(valid_bond, multipliers, 0).max(axis=-1)
 
         return bond_order
@@ -676,7 +681,9 @@ class Molecule:
             G.add_node(i, element=symbol)
 
         # Compute distance matrix if not already available
-        distance_matrix = np.linalg.norm(positions[:, np.newaxis] - positions, axis=2)
+        distance_matrix = np.linalg.norm(
+            positions[:, np.newaxis] - positions, axis=2
+        )
 
         # Compute bond cutoff matrix
         cutoff_matrix = np.zeros((num_atoms, num_atoms))
@@ -697,7 +704,9 @@ class Molecule:
                 )
 
         # Determine bond orders
-        bond_orders = self.determine_bond_order(bond_length=distance_matrix, bond_cutoff=cutoff_matrix)
+        bond_orders = self.determine_bond_order(
+            bond_length=distance_matrix, bond_cutoff=cutoff_matrix
+        )
 
         # Add edges where bond order > 0
         i_indices, j_indices = np.where(bond_orders > 0)
@@ -708,7 +717,9 @@ class Molecule:
 
         return G
 
-    def to_graph_non_vectorized(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
+    def to_graph_non_vectorized(
+        self, bond_cutoff_buffer=0.05, adjust_H=True
+    ) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph, non-vectorized.
         Bond cutoff value determines the maximum distance between two atoms
         to add a graph edge between them. Bond cutoff is obtained using Covalent

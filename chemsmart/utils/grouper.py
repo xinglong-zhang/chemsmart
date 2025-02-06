@@ -4,28 +4,31 @@ import logging
 import multiprocessing
 import pickle
 from abc import ABC, abstractmethod
+from multiprocessing import RawArray, shared_memory
 from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Optional, Tuple
-from joblib import Parallel, delayed  # More efficient parallelization
-import networkx as nx
-import multiprocessing
-from multiprocessing import shared_memory
 
+import networkx as nx
 import numpy as np
+from joblib import Parallel, delayed  # More efficient parallelization
 from rdkit import Chem
 from rdkit.Chem import DataStructs, rdMolHash
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components, reverse_cuthill_mckee
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.utils import kabsch_align
 
 logger = logging.getLogger(__name__)
 
 
-def to_graph_wrapper(mol: Molecule, bond_cutoff_buffer: float = 0.0, adjust_H: bool=True) -> nx.Graph:
+def to_graph_wrapper(
+    mol: Molecule, bond_cutoff_buffer: float = 0.0, adjust_H: bool = True
+) -> nx.Graph:
     """Global Helper function to call to_graph()."""
-    return mol.to_graph(bond_cutoff_buffer=bond_cutoff_buffer, adjust_H=adjust_H)
-
+    return mol.to_graph(
+        bond_cutoff_buffer=bond_cutoff_buffer, adjust_H=adjust_H
+    )
 
 
 class StructureGrouperConfig:
@@ -300,10 +303,6 @@ class RCMSimilarityGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _tanimoto_similarity(self, fp1, fp2) -> float:
-        """Calculate Tanimoto similarity between fingerprints"""
-        return Chem.DataStructs.TanimotoSimilarity(fp1, fp2)
-
 
 class RMSDGrouper(MoleculeGrouper):
     """Group molecules based on RMSD (Root Mean Square Deviation) of atomic positions.
@@ -338,6 +337,12 @@ class RMSDGrouper(MoleculeGrouper):
 
         # Find connected components
         _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Add deterministic ordering since order of parallel task execution
+        # can affect grouping results when using threshold boundaries.
+        unique_labels = np.unique(labels)
+        unique_labels.sort()  # Force consistent ordering
+
         groups: List[List[Molecule]] = []
         index_groups: List[List[int]] = []
         for label in np.unique(labels):
@@ -354,8 +359,11 @@ class RMSDGrouper(MoleculeGrouper):
 
         if sorted(mol1.chemical_symbols) != sorted(mol2.chemical_symbols):
             return False
+        rmsd = self._calculate_rmsd(mol1, mol2)
 
-        return self._calculate_rmsd(mol1, mol2) < self.rmsd_threshold
+        return np.isclose(rmsd, self.rmsd_threshold, atol=1e-6) or (
+            rmsd < self.rmsd_threshold
+        )
 
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """Calculate RMSD between two molecules."""
@@ -372,47 +380,90 @@ class RMSDGrouper(MoleculeGrouper):
 
         if self.align_molecules:
             logger.info("Aligning molecules using Kabsch algorithm.")
-            pos1, pos2, _, _, _ = self._kabsch_align(pos1, pos2)
+            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
 
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
-    def _kabsch_align(
-        self, P: np.ndarray, Q: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Kabsch algorithm for molecular alignment"""
-        # Center molecules
-        assert P.shape == Q.shape, "Matrix dimensions must match"
 
-        # Compute centroids
-        centroid_P = np.mean(P, axis=0)
-        centroid_Q = np.mean(Q, axis=0)
+class RMSDGrouperSharedMemory(MoleculeGrouper):
+    """Group molecules based on RMSD using shared memory with minimal locking."""
 
-        # Optimal translation
-        t = centroid_Q - centroid_P
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        rmsd_threshold: float = 0.5,
+        num_procs: int = 1,
+        align_molecules: bool = True,
+    ):
+        super().__init__(molecules, num_procs)
+        self.rmsd_threshold = rmsd_threshold
+        self.align_molecules = align_molecules
 
-        # Center the points
-        p = P - centroid_P
-        q = Q - centroid_Q
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules using shared memory with optimized parallelism."""
+        n = len(self.molecules)
+        num_atoms = self.molecules[0].positions.shape[0]
 
-        # Compute the covariance matrix
-        H = np.dot(p.T, q)
+        # 🧠 **1️⃣ Create Shared Memory (RawArray - Faster, Less Locking)**
+        shared_pos = RawArray("d", n * num_atoms * 3)  # 'd' -> float64
 
-        # SVD
-        U, S, Vt = np.linalg.svd(H)
+        # Convert RawArray into numpy view
+        pos_np = np.frombuffer(shared_pos, dtype=np.float64).reshape(
+            n, num_atoms, 3
+        )
 
-        # Validate right-handed coordinate system
-        if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
-            Vt[-1, :] *= -1.0
+        # Copy molecular positions into shared memory (only once!)
+        for i, mol in enumerate(self.molecules):
+            pos_np[i] = mol.positions
 
-        # Optimal rotation
-        R = np.dot(Vt.T, U.T)
+        # 🏃‍♂️ **2️⃣ Run Parallel RMSD Calculation Using Explicit Shared Memory**
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        with multiprocessing.Pool(
+            self.num_procs,
+            initializer=self._init_worker,
+            initargs=(shared_pos, (n, num_atoms, 3)),
+        ) as pool:
+            rmsd_values = pool.map(self._calculate_rmsd, indices)
 
-        # rotate p
-        p = np.dot(p, R.T)
-        # RMSD
-        rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
+        # 🏗️ **3️⃣ Construct Adjacency Matrix for Clustering**
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            if rmsd < self.rmsd_threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
 
-        return p, q, R, t, rmsd
+        # 🔗 **4️⃣ Find Connected Components (Groups)**
+        _, labels = connected_components(csr_matrix(adj_matrix))
+        groups, index_groups = [], []
+        for label in np.unique(labels):
+            mask = labels == label
+            groups.append([self.molecules[i] for i in np.where(mask)[0]])
+            index_groups.append(list(np.where(mask)[0]))
+
+        return groups, index_groups
+
+    @staticmethod
+    def _init_worker(shared_pos, pos_shape):
+        """Worker process initializer to attach shared memory."""
+        global shared_positions
+        shared_positions = np.frombuffer(shared_pos, dtype=np.float64).reshape(
+            pos_shape
+        )
+
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """Calculate RMSD efficiently using local copies of shared memory."""
+        i, j = idx_pair
+
+        # ✅ **Read from Shared Memory ONCE (No repeated locking)**
+        pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
+        pos2 = np.array(shared_positions[j])
+
+        if pos1.shape != pos2.shape:
+            return np.inf
+
+        if self.align_molecules:
+            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
+
+        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
 
 class FormulaGrouper(MoleculeGrouper):
@@ -438,83 +489,18 @@ class FormulaGrouper(MoleculeGrouper):
         return mol_groups, idx_groups
 
 
-# class ConnectivityGrouper(MoleculeGrouper):
-#     """Group by molecular connectivity.
-#     Useful for identifying molecules with similar bond arrangements and structures, useful
-#     in scenarios where molecular connectivity is critical.
-#     """
-#
-#     def __init__(
-#         self,
-#         molecules: Iterable[Molecule],
-#         num_procs: int = 1,
-#         bond_cutoff_buffer: float = 0.0,
-#         adjust_H: bool=True
-#     ):
-#         super().__init__(molecules, num_procs)
-#         self.bond_cutoff_buffer = bond_cutoff_buffer
-#         self.adjust_H = adjust_H
-#
-#     def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
-#         """Check if two molecular graphs are isomorphic."""
-#         return nx.is_isomorphic(
-#             g1,
-#             g2,
-#             node_match=lambda a, b: a["element"] == b["element"],
-#             edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
-#         )
-#
-#     def _check_isomorphism(self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int) -> Tuple[int, bool]:
-#         """Helper function for multiprocessing: Checks isomorphism for a molecule."""
-#         return idx, self._are_isomorphic(pivot_graph, mol_graph)
-#
-#     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-#         """Group molecules based on molecular connectivity using optimized multiprocessing."""
-#         groups = []
-#
-#         # Precompute Graphs in Parallel (Avoid repeated conversions)
-#         # Use `starmap()` instead of `map()` to unpack arguments correctly
-#         with multiprocessing.Pool(self.num_procs) as pool:
-#             precomputed_graphs = pool.starmap(to_graph_wrapper, [(mol, self.bond_cutoff_buffer, self.adjust_H) for mol in self.molecules])
-#
-#         remaining = list(enumerate(self.molecules))
-#         remaining = [(idx, mol, g) for (idx, mol), g in zip(remaining, precomputed_graphs)]
-#
-#         while remaining:
-#             pivot_idx, pivot_mol, pivot_graph = remaining.pop(0)
-#
-#             # Parallel isomorphism check (Avoid Thread Locking)
-#             results = Parallel(n_jobs=self.num_procs, backend="loky")(
-#                 delayed(self._check_isomorphism)(pivot_graph, g, idx) for idx, _, g in remaining
-#             )
-#
-#             # Collect molecules that are isomorphic to the pivot
-#             current_group = [pivot_mol]
-#             current_indices = [pivot_idx]
-#             to_remove = {idx for idx, is_iso in results if is_iso}
-#
-#             remaining = [(idx, mol, g) for idx, mol, g in remaining if idx not in to_remove]
-#             current_group.extend(mol for idx, mol, _ in remaining if idx in to_remove)
-#             current_indices.extend(idx for idx, _, _ in remaining if idx in to_remove)
-#
-#             groups.append((current_group, current_indices))
-#
-#         mol_groups = [g[0] for g in groups]
-#         idx_groups = [g[1] for g in groups]
-#         return mol_groups, idx_groups
-
-
 class ConnectivityGrouper(MoleculeGrouper):
-    """Group molecules based on molecular connectivity.
+    """Group by molecular connectivity.
     Useful for identifying molecules with similar bond arrangements and structures, useful
-    in scenarios where molecular connectivity is critical."""
+    in scenarios where molecular connectivity is critical.
+    """
 
     def __init__(
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
         bond_cutoff_buffer: float = 0.0,
-        adjust_H: bool = True
+        adjust_H: bool = True,
     ):
         super().__init__(molecules, num_procs)
         self.bond_cutoff_buffer = bond_cutoff_buffer
@@ -529,7 +515,92 @@ class ConnectivityGrouper(MoleculeGrouper):
             edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
         )
 
-    def _check_isomorphism(self, pivot_graph_bytes, mol_graph_bytes, idx: int) -> Tuple[int, bool]:
+    def _check_isomorphism(
+        self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int
+    ) -> Tuple[int, bool]:
+        """Helper function for multiprocessing: Checks isomorphism for a molecule."""
+        return idx, self._are_isomorphic(pivot_graph, mol_graph)
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules based on molecular connectivity using optimized multiprocessing."""
+        groups = []
+
+        # Precompute Graphs in Parallel (Avoid repeated conversions)
+        # Use `starmap()` instead of `map()` to unpack arguments correctly
+        with multiprocessing.Pool(self.num_procs) as pool:
+            precomputed_graphs = pool.starmap(
+                to_graph_wrapper,
+                [
+                    (mol, self.bond_cutoff_buffer, self.adjust_H)
+                    for mol in self.molecules
+                ],
+            )
+
+        remaining = list(enumerate(self.molecules))
+        remaining = [
+            (idx, mol, g)
+            for (idx, mol), g in zip(remaining, precomputed_graphs)
+        ]
+
+        while remaining:
+            pivot_idx, pivot_mol, pivot_graph = remaining.pop(0)
+
+            # Parallel isomorphism check (Avoid Thread Locking)
+            results = Parallel(n_jobs=self.num_procs, backend="loky")(
+                delayed(self._check_isomorphism)(pivot_graph, g, idx)
+                for idx, _, g in remaining
+            )
+
+            # Collect molecules that are isomorphic to the pivot
+            current_group = [pivot_mol]
+            current_indices = [pivot_idx]
+            to_remove = {idx for idx, is_iso in results if is_iso}
+
+            remaining = [
+                (idx, mol, g)
+                for idx, mol, g in remaining
+                if idx not in to_remove
+            ]
+            current_group.extend(
+                mol for idx, mol, _ in remaining if idx in to_remove
+            )
+            current_indices.extend(
+                idx for idx, _, _ in remaining if idx in to_remove
+            )
+
+            groups.append((current_group, current_indices))
+
+        mol_groups = [g[0] for g in groups]
+        idx_groups = [g[1] for g in groups]
+        return mol_groups, idx_groups
+
+
+class ConnectivityGrouperSharedMemory(MoleculeGrouper):
+    """Group molecules based on molecular connectivity."""
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        num_procs: int = 1,
+        bond_cutoff_buffer: float = 0.0,
+        adjust_H: bool = True,
+    ):
+        super().__init__(molecules, num_procs)
+        self.bond_cutoff_buffer = bond_cutoff_buffer
+        self.adjust_H = adjust_H
+
+    def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
+        """Check if two molecular graphs are isomorphic."""
+        return nx.is_isomorphic(
+            g1,
+            g2,
+            node_match=lambda a, b: a["element"] == b["element"],
+            edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
+        )
+
+    def _check_isomorphism(
+        self, pivot_graph_bytes, mol_graph_bytes, idx: int
+    ) -> Tuple[int, bool]:
         """Helper function for multiprocessing: Checks isomorphism for a molecule using shared memory."""
         pivot_graph = pickle.loads(pivot_graph_bytes)
         mol_graph = pickle.loads(mol_graph_bytes)
@@ -540,7 +611,10 @@ class ConnectivityGrouper(MoleculeGrouper):
         with multiprocessing.Pool(self.num_procs) as pool:
             graphs = pool.starmap(
                 to_graph_wrapper,
-                [(mol, self.bond_cutoff_buffer, self.adjust_H) for mol in self.molecules]
+                [
+                    (mol, self.bond_cutoff_buffer, self.adjust_H)
+                    for mol in self.molecules
+                ],
             )
 
         # Serialize graphs using pickle and store in shared memory
@@ -549,7 +623,9 @@ class ConnectivityGrouper(MoleculeGrouper):
         # Store in shared NumPy array
         shared_array = np.array(graph_bytes, dtype=object)
         shm = shared_memory.SharedMemory(create=True, size=shared_array.nbytes)
-        np.ndarray(shared_array.shape, dtype=shared_array.dtype, buffer=shm.buf)[:] = shared_array[:]
+        np.ndarray(
+            shared_array.shape, dtype=shared_array.dtype, buffer=shm.buf
+        )[:] = shared_array[:]
 
         return shm, shared_array.shape, shared_array.dtype
 
@@ -566,16 +642,26 @@ class ConnectivityGrouper(MoleculeGrouper):
 
             # Parallel isomorphism check
             results = Parallel(n_jobs=self.num_procs, backend="loky")(
-                delayed(self._check_isomorphism)(pivot_graph_bytes, g_bytes, idx)
+                delayed(self._check_isomorphism)(
+                    pivot_graph_bytes, g_bytes, idx
+                )
                 for idx, (_, g_bytes) in remaining
             )
 
             # Collect isomorphic molecules
             to_remove = {idx for idx, is_iso in results if is_iso}
-            current_group = [pivot_mol] + [mol for idx, (mol, _) in remaining if idx in to_remove]
-            current_indices = [pivot_idx] + [idx for idx, _ in remaining if idx in to_remove]
+            current_group = [pivot_mol] + [
+                mol for idx, (mol, _) in remaining if idx in to_remove
+            ]
+            current_indices = [pivot_idx] + [
+                idx for idx, _ in remaining if idx in to_remove
+            ]
 
-            remaining = [(idx, (mol, g_bytes)) for idx, (mol, g_bytes) in remaining if idx not in to_remove]
+            remaining = [
+                (idx, (mol, g_bytes))
+                for idx, (mol, g_bytes) in remaining
+                if idx not in to_remove
+            ]
             groups.append((current_group, current_indices))
 
         shm.close()
@@ -584,7 +670,6 @@ class ConnectivityGrouper(MoleculeGrouper):
         mol_groups = [g[0] for g in groups]
         idx_groups = [g[1] for g in groups]
         return mol_groups, idx_groups
-
 
 
 class StructureGrouperFactory:

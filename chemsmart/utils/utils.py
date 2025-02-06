@@ -6,7 +6,7 @@ import subprocess
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
-from typing import Union
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -486,3 +486,42 @@ def run_command(command):
     except Exception as e:
         print(f"Exception while running {command}: {e}")
         return None
+
+
+def kabsch_align(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Kabsch algorithm for molecular alignment"""
+    # Center molecules
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+
+    # Optimal translation
+    t = centroid_Q - centroid_P
+
+    # Center the points
+    p = P - centroid_P
+    q = Q - centroid_Q
+
+    # Compute the covariance matrix
+    H = np.dot(p.T, q)
+
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+
+    # Validate right-handed coordinate system
+    if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
+        Vt[-1, :] *= -1.0
+
+    # Optimal rotation
+    R = np.dot(Vt.T, U.T)
+
+    # rotate p
+    p = np.dot(p, R.T)
+    # RMSD
+    rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
+
+    return p, q, R, t, rmsd

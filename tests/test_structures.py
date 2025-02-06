@@ -6,7 +6,6 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
-from rdkit.Chem import rdForceFieldHelpers
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
@@ -528,19 +527,47 @@ class TestChemicalFeatures:
     def test_stereochemistry_handling(self):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = Molecule.from_pubchem("11507")
-        assert np.all(methyl_3_hexane.bond_orders == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+        assert np.all(
+            methyl_3_hexane.bond_orders
+            == [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+            ]
+        )
         assert len(methyl_3_hexane.bond_orders) == 22
         assert all([i == 1 for i in methyl_3_hexane.bond_orders])
         assert methyl_3_hexane.is_chiral
         chiral_mol = Molecule(
             symbols=["C", "Cl", "F", "Br", "I"],
-            positions=np.array([
-                [0.0, 0.0, 0.0],
-                [1.2, 0.0, -0.5],
-                [-0.6, 1.0, 0.5],
-                [-0.6, -1.0, 0.5],
-                [0.0, 0.0, 1.3],
-            ]),
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.2, 0.0, -0.5],
+                    [-0.6, 1.0, 0.5],
+                    [-0.6, -1.0, 0.5],
+                    [0.0, 0.0, 1.3],
+                ]
+            ),
         )
 
         # can't get the bond orders of this challenging molecule correctly
