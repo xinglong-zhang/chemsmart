@@ -4,9 +4,9 @@ import os
 import re
 from functools import cached_property, lru_cache
 
-import ase
 import networkx as nx
 import numpy as np
+from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
 from rdkit.Chem import rdchem
@@ -286,7 +286,8 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_orca_outfile(filepath, index):
-        # TODO: to improve ORCAOutput object so that all the structures can be obtained and returned via index
+        # TODO: to improve ORCAOutput object so that all the structures
+        #  can be obtained and returned via index
         from chemsmart.io.orca.output import ORCAOutput
 
         orca_output = ORCAOutput(filename=filepath)
@@ -312,7 +313,16 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
-        return ase.io.read(filepath, index=index, **kwargs)
+        """Reads a file using ASE and returns a Molecule object."""
+        from .atoms import AtomsChargeMultiplicity
+
+        ase_atoms = ase_read(filepath, index=index, **kwargs)
+        if isinstance(ase_atoms, list):
+            return [
+                AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
+                for atoms in ase_atoms
+            ]
+        return AtomsChargeMultiplicity.from_atoms(ase_atoms).to_molecule()
 
     @classmethod
     @lru_cache(maxsize=128)

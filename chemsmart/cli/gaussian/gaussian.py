@@ -287,12 +287,13 @@ def gaussian(
     elif filename.endswith((".com", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
-    elif filename.endswith(".xyz"):
-        job_settings = GaussianJobSettings.default()
+    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
     else:
-        raise ValueError(
-            f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
-        )
+        job_settings = GaussianJobSettings.default()
+    # else:
+    #     raise ValueError(
+    #         f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
+    #     )
 
     # Update keywords
     keywords = (

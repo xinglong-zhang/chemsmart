@@ -10,12 +10,12 @@ def logger_options(f):
     @click.option(
         "-d",
         "--debug/--no-debug",
-        default=False,
+        default=True,
         help="Turns on debug logging.",
     )
     @click.option(
         "--stream/--no-stream",
-        default=False,
+        default=True,
         help="Turns on logging to stdout.",
     )
     @functools.wraps(f)
