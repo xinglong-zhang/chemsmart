@@ -11,8 +11,8 @@ from typing import Iterable, List, Optional, Tuple
 import networkx as nx
 import numpy as np
 from joblib import Parallel, delayed  # More efficient parallelization
-from rdkit import Chem
-from rdkit.Chem import DataStructs, rdMolHash
+from rdkit import Chem, DataStructs
+from rdkit.Chem import rdFingerprintGenerator, rdMolHash
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components, reverse_cuthill_mckee
 
@@ -83,73 +83,76 @@ class RDKitFingerprintGrouper(MoleculeGrouper):
         super().__init__(molecules, num_procs)
         self.threshold = threshold  # Similarity threshold
 
-        # Convert Molecules to RDKit molecules
-        self.molecules = [
-            mol.to_rdkit() for mol in self.molecules if mol.to_rdkit()
-        ]
+        # Convert to RDKit molecules and filter out invalid ones
+        self.molecules = [mol for mol in molecules if mol.to_rdkit()]
+        self.rdkit_molecules = [mol.to_rdkit() for mol in self.molecules]
 
     @staticmethod
     def _get_fingerprint(
-        mol: Molecule,
+        rdkit_mol: Chem.Mol,
     ) -> Optional[DataStructs.ExplicitBitVect]:
         """Generate RDKit fingerprint for a molecule."""
         try:
-            rdkit_mol = mol.to_rdkit()
-            return Chem.RDKFingerprint(rdkit_mol) if rdkit_mol else None
+            return rdFingerprintGenerator.GetRDKitFPGenerator().GetFingerprint(
+                rdkit_mol
+            )
         except Exception as e:
             logger.warning(f"Fingerprint generation failed: {str(e)}")
             return None
 
     @staticmethod
-    def _compute_similarity(idx1, idx2, fingerprints):
-        """Compute similarity between two fingerprints.
-        Uses TanimotoSimilarity metric from RDKit by default."""
+    def _compute_similarity(args):
+        """Compute similarity between two fingerprints using Tanimoto similarity."""
+        idx1, idx2, fps = args
         return (
             idx1,
             idx2,
-            DataStructs.FingerprintSimilarity(
-                fingerprints[idx1], fingerprints[idx2]
-            ),
+            DataStructs.FingerprintSimilarity(fps[idx1], fps[idx2]),
         )
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group molecules based on fingerprint similarity."""
         with multiprocessing.Pool(self.num_procs) as pool:
-            fps = [
-                fp
-                for fp in pool.map(self._get_fingerprint, self.molecules)
-                if fp
-            ]
+            fps = pool.map(self._get_fingerprint, self.rdkit_molecules)
+
+        # Remove None fingerprints and adjust molecule lists accordingly
+        valid_indices = [i for i, fp in enumerate(fps) if fp is not None]
+        self.molecules = [self.molecules[i] for i in valid_indices]
+        fps = [fps[i] for i in valid_indices]
 
         n = len(fps)
-        similarity_matrix = np.zeros((n, n))
-        range_indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        if n == 0:
+            return [], []
 
+        # Compute similarity matrix
+        range_indices = [
+            (i, j, fps) for i in range(n) for j in range(i + 1, n)
+        ]
         with multiprocessing.Pool(self.num_procs) as pool:
-            results = pool.starmap(
-                self._compute_similarity,
-                [(i, j, fps) for i, j in range_indices],
-            )
+            results = pool.map(self._compute_similarity, range_indices)
 
-        for (i, j), sim in zip(range_indices, results):
-            similarity_matrix[i][j] = similarity_matrix[j][i] = sim
+        # Construct similarity matrix
+        similarity_matrix = np.zeros((n, n))
+        for i, j, sim in results:
+            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
-        # Find connected components
-        n_components, labels = connected_components(
-            csr_matrix(similarity_matrix > self.threshold)
-        )
-        groups: List[List[Molecule]] = []
-        indices: List[List[int]] = []
-        for i in range(n_components):
-            component = [self.molecules[j] for j in np.where(labels == i)[0]]
-            groups.append(component)
-            indices.append(list(np.where(labels == i)[0]))
+        # Identify connected components
+        graph = csr_matrix(similarity_matrix >= self.threshold)
+        n_components, labels = connected_components(graph)
+
+        # Group molecules based on component labels
+        groups = [[] for _ in range(n_components)]
+        indices = [[] for _ in range(n_components)]
+        for idx, label in enumerate(labels):
+            groups[label].append(self.molecules[idx])
+            indices[label].append(valid_indices[idx])
 
         return groups, indices
 
 
 class RDKitIsomorphismGrouper(MoleculeGrouper):
-    """Group molecules using RDKit-based hashing and isomorphism checks"""
+    """Group molecules using RDKit-based hashing and isomorphism checks.
+    Seems very expensive for large molecules and unoptimized, yet."""
 
     def __init__(
         self,
@@ -337,11 +340,6 @@ class RMSDGrouper(MoleculeGrouper):
 
         # Find connected components
         _, labels = connected_components(csr_matrix(adj_matrix))
-
-        # Add deterministic ordering since order of parallel task execution
-        # can affect grouping results when using threshold boundaries.
-        unique_labels = np.unique(labels)
-        unique_labels.sort()  # Force consistent ordering
 
         groups: List[List[Molecule]] = []
         index_groups: List[List[int]] = []
@@ -674,7 +672,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
 
 class StructureGrouperFactory:
     @staticmethod
-    def create_grouper(structures, strategy="rdkit", num_procs=1):
+    def create(structures, strategy="rdkit", num_procs=1):
         groupers = {
             "fingerprint": RDKitFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,

@@ -521,7 +521,8 @@ def kabsch_align(
 
     # rotate p
     p = np.dot(p, R.T)
+
     # RMSD
-    rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
+    rmsd = np.sqrt(np.sum(np.square(p - q)) / P.shape[0])
 
     return p, q, R, t, rmsd
