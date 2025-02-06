@@ -71,242 +71,6 @@ class MoleculeGrouper(ABC):
         return [group[0] for group in groups]
 
 
-class RDKitFingerprintGrouper(MoleculeGrouper):
-    """Groups molecules using RDKit fingerprint similarity."""
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        num_procs: int = 1,
-        threshold: float = 0.8,
-    ):
-        super().__init__(molecules, num_procs)
-        self.threshold = threshold  # Similarity threshold
-
-        # Convert to RDKit molecules and filter out invalid ones
-        self.molecules = [mol for mol in molecules if mol.to_rdkit()]
-        self.rdkit_molecules = [mol.to_rdkit() for mol in self.molecules]
-
-    @staticmethod
-    def _get_fingerprint(
-        rdkit_mol: Chem.Mol,
-    ) -> Optional[DataStructs.ExplicitBitVect]:
-        """Generate RDKit fingerprint for a molecule."""
-        try:
-            return rdFingerprintGenerator.GetRDKitFPGenerator().GetFingerprint(
-                rdkit_mol
-            )
-        except Exception as e:
-            logger.warning(f"Fingerprint generation failed: {str(e)}")
-            return None
-
-    @staticmethod
-    def _compute_similarity(args):
-        """Compute similarity between two fingerprints using Tanimoto similarity."""
-        idx1, idx2, fps = args
-        return (
-            idx1,
-            idx2,
-            DataStructs.FingerprintSimilarity(fps[idx1], fps[idx2]),
-        )
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules based on fingerprint similarity."""
-        with multiprocessing.Pool(self.num_procs) as pool:
-            fps = pool.map(self._get_fingerprint, self.rdkit_molecules)
-
-        # Remove None fingerprints and adjust molecule lists accordingly
-        valid_indices = [i for i, fp in enumerate(fps) if fp is not None]
-        self.molecules = [self.molecules[i] for i in valid_indices]
-        fps = [fps[i] for i in valid_indices]
-
-        n = len(fps)
-        if n == 0:
-            return [], []
-
-        # Compute similarity matrix
-        range_indices = [
-            (i, j, fps) for i in range(n) for j in range(i + 1, n)
-        ]
-        with multiprocessing.Pool(self.num_procs) as pool:
-            results = pool.map(self._compute_similarity, range_indices)
-
-        # Construct similarity matrix
-        similarity_matrix = np.zeros((n, n))
-        for i, j, sim in results:
-            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
-
-        # Identify connected components
-        graph = csr_matrix(similarity_matrix >= self.threshold)
-        n_components, labels = connected_components(graph)
-
-        # Group molecules based on component labels
-        groups = [[] for _ in range(n_components)]
-        indices = [[] for _ in range(n_components)]
-        for idx, label in enumerate(labels):
-            groups[label].append(self.molecules[idx])
-            indices[label].append(valid_indices[idx])
-
-        return groups, indices
-
-
-class RDKitIsomorphismGrouper(MoleculeGrouper):
-    """Group molecules using RDKit-based hashing and isomorphism checks.
-    Seems very expensive for large molecules and unoptimized, yet."""
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        num_procs: int = 1,
-        use_stereochemistry: bool = True,
-        use_tautomers: bool = False,
-    ):
-        super().__init__(molecules, num_procs)
-        self.use_stereochemistry = use_stereochemistry
-        self.use_tautomers = use_tautomers
-
-    def _get_mol_hash(self, mol: Molecule) -> Optional[str]:
-        """Generate canonical hash for molecules"""
-        try:
-            rdkit_mol = mol.to_rdkit()
-            if not rdkit_mol:
-                return None
-            # Choose hashing function based on requirements
-            hash_func = (
-                rdMolHash.HashFunction.Tautomer
-                if self.use_tautomers
-                else (
-                    rdMolHash.HashFunction.AnonymousGraph
-                    if self.use_stereochemistry
-                    else rdMolHash.HashFunction.MolFormula
-                )
-            )
-            return rdMolHash.MolHash(rdkit_mol, hash_func)
-        except Exception as e:
-            logger.warning(f"Hash generation failed: {str(e)}")
-            return None
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules using structural isomorphism."""
-        with multiprocessing.Pool(self.num_procs) as pool:
-            hashes = pool.map(self._get_mol_hash, self.molecules)
-
-        groups: List[List[Molecule]] = []
-        indices = list(range(len(self.molecules)))
-        index_groups: List[List[int]] = []
-
-        while indices:
-            pivot_idx = indices[0]
-            current_hash = hashes[pivot_idx]
-            matches = [i for i in indices if hashes[i] == current_hash]
-
-            # Verify isomorphism if needed
-            if self.use_stereochemistry or self.use_tautomers:
-                matches = [
-                    i
-                    for i in matches
-                    if self._check_isomorphism(
-                        self.molecules[pivot_idx], self.molecules[i]
-                    )
-                ]
-
-            groups.append([self.molecules[i] for i in matches])
-            index_groups.append(matches)
-            indices = [i for i in indices if i not in matches]
-
-        return groups, index_groups
-
-    def _check_isomorphism(self, mol1: Molecule, mol2: Molecule) -> bool:
-        """Check graph isomorphism considering stereochemistry."""
-        try:
-            return Chem.MolToInchiKey(mol1.to_rdkit()) == Chem.MolToInchiKey(
-                mol2.to_rdkit()
-            )
-        except Exception as e:
-            logger.warning(f"Isomorphism check failed: {str(e)}")
-            return False
-
-
-class RCMSimilarityGrouper(MoleculeGrouper):
-    """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix.
-    Utilize molecular fingerprinting to focus on connectivity and similarity,
-    suitable when detailed structural matching is needed.
-    Tanimoto similarity is a measure of how similar two molecular fingerprints are,
-    ranging from 0 (completely different) to 1 (identical).
-    Default = 0.9 ensures molecules have a strong structural resemblance while
-    allowing minor variations.
-
-    Threshold	Effect	Use Case
-    0.95 - 1.0	Very strict: Only almost identical molecules are grouped.
-                            Ideal for highly similar molecules (e.g., stereoisomers).
-    0.80 - 0.95	Moderately strict: Groups structurally similar molecules.
-                            Useful for clustering molecules with minor functional group differences.
-    0.50 - 0.80	More relaxed: Groups molecules with broad structural similarities.
-                            Good for structural analogs or scaffold-based grouping.
-    < 0.50	Very lenient: Even molecules with weak similarity are grouped.
-                            Not recommended unless looking for very broad chemical families.
-    """
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        similarity_threshold: float = 0.9,
-        num_procs: int = 1,
-    ):
-        super().__init__(molecules, num_procs)
-        self.similarity_threshold = similarity_threshold
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Cluster molecules using RCM on similarity matrix."""
-        with ThreadPool(self.num_procs) as pool:
-            # Use ThreadPool instead of Pool since the latter
-            # cannot pickle non-python objects
-            fps = pool.map(
-                Chem.RDKFingerprint, (m.to_rdkit() for m in self.molecules)
-            )
-
-        n = len(self.molecules)
-        similarity_matrix = np.zeros((n, n))
-        indices = [(i, j) for i in range(n) for j in range(i, n)]
-
-        with ThreadPool(self.num_procs) as pool:
-            similarities = pool.starmap(
-                Chem.DataStructs.TanimotoSimilarity,
-                [(fps[idx[0]], fps[idx[1]]) for idx in indices],
-            )
-
-        for (i, j), sim in zip(indices, similarities):
-            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
-
-        # Apply RCM clustering
-        sparse_matrix = csr_matrix(
-            similarity_matrix > self.similarity_threshold
-        )
-        perm = reverse_cuthill_mckee(sparse_matrix, symmetric_mode=True)
-
-        # Extract groups from permutation
-        groups: List[List[Molecule]] = []
-        index_groups: List[List[int]] = []
-        current_group: List[int] = [perm[0]]
-
-        for idx in perm[1:]:
-            if (
-                similarity_matrix[idx, current_group[0]]
-                > self.similarity_threshold
-            ):
-                current_group.append(idx)
-            else:
-                groups.append([self.molecules[i] for i in current_group])
-                index_groups.append(current_group)
-                current_group = [idx]
-
-        if current_group:
-            groups.append([self.molecules[i] for i in current_group])
-            index_groups.append(current_group)
-
-        return groups, index_groups
-
-
 class RMSDGrouper(MoleculeGrouper):
     """Group molecules based on RMSD (Root Mean Square Deviation) of atomic positions.
     Effective for precise 3D comparisons, ideal in contexts like crystallography or drug
@@ -462,6 +226,242 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
 
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+
+
+class RCMSimilarityGrouper(MoleculeGrouper):
+    """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix.
+    Utilize molecular fingerprinting to focus on connectivity and similarity,
+    suitable when detailed structural matching is needed.
+    Tanimoto similarity is a measure of how similar two molecular fingerprints are,
+    ranging from 0 (completely different) to 1 (identical).
+    Default = 0.9 ensures molecules have a strong structural resemblance while
+    allowing minor variations.
+
+    Threshold	Effect	Use Case
+    0.95 - 1.0	Very strict: Only almost identical molecules are grouped.
+                            Ideal for highly similar molecules (e.g., stereoisomers).
+    0.80 - 0.95	Moderately strict: Groups structurally similar molecules.
+                            Useful for clustering molecules with minor functional group differences.
+    0.50 - 0.80	More relaxed: Groups molecules with broad structural similarities.
+                            Good for structural analogs or scaffold-based grouping.
+    < 0.50	Very lenient: Even molecules with weak similarity are grouped.
+                            Not recommended unless looking for very broad chemical families.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        similarity_threshold: float = 0.9,
+        num_procs: int = 1,
+    ):
+        super().__init__(molecules, num_procs)
+        self.similarity_threshold = similarity_threshold
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Cluster molecules using RCM on similarity matrix."""
+        with ThreadPool(self.num_procs) as pool:
+            # Use ThreadPool instead of Pool since the latter
+            # cannot pickle non-python objects
+            fps = pool.map(
+                Chem.RDKFingerprint, (m.to_rdkit() for m in self.molecules)
+            )
+
+        n = len(self.molecules)
+        similarity_matrix = np.zeros((n, n))
+        indices = [(i, j) for i in range(n) for j in range(i, n)]
+
+        with ThreadPool(self.num_procs) as pool:
+            similarities = pool.starmap(
+                Chem.DataStructs.TanimotoSimilarity,
+                [(fps[idx[0]], fps[idx[1]]) for idx in indices],
+            )
+
+        for (i, j), sim in zip(indices, similarities):
+            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
+
+        # Apply RCM clustering
+        sparse_matrix = csr_matrix(
+            similarity_matrix > self.similarity_threshold
+        )
+        perm = reverse_cuthill_mckee(sparse_matrix, symmetric_mode=True)
+
+        # Extract groups from permutation
+        groups: List[List[Molecule]] = []
+        index_groups: List[List[int]] = []
+        current_group: List[int] = [perm[0]]
+
+        for idx in perm[1:]:
+            if (
+                similarity_matrix[idx, current_group[0]]
+                > self.similarity_threshold
+            ):
+                current_group.append(idx)
+            else:
+                groups.append([self.molecules[i] for i in current_group])
+                index_groups.append(current_group)
+                current_group = [idx]
+
+        if current_group:
+            groups.append([self.molecules[i] for i in current_group])
+            index_groups.append(current_group)
+
+        return groups, index_groups
+
+
+class RDKitFingerprintGrouper(MoleculeGrouper):
+    """Groups molecules using RDKit fingerprint similarity."""
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        num_procs: int = 1,
+        threshold: float = 0.8,
+    ):
+        super().__init__(molecules, num_procs)
+        self.threshold = threshold  # Similarity threshold
+
+        # Convert to RDKit molecules and filter out invalid ones
+        self.molecules = [mol for mol in molecules if mol.to_rdkit()]
+        self.rdkit_molecules = [mol.to_rdkit() for mol in self.molecules]
+
+    @staticmethod
+    def _get_fingerprint(
+        rdkit_mol: Chem.Mol,
+    ) -> Optional[DataStructs.ExplicitBitVect]:
+        """Generate RDKit fingerprint for a molecule."""
+        try:
+            return rdFingerprintGenerator.GetRDKitFPGenerator().GetFingerprint(
+                rdkit_mol
+            )
+        except Exception as e:
+            logger.warning(f"Fingerprint generation failed: {str(e)}")
+            return None
+
+    @staticmethod
+    def _compute_similarity(args):
+        """Compute similarity between two fingerprints using Tanimoto similarity."""
+        idx1, idx2, fps = args
+        return (
+            idx1,
+            idx2,
+            DataStructs.FingerprintSimilarity(fps[idx1], fps[idx2]),
+        )
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules based on fingerprint similarity."""
+        with multiprocessing.Pool(self.num_procs) as pool:
+            fps = pool.map(self._get_fingerprint, self.rdkit_molecules)
+
+        # Remove None fingerprints and adjust molecule lists accordingly
+        valid_indices = [i for i, fp in enumerate(fps) if fp is not None]
+        self.molecules = [self.molecules[i] for i in valid_indices]
+        fps = [fps[i] for i in valid_indices]
+
+        n = len(fps)
+        if n == 0:
+            return [], []
+
+        # Compute similarity matrix
+        range_indices = [
+            (i, j, fps) for i in range(n) for j in range(i + 1, n)
+        ]
+        with multiprocessing.Pool(self.num_procs) as pool:
+            results = pool.map(self._compute_similarity, range_indices)
+
+        # Construct similarity matrix
+        similarity_matrix = np.zeros((n, n))
+        for i, j, sim in results:
+            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
+
+        # Identify connected components
+        graph = csr_matrix(similarity_matrix >= self.threshold)
+        n_components, labels = connected_components(graph)
+
+        # Group molecules based on component labels
+        groups = [[] for _ in range(n_components)]
+        indices = [[] for _ in range(n_components)]
+        for idx, label in enumerate(labels):
+            groups[label].append(self.molecules[idx])
+            indices[label].append(valid_indices[idx])
+
+        return groups, indices
+
+
+class RDKitIsomorphismGrouper(MoleculeGrouper):
+    """Group molecules using RDKit-based hashing and isomorphism checks.
+    Seems very expensive for large molecules and unoptimized, yet."""
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        num_procs: int = 1,
+        use_stereochemistry: bool = True,
+        use_tautomers: bool = False,
+    ):
+        super().__init__(molecules, num_procs)
+        self.use_stereochemistry = use_stereochemistry
+        self.use_tautomers = use_tautomers
+
+    def _get_mol_hash(self, mol: Molecule) -> Optional[str]:
+        """Generate canonical hash for molecules"""
+        try:
+            rdkit_mol = mol.to_rdkit()
+            if not rdkit_mol:
+                return None
+            # Choose hashing function based on requirements
+            hash_func = (
+                rdMolHash.HashFunction.Tautomer
+                if self.use_tautomers
+                else (
+                    rdMolHash.HashFunction.AnonymousGraph
+                    if self.use_stereochemistry
+                    else rdMolHash.HashFunction.MolFormula
+                )
+            )
+            return rdMolHash.MolHash(rdkit_mol, hash_func)
+        except Exception as e:
+            logger.warning(f"Hash generation failed: {str(e)}")
+            return None
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules using structural isomorphism."""
+        with multiprocessing.Pool(self.num_procs) as pool:
+            hashes = pool.map(self._get_mol_hash, self.molecules)
+
+        groups: List[List[Molecule]] = []
+        indices = list(range(len(self.molecules)))
+        index_groups: List[List[int]] = []
+
+        while indices:
+            pivot_idx = indices[0]
+            current_hash = hashes[pivot_idx]
+            matches = [i for i in indices if hashes[i] == current_hash]
+
+            # Verify isomorphism if needed
+            if self.use_stereochemistry or self.use_tautomers:
+                matches = [
+                    i
+                    for i in matches
+                    if self._check_isomorphism(
+                        self.molecules[pivot_idx], self.molecules[i]
+                    )
+                ]
+
+            groups.append([self.molecules[i] for i in matches])
+            index_groups.append(matches)
+            indices = [i for i in indices if i not in matches]
+
+        return groups, index_groups
+
+    def _check_isomorphism(self, mol1: Molecule, mol2: Molecule) -> bool:
+        """Check graph isomorphism considering stereochemistry."""
+        try:
+            return Chem.MolToInchiKey(mol1.to_rdkit()) == Chem.MolToInchiKey(
+                mol2.to_rdkit()
+            )
+        except Exception as e:
+            logger.warning(f"Isomorphism check failed: {str(e)}")
+            return False
 
 
 class FormulaGrouper(MoleculeGrouper):
@@ -674,10 +674,10 @@ class StructureGrouperFactory:
     @staticmethod
     def create(structures, strategy="rdkit", num_procs=1):
         groupers = {
+            "rmsd": RMSDGrouper,
+            "rcm": RCMSimilarityGrouper,
             "fingerprint": RDKitFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
-            "rcm": RCMSimilarityGrouper,
-            "rmsd": RMSDGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
         }
