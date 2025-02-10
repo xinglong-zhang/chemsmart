@@ -1,5 +1,4 @@
 import logging
-import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -54,6 +53,7 @@ class Updater:
             "--savepath",
             str(tmp_path),
         ]
+        logger.info(f"Running pipreqs: {' '.join(cmd)}")
 
         process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -92,12 +92,14 @@ class Updater:
         # Extract existing dependencies from pyproject.toml
         existing_deps = self._get_existing_dependencies()
 
-        # Function to extract only package names (ignore versions)
+        # Function to extract only package names
         def extract_pkg_name(dep):
-            return re.split(r"[=<>~!]", dep, maxsplit=1)[0].strip()
+            # return re.split(r"[=<>~!]", dep, maxsplit=1)[0].strip()  # ignore version
+            return dep
 
         # Convert dependencies to package names only
         detected_pkgs = {extract_pkg_name(dep) for dep in detected_deps}
+        logger.debug(f"Detected packages: {detected_pkgs}")
         existing_pkgs = {extract_pkg_name(dep) for dep in existing_deps}
 
         # Identify missing packages (only from code, not the entire environment)
