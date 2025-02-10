@@ -87,6 +87,14 @@ show: ## Display the current environment information.
 
 # === Code Quality ===
 
+.PHONY: update-deps
+update-deps:          ## Automatically update new packages that are added in the codes
+	@echo "Updating additional dependencies to pyproject.toml file..."
+	$(ENV_PREFIX)$(CHEMSMART_PATH) update deps
+	@echo "Reinstalling chemsmart package..."
+	$(ENV_PREFIX)pip install -e .[test]
+
+
 .PHONY: fmt
 fmt:              ## Format code using black and isort.
 	$(ENV_PREFIX)isort --skip pyproject.toml --gitignore .
