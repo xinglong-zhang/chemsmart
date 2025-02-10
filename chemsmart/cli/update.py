@@ -37,7 +37,7 @@ class Updater:
 
     def _generate_requirements(self, ignore_dirs=None) -> Path:
         """Run pipreqs and extract dependencies."""
-        ignore_dirs = ignore_dirs or [".git", ".github", "tests"]
+        ignore_dirs = ignore_dirs or [".git", ".github"]
         ignore_arg = ",".join(ignore_dirs)
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
