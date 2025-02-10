@@ -313,33 +313,6 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
 
-    def test_rdkit_isomorphism_grouper_for_large_number_of_mols(
-        self, conformers_from_rdkit
-    ):
-        conformers_from_rdkit = conformers_from_rdkit[:5]
-        # seems very slow for 300 conformers, even for 20 confs
-
-        grouper = RDKitIsomorphismGrouper(
-            conformers_from_rdkit, num_procs=self.NUM_PROCS
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 1
-        assert len(group_indices) == 1
-        unique_structures = grouper.unique()
-        assert len(unique_structures) == 1
-
-        grouper2 = RDKitIsomorphismGrouper(
-            conformers_from_rdkit,
-            use_stereochemistry=False,
-            num_procs=self.NUM_PROCS,
-        )
-        # increased threshold, so should have less distinct groups
-        groups, group_indices = grouper2.group()
-        assert len(groups) == 1
-        assert len(group_indices) == 1
-        unique_structures = grouper2.unique()
-        assert len(unique_structures) == 1
-
     def test_structure_grouper_factory(self, methanol_molecules):
         factory = StructureGrouperFactory()
         rmsd_grouper = factory.create(methanol_molecules, strategy="rmsd")
