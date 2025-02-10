@@ -23,7 +23,7 @@ dependencies = [
     "networkx",
     "dictdiffer==0.9.0",
     "joblib==1.4.2",
-    "numpy~=2.1.0",
+    "numpy~=1.26.4",
     "pytest~=8.3.4",
     "pyyaml",
     "pymatgen>=2024.8.9",
