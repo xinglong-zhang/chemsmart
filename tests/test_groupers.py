@@ -6,7 +6,6 @@ from chemsmart.utils.grouper import (
     ConnectivityGrouper,
     ConnectivityGrouperSharedMemory,
     FormulaGrouper,
-    RDKitFingerprintGrouper,
     RDKitIsomorphismGrouper,
     RMSDGrouper,
     RMSDGrouperSharedMemory,
@@ -500,72 +499,6 @@ class TestGrouper:
         unique_structures = grouper2.unique()
         assert len(unique_structures) == 1
 
-    def test_rdkit_fingerprint_grouper(
-        self, methanol_molecules, methanol_and_ethanol
-    ):
-        grouper = RDKitFingerprintGrouper(methanol_molecules)
-        groups, group_indices = grouper.group()
-        assert (
-            len(groups) == 1
-        ), "Molecules should form one group based on RCM similarity."
-        assert (
-            len(group_indices) == 1
-        ), "Molecules should form one group based on RCM similarity."
-        unique_structures = grouper.unique()
-        assert (
-            len(unique_structures) == 1
-        ), "Molecules should form one group based on RCM similarity."
-        grouper2 = RDKitFingerprintGrouper(methanol_and_ethanol)
-        groups, group_indices = grouper2.group()
-        assert (
-            len(groups) == 2
-        ), "Molecules should form two groups based on RCM similarity."
-        assert (
-            len(group_indices) == 2
-        ), "Molecules should form two groups based on RCM similarity."
-        unique_structures = grouper2.unique()
-        assert (
-            len(unique_structures) == 2
-        ), "Molecules should form two groups based on RCM similarity."
-
-    @pytest.mark.slow
-    def test_rdkit_fingerprint_grouper_for_large_number_of_mols(
-        self, conformers_from_rdkit
-    ):
-
-        grouper = RDKitFingerprintGrouper(
-            conformers_from_rdkit, num_procs=self.NUM_PROCS
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 1
-        assert len(group_indices) == 1
-        unique_structures = grouper.unique()
-        assert len(unique_structures) == 1
-
-        grouper2 = RDKitFingerprintGrouper(
-            conformers_from_rdkit,
-            num_procs=self.NUM_PROCS,
-            threshold=0.5,
-        )
-        # increased threshold, so should have less distinct groups
-        groups, group_indices = grouper2.group()
-        assert len(groups) == 1
-        assert len(group_indices) == 1
-        unique_structures = grouper2.unique()
-        assert len(unique_structures) == 1
-
-        grouper3 = RDKitFingerprintGrouper(
-            conformers_from_rdkit,
-            num_procs=self.NUM_PROCS,
-            threshold=0.1,
-        )
-        # increased threshold, so should have less distinct groups
-        groups, group_indices = grouper3.group()
-        assert len(groups) == 1
-        assert len(group_indices) == 1
-        unique_structures = grouper3.unique()
-        assert len(unique_structures) == 1
-
     def test_structure_grouper_factory(self, methanol_molecules):
         factory = StructureGrouperFactory()
         rmsd_grouper = factory.create(methanol_molecules, strategy="rmsd")
@@ -586,7 +519,3 @@ class TestGrouper:
             methanol_molecules, strategy="isomorphism"
         )
         assert isinstance(rdkit_isomorphism_grouper, RDKitIsomorphismGrouper)
-        rdkit_fingerprint_grouper = factory.create(
-            methanol_molecules, strategy="fingerprint"
-        )
-        assert isinstance(rdkit_fingerprint_grouper, RDKitFingerprintGrouper)

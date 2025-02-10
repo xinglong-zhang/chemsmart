@@ -12,7 +12,8 @@ import networkx as nx
 import numpy as np
 from joblib import Parallel, delayed  # More efficient parallelization
 from rdkit import Chem, DataStructs
-from rdkit.Chem import rdFingerprintGenerator, rdMolHash
+from rdkit.Chem import rdMolHash
+from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
@@ -224,7 +225,11 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
-    """Group molecules using molecular fingerprinting and Tanimoto similarity.
+    """Groups molecules based on fingerprint similarity using Tanimoto coefficient.
+
+    This class supports different fingerprint types and uses connected components
+    clustering to group structurally similar molecules.
+
     Tanimoto similarity is a measure of how similar two molecular fingerprints are,
     ranging from 0 (completely different) to 1 (identical).
     Default = 0.9 ensures molecules have a strong structural resemblance while
@@ -246,26 +251,40 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         molecules: Iterable[Molecule],
         similarity_threshold: float = 0.9,
         num_procs: int = 1,
+        use_rdkit_fp: bool = True,  # Allows switching between RDKit FP and RDKFingerprint
     ):
         super().__init__(molecules, num_procs)
         self.similarity_threshold = similarity_threshold
+        self.use_rdkit_fp = use_rdkit_fp  # Choose fingerprinting method
 
-    def _compute_fingerprint(
-        self, mol: Molecule
-    ) -> Optional[Tuple[int, DataStructs.ExplicitBitVect]]:
-        """Compute RDKit fingerprint for a molecule, returning (index, fingerprint)."""
-        rdkit_mol = mol.to_rdkit()
-        if rdkit_mol:
-            return Chem.RDKFingerprint(rdkit_mol)
-        return None
+        # Convert valid molecules to RDKit format
+        self.rdkit_molecules = [
+            mol.to_rdkit() for mol in molecules if mol.to_rdkit()
+        ]
+        self.valid_molecules = [mol for mol in molecules if mol.to_rdkit()]
+
+    def _get_fingerprint(
+        self, rdkit_mol: Chem.Mol
+    ) -> Optional[DataStructs.ExplicitBitVect]:
+        """Generate an RDKit fingerprint for a molecule."""
+        try:
+            if self.use_rdkit_fp:
+                return GetRDKitFPGenerator().GetFingerprint(rdkit_mol)
+            else:
+                return Chem.RDKFingerprint(rdkit_mol)  # Alternative method
+        except Exception as e:
+            logger.warning(f"Fingerprint generation failed: {str(e)}")
+            return None
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Cluster molecules using similarity-based connected components clustering."""
-        # Compute fingerprints in parallel using ThreadPool (RDKit objects are not pickleable)
+        """Groups molecules based on Tanimoto similarity using connected components clustering."""
+        # Compute fingerprints in parallel
         with ThreadPool(self.num_procs) as pool:
-            fingerprints = pool.map(self._compute_fingerprint, self.molecules)
+            fingerprints = pool.map(
+                self._get_fingerprint, self.rdkit_molecules
+            )
 
-        # Filter out molecules that failed to generate fingerprints
+        # Filter valid fingerprints
         valid_indices = [
             i for i, fp in enumerate(fingerprints) if fp is not None
         ]
@@ -275,7 +294,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         if num_valid == 0:
             return [], []  # No valid molecules
 
-        # Compute pairwise similarity matrix in parallel
+        # Compute similarity matrix
         similarity_matrix = np.zeros((num_valid, num_valid), dtype=np.float32)
         pairs = [
             (i, j) for i in range(num_valid) for j in range(i + 1, num_valid)
@@ -283,25 +302,25 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         with ThreadPool(self.num_procs) as pool:
             similarities = pool.starmap(
-                DataStructs.TanimotoSimilarity,
+                DataStructs.FingerprintSimilarity,
                 [(valid_fps[i], valid_fps[j]) for i, j in pairs],
             )
 
-        # Fill the similarity matrix
+        # Fill similarity matrix
         for (i, j), sim in zip(pairs, similarities):
             similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
-        # Apply thresholding to create an adjacency matrix
+        # Apply threshold and create adjacency matrix
         adj_matrix = csr_matrix(similarity_matrix >= self.similarity_threshold)
 
-        # Use connected components to find molecule groups
+        # Use connected components clustering
         _, labels = connected_components(adj_matrix)
 
-        # Group molecules by their component labels
+        # Build molecule groups
         unique_labels = np.unique(labels)
         mol_groups = [
             [
-                self.molecules[valid_indices[i]]
+                self.valid_molecules[valid_indices[i]]
                 for i in np.where(labels == label)[0]
             ]
             for label in unique_labels
@@ -312,85 +331,6 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         ]
 
         return mol_groups, idx_groups
-
-
-class RDKitFingerprintGrouper(MoleculeGrouper):
-    """Groups molecules using RDKit fingerprint similarity."""
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        num_procs: int = 1,
-        threshold: float = 0.8,
-    ):
-        super().__init__(molecules, num_procs)
-        self.threshold = threshold  # Similarity threshold
-
-        # Convert to RDKit molecules and filter out invalid ones
-        self.molecules = [mol for mol in molecules if mol.to_rdkit()]
-        self.rdkit_molecules = [mol.to_rdkit() for mol in self.molecules]
-
-    @staticmethod
-    def _get_fingerprint(
-        rdkit_mol: Chem.Mol,
-    ) -> Optional[DataStructs.ExplicitBitVect]:
-        """Generate RDKit fingerprint for a molecule."""
-        try:
-            return rdFingerprintGenerator.GetRDKitFPGenerator().GetFingerprint(
-                rdkit_mol
-            )
-        except Exception as e:
-            logger.warning(f"Fingerprint generation failed: {str(e)}")
-            return None
-
-    @staticmethod
-    def _compute_similarity(args):
-        """Compute similarity between two fingerprints using Tanimoto similarity."""
-        idx1, idx2, fps = args
-        return (
-            idx1,
-            idx2,
-            DataStructs.FingerprintSimilarity(fps[idx1], fps[idx2]),
-        )
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules based on fingerprint similarity."""
-        with multiprocessing.Pool(self.num_procs) as pool:
-            fps = pool.map(self._get_fingerprint, self.rdkit_molecules)
-
-        # Remove None fingerprints and adjust molecule lists accordingly
-        valid_indices = [i for i, fp in enumerate(fps) if fp is not None]
-        self.molecules = [self.molecules[i] for i in valid_indices]
-        fps = [fps[i] for i in valid_indices]
-
-        n = len(fps)
-        if n == 0:
-            return [], []
-
-        # Compute similarity matrix
-        range_indices = [
-            (i, j, fps) for i in range(n) for j in range(i + 1, n)
-        ]
-        with multiprocessing.Pool(self.num_procs) as pool:
-            results = pool.map(self._compute_similarity, range_indices)
-
-        # Construct similarity matrix
-        similarity_matrix = np.zeros((n, n))
-        for i, j, sim in results:
-            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
-
-        # Identify connected components
-        graph = csr_matrix(similarity_matrix >= self.threshold)
-        n_components, labels = connected_components(graph)
-
-        # Group molecules based on component labels
-        groups = [[] for _ in range(n_components)]
-        indices = [[] for _ in range(n_components)]
-        for idx, label in enumerate(labels):
-            groups[label].append(self.molecules[idx])
-            indices[label].append(valid_indices[idx])
-
-        return groups, indices
 
 
 class RDKitIsomorphismGrouper(MoleculeGrouper):
@@ -668,7 +608,6 @@ class StructureGrouperFactory:
         groupers = {
             "rmsd": RMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
-            "fingerprint": RDKitFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
