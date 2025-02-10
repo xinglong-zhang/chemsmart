@@ -1,7 +1,10 @@
 import os
 
 import pytest
+import rdkit.Chem.rdDistGeom as rdDistGeom
+from rdkit import Chem
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.settings.server import Server
 
@@ -201,6 +204,30 @@ def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
         "oxetane_rc_hirshfeld_sp_smd_n_n-DiMethylFormamide.log",
     )
     return gaussian_hirshfeld_outfile
+
+
+@pytest.fixture()
+def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_ozone_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "ozone.log"
+    )
+    return gaussian_ozone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_acetone_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_acetone_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "acetone.log"
+    )
+    return gaussian_acetone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_benzene_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_benzene_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "benzene.log"
+    )
+    return gaussian_benzene_opt_outfile
 
 
 # Gaussian output file for MP2 calculations
@@ -679,3 +706,76 @@ def jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def jobrunner_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+
+
+## conformers for testing
+@pytest.fixture()
+def methanol_molecules():
+    # molecules for testing
+    # methanol
+    methanol = Molecule.from_pubchem(identifier="CO")
+    # f = open("methanol.xyz", "w")
+    # methanol.write_coordinates(f)
+
+    # rotated methanol
+    ase_atoms = methanol.to_ase()
+    ase_atoms.rotate(90, [0, 0, 1])
+    methanol_rot1 = Molecule.from_ase_atoms(ase_atoms)
+
+    ase_atoms = methanol.to_ase()
+    ase_atoms.rotate(20, [1, 1, 1])
+    methanol_rot2 = Molecule.from_ase_atoms(ase_atoms)
+
+    methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
+
+    return methanol_molecules
+
+
+@pytest.fixture()
+def methanol_and_ethanol():
+    # molecules for testing
+    # methanol
+    methanol = Molecule.from_pubchem(identifier="CO")
+
+    # ethanol
+    ethanol = Molecule.from_pubchem(identifier="CCO")
+
+    methanol_and_ethanol = [methanol, ethanol]
+    return methanol_and_ethanol
+
+
+@pytest.fixture()
+def conformers_from_rdkit():
+    """Generate multiple conformers for a complex molecule using RDKit."""
+    smiles = "O=C([O-])CCn1c(=O)c(=O)[nH]c2cc([N+](=O)[O-])c(-n3ccc(C=NOCc4ccccc4)c3)cc21"
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)
+
+    # Generate 3D conformers
+    ps = rdDistGeom.ETKDGv3()
+    ps.randomSeed = 0xD06F00D
+    ps.numThreads = 10
+    conf_ids = rdDistGeom.EmbedMultipleConfs(mol, numConfs=300, params=ps)
+
+    # Ensure each conformer is extracted into its own unique RDKit Mol object
+    conformers = []
+    for conf_id in conf_ids:
+        single_conf_mol = Chem.Mol(mol)  # Copy molecule structure
+        single_conf_mol.RemoveAllConformers()  # Remove all existing conformers
+        single_conf_mol.AddConformer(
+            mol.GetConformer(conf_id), assignId=True
+        )  # Add only this conformer
+        conformers.append(single_conf_mol)
+
+    # Verify that each conformer contains exactly one conformer
+    for conf in conformers:
+        assert (
+            conf.GetNumConformers() == 1
+        ), "Each conformer should contain exactly one conformer."
+
+    # Convert to Molecule instances
+    conformers_from_rdkit = [
+        Molecule.from_rdkit_mol(conf) for conf in conformers
+    ]
+
+    return conformers_from_rdkit

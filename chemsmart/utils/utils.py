@@ -6,7 +6,7 @@ import subprocess
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
-from typing import Union
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -486,3 +486,90 @@ def run_command(command):
     except Exception as e:
         print(f"Exception while running {command}: {e}")
         return None
+
+
+def kabsch_align(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Kabsch algorithm for molecular alignment.
+    From https://hunterheidenreich.com/posts/kabsch_algorithm/"""
+    # Center molecules
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+
+    # Optimal translation
+    t = centroid_Q - centroid_P
+
+    # Center the points
+    p = P - centroid_P
+    q = Q - centroid_Q
+
+    # Compute the covariance matrix
+    H = np.dot(p.T, q)
+
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+
+    # Validate right-handed coordinate system
+    if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
+        Vt[-1, :] *= -1.0
+
+    # Optimal rotation
+    R = np.dot(Vt.T, U.T)
+
+    # rotate p
+    p = np.dot(p, R.T)
+
+    # RMSD
+    rmsd = np.sqrt(np.sum(np.square(p - q)) / P.shape[0])
+
+    return p, q, R, t, rmsd
+
+
+def kabsch_align2(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """Kabsch algorithm for optimal molecular alignment.
+    (This does not seem to work correctly?)
+
+    Returns:
+    - aligned_P: P after rotation and translation to match Q's position
+    - R: Optimal rotation matrix
+    - t: Optimal translation vector
+    - rmsd: Root Mean Square Deviation after alignment
+    """
+    assert P.shape == Q.shape, "Input matrices must have the same dimensions"
+
+    # Compute centroids and center coordinates
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+    centered_P = P - centroid_P
+    centered_Q = Q - centroid_Q
+
+    # Compute covariance matrix
+    H = centered_P.T @ centered_Q
+
+    # Singular Value Decomposition
+    U, S, Vt = np.linalg.svd(H)
+
+    # Ensure proper rotation (right-hand system)
+    det_sign = np.linalg.det(Vt.T @ U.T)
+    if det_sign < 0:
+        Vt[-1, :] *= -1
+
+    # Compute optimal rotation matrix
+    R = Vt.T @ U.T
+
+    # Apply rotation to centered_P (corrected from original)
+    rotated_P = centered_P @ R  # Changed from R.T to R
+
+    # Apply final translation to Q's coordinate system
+    aligned_P = rotated_P + centroid_Q  # Translate to Q's position
+
+    # Calculate RMSD using centered coordinates
+    rmsd = np.sqrt(np.mean(np.sum((rotated_P - centered_Q) ** 2, axis=1)))
+
+    return aligned_P, Q, R, centroid_Q - centroid_P, rmsd

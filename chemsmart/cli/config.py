@@ -46,7 +46,7 @@ class Config:
             return Path.home() / ".zshrc"
 
     @property
-    def chemsmart_path(self):
+    def chemsmart_package_path(self):
         """Define the path for the chemsmart package."""
         chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
         chemsmart_path = os.path.abspath(chemsmart_path)
@@ -88,10 +88,10 @@ class Config:
     def env_vars(self):
         """Define the environment variables to be added to the shell config."""
         return [
-            f'export PATH="{self.chemsmart_path}:$PATH"',
-            f'export PATH="{self.chemsmart_path}/chemsmart/cli:$PATH"',
-            f'export PATH="{self.chemsmart_path}/chemsmart/scripts:$PATH"',
-            f'export PYTHONPATH="{self.chemsmart_path}:$PYTHONPATH"',
+            f'export PATH="{self.chemsmart_package_path}:$PATH"',
+            f'export PATH="{self.chemsmart_package_path}/chemsmart/cli:$PATH"',
+            f'export PATH="{self.chemsmart_package_path}/chemsmart/scripts:$PATH"',
+            f'export PYTHONPATH="{self.chemsmart_package_path}:$PYTHONPATH"',
         ]
 
     def setup_environment(self):
