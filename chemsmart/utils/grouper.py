@@ -14,7 +14,7 @@ from joblib import Parallel, delayed  # More efficient parallelization
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, rdMolHash
 from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import connected_components, reverse_cuthill_mckee
+from scipy.sparse.csgraph import connected_components
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.utils import kabsch_align
@@ -87,61 +87,56 @@ class RMSDGrouper(MoleculeGrouper):
         super().__init__(molecules, num_procs)
         self.rmsd_threshold = rmsd_threshold
         self.align_molecules = align_molecules
+        # Cache sorted chemical symbols as sets for faster comparison
+        self._chemical_symbol_sets = [
+            set(mol.chemical_symbols) for mol in molecules
+        ]
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group molecules by geometric similarity."""
         n = len(self.molecules)
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
 
+        # Use map instead of imap_unordered for better parallelism
         with multiprocessing.Pool(self.num_procs) as pool:
             rmsd_values = pool.map(self._calculate_rmsd, indices)
 
         # Build adjacency matrix
         adj_matrix = np.zeros((n, n), dtype=bool)
         for (i, j), rmsd in zip(indices, rmsd_values):
-            if round(rmsd, 2) < self.rmsd_threshold:
+            if rmsd < self.rmsd_threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
         # Find connected components
         _, labels = connected_components(csr_matrix(adj_matrix))
 
-        groups: List[List[Molecule]] = []
-        index_groups: List[List[int]] = []
-        for label in np.unique(labels):
-            mask = labels == label
-            groups.append([self.molecules[i] for i in np.where(mask)[0]])
-            index_groups.append(list(np.where(mask)[0]))
+        # Use np.unique(labels) approach for better memory efficiency
+        unique_labels = np.unique(labels)
+        groups = [
+            [self.molecules[i] for i in np.where(labels == label)[0]]
+            for label in unique_labels
+        ]
+        index_groups = [
+            list(np.where(labels == label)[0]) for label in unique_labels
+        ]
 
         return groups, index_groups
-
-    def _check_similarity(self, mol1: Molecule, mol2: Molecule) -> bool:
-        """Check if two molecules are geometrically similar"""
-        if mol1.num_atoms != mol2.num_atoms:
-            return False
-
-        if sorted(mol1.chemical_symbols) != sorted(mol2.chemical_symbols):
-            return False
-        rmsd = self._calculate_rmsd(mol1, mol2)
-
-        return np.isclose(rmsd, self.rmsd_threshold, atol=1e-2) or (
-            rmsd < self.rmsd_threshold
-        )
 
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """Calculate RMSD between two molecules."""
         i, j = idx_pair
         mol1, mol2 = self.molecules[i], self.molecules[j]
 
-        if mol1.num_atoms != mol2.num_atoms or sorted(
-            mol1.chemical_symbols
-        ) != sorted(mol2.chemical_symbols):
+        if (
+            mol1.num_atoms != mol2.num_atoms
+            or self._chemical_symbol_sets[i] != self._chemical_symbol_sets[j]
+        ):
             return np.inf
 
-        pos1 = mol1.positions
-        pos2 = mol2.positions
+        pos1, pos2 = mol1.positions, mol2.positions
 
         if self.align_molecules:
-            logger.info("Aligning molecules using Kabsch algorithm.")
+            logger.debug("Aligning molecules using Kabsch algorithm.")
             pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
 
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
@@ -228,10 +223,8 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
 
-class RCMSimilarityGrouper(MoleculeGrouper):
-    """Group molecules using Reverse Cuthill-McKee algorithm on similarity matrix.
-    Utilize molecular fingerprinting to focus on connectivity and similarity,
-    suitable when detailed structural matching is needed.
+class TanimotoSimilarityGrouper(MoleculeGrouper):
+    """Group molecules using molecular fingerprinting and Tanimoto similarity.
     Tanimoto similarity is a measure of how similar two molecular fingerprints are,
     ranging from 0 (completely different) to 1 (identical).
     Default = 0.9 ensures molecules have a strong structural resemblance while
@@ -257,55 +250,68 @@ class RCMSimilarityGrouper(MoleculeGrouper):
         super().__init__(molecules, num_procs)
         self.similarity_threshold = similarity_threshold
 
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Cluster molecules using RCM on similarity matrix."""
-        with ThreadPool(self.num_procs) as pool:
-            # Use ThreadPool instead of Pool since the latter
-            # cannot pickle non-python objects
-            fps = pool.map(
-                Chem.RDKFingerprint, (m.to_rdkit() for m in self.molecules)
-            )
+    def _compute_fingerprint(
+        self, mol: Molecule
+    ) -> Optional[Tuple[int, DataStructs.ExplicitBitVect]]:
+        """Compute RDKit fingerprint for a molecule, returning (index, fingerprint)."""
+        rdkit_mol = mol.to_rdkit()
+        if rdkit_mol:
+            return Chem.RDKFingerprint(rdkit_mol)
+        return None
 
-        n = len(self.molecules)
-        similarity_matrix = np.zeros((n, n))
-        indices = [(i, j) for i in range(n) for j in range(i, n)]
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Cluster molecules using similarity-based connected components clustering."""
+        # Compute fingerprints in parallel using ThreadPool (RDKit objects are not pickleable)
+        with ThreadPool(self.num_procs) as pool:
+            fingerprints = pool.map(self._compute_fingerprint, self.molecules)
+
+        # Filter out molecules that failed to generate fingerprints
+        valid_indices = [
+            i for i, fp in enumerate(fingerprints) if fp is not None
+        ]
+        valid_fps = [fingerprints[i] for i in valid_indices]
+        num_valid = len(valid_indices)
+
+        if num_valid == 0:
+            return [], []  # No valid molecules
+
+        # Compute pairwise similarity matrix in parallel
+        similarity_matrix = np.zeros((num_valid, num_valid), dtype=np.float32)
+        pairs = [
+            (i, j) for i in range(num_valid) for j in range(i + 1, num_valid)
+        ]
 
         with ThreadPool(self.num_procs) as pool:
             similarities = pool.starmap(
-                Chem.DataStructs.TanimotoSimilarity,
-                [(fps[idx[0]], fps[idx[1]]) for idx in indices],
+                DataStructs.TanimotoSimilarity,
+                [(valid_fps[i], valid_fps[j]) for i, j in pairs],
             )
 
-        for (i, j), sim in zip(indices, similarities):
+        # Fill the similarity matrix
+        for (i, j), sim in zip(pairs, similarities):
             similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
-        # Apply RCM clustering
-        sparse_matrix = csr_matrix(
-            similarity_matrix > self.similarity_threshold
-        )
-        perm = reverse_cuthill_mckee(sparse_matrix, symmetric_mode=True)
+        # Apply thresholding to create an adjacency matrix
+        adj_matrix = csr_matrix(similarity_matrix >= self.similarity_threshold)
 
-        # Extract groups from permutation
-        groups: List[List[Molecule]] = []
-        index_groups: List[List[int]] = []
-        current_group: List[int] = [perm[0]]
+        # Use connected components to find molecule groups
+        _, labels = connected_components(adj_matrix)
 
-        for idx in perm[1:]:
-            if (
-                similarity_matrix[idx, current_group[0]]
-                > self.similarity_threshold
-            ):
-                current_group.append(idx)
-            else:
-                groups.append([self.molecules[i] for i in current_group])
-                index_groups.append(current_group)
-                current_group = [idx]
+        # Group molecules by their component labels
+        unique_labels = np.unique(labels)
+        mol_groups = [
+            [
+                self.molecules[valid_indices[i]]
+                for i in np.where(labels == label)[0]
+            ]
+            for label in unique_labels
+        ]
+        idx_groups = [
+            list(np.array(valid_indices)[np.where(labels == label)[0]])
+            for label in unique_labels
+        ]
 
-        if current_group:
-            groups.append([self.molecules[i] for i in current_group])
-            index_groups.append(current_group)
-
-        return groups, index_groups
+        return mol_groups, idx_groups
 
 
 class RDKitFingerprintGrouper(MoleculeGrouper):
@@ -488,9 +494,8 @@ class FormulaGrouper(MoleculeGrouper):
 
 
 class ConnectivityGrouper(MoleculeGrouper):
-    """Group by molecular connectivity.
-    Useful for identifying molecules with similar bond arrangements and structures, useful
-    in scenarios where molecular connectivity is critical.
+    """Group molecules based on molecular connectivity (graph isomorphism).
+    Efficient for recognizing similar bond arrangements in large datasets.
     """
 
     def __init__(
@@ -514,19 +519,19 @@ class ConnectivityGrouper(MoleculeGrouper):
         )
 
     def _check_isomorphism(
-        self, pivot_graph: nx.Graph, mol_graph: nx.Graph, idx: int
-    ) -> Tuple[int, bool]:
-        """Helper function for multiprocessing: Checks isomorphism for a molecule."""
-        return idx, self._are_isomorphic(pivot_graph, mol_graph)
+        self, idx_pair: Tuple[int, int]
+    ) -> Tuple[int, int, bool]:
+        """Multiprocessing-compatible function to check graph isomorphism."""
+        i, j = idx_pair
+        return i, j, self._are_isomorphic(self.graphs[i], self.graphs[j])
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules based on molecular connectivity using optimized multiprocessing."""
-        groups = []
+        """Group molecules by connectivity using parallel isomorphism checks."""
+        n = len(self.molecules)
 
-        # Precompute Graphs in Parallel (Avoid repeated conversions)
-        # Use `starmap()` instead of `map()` to unpack arguments correctly
+        # Convert molecules to graphs in parallel
         with multiprocessing.Pool(self.num_procs) as pool:
-            precomputed_graphs = pool.starmap(
+            self.graphs = pool.starmap(
                 to_graph_wrapper,
                 [
                     (mol, self.bond_cutoff_buffer, self.adjust_H)
@@ -534,43 +539,30 @@ class ConnectivityGrouper(MoleculeGrouper):
                 ],
             )
 
-        remaining = list(enumerate(self.molecules))
-        remaining = [
-            (idx, mol, g)
-            for (idx, mol), g in zip(remaining, precomputed_graphs)
+        # Compute pairwise isomorphism in parallel
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        with multiprocessing.Pool(self.num_procs) as pool:
+            isomorphic_pairs = pool.map(self._check_isomorphism, indices)
+
+        # Build adjacency matrix
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for i, j, is_iso in isomorphic_pairs:
+            if is_iso:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components (groups of isomorphic molecules)
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        unique_labels = np.unique(labels)
+        groups = [
+            [self.molecules[i] for i in np.where(labels == label)[0]]
+            for label in unique_labels
+        ]
+        index_groups = [
+            list(np.where(labels == label)[0]) for label in unique_labels
         ]
 
-        while remaining:
-            pivot_idx, pivot_mol, pivot_graph = remaining.pop(0)
-
-            # Parallel isomorphism check (Avoid Thread Locking)
-            results = Parallel(n_jobs=self.num_procs, backend="loky")(
-                delayed(self._check_isomorphism)(pivot_graph, g, idx)
-                for idx, _, g in remaining
-            )
-
-            # Collect molecules that are isomorphic to the pivot
-            current_group = [pivot_mol]
-            current_indices = [pivot_idx]
-            to_remove = {idx for idx, is_iso in results if is_iso}
-
-            remaining = [
-                (idx, mol, g)
-                for idx, mol, g in remaining
-                if idx not in to_remove
-            ]
-            current_group.extend(
-                mol for idx, mol, _ in remaining if idx in to_remove
-            )
-            current_indices.extend(
-                idx for idx, _, _ in remaining if idx in to_remove
-            )
-
-            groups.append((current_group, current_indices))
-
-        mol_groups = [g[0] for g in groups]
-        idx_groups = [g[1] for g in groups]
-        return mol_groups, idx_groups
+        return groups, index_groups
 
 
 class ConnectivityGrouperSharedMemory(MoleculeGrouper):
@@ -675,7 +667,7 @@ class StructureGrouperFactory:
     def create(structures, strategy="rdkit", num_procs=1):
         groupers = {
             "rmsd": RMSDGrouper,
-            "rcm": RCMSimilarityGrouper,
+            "tanimoto": TanimotoSimilarityGrouper,
             "fingerprint": RDKitFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,

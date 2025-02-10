@@ -722,7 +722,11 @@ def methanol_molecules():
     ase_atoms.rotate(90, [0, 0, 1])
     methanol_rot1 = Molecule.from_ase_atoms(ase_atoms)
 
-    methanol_molecules = [methanol, methanol_rot1]
+    ase_atoms = methanol.to_ase()
+    ase_atoms.rotate(20, [1, 1, 1])
+    methanol_rot2 = Molecule.from_ase_atoms(ase_atoms)
+
+    methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
 
     return methanol_molecules
 

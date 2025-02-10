@@ -1092,9 +1092,3 @@ class XYZFile(FileMixin):
             index=index, return_list=return_list
         )
         return molecules
-
-    def get_comments(self, index=":", return_list=False):
-        _, comments = self._get_molecules_and_comments(
-            index=index, return_list=return_list
-        )
-        return comments
