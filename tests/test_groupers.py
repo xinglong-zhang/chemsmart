@@ -55,6 +55,7 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on geometry."
 
+    @pytest.mark.slow
     def test_rmsd_grouper_for_large_number_of_mols(
         self, conformers_from_rdkit
     ):
@@ -129,6 +130,7 @@ class TestGrouper:
         assert len(unique_structures) == 4
         # took 18 sec 848 ms
 
+    @pytest.mark.slow
     def test_rmsd_grouper_shared_memory_for_large_number_of_mols(
         self, conformers_from_rdkit
     ):
@@ -290,6 +292,7 @@ class TestGrouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
 
+    @pytest.mark.slow
     def test_rcm_similarity_grouper_for_large_number_of_mols(
         self, conformers_from_rdkit
     ):
