@@ -137,123 +137,6 @@ class TestGrouper:
         unique_structures = grouper6.unique()
         assert len(unique_structures) == 3
 
-    # @pytest.mark.slow
-    # def test_rmsd_grouper_for_large_number_of_mols(
-    #     self, conformers_from_rdkit
-    # ):
-    #     # conformers_from_rdkit = conformers_from_rdkit[:12]
-    #
-    #     grouper = RMSDGrouper(conformers_from_rdkit, num_procs=self.NUM_PROCS)
-    #     groups, group_indices = grouper.group()
-    #     # groupers seems sensitive to numpy version
-    #     assert len(groups) == 297
-    #     assert len(group_indices) == 297
-    #     mol1 = conformers_from_rdkit[0]
-    #
-    #     mol2 = conformers_from_rdkit[1]
-    #
-    #     ## from pymol alignment
-    #     #  ExecutiveRMS: 4 atoms rejected during cycle 1 (RMSD=1.67).
-    #     #  ExecutiveRMS: 2 atoms rejected during cycle 2 (RMSD=1.32).
-    #     #  ExecutiveRMS: 4 atoms rejected during cycle 3 (RMSD=1.20).
-    #     #  ExecutiveRMS: 2 atoms rejected during cycle 4 (RMSD=1.00).
-    #     #  ExecutiveRMS: 1 atoms rejected during cycle 5 (RMSD=0.90).
-    #     #  Executive: RMSD =    0.860 (40 to 40 atoms)
-    #
-    #     # rmsd calculation from Kabsh alignment
-    #     from chemsmart.utils.utils import kabsch_align
-    #
-    #     _, _, _, _, rmsd = kabsch_align(mol1.positions, mol2.positions)
-    #     assert np.isclose(rmsd, 1.670, rtol=1e-3)
-    #
-    #     # rmsd calculation from grouper
-    #     rmsd = grouper._calculate_rmsd((0, 1))
-    #     assert np.isclose(rmsd, 1.670, rtol=1e-3)
-    #     unique_structures = grouper.unique()
-    #     assert len(unique_structures) == 297
-    #
-    #     grouper2 = RMSDGrouper(
-    #         conformers_from_rdkit, rmsd_threshold=1.0, num_procs=self.NUM_PROCS
-    #     )
-    #     # increased threshold, so should have less distinct groups
-    #     groups, group_indices = grouper2.group()
-    #     assert len(groups) == 163
-    #     assert len(group_indices) == 163
-    #     rmsd = grouper2._calculate_rmsd((0, 1))
-    #     assert np.isclose(rmsd, 1.670, rtol=1e-3)
-    #     unique_structures = grouper2.unique()
-    #     assert len(unique_structures) == 163
-    #
-    #     grouper3 = RMSDGrouper(
-    #         conformers_from_rdkit, rmsd_threshold=1.5, num_procs=self.NUM_PROCS
-    #     )
-    #     # even greater threshold, so should have even less distinct groups
-    #     groups, group_indices = grouper3.group()
-    #     assert len(groups) == 6
-    #     assert len(group_indices) == 6
-    #     rmsd = grouper2._calculate_rmsd((0, 1))
-    #     assert np.isclose(rmsd, 1.670, rtol=1e-3)
-    #     unique_structures = grouper3.unique()
-    #     assert len(unique_structures) == 6
-    #
-    #     grouper4 = RMSDGrouper(
-    #         conformers_from_rdkit, rmsd_threshold=2.0, num_procs=self.NUM_PROCS
-    #     )
-    #     # even greater threshold, so should have even less distinct groups
-    #     groups, group_indices = grouper4.group()
-    #     assert len(groups) == 4
-    #     assert len(group_indices) == 4
-    #     rmsd = grouper2._calculate_rmsd((0, 1))
-    #     assert np.isclose(rmsd, 1.670, rtol=1e-3)
-    #     unique_structures = grouper4.unique()
-    #     assert len(unique_structures) == 4
-    #     # took 18 sec 848 ms
-
-    # @pytest.mark.slow
-    # def test_rmsd_grouper_shared_memory_for_large_number_of_mols(
-    #     self, conformers_from_rdkit
-    # ):
-    #
-    #     grouper = RMSDGrouperSharedMemory(
-    #         conformers_from_rdkit, num_procs=self.NUM_PROCS
-    #     )
-    #     groups, group_indices = grouper.group()
-    #     assert len(groups) == 297
-    #     assert len(group_indices) == 297
-    #     unique_structures = grouper.unique()
-    #     assert len(unique_structures) == 297
-    #
-    #     grouper2 = RMSDGrouperSharedMemory(
-    #         conformers_from_rdkit, rmsd_threshold=1.0, num_procs=self.NUM_PROCS
-    #     )
-    #     # increased threshold, so should have less distinct groups
-    #     groups, group_indices = grouper2.group()
-    #     assert len(groups) == 163
-    #     assert len(group_indices) == 163
-    #     unique_structures = grouper2.unique()
-    #     assert len(unique_structures) == 163
-    #
-    #     grouper3 = RMSDGrouperSharedMemory(
-    #         conformers_from_rdkit, rmsd_threshold=1.5, num_procs=self.NUM_PROCS
-    #     )
-    #     # even greater threshold, so should have even less distinct groups
-    #     groups, group_indices = grouper3.group()
-    #     assert len(groups) == 6
-    #     assert len(group_indices) == 6
-    #     unique_structures = grouper3.unique()
-    #     assert len(unique_structures) == 6
-    #
-    #     grouper4 = RMSDGrouperSharedMemory(
-    #         conformers_from_rdkit, rmsd_threshold=2.0, num_procs=self.NUM_PROCS
-    #     )
-    #     # even greater threshold, so should have even less distinct groups
-    #     groups, group_indices = grouper4.group()
-    #     assert len(groups) == 4
-    #     assert len(group_indices) == 4
-    #     unique_structures = grouper4.unique()
-    #     assert len(unique_structures) == 4
-    #     # took 19 sec 247 ms
-
     def test_formula_grouper(
         self, methanol_molecules, methanol_and_ethanol, conformers_from_rdkit
     ):
@@ -340,33 +223,6 @@ class TestGrouper:
         unique_structures = grouper2.unique()
         assert len(unique_structures) == 1
 
-    # @pytest.mark.slow
-    # def test_connectivity_grouper_for_large_number_of_mols(
-    #     self, conformers_from_rdkit
-    # ):
-    #     grouper3 = ConnectivityGrouper(
-    #         conformers_from_rdkit, num_procs=self.NUM_PROCS
-    #     )
-    #     # based on connectivity, should all be the same even for 300 conformers
-    #     groups, group_indices = grouper3.group()
-    #     unique_structures = grouper3.unique()
-    #     assert len(groups) == 209
-    #     assert len(unique_structures) == 209
-
-    # @pytest.mark.slow
-    # def test_connectivity_grouper_shared_for_large_number_of_mols(
-    #     self, conformers_from_rdkit
-    # ):
-    #     grouper3 = ConnectivityGrouperSharedMemory(
-    #         conformers_from_rdkit, num_procs=self.NUM_PROCS
-    #     )
-    #     # based on connectivity, should all be the same even for 300 conformers
-    #     groups, group_indices = grouper3.group()
-    #     unique_structures = grouper3.unique()
-    #     assert len(groups) == 209
-    #     assert len(unique_structures) == 209
-    #     # uses 1 min 50 sec; most calls to time.sleep()
-
     def test_tanimoto_similarity_grouper(
         self, methanol_molecules, methanol_and_ethanol
     ):
@@ -394,52 +250,6 @@ class TestGrouper:
         assert (
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
-
-    # @pytest.mark.slow
-    # def test_tanimoto_similarity_grouper_for_large_number_of_mols(
-    #     self, conformers_from_rdkit
-    # ):
-    #
-    #     grouper = TanimotoSimilarityGrouper(
-    #         conformers_from_rdkit, num_procs=self.NUM_PROCS
-    #     )
-    #     groups, group_indices = grouper.group()
-    #     assert len(groups) == 2
-    #     assert len(group_indices) == 2
-    #     unique_structures = grouper.unique()
-    #     assert len(unique_structures) == 2
-    #
-    #     grouper2 = TanimotoSimilarityGrouper(
-    #         conformers_from_rdkit,
-    #         similarity_threshold=0.95,  # very strict threshold
-    #         num_procs=self.NUM_PROCS,
-    #     )
-    #     # increased threshold, so should have less distinct groups
-    #     groups, group_indices = grouper2.group()
-    #     assert len(groups) == 92
-    #     assert len(group_indices) == 92
-    #     unique_structures = grouper2.unique()
-    #     assert len(unique_structures) == 92
-    #
-    #     grouper3 = TanimotoSimilarityGrouper(
-    #         conformers_from_rdkit, similarity_threshold=0.8, num_procs=10
-    #     )
-    #     # even greater threshold, so should have even less distinct groups
-    #     groups, group_indices = grouper3.group()
-    #     assert len(groups) == 1
-    #     assert len(group_indices) == 1
-    #     unique_structures = grouper3.unique()
-    #     assert len(unique_structures) == 1
-    #
-    #     grouper4 = TanimotoSimilarityGrouper(
-    #         conformers_from_rdkit, similarity_threshold=0.5, num_procs=10
-    #     )
-    #     # even greater threshold, so should have even less distinct groups
-    #     groups, group_indices = grouper4.group()
-    #     assert len(groups) == 1
-    #     assert len(group_indices) == 1
-    #     unique_structures = grouper4.unique()
-    #     assert len(unique_structures) == 1
 
     def test_tanimoto_grouper_for_crest_conformers(
         self, multiple_molecules_xyz_file
@@ -475,7 +285,6 @@ class TestGrouper:
         unique_structures = grouper3.unique()
         assert len(unique_structures) == 1
 
-
     def test_rdkit_isomorphism_grouper(
         self, methanol_molecules, methanol_and_ethanol
     ):
@@ -503,24 +312,6 @@ class TestGrouper:
         assert (
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
-
-    # @ pytest.mark.slow
-    # def test_rdkit_isomorphism_grouper_for_crest_conformers(
-    #     self, multiple_molecules_xyz_file
-    # ):
-    #     xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
-    #
-    #     molecules = xyz_file.get_molecule(index=":", return_list=True)
-    #     assert len(molecules) == 18
-    #     grouper = RDKitIsomorphismGrouper(
-    #         molecules, num_procs=self.NUM_PROCS
-    #     )
-    #     groups, group_indices = grouper.group()
-    #     assert len(groups) == 1
-    #     assert len(group_indices) == 1
-    #     unique_structures = grouper.unique()
-    #     assert len(unique_structures) == 1
-
 
     def test_rdkit_isomorphism_grouper_for_large_number_of_mols(
         self, conformers_from_rdkit
