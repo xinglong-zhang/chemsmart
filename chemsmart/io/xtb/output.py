@@ -63,6 +63,13 @@ class XTBOutput:
         return False
 
     @property
+    def solvent_model(self):
+        if self.solvation:
+            for line in self.contents:
+                if "* Solvation model:" in line:
+                    return line.split()[-1].strip()
+
+    @property
     def solvation_info(self):
         solvation_info = {}
         if self.solvation:
@@ -85,6 +92,8 @@ class XTBOutput:
                     """Density in kg/L"""
                     solvation_info["density"] = float(line.split()[-2])
                 elif "Solvent mass" in line:
+                    print("*************")
+                    print(line)
                     """Solvent mass in g/mol"""
                     solvation_info["solvent_mass"] = float(line.split()[-2])
                 elif "H-bond correction" in line:
@@ -108,16 +117,16 @@ class XTBOutput:
 
     @property
     def homo_energy(self):
-        for line in self.contents:
+        """Obtain HOMO energy of last optimized structure."""
+        for line in reversed(self.contents):
             if "(HOMO)" in line:
-                homo_energy = line.split()[-2]
-                """homo energy in eV"""
+                homo_energy = line.split()[-2]  # homo energy in eV
                 return float(homo_energy)
         return None
 
     @property
     def lumo_energy(self):
-        for line in self.contents:
+        for line in reversed(self.contents):
             if "(LUMO)" in line:
                 lumo_energy = line.split()[-2]
                 """lumo energy in eV"""
@@ -220,6 +229,10 @@ class XTBOutput:
         return quadrupole_data
 
     @property
+    def route_string(self):
+        return self._get_route()
+
+    @property
     def total_energy(self):
         """Total energy in Eh"""
         return self._extract_summary_information("TOTAL ENERGY")
@@ -297,7 +310,7 @@ class XTBOutput:
     GEOMETRY OPTIMIZATION
     """
     @cached_property
-    def geometry_optimization_convergence(self):
+    def geometry_optimization_converged(self):
         for line in self.contents:
             if "GEOMETRY OPTIMIZATION CONVERGED" in line:
                 return True
@@ -312,7 +325,7 @@ class XTBOutput:
     @property
     def optimized_structure_block(self):
         """Return optimized structure."""
-        if self.geometry_optimization_convergence:
+        if self.geometry_optimization_converged:
             coordinates_blocks = []
             for i, line in enumerate(self.contents):
                 if "final structure:" in line:
@@ -325,7 +338,7 @@ class XTBOutput:
 
     @property
     def molecular_mass(self):
-        if not self.geometry_optimization_convergence:
+        if not self.geometry_optimization_converged:
             return None
         for line in self.contents:
             if "molecular mass/u" in line:
@@ -335,7 +348,7 @@ class XTBOutput:
 
     @property
     def center_of_mass(self):
-        if not self.geometry_optimization_convergence:
+        if not self.geometry_optimization_converged:
             return None
         for line in self.contents:
             if "center of mass at/Å" in line:
@@ -344,7 +357,7 @@ class XTBOutput:
 
     @property
     def moments_of_inertia(self):
-        if not self.geometry_optimization_convergence:
+        if not self.geometry_optimization_converged:
             return None
         for line in self.contents:
             if "moments of inertia/u·Å²" in line:
@@ -353,7 +366,7 @@ class XTBOutput:
 
     @property
     def rotational_constants(self):
-        if not self.geometry_optimization_convergence:
+        if not self.geometry_optimization_converged:
             return None
         for line in self.contents:
             if "rotational constants/cm⁻¹" in line:

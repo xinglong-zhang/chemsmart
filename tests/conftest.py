@@ -679,3 +679,26 @@ def jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def jobrunner_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+
+
+## xtb fixtures
+# master xtb test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+# @pytest.fixture()
+# def xtb_inputs_directory(xtb_test_directory):
+#     return os.path.join(xtb_test_directory, "inputs")
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    return os.path.join(xtb_test_directory, "outputs")
+
+@pytest.fixture()
+def xtb_opt_gbsa_outfile(xtb_outputs_directory):
+    xtb_opt_gbsa_outfile = os.path.join(
+        xtb_outputs_directory, "pyridine_opt_acetonitrile.out"
+    )
+    return xtb_opt_gbsa_outfile
+

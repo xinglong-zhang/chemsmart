@@ -1,15 +1,14 @@
 import os.path
 
-from chemsmart.io.xtb.inputs import XTBInput
+from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
 
 class TestXTBOutput:
-    def test_opt_gbsa_output(self):
-        xtb_opt_gbsa_outfile = "pyridine_opt_acetonitrile.out"
+    def test_opt_gbsa_output(self, xtb_opt_gbsa_outfile):
         assert os.path.exists(xtb_opt_gbsa_outfile)
         xtb_output = XTBOutput(filename=xtb_opt_gbsa_outfile)
         assert xtb_output.normal_termination
-        assert xtb_output.geometry_optimization_convergence
+        assert xtb_output.geometry_optimization_converged
         assert xtb_output.route_string == "xtb pyridine_opt.sdf -gbsa acetonitrile -opt"
         assert xtb_output.solvation
         expected_output = {
@@ -24,6 +23,7 @@ class TestXTBOutput:
             "ion_screening": False,
             "surface_tension": 1.0000E-05,
         }
+        assert xtb_output.solvent_model == "GBSA"
         assert xtb_output.solvation_info == expected_output
         assert xtb_output.num_basis_functions == 29
         assert xtb_output.num_atomic_orbital == 29
