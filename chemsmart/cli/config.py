@@ -35,11 +35,14 @@ class Config:
     @property
     def shell_config(self):
         """Define the shell configuration file path."""
-        return Path.home() / (
-            ".bashrc"
-            if os.environ.get("SHELL", "").endswith("bash")
-            else ".zshrc"
-        )
+        if os.environ.get("SHELL", "").endswith("bash"):
+            try:
+                return Path.home() / ".bashrc"
+            except FileNotFoundError:
+                logger.error("Bashrc file not found.")
+                return Path.home() / ".bash_profile"
+        else:
+            return Path.home() / ".zshrc"
 
     @property
     def chemsmart_path(self):
