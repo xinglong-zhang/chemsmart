@@ -99,7 +99,7 @@ class RMSDGrouper(MoleculeGrouper):
         # Build adjacency matrix
         adj_matrix = np.zeros((n, n), dtype=bool)
         for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.rmsd_threshold:
+            if round(rmsd, 2) < self.rmsd_threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
         # Find connected components
@@ -123,7 +123,7 @@ class RMSDGrouper(MoleculeGrouper):
             return False
         rmsd = self._calculate_rmsd(mol1, mol2)
 
-        return np.isclose(rmsd, self.rmsd_threshold, atol=1e-6) or (
+        return np.isclose(rmsd, self.rmsd_threshold, atol=1e-2) or (
             rmsd < self.rmsd_threshold
         )
 

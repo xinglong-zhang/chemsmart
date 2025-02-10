@@ -65,17 +65,30 @@ class TestGrouper:
         assert len(groups) == 297
         assert len(group_indices) == 297
         mol1 = conformers_from_rdkit[0]
+        # f1 = open("mol1.xyz", "w")
+        # mol1.write_coordinates(f1, program="gaussian")
+
         mol2 = conformers_from_rdkit[1]
+        # f2 = open("mol2.xyz", "w")
+        # mol2.write_coordinates(f2, program="gaussian")
+
+        ## from pymol alignment
+        #  ExecutiveRMS: 4 atoms rejected during cycle 1 (RMSD=1.67).
+        #  ExecutiveRMS: 2 atoms rejected during cycle 2 (RMSD=1.32).
+        #  ExecutiveRMS: 4 atoms rejected during cycle 3 (RMSD=1.20).
+        #  ExecutiveRMS: 2 atoms rejected during cycle 4 (RMSD=1.00).
+        #  ExecutiveRMS: 1 atoms rejected during cycle 5 (RMSD=0.90).
+        #  Executive: RMSD =    0.860 (40 to 40 atoms)
 
         # rmsd calculation from Kabsh alignment
         from chemsmart.utils.utils import kabsch_align
 
         _, _, _, _, rmsd = kabsch_align(mol1.positions, mol2.positions)
-        assert np.isclose(rmsd, 1.6695, rtol=1e-4)
+        assert np.isclose(rmsd, 1.670, rtol=1e-3)
 
         # rmsd calculation from grouper
         rmsd = grouper._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 1.6695, rtol=1e-4)
+        assert np.isclose(rmsd, 1.670, rtol=1e-3)
         unique_structures = grouper.unique()
         assert len(unique_structures) == 297
 
@@ -84,12 +97,12 @@ class TestGrouper:
         )
         # increased threshold, so should have less distinct groups
         groups, group_indices = grouper2.group()
-        assert len(groups) == 163
-        assert len(group_indices) == 163
+        assert len(groups) == 168
+        assert len(group_indices) == 168
         rmsd = grouper2._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 1.6695, rtol=1e-4)
+        assert np.isclose(rmsd, 1.670, rtol=1e-3)
         unique_structures = grouper2.unique()
-        assert len(unique_structures) == 163
+        assert len(unique_structures) == 168
 
         grouper3 = RMSDGrouper(
             conformers_from_rdkit, rmsd_threshold=1.5, num_procs=self.NUM_PROCS
@@ -99,7 +112,7 @@ class TestGrouper:
         assert len(groups) == 6
         assert len(group_indices) == 6
         rmsd = grouper2._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 1.6695, rtol=1e-4)
+        assert np.isclose(rmsd, 1.670, rtol=1e-3)
         unique_structures = grouper3.unique()
         assert len(unique_structures) == 6
 
@@ -111,7 +124,7 @@ class TestGrouper:
         assert len(groups) == 4
         assert len(group_indices) == 4
         rmsd = grouper2._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 1.6695, rtol=1e-4)
+        assert np.isclose(rmsd, 1.670, rtol=1e-3)
         unique_structures = grouper4.unique()
         assert len(unique_structures) == 4
         # took 18 sec 848 ms

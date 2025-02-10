@@ -31,6 +31,7 @@ dependencies = [
     "scipy==1.15.1",
     "setuptools>=70.1.1",
     "tomlkit==0.13.2",
+    "pytest==8.3.4",
 ]
 
 [project.optional-dependencies]
