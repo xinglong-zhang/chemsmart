@@ -1,7 +1,7 @@
 import os.path
 
-from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
+
 
 class TestXTBOutput:
     def test_opt_gbsa_output(self, xtb_opt_gbsa_outfile):
@@ -9,7 +9,10 @@ class TestXTBOutput:
         xtb_output = XTBOutput(filename=xtb_opt_gbsa_outfile)
         assert xtb_output.normal_termination
         assert xtb_output.geometry_optimization_converged
-        assert xtb_output.route_string == "xtb pyridine_opt.sdf -gbsa acetonitrile -opt"
+        assert (
+            xtb_output.route_string
+            == "xtb pyridine_opt.sdf -gbsa acetonitrile -opt"
+        )
         assert xtb_output.solvation
         expected_output = {
             "solvation_model": "GBSA",
@@ -18,10 +21,10 @@ class TestXTBOutput:
             "free_energy_shift": 0.0020473,
             "temperature": 298.15,
             "density": 0.786,
-#           "solvent_mass": 41.05,
+            #           "solvent_mass": 41.05,
             "H_bond_correction": True,
             "ion_screening": False,
-            "surface_tension": 1.0000E-05,
+            "surface_tension": 1.0000e-05,
         }
         assert xtb_output.solvent_model == "GBSA"
         assert xtb_output.solvation_info == expected_output
@@ -47,35 +50,35 @@ class TestXTBOutput:
         assert xtb_output.total_charge == 0
         assert xtb_output.degrees_of_freedom == 27
         assert xtb_output.optimized_structure_block == [
-            'xtb: 6.7.1 (edcfbbe)',
-            '02012514123D',
-            '',
-            '11 11  0     0  0            999 V2000',
-            '-1.3731   -0.0003   -0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0',
-            '1.4025    0.0003    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
-            '0.6951    1.1927    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
-            '0.6956   -1.1925    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
-            '-0.6910    1.1338    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
-            '-0.6905   -1.1342   -0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
-            '2.4828    0.0005   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0',
-            '1.2041    2.1438   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0',
-            '1.2049   -2.1434   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0',
-            '-1.2892    2.0363   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0',
-            '-1.2884   -2.0368   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0',
-            '1  5  2  0  0  0  0',
-            '1  6  1  0  0  0  0',
-            '2  3  2  0  0  0  0',
-            '2  4  1  0  0  0  0',
-            '2  7  1  0  0  0  0',
-            '3  5  1  0  0  0  0',
-            '3  8  1  0  0  0  0',
-            '4  6  2  0  0  0  0',
-            '4  9  1  0  0  0  0',
-            '5 10  1  0  0  0  0',
-            '6 11  1  0  0  0  0',
-            'M  END',
-            '$$$$',
-            ''
+            "xtb: 6.7.1 (edcfbbe)",
+            "02012514123D",
+            "",
+            "11 11  0     0  0            999 V2000",
+            "-1.3731   -0.0003   -0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0",
+            "1.4025    0.0003    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+            "0.6951    1.1927    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+            "0.6956   -1.1925    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+            "-0.6910    1.1338    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+            "-0.6905   -1.1342   -0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+            "2.4828    0.0005   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0",
+            "1.2041    2.1438   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0",
+            "1.2049   -2.1434   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0",
+            "-1.2892    2.0363   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0",
+            "-1.2884   -2.0368   -0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0",
+            "1  5  2  0  0  0  0",
+            "1  6  1  0  0  0  0",
+            "2  3  2  0  0  0  0",
+            "2  4  1  0  0  0  0",
+            "2  7  1  0  0  0  0",
+            "3  5  1  0  0  0  0",
+            "3  8  1  0  0  0  0",
+            "4  6  2  0  0  0  0",
+            "4  9  1  0  0  0  0",
+            "5 10  1  0  0  0  0",
+            "6 11  1  0  0  0  0",
+            "M  END",
+            "$$$$",
+            "",
         ]
         assert xtb_output.molecular_dipole == {
             "q_only": [0.534, 0.0, -0.0],
@@ -89,8 +92,16 @@ class TestXTBOutput:
         }
         assert xtb_output.molecular_mass == 79.1000865
         assert xtb_output.center_of_mass == [0.0006925, -0.0000252, 0.0000017]
-        assert xtb_output.moments_of_inertia == [0.8267851E+02, 0.8559447E+02, 0.1682730E+03]
-        assert xtb_output.rotational_constants == [0.2038937E+00, 0.1969477E+00, 0.1001803E+00]
+        assert xtb_output.moments_of_inertia == [
+            0.8267851e02,
+            0.8559447e02,
+            0.1682730e03,
+        ]
+        assert xtb_output.rotational_constants == [
+            0.2038937e00,
+            0.1969477e00,
+            0.1001803e00,
+        ]
         assert xtb_output.total_energy == -16.158054009147
         assert xtb_output.gradient_norm == 0.000467095333
         assert xtb_output.fmo_gap == 3.234266958383
@@ -205,7 +216,7 @@ class TestXTBOutput:
             95.18,
             29.94,
         ]
-        assert xtb_output.raman_intensities ==[
+        assert xtb_output.raman_intensities == [
             0.00,
             0.00,
             0.00,
@@ -247,9 +258,9 @@ class TestXTBOutput:
         assert xtb_output.scaling_factor == 1.0
         assert xtb_output.partition_function == {
             "vibrational": 1.99,
-            "rotational": 0.417E+05,
-            "internal": 0.828E+05,
-            "translational": 0.681E+27,
+            "rotational": 0.417e05,
+            "internal": 0.828e05,
+            "translational": 0.681e27,
         }
         assert xtb_output.zero_point_energy == 0.085379802829
         assert xtb_output.grrho_without_zpve == -0.026863175517

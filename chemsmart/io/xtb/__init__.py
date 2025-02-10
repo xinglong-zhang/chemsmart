@@ -2,13 +2,13 @@ class XTBRefs:
     XTB_GROUPS = [
         "chrg",  # Set the charge of the molecule
         "spin",  # Set Nalpha-Nbeta of the molecule
-        "cma", # Shift molecule to center of mass
-        "constrain", # Constrain the gradient by appling potentials
+        "cma",  # Shift molecule to center of mass
+        "constrain",  # Constrain the gradient by appling potentials
         "cube",
         "external",
-        "fix", # Exact fixing
-        "gbsa", # Generalized born (GB) model with solvent accessable surface area
-        "gfn", # GFN Hamiltonian
+        "fix",  # Exact fixing
+        "gbsa",  # Generalized born (GB) model with solvent accessable surface area
+        "gfn",  # GFN Hamiltonian
         "hess",
         "metadyn",
         "md",
@@ -23,7 +23,7 @@ class XTBRefs:
         "symmetry",
         "thermo",
         "wall",
-        "write"
+        "write",
     ]
 
     XTB_METHODS = ["GFN0-xTB", "GFN1-xTB", "GFN2-xTB", "GFN-FF"]
@@ -36,13 +36,13 @@ class XTBRefs:
         "normal",
         "tight",
         "vtight",
-        "extreme"
+        "extreme",
     ]
 
     XTB_OPT_ENGINE = [
-        "rf", # Approximate Normal Coordinate Rational Function optimizer
-        "lbfgs", # L-BFGS Approximate Normal Coordinate optimizer
-        "inertial" # Fast Inertial Relaxation Engine
+        "rf",  # Approximate Normal Coordinate Rational Function optimizer
+        "lbfgs",  # L-BFGS Approximate Normal Coordinate optimizer
+        "inertial",  # Fast Inertial Relaxation Engine
     ]
 
     XTB_SOLVENT_MODELS = [

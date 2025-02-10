@@ -1,8 +1,8 @@
 import logging
-import re
 from functools import cached_property
 
 logger = logging.getLogger(__name__)
+
 
 class XTBOutput:
     def __init__(self, filename):
@@ -76,15 +76,21 @@ class XTBOutput:
             lines = self.contents
             for i, line in enumerate(lines):
                 if "* Solvation model:" in line:
-                    solvation_info["solvation_model"] = line.split(":")[-1].strip()
+                    solvation_info["solvation_model"] = line.split(":")[
+                        -1
+                    ].strip()
                 elif "Solvent" in line:
                     if "* Solvation model:" in lines[i - 1]:
                         solvation_info["solvent"] = line.split()[-1]
                 elif "Dielectric constant" in line:
-                    solvation_info["dielectric_constant"] = float(line.split()[-1])
+                    solvation_info["dielectric_constant"] = float(
+                        line.split()[-1]
+                    )
                 elif "Free energy shift" in line:
                     """Free energy shift in Eh"""
-                    solvation_info["free_energy_shift"] = float(line.split()[-4])
+                    solvation_info["free_energy_shift"] = float(
+                        line.split()[-4]
+                    )
                 elif "Temperature" in line:
                     """Temperature in K"""
                     solvation_info["temperature"] = float(line.split()[-2])
@@ -97,9 +103,13 @@ class XTBOutput:
                     """Solvent mass in g/mol"""
                     solvation_info["solvent_mass"] = float(line.split()[-2])
                 elif "H-bond correction" in line:
-                    solvation_info["H_bond_correction"] = line.split()[-1] == "true"
+                    solvation_info["H_bond_correction"] = (
+                        line.split()[-1] == "true"
+                    )
                 elif "Ion screening" in line:
-                    solvation_info["ion_screening"] = line.split()[-1] == "true"
+                    solvation_info["ion_screening"] = (
+                        line.split()[-1] == "true"
+                    )
                 elif "Surface tension" in line:
                     """Surface tension in Eh"""
                     solvation_info["surface_tension"] = float(line.split()[-4])
@@ -192,7 +202,7 @@ class XTBOutput:
         dipole_lines = []
         for i, line in enumerate(self.contents):
             if line.startswith("molecular dipole:"):
-                for j_line in self.contents[i + 2: i + 4]:
+                for j_line in self.contents[i + 2 : i + 4]:
                     dipole_lines.append(j_line.split(":")[1].strip().split())
         if len(dipole_lines) == 0:
             return None
@@ -217,8 +227,10 @@ class XTBOutput:
         quadrupole_lines = []
         for i, line in enumerate(self.contents):
             if line.startswith("molecular quadrupole (traceless):"):
-                for j_line in self.contents[i + 2: i + 5]:
-                    quadrupole_lines.append(j_line.split(":")[1].strip().split())
+                for j_line in self.contents[i + 2 : i + 5]:
+                    quadrupole_lines.append(
+                        j_line.split(":")[1].strip().split()
+                    )
         if len(quadrupole_lines) == 0:
             return None
         quadrupole_data = {
@@ -305,10 +317,10 @@ class XTBOutput:
             return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
         return None
 
-
     """
     GEOMETRY OPTIMIZATION
     """
+
     @cached_property
     def geometry_optimization_converged(self):
         for line in self.contents:
@@ -329,7 +341,7 @@ class XTBOutput:
             coordinates_blocks = []
             for i, line in enumerate(self.contents):
                 if "final structure:" in line:
-                    for j_line in self.contents[i + 2:]:
+                    for j_line in self.contents[i + 2 :]:
                         if "Bond Distances (Angstroems)" in j_line:
                             break
                         coordinates_blocks.append(j_line)
@@ -376,7 +388,9 @@ class XTBOutput:
     @property
     def optimizer_wall_time(self):
         if self.elapsed_walltime_by_jobs("ANC optimizer:"):
-            return round(sum(self.elapsed_walltime_by_jobs("ANC optimizer:")), 6)
+            return round(
+                sum(self.elapsed_walltime_by_jobs("ANC optimizer:")), 6
+            )
         return None
 
     @property
@@ -385,22 +399,25 @@ class XTBOutput:
             return round(sum(self.cpu_runtime_by_jobs("ANC optimizer:")), 6)
         return None
 
-
     """
     CALCULATION OF VIBRATIONAL FREQUENCIES
     """
+
     @cached_property
     def vibrational_frequencies(self):
         """Read the vibrational frequencies from the XTB output file.
-        The first six frequencies correspond to the rotations and translations of the molecule."""
+        The first six frequencies correspond to the rotations and translations of the molecule.
+        """
         found_frequency_printout = False
         for i, line in enumerate(self.contents):
             if "Frequency Printout" in line:
                 found_frequency_printout = True
                 continue
-            if found_frequency_printout and line.startswith("projected vibrational frequencies (cm⁻¹)"):
+            if found_frequency_printout and line.startswith(
+                "projected vibrational frequencies (cm⁻¹)"
+            ):
                 frequencies = []
-                for j_line in self.contents[i + 1:]:
+                for j_line in self.contents[i + 1 :]:
                     if "reduced masses (amu)" in j_line:
                         break
                     freq_line = j_line.split(":")[1].strip().split()
@@ -415,7 +432,7 @@ class XTBOutput:
         for i, line in enumerate(self.contents):
             if line.startswith("reduced masses (amu)"):
                 reduced_masses = []
-                for j_line in self.contents[i + 1:]:
+                for j_line in self.contents[i + 1 :]:
                     if "IR intensities (km·mol⁻¹)" in j_line:
                         break
                     reduced_mass_line = j_line.split()[1::2]
@@ -430,7 +447,7 @@ class XTBOutput:
         for i, line in enumerate(self.contents):
             if line.startswith("IR intensities (km·mol⁻¹)"):
                 ir_intensities = []
-                for j_line in self.contents[i + 1:]:
+                for j_line in self.contents[i + 1 :]:
                     if "Raman intensities (Ä⁴*amu⁻¹)" in j_line:
                         break
                     ir_intensity_line = j_line.split()[1::2]
@@ -445,7 +462,7 @@ class XTBOutput:
         for i, line in enumerate(self.contents):
             if line.startswith("Raman intensities (Ä⁴*amu⁻¹)"):
                 raman_intensities = []
-                for j_line in self.contents[i + 1:]:
+                for j_line in self.contents[i + 1 :]:
                     if "output can be read by thermo" in j_line:
                         break
                     raman_intensity_line = j_line.split()[1::2]
@@ -514,11 +531,15 @@ class XTBOutput:
     @property
     def hessian_wall_time(self):
         if self.elapsed_walltime_by_jobs("analytical hessian:"):
-            return round(sum(self.elapsed_walltime_by_jobs("analytical hessian:")), 6)
+            return round(
+                sum(self.elapsed_walltime_by_jobs("analytical hessian:")), 6
+            )
         return None
 
     @property
     def hessian_cpu_time(self):
         if self.cpu_runtime_by_jobs("analytical hessian:"):
-            return round(sum(self.cpu_runtime_by_jobs("analytical hessian:")), 6)
+            return round(
+                sum(self.cpu_runtime_by_jobs("analytical hessian:")), 6
+            )
         return None
