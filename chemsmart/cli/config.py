@@ -36,10 +36,11 @@ class Config:
     def shell_config(self):
         """Define the shell configuration file path."""
         if os.environ.get("SHELL", "").endswith("bash"):
-            try:
-                return Path.home() / ".bashrc"
-            except FileNotFoundError:
-                logger.error("Bashrc file not found.")
+            bashrc_filepath = Path.home() / ".bashrc"
+            if bashrc_filepath.exists():
+                return bashrc_filepath
+            else:
+                logger.info("Bashrc not found. Trying bash_profile.")
                 return Path.home() / ".bash_profile"
         else:
             return Path.home() / ".zshrc"
@@ -121,7 +122,8 @@ class Config:
                 )
 
         logger.info(
-            "Please restart your terminal or run 'source ~/.bashrc' (or 'source ~/.zshrc')."
+            f"Please restart your terminal or run "
+            f"'source {os.path.basename(self.shell_config).split()[-1]}'."
         )
 
 
