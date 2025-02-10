@@ -12,6 +12,7 @@ from chemsmart.utils.grouper import (
     RMSDGrouperSharedMemory,
     StructureGrouperFactory,
 )
+from chemsmart.utils.utils import kabsch_align
 
 
 class TestGrouper:
@@ -25,14 +26,20 @@ class TestGrouper:
         ), "Rotated molecule should have different positions."
         grouper = RMSDGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
+        rmsd = grouper._calculate_rmsd((0, 1))
+        assert np.isclose(
+            rmsd, 0.0, rtol=1e-7
+        ), "RMSD should be close to zero."
+        _, _, _, _, rmsd_kabsch = kabsch_align(
+            methanol.positions, methanol_rot1.positions
+        )
+        assert np.isclose(rmsd_kabsch, 0.0, rtol=1e-7)
         assert (
             len(groups) == 1
         ), "Molecules should form one group based on geometry."
         assert (
             len(group_indices) == 1
         ), "Molecules should form one group based on geometry."
-        rmsd = grouper._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 0.0), "RMSD should be close to zero."
         unique_structures = grouper.unique()
         assert (
             len(unique_structures) == 1

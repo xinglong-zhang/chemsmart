@@ -491,7 +491,8 @@ def run_command(command):
 def kabsch_align(
     P: np.ndarray, Q: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Kabsch algorithm for molecular alignment"""
+    """Kabsch algorithm for molecular alignment.
+    From https://hunterheidenreich.com/posts/kabsch_algorithm/"""
     # Center molecules
     assert P.shape == Q.shape, "Matrix dimensions must match"
 
