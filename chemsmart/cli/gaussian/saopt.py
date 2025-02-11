@@ -42,7 +42,15 @@ logger = logging.getLogger(__name__)
         case_sensitive=False,
     ),
     default="rmsd",
-    help="Grouping strategy to use for grouping. \nAvailable options are 'rmsd', 'rcm', 'fingerprint', 'isomorphism', 'formula', 'connectivity'",
+    help="Grouping strategy to use for grouping. \n"
+         "Available options are 'rmsd', 'tanimoto', 'isomorphism', 'formula', 'connectivity'",
+)
+@click.option(
+    "-i",
+    "--ignore-hydrogens",
+    type=bool,
+    default=False,
+    help="Ignore H atoms in the grouping.",
 )
 @click.option(
     "-p",
@@ -68,6 +76,7 @@ def saopt(
     num_steps,
     num_structures_to_run,
     grouping_strategy,
+    ignore_hydrogens,
     num_procs,
     proportion_structures_to_use,
     **kwargs,
@@ -107,6 +116,7 @@ def saopt(
         label=label,
         num_structures_to_run=num_structures_to_run,
         grouping_strategy=grouping_strategy,
+        ignore_hydrogens=ignore_hydrogens,
         num_procs=num_procs,
         proportion_structures_to_use=proportion_structures_to_use,
         **kwargs,

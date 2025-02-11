@@ -40,7 +40,7 @@ class GaussianSAOptJob(GaussianJob):
         )
         self.molecules = molecules[-last_num_structures:]
         self.grouper = StructureGrouperFactory.create(
-            self.molecules, strategy=self.grouping_strategy
+            self.molecules, strategy=self.grouping_strategy, **kwargs
         )
 
     @cached_property
@@ -125,7 +125,7 @@ class GaussianSAOptJob(GaussianJob):
         for job in self.all_structures_opt_jobs[: self.num_structures_to_opt]:
             job.run(jobrunner=jobrunner)
 
-    def _run(self, jobrunner, **kwargs):
+    def _run(self, jobrunner):
         self._run_all_jobs(jobrunner=jobrunner)
 
     def is_complete(self):
