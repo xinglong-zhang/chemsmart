@@ -84,14 +84,30 @@ class RMSDGrouper(MoleculeGrouper):
         rmsd_threshold: float = 0.5,
         num_procs: int = 1,
         align_molecules: bool = True,
+        ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
     ):
         super().__init__(molecules, num_procs)
         self.rmsd_threshold = rmsd_threshold
         self.align_molecules = align_molecules
+        self.ignore_hydrogens = ignore_hydrogens
         # Cache sorted chemical symbols as sets for faster comparison
         self._chemical_symbol_sets = [
             set(mol.chemical_symbols) for mol in molecules
         ]
+
+    def _get_heavy_atoms(self, mol: Molecule) -> Tuple[np.ndarray, List[str]]:
+        """Remove hydrogen atoms if ignore_hydrogens is enabled."""
+        if self.ignore_hydrogens:
+            non_h_indices = [
+                i for i, sym in enumerate(mol.chemical_symbols) if sym != "H"
+            ]
+            return mol.positions[non_h_indices], [
+                mol.chemical_symbols[i] for i in non_h_indices
+            ]
+        return (
+            mol.positions,
+            mol.chemical_symbols,
+        )  # Use all atoms if flag is False
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group molecules by geometric similarity."""
@@ -128,13 +144,14 @@ class RMSDGrouper(MoleculeGrouper):
         i, j = idx_pair
         mol1, mol2 = self.molecules[i], self.molecules[j]
 
+        pos1, symbols1 = self._get_heavy_atoms(mol1)
+        pos2, symbols2 = self._get_heavy_atoms(mol2)
+
         if (
             mol1.num_atoms != mol2.num_atoms
             or self._chemical_symbol_sets[i] != self._chemical_symbol_sets[j]
         ):
             return np.inf
-
-        pos1, pos2 = mol1.positions, mol2.positions
 
         if self.align_molecules:
             logger.debug("Aligning molecules using Kabsch algorithm.")
@@ -604,7 +621,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
 
 class StructureGrouperFactory:
     @staticmethod
-    def create(structures, strategy="rdkit", num_procs=1):
+    def create(structures, strategy="rdkit", num_procs=1, **kwargs):
         groupers = {
             "rmsd": RMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
@@ -614,5 +631,5 @@ class StructureGrouperFactory:
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
-            return groupers[strategy](structures, num_procs)
+            return groupers[strategy](structures, num_procs, **kwargs)
         raise ValueError(f"Unknown grouping strategy: {strategy}")
