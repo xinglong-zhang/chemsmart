@@ -697,6 +697,19 @@ def xtb_test_directory(test_data_directory):
 def xtb_outputs_directory(xtb_test_directory):
     return os.path.join(xtb_test_directory, "outputs")
 
+@pytest.fixture()
+def xtb_sp_outfile(xtb_outputs_directory):
+    xtb_sp_outfile = os.path.join(
+        xtb_outputs_directory, "water_sp.out"
+    )
+    return xtb_sp_outfile
+
+@pytest.fixture()
+def xtb_opt_outfile(xtb_outputs_directory):
+    xtb_opt_outfile = os.path.join(
+        xtb_outputs_directory, "water_opt.out"
+    )
+    return xtb_opt_outfile
 
 @pytest.fixture()
 def xtb_opt_gbsa_outfile(xtb_outputs_directory):
@@ -704,3 +717,10 @@ def xtb_opt_gbsa_outfile(xtb_outputs_directory):
         xtb_outputs_directory, "pyridine_opt_acetonitrile.out"
     )
     return xtb_opt_gbsa_outfile
+
+@pytest.fixture()
+def xtb_hess_outfile(xtb_outputs_directory):
+    xtb_hess_outfile = os.path.join(
+        xtb_outputs_directory, "pyridine_hess_acetonitrile.out"
+    )
+    return xtb_hess_outfile

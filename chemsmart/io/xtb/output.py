@@ -31,7 +31,11 @@ class XTBOutput:
                 return line.split(":")[-1].strip()
         return None
 
-    def _extract_setup_information(self, keyword):
+    @property
+    def route_string(self):
+        return self._get_route()
+
+    def _get_setup_information(self, keyword):
         for line in self.contents:
             if keyword in line:
                 return int(line.split()[-2])
@@ -39,91 +43,66 @@ class XTBOutput:
 
     @property
     def num_basis_functions(self):
-        return self._extract_setup_information("# basis functions")
+        return self._get_setup_information("# basis functions")
 
     @property
     def num_atomic_orbital(self):
-        return self._extract_setup_information("# atomic orbitals")
+        return self._get_setup_information("# atomic orbitals")
 
     @property
     def num_shells(self):
-        return self._extract_setup_information("# shells")
+        return self._get_setup_information("# shells")
 
     @property
     def num_electrons(self):
-        return self._extract_setup_information("# electrons")
+        return self._get_setup_information("# electrons")
+
+    @property
+    def hamiltonian(self):
+        for line in reversed(self.contents):
+            if "Hamiltonian" in line:
+                return line.split()[-2]
+        return None
+
+    def _setup_bool(self, keyword):
+        for line in self.contents:
+            if keyword in line:
+                return line.split()[-2].lower() == "true"
+        return None
+
+    @property
+    def restart(self):
+        return self._setup_bool("restarted?")
 
     @property
     def solvation(self):
+        return self._setup_bool("GBSA solvation")
+
+    @property
+    def pc_potential(self):
+        return self._setup_bool("PC potential")
+
+    @property
+    def electronic_temperature(self):
         for line in self.contents:
-            if "GBSA solvation" in line:
-                line_elements = line.split()
-                if "true" in line_elements:
-                    return True
-        return False
+            if "electronic temp." in line:
+                return float(line.split()[-3])  # electronic temperature in K
+        return None
 
     @property
-    def solvent_model(self):
-        if self.solvation:
-            for line in self.contents:
-                if "* Solvation model:" in line:
-                    return line.split()[-1].strip()
-
-    @property
-    def solvation_info(self):
-        solvation_info = {}
-        if self.solvation:
-            lines = self.contents
-            for i, line in enumerate(lines):
-                if "* Solvation model:" in line:
-                    solvation_info["solvation_model"] = line.split(":")[
-                        -1
-                    ].strip()
-                elif "Solvent" in line:
-                    if "* Solvation model:" in lines[i - 1]:
-                        solvation_info["solvent"] = line.split()[-1]
-                elif "Dielectric constant" in line:
-                    solvation_info["dielectric_constant"] = float(
-                        line.split()[-1]
-                    )
-                elif "Free energy shift" in line:
-                    """Free energy shift in Eh"""
-                    solvation_info["free_energy_shift"] = float(
-                        line.split()[-4]
-                    )
-                elif "Temperature" in line:
-                    """Temperature in K"""
-                    solvation_info["temperature"] = float(line.split()[-2])
-                elif "Density" in line:
-                    """Density in kg/L"""
-                    solvation_info["density"] = float(line.split()[-2])
-                elif "Solvent mass" in line:
-                    print("*************")
-                    print(line)
-                    """Solvent mass in g/mol"""
-                    solvation_info["solvent_mass"] = float(line.split()[-2])
-                elif "H-bond correction" in line:
-                    solvation_info["H_bond_correction"] = (
-                        line.split()[-1] == "true"
-                    )
-                elif "Ion screening" in line:
-                    solvation_info["ion_screening"] = (
-                        line.split()[-1] == "true"
-                    )
-                elif "Surface tension" in line:
-                    """Surface tension in Eh"""
-                    solvation_info["surface_tension"] = float(line.split()[-4])
-            if solvation_info:
-                return solvation_info
+    def broyden_damping(self):
+        for line in self.contents:
+            if "Broyden damping" in line:
+                return float(line.split()[-2])
         return None
 
     @property
     def net_charge(self):
-        return self._extract_setup_information("net charge")
+        return self._get_setup_information("net charge")
 
     @property
     def unpaired_electrons(self):
-        return self._extract_setup_information("unpaired electrons")
+        return self._get_setup_information("unpaired electrons")
 
     @property
     def homo_energy(self):
@@ -138,8 +117,7 @@ class XTBOutput:
     def lumo_energy(self):
         for line in reversed(self.contents):
             if "(LUMO)" in line:
-                lumo_energy = line.split()[-2]
-                """lumo energy in eV"""
+                lumo_energy = line.split()[-2]  # lumo energy in eV
                 return float(lumo_energy)
         return None
 
@@ -170,26 +148,6 @@ class XTBOutput:
         return self._extract_summary_information("-> dispersion")
 
     @property
-    def gsolv(self):
-        return self._extract_summary_information("-> Gsolv")
-
-    @property
-    def gelec(self):
-        return self._extract_summary_information("-> Gelec")
-
-    @property
-    def gsasa(self):
-        return self._extract_summary_information("-> Gsasa")
-
-    @property
-    def ghb(self):
-        return self._extract_summary_information("-> Ghb")
-
-    @property
-    def gshift(self):
-        return self._extract_summary_information("-> Gshift")
-
-    @property
     def repulsion_energy(self):
         return self._extract_summary_information("repulsion energy")
 
@@ -217,8 +175,7 @@ class XTBOutput:
         for i, line in enumerate(self.contents):
             if line.startswith("molecular dipole:"):
                 if "full:" in self.contents[i + 3]:
-                    total_dipole = self.contents[i + 3].split()[-1]
-                    """Total dipole in Debye"""
+                    total_dipole = self.contents[i + 3].split()[-1]  # total dipole in Debye
                     return float(total_dipole)
         return None
 
@@ -241,23 +198,16 @@ class XTBOutput:
         return quadrupole_data
 
     @property
-    def route_string(self):
-        return self._get_route()
-
-    @property
     def total_energy(self):
-        """Total energy in Eh"""
-        return self._extract_summary_information("TOTAL ENERGY")
+        return self._extract_summary_information("TOTAL ENERGY")  # total energy in Eh
 
     @property
     def gradient_norm(self):
-        """Gradient norm in Eh/α"""
-        return self._extract_summary_information("GRADIENT NORM")
+        return self._extract_summary_information("GRADIENT NORM")  # gradient norm in Eh/α
 
     @property
     def fmo_gap(self):
-        """Homo-Lumo gap in eV"""
-        return self._extract_summary_information("HOMO-LUMO GAP")
+        return self._extract_summary_information("HOMO-LUMO GAP")  # homo-lumo gap in eV
 
     def sum_time_hours(self, line):
         n_days = float(line.split(" d,")[0].split()[-1])
@@ -318,6 +268,110 @@ class XTBOutput:
         return None
 
     """
+    SOLVATION
+    """
+
+    @property
+    def solvent_model(self):
+        if self.solvation:
+            for line in self.contents:
+                if "* Solvation model:" in line:
+                    return line.split()[-1]
+        return None
+
+    @property
+    def solvent(self):
+        if self.solvation:
+            for i, line in enumerate(self.contents):
+                if "Solvent" in line and "* Solvation model:" in self.contents[i - 1]:
+                    return line.split()[-1]
+        return None
+
+    @property
+    def dielectric_constant(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Dielectric constant" in line:
+                    return float(line.split()[-1])
+        return None
+
+    @property
+    def free_energy_shift(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Free energy shift" in line:
+                    return float(line.split()[-4])  # free energy shift in Eh
+        return None
+
+    @property
+    def temperature(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Temperature" in line:
+                    return float(line.split()[-2])  # temperature in K
+        return None
+
+    @property
+    def density(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Density" in line:
+                    return float(line.split()[-2])  # density in kg/L
+        return None
+
+    @property
+    def solvent_mass(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Solvent mass" in line:
+                    return float(line.split()[-2])  # solvent mass in g/mol
+        return None
+
+    @property
+    def h_bond_correction(self):
+        if self.solvation:
+            for line in self.contents:
+                if "H-bond correction" in line:
+                    return line.split()[-1] == "true"
+        return None
+
+    @property
+    def ion_screening(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Ion screening" in line:
+                    return line.split()[-1] == "true"
+        return None
+
+    @property
+    def surface_tension(self):
+        if self.solvation:
+            for line in self.contents:
+                if "Surface tension" in line:
+                    return float(line.split()[-4])  # surface tension in Eh
+        return None
+
+    @property
+    def gsolv(self):
+        return self._extract_summary_information("-> Gsolv")
+
+    @property
+    def gelec(self):
+        return self._extract_summary_information("-> Gelec")
+
+    @property
+    def gsasa(self):
+        return self._extract_summary_information("-> Gsasa")
+
+    @property
+    def ghb(self):
+        return self._extract_summary_information("-> Ghb")
+
+    @property
+    def gshift(self):
+        return self._extract_summary_information("-> Gshift")
+
+    """
     GEOMETRY OPTIMIZATION
     """
 
@@ -331,8 +385,15 @@ class XTBOutput:
         return False
 
     @property
+    def optimization_level(self):
+        for line in self.contents:
+            if "optimization level" in line:
+                return line.split()[-2]
+        return None
+
+    @property
     def degrees_of_freedom(self):
-        return self._extract_setup_information("degrees of freedom")
+        return self._get_setup_information("degrees of freedom")
 
     @property
     def optimized_structure_block(self):
@@ -476,11 +537,11 @@ class XTBOutput:
 
     @property
     def num_frequencies(self):
-        return self._extract_setup_information("# frequencies")
+        return self._get_setup_information("# frequencies")
 
     @property
     def num_imaginary_frequencies(self):
-        return self._extract_setup_information("# imaginary freq.")
+        return self._get_setup_information("# imaginary freq.")
 
     @property
     def symmetry(self):
@@ -492,7 +553,7 @@ class XTBOutput:
 
     @property
     def rotational_number(self):
-        return self._extract_setup_information("rotational number")
+        return self._get_setup_information("rotational number")
 
     @property
     def scaling_factor(self):
@@ -500,6 +561,22 @@ class XTBOutput:
             if line.startswith(":"):
                 if "scaling factor" in line:
                     return float(line.split()[-2])
+        return None
+
+    @property
+    def partition_function(self):
+        partition_function = {}
+        for line in self.contents:
+            if "VIB" in line:
+                partition_function["vibrational"] = float(line.split()[2])
+            elif "ROT" in line:
+                partition_function["rotational"] = float(line.split()[1])
+            elif "INT" in line:
+                partition_function["internal"] = float(line.split()[1])
+            elif "TR" in line:
+                partition_function["translational"] = float(line.split()[1])
+        if partition_function:
+            return partition_function
         return None
 
     @property
