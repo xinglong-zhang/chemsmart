@@ -76,19 +76,17 @@ class CtxObjArguments:
 
         if value is False:
             if is_flag and len(secondary_opts) == 0:
-                # click "is_flag" option. Click param class has no way to check if flag is True or not
-                # only can determine by checking arg_secondary_opts
+                # click "is_flag" option. Click param class has no way to check if
+                # flag is True or not only can determine by checking arg_secondary_opts
                 return ""
 
-            # # click "bool" variable e.g. '--with-flag/--no-with-flag'
-            # assert len(secondary_opts) == 1
-            # arg = secondary_opts[0].strip("-")
+            # if variable is bool, then there will be non-empty secondary_opts
             if len(secondary_opts) == 1:
                 arg = secondary_opts[0].strip("-")
             elif len(secondary_opts) > 1:
                 arg = secondary_opts[-1].strip(
                     "--"
-                )  # instead od assert, use last option
+                )  # instead of assert, use last option
 
         return "-" + arg if len(arg) == 1 else "--" + arg
 
