@@ -79,9 +79,13 @@ class CtxObjArguments:
                 # only can determine by checking arg_secondary_opts
                 return ""
 
-            # click "bool" variable e.g. '--with-flag/--no-with-flag'
-            assert len(secondary_opts) == 1
-            arg = secondary_opts[0].strip("-")
+            # # click "bool" variable e.g. '--with-flag/--no-with-flag'
+            # assert len(secondary_opts) == 1
+            # arg = secondary_opts[0].strip("-")
+            if len(secondary_opts) == 1:
+                arg = secondary_opts[0].strip("-")
+            elif len(secondary_opts) > 1:
+                arg = secondary_opts[-1].strip("--")
 
         return "-" + arg if len(arg) == 1 else "--" + arg
 
