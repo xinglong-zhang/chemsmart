@@ -46,8 +46,8 @@ logger = logging.getLogger(__name__)
     "Available options are 'rmsd', 'tanimoto', 'isomorphism', 'formula', 'connectivity'",
 )
 @click.option(
-    "-i",
-    "--ignore-hydrogens",
+    "-i/",
+    "--ignore-hydrogens/--no-ignore-hydrogens",
     type=bool,
     default=False,
     help="Ignore H atoms in the grouping.",

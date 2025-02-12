@@ -86,7 +86,9 @@ class CtxObjArguments:
             if len(secondary_opts) == 1:
                 arg = secondary_opts[0].strip("-")
             elif len(secondary_opts) > 1:
-                arg = secondary_opts[-1].strip("--")
+                arg = secondary_opts[-1].strip(
+                    "--"
+                )  # instead od assert, use last option
 
         return "-" + arg if len(arg) == 1 else "--" + arg
 
