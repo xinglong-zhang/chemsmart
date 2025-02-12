@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import pprint
 import typing as t
 
 import click
@@ -113,7 +114,8 @@ class CtxObjArguments:
     def _reconstruct_command(self, command):
         subcommand_args = command["kwargs"]
         subcommand_name = command["name"]
-        # logger.debug(f'Subcommand args {pprint.pformat(subcommand_args)}')
+        logger.debug(f"Subcommand name {subcommand_name}")
+        logger.debug(f"Subcommand args {pprint.pformat(subcommand_args)}")
 
         command_line_string = [subcommand_name]
         for k, subdict in subcommand_args.items():
@@ -146,6 +148,7 @@ class CtxObjArguments:
                     command_line_string += [self._value(i) for i in v]
                 else:
                     command_line_string += [self._value(v)]
+        logger.debug(f"Command line string: {command_line_string}")
         return command_line_string
 
     def _reconstruct_family(self, parent):
