@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
     ),
     default="rmsd",
     help="Grouping strategy to use for grouping. \n"
-         "Available options are 'rmsd', 'tanimoto', 'isomorphism', 'formula', 'connectivity'",
+    "Available options are 'rmsd', 'tanimoto', 'isomorphism', 'formula', 'connectivity'",
 )
 @click.option(
     "-i",
@@ -70,6 +70,7 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def saopt(
     ctx,
+    skip_completed,
     jobtype,
     coordinates,
     step_size,
@@ -114,10 +115,11 @@ def saopt(
         molecules=molecules,
         settings=saopt_settings,
         label=label,
-        num_structures_to_run=num_structures_to_run,
         grouping_strategy=grouping_strategy,
-        ignore_hydrogens=ignore_hydrogens,
         num_procs=num_procs,
         proportion_structures_to_use=proportion_structures_to_use,
+        num_structures_to_run=num_structures_to_run,
+        ignore_hydrogens=ignore_hydrogens,
+        skip_completed=skip_completed,
         **kwargs,
     )

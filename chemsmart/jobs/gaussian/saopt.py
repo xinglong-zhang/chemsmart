@@ -17,19 +17,24 @@ class GaussianSAOptJob(GaussianJob):
         molecules,
         settings,
         label,
-        num_structures_to_opt=None,
+        num_structures_to_run=None,
         grouping_strategy="rmsd",
         num_procs=1,
         proportion_structures_to_use=0.1,
+        skip_completed=True,
         **kwargs,
     ):
         if not isinstance(molecules, list) and len(molecules) == 0:
             raise ValueError("Molecules must be a list of Molecule objects.")
 
         super().__init__(
-            molecule=molecules[0], settings=settings, label=label, **kwargs
+            molecule=molecules[0],
+            settings=settings,
+            label=label,
+            skip_completed=skip_completed,
+            **kwargs,
         )
-        self.num_structures_to_opt = num_structures_to_opt
+        self.num_structures_to_run = num_structures_to_run
         self.grouping_strategy = grouping_strategy
         self.num_procs = num_procs
 
@@ -122,7 +127,14 @@ class GaussianSAOptJob(GaussianJob):
         return self.num_unique_structures
 
     def _run_all_jobs(self, jobrunner):
-        for job in self.all_structures_opt_jobs[: self.num_structures_to_opt]:
+        if self.num_structures_to_run is None:
+            # run all jobs if num_structures_to_run is not specified
+            jobs_to_run = self.all_structures_opt_jobs
+        else:
+            jobs_to_run = self.incomplete_structure_opt_jobs[
+                : self.num_structures_to_run
+            ]
+        for job in jobs_to_run:
             job.run(jobrunner=jobrunner)
 
     def _run(self, jobrunner):
@@ -132,9 +144,13 @@ class GaussianSAOptJob(GaussianJob):
         return self._run_all_sa_opt_jobs_are_complete()
 
     def _run_all_sa_opt_jobs_are_complete(self):
+        if self.num_structures_to_run is None:
+            return all(
+                job.is_complete() for job in self.all_structures_opt_jobs
+            )
         return all(
             job.is_complete()
             for job in self.all_structures_opt_jobs[
-                : self.num_structures_to_opt
+                : self.num_structures_to_run
             ]
         )
