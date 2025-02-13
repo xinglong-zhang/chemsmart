@@ -10,7 +10,7 @@ def logger_options(f):
     @click.option(
         "-d",
         "--debug/--no-debug",
-        default=True,
+        default=False,
         help="Turns on debug logging.",
     )
     @click.option(

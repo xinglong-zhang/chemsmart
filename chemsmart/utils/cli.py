@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import pprint
 import typing as t
 
 import click
@@ -75,13 +76,17 @@ class CtxObjArguments:
 
         if value is False:
             if is_flag and len(secondary_opts) == 0:
-                # click "is_flag" option. Click param class has no way to check if flag is True or not
-                # only can determine by checking arg_secondary_opts
+                # click "is_flag" option. Click param class has no way to check if
+                # flag is True or not only can determine by checking arg_secondary_opts
                 return ""
 
-            # click "bool" variable e.g. '--with-flag/--no-with-flag'
-            assert len(secondary_opts) == 1
-            arg = secondary_opts[0].strip("-")
+            # if variable is bool, then there will be non-empty secondary_opts
+            if len(secondary_opts) == 1:
+                arg = secondary_opts[0].strip("-")
+            elif len(secondary_opts) > 1:
+                arg = secondary_opts[-1].strip(
+                    "--"
+                )  # instead of assert, use last option
 
         return "-" + arg if len(arg) == 1 else "--" + arg
 
@@ -109,7 +114,8 @@ class CtxObjArguments:
     def _reconstruct_command(self, command):
         subcommand_args = command["kwargs"]
         subcommand_name = command["name"]
-        # logger.debug(f'Subcommand args {pprint.pformat(subcommand_args)}')
+        logger.debug(f"Subcommand name {subcommand_name}")
+        logger.debug(f"Subcommand args {pprint.pformat(subcommand_args)}")
 
         command_line_string = [subcommand_name]
         for k, subdict in subcommand_args.items():
@@ -142,6 +148,7 @@ class CtxObjArguments:
                     command_line_string += [self._value(i) for i in v]
                 else:
                     command_line_string += [self._value(v)]
+        logger.debug(f"Command line string: {command_line_string}")
         return command_line_string
 
     def _reconstruct_family(self, parent):

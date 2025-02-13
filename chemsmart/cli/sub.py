@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 @click.option("-t", "--time-hours", type=float, default=None)
 @click.option("-q", "--queue", type=str, help="queue")
 @click.option(
-    "-v",
+    "-v/",
     "--verbose/--no-verbose",
-    default=True,
+    default=False,
     help="Turns on logging to stream output and debug logging.",
 )
 @click.option(
