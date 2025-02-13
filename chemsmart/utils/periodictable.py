@@ -1,11 +1,14 @@
-try:
-    from periodictable import elements
-except ImportError:
-    from ase.data import chemical_symbols as elements
+from ase.data import chemical_symbols as elements
 
 
 class PeriodicTable:
     PERIODIC_TABLE = [str(element) for element in elements]
+
+    @property
+    def atomic_masses(self):
+        from ase.data import atomic_masses_iupac2016 as atomic_masses
+
+        return atomic_masses
 
     def to_element(self, element_str):
         """Function to convert lower case element to element with proper caps in periodic table."""
@@ -31,3 +34,6 @@ class PeriodicTable:
     def to_symbol(self, atomic_number):
         element_str = self.PERIODIC_TABLE[atomic_number]
         return self.to_element(element_str)
+
+    def to_atomic_mass(self, symbol):
+        return self.atomic_masses[self.to_atomic_number(symbol)]

@@ -131,6 +131,10 @@ class Molecule:
         )
 
     @property
+    def mass(self):
+        return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
+
+    @property
     def chemical_formula(self):
         return self.get_chemical_formula()
 

@@ -31,6 +31,10 @@ Cl      -3.0556310000   -0.1578960000   -0.0001400000
 """
         cb = CoordinateBlock(coordinate_block=coordinates_string)
         assert cb.symbols.get_chemical_formula() == "C7H5ClO"
+        mol = cb.molecule
+        assert mol.empirical_formula == "C7H5ClO"
+        assert mol.num_atoms == 14
+        assert np.isclose(mol.mass, 140.567, atol=1e-2)
 
     def test_read_gaussian_cb_with_tv(self):
         coordinates_string = """
@@ -50,6 +54,7 @@ TV                -1.219952    2.133447    0.000000
             [2.475315, 0.000000, 0.000000],
             [-1.219952, 2.133447, 0.000000],
         ]
+        assert np.isclose(cb.molecule.mass, 24.02, atol=1e-2)
 
     def test_read_gaussian_cb_frozen_atoms(self):
         coordinates_string = """
@@ -133,6 +138,9 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+        assert len(molecule.chemical_symbols) == 71
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+        assert np.isclose(molecule.mass, 665.982, atol=1e-2)
 
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
@@ -344,6 +352,7 @@ class TestStructures:
             symbols=["C", "O", "O"],
             positions=np.array([[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]),
         )
+        assert np.isclose(mol.mass, 44.01, atol=1e-2)
         assert np.isclose(mol.get_distance(1, 2), 1.16)
         assert np.isclose(mol.get_distance(2, 3), 1.16)
         assert np.isclose(mol.get_angle(1, 2, 3), 180)

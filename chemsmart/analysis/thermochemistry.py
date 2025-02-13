@@ -8,23 +8,52 @@ class Thermochemistry:
     """Class for thermochemistry analysis.
     Requires filename from which thermochemistry data is extracted."""
 
-    def __init__(self, filename):
+    def __init__(self, filename, temperature, pressure):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
+        self.temperature = temperature
+        self.pressure = pressure
+
+    @property
+    def translational_partition_function(self):
+        """Obtain the translational partition function.
+        Formula:
+            q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
+        where:
+            m = mass of the molecule
+            k = Boltzmann constant
+            T = temperature
+            h = Planck constant
+            P = pressure of the system
+        """
+        m = self.molecule.mass
+        T = self.temperature
+        P = self.pressure
+        return (2 * np.pi * m * units.kB * T / units.hbar**2) ** (3 / 2) * (
+            units.kB * T / P
+        )
 
     def translational_entropy(self):
         """Obtain the translational entropy.
         Formula:
-            S_t = R * ln(q_t + 1 + 3/2 ) for non-linear molecules.
-            S_t = R * ln(q_t + 1 + 1) for linear molecules.
-            S_t = R * ln(q_t + 1) for monoatomic molecules.
+            S_t = R * [ln(q_t) + 1 + d/2]
+            where d = 3 for non-linear molecules;
+                  d = 2 for linear molecules;
+                  d = 1 for monoatomic molecules.
         """
         if self.molecule.is_monoatomic:
-            return units.mol * units.kB * np.log(3 + 1)
+            d = 1
         elif self.molecule.is_linear:
-            return units.mol * units.kB * np.log(3 + 1 + 1)
+            d = 2
         else:
-            return units.mol * units.kB * np.log(3 + 1 + 3 / 2)
+            d = 3
+        return units.kB * np.log(3 + 1 + d / 2)
+
+    def translational_internal_energy(self):
+        """Obtain the translational internal energy.
+        Formula:
+            U_t = 3/2 * R * T
+        """
 
     def get_thermochemistry(self):
         pass
