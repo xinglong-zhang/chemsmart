@@ -29,6 +29,14 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="submission command for all jobs.",
 )
 def entry_point(filename, command):
+    """Script for submitting a list of jobs from a .txt file.
+    The .txt file contains the names of the files to be submitted.
+    Usage:
+    submit_jobs.py -f filename.txt -c "command"
+    where "command" is the submission command for all files, e.g.,
+    "chemsmart sub gaussian -p test -f file sp" where "file" is the placeholder
+    (required) for all filenames in the .txt file.
+    """
     create_logger()
     logger.info(f"Reading filenames from {filename}")
     with open(filename, "r") as f:
