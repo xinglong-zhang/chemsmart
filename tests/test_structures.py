@@ -338,6 +338,18 @@ class TestStructures:
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
+    def test_molecular_geometry(self):
+        """Test molecular geometry calculations."""
+        mol = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array([[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]),
+        )
+        assert np.isclose(mol.get_distance(1, 2), 1.16)
+        assert np.isclose(mol.get_distance(2, 3), 1.16)
+        assert np.isclose(mol.get_angle(1, 2, 3), 180)
+        assert np.isclose(mol.get_dihedral(0, 1, 2, 0), 0)
+        assert mol.is_linear
+
 
 class TestMoleculeAdvanced:
     def test_molecule_to_rdkit_conversion(self):

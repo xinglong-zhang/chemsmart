@@ -14,6 +14,7 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
+from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
@@ -159,11 +160,99 @@ class Molecule:
         """Check if molecule is chiral or not."""
         return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
 
+    @property
+    def is_aromatic(self):
+        """Check if molecule is aromatic or not."""
+        return Chem.GetAromaticAtoms(self.to_rdkit()) != []
+
+    @property
+    def is_ring(self):
+        """Check if molecule is a ring or not."""
+        return Chem.GetSymmSSSR(self.to_rdkit()) != []
+
+    @property
+    def is_monoatomic(self):
+        """Check if molecule is monoatomic or not."""
+        return self.num_atoms == 1
+
+    @property
+    def is_diatomic(self):
+        """Check if molecule is diatomic or not."""
+        return self.num_atoms == 2
+
+    @property
+    def is_linear(self):
+        """Check if molecule is linear or not."""
+        if self.num_atoms <= 2:
+            return True
+        else:
+            if self.num_atoms == 3:
+                return is_collinear(self.positions)
+            else:
+                from sklearn.decomposition import PCA
+
+                # Use PCA to check if all atoms lie on one principal axis
+                pca = PCA(n_components=1)
+                pca.fit(self.positions)
+                reconstructed = pca.inverse_transform(
+                    pca.transform(self.positions)
+                )
+                error = np.linalg.norm(
+                    self.positions - reconstructed, axis=1
+                ).max()
+                return error < 1e-2
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return Symbols.fromsymbols(self.symbols).get_chemical_formula(
                 mode=mode, empirical=empirical
             )
+
+    def get_distance(self, idx1, idx2):
+        """Calculate the distance between two points.
+        Use 1-based indexing for idx1 and idx2."""
+        return np.linalg.norm(
+            self.positions[idx1 - 1] - self.positions[idx2 - 1]
+        )
+
+    def get_angle(self, idx1, idx2, idx3):
+        """Calculate the angle between three points.
+        Use 1-based indexing for idx1, idx2, and idx3."""
+        return self.get_angle_from_positions(
+            self.positions[idx1 - 1],
+            self.positions[idx2 - 1],
+            self.positions[idx3 - 1],
+        )
+
+    def get_angle_from_positions(self, position1, position2, position3):
+        """Calculate the angle between three points."""
+        v1 = position1 - position2
+        v2 = position3 - position2
+        cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        return np.degrees(np.arccos(cos_theta))
+
+    def get_dihedral(self, idx1, idx2, idx3, idx4):
+        """Calculate the dihedral angle between four points, about bond formed by idx2 and idx3.
+        Use 1-based indexing for idx1, idx2, idx3, and idx4."""
+        return self.get_dihedral_from_positions(
+            self.positions[idx1 - 1],
+            self.positions[idx2 - 1],
+            self.positions[idx3 - 1],
+            self.positions[idx4 - 1],
+        )
+
+    def get_dihedral_from_positions(
+        self, position1, position2, position3, position4
+    ):
+        """Calculate the dihedral angle between four points."""
+        v1 = position1 - position2
+        v2 = position3 - position2
+        v3 = position4 - position3
+        n1 = np.cross(v1, v2)
+        n2 = np.cross(v2, v3)
+        x = np.dot(n1, n2)
+        y = np.dot(np.cross(n1, v2), n2)
+        return np.degrees(np.arctan2(y, x))
 
     def copy(self):
         return copy.deepcopy(self)
