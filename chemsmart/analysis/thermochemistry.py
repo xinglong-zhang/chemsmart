@@ -47,13 +47,15 @@ class Thermochemistry:
             d = 2
         else:
             d = 3
-        return units.kB * np.log(3 + 1 + d / 2)
+        return units.kB * units._Nav * np.log(3 + 1 + d / 2)
 
     def translational_internal_energy(self):
         """Obtain the translational internal energy.
+        Same for all types of molecules, whether linear, non-linear or monoatomic.
         Formula:
             U_t = 3/2 * R * T
         """
+        return 3 / 2 * units.kB * units._Nav * self.temperature
 
     def get_thermochemistry(self):
         pass
