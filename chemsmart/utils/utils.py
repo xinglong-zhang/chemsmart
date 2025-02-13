@@ -573,3 +573,12 @@ def kabsch_align2(
     rmsd = np.sqrt(np.mean(np.sum((rotated_P - centered_Q) ** 2, axis=1)))
 
     return aligned_P, Q, R, centroid_Q - centroid_P, rmsd
+
+
+def extract_number(filename):
+    """Extracts the numeric part from the filename."""
+    match = re.search(r"c(\d+)\*?", filename)
+    if match:
+        return int(match.group(1))
+    else:
+        return float("inf")  # If no number is found, place it at the end

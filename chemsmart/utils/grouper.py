@@ -81,13 +81,13 @@ class RMSDGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        rmsd_threshold: float = 0.5,
+        threshold: float = 0.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
     ):
         super().__init__(molecules, num_procs)
-        self.rmsd_threshold = rmsd_threshold
+        self.threshold = threshold  # RMSD threshold for grouping
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
         # Cache sorted chemical symbols as sets for faster comparison
@@ -121,7 +121,7 @@ class RMSDGrouper(MoleculeGrouper):
         # Build adjacency matrix
         adj_matrix = np.zeros((n, n), dtype=bool)
         for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.rmsd_threshold:
+            if rmsd < self.threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
         # Find connected components
@@ -166,12 +166,12 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        rmsd_threshold: float = 0.5,
+        threshold: float = 0.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
     ):
         super().__init__(molecules, num_procs)
-        self.rmsd_threshold = rmsd_threshold
+        self.threshold = threshold
         self.align_molecules = align_molecules
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
@@ -203,7 +203,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         # 🏗️ **3️⃣ Construct Adjacency Matrix for Clustering**
         adj_matrix = np.zeros((n, n), dtype=bool)
         for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.rmsd_threshold:
+            if rmsd < self.threshold:
                 adj_matrix[i, j] = adj_matrix[j, i] = True
 
         # 🔗 **4️⃣ Find Connected Components (Groups)**
@@ -266,12 +266,12 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        similarity_threshold: float = 0.9,
+        threshold: float = 0.9,  # Tanimoto similarity threshold
         num_procs: int = 1,
         use_rdkit_fp: bool = True,  # Allows switching between RDKit FP and RDKFingerprint
     ):
         super().__init__(molecules, num_procs)
-        self.similarity_threshold = similarity_threshold
+        self.threshold = threshold
         self.use_rdkit_fp = use_rdkit_fp  # Choose fingerprinting method
 
         # Convert valid molecules to RDKit format
@@ -328,7 +328,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
         # Apply threshold and create adjacency matrix
-        adj_matrix = csr_matrix(similarity_matrix >= self.similarity_threshold)
+        adj_matrix = csr_matrix(similarity_matrix >= self.threshold)
 
         # Use connected components clustering
         _, labels = connected_components(adj_matrix)
@@ -459,11 +459,11 @@ class ConnectivityGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
-        bond_cutoff_buffer: float = 0.0,
+        threshold: float = 0.0,  # Buffer for bond cutoff
         adjust_H: bool = True,
     ):
         super().__init__(molecules, num_procs)
-        self.bond_cutoff_buffer = bond_cutoff_buffer
+        self.threshold = threshold  # Buffer for bond cutoff
         self.adjust_H = adjust_H
 
     def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
@@ -491,7 +491,7 @@ class ConnectivityGrouper(MoleculeGrouper):
             self.graphs = pool.starmap(
                 to_graph_wrapper,
                 [
-                    (mol, self.bond_cutoff_buffer, self.adjust_H)
+                    (mol, self.threshold, self.adjust_H)
                     for mol in self.molecules
                 ],
             )
@@ -529,11 +529,11 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
-        bond_cutoff_buffer: float = 0.0,
+        threshold: float = 0.0,  # Buffer for bond cutoff
         adjust_H: bool = True,
     ):
         super().__init__(molecules, num_procs)
-        self.bond_cutoff_buffer = bond_cutoff_buffer
+        self.threshold = threshold
         self.adjust_H = adjust_H
 
     def _are_isomorphic(self, g1: nx.Graph, g2: nx.Graph) -> bool:
@@ -559,7 +559,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
             graphs = pool.starmap(
                 to_graph_wrapper,
                 [
-                    (mol, self.bond_cutoff_buffer, self.adjust_H)
+                    (mol, self.threshold, self.adjust_H)
                     for mol in self.molecules
                 ],
             )

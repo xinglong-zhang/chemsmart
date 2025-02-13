@@ -72,7 +72,7 @@ class TestGrouper:
         molecules = xyz_file.get_molecule(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = RMSDGrouper(
-            molecules, num_procs=self.NUM_PROCS, rmsd_threshold=0.2
+            molecules, threshold=0.2, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper.group()
         assert len(groups) == 18
@@ -93,7 +93,7 @@ class TestGrouper:
         assert np.isclose(rmsd, 0.409, rtol=1e-3)
 
         grouper2 = RMSDGrouper(
-            molecules, num_procs=self.NUM_PROCS, rmsd_threshold=0.5
+            molecules, threshold=0.5, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper2.group()
         assert len(groups) == 12
@@ -102,7 +102,7 @@ class TestGrouper:
         assert len(unique_structures) == 12
 
         grouper3 = RMSDGrouper(
-            molecules, num_procs=self.NUM_PROCS, rmsd_threshold=1.0
+            molecules, threshold=1.0, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper3.group()
         assert len(groups) == 10
@@ -111,7 +111,7 @@ class TestGrouper:
         assert len(unique_structures) == 10
 
         grouper4 = RMSDGrouper(
-            molecules, num_procs=self.NUM_PROCS, rmsd_threshold=1.5
+            molecules, threshold=1.5, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper4.group()
         assert len(groups) == 6
@@ -120,7 +120,7 @@ class TestGrouper:
         assert len(unique_structures) == 6
 
         grouper5 = RMSDGrouper(
-            molecules, num_procs=self.NUM_PROCS, rmsd_threshold=2.0
+            molecules, threshold=2.0, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper5.group()
         assert len(groups) == 4
@@ -129,7 +129,7 @@ class TestGrouper:
         assert len(unique_structures) == 4
 
         grouper6 = RMSDGrouper(
-            molecules, num_procs=self.NUM_PROCS, rmsd_threshold=2.5
+            molecules, threshold=2.5, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper6.group()
         assert len(groups) == 3
@@ -146,8 +146,8 @@ class TestGrouper:
         assert len(molecules) == 18
         grouper = RMSDGrouper(
             molecules,
+            threshold=0.2,
             num_procs=self.NUM_PROCS,
-            rmsd_threshold=0.2,
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper.group()
@@ -170,8 +170,8 @@ class TestGrouper:
 
         grouper2 = RMSDGrouper(
             molecules,
+            threshold=0.5,
             num_procs=self.NUM_PROCS,
-            rmsd_threshold=0.5,
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper2.group()
@@ -182,8 +182,8 @@ class TestGrouper:
 
         grouper3 = RMSDGrouper(
             molecules,
+            threshold=1.0,
             num_procs=self.NUM_PROCS,
-            rmsd_threshold=1.0,
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper3.group()
@@ -194,8 +194,8 @@ class TestGrouper:
 
         grouper4 = RMSDGrouper(
             molecules,
+            threshold=1.5,
             num_procs=self.NUM_PROCS,
-            rmsd_threshold=1.5,
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper4.group()
@@ -206,8 +206,8 @@ class TestGrouper:
 
         grouper5 = RMSDGrouper(
             molecules,
+            threshold=2.0,
             num_procs=self.NUM_PROCS,
-            rmsd_threshold=2.0,
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper5.group()
@@ -218,8 +218,8 @@ class TestGrouper:
 
         grouper6 = RMSDGrouper(
             molecules,
+            threshold=2.5,
             num_procs=self.NUM_PROCS,
-            rmsd_threshold=2.5,
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper6.group()
@@ -297,7 +297,7 @@ class TestGrouper:
         molecules = xyz_file.get_molecule(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = ConnectivityGrouper(
-            molecules, num_procs=self.NUM_PROCS, bond_cutoff_buffer=0.2
+            molecules, num_procs=self.NUM_PROCS, threshold=0.2
         )
         groups, group_indices = grouper.group()
         assert len(groups) == 3
@@ -306,7 +306,7 @@ class TestGrouper:
         assert len(unique_structures) == 3
 
         grouper2 = ConnectivityGrouper(
-            molecules, num_procs=self.NUM_PROCS, bond_cutoff_buffer=0.5
+            molecules, num_procs=self.NUM_PROCS, threshold=0.5
         )
         groups, group_indices = grouper2.group()
         assert len(groups) == 1
@@ -350,7 +350,7 @@ class TestGrouper:
         molecules = xyz_file.get_molecule(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = TanimotoSimilarityGrouper(
-            molecules, num_procs=self.NUM_PROCS, similarity_threshold=0.95
+            molecules, threshold=0.95, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper.group()
         assert len(groups) == 1
@@ -359,7 +359,7 @@ class TestGrouper:
         assert len(unique_structures) == 1
 
         grouper2 = TanimotoSimilarityGrouper(
-            molecules, num_procs=self.NUM_PROCS, similarity_threshold=0.8
+            molecules, threshold=0.8, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper2.group()
         assert len(groups) == 1
@@ -368,7 +368,7 @@ class TestGrouper:
         assert len(unique_structures) == 1
 
         grouper3 = TanimotoSimilarityGrouper(
-            molecules, num_procs=self.NUM_PROCS, similarity_threshold=0.5
+            molecules, threshold=0.5, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper3.group()
         assert len(groups) == 1
