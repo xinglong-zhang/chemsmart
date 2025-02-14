@@ -34,7 +34,7 @@ class Thermochemistry:
         m = self.molecule.mass
         T = self.temperature
         P = self.pressure
-        return ((2 * np.pi * m * units.kB * T) / (units.hplanck) ** 2) ** (3 / 2) * (
+        return ((2 * np.pi * m * units._k * T) / (units.hplanck) ** 2) ** (3 / 2) * (
             units._k * T / P
         )
 
