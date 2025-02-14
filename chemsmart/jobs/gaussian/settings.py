@@ -577,17 +577,35 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         logger.debug(f"Link route for settings {self}: {link_route_string}")
         return link_route_string
 
-    def _get_link_route_string_from_jobtype(self):
+    def _get_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
         # remove "opt or opt= and freq" from route string
         pattern = re.compile(r"opt\s*(=\s*(\(.*\)|\w+))?\s*", re.IGNORECASE)
         route_string_final = re.sub(pattern, "", route_string)
         route_string_final = route_string_final.replace("freq", "")
+        # stable=opt guess=mix
+        if self.stable:
+            logger.debug(f"Stable: {self.stable}")
+            route_string_final += f" stable={self.stable}"
+        if self.guess:
+            logger.debug(f"Guess: {self.guess}")
+            route_string_final += f" guess={self.guess}"
+        else:
+            # other methods for link jobs - have not encountered yet,
+            # but may be modified in future when needed
+            pass
 
-        if self.stable is not None and self.guess is not None:
-            route_string_final += f" stable={self.stable} guess={self.guess}"
-        route_string_final += " geom=check guess=read "
         return route_string_final
+
+    def _get_link_route_string_from_jobtype(self):
+        route_string = super()._get_route_string_from_jobtype()
+        # remove "opt or opt= and freq" from route string
+
+        if "geom=check" not in route_string:
+            route_string += " geom=check"
+        if "guess=read" not in route_string:
+            route_string += " guess=read"
+        return route_string
 
 
 class GaussianTDDFTJobSettings(GaussianJobSettings):
