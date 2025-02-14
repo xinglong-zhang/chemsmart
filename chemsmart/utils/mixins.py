@@ -529,3 +529,29 @@ class RegistryMixin(metaclass=RegistryMeta):
 #     def write(self, f):
 #         for line in self.contents:
 #             f.write(line)
+
+
+class FolderMixin:
+    """Mixin class for folders."""
+
+    def get_all_files_in_current_folder(self, filetype):
+        """Obtain a list of files of specified type in the folder."""
+
+        all_files = []
+        for file in os.listdir(self.folder):
+            # check that the file is not empty:
+            if os.stat(os.path.join(self.folder, file)).st_size == 0:
+                continue
+            # collect files of specified type
+            if file.endswith(filetype):
+                all_files.append(file)
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders(self, filetype):
+        """Obtain a list of files of specified type in the folder and subfolders."""
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            for file in files:
+                if file.endswith(filetype):
+                    all_files.append(os.path.join(subdir, file))
+        return all_files

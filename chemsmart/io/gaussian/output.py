@@ -7,7 +7,7 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.mixins import GaussianFileMixin
+from chemsmart.utils.mixins import FolderMixin, GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     eV_pattern,
@@ -1629,8 +1629,7 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
         return None
 
 
-
-class GaussianLogFolder:
+class GaussianLogFolder(FolderMixin):
     """Log folder containing all Gaussian log files for postprocessing."""
 
     def __init__(self, folder):
@@ -1639,14 +1638,15 @@ class GaussianLogFolder:
 
     @property
     def all_logfiles(self):
+        """Get all log files in the folder, including subfolders."""
+        return self.get_all_files_in_current_folder_and_subfolders(
+            filetype="log"
+        )
+
+    @property
+    def all_logfiles_in_current_folder(self):
         """Get all log files in the folder."""
-        log_files = []
-        for subdir, _dirs, files in os.walk(self.folder):
-            for file in files:
-                filepath = os.path.join(subdir, file)
-                if filepath.endswith(".log"):
-                    log_files.append(filepath)
-        return log_files
+        return self.get_all_files_in_current_folder(filetype="log")
 
     @property
     def total_service_units(self):
@@ -1658,11 +1658,25 @@ class GaussianLogFolder:
             total_service_units += core_hours
         return total_service_units
 
-    def write_job_runtime(self, job_runtime_file='job_runtime.txt'):
+    def write_job_runtime(self, job_runtime_file="job_runtime.txt"):
         """Write job runtime for all log files in the folder."""
-        with open(job_runtime_file, 'w') as f:
+        with open(job_runtime_file, "w") as f:
             for file in self.all_logfiles:
                 output_file = Gaussian16Output(file)
                 core_hours = output_file.total_core_hours
-                f.write(f'Job: {file:<130} Total time: {core_hours:6.1f} core-hours\n')
-            f.write(f'TOTAL core-hours in folder {self.folder} is: {self.total_service_units}\n')
+                f.write(
+                    f"Job: {file:<130} Total time: {core_hours:6.1f} core-hours\n"
+                )
+            f.write(
+                f"TOTAL core-hours in folder {self.folder} is: {self.total_service_units}\n"
+            )
+
+    # def assemble_database(self, database_file='database.json'):
+    #     """Assemble a database from all log files in the folder."""
+    #     database = {}
+    #     for file in self.all_logfiles:
+    #         output_file = Gaussian16Output(file)
+    #         database[file] = output_file.__dict__
+    #     with open(database_file, 'w') as f:
+    #         json.dump(database, f, indent=4)
+    #     return database
