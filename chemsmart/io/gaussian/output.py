@@ -1627,3 +1627,42 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
                         all_cells.append(tv_vector)
                 return np.array(all_cells)
         return None
+
+
+
+class GaussianLogFolder:
+    """Log folder containing all Gaussian log files for postprocessing."""
+
+    def __init__(self, folder):
+        """:param folder: Parent folder for all log files; type of str"""
+        self.folder = folder
+
+    @property
+    def all_logfiles(self):
+        """Get all log files in the folder."""
+        log_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            for file in files:
+                filepath = os.path.join(subdir, file)
+                if filepath.endswith(".log"):
+                    log_files.append(filepath)
+        return log_files
+
+    @property
+    def total_service_units(self):
+        """Get all service units used in all the log files contained in the folder."""
+        total_service_units = 0
+        for file in self.all_logfiles:
+            output_file = Gaussian16Output(file)
+            core_hours = output_file.total_core_hours
+            total_service_units += core_hours
+        return total_service_units
+
+    def write_job_runtime(self, job_runtime_file='job_runtime.txt'):
+        """Write job runtime for all log files in the folder."""
+        with open(job_runtime_file, 'w') as f:
+            for file in self.all_logfiles:
+                output_file = Gaussian16Output(file)
+                core_hours = output_file.total_core_hours
+                f.write(f'Job: {file:<130} Total time: {core_hours:6.1f} core-hours\n')
+            f.write(f'TOTAL core-hours in folder {self.folder} is: {self.total_service_units}\n')
