@@ -1,18 +1,23 @@
 import numpy as np
-from ase import units
+from chemsmart.utils.units import ase_units as units
 
 from chemsmart.io.molecules.structure import Molecule
 
 
 class Thermochemistry:
     """Class for thermochemistry analysis.
-    Requires filename from which thermochemistry data is extracted."""
+    Requires filename from which thermochemistry data is extracted.
+    Args:
+        filename: str. Filepath to the file from which thermochemistry data is extracted.
+        temperature: float. Temperature of the system, in ºC.
+        pressure: float. Pressure of the system, in atm.
+    """
 
     def __init__(self, filename, temperature, pressure):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
-        self.temperature = temperature
-        self.pressure = pressure
+        self.temperature = temperature + 273.15  # Convert to Kelvin
+        self.pressure = pressure * units.atm_to_pa
 
     @property
     def translational_partition_function(self):
@@ -29,8 +34,8 @@ class Thermochemistry:
         m = self.molecule.mass
         T = self.temperature
         P = self.pressure
-        return (2 * np.pi * m * units.kB * T / units.hbar**2) ** (3 / 2) * (
-            units.kB * T / P
+        return ((2 * np.pi * m * units.kB * T) / (units.hplanck) ** 2) ** (3 / 2) * (
+            units._k * T / P
         )
 
     def translational_entropy(self):

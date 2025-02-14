@@ -672,6 +672,14 @@ class Gaussian16Output(GaussianFileMixin):
         elif len(self.oniom_energies) != 0:
             return self.oniom_energies
 
+    @cached_property
+    def zero_point_energy(self):
+        """Zero point energy in Hartree."""
+        for line in self.contents:
+            if "Zero-point correction=" in line:
+                return float(line.split()[2])
+        return None
+
     # check for convergence criterion not met (happens for some output files)
     @property
     def convergence_criterion_not_met(self):
