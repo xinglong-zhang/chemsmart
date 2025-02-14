@@ -1,23 +1,31 @@
+import logging
+
 import numpy as np
-from chemsmart.utils.units import ase_units as units
+from ase import units
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.constants import R, atm_to_pa
+from chemsmart.utils.logger import create_logger
+
+logger = logging.getLogger(__name__)
+
+create_logger()
 
 
 class Thermochemistry:
-    """Class for thermochemistry analysis.
+    """Class for thermochemistry analysis. Use SI units.
     Requires filename from which thermochemistry data is extracted.
     Args:
         filename: str. Filepath to the file from which thermochemistry data is extracted.
-        temperature: float. Temperature of the system, in ºC.
+        temperature: float. Temperature of the system, in K.
         pressure: float. Pressure of the system, in atm.
     """
 
     def __init__(self, filename, temperature, pressure):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
-        self.temperature = temperature + 273.15  # Convert to Kelvin
-        self.pressure = pressure * units.atm_to_pa
+        self.temperature = temperature  # in Kelvin
+        self.pressure = pressure * atm_to_pa
 
     @property
     def translational_partition_function(self):
@@ -34,9 +42,10 @@ class Thermochemistry:
         m = self.molecule.mass
         T = self.temperature
         P = self.pressure
-        return ((2 * np.pi * m * units._k * T) / (units.hplanck) ** 2) ** (3 / 2) * (
-            units._k * T / P
-        )
+        logger.debug(f"Mass: {m} g/mol, Temperature: {T} K, Pressure: {P} Pa")
+        return (2 * np.pi * m * units._k * T / (units._hplanck**2)) ** (
+            3 / 2
+        ) * (units._k * T / P)
 
     def translational_entropy(self):
         """Obtain the translational entropy.
@@ -52,7 +61,7 @@ class Thermochemistry:
             d = 2
         else:
             d = 3
-        return units.kB * units._Nav * np.log(3 + 1 + d / 2)
+        return R * (np.log(self.translational_partition_function) + 1 + d / 2)
 
     def translational_internal_energy(self):
         """Obtain the translational internal energy.
@@ -60,7 +69,7 @@ class Thermochemistry:
         Formula:
             U_t = 3/2 * R * T
         """
-        return 3 / 2 * units.kB * units._Nav * self.temperature
+        return 3 / 2 * R * self.temperature
 
     def get_thermochemistry(self):
         pass
