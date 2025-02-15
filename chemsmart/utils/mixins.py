@@ -544,13 +544,14 @@ class FolderMixin:
                 continue
             # collect files of specified type
             if file.endswith(filetype):
-                all_files.append(file)
+                all_files.append(os.path.join(self.folder, file))
         return all_files
 
     def get_all_files_in_current_folder_and_subfolders(self, filetype):
         """Obtain a list of files of specified type in the folder and subfolders."""
         all_files = []
         for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
             for file in files:
                 if file.endswith(filetype):
                     all_files.append(os.path.join(subdir, file))

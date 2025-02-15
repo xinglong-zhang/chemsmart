@@ -6,6 +6,7 @@ from functools import cached_property, lru_cache
 
 import networkx as nx
 import numpy as np
+from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
@@ -14,9 +15,10 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
+from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
-from chemsmart.utils.utils import file_cache, string2index_1based
+from chemsmart.utils.utils import file_cache
 
 p = pt()
 
@@ -105,6 +107,10 @@ class Molecule:
 
         # check that the number of symbols and positions are the same
         if len(self.symbols) != len(self.positions):
+            logger.debug(f"Number of symbols: {len(self.symbols)}")
+            logger.debug(f"Number of positions: {len(self.positions)}")
+            logger.debug(f"Symbols: {self.symbols}")
+            logger.debug(f"Positions: {self.positions}")
             raise ValueError(
                 "The number of symbols and positions should be the same!"
             )
@@ -446,6 +452,61 @@ class Molecule:
             raise ValueError(
                 f"Program {program} is not supported for writing coordinates."
             )
+
+    def write(self, filename, format="xyz", **kwargs):
+        """Write the molecule to a file."""
+        if format.lower() == "xyz":
+            self.write_xyz(filename, **kwargs)
+        elif format.lower() == "com":
+            self.write_com(filename, **kwargs)
+        # elif format.lower() == "mol":
+        #     self.write_mol(filename, **kwargs)
+        else:
+            raise ValueError(f"Format {format} is not supported for writing.")
+
+    def write_xyz(self, filename, **kwargs):
+        """Write the molecule to an XYZ file."""
+        with open(filename, "w") as f:
+            base_filename = os.path.basename(filename)
+            if self.energy is not None:
+                # energy found in file, e.g., .out, .log
+                xyz_info = (
+                    f"{base_filename}    Empirical formula: {self.chemical_formula}    "
+                    f"Energy(Hartree): {self.energy/units.Hartree}"
+                )
+            else:
+                # no energy found in file, e.g., .xyz or .com
+                xyz_info = f"{base_filename}    Empirical formula: {self.chemical_formula}"
+
+            logger.info(f"Writing outputfile to {filename}")
+            f.write(f"{self.num_atoms}\n")
+            f.write(f"{xyz_info}\n")
+            self._write_orca_coordinates(f)
+
+    def write_com(
+        self,
+        filename,
+        charge=0,
+        multiplicity=1,
+        route="# opt freq m062x def2svp",
+        **kwargs,
+    ):
+        """Write the molecule to a Gaussian input file."""
+        with open(filename, "w") as f:
+            basename = os.path.basename(filename).split(".")[0]
+            f.write(f"%chk={basename}.chk\n")
+            f.write("%mem=2GB\n")
+            f.write("%nprocshared=32\n")
+            f.write(f"{route}\n")  # example route
+            f.write("\n")
+            f.write(f"Generated from {filename}\n")
+            f.write("\n")
+            if self.charge is not None and self.multiplicity is not None:
+                f.write(f"{self.charge} {self.multiplicity}\n")
+            else:
+                f.write(f"{charge} {multiplicity}\n")
+            self.write_coordinates(f, program="gaussian")
+            f.write("\n")
 
     def _write_gaussian_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
@@ -1044,51 +1105,3 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
-
-
-class XYZFile(FileMixin):
-    """xyz file object."""
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    @cached_property
-    def num_atoms(self):
-        return int(self.contents[0])
-
-    def _get_molecules_and_comments(self, index=":", return_list=False):
-        """Return a molecule object or a list of molecule objects from an xyz file.
-        The xzy file can either contain a single molecule, as conventionally, or a list
-        of molecules, such as those in crest_conformers.xyz file."""
-        all_molecules = []
-        comments = []
-        i = 0
-        while i < len(self.contents):
-            # Read number of atoms
-            num_atoms = int(self.contents[i].strip())
-            if num_atoms == 0:
-                raise ValueError("Number of atoms in the xyz file is zero!")
-            i += 1
-            # Read comment line
-            comment = self.contents[i].strip()
-            comments.append(comment)
-            i += 1
-            # Read the coordinate block
-            coordinate_block = self.contents[i : i + num_atoms]
-            i += num_atoms
-            molecule = Molecule.from_coordinate_block_text(coordinate_block)
-
-            # Store the molecule data
-            all_molecules.append(molecule)
-
-        molecules = all_molecules[string2index_1based(index)]
-        comments = comments[string2index_1based(index)]
-        if return_list and isinstance(molecules, Molecule):
-            return [molecules], [comments]
-        return molecules, comments
-
-    def get_molecule(self, index=":", return_list=False):
-        molecules, _ = self._get_molecules_and_comments(
-            index=index, return_list=return_list
-        )
-        return molecules

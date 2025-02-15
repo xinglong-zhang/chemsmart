@@ -8,7 +8,8 @@ from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.io.xyz.file import XYZFile
 
 
 class TestCoordinateBlock:
