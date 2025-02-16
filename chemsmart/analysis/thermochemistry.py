@@ -1,5 +1,6 @@
 import logging
 import math
+
 import numpy as np
 from ase import units
 
@@ -21,21 +22,41 @@ class Thermochemistry:
         pressure: float. Pressure of the system, in atm.
     """
 
-    def __init__(self, filename, temperature, pressure, degeneracy, rotational_number, moments_of_inertia, vibrational_frequencies):
+    def __init__(
+        self,
+        filename,
+        temperature,
+        pressure,
+        degeneracy,
+        rotational_number,
+        moments_of_inertia,
+        vibrational_frequencies,
+    ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
         self.degeneracy = degeneracy  # degeneracy of the ground state
-        self.rotational_number = rotational_number  # symmetry number for rotation
+        self.rotational_number = (
+            rotational_number  # symmetry number for rotation
+        )
         self.moments_of_inertia = moments_of_inertia  # array of moments of inertia along the x, y, and z axes
         self.vibrational_frequencies = vibrational_frequencies  # array of vibrational frequencies for each normal mode
 
-        self.m = self.molecule.mass * units._amu  # convert the unit of mass of the molecule from amu to kg
+        self.m = (
+            self.molecule.mass * units._amu
+        )  # convert the unit of mass of the molecule from amu to kg
         self.T = self.temperature  # temperature in K
-        self.P = self.pressure * atm_to_pa  # convert the unit of pressure from atm to Pascal
-        self.I = [i * units._amu * (1 / units.m) ** 2 for i in self.moments_of_inertia]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
-        self.v = [k * units._c * 1e2 for k in self.vibrational_frequencies]  # convert the unit of vibrational frequencies from cm^-1 to Hz
+        self.P = (
+            self.pressure * atm_to_pa
+        )  # convert the unit of pressure from atm to Pascal
+        self.I = [
+            i * units._amu * (1 / units.m) ** 2
+            for i in self.moments_of_inertia
+        ]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
+        self.v = [
+            k * units._c * 1e2 for k in self.vibrational_frequencies
+        ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
         # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
         self.theta = [units._hplanck * vk / units._k for vk in self.v]
@@ -52,8 +73,9 @@ class Thermochemistry:
             h = Planck constant (J s)
             P = pressure of the system (Pa)
         """
-        return (2 * np.pi * self.m * units._k * self.T / units._hplanck**2) ** (3 / 2) * (
-            units._k * self.T / self.P)
+        return (
+            2 * np.pi * self.m * units._k * self.T / units._hplanck**2
+        ) ** (3 / 2) * (units._k * self.T / self.P)
 
     @property
     def translational_entropy(self):
@@ -128,10 +150,12 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
-        theta_r = units._hplanck ** 2 / (8 * np.pi ** 2 * self.I[0] * units._k)
+        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[0] * units._k)
         return 1 / self.rotational_number * (self.T / theta_r)
 
-    def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(self):
+    def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
+        self,
+    ):
         """Calculate the rotational partition function of a nonlinear polyatomic molecule.
         Formula:
             q_r = pi^(1/2) / σ_r * (T^(3/2) / (Θ_r,x * Θ_r,y * Θ_r,z)^(1/2))
@@ -139,8 +163,14 @@ class Thermochemistry:
             σ_r = symmetry number for rotation
             Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
         """
-        theta_ri = [units._hplanck ** 2 / (8 * np.pi ** 2 * i * units._k) for i in self.I]
-        return np.pi ** (1 / 2) / self.rotational_number * (self.T ** (3 / 2) / np.prod(theta_ri) ** (1 / 2))
+        theta_ri = [
+            units._hplanck**2 / (8 * np.pi**2 * i * units._k) for i in self.I
+        ]
+        return (
+            np.pi ** (1 / 2)
+            / self.rotational_number
+            * (self.T ** (3 / 2) / np.prod(theta_ri) ** (1 / 2))
+        )
 
     @property
     def rotational_partition_function(self):
@@ -148,9 +178,13 @@ class Thermochemistry:
         if self.molecule.is_monoatomic:
             return 1
         elif self.molecule.is_linear:
-            return self._calculate_rotational_partition_function_for_linear_molecule()
+            return (
+                self._calculate_rotational_partition_function_for_linear_molecule()
+            )
         else:
-            return self._calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule()
+            return (
+                self._calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule()
+            )
 
     @property
     def rotational_entropy(self):
@@ -210,7 +244,10 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        return [math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T)) for t in self.theta]
+        return [
+            math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T))
+            for t in self.theta
+        ]
 
     @property
     def vibrational_partition_function_BOT(self):
@@ -254,7 +291,11 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        s = [(t / self.T) / (math.exp(t / self.T) - 1) - np.log(1 - math.exp(-t / self.T)) for t in self.theta]
+        s = [
+            (t / self.T) / (math.exp(t / self.T) - 1)
+            - np.log(1 - math.exp(-t / self.T))
+            for t in self.theta
+        ]
         return R * sum(s)
 
     @property
@@ -276,28 +317,52 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        c = [math.exp(t / self.T) * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2 for t in self.theta]
+        c = [
+            math.exp(t / self.T)
+            * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
+            for t in self.theta
+        ]
         return R * sum(c)
 
     @property
     def total_partition_function(self):
         """Obtain the total partition function."""
-        return self.translational_partition_function * self.rotational_partition_function * self.electronic_partition_function * self.vibrational_partition_function_V0
+        return (
+            self.translational_partition_function
+            * self.rotational_partition_function
+            * self.electronic_partition_function
+            * self.vibrational_partition_function_V0
+        )
 
     @property
     def total_entropy(self):
         """Obtain the total entropy."""
-        return self.translational_entropy + self.rotational_entropy + self.electronic_entropy + self.vibrational_entropy
+        return (
+            self.translational_entropy
+            + self.rotational_entropy
+            + self.electronic_entropy
+            + self.vibrational_entropy
+        )
 
     @property
     def total_internal_energy(self):
         """Obtain the total internal energy."""
-        return self.translational_internal_energy + self.rotational_internal_energy + self.electronic_internal_energy + self.vibrational_internal_energy
+        return (
+            self.translational_internal_energy
+            + self.rotational_internal_energy
+            + self.electronic_internal_energy
+            + self.vibrational_internal_energy
+        )
 
     @property
     def total_heat_capacity(self):
         """Obtain the total heat capacity."""
-        return self.translational_heat_capacity + self.rotational_heat_capacity + self.electronic_heat_capacity + self.vibrational_heat_capacity
+        return (
+            self.translational_heat_capacity
+            + self.rotational_heat_capacity
+            + self.electronic_heat_capacity
+            + self.vibrational_heat_capacity
+        )
 
     def get_thermochemistry(self):
         pass
