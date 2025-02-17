@@ -3,6 +3,7 @@ import os.path
 import numpy as np
 
 from chemsmart.analysis.thermochemistry import Thermochemistry
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
 )
@@ -46,18 +47,21 @@ class TestThermochemistry:
         # here T = 298.15 K, P = 1 atm = 101325 Pa
         # k_B = 1.380649 * 10^-23 J/K
         # h = 6.62607015 * 10^-34 J s
+        # A_N = 6.0221408e+23 mol^-1
         # using these constants, we got 8.732609925501497e+48
         expected_translational_partition_function = (
             (
                 2
                 * np.pi
-                * mol.mass
+                * (mol.mass /(6.0221408 * 1e23 *1000))
                 * 1.380649
                 * 1e-23
                 * 298.15
                 / (6.62607015 * 1e-34 * 6.62607015 * 1e-34)
             )
         ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
+        print(expected_translational_partition_function)
+        print(thermochem1.translational_partition_function)
         assert np.isclose(
             thermochem1.translational_partition_function,
             expected_translational_partition_function,
@@ -67,3 +71,32 @@ class TestThermochemistry:
         # # assert np.isclose(thermochem1.translational_internal_energy()
 
         assert g16_output.freq
+
+        thermochem2 = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=598.15,  # in Kelvin
+            pressure=1.2,  # in atm
+        )
+
+        # tests on thermochem2
+
+
+    def test_thermochemistry_co2(self, tmpdir):
+        mol = Molecule.from_pubchem("280")
+        tmp_path = tmpdir.join("co2.com")
+        mol.write_com(tmp_path)
+        print(tmp_path)
+        assert os.path.exists(tmp_path)
+        assert np.isclose(mol.mass, 44.01, rtol=1e-2)
+        thermochem1 = Thermochemistry(
+            filename=tmp_path,
+            temperature=298.15,  # in Kelvin
+            pressure=1,  # in atm
+        )
+
+        print(thermochem1.translational_partition_function)
+        from ase import units
+        print(units._amu)
+        print(1/units._Nav/1000)
+
+

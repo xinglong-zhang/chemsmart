@@ -27,10 +27,10 @@ class Thermochemistry:
         filename,
         temperature,
         pressure,
-        degeneracy,
-        rotational_number,
-        moments_of_inertia,
-        vibrational_frequencies,
+        degeneracy=None,
+        rotational_number=None,
+        moments_of_inertia=None,
+        vibrational_frequencies=None,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
@@ -44,22 +44,25 @@ class Thermochemistry:
         self.vibrational_frequencies = vibrational_frequencies  # array of vibrational frequencies for each normal mode
 
         self.m = (
-            self.molecule.mass * units._amu
+            self.molecule.mass * units._amu  # converts mass from g/mol to kg per molecule
+            # units._amu is same as divide by Avogadro's number then by 1000 (g to kg)
         )  # convert the unit of mass of the molecule from amu to kg
         self.T = self.temperature  # temperature in K
         self.P = (
             self.pressure * atm_to_pa
         )  # convert the unit of pressure from atm to Pascal
-        self.I = [
-            i * units._amu * (1 / units.m) ** 2
-            for i in self.moments_of_inertia
-        ]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
-        self.v = [
-            k * units._c * 1e2 for k in self.vibrational_frequencies
-        ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
+        if self.moments_of_inertia is not None:
+            self.I = [
+                i * units._amu * (1 / units.m) ** 2
+                for i in self.moments_of_inertia
+            ]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
+        if self.vibrational_frequencies is not None:
+            self.v = [
+                k * units._c * 1e2 for k in self.vibrational_frequencies
+            ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
-        # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
-        self.theta = [units._hplanck * vk / units._k for vk in self.v]
+            # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
+            self.theta = [units._hplanck * vk / units._k for vk in self.v]
 
     @property
     def translational_partition_function(self):
