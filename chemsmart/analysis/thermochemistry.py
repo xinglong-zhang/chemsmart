@@ -4,7 +4,9 @@ import math
 import numpy as np
 from ase import units
 
+from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.constants import R, atm_to_pa
 from chemsmart.utils.logger import create_logger
 
@@ -28,21 +30,12 @@ class Thermochemistry:
         temperature,
         pressure,
         degeneracy=None,
-        rotational_number=None,
-        moments_of_inertia=None,
-        vibrational_frequencies=None,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
         self.degeneracy = degeneracy  # degeneracy of the ground state
-        self.rotational_number = (
-            rotational_number  # symmetry number for rotation
-        )
-        self.moments_of_inertia = moments_of_inertia  # array of moments of inertia along the x, y, and z axes
-        self.vibrational_frequencies = vibrational_frequencies  # array of vibrational frequencies for each normal mode
-
         self.m = (
             self.molecule.mass
             * units._amu  # converts mass from g/mol to kg per molecule
@@ -64,6 +57,37 @@ class Thermochemistry:
 
             # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
             self.theta = [units._hplanck * vk / units._k for vk in self.v]
+
+    @property
+    def file_object(self):
+        """Open the file and return the file object."""
+        if self.filename.endswith(".log"):
+            # create a Gaussian16Output object if .log file
+            return Gaussian16Output(self.filename)
+        elif self.filename.endswith(".out"):
+            # create an OrcaOutput object if .out file
+            return ORCAOutput(self.filename)
+        else:
+            # can be added in future to parse other file formats
+            raise ValueError(
+                "Unsupported file format. Use .log or .out files."
+            )
+
+    @property
+    def moments_of_inertia(self):
+        """Obtain the moments of inertia of the molecule.
+        Array of moments of inertia along the x, y, and z axes"""
+        return self.file_object.moments_of_inertia
+
+    @property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number."""
+        return self.file_object.rotational_symmetry_number
+
+    @property
+    def vibrational_frequencies(self):
+        """Obtain the vibrational frequencies of the molecule."""
+        return self.file_object.vibrational_frequencies
 
     @property
     def translational_partition_function(self):
@@ -155,7 +179,7 @@ class Thermochemistry:
             I = moment of inertia (kg m^2)
         """
         theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[0] * units._k)
-        return 1 / self.rotational_number * (self.T / theta_r)
+        return 1 / self.rotational_symmetry_number * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
         self,
@@ -172,7 +196,7 @@ class Thermochemistry:
         ]
         return (
             np.pi ** (1 / 2)
-            / self.rotational_number
+            / self.rotational_symmetry_number
             * (self.T ** (3 / 2) / np.prod(theta_ri) ** (1 / 2))
         )
 

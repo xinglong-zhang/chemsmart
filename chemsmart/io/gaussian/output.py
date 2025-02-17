@@ -1398,6 +1398,28 @@ class Gaussian16Output(GaussianFileMixin):
         index = string2index_1based(index)
         return self.all_structures[index]
 
+    @cached_property
+    def moments_of_inertia(self):
+        """Obtain moments of inertia from the output file."""
+        for i, line in enumerate(self.contents):
+            if "moments of inertia" in line:
+                moments_of_inertia = []
+                for j_line in self.contents[i + 2 :]:
+                    if j_line.startswith("This molecule is"):
+                        break
+                    if len(j_line.split()) == 4:
+                        moments_of_inertia.append(
+                            np.array(j_line.split()[1:4], dtype=float)
+                        )
+                return moments_of_inertia
+
+    @cached_property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number from the output file."""
+        for line in self.contents:
+            if "Rotational symmetry number" in line:
+                return int(line.split()[-1].split(".")[0])
+
     def to_dataset(self, **kwargs):
         """Convert Gaussian .log file to Dataset with all data points taken from the .log file.
 
