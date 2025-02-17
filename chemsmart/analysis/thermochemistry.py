@@ -61,10 +61,10 @@ class Thermochemistry:
     @property
     def file_object(self):
         """Open the file and return the file object."""
-        if self.filename.endswith(".log"):
+        if str(self.filename).endswith(".log"):
             # create a Gaussian16Output object if .log file
             return Gaussian16Output(self.filename)
-        elif self.filename.endswith(".out"):
+        elif str(self.filename).endswith(".out"):
             # create an OrcaOutput object if .out file
             return ORCAOutput(self.filename)
         else:

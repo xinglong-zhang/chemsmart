@@ -7,6 +7,8 @@ from chemsmart.io.gaussian.output import (
     Gaussian16Output,
 )
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.gaussian import GaussianOptJob
+from chemsmart.settings.gaussian import GaussianProjectSettings
 
 
 class TestThermochemistry:
@@ -96,14 +98,49 @@ class TestThermochemistry:
 
         # tests on thermochem2
 
-    def test_thermochemistry_co2(self, tmpdir):
+    def test_thermochemistry_co2(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_scratch,
+    ):
         mol = Molecule.from_pubchem("280")
         tmp_path = tmpdir.join("co2.com")
+
+        os.chdir(tmpdir)
         mol.write_com(tmp_path)
-        assert os.path.exists(tmp_path)
-        assert np.isclose(mol.mass, 44.01, rtol=1e-2)
-        thermochem1 = Thermochemistry(
+
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        # create gaussian job
+
+        job = GaussianOptJob.from_filename(
             filename=tmp_path,
+            settings=settings,
+        )
+        assert isinstance(job, GaussianOptJob)
+
+        # set scratch
+        jobrunner_scratch.scratch_dir = tmpdir
+
+        # run the job
+        job.run(jobrunner=jobrunner_scratch)
+        assert job.is_complete()
+
+        # check that the job finished
+        tmp_log_path = tmpdir.join("CO2_fake.log")
+        assert os.path.exists(tmp_log_path)
+        assert np.isclose(mol.mass, 44.01, rtol=1e-2)
+
+        # get thermochemistry for CO2 molecule
+        thermochem1 = Thermochemistry(
+            filename=tmp_log_path,
             temperature=298.15,  # in Kelvin
             pressure=1,  # in atm
         )
