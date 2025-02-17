@@ -44,7 +44,8 @@ class Thermochemistry:
         self.vibrational_frequencies = vibrational_frequencies  # array of vibrational frequencies for each normal mode
 
         self.m = (
-            self.molecule.mass * units._amu  # converts mass from g/mol to kg per molecule
+            self.molecule.mass
+            * units._amu  # converts mass from g/mol to kg per molecule
             # units._amu is same as divide by Avogadro's number then by 1000 (g to kg)
         )  # convert the unit of mass of the molecule from amu to kg
         self.T = self.temperature  # temperature in K

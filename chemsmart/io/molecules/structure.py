@@ -16,6 +16,7 @@ from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.io.xyz.file import XYZFile
+from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache

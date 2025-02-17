@@ -3,10 +3,10 @@ import os.path
 import numpy as np
 
 from chemsmart.analysis.thermochemistry import Thermochemistry
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
 )
+from chemsmart.io.molecules.structure import Molecule
 
 
 class TestThermochemistry:
@@ -53,15 +53,13 @@ class TestThermochemistry:
             (
                 2
                 * np.pi
-                * (mol.mass /(6.0221408 * 1e23 *1000))
+                * (mol.mass / (6.0221408 * 1e23 * 1000))
                 * 1.380649
                 * 1e-23
                 * 298.15
                 / (6.62607015 * 1e-34 * 6.62607015 * 1e-34)
             )
         ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
-        print(expected_translational_partition_function)
-        print(thermochem1.translational_partition_function)
         assert np.isclose(
             thermochem1.translational_partition_function,
             expected_translational_partition_function,
@@ -78,14 +76,30 @@ class TestThermochemistry:
             pressure=1.2,  # in atm
         )
 
-        # tests on thermochem2
+        expected_translational_partition_function2 = (
+            (
+                2
+                * np.pi
+                * (mol.mass / (6.0221408 * 1e23 * 1000))
+                * 1.380649
+                * 1e-23
+                * 598.15
+                / (6.62607015 * 1e-34 * 6.62607015 * 1e-34)
+            )
+        ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / (1.2 * 101325))
 
+        assert np.isclose(
+            thermochem2.translational_partition_function,
+            expected_translational_partition_function2,
+            rtol=1e5,
+        )
+
+        # tests on thermochem2
 
     def test_thermochemistry_co2(self, tmpdir):
         mol = Molecule.from_pubchem("280")
         tmp_path = tmpdir.join("co2.com")
         mol.write_com(tmp_path)
-        print(tmp_path)
         assert os.path.exists(tmp_path)
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
         thermochem1 = Thermochemistry(
@@ -94,9 +108,6 @@ class TestThermochemistry:
             pressure=1,  # in atm
         )
 
-        print(thermochem1.translational_partition_function)
-        from ase import units
-        print(units._amu)
-        print(1/units._Nav/1000)
-
-
+        assert np.isclose(
+            thermochem1.translational_partition_function, 1.15e7, rtol=1e5
+        )
