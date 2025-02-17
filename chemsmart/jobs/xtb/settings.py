@@ -1,7 +1,6 @@
 import copy
 import logging
 import os
-import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 class XTBJobSettings(MolecularJobSettings):
     def __init__(
         self,
-        xtb_version=None,
+        xtb_version="gfn2",  # use gfn2 by default
         optimization_level=None,
         charge=None,
         unpair_electrons=None,
@@ -40,7 +39,6 @@ class XTBJobSettings(MolecularJobSettings):
         self.xtb_version = xtb_version
         self.optimization_level = optimization_level
         self.unpair_electrons = unpair_electrons
-
 
     def copy(self):
         return copy.deepcopy(self)
@@ -173,6 +171,10 @@ class XTBJobSettings(MolecularJobSettings):
             return cls.from_inpfile(filepath)
         if filepath.endswith(".log"):
             return cls.from_logfile(filepath)
+        if filepath.endswith(".out"):
+            return cls.from_outfile(filepath)
+        if filepath.endswith(".xyz"):
+            return cls.default()
         raise ValueError(f"Could not create {cls} from {filepath}")
 
     @property
@@ -378,161 +380,3 @@ class XTBJobSettings(MolecularJobSettings):
                 f"The specified solvent model {solvent_model} is not in \n"
                 f"the available solvent models: {GAUSSIAN_SOLVATION_MODELS}"
             )
-
-
-class GaussianIRCJobSettings(GaussianJobSettings):
-    def __init__(
-        self,
-        predictor=None,
-        recorrect=None,
-        recalc_step=6,
-        direction=None,
-        maxpoints=512,
-        maxcycles=128,
-        stepsize=20,
-        flat_irc=False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.predictor = predictor
-        self.recorrect = recorrect
-        self.recalc_step = recalc_step
-        self.direction = direction
-        self.maxpoints = maxpoints
-        self.maxcycles = maxcycles
-        self.stepsize = stepsize
-        self.flat_irc = flat_irc
-        self.freq = False  # turn off freq calc for IRC jobs
-        self.forces = False  # turn off forces calculations
-        self.route_to_be_written = None
-
-    def _get_route_string_from_jobtype(self):
-        route_string = super()._get_route_string_from_jobtype()
-        # if flat irc
-        if self.flat_irc:
-            # default route for flat IRC run if no options are specified
-            self.predictor = (
-                "LQA" if self.predictor is None else self.predictor
-            )
-            self.recorrect = (
-                "never" if self.recorrect is None else self.recorrect
-            )
-            self.recalc_step = (
-                -5 if self.recalc_step == 6 else self.recalc_step
-            )
-
-        # write job type specific route for irc
-        if self.job_type == "ircf":
-            self.direction = "forward"
-        elif self.job_type == "ircr":
-            self.direction = "reverse"
-
-        if self.predictor is not None and self.recorrect is not None:
-            route_string += (
-                f" irc({self.predictor},calcfc,recorrect={self.recorrect},recalc={self.recalc_step},"
-                f"stepsize={self.stepsize},{self.direction},maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
-            )
-        elif self.predictor is None and self.recorrect is None:
-            route_string += (
-                f" irc(calcfc,recalc={self.recalc_step},{self.direction},"
-                f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
-            )
-        else:
-            raise ValueError(
-                f"Only one of predictor type and recorrect is specified, please check!\n"
-                f"Predictor: {self.predictor}; Recorrect: {self.recorrect}"
-            )
-
-        if self.additional_route_parameters is not None:
-            route_string += f" {self.additional_route_parameters}"
-
-        return route_string
-
-
-class GaussianLinkJobSettings(GaussianJobSettings):
-    def __init__(
-        self, link=True, link_route=None, stable="opt", guess="mix", **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.link = link
-        self.link_route = link_route
-        self.stable = stable
-        self.guess = guess
-
-    @property
-    def link_route_string(self):
-        if self.link_route is not None:
-            link_route_string = self.link_route
-            if self.functional not in self.link_route:
-                link_route_string += f" {self.functional}"
-            if self.basis not in self.link_route:
-                link_route_string += f" {self.basis}"
-            if "geom=check" not in self.link_route:
-                link_route_string += " geom=check"
-            if "guess=read" not in self.link_route:
-                link_route_string += " guess=read"
-            logger.debug(
-                f"Link route for settings {self}: {link_route_string}"
-            )
-            return link_route_string
-
-        link_route_string = self._get_link_route_string_from_jobtype()
-        logger.debug(f"Link route for settings {self}: {link_route_string}")
-        return link_route_string
-
-    def _get_route_string_from_jobtype(self):
-        route_string = super()._get_route_string_from_jobtype()
-        # remove "opt or opt= and freq" from route string
-        pattern = re.compile(r"opt\s*(=\s*(\(.*\)|\w+))?\s*", re.IGNORECASE)
-        route_string_final = re.sub(pattern, "", route_string)
-        route_string_final = route_string_final.replace("freq", "")
-        # stable=opt guess=mix
-        if self.stable:
-            logger.debug(f"Stable: {self.stable}")
-            route_string_final += f" stable={self.stable}"
-        if self.guess:
-            logger.debug(f"Guess: {self.guess}")
-            route_string_final += f" guess={self.guess}"
-        else:
-            # other methods for link jobs - have not encountered yet,
-            # but may be modified in future when needed
-            pass
-
-        return route_string_final
-
-    def _get_link_route_string_from_jobtype(self):
-        route_string = super()._get_route_string_from_jobtype()
-        # remove "opt or opt= and freq" from route string
-
-        if "geom=check" not in route_string:
-            route_string += " geom=check"
-        if "guess=read" not in route_string:
-            route_string += " guess=read"
-        return route_string
-
-
-class GaussianTDDFTJobSettings(GaussianJobSettings):
-    def __init__(
-        self, states="singlets", root=1, nstates=3, eqsolv=None, **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.states = states
-        self.root = root
-        self.nstates = nstates
-        self.eqsolv = eqsolv
-
-    def _get_route_string_from_jobtype(self):
-        route_string = super()._get_route_string_from_jobtype()
-
-        if self.eqsolv is None:
-            eqsolv = ""
-        else:
-            eqsolv_options = ["eqsolv", "noneqsolv"]
-            assert (
-                self.eqsolv.lower() in eqsolv_options
-            ), f"Possible equilibrium solvation options are: {eqsolv_options}!"
-            eqsolv = f",{self.eqsolv}"
-
-        route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
-
-        return route_string

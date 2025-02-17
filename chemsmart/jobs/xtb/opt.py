@@ -1,8 +1,8 @@
-from chemsmart.jobs.gaussian.job import GaussianJob
+from chemsmart.jobs.xtb.job import XTBJob
 
 
-class GaussianOptJob(GaussianJob):
-    TYPE = "g16opt"
+class XTBOptJob(XTBJob):
+    TYPE = "xtbopt"
 
     def __init__(self, molecule, settings, label, **kwargs):
         super().__init__(

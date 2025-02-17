@@ -3,15 +3,13 @@ import os
 import shlex
 import subprocess
 from contextlib import suppress
-from datetime import datetime
 from functools import lru_cache
 from glob import glob
-from random import random
 from shutil import copy, rmtree
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.executable import GaussianExecutable
+from chemsmart.settings.executable import XTBExecutable
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
@@ -19,33 +17,14 @@ pt = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class GaussianJobRunner(JobRunner):
+class XTBJobRunner(JobRunner):
     # creates job runner process
     # combines information about server and program
     JOBTYPES = [
-        "g16crest",
-        "g16crestopt",
-        "g16crestts",
-        "g16job",
-        "g16dias",
-        "g16opt",
-        "g16irc",
-        "g16modred",
-        "g16nci",
-        "g16resp",
-        "g16saopt",
-        "g16scan",
-        "g16sp",
-        "g16td",
-        "g16ts",
-        "g16uvvis",
-        "g16wbi",
-        "g16",
-        "g16com",
-        "g16link",
+        "xtbopt",
     ]
 
-    PROGRAM = "gaussian"
+    PROGRAM = "XTB"
 
     FAKE = False
 
@@ -65,14 +44,14 @@ class GaussianJobRunner(JobRunner):
             logger.info(
                 f"Obtaining executable from server: {self.server.name}"
             )
-            executable = GaussianExecutable.from_servername(
+            executable = XTBExecutable.from_servername(
                 servername=self.server.name
             )
             return executable
         except FileNotFoundError as e:
             logger.error(
                 f"No server file {self.server} is found: {e}\n"
-                f"Available servers are: {GaussianExecutable.available_servers}"
+                f"Available servers are: {XTBExecutable.available_servers}"
             )
             raise
 
@@ -80,7 +59,8 @@ class GaussianJobRunner(JobRunner):
         self._assign_variables(job)
 
     def _assign_variables(self, job):
-        """Sets proper file paths for job input, output, and error files in scratch or not in scratch."""
+        """Sets proper file paths for job input, output,
+        and error files in scratch or not in scratch."""
         # keep job output file in job folder regardless of running in scratch or not
         self.job_outputfile = job.outputfile
 
@@ -101,13 +81,9 @@ class GaussianJobRunner(JobRunner):
         self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
 
-        job_inputfile = job.label + ".com"
+        job_inputfile = job.label + ".xyz"
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
-
-        job_chkfile = job.label + ".chk"
-        scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
-        self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
         job_errfile = job.label + ".err"
         scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
@@ -117,18 +93,28 @@ class GaussianJobRunner(JobRunner):
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
         self.job_inputfile = os.path.abspath(job.inputfile)
-        self.job_chkfile = os.path.abspath(job.chkfile)
         self.job_errfile = os.path.abspath(job.errfile)
 
     def _write_input(self, job):
-        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        pass
 
-        input_writer = GaussianInputWriter(job=job, jobrunner=self)
-        input_writer.write(target_directory=self.running_directory)
-
-    def _get_command(self):
+    def _get_command(self, settings):
         exe = self._get_executable()
-        command = f"{exe} {self.job_inputfile}"
+        if (
+            settings.solvent_model is not None
+            and settings.solvent_id is not None
+        ):
+            command = (
+                f"{exe} {self.job_inputfile} --{settings.xtb_version} "
+                f"--{settings.jobtype} {settings.optimization_level}  --chrg {settings.charge} "
+                f"--uhf {settings.unpair_electrons} --{settings.solvent_model} {settings.solvent_id}"
+            )
+        else:
+            command = (
+                f"{exe} {self.job_inputfile} --{settings.xtb_version} "
+                f"--{settings.jobtype} {settings.optimization_level}  --chrg {settings.charge} "
+                f"--uhf {settings.unpair_electrons}"
+            )
         return command
 
     def _create_process(self, job, command, env):
@@ -176,7 +162,7 @@ class GaussianJobRunner(JobRunner):
                 rmtree(self.running_directory)
 
 
-class FakeGaussianJobRunner(GaussianJobRunner):
+class FakeXTBJobRunner(XTBJobRunner):
     # creates job runner process
     # combines information about server and program
     FAKE = True
@@ -187,7 +173,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     def run(self, job, **kwargs):
         self._prerun(job=job)
         self._write_input(job=job)
-        returncode = FakeGaussian(self.job_inputfile).run()
+        returncode = FakeXTB(self.job_inputfile).run()
         self._postrun(job=job)
         return returncode
 
@@ -225,7 +211,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         self.job_errfile = os.path.abspath(job.errfile)
 
 
-class FakeGaussian:
+class FakeXTB:
     def __init__(self, file_to_run):
         if not os.path.exists(file_to_run):
             raise FileNotFoundError(f"File {file_to_run} not found.")
@@ -292,110 +278,14 @@ class FakeGaussian:
         return self.molecule.get_chemical_formula(empirical=True)
 
     def run(self):
-        # get input lines
-        with open(self.input_filepath) as f:
-            lines = f.readlines()
-
         with open(self.output_filepath, "w") as g:
-            g.write(" Entering Gaussian System, FakeGaussianRunner\n")
-            g.write(f" Input={self.input_filepath}\n")
-            g.write(f" Output={self.output_filepath}\n")
-            g.write(" ******************************************\n")
-            g.write(" Fake Gaussian Executable\n")
-            g.write(" ******************************************\n")
-            # write mem/nproc/chk information (%...)
-            for line in lines:
-                if line.startswith("%"):
-                    g.write(f" {line}")
-            # write route information
-            for line in lines:
-                if line.startswith("#"):
-                    line_len = len(line)
-                    g.write(" " + "-" * line_len + "\n")
-                    g.write(f" {line}")
-                    g.write(" " + "-" * line_len + "\n")
-            # write charge and multiplicity
-            g.write(
-                f" Charge =  {self.charge} Multiplicity = {self.multiplicity}\n"
-            )
-            # missing Z-matrix
+            g.write("-" * 100 + "\n")
+            g.write("* xtb version 0.0.0 (Fake) \n")
+            g.write("-" * 100 + "\n")
+            g.write("\n")
 
-            # write input orientation
-            g.write(
-                "                          Input orientation:                             \n"
-            )
-            g.write(
-                " ------------------------------------------------------------------------\n"
-            )
-            g.write(
-                " Center     Atomic      Atomic             Coordinates (Angstroms)       \n"
-            )
-            g.write(
-                " Number     Number       Type             X           Y           Z      \n"
-            )
-            g.write(
-                " ------------------------------------------------------------------------\n"
-            )
+            for line in self.input_contents:
+                g.write(f" {line}\n")
 
-            # write coordinates
-            for i in range(self.num_atoms):
-                g.write(
-                    f"{i + 1:>4} {self.atomic_numbers[i]:>10} {0!s:>10} "
-                    f"{self.atomic_coordinates[i][0]:>20.6}"
-                    f"{self.atomic_coordinates[i][1]:>14.6}"
-                    f"{self.atomic_coordinates[i][2]:>14.6}\n"
-                )
-            g.write(
-                " ------------------------------------------------------------------------\n"
-            )
-            g.write(f" Stoichiometry    {self.empirical_formula}")
-
-            # write standard orientation
-            g.write(
-                "                       Standard orientation:                             \n"
-            )
-            g.write(
-                " ------------------------------------------------------------------------\n"
-            )
-            g.write(
-                " Center     Atomic      Atomic             Coordinates (Angstroms)       \n"
-            )
-            g.write(
-                " Number     Number       Type             X           Y           Z      \n"
-            )
-            g.write(
-                " ------------------------------------------------------------------------\n"
-            )
-            # write coordinates
-            for i in range(self.num_atoms):
-                g.write(
-                    f"{i + 1:>4} {self.atomic_numbers[i]:>10} {0!s:>10} "
-                    f"{self.atomic_coordinates[i][0]:>20.6}"
-                    f"{self.atomic_coordinates[i][1]:>14.6}"
-                    f"{self.atomic_coordinates[i][2]:>14.6}\n"
-                )
-            g.write(
-                " ------------------------------------------------------------------------\n"
-            )
-            g.write(
-                " ! Dummy Rotational constant values and dummy SCF energy value...\n"
-            )
-            g.write(
-                " Rotational constants (GHZ):          11.4493930           9.4805599           5.3596246\n"
-            )  # not real values
-            g.write(f" Standard basis: {self.input_object.basis} (5D, 7F)\n")
-            g.write(f" NAtoms=    {self.num_atoms}\n")
-            g.write(
-                f" SCF Done:  E({self.spin}{self.input_object.functional.upper()}) =  "
-                f"-{1000 * random()}  A.U. after   14 cycles\n"
-            )  # dummy energy
-            g.write(" Mulliken charges:\n")
-            g.write("               1\n")
-            for i in range(self.num_atoms):
-                g.write(
-                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {random():>12.6}\n"
-                )  # not real values
-            g.write(" Elapsed time: xx\n")
-            g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
-            )
+            g.write("\n")
+            g.write("* finished run (fake xtb) \n")
