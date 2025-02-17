@@ -96,6 +96,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def charge(self):
+        """Charge of the molecule."""
         for line in self.contents:
             if "Charge" in line and "Multiplicity" in line:
                 line_elem = line.split()
@@ -103,10 +104,14 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def multiplicity(self):
+        """Multiplicity of the molecule."""
         for line in self.contents:
             if "Charge" in line and "Multiplicity" in line:
                 line_elem = line.split()
-                return int(line_elem[-1])
+                # return int(line_elem[-1])
+                # # in qmmm, not always last, e.g.,
+                # # Charge =  1 Multiplicity = 2 for low   level calculation on real  system.
+                return int(line_elem[5])
 
     @property
     def spin(self):
@@ -133,6 +138,13 @@ class Gaussian16Output(GaussianFileMixin):
                 for j_line in self.contents[i + 2 :]:
                     if len(j_line) == 0:
                         break
+                    if j_line.split()[0] not in p.PERIODIC_TABLE:
+                        if j_line.startswith("Charge ="):
+                            logger.debug(f"Skipping line: {j_line}")
+                            # e.g., in QM/MM output files, the first element is not the coordinates information
+                            # e.g., "Charge =  1 Multiplicity = 2 for low   level calculation on real  system."
+                            continue
+                        # elif j_line.startswith("TV"): we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb

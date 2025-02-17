@@ -40,7 +40,8 @@ class GaussianInputWriter(InputWriter):
         self._write_gaussian_title(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
-        self._append_modredundant(f)
+        if not isinstance(self.settings, GaussianLinkJobSettings):
+            self._append_modredundant(f)
         self._append_gen_genecp_basis(f)  # then write genecp info
         self._append_custom_solvent_parameters(
             f
