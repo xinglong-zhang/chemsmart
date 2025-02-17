@@ -3,7 +3,7 @@ import os
 from typing import Type
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.xtb.settings import GaussianJobSettings
+from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.jobs.job import Job
 from chemsmart.utils.utils import string2index_1based
 

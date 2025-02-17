@@ -89,43 +89,6 @@ class GaussianJobSettings(MolecularJobSettings):
             self.gen_genecp_file is not None or self.heavy_elements is not None
         )
 
-    def merge(
-        self,
-        other,
-        keywords=("charge", "multiplicity", "title"),
-        merge_all=False,
-    ):
-        """Overwrite self settings with other settings.
-
-        Args:
-            keywords (list): Specific list of keywords to merge.
-                Defaults to charge and multiplicity.
-                If None, all settings will be merged (Caution: may cause issue if e.g.,
-                genecp log file used to prepare input without genecp).
-            other (JobSettings, dict): Settings to merge. Can also take the form of a dictionary
-            merge_all (bool): If True, merge all settings.
-            If False, only merge the settings specified in keywords.
-        """
-        other_dict = other if isinstance(other, dict) else other.__dict__
-
-        if merge_all:
-            # Update self with other for all
-            merged_dict = self.__dict__.copy()
-            merged_dict.update(other_dict)
-            return type(self)(**merged_dict)
-
-        if keywords is not None:
-            other_dict = {
-                k: other_dict[k] for k in keywords if k in other_dict
-            }
-        # Update self with other
-        merged_dict = self.__dict__.copy()
-        merged_dict.update(other_dict)
-        return type(self)(**merged_dict)
-
-    def copy(self):
-        return copy.deepcopy(self)
-
     def __getitem__(self, key):
         return self.__dict__[key]
 

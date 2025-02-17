@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 
@@ -123,6 +124,31 @@ class MolecularJobSettings:
     @classmethod
     def from_dict(cls, settings_dict):
         return cls(**settings_dict)
+
+    def merge(
+        self, other, keywords=("charge", "multiplicity"), merge_all=False
+    ):
+        """Overwrite self settings with other settings."""
+
+        other_dict = other if isinstance(other, dict) else other.__dict__
+
+        if merge_all:
+            # Update self with other for all
+            merged_dict = self.__dict__.copy()
+            merged_dict.update(other_dict)
+            return type(self)(**merged_dict)
+
+        if keywords is not None:
+            other_dict = {
+                k: other_dict[k] for k in keywords if k in other_dict
+            }
+        # Update self with other
+        merged_dict = self.__dict__.copy()
+        merged_dict.update(other_dict)
+        return type(self)(**merged_dict)
+
+    def copy(self):
+        return copy.deepcopy(self)
 
 
 def read_molecular_job_yaml(filename, program="gaussian"):
