@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class XTBJob(Job):
-    PROGRAM = "XTB"
+    PROGRAM = "xtb"
 
     def __init__(self, molecule, settings=None, label=None, **kwargs):
         super().__init__(molecule=molecule, label=label, **kwargs)

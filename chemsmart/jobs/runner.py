@@ -177,9 +177,12 @@ class JobRunner(RegistryMixin):
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
+        logger.debug(f"All available runners: {runners}")
         jobtype = job.TYPE
+        logger.debug(f"Running job type: {jobtype}")
 
         for runner in runners:
+            logger.debug(f"Checking runner: {runner}")
             runner_jobtypes = runner.JOBTYPES
             logger.debug(f"Runner jobtypes: {runner_jobtypes}")
 

@@ -1,4 +1,5 @@
 import inspect
+import logging
 import os
 import re
 from functools import cached_property
@@ -7,6 +8,8 @@ from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+
+logger = logging.getLogger(__name__)
 
 
 class FileMixin:
@@ -489,39 +492,55 @@ class YAMLFileMixin(FileMixin):
 
 
 class RegistryMeta(type):
-    """Metaclass to ensure all subclasses are registered in the root class's _REGISTRY."""
+    """Metaclass to ensure all subclasses are registered in a shared _REGISTRY."""
 
     def __init__(cls, name, bases, dct):
         super().__init__(name, bases, dct)
-        # Only initialize _REGISTRY in the root parent class
+        # Ensure _REGISTRY is only initialized once in the root class
         if not hasattr(cls, "_REGISTRY"):
             cls._REGISTRY = []
+        logger.debug(
+            f"Initializing class: {cls.__name__}, Registry size: {len(cls._REGISTRY)}"
+        )
 
 
 class RegistryMixin(metaclass=RegistryMeta):
     """Mixin to register subclasses in a shared registry."""
 
-    REGISTERABLE = True
+    REGISTERABLE = True  # Allow subclasses to opt out
+
+    def __init_subclass__(cls, **kwargs):
+        """Automatically register subclasses in the shared registry."""
+        super().__init_subclass__(**kwargs)
+        if cls.REGISTERABLE:
+            root_registry = cls.get_root_registry()
+            root_registry.append(cls)
+            logger.debug(
+                f"Registered subclass: {cls.__name__} in {root_registry}"
+            )
+
+    @classmethod
+    def get_root_registry(cls):
+        """Find the rootmost registry to store all subclasses."""
+        root_class = cls
+        while (
+            hasattr(root_class, "__base__")
+            and root_class.__base__ is not object
+        ):
+            root_class = root_class.__base__
+        return root_class._REGISTRY
 
     @classmethod
     def subclasses(cls, allow_abstract=False):
-        return cls._subclasses(cls, cls._REGISTRY, allow_abstract)
-
-    @staticmethod
-    def _subclasses(parent_cls, registry, allow_abstract):
+        """Return all subclasses of this class."""
+        registry = cls.get_root_registry()
         return [
             c
             for c in registry
-            if issubclass(c, parent_cls)
-            and c != parent_cls
+            if issubclass(c, cls)
+            and c != cls
             and (not inspect.isabstract(c) or allow_abstract)
         ]
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls.REGISTERABLE:
-            # Append the subclass to the root _REGISTRY
-            cls._REGISTRY.append(cls)
 
 
 # class BlockMixin:

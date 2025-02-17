@@ -24,7 +24,7 @@ class XTBJobRunner(JobRunner):
         "xtbopt",
     ]
 
-    PROGRAM = "XTB"
+    PROGRAM = "xtb"
 
     FAKE = False
 
@@ -39,7 +39,7 @@ class XTBJobRunner(JobRunner):
     @property
     @lru_cache(maxsize=12)
     def executable(self):
-        """Executable class object for Gaussian."""
+        """Executable class object for XTB."""
         try:
             logger.info(
                 f"Obtaining executable from server: {self.server.name}"
@@ -139,7 +139,7 @@ class XTBJobRunner(JobRunner):
     def _get_executable(self):
         """Get executable for Gaussian."""
         exe = self.executable.get_executable()
-        logger.info(f"Gaussian executable: {exe}")
+        logger.info(f"XTB executable: {exe}")
         return exe
 
     def _postrun(self, job):
