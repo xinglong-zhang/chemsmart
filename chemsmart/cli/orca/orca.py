@@ -378,7 +378,7 @@ def orca(
 
     if filename:
         molecules = Molecule.from_filepath(
-            filepath=filename, index=";", return_list=True
+            filepath=filename, index=":", return_list=True
         )
         assert (
             molecules is not None
