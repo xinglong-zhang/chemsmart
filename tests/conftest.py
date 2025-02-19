@@ -779,3 +779,13 @@ def conformers_from_rdkit():
     ]
 
     return conformers_from_rdkit
+
+
+@pytest.fixture()
+def io_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "IOTests")
+
+
+@pytest.fixture()
+def excel_file(io_test_directory):
+    return os.path.join(io_test_directory, "test.xlsx")
