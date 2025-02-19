@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import logging
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ from itertools import groupby
 from typing import Tuple, Union
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -480,11 +483,11 @@ def run_command(command):
         )
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            print(f"Error running {command}: {stderr.strip()}")
+            logger.info(f"Error running {command}: {stderr.strip()}")
             return None
         return stdout.strip()
     except Exception as e:
-        print(f"Exception while running {command}: {e}")
+        logger.error(f"Exception while running {command}: {e}")
         return None
 
 
@@ -582,3 +585,45 @@ def extract_number(filename):
         return int(match.group(1))
     else:
         return float("inf")  # If no number is found, place it at the end
+
+
+## file handling
+
+
+def search_file(filename):
+    """Searches for a file in the current directory and its subdirectories securely."""
+    try:
+        # Search for the absolute file path
+        result = subprocess.run(
+            ["find", ".", "-name", filename],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_path = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        # Search for the absolute directory path
+        result = subprocess.run(
+            ["find", ".", "-name", filename, "-exec", "dirname", "{}", ";"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_dir = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        if absolute_file_path and absolute_file_dir:
+            return absolute_file_path, absolute_file_dir
+        else:
+            logger.error(f"{filename} not found! Check your Excel file.")
+            return None, None
+    except subprocess.CalledProcessError:
+        logger.error(f"Error occurred while searching for {filename}.")
+        return None, None
