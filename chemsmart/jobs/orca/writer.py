@@ -88,7 +88,11 @@ class ORCAInputWriter(InputWriter):
 
     def _write_scf_maxiter(self, f):
         """Write the SCF maxiter for the ORCA input file."""
-        scf_maxiter = self.scf_maxiter if self.scf_maxiter is not None else 200
+        scf_maxiter = (
+            self.settings.scf_maxiter
+            if self.settings.scf_maxiter is not None
+            else 200
+        )
         f.write(f"  maxiter {scf_maxiter}\n")
 
     def _write_scf_convergence(self, f):
@@ -118,7 +122,7 @@ class ORCAInputWriter(InputWriter):
         if mdci_cutoff is not None:
             logger.debug("Writing MDCI block.")
             # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
-            assert mdci_cutoff in ["loose", "normal", "tight"], (
+            assert mdci_cutoff.lower() in ["loose", "normal", "tight"], (
                 "mdci_cutoff must be one of the allowed values: "
                 "['loose', 'normal', 'tight']"
             )
@@ -140,7 +144,11 @@ class ORCAInputWriter(InputWriter):
                 f.write("  TCutMKN 1e-4\n")
             if mdci_density is not None:
                 # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
-                assert mdci_density in ["none", "unrelaxed", "relaxed"], (
+                assert mdci_density.lower() in [
+                    "none",
+                    "unrelaxed",
+                    "relaxed",
+                ], (
                     "mdci_density must be one of the allowed values: "
                     "['none', 'unrelaxed', 'relaxed']"
                 )
