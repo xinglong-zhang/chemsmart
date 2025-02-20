@@ -1400,8 +1400,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def moments_of_inertia(self):
-        """Obtain moments of inertia from the output file and
-        convert to SI units."""
+        """Obtain moments of inertia from the output file which are in atomic units
+        (amu * Bohr^2) and convert to SI units (kg * m^2)."""
         for i, line in enumerate(self.contents):
             if "moments of inertia" in line:
                 moments_of_inertia = []
@@ -1412,11 +1412,7 @@ class Gaussian16Output(GaussianFileMixin):
                         moments_of_inertia.append(
                             np.array(j_line.split()[1:4], dtype=float)
                         )
-                # convert from atomic units to SI
-                moments_of_inertia = np.array(moments_of_inertia) * (
-                    units._amu / (units.m ** 2)
-                )
-                return moments_of_inertia
+                return np.array(moments_of_inertia)
 
     @cached_property
     def rotational_symmetry_number(self):

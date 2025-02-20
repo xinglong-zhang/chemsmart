@@ -44,10 +44,9 @@ class Thermochemistry:
             self.pressure * atm_to_pa
         )  # convert the unit of pressure from atm to Pascal
         if self.moments_of_inertia is not None:
-            self.I = [
-                i * units._amu * (1 / units.m) ** 2
-                for i in self.moments_of_inertia
-            ]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
+            self.I = self.moments_of_inertia * (
+                units._amu * (units.Bohr / units.m) ** 2
+            )  # convert the unit of moments of inertia from amu Å^2 to kg m^2
         if self.vibrational_frequencies is not None:
             self.v = [
                 k * units._c * 1e2 for k in self.vibrational_frequencies

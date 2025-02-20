@@ -141,6 +141,16 @@ class Molecule:
         return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
 
     @property
+    def masses(self):
+        """Numpy array of atomic masses of the molecule."""
+        return np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
+
+    @property
+    def center_of_mass(self):
+        """Compute the center of mass of the molecule."""
+        return np.average(self.positions, axis=0, weights=self.masses)
+
+    @property
     def chemical_formula(self):
         return self.get_chemical_formula()
 
@@ -213,19 +223,41 @@ class Molecule:
                 return error < 1e-2
 
     @property
+    def moments_of_inertia_tensor(self):
+        """Calculate the moment of inertia tensor of the molecule."""
+        moi_tensor, _, _ = self._get_moments_of_inertia
+        return np.array(moi_tensor)
+
+    @property
     def moments_of_inertia(self):
         """Obtain moments of inertia from molecular structure."""
         if self.is_monoatomic:
             return np.zeros(3)
         else:
+
+            # # convert masses from g/mol to kg/molecule
+            # masses = masses / units.kg
+            # # convert positions from Å to m
+            # positions = self.positions / units.m
+            _, _, eigenvectors = self._get_moments_of_inertia
+            return np.array(eigenvectors)
+
+    @property
+    def principal_moments_of_inertia(self):
+        """Obtain principal moments of inertia from molecular structure."""
+        _, eigenvalues, _ = self._get_moments_of_inertia
+        return np.array(eigenvalues)
+
+    @cached_property
+    def _get_moments_of_inertia(self):
+        """Calculate the moments of inertia of the molecule.
+        Units of amu Å^2."""
+        if self.num_atoms == 1:
+            return np.zeros(3)
+        else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
-            masses = np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
-            # convert masses from g/mol to kg/molecule
-            masses = masses / units.kg
-            # convert positions from Å to m
-            positions = self.positions / units.m
-            moi_tensor, _ = calculate_moments_of_inertia(masses, positions)
-            return moi_tensor
+
+            return calculate_moments_of_inertia(self.masses, self.positions)
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:

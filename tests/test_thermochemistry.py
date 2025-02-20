@@ -2,6 +2,7 @@ import os.path
 
 import numpy as np
 from ase import units
+
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
@@ -23,9 +24,46 @@ class TestThermochemistry:
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
         assert g16_output.normal_termination
+
         mol = g16_output.molecule
         assert mol.empirical_formula == "C19H12F3I2N3O"
         assert np.isclose(mol.mass, 609.1230, rtol=1e-3)
+
+        mol_as_ase_atoms = mol.to_ase()
+        mol_as_ase_atoms_principal_moi, mol_as_ase_atoms_moi = (
+            mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
+        )
+
+        assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
+        assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
+        assert np.allclose(
+            mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
+        )
+        assert np.allclose(
+            mol.principal_moments_of_inertia, mol_as_ase_atoms_principal_moi
+        )
+        assert np.allclose(
+            mol.moments_of_inertia, mol_as_ase_atoms_moi.transpose()
+        )
+
+        # print(mol.center_of_mass)
+        # print(mol_to_ase_atoms.get_center_of_mass())
+
+        # # print(mol_to_ase_atoms.get_masses())
+        # print(mol_to_ase_atoms.get_positions())
+
+        print(mol_as_ase_atoms.get_moments_of_inertia(vectors=True))
+        a, t = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
+        # print(t * units._amu * (units.Bohr / units.m) ** 2)
+        # print(a* units.Ang)
+        print(mol.moments_of_inertia)
+        print(mol.principal_moments_of_inertia)
+        print(g16_output.moments_of_inertia)
+        # print(1* units.Ang)
+        # print(1 * units.Bohr / units.m)
+        # print(units._amu)
+        # print(units._amu *(1 * units.Bohr / units.m)**2)
+        # print(0.99974* units._amu *(1 * units.Bohr / units.m)**2)
 
         expected_E = (
             -1864.040180
@@ -149,13 +187,15 @@ class TestThermochemistry:
             thermochem1.translational_partition_function, 1.15e7, rtol=1e5
         )
 
-    def test_thermochemistry_co2_gaussian_output(self, gaussian_co2_opt_outfile):
+    def test_thermochemistry_co2_gaussian_output(
+        self, gaussian_co2_opt_outfile
+    ):
         """Values from Goodvices, as a reference:
-        goodvibes -f 100 -c 1.0 -t 298.15 co2.log
-Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-   ********************************************************************************************************************************
-o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
-   ********************************************************************************************************************************
+                goodvibes -f 100 -c 1.0 -t 298.15 co2.log
+        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+           ********************************************************************************************************************************
+        o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
+           ********************************************************************************************************************************
         """
         assert os.path.exists(gaussian_co2_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
@@ -163,6 +203,7 @@ o  co2                                       -188.444680   0.011776   -188.42932
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
         print(mol.moments_of_inertia)
+        print(mol.principal_moments_of_inertia)
         assert mol.empirical_formula == "CO2"
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
         assert np.isclose(g16_output.energies[-1], -188.444680, rtol=1e-6)
@@ -177,9 +218,5 @@ o  co2                                       -188.444680   0.011776   -188.42932
         average_moi = np.mean(moments_of_inertia[1:])
         print(average_moi)
 
-        rot_temp = units._hplanck ** 2 / (8 * np.pi ** 2 * average_moi * units._k)
+        rot_temp = units._hplanck**2 / (8 * np.pi**2 * average_moi * units._k)
         print(rot_temp)
-
-
-
-
