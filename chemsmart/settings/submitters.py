@@ -1,5 +1,6 @@
 import inspect
 import logging
+import os
 from abc import abstractmethod
 from typing import Optional
 
@@ -110,12 +111,17 @@ class Submitter(RegistryMixin):
     @property
     def executable(self):
         """Executable for the job."""
+        # TODO: better to attach jobrunner to job, such tbat job.runner can be
+        # TODO: used direclty to get the executable
+        # TODO: executable = self.job.runner.executable
         if self.job.PROGRAM.lower() == "gaussian":
             executable = GaussianExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "orca":
             executable = ORCAExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "xtb":
-            executable = XTBExecutable.from_servername(self.server.name)
+            executable_path = XTBExecutable().get_executable()
+            executable_path = os.path.dirname(executable_path)
+            executable = XTBExecutable(executable_path)
         else:
             # Need to add programs here to be supported for other types of programs
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")

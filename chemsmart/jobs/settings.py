@@ -126,7 +126,10 @@ class MolecularJobSettings:
         return cls(**settings_dict)
 
     def merge(
-        self, other, keywords=("charge", "multiplicity"), merge_all=False
+        self,
+        other,
+        keywords=("charge", "multiplicity", "title"),
+        merge_all=False,
     ):
         """Overwrite self settings with other settings."""
 
