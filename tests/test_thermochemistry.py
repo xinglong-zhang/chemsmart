@@ -30,21 +30,51 @@ class TestThermochemistry:
         assert np.isclose(mol.mass, 609.1230, rtol=1e-3)
 
         mol_as_ase_atoms = mol.to_ase()
-        mol_as_ase_atoms_principal_moi, mol_as_ase_atoms_moi = (
-            mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
-        )
+        (
+            mol_as_ase_atoms_moi_along_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
+        print(mol.moments_of_inertia_principal_axes)
 
         assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
         assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
         assert np.allclose(
             mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
         )
+
+        # same moments of inertia along principal axes as from ase
         assert np.allclose(
-            mol.principal_moments_of_inertia, mol_as_ase_atoms_principal_moi
+            mol.moments_of_inertia,
+            mol_as_ase_atoms_moi_along_principal_axes,
         )
+
         assert np.allclose(
-            mol.moments_of_inertia, mol_as_ase_atoms_moi.transpose()
+            mol.moments_of_inertia, np.array([3111.56720644, 6850.18931668, 9483.18883579]), atol=1e-4
         )
+
+        # same moments of inertia principal axes as from ase
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes.transpose(),
+        )
+
+        # test moments of inertia from molecular structure and from Gaussian output
+        # can't get moments of inertia from Gaussian output due to printing *****
+        assert np.allclose(g16_output.moments_of_inertia, np.array([np.inf, np.inf, np.inf]))
+
+        # test moments of inertia principal axes from molecular structure and from Gaussian output
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes,
+            g16_output.moments_of_inertia_principal_axes,
+            atol=1e-4
+        )
+
+        # test rotational temperatures from molecule
+        print(mol.rotational_temperatures)
+        # test rotational temperatures from Gaussian output file
+        print(g16_output.rotational_temperatures)
+
+
 
         # print(mol.center_of_mass)
         # print(mol_to_ase_atoms.get_center_of_mass())
@@ -57,7 +87,7 @@ class TestThermochemistry:
         # print(t * units._amu * (units.Bohr / units.m) ** 2)
         # print(a* units.Ang)
         print(mol.moments_of_inertia)
-        print(mol.principal_moments_of_inertia)
+        print(mol.moments_of_inertia_principal_axes)
         print(g16_output.moments_of_inertia)
         # print(1* units.Ang)
         # print(1 * units.Bohr / units.m)
@@ -202,8 +232,35 @@ class TestThermochemistry:
         assert g16_output.normal_termination
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
+        mol_as_ase_atoms = mol.to_ase()
+        (
+            mol_as_ase_atoms_moi_along_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
+
         print(mol.moments_of_inertia)
-        print(mol.principal_moments_of_inertia)
+        print(mol.to_ase().get_moments_of_inertia(vectors=False))
+        print(g16_output.moments_of_inertia)
+
+        assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
+        assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
+        assert np.allclose(
+            mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
+        )
+        # assert np.allclose(
+        #     mol.moments_of_inertia_principal_axes,
+        #     mol_as_ase_atoms_moi_along_principal_axes,
+        # )
+        assert np.allclose(
+            mol.moments_of_inertia,
+            mol_as_ase_atoms_moi_principal_axes.transpose(),
+        )
+
+        # test moments of inertia from molecular structure and from gaussian output
+        # assert np.allclose(
+        #     mol.moments_of_inertia, g16_output.moments_of_inertia, atol=1e-4
+        # )
+
         assert mol.empirical_formula == "CO2"
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
         assert np.isclose(g16_output.energies[-1], -188.444680, rtol=1e-6)
@@ -211,6 +268,8 @@ class TestThermochemistry:
         assert g16_output.rotational_temperatures == [0.56050]
         assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
+        print(g16_output.moments_of_inertia)
+        # rot temp: theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[0] * units._k)
         print(g16_output.moments_of_inertia)
 
         moments_of_inertia = g16_output.moments_of_inertia

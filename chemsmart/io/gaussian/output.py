@@ -1402,17 +1402,44 @@ class Gaussian16Output(GaussianFileMixin):
     def moments_of_inertia(self):
         """Obtain moments of inertia from the output file which are in atomic units
         (amu * Bohr^2) and convert to SI units (kg * m^2)."""
+        moments_of_inertia, _ = (
+            self._get_moments_of_inertia_and_principal_axes()
+        )
+        return moments_of_inertia
+
+    @cached_property
+    def moments_of_inertia_principal_axes(self):
+        _, principal_axes = self._get_moments_of_inertia_and_principal_axes()
+        return principal_axes
+
+    def _get_moments_of_inertia_and_principal_axes(self):
+        """Obtain moments of inertia along principal axes from the output file
+        (amu * Bohr^2) in Gaussian and convert to SI units (amu * Å^2)."""
         for i, line in enumerate(self.contents):
-            if "moments of inertia" in line:
+            if "Principal axes and moments of inertia" in line:
                 moments_of_inertia = []
+                moments_of_inertia_principal_axes = []
                 for j_line in self.contents[i + 2 :]:
-                    if j_line.startswith("This molecule is"):
+                    if j_line.startswith("This molecule"):
                         break
-                    if len(j_line.split()) == 4:
-                        moments_of_inertia.append(
-                            np.array(j_line.split()[1:4], dtype=float)
-                        )
-                return np.array(moments_of_inertia)
+                    if j_line.startswith("Eigenvalue"):
+                        for eigenval in j_line.split("Eigenvalues --")[
+                            -1
+                        ].split():
+                            try:
+                                moments_of_inertia.append(float(eigenval)*units.Bohr**2)
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not convert '{j_line}' due to "
+                                    f"Gaussian incorrect printing."
+                                )
+                                moments_of_inertia.append(np.array([np.inf]*3))
+                    else:
+                        if len(j_line.split()) == 4:
+                            moments_of_inertia_principal_axes.append(
+                                np.array(j_line.split()[1:4], dtype=float)
+                            )
+                return np.array(moments_of_inertia), moments_of_inertia_principal_axes
 
     @cached_property
     def rotational_symmetry_number(self):

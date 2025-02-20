@@ -44,9 +44,9 @@ def is_collinear(coords, tol=1e-5):
 #     moi_tensor[2, 1] = moi_tensor[1, 2]
 #
 #     # Step 3: Compute principal moments of inertia (eigenvalues)
-#     principal_moments_of_inertia = np.linalg.eigvalsh(moi_tensor)  # Sorted eigenvalues
+#     moments_of_inertia_principal_axes = np.linalg.eigvalsh(moi_tensor)  # Sorted eigenvalues
 #
-#     return principal_moments_of_inertia, moi_tensor
+#     return moments_of_inertia_principal_axes, moi_tensor
 
 # def calculate_moments_of_inertia(mass, coords):
 #     """Calculate the moment of inertia tensor and principal moments of inertia.
@@ -56,7 +56,7 @@ def is_collinear(coords, tol=1e-5):
 #     - coords (list or np.array): Nx3 array of atomic coordinates.
 #
 #     Returns:
-#     - principal_moments_of_inertia (np.array): Sorted eigenvalues of moi_tensor.
+#     - moments_of_inertia_principal_axes (np.array): Sorted eigenvalues of moi_tensor.
 #     - moi_tensor (np.array): 3x3 moment of inertia tensor.
 #     """
 #     # Convert inputs to NumPy arrays
@@ -89,7 +89,7 @@ def calculate_moments_of_inertia(mass, coords):
     - coords (list or np.array): Nx3 array of atomic coordinates.
 
     Returns:
-    - principal_moments_of_inertia (np.array): Sorted eigenvalues of moi_tensor.
+    - moments_of_inertia_principal_axes (np.array): Sorted eigenvalues of moi_tensor.
     - moi_tensor (np.array): 3x3 moment of inertia tensor.
     """
     # Convert inputs to NumPy arrays

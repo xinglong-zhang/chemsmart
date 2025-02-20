@@ -230,23 +230,18 @@ class Molecule:
 
     @property
     def moments_of_inertia(self):
-        """Obtain moments of inertia from molecular structure."""
+        """Obtain moments of inertia from molecular structure along principal axes as a list."""
         if self.is_monoatomic:
-            return np.zeros(3)
+            return [0.0, 0.0, 0.0]
         else:
-
-            # # convert masses from g/mol to kg/molecule
-            # masses = masses / units.kg
-            # # convert positions from Å to m
-            # positions = self.positions / units.m
-            _, _, eigenvectors = self._get_moments_of_inertia
-            return np.array(eigenvectors)
+            _, eigenvalues, _ = self._get_moments_of_inertia
+            return eigenvalues
 
     @property
-    def principal_moments_of_inertia(self):
-        """Obtain principal moments of inertia from molecular structure."""
-        _, eigenvalues, _ = self._get_moments_of_inertia
-        return np.array(eigenvalues)
+    def moments_of_inertia_principal_axes(self):
+        """Obtain moments of inertia along principal axes from molecular structure."""
+        _, _, eigenvectors = self._get_moments_of_inertia
+        return eigenvectors
 
     @cached_property
     def _get_moments_of_inertia(self):
@@ -258,6 +253,14 @@ class Molecule:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
             return calculate_moments_of_inertia(self.masses, self.positions)
+
+    @cached_property
+    def rotational_temperatures(self):
+        """Obtain the rotational temperatures of the molecule.
+        Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z"""
+        moi_in_SI_units = [i * units._amu * (1/units.m) ** 2 for i in self.moments_of_inertia]
+        return [units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k) for i in range(3)]
+
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
