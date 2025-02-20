@@ -34,14 +34,18 @@ class ORCAJobRunner(JobRunner):
     PROGRAM = "orca"
 
     FAKE = False
+    SCRATCH = True
 
     def __init__(self, server, scratch=None, fake=False, **kwargs):
+        if scratch is None:
+            scratch = self.SCRATCH  # default to True for ORCA jobs
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
         logger.debug(f"Jobrunner num gpus: {self.num_gpus}")
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
+        logger.debug(f"Jobrunner scratch: {self.scratch}")
 
     @property
     @lru_cache(maxsize=12)

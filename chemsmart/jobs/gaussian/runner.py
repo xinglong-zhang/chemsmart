@@ -48,14 +48,23 @@ class GaussianJobRunner(JobRunner):
     PROGRAM = "gaussian"
 
     FAKE = False
+    SCRATCH = True
+    # default to use scratch for Gaussian Jobs
+    # class attribute instead of instance attribute so it needs not be set at
+    # instance level - set during initialization (__init__).
 
     def __init__(self, server, scratch=None, fake=False, **kwargs):
+        # Use default SCRATCH if scratch is not explicitly set
+        if scratch is None:
+            scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
         logger.debug(f"Jobrunner num gpus: {self.num_gpus}")
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
+        logger.debug(f"Jobrunner scratch: {self.scratch}")
 
     @property
     @lru_cache(maxsize=12)

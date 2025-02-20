@@ -208,6 +208,14 @@ class JobRunner(RegistryMixin):
 
             if jobtype in runner_jobtypes and fake == runner.FAKE:
                 logger.info(f"Using job runner: {runner} for job: {job}")
+
+                # If scratch is None, use the runner's default scratch value
+                scratch = (
+                    scratch
+                    if scratch is not None
+                    else getattr(runner, "SCRATCH", None)
+                )
+
                 return runner(server=server, scratch=scratch, **kwargs)
 
         raise ValueError(
