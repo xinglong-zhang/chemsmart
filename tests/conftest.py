@@ -215,6 +215,14 @@ def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_co2_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "co2.log"
+    )
+    return gaussian_co2_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_acetone_opt_outfile(gaussian_outputs_test_directory):
     gaussian_acetone_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "acetone.log"

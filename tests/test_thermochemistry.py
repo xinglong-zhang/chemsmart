@@ -1,7 +1,7 @@
 import os.path
 
 import numpy as np
-
+from ase import units
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
@@ -148,3 +148,38 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.translational_partition_function, 1.15e7, rtol=1e5
         )
+
+    def test_thermochemistry_co2_gaussian_output(self, gaussian_co2_opt_outfile):
+        """Values from Goodvices, as a reference:
+        goodvibes -f 100 -c 1.0 -t 298.15 co2.log
+Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+   ********************************************************************************************************************************
+o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
+   ********************************************************************************************************************************
+        """
+        assert os.path.exists(gaussian_co2_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
+        assert g16_output.normal_termination
+        assert g16_output.num_atoms == 3
+        mol = g16_output.molecule
+        print(mol.moments_of_inertia)
+        assert mol.empirical_formula == "CO2"
+        assert np.isclose(mol.mass, 44.01, rtol=1e-2)
+        assert np.isclose(g16_output.energies[-1], -188.444680, rtol=1e-6)
+        assert np.isclose(g16_output.zero_point_energy, 0.011776, rtol=1e-6)
+        assert g16_output.rotational_temperatures == [0.56050]
+        assert g16_output.rotational_symmetry_number == 2
+        assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
+        print(g16_output.moments_of_inertia)
+
+        moments_of_inertia = g16_output.moments_of_inertia
+        # assert np.allclose(moments_of_inertia[0], [0.0, 1.0, 0.0], rtol=1e-6)
+        average_moi = np.mean(moments_of_inertia[1:])
+        print(average_moi)
+
+        rot_temp = units._hplanck ** 2 / (8 * np.pi ** 2 * average_moi * units._k)
+        print(rot_temp)
+
+
+
+

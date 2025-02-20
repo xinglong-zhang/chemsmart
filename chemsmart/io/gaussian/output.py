@@ -1400,7 +1400,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def moments_of_inertia(self):
-        """Obtain moments of inertia from the output file."""
+        """Obtain moments of inertia from the output file and
+        convert to SI units."""
         for i, line in enumerate(self.contents):
             if "moments of inertia" in line:
                 moments_of_inertia = []
@@ -1411,6 +1412,10 @@ class Gaussian16Output(GaussianFileMixin):
                         moments_of_inertia.append(
                             np.array(j_line.split()[1:4], dtype=float)
                         )
+                # convert from atomic units to SI
+                moments_of_inertia = np.array(moments_of_inertia) * (
+                    units._amu / (units.m ** 2)
+                )
                 return moments_of_inertia
 
     @cached_property
@@ -1426,8 +1431,10 @@ class Gaussian16Output(GaussianFileMixin):
         rot_temps = []
         for line in reversed(self.contents):
             # take from the end of outputfile
-            if "Rotational temperatures (Kelvin)" in line:
-                for rot_temp in line.split()[-3:]:
+            if "Rotational temperature" in line and "(Kelvin)" in line:
+                for rot_temp in line.split("(Kelvin)")[-1].split():
+                    # linear molecules may have only one rot temp,
+                    # non-linear has three
                     rot_temps.append(float(rot_temp))
                 return rot_temps
 
@@ -1437,8 +1444,8 @@ class Gaussian16Output(GaussianFileMixin):
         rot_consts = []
         for line in reversed(self.contents):
             # take from the end of outputfile
-            if "Rotational constants (GHZ)" in line:
-                for rot_const in line.split()[-3:]:
+            if "Rotational constant" in line and "(GHZ):" in line:
+                for rot_const in line.split("(GHZ):")[-1].split():
                     rot_consts.append(float(rot_const) * 1e9)
                 return rot_consts
 

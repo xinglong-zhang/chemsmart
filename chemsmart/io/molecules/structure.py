@@ -212,6 +212,21 @@ class Molecule:
                 ).max()
                 return error < 1e-2
 
+    @property
+    def moments_of_inertia(self):
+        """Obtain moments of inertia from molecular structure."""
+        if self.is_monoatomic:
+            return np.zeros(3)
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+            masses = np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
+            # convert masses from g/mol to kg/molecule
+            masses = masses / units.kg
+            # convert positions from Å to m
+            positions = self.positions / units.m
+            moi_tensor, _ = calculate_moments_of_inertia(masses, positions)
+            return moi_tensor
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return Symbols.fromsymbols(self.symbols).get_chemical_formula(
