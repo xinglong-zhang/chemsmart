@@ -16,6 +16,7 @@ from .singlepoint import sp
 from .tddft import td
 from .ts import ts
 from .wbi import wbi
+from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 
 __all__ = [
     "com",
@@ -36,6 +37,7 @@ __all__ = [
     "td",
     "ts",
     "wbi",
+    "GaussianJobRunner",
 ]
 # signals to the linter these imports are intentional
 # imports as explicitly used
