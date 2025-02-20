@@ -82,7 +82,6 @@ class TestConverter:
         # check all .com files have been converted to .xyz files
         g16_folder = GaussianComFolder(folder=tmp_com_folder)
         all_comfiles = g16_folder.all_comfiles
-        print(all_comfiles)
         for file in all_comfiles:
             assert os.path.exists(file.replace(".com", ".xyz"))
 

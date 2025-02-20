@@ -3,7 +3,6 @@ import logging
 import os
 
 import click
-from ase import units
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
@@ -41,7 +40,7 @@ def entry_point(filename, unit):
     lumo_energy = outputfile.lumo_energy
     fmo_gap = outputfile.fmo_gap
     energy_unit = "eV"
-    print(units.Hartree * units.kcal)
+    # print(units.Hartree * units.kcal)
     if unit.lower() == "kcal/mol":
         homo_energy *= 23.06054195
         lumo_energy *= 23.06054195

@@ -411,7 +411,6 @@ def xtb(
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
-    print(f"xtb label: {label}")
     ctx.obj["filename"] = filename
 
 

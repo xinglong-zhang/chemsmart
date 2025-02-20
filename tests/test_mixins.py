@@ -36,6 +36,3 @@ class TestMixins:
             assert issubclass(
                 cls, Animal
             ), f"{cls} is not a subclass of Animal"
-
-        # Debugging: Print registry if test fails
-        print("Registered subclasses:", subclasses)

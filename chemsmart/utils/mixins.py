@@ -185,7 +185,7 @@ class GaussianFileMixin(FileMixin):
             route_object = GaussianRoute(route_string=self.route_string)
             return route_object
         except TypeError as err:
-            print(err)
+            logger.error(err)
 
     @property
     def dieze_tag(self):

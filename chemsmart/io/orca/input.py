@@ -34,7 +34,7 @@ class ORCAInput(ORCAFileMixin):
             route_object = ORCARoute(route_string=self.route_string)
             return route_object
         except TypeError as err:
-            print(err)
+            logger.error(err)
 
     @property
     def coordinate_type(self):

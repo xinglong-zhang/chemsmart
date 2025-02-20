@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import logging
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ from itertools import groupby
 from typing import Tuple, Union
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -487,11 +490,11 @@ def run_command(command):
         )
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            print(f"Error running {command}: {stderr.strip()}")
+            logger.error(f"Error running {command}: {stderr.strip()}")
             return None
         return stdout.strip()
     except Exception as e:
-        print(f"Exception while running {command}: {e}")
+        logger.error(f"Exception while running {command}: {e}")
         return None
 
 
