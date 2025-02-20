@@ -11,16 +11,23 @@ from .run import run
 from .sub import sub
 from .update import update
 
+logger = logging.getLogger(__name__)
+
 
 @click.group(cls=MyGroup)
 @click.pass_context
-@click.option("--verbose", is_flag=True, default=False)
+@click.option(
+    "--verbose/--no-verbose",
+    is_flag=True,
+    type=bool,
+    default=False,
+    help="Turn on verbose logging.",
+)
 def entry_point(ctx, verbose):
     if verbose:
         from chemsmart.utils.logger import create_logger
 
-        create_logger(debug=True)
-        logging.basicConfig(level=logging.INFO)
+        create_logger(debug=True, stream=True)
         logging.info("Verbose mode activated.")
 
 

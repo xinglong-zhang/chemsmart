@@ -44,6 +44,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     # get label for the job
     label = ctx.obj["label"]
+    print(f"opt label: {label}")
 
     # Set atoms to freeze
 

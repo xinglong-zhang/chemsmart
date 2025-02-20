@@ -9,12 +9,9 @@ from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.io.xyz.folder import XYZFolder
-from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
-
-create_logger()
 
 
 class FileConverter:

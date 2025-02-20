@@ -285,15 +285,10 @@ def xtb(
             f"No filename is supplied and XTB default settings are used:\n{job_settings.__dict__} "
         )
     elif filename.endswith((".com", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = XTBJobSettings.from_filepath(filename)
-    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
     else:
+        # all other input files such as .xyz, .pdb, .mol, .mol2, .sdf, .smi, .cif, .traj, .gro, .db
         job_settings = XTBJobSettings.default()
-    # else:
-    #     raise ValueError(
-    #         f"Unrecognised filetype {filename} to obtain XTBJobSettings"
-    #     )
 
     # Update keywords
     keywords = (
@@ -332,6 +327,20 @@ def xtb(
         job_settings.forces = forces
         keywords += ("forces",)
 
+    # update labels
+    if label is not None and append_label is not None:
+        raise ValueError(
+            "Only give XTB input filename or name to be be appended, but not both!"
+        )
+    if append_label is not None:
+        label = os.path.splitext(os.path.basename(filename))[0]
+        label = f"{label}_{append_label}"
+    if label is None and append_label is None:
+        label = os.path.splitext(os.path.basename(filename))[0]
+        label = (
+            f"{label}_{ctx.invoked_subcommand}"  # add in subcommand to label
+        )
+
     # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
@@ -351,24 +360,26 @@ def xtb(
         ), f"Could not obtain molecule from {filename}!"
         logger.debug(f"Obtained molecule {molecules} from {filename}")
 
+        # # create input file as .xyz for xtb jobs
+        # if filename.endswith(".xyz"):
+        #     # if xyz file, then copy this to label.xyz
+        #     from shutil import copy
+        #
+        #     copy(filename, f"{label}.xyz")
+        # else:
+        #     # convert file to .xyz
+        #     molecule = Molecule.from_filepath(
+        #         filepath=filename, index="-1", return_list=False
+        #     )
+        #     logger.debug(f"Writting molecule {molecule} to: {label}.xyz")
+        #     molecule.write_xyz(filename=f"{label}.xyz")
+
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
-
-    # update labels
-    if label is not None and append_label is not None:
-        raise ValueError(
-            "Only give XTB input filename or name to be be appended, but not both!"
-        )
-    if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{append_label}"
-    if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{ctx.invoked_subcommand}"
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 
@@ -400,6 +411,7 @@ def xtb(
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
+    print(f"xtb label: {label}")
     ctx.obj["filename"] = filename
 
 

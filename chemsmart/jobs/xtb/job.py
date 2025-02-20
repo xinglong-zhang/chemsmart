@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Type
 
-
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.xtb.settings import XTBJobSettings

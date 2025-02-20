@@ -432,12 +432,12 @@ def check_charge_and_multiplicity(settings):
             "Charge and multiplicity must be set for Gaussian jobs."
         )
 
+
 def check_charge_and_uhf(settings):
     if settings.charge is None or settings.uhf is None:
         raise ValueError(
             "Charge and number of unpaired electrons must be set for XTB jobs."
         )
-
 
 
 def cmp_with_ignore(f1, f2, ignore_string=None):

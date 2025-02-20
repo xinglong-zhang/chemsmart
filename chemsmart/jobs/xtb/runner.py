@@ -7,6 +7,7 @@ from functools import lru_cache
 from glob import glob
 from shutil import copy, rmtree
 
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import XTBExecutable
 from chemsmart.utils.periodictable import PeriodicTable
@@ -51,7 +52,6 @@ class XTBJobRunner(JobRunner):
 
     def _prerun(self, job):
         self._assign_variables(job)
-        self._convert_files()
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output,
@@ -67,41 +67,6 @@ class XTBJobRunner(JobRunner):
         if self.executable and self.executable.local_run is not None:
             logger.info(f"Local run is {self.executable.local_run}.")
             job.local = self.executable.local_run
-
-    def _convert_files(self):
-        """Convert the file to be run to .xyz format, if it is not already."""
-        print(self.job_inputfile)
-        job_inputfile = os.path.basename(self.job_inputfile)
-        print(job_inputfile)
-        if not job_inputfile.endswith(".xyz"):
-            from chemsmart.io.gaussian.input import Gaussian16Input
-            from chemsmart.io.gaussian.output import Gaussian16Output
-            from chemsmart.io.orca.input import ORCAInput
-            logger.debug(f"Writing xyz file to: {job_inputfile.replace('.com', '.xyz')}")
-
-            mol = None
-            # from chemsmart.io.xtb.output import XTBOutput
-            """Convert input file to xyz format."""
-            from chemsmart.io.molecules.structure import Molecule
-            if self.job_inputfile.endswith(".com") or self.job_inputfile.endswith(".gjf"):
-                mol = Gaussian16Input(filename=self.job_inputfile).molecule
-            elif self.job_inputfile.endswith(".log"):
-                mol = Gaussian16Output(filename=self.job_inputfile).molecule
-            elif self.job_inputfile.endswith(".inp"):
-                mol = ORCAInput(filename=self.job_inputfile).molecule
-            elif self.job_inputfile.endswith(".out"):
-                try:
-                    # orca output
-                    mol = ORCAInput(filename=self.job_inputfile).molecule
-                except Exception:
-                    # xtb output
-                    # mol = XTBOutput(filename=self.job_inputfile).molecule
-                    pass
-            else:
-                raise ValueError(f"Cannot convert {self.job_inputfile} to .xyz format.")
-
-            print(f"Writing xyz file to: {self.job_inputfile.replace('.com', '.xyz')}")
-            mol.write_xyz(self.job_inputfile.replace(".com", ".xyz"))
 
     def _set_up_variables_in_scratch(self, job):
         scratch_job_dir = os.path.join(self.scratch_dir, job.label)
@@ -126,7 +91,9 @@ class XTBJobRunner(JobRunner):
         self.job_errfile = os.path.abspath(job.errfile)
 
     def _write_input(self, job):
-        pass
+        """Write the input file as .xyz for xtb jobs."""
+        logger.info(f"Writting input file to: {job.label}.xyz")
+        job.molecule.write_xyz(f"{job.label}.xyz")
 
     def _get_command(self, **kwargs):
         exe = self._get_executable()
@@ -206,9 +173,8 @@ class FakeXTBJobRunner(XTBJobRunner):
     def run(self, job, **kwargs):
         self._prerun(job=job)
         self._write_input(job=job)
-        returncode = FakeXTB(self.job_inputfile).run()
+        FakeXTB(self.job_inputfile).run()
         self._postrun(job=job)
-        return returncode
 
     def _set_up_variables_in_scratch(self, job):
         scratch_job_dir = os.path.join(self.scratch_dir, job.label)
@@ -226,10 +192,6 @@ class FakeXTBJobRunner(XTBJobRunner):
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
-        scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
-        self.job_chkfile = os.path.abspath(scratch_job_chkfile)
-
         job_errfile = job.label + ".err"
         scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
         self.job_errfile = os.path.abspath(scratch_job_errfile)
@@ -240,7 +202,6 @@ class FakeXTBJobRunner(XTBJobRunner):
         job.label = f"{job.label}_fake"
         logger.debug(f"Job label for fake job run: {job.label}")
         self.job_inputfile = os.path.abspath(job.inputfile)
-        self.job_chkfile = os.path.abspath(job.chkfile)
         self.job_errfile = os.path.abspath(job.errfile)
 
 

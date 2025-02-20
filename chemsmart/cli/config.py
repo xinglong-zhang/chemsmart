@@ -6,12 +6,9 @@ from pathlib import Path
 import click
 import yaml
 
-from chemsmart.utils.logger import create_logger
 from chemsmart.utils.utils import run_command
 
 logger = logging.getLogger(__name__)
-
-create_logger(debug=True, stream=True)
 
 
 class Config:
