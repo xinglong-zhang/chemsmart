@@ -22,12 +22,6 @@ logger = logging.getLogger(__name__)
 @click.option("-t", "--time-hours", type=float, default=None)
 @click.option("-q", "--queue", type=str, help="queue")
 @click.option(
-    "-v/",
-    "--verbose/--no-verbose",
-    default=False,
-    help="Turns on logging to stream output and debug logging.",
-)
-@click.option(
     "--test/--no-test",
     default=False,
     help="If true, job will not be submitted; only run and submit scripts will be written.",
@@ -49,16 +43,12 @@ def sub(
     stream,
     time_hours,
     queue,
-    verbose,
     test,
     print_command,
     **kwargs,
 ):
     # Set up logging
-    if verbose:
-        create_logger(stream=True, debug=True)
-    else:
-        create_logger(debug=debug, stream=stream)
+    create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
@@ -91,7 +81,7 @@ def sub(
 def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     def _clean_command(ctx):
         """Remove keywords used in sub.py but not in run.py.
-        Specifically: Some keywords/options (like queue, verbose, etc.)
+        Specifically: Some keywords/options (like queue, etc.)
         are only relevant to sub.py and not applicable to run.py."""
         # Get "sub" command and assert that there is exactly one.
         command = next(
@@ -110,7 +100,6 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         keywords_not_in_run = [
             "time_hours",
             "queue",
-            "verbose",
             "test",
             "print_command",
         ]
