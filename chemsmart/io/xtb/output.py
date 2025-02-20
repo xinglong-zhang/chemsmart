@@ -552,7 +552,7 @@ class XTBOutput:
         return None
 
     @property
-    def rotational_number(self):
+    def rotational_symmetry_number(self):
         return self._get_setup_information("rotational number")
 
     @property
