@@ -4,13 +4,21 @@ import os
 import re
 from functools import cached_property, lru_cache
 
-import ase
+import networkx as nx
 import numpy as np
+from ase import units
+from ase.io import read as ase_read
 from ase.symbols import Symbols
+from rdkit import Chem
+from rdkit.Chem import rdchem
+from rdkit.Geometry import Point3D
+from scipy.spatial.distance import cdist
 
+from chemsmart.io.molecules import get_bond_cutoff
+from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
-from chemsmart.utils.utils import file_cache, string2index_1based
+from chemsmart.utils.utils import file_cache
 
 p = pt()
 
@@ -22,11 +30,7 @@ class Molecule:
 
     Parameters:
 
-    symbols: follows from :class:`ase.symbols.Symbols`
-        str (formula) or list of str
-        Can be a string formula, a list of symbols or a list of
-        Atom objects.  Examples: 'H2O', 'COPt12', ['H', 'H', 'O'],
-        [Atom('Ne', (x, y, z)), ...].
+    symbols: a list of symbols.
     positions: a numpy array of atomic positions
         The shape of the array should be (n, 3) where n is the number
         of atoms in the molecule.
@@ -76,6 +80,40 @@ class Molecule:
         self.forces = forces
         self.velocities = velocities
         self.info = info
+        self._num_atoms = len(self.symbols)
+
+        # Define bond order classification multipliers (avoiding redundancy)
+        # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
+        #                 1/Ls^3 : 1/Ld^3 : 1/Lt^3 = 2 : 3 : 4
+        # From experimental data, the aromatic bond length in benzene is ~1.39 Å,
+        # which is between single (C–C, ~1.54 Å) and double (C=C, ~1.34 Å) bonds.
+        # Interpolate the aromatic bond length as L_ar ≈ L_s × (4/5)**1/3
+        self.bond_length_multipliers = {
+            "single": 1.0,
+            "aromatic": (4 / 5) ** (1.0 / 3),  # Aromatic bond approx.
+            "double": (2 / 3) ** (1.0 / 3),
+            "triple": (1 / 2) ** (1.0 / 3),
+        }
+
+        # Ensure symbols and positions are available
+        if self.symbols is None or self.positions is None:
+            raise ValueError(
+                "Molecule must have symbols and positions defined."
+            )
+
+        # check that the number of symbols are not empty
+        if len(self.symbols) == 0:
+            raise ValueError("The number of symbols should not be empty!")
+
+        # check that the number of symbols and positions are the same
+        if len(self.symbols) != len(self.positions):
+            logger.debug(f"Number of symbols: {len(self.symbols)}")
+            logger.debug(f"Number of positions: {len(self.positions)}")
+            logger.debug(f"Symbols: {self.symbols}")
+            logger.debug(f"Positions: {self.positions}")
+            raise ValueError(
+                "The number of symbols and positions should be the same!"
+            )
 
     def __len__(self):
         return len(self.chemical_symbols)
@@ -98,6 +136,10 @@ class Molecule:
         )
 
     @property
+    def chemical_formula(self):
+        return self.get_chemical_formula()
+
+    @cached_property
     def chemical_symbols(self):
         """Return a list of chemical symbols strings"""
         if self.symbols is not None:
@@ -106,16 +148,26 @@ class Molecule:
     @property
     def num_atoms(self):
         """Return the number of atoms in the molecule."""
-        return len(self.chemical_symbols)
+        return self._num_atoms
+
+    @num_atoms.setter
+    def num_atoms(self, value):
+        self._num_atoms = value
 
     @property
     def pbc(self):
         """Return the periodic boundary conditions."""
-        return all(i == 0 for i in self.pbc_conditions)
+        if self.pbc_conditions is not None:
+            return all(i == 0 for i in self.pbc_conditions)
+
+    @property
+    def is_chiral(self):
+        """Check if molecule is chiral or not."""
+        return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
-            return self.symbols.get_chemical_formula(
+            return Symbols.fromsymbols(self.symbols).get_chemical_formula(
                 mode=mode, empirical=empirical
             )
 
@@ -240,7 +292,8 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_orca_outfile(filepath, index):
-        # TODO: to improve ORCAOutput object so that all the structures can be obtained and returned via index
+        # TODO: to improve ORCAOutput object so that all the structures
+        #  can be obtained and returned via index
         from chemsmart.io.orca.output import ORCAOutput
 
         orca_output = ORCAOutput(filename=filepath)
@@ -266,7 +319,16 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
-        return ase.io.read(filepath, index=index, **kwargs)
+        """Reads a file using ASE and returns a Molecule object."""
+        from .atoms import AtomsChargeMultiplicity
+
+        ase_atoms = ase_read(filepath, index=index, **kwargs)
+        if isinstance(ase_atoms, list):
+            return [
+                AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
+                for atoms in ase_atoms
+            ]
+        return AtomsChargeMultiplicity.from_atoms(ase_atoms).to_molecule()
 
     @classmethod
     @lru_cache(maxsize=128)
@@ -312,9 +374,72 @@ class Molecule:
             pbc_conditions=atoms.get_pbc(),
         )
 
+    @classmethod
+    def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
+        """Creates a Molecule instance from an RDKit Mol object, assuming a single conformer."""
+        if rdMol is None:
+            raise ValueError("Invalid RDKit molecule provided.")
+
+        num_confs = rdMol.GetNumConformers()
+        if num_confs == 0:
+            raise ValueError(
+                "RDKit molecule has no conformers. Ensure 3D coordinates are generated."
+            )
+        if num_confs > 1:
+            raise ValueError(
+                f"Expected a single conformer but found {num_confs}. Please provide a single conformer."
+            )
+
+        # Extract atomic symbols
+        symbols = [atom.GetSymbol() for atom in rdMol.GetAtoms()]
+
+        # Extract atomic positions from the first conformer (assuming single conformer)
+        conf = rdMol.GetConformer(0)
+        positions = np.array(
+            [
+                [
+                    conf.GetAtomPosition(i).x,
+                    conf.GetAtomPosition(i).y,
+                    conf.GetAtomPosition(i).z,
+                ]
+                for i in range(rdMol.GetNumAtoms())
+            ]
+        )
+
+        # Get molecular charge
+        charge = Chem.GetFormalCharge(rdMol)
+
+        # Estimate multiplicity (multiplicity = 2S + 1, where S is total spin)
+        num_radical_electrons = sum(
+            atom.GetNumRadicalElectrons() for atom in rdMol.GetAtoms()
+        )
+        multiplicity = (
+            num_radical_electrons + 1 if num_radical_electrons > 0 else 1
+        )  # Default to singlet
+
+        # Store additional RDKit properties
+        info = {
+            "smiles": Chem.MolToSmiles(rdMol),
+            "num_bonds": rdMol.GetNumBonds(),
+        }
+
+        rdkit_mol = cls(
+            symbols=symbols,
+            positions=positions,
+            charge=charge,
+            multiplicity=multiplicity,
+            info=info,
+        )
+
+        rdkit_mol.num_atoms = rdMol.GetNumAtoms()
+
+        return rdkit_mol
+
     def write_coordinates(self, f, program=None):
         """Write the coordinates of the molecule to a file.
         No empty end line at the end of the file."""
+        if program is None:
+            program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
             self._write_gaussian_coordinates(f)
             self._write_gaussian_pbc_coordinates(f)
@@ -327,6 +452,61 @@ class Molecule:
             raise ValueError(
                 f"Program {program} is not supported for writing coordinates."
             )
+
+    def write(self, filename, format="xyz", **kwargs):
+        """Write the molecule to a file."""
+        if format.lower() == "xyz":
+            self.write_xyz(filename, **kwargs)
+        elif format.lower() == "com":
+            self.write_com(filename, **kwargs)
+        # elif format.lower() == "mol":
+        #     self.write_mol(filename, **kwargs)
+        else:
+            raise ValueError(f"Format {format} is not supported for writing.")
+
+    def write_xyz(self, filename, **kwargs):
+        """Write the molecule to an XYZ file."""
+        with open(filename, "w") as f:
+            base_filename = os.path.basename(filename)
+            if self.energy is not None:
+                # energy found in file, e.g., .out, .log
+                xyz_info = (
+                    f"{base_filename}    Empirical formula: {self.chemical_formula}    "
+                    f"Energy(Hartree): {self.energy/units.Hartree}"
+                )
+            else:
+                # no energy found in file, e.g., .xyz or .com
+                xyz_info = f"{base_filename}    Empirical formula: {self.chemical_formula}"
+
+            logger.info(f"Writing outputfile to {filename}")
+            f.write(f"{self.num_atoms}\n")
+            f.write(f"{xyz_info}\n")
+            self._write_orca_coordinates(f)
+
+    def write_com(
+        self,
+        filename,
+        charge=0,
+        multiplicity=1,
+        route="# opt freq m062x def2svp",
+        **kwargs,
+    ):
+        """Write the molecule to a Gaussian input file."""
+        with open(filename, "w") as f:
+            basename = os.path.basename(filename).split(".")[0]
+            f.write(f"%chk={basename}.chk\n")
+            f.write("%mem=2GB\n")
+            f.write("%nprocshared=32\n")
+            f.write(f"{route}\n")  # example route
+            f.write("\n")
+            f.write(f"Generated from {filename}\n")
+            f.write("\n")
+            if self.charge is not None and self.multiplicity is not None:
+                f.write(f"{self.charge} {self.multiplicity}\n")
+            else:
+                f.write(f"{charge} {multiplicity}\n")
+            self.write_coordinates(f, program="gaussian")
+            f.write("\n")
 
     def _write_gaussian_coordinates(self, f):
         assert self.symbols is not None, "Symbols to write should not be None!"
@@ -382,6 +562,46 @@ class Molecule:
     def __str__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"
 
+    @cached_property
+    def distance_matrix(self):
+        """ "Compute pairwise distance matrix."""
+        return cdist(self.positions, self.positions)
+
+    def determine_bond_order_one_bond(self, bond_length, bond_cutoff):
+        """Determine the bond order based on bond length and cutoff."""
+        for bond_type, multiplier in [
+            ("triple", 3),
+            ("double", 2),
+            ("aromatic", 1.5),
+            ("single", 1),
+        ]:
+            if (
+                bond_length
+                < bond_cutoff * self.bond_length_multipliers[bond_type]
+            ):
+                return multiplier
+        return 0  # No bond
+
+    def determine_bond_order(self, bond_length, bond_cutoff):
+        """Vectorized determination of bond order based on bond length and cutoff."""
+        multipliers = np.array([3, 2, 1.5, 1])
+        bond_types = ["triple", "double", "aromatic", "single"]
+
+        # Compute bond order matrix
+        bond_multiplier_matrix = np.array(
+            [
+                self.bond_length_multipliers[bond_type]
+                for bond_type in bond_types
+            ]
+        )
+
+        valid_bond = bond_length[..., np.newaxis] < (
+            bond_cutoff[..., np.newaxis] * bond_multiplier_matrix
+        )
+        bond_order = np.where(valid_bond, multipliers, 0).max(axis=-1)
+
+        return bond_order
+
     def bond_lengths(self):
         # get all bond distances in the molecule
         return self.get_all_distances()
@@ -394,6 +614,252 @@ class Molecule:
                     np.linalg.norm(self.positions[i] - self.positions[j])
                 )
         return bond_distances
+
+    def to_smiles(self):
+        """Convert molecule to SMILES string."""
+        # Create an RDKit molecule
+        rdkit_mol = self.to_rdkit()
+
+        # Convert RDKit molecule to SMILES
+        return Chem.MolToSmiles(rdkit_mol)
+
+    def to_rdkit(self, bond_cutoff_buffer=0.05, adjust_H=True):
+        """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
+        Args:
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            From testing, see test_resonance_handling, it seems that a value of 0.1Å
+            works for ozone, acetone, benzene, and probably other molecules, too.
+            adjust_Hs (bool): Adjust bond distances to H atoms.
+        Returns:
+            RDKit Mol: RDKit molecule object.
+        """
+
+        # Create molecule and add atoms
+        rdkit_mol = Chem.RWMol()
+
+        # Add atoms to the RDKit molecule
+        for symbol in self.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+
+        # add bonds
+        for i in range(len(self.symbols)):
+            for j in range(i + 1, len(self.symbols)):
+                if adjust_H:
+                    if self.symbols[i] == "H" and self.symbols[j] == "H":
+                        # bond length of H-H is 0.74 Å
+                        # covalent radius of H is 0.31 Å
+                        cutoff_buffer = 0.2
+                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                        # C-H bond distance of ~ 1.09 Å
+                        # N-H bond distance of ~ 1.01 Å
+                        # O-H bond distance of ~ 0.96 Å
+                        # covalent radius of C is  0.76,
+                        # covalent radius of N is 0.71,
+                        # covalent radius of O is 0.66,
+                        cutoff_buffer = 0.1
+                    else:
+                        cutoff_buffer = bond_cutoff_buffer
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer
+                )
+                bond_order = self.determine_bond_order(
+                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                )
+                if bond_order > 0:
+                    bond_type = {
+                        1: Chem.BondType.SINGLE,
+                        1.5: Chem.BondType.AROMATIC,
+                        2: Chem.BondType.DOUBLE,
+                        3: Chem.BondType.TRIPLE,
+                    }[bond_order]
+                    rdkit_mol.AddBond(i, j, bond_type)
+
+        # Create a conformer and set 3D coordinates
+        conformer = rdchem.Conformer(len(self.symbols))
+        for i, pos in enumerate(self.positions):
+            conformer.SetAtomPosition(i, Point3D(*pos))
+        rdkit_mol.AddConformer(conformer)
+
+        # Compute valences (Fix for getNumImplicitHs issue)
+        rdkit_mol.UpdatePropertyCache(strict=False)
+
+        # Partial sanitization for stereochemistry detection
+        # Chem.SanitizeMol(rdkit_mol,
+        #                  Chem.SANITIZE_ALL ^ Chem.SANITIZE_ADJUSTHS ^ Chem.SANITIZE_SETAROMATICITY)
+
+        # Detect stereochemistry from 3D coordinates
+        Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
+        Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
+
+        # Force update of stereo flags
+        Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
+
+        return rdkit_mol.GetMol()
+
+    @cached_property
+    def rdkit_fingerprints(self):
+        """Return RDKit molecular fingerprints."""
+        rdkit_mol = self.to_rdkit()
+        return Chem.RDKFingerprint(rdkit_mol)
+
+    @cached_property
+    def bond_orders(self):
+        """Return a list of bond orders from the molecular graph.
+        Note that in conformers analysis, the bond orders should
+        be the same for all conformers. In those cases, its best
+        to use get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
+        or get_bond_orders_from_graph(bond_cutoff_buffer=0.0) directly."""
+        try:
+            return self.get_bond_orders_from_graph()
+        except Exception:
+            return self.get_bond_orders_from_rdkit_mol()
+
+    def get_bond_orders_from_rdkit_mol(self, **kwargs):
+        """Return a list of bond orders from the RDKit molecule."""
+        return [
+            bond.GetBondTypeAsDouble()
+            for bond in self.to_rdkit(**kwargs).GetBonds()
+        ]
+
+    def get_bond_orders_from_graph(self, **kwargs):
+        """Return a list of bond orders from the molecular graph."""
+        graph = self.to_graph(**kwargs)
+        bond_orders = []
+        for bond in graph.edges.values():
+            bond_orders.append(bond["bond_order"])
+        return bond_orders
+
+    def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
+        """Convert a Molecule object to a connectivity graph with vectorized calculations.
+        Bond cutoff value determines the maximum distance between two atoms
+        to add a graph edge between them. Bond cutoff is obtained using Covalent
+        Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
+        Args:
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+            adjust_H (bool): Whether to adjust hydrogen bond cutoffs.
+
+        Returns:
+            nx.Graph: A networkx graph object representing the molecule.
+        """
+
+        G = nx.Graph()
+        positions = np.array(self.positions)
+        symbols = np.array(self.chemical_symbols)
+        num_atoms = len(symbols)
+
+        # Add nodes
+        for i, symbol in enumerate(symbols):
+            G.add_node(i, element=symbol)
+
+        # Compute distance matrix if not already available
+        distance_matrix = np.linalg.norm(
+            positions[:, np.newaxis] - positions, axis=2
+        )
+
+        # Compute bond cutoff matrix
+        cutoff_matrix = np.zeros((num_atoms, num_atoms))
+
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                element_i, element_j = symbols[i], symbols[j]
+
+                cutoff_buffer = bond_cutoff_buffer
+                if adjust_H:
+                    if element_i == "H" and element_j == "H":
+                        cutoff_buffer = 0.12
+                    elif element_i == "H" or element_j == "H":
+                        cutoff_buffer = 0.05
+
+                cutoff_matrix[i, j] = cutoff_matrix[j, i] = get_bond_cutoff(
+                    element_i, element_j, cutoff_buffer
+                )
+
+        # Determine bond orders
+        bond_orders = self.determine_bond_order(
+            bond_length=distance_matrix, bond_cutoff=cutoff_matrix
+        )
+
+        # Add edges where bond order > 0
+        i_indices, j_indices = np.where(bond_orders > 0)
+
+        for i, j in zip(i_indices, j_indices):
+            if i < j:  # Avoid duplicate edges
+                G.add_edge(i, j, bond_order=bond_orders[i, j])
+
+        return G
+
+    def to_graph_non_vectorized(
+        self, bond_cutoff_buffer=0.05, adjust_H=True
+    ) -> nx.Graph:
+        """Convert a Molecule object to a connectivity graph, non-vectorized.
+        Bond cutoff value determines the maximum distance between two atoms
+        to add a graph edge between them. Bond cutoff is obtained using Covalent
+        Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
+        Args:
+            bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
+        Returns:
+            nx.Graph: A networkx graph object representing the molecule.
+        """
+        G = nx.Graph()
+        positions = self.positions
+
+        # add nodes
+        for i, symbol in enumerate(self.chemical_symbols):
+            G.add_node(i, element=symbol)
+
+        # Add edges (bonds) with bond order
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                element_i, element_j = (
+                    self.chemical_symbols[i],
+                    self.chemical_symbols[j],
+                )
+
+                cutoff_buffer = bond_cutoff_buffer
+
+                if adjust_H:
+                    if element_i == "H" and element_j == "H":
+                        # bond length of H-H is 0.74 Å
+                        # covalent radius of H is 0.31 Å
+                        cutoff_buffer = 0.12
+                    elif element_i == "H" or element_j == "H":
+                        # C-H bond distance of ~ 1.09 Å
+                        # N-H bond distance of ~ 1.01 Å
+                        # O-H bond distance of ~ 0.96 Å
+                        # covalent radius of C is  0.76,
+                        # covalent radius of N is 0.71,
+                        # covalent radius of O is 0.66,
+                        cutoff_buffer = 0.05
+
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer
+                )
+                bond_order = self.determine_bond_order_one_bond(
+                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                )
+                if bond_order > 0:
+                    G.add_edge(i, j, bond_order=bond_order)
+        return G
+
+    def to_ase(self):
+        """Convert molecule object to ASE atoms object."""
+        from .atoms import AtomsChargeMultiplicity
+
+        return AtomsChargeMultiplicity(
+            symbols=self.chemical_symbols,
+            positions=self.positions,
+            pbc=self.pbc,
+            cell=self.translation_vectors,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+        )
+
+    def to_pymatgen(self):
+        """Convert molecule object to pymatgen IStructure."""
+
+        from pymatgen.io.ase import AseAtomsAdaptor
+
+        return AseAtomsAdaptor.get_molecule(atoms=self.to_ase())
 
 
 class CoordinateBlock:
@@ -639,57 +1105,3 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
-
-
-class XYZFile(FileMixin):
-    """xyz file object."""
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    @cached_property
-    def num_atoms(self):
-        return int(self.contents[0])
-
-    def _get_molecules_and_comments(self, index=":", return_list=False):
-        """Return a molecule object or a list of molecule objects from an xyz file.
-        The xzy file can either contain a single molecule, as conventionally, or a list
-        of molecules, such as those in crest_conformers.xyz file."""
-        all_molecules = []
-        comments = []
-        i = 0
-        while i < len(self.contents):
-            # Read number of atoms
-            num_atoms = int(self.contents[i].strip())
-            if num_atoms == 0:
-                raise ValueError("Number of atoms in the xyz file is zero!")
-            i += 1
-            # Read comment line
-            comment = self.contents[i].strip()
-            comments.append(comment)
-            i += 1
-            # Read the coordinate block
-            coordinate_block = self.contents[i : i + num_atoms]
-            i += num_atoms
-            molecule = Molecule.from_coordinate_block_text(coordinate_block)
-
-            # Store the molecule data
-            all_molecules.append(molecule)
-
-        molecules = all_molecules[string2index_1based(index)]
-        comments = comments[string2index_1based(index)]
-        if return_list and isinstance(molecules, Molecule):
-            return [molecules], [comments]
-        return molecules, comments
-
-    def get_molecule(self, index=":", return_list=False):
-        molecules, _ = self._get_molecules_and_comments(
-            index=index, return_list=return_list
-        )
-        return molecules
-
-    def get_comments(self, index=":", return_list=False):
-        _, comments = self._get_molecules_and_comments(
-            index=index, return_list=return_list
-        )
-        return comments

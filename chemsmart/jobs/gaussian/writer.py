@@ -40,7 +40,8 @@ class GaussianInputWriter(InputWriter):
         self._write_gaussian_title(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
-        self._append_modredundant(f)
+        if not isinstance(self.settings, GaussianLinkJobSettings):
+            self._append_modredundant(f)
         self._append_gen_genecp_basis(f)  # then write genecp info
         self._append_custom_solvent_parameters(
             f
@@ -81,9 +82,18 @@ class GaussianInputWriter(InputWriter):
                 # returns empty list if no heavy elements found in structure
                 # (heavy elements specified in settings)
             ):
+                # first remove any '-' in light_elements_basis
+                # this is because '-' is needed by bse package to get the right
+                # basis set from https://www.basissetexchange.org/, eg, def2-SVP
+                # but this is not needed in Gaussian input file
+                # (will cause error when run), eg, def2svp
+                light_elements_basis = (
+                    self.settings.light_elements_basis.replace("-", "").lower()
+                )
+
                 route_string = route_string.replace(
                     self.settings.basis,
-                    self.settings.light_elements_basis,
+                    light_elements_basis,
                 )
         f.write(route_string + "\n")
         f.write("\n")

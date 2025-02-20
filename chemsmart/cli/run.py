@@ -80,6 +80,7 @@ def process_pipeline(ctx, *args, **kwargs):
     # Instantiate a specific jobrunner based on job type
     # jobrunner at this stage is an instance of specific JobRunner subclass to run the job
     if isinstance(job, Job):
+        logger.debug(f"Creating jobrunner from job: {job}")
         jobrunner = jobrunner.from_job(
             job=job,
             server=jobrunner.server,
