@@ -1,3 +1,5 @@
+from chemsmart.jobs.orca.runner import ORCAJobRunner
+
 from .inp import inp
 from .irc import irc
 from .modred import modred
@@ -6,7 +8,6 @@ from .orca import orca
 from .scan import scan
 from .singlepoint import sp
 from .ts import ts
-from chemsmart.jobs.orca.runner import ORCAJobRunner
 
 __all__ = [
     "inp",

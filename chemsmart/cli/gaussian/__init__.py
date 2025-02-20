@@ -1,3 +1,5 @@
+from chemsmart.jobs.gaussian.runner import GaussianJobRunner
+
 from .com import com
 from .crest import crest
 from .crestopt import crestopt
@@ -16,7 +18,6 @@ from .singlepoint import sp
 from .tddft import td
 from .ts import ts
 from .wbi import wbi
-from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 
 __all__ = [
     "com",

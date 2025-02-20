@@ -19,7 +19,7 @@ class XTBJobSettings(MolecularJobSettings):
         xtb_version="gfn2",  # use gfn2 by default
         optimization_level=None,
         charge=None,
-        unpair_electrons=None,
+        uhf=None,
         job_type=None,
         title=None,
         freq=False,
@@ -27,6 +27,9 @@ class XTBJobSettings(MolecularJobSettings):
         solvent_id=None,
         **kwargs,
     ):
+        """Initialize XTB job settings.
+        uhf(int): Number of unpaired electrons.
+        """
         super().__init__(
             charge=charge,
             freq=freq,
@@ -38,7 +41,7 @@ class XTBJobSettings(MolecularJobSettings):
         )
         self.xtb_version = xtb_version
         self.optimization_level = optimization_level
-        self.unpair_electrons = unpair_electrons
+        self.uhf = uhf
 
     def copy(self):
         return copy.deepcopy(self)
@@ -155,7 +158,7 @@ class XTBJobSettings(MolecularJobSettings):
             xtb_version="gfn2",
             optimization_level="vtight",
             charge=None,
-            unpair_electrons=None,
+            uhf=None,
             job_type=None,
             title="xtb job with default settings",
             freq=False,

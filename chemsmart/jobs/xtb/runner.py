@@ -7,7 +7,6 @@ from functools import lru_cache
 from glob import glob
 from shutil import copy, rmtree
 
-from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import XTBExecutable
 from chemsmart.utils.periodictable import PeriodicTable
@@ -41,22 +40,18 @@ class XTBJobRunner(JobRunner):
     def executable(self):
         """Executable class object for XTB."""
         try:
-            logger.info(
-                f"Obtaining executable from server: {self.server.name}"
-            )
-            executable = XTBExecutable.from_servername(
-                servername=self.server.name
-            )
+            executable_path = XTBExecutable().get_executable()
+            executable_path = os.path.dirname(executable_path)
+            executable = XTBExecutable(executable_path)
+            logger.debug(f"Obtained xtb executable: {executable}")
             return executable
-        except FileNotFoundError as e:
-            logger.error(
-                f"No server file {self.server} is found: {e}\n"
-                f"Available servers are: {XTBExecutable.available_servers}"
-            )
+        except TypeError as e:
+            logger.error(f"No xtb executable is found: {e}\n")
             raise
 
     def _prerun(self, job):
         self._assign_variables(job)
+        self._convert_files()
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output,
@@ -72,6 +67,41 @@ class XTBJobRunner(JobRunner):
         if self.executable and self.executable.local_run is not None:
             logger.info(f"Local run is {self.executable.local_run}.")
             job.local = self.executable.local_run
+
+    def _convert_files(self):
+        """Convert the file to be run to .xyz format, if it is not already."""
+        print(self.job_inputfile)
+        job_inputfile = os.path.basename(self.job_inputfile)
+        print(job_inputfile)
+        if not job_inputfile.endswith(".xyz"):
+            from chemsmart.io.gaussian.input import Gaussian16Input
+            from chemsmart.io.gaussian.output import Gaussian16Output
+            from chemsmart.io.orca.input import ORCAInput
+            logger.debug(f"Writing xyz file to: {job_inputfile.replace('.com', '.xyz')}")
+
+            mol = None
+            # from chemsmart.io.xtb.output import XTBOutput
+            """Convert input file to xyz format."""
+            from chemsmart.io.molecules.structure import Molecule
+            if self.job_inputfile.endswith(".com") or self.job_inputfile.endswith(".gjf"):
+                mol = Gaussian16Input(filename=self.job_inputfile).molecule
+            elif self.job_inputfile.endswith(".log"):
+                mol = Gaussian16Output(filename=self.job_inputfile).molecule
+            elif self.job_inputfile.endswith(".inp"):
+                mol = ORCAInput(filename=self.job_inputfile).molecule
+            elif self.job_inputfile.endswith(".out"):
+                try:
+                    # orca output
+                    mol = ORCAInput(filename=self.job_inputfile).molecule
+                except Exception:
+                    # xtb output
+                    # mol = XTBOutput(filename=self.job_inputfile).molecule
+                    pass
+            else:
+                raise ValueError(f"Cannot convert {self.job_inputfile} to .xyz format.")
+
+            print(f"Writing xyz file to: {self.job_inputfile.replace('.com', '.xyz')}")
+            mol.write_xyz(self.job_inputfile.replace(".com", ".xyz"))
 
     def _set_up_variables_in_scratch(self, job):
         scratch_job_dir = os.path.join(self.scratch_dir, job.label)
@@ -98,26 +128,29 @@ class XTBJobRunner(JobRunner):
     def _write_input(self, job):
         pass
 
-    def _get_command(self, settings):
+    def _get_command(self, **kwargs):
         exe = self._get_executable()
+        command = f"{exe} {self.job_inputfile} "
+        return command
+
+    def _create_process(self, job, command, env):
+        settings = job.settings
         if (
             settings.solvent_model is not None
             and settings.solvent_id is not None
         ):
-            command = (
-                f"{exe} {self.job_inputfile} --{settings.xtb_version} "
-                f"--{settings.jobtype} {settings.optimization_level}  --chrg {settings.charge} "
-                f"--uhf {settings.unpair_electrons} --{settings.solvent_model} {settings.solvent_id}"
+            command += (
+                f" --{settings.xtb_version} "
+                f"--{settings.job_type} {settings.optimization_level}  --chrg {settings.charge} "
+                f"--uhf {settings.uhf} --{settings.solvent_model} {settings.solvent_id}"
             )
         else:
-            command = (
-                f"{exe} {self.job_inputfile} --{settings.xtb_version} "
-                f"--{settings.jobtype} {settings.optimization_level}  --chrg {settings.charge} "
-                f"--uhf {settings.unpair_electrons}"
+            command += (
+                f" --{settings.xtb_version} "
+                f"--{settings.job_type} {settings.optimization_level}  --chrg {settings.charge} "
+                f"--uhf {settings.uhf}"
             )
-        return command
 
-    def _create_process(self, job, command, env):
         with (
             open(self.job_outputfile, "w") as out,
             open(self.job_errfile, "w") as err,

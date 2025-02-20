@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Type
 
+
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.xtb.settings import XTBJobSettings
@@ -69,8 +70,8 @@ class XTBJob(Job):
             logger.error(f"Error reading output file: {self.outputfile}")
             return None
 
-    def _run(self, jobrunner):
-        jobrunner.run(self)
+    def _run(self, jobrunner, **kwargs):
+        jobrunner.run(self, **kwargs)
 
     @classmethod
     def from_filename(
