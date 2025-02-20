@@ -442,6 +442,13 @@ class TestGaussian16Output:
             expected_moments_of_inertia,
             rtol=1e-3,
         )
+        assert np.allclose(
+            g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
+        )
+        assert np.allclose(
+            g16_output.rotational_constants_in_Hz,
+            [0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9],
+        )
         assert g16_output.rotational_symmetry_number == 1
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):

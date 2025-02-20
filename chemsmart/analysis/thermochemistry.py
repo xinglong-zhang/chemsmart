@@ -29,16 +29,14 @@ class Thermochemistry:
         filename,
         temperature,
         pressure,
-        degeneracy=None,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
-        self.degeneracy = degeneracy  # degeneracy of the ground state
         self.m = (
             self.molecule.mass
-            * units._amu  # converts mass from g/mol to kg per molecule
+            * units._amu  # converts mass from g/mol to kg/molecule
             # units._amu is same as divide by Avogadro's number then by 1000 (g to kg)
         )  # convert the unit of mass of the molecule from amu to kg
         self.T = self.temperature  # temperature in K
@@ -144,12 +142,16 @@ class Thermochemistry:
     @property
     def electronic_partition_function(self):
         """Obtain the electronic partition function.
+        Gaussian assumes first electronic excitation energy is much greater than k_B * T.
+        Thus, first and higher excited states assumed inaccessible at any temperature.
+        Further, energy of ground state is set to zero.
         Formula:
             q_e = ω_0
         where:
-            ω_0 = degeneracy of the ground state
+            ω_0 = degeneracy of the ground state,
+            which is simply the electronic spin multiplicity of the molecule.
         """
-        return self.degeneracy
+        return self.file_object.multiplicity
 
     @property
     def electronic_entropy(self):
@@ -161,12 +163,15 @@ class Thermochemistry:
 
     @property
     def electronic_internal_energy(self):
-        """The internal thermal energy due to electronic motion is zero."""
+        """The internal thermal energy due to electronic motion is zero.
+        Since there are no temperature dependent terms in electronic partition function
+        """
         return 0
 
     @property
     def electronic_heat_capacity(self):
-        """The electronic heat capacity is zero for all types of molecules."""
+        """The electronic heat capacity is zero for all types of molecules.
+        C_V = (\partial U_e / \partial T)_V = 0"""
         return 0
 
     def _calculate_rotational_partition_function_for_linear_molecule(self):
@@ -179,7 +184,7 @@ class Thermochemistry:
             I = moment of inertia (kg m^2)
         """
         theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[0] * units._k)
-        return 1 / self.rotational_symmetry_number * (self.T / theta_r)
+        return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
         self,
@@ -202,7 +207,10 @@ class Thermochemistry:
 
     @property
     def rotational_partition_function(self):
-        """Obtain the rotational partition function."""
+        """Obtain the rotational partition function.
+        For a single atom, q_r = 1. Since q_r does not depend on temperature, contribution
+        of rotation to internal thermal energy, heat capacity and entropy are all identically zero.
+        """
         if self.molecule.is_monoatomic:
             return 1
         elif self.molecule.is_linear:

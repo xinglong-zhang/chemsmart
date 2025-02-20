@@ -1420,6 +1420,28 @@ class Gaussian16Output(GaussianFileMixin):
             if "Rotational symmetry number" in line:
                 return int(line.split()[-1].split(".")[0])
 
+    @cached_property
+    def rotational_temperatures(self):
+        """Rotational temperatures in Kelvin, as a list."""
+        rot_temps = []
+        for line in reversed(self.contents):
+            # take from the end of outputfile
+            if "Rotational temperatures (Kelvin)" in line:
+                for rot_temp in line.split()[-3:]:
+                    rot_temps.append(float(rot_temp))
+                return rot_temps
+
+    @cached_property
+    def rotational_constants_in_Hz(self):
+        """Rotational constants in Hz, as a list."""
+        rot_consts = []
+        for line in reversed(self.contents):
+            # take from the end of outputfile
+            if "Rotational constants (GHZ)" in line:
+                for rot_const in line.split()[-3:]:
+                    rot_consts.append(float(rot_const) * 1e9)
+                return rot_consts
+
     def to_dataset(self, **kwargs):
         """Convert Gaussian .log file to Dataset with all data points taken from the .log file.
 
