@@ -107,13 +107,13 @@ class XTBJobRunner(JobRunner):
             and settings.solvent_id is not None
         ):
             command += (
-                f" --{settings.xtb_version} "
+                f" --{settings.gfn_version} "
                 f"--{settings.job_type} {settings.optimization_level}  --chrg {settings.charge} "
                 f"--uhf {settings.uhf} --{settings.solvent_model} {settings.solvent_id}"
             )
         else:
             command += (
-                f" --{settings.xtb_version} "
+                f" --{settings.gfn_version} "
                 f"--{settings.job_type} {settings.optimization_level}  --chrg {settings.charge} "
                 f"--uhf {settings.uhf}"
             )

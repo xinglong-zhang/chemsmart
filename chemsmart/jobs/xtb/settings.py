@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class XTBJobSettings(MolecularJobSettings):
     def __init__(
         self,
-        xtb_version="gfn2",  # use gfn2 by default
+        gfn_version="gfn2",  # use gfn2 by default
         optimization_level=None,
         charge=None,
         uhf=None,
@@ -39,7 +39,7 @@ class XTBJobSettings(MolecularJobSettings):
             solvent_id=solvent_id,
             **kwargs,
         )
-        self.xtb_version = xtb_version
+        self.gfn_version = gfn_version
         self.optimization_level = optimization_level
         self.uhf = uhf
 
@@ -155,7 +155,7 @@ class XTBJobSettings(MolecularJobSettings):
     @classmethod
     def default(cls):
         return cls(
-            xtb_version="gfn2",
+            gfn_version="gfn2",
             optimization_level="vtight",
             charge=None,
             uhf=None,

@@ -1,6 +1,7 @@
 import logging
 from functools import cached_property
 
+
 from chemsmart.utils.mixins import FileMixin
 
 logger = logging.getLogger(__name__)
@@ -9,6 +10,14 @@ logger = logging.getLogger(__name__)
 class XTBOutput(FileMixin):
     def __init__(self, filename):
         self.filename = filename
+
+    @property
+    def xtb_version(self):
+        """xtb version used for the calculation."""
+        for line in self.contents:
+            if "xtb version" in line:
+                return line.split()[3]
+        return None
 
     @property
     def normal_termination(self):
@@ -32,74 +41,232 @@ class XTBOutput(FileMixin):
     def route_string(self):
         return self._get_route()
 
+    #           ...................................................
+    #           :                      SETUP                      :
+    #           :.................................................:
     def _get_setup_information(self, keyword):
-        for line in self.contents:
-            if keyword in line:
-                return int(line.split()[-2])
+        """Get xtb setup information."""
+        # restrict to SETUP block
+        for i, line in enumerate(self.contents):
+            if "SETUP" in line:
+                for j_line in self.contents[i + 2 :]:
+                    if len(j_line) == 0:
+                        break
+                    if keyword in j_line:
+                        return (
+                            j_line.split(keyword)[-1]
+                            .strip()
+                            .split()[0]
+                            .strip()
+                        )
         return None
 
     @property
     def num_basis_functions(self):
-        return self._get_setup_information("# basis functions")
+        num_basis_functions = self._get_setup_information("# basis functions")
+        return int(num_basis_functions)
 
     @property
     def num_atomic_orbital(self):
-        return self._get_setup_information("# atomic orbitals")
+        num_atomic_orbital = self._get_setup_information("# atomic orbitals")
+        return int(num_atomic_orbital)
 
     @property
     def num_shells(self):
-        return self._get_setup_information("# shells")
+        num_shells = self._get_setup_information("# shells")
+        return int(num_shells)
 
     @property
     def num_electrons(self):
-        return self._get_setup_information("# electrons")
+        num_electrons = self._get_setup_information("# electrons")
+        return int(num_electrons)
+
+    @property
+    def max_iter(self):
+        max_iter = self._get_setup_information("max. iterations")
+        return int(max_iter)
 
     @property
     def hamiltonian(self):
-        for line in reversed(self.contents):
-            if "Hamiltonian" in line:
-                return line.split()[-2]
-        return None
-
-    def _setup_bool(self, keyword):
-        for line in self.contents:
-            if keyword in line:
-                return line.split()[-2].lower() == "true"
-        return None
+        return self._get_setup_information("Hamiltonian")
 
     @property
     def restart(self):
-        return self._setup_bool("restarted?")
+        restart = self._get_setup_information("restarted?")
+        return restart.lower() == "true"
 
     @property
-    def solvation(self):
-        return self._setup_bool("GBSA solvation")
+    def solvent_on(self):
+        # instead of checking for GBSA solvation,
+        # we will search for the actual solvent model and solvent ID
+        solvation = self._get_setup_information("GBSA solvation")
+        return solvation.lower() == "true"
+
+    # solvation model and solvent ID
+    @property
+    def solvent_model(self):
+        for line in self.contents:
+            if "Solvation model:" in line:
+                return line.split()[-1]
+        return None
+
+    @property
+    def solvent_id(self):
+        for line in self.contents:
+            if "Solvent" in line and len(line.split()) == 2:
+                return line.split()[-1]
+        return None
 
     @property
     def pc_potential(self):
-        return self._setup_bool("PC potential")
+        """Point Charge Potential, an external electrostatic potential
+        applied to the system using classical point charges"""
+        pc_pot = self._get_setup_information("PC potential")
+        return pc_pot.lower() == "true"
 
     @property
     def electronic_temperature(self):
-        for line in self.contents:
-            if "electronic temp." in line:
-                return float(line.split()[-3])  # electronic temperature in K
-        return None
+        electronic_temp = self._get_setup_information("electronic temp.")
+        return float(electronic_temp)
+
+    @property
+    def accuracy(self):
+        accuracy = self._get_setup_information("accuracy")
+        return float(accuracy)
+
+    @property
+    def integral_cutoff(self):
+        integral_cutoff = self._get_setup_information("integral cutoff")
+        return float(integral_cutoff)
+
+    @property
+    def integral_neglect(self):
+        integral_neglect = self._get_setup_information("integral neglect")
+        return float(integral_neglect)
+
+    @property
+    def scf_convergence(self):
+        scf_convergence = self._get_setup_information("SCF convergence")
+        return float(scf_convergence)
+
+    @property
+    def wf_convergence(self):
+        wf_convergence = self._get_setup_information("wf. convergence")
+        return float(wf_convergence)
 
     @property
     def broyden_damping(self):
-        for line in self.contents:
-            if "Broyden damping" in line:
-                return float(line.split()[-2])
-        return None
+        broyden_damping = self._get_setup_information("Broyden damping")
+        return float(broyden_damping)
 
     @property
     def net_charge(self):
-        return self._get_setup_information("net charge")
+        net_charge = self._get_setup_information("net charge")
+        return int(net_charge)
 
     @property
     def unpaired_electrons(self):
-        return self._get_setup_information("unpaired electrons")
+        unpaired_electrons = self._get_setup_information("unpaired electrons")
+        return int(unpaired_electrons)
+
+    @property
+    def optimization_level(self):
+        """Optimization level."""
+        opt_level = self._get_setup_information("optimization level")
+        return opt_level
+
+    @property
+    def max_optcycles(self):
+        max_optcycles = self._get_setup_information("max. optcycles")
+        if max_optcycles:
+            return int(max_optcycles)
+
+    @property
+    def anc_microcycles(self):
+        """ANC micro-cycles: Advanced Newton–Raphson Convergence (ANC) micro-iterations
+        used in the Self-Consistent Field (SCF) algorithm to improve convergence
+        """
+        anc_microcycles = self._get_setup_information("ANC micro-cycles")
+        if anc_microcycles:
+            return int(anc_microcycles)
+
+    @property
+    def degrees_of_freedom(self):
+        dof = self._get_setup_information("degrees of freedom")
+        if dof:
+            return int(dof)
+
+    @property
+    def rf_solver(self):
+        """In xtb, the RF solver refers to the Relaxed Fock (RF) solver,
+        an alternative approach for solving the Self-Consistent Field (SCF) equations.
+        It is designed to improve SCF convergence, particularly for challenging
+        systems where standard methods struggle."""
+        return self._get_setup_information("RF solver")
+
+    @property
+    def write_all_intermediate_geometries(self):
+        write_all = self._get_setup_information("write xtbopt.log")
+        if write_all:
+            return write_all.lower() == "true"
+
+    @property
+    def is_linear(self):
+        """Determine if molecule is linear."""
+        linear = self._get_setup_information("linear?")
+        if linear:
+            return linear.lower() == "true"
+
+    @property
+    def energy_convergence(self):
+        energy_conv = self._get_setup_information("energy convergence")
+        if energy_conv:
+            return float(energy_conv)
+
+    @property
+    def gradient_convergence(self):
+        """Gradient convergence threshold, in Eh/alpha."""
+        gradient_conv = self._get_setup_information("grad. convergence")
+        if gradient_conv:
+            return float(gradient_conv)
+
+    @property
+    def max_rf_displacement(self):
+        """Maximum displacement in the Relaxed Fock (RF) solver."""
+        max_rf_disp = self._get_setup_information("maxmium RF displ.")
+        if max_rf_disp:
+            return float(max_rf_disp)
+
+    @property
+    def low_frequency_cutoff(self):
+        """Low frequency cutoff in cm^-1."""
+        low_freq_cutoff = self._get_setup_information("Hlow (freq-cutoff)")
+        if low_freq_cutoff:
+            return float(low_freq_cutoff)
+
+    @property
+    def max_frequency_cutoff(self):
+        """Maximum frequency cutoff in cm^-1."""
+        max_freq_cutoff = self._get_setup_information("Hmax (freq-cutoff)")
+        if max_freq_cutoff:
+            return float(max_freq_cutoff)
+
+    @property
+    def s6_in_model_hessian(self):
+        """S6 parameter in the model Hessian. S6 is a scaling factor used for
+        dispersion correction in GFN-xTB. It is part of D3 dispersion correction
+        and related to the dispersion energy scaling.
+        S6 is a global scaling factor that determines strength of dispersion correction
+        applied in the model Hessian calculation, to account for long-range van der Waals
+        interactions.
+        The model Hessian is an approximate way to compute vibrational frequencies in xtb.
+        Since dispersion affects intermolecular forces and bond stiffness, S6 influences
+        force constants used in Hessian construction.
+        Proper dispersion scaling ensures realistic vibrational spectra and thermodynamic properties.
+        """
+        s6 = self._get_setup_information("S6 in model hess.")
+        if s6:
+            return float(s6)
 
     @property
     def homo_energy(self):
@@ -272,29 +439,6 @@ class XTBOutput(FileMixin):
             return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
         return None
 
-    """
-    SOLVATION
-    """
-
-    @property
-    def solvent_model(self):
-        if self.solvation:
-            for line in self.contents:
-                if "* Solvation model:" in line:
-                    return line.split()[-1]
-        return None
-
-    @property
-    def solvent(self):
-        if self.solvation:
-            for i, line in enumerate(self.contents):
-                if (
-                    "Solvent" in line
-                    and "* Solvation model:" in self.contents[i - 1]
-                ):
-                    return line.split()[-1]
-        return None
-
     @property
     def dielectric_constant(self):
         if self.solvation:
@@ -391,17 +535,6 @@ class XTBOutput(FileMixin):
             elif "FAILED TO CONVERGE GEOMETRY OPTIMIZATION" in line:
                 return False
         return False
-
-    @property
-    def optimization_level(self):
-        for line in self.contents:
-            if "optimization level" in line:
-                return line.split()[-2]
-        return None
-
-    @property
-    def degrees_of_freedom(self):
-        return self._get_setup_information("degrees of freedom")
 
     @property
     def optimized_structure_block(self):

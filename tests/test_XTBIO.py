@@ -13,14 +13,33 @@ class TestXTBOutput:
         assert xtb_output.num_atomic_orbital == 6
         assert xtb_output.num_shells == 4
         assert xtb_output.num_electrons == 8
+        assert xtb_output.max_iter == 250
         assert xtb_output.hamiltonian == "GFN2-xTB"
         assert xtb_output.restart is False
-        assert xtb_output.solvation is False
+        assert xtb_output.solvent_on is False
         assert xtb_output.pc_potential is False
         assert xtb_output.electronic_temperature == 300.0
+        assert xtb_output.accuracy == 1.0
+        assert xtb_output.integral_cutoff == 25.0
+        assert xtb_output.integral_neglect == 1e-8
+        assert xtb_output.scf_convergence == 1.0e-6
+        assert xtb_output.wf_convergence == 1.0e-4
         assert xtb_output.broyden_damping == 0.4
         assert xtb_output.net_charge == 0
         assert xtb_output.unpaired_electrons == 0
+        assert xtb_output.optimization_level is None  # SP job
+        assert xtb_output.max_optcycles is None
+        assert xtb_output.anc_microcycles is None
+        assert xtb_output.degrees_of_freedom is None
+        assert xtb_output.rf_solver is None
+        assert not xtb_output.write_all_intermediate_geometries
+        assert not xtb_output.is_linear
+        assert xtb_output.energy_convergence is None
+        assert xtb_output.gradient_convergence is None
+        assert xtb_output.max_rf_displacement is None
+        assert xtb_output.low_frequency_cutoff is None
+        assert xtb_output.max_frequency_cutoff is None
+        assert xtb_output.s6_in_model_hessian is None
         assert xtb_output.homo_energy == -12.1467
         assert xtb_output.lumo_energy == 2.2442
         assert xtb_output.scc_energy == -5.104925504312
@@ -48,6 +67,27 @@ class TestXTBOutput:
         assert os.path.exists(xtb_opt_outfile)
         xtb_output = XTBOutput(filename=xtb_opt_outfile)
         assert xtb_output.normal_termination
+        assert xtb_output.accuracy == 1.0
+        assert xtb_output.integral_cutoff == 25.0
+        assert xtb_output.integral_neglect == 1e-8
+        assert xtb_output.scf_convergence == 1.0e-6
+        assert xtb_output.wf_convergence == 1.0e-4
+        assert xtb_output.broyden_damping == 0.4
+        assert xtb_output.net_charge == 0
+        assert xtb_output.unpaired_electrons == 0
+        assert xtb_output.optimization_level == "normal"
+        assert xtb_output.max_optcycles == 200
+        assert xtb_output.anc_microcycles == 20
+        assert xtb_output.degrees_of_freedom == 3
+        assert xtb_output.rf_solver == "davidson"
+        assert xtb_output.write_all_intermediate_geometries
+        assert not xtb_output.is_linear
+        assert xtb_output.energy_convergence == 5.0e-6
+        assert xtb_output.gradient_convergence == 1.0e-3
+        assert xtb_output.max_rf_displacement == 1.0
+        assert xtb_output.low_frequency_cutoff == 0.01
+        assert xtb_output.max_frequency_cutoff == 5.0
+        assert xtb_output.s6_in_model_hessian == 20.0
         assert xtb_output.geometry_optimization_converged
         assert xtb_output.route_string == "xtb coord --opt"
         assert xtb_output.homo_energy == -12.1467
