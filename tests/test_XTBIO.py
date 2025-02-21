@@ -63,6 +63,10 @@ class TestXTBOutput:
         assert xtb_output.gradient_norm == 0.000075164743
         assert xtb_output.fmo_gap == 14.390891673350
 
+        all_summary_blocks = xtb_output.get_all_summary_blocks()
+        assert len(all_summary_blocks) == 1
+        assert len(all_summary_blocks[0]) == 11
+
     def test_opt_output(self, xtb_opt_outfile):
         assert os.path.exists(xtb_opt_outfile)
         xtb_output = XTBOutput(filename=xtb_opt_outfile)
@@ -118,6 +122,10 @@ class TestXTBOutput:
         assert xtb_output.gradient_norm == 0.000074994303
         assert xtb_output.fmo_gap == 14.390898452735
 
+        all_summary_blocks = xtb_output.get_all_summary_blocks()
+        assert len(all_summary_blocks) == 2
+        assert len(all_summary_blocks[0]) == 11
+
     def test_opt_gbsa_output(self, xtb_opt_gbsa_outfile):
         assert os.path.exists(xtb_opt_gbsa_outfile)
         xtb_output = XTBOutput(filename=xtb_opt_gbsa_outfile)
@@ -127,9 +135,9 @@ class TestXTBOutput:
             xtb_output.route_string
             == "xtb pyridine_opt.sdf -gbsa acetonitrile -opt"
         )
-        assert xtb_output.solvation
+        assert xtb_output.solvent_on
         assert xtb_output.solvent_model == "GBSA"
-        assert xtb_output.solvent == "acetonitrile"
+        assert xtb_output.solvent_id == "acetonitrile"
         assert xtb_output.dielectric_constant == 37.5
         assert xtb_output.free_energy_shift == 0.0020473
         assert xtb_output.temperature == 298.15
@@ -325,9 +333,13 @@ class TestXTBOutput:
         ]
         assert xtb_output.num_frequencies == 27
         assert xtb_output.num_imaginary_frequencies == 0
+        assert not xtb_output.is_linear
+        assert not xtb_output.only_rot_calc
         assert xtb_output.symmetry == "c2v"
         assert xtb_output.rotational_symmetry_number == 2
         assert xtb_output.scaling_factor == 1.0
+        assert xtb_output.rotor_cutoff == 50.0
+        assert xtb_output.imaginary_frequency_cutoff == -20.0
         assert xtb_output.partition_function == {
             "vibrational": 1.99,
             "rotational": 0.417e05,

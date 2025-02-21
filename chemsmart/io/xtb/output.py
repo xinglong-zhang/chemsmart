@@ -1,6 +1,7 @@
 import logging
 from functools import cached_property
 
+import numpy as np
 
 from chemsmart.utils.mixins import FileMixin
 
@@ -270,23 +271,42 @@ class XTBOutput(FileMixin):
 
     @property
     def homo_energy(self):
-        """Obtain HOMO energy of last optimized structure."""
+        """Obtain HOMO energy of last optimized structure, in eV."""
         for line in reversed(self.contents):
             if "(HOMO)" in line:
-                homo_energy = line.split()[-2]  # homo energy in eV
+                homo_energy = line.split()[-2]
                 return float(homo_energy)
         return None
 
     @property
     def lumo_energy(self):
+        """Obtain LUMO energy of last optimized structure, in eV."""
         for line in reversed(self.contents):
             if "(LUMO)" in line:
                 lumo_energy = line.split()[-2]  # lumo energy in eV
                 return float(lumo_energy)
         return None
 
+    def get_all_summary_blocks(self):
+        """Obtain all SUMMARY blocks from the output file."""
+        summary_blocks = []
+        for i, line in enumerate(self.contents):
+            if "SUMMARY" in line:
+                summary_block = []
+                for j_line in self.contents[i + 2 :]:
+                    if len(j_line) == 0:
+                        break
+                    if "::::::::" in j_line or "........" in j_line:
+                        continue
+                    else:
+                        summary_block.append(j_line)
+                summary_blocks.append(summary_block)
+        return summary_blocks
+
     def _extract_summary_information(self, keyword):
-        for line in reversed(self.contents):
+        # make sure it only extracts from SUMMARY block
+        last_summary_block = self.get_all_summary_blocks()[-1]
+        for line in last_summary_block:
             if keyword in line:
                 return float(line.split()[-3])
         return None
@@ -363,23 +383,34 @@ class XTBOutput(FileMixin):
         }
         return quadrupole_data
 
+    def _extract_final_information(self, keyword):
+        for line in reversed(self.contents):
+            if keyword in line:
+                return float(
+                    line.split(keyword)[-1].strip().split()[0].strip()
+                )
+        return None
+
     @property
     def total_energy(self):
-        return self._extract_summary_information(
+        return self._extract_final_information(
             "TOTAL ENERGY"
         )  # total energy in Eh
 
     @property
     def gradient_norm(self):
-        return self._extract_summary_information(
+        return self._extract_final_information(
             "GRADIENT NORM"
         )  # gradient norm in Eh/α
 
     @property
     def fmo_gap(self):
-        return self._extract_summary_information(
-            "HOMO-LUMO GAP"
-        )  # homo-lumo gap in eV
+        """Extract HOMO-LUMO gap, in eV"""
+        fmo_gap = self._extract_final_information("HOMO-LUMO GAP")
+        assert np.isclose(
+            self.lumo_energy - self.homo_energy, fmo_gap, atol=1e-3
+        )
+        return fmo_gap
 
     def sum_time_hours(self, line):
         n_days = float(line.split(" d,")[0].split()[-1])
@@ -441,7 +472,7 @@ class XTBOutput(FileMixin):
 
     @property
     def dielectric_constant(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Dielectric constant" in line:
                     return float(line.split()[-1])
@@ -449,7 +480,7 @@ class XTBOutput(FileMixin):
 
     @property
     def free_energy_shift(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Free energy shift" in line:
                     return float(line.split()[-4])  # free energy shift in Eh
@@ -457,7 +488,7 @@ class XTBOutput(FileMixin):
 
     @property
     def temperature(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Temperature" in line:
                     return float(line.split()[-2])  # temperature in K
@@ -465,7 +496,7 @@ class XTBOutput(FileMixin):
 
     @property
     def density(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Density" in line:
                     return float(line.split()[-2])  # density in kg/L
@@ -473,7 +504,7 @@ class XTBOutput(FileMixin):
 
     @property
     def solvent_mass(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Solvent mass" in line:
                     return float(line.split()[-2])  # solvent mass in g/mol
@@ -481,7 +512,7 @@ class XTBOutput(FileMixin):
 
     @property
     def h_bond_correction(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "H-bond correction" in line:
                     return line.split()[-1] == "true"
@@ -489,7 +520,7 @@ class XTBOutput(FileMixin):
 
     @property
     def ion_screening(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Ion screening" in line:
                     return line.split()[-1] == "true"
@@ -497,7 +528,7 @@ class XTBOutput(FileMixin):
 
     @property
     def surface_tension(self):
-        if self.solvation:
+        if self.solvent_on:
             for line in self.contents:
                 if "Surface tension" in line:
                     return float(line.split()[-4])  # surface tension in Eh
@@ -676,33 +707,60 @@ class XTBOutput(FileMixin):
                 return raman_intensities
         return None
 
+    # Hessian SETUP information
     @property
     def num_frequencies(self):
-        return self._get_setup_information("# frequencies")
+        num_freq = self._get_setup_information("# frequencies")
+        return int(num_freq)
 
     @property
     def num_imaginary_frequencies(self):
-        return self._get_setup_information("# imaginary freq.")
+        num_im_freq = self._get_setup_information("# imaginary freq.")
+        if num_im_freq:
+            return int(num_im_freq)
+
+    @property
+    def only_rot_calc(self):
+        """compute only rotational contributions to Hessian,
+        rather than the full vibrational analysis."""
+        only_rot = self._get_setup_information("only rotational calc.")
+        if only_rot:
+            return only_rot.lower() == "true"
 
     @property
     def symmetry(self):
-        for line in self.contents:
-            if line.startswith(":"):
-                if "symmetry" in line:
-                    return line.split()[-2]
-        return None
+        """Molecular symmetry."""
+        return self._get_setup_information("symmetry")
 
     @property
     def rotational_symmetry_number(self):
-        return self._get_setup_information("rotational number")
+        rot_num = self._get_setup_information("rotational number")
+        if rot_num:
+            return int(rot_num)
 
     @property
     def scaling_factor(self):
-        for line in self.contents:
-            if line.startswith(":"):
-                if "scaling factor" in line:
-                    return float(line.split()[-2])
-        return None
+        """Scaling factor used for vibrational frequencies."""
+        scale_factor = self._get_setup_information("scaling factor")
+        if scale_factor:
+            return float(scale_factor)
+
+    @property
+    def rotor_cutoff(self):
+        """Defines threshold below which low-frequency vibrational modes are treated
+        as rotational modes (free internal rotations). Defaults to 50 cm^-1."""
+        rotor_cut = self._get_setup_information("rotor cutoff")
+        if rotor_cut:
+            return float(rotor_cut)
+
+    @property
+    def imaginary_frequency_cutoff(self):
+        """Imaginary frequency cutoff in cm^-1. Defaults to 20 cm^-1."""
+        im_freq_cutoff = self._get_setup_information("imag. cutoff")
+        if im_freq_cutoff:
+            return float(im_freq_cutoff)
+
+    # Hessian SETUP information
 
     @property
     def partition_function(self):
