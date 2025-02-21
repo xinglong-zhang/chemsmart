@@ -6,12 +6,9 @@ from pathlib import Path
 import click
 import yaml
 
-from chemsmart.utils.logger import create_logger
 from chemsmart.utils.utils import run_command
 
 logger = logging.getLogger(__name__)
-
-create_logger(debug=True, stream=True)
 
 
 class Config:
@@ -36,16 +33,17 @@ class Config:
     def shell_config(self):
         """Define the shell configuration file path."""
         if os.environ.get("SHELL", "").endswith("bash"):
-            try:
-                return Path.home() / ".bashrc"
-            except FileNotFoundError:
-                logger.error("Bashrc file not found.")
+            bashrc_filepath = Path.home() / ".bashrc"
+            if bashrc_filepath.exists():
+                return bashrc_filepath
+            else:
+                logger.info("Bashrc not found. Trying bash_profile.")
                 return Path.home() / ".bash_profile"
         else:
             return Path.home() / ".zshrc"
 
     @property
-    def chemsmart_path(self):
+    def chemsmart_package_path(self):
         """Define the path for the chemsmart package."""
         chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
         chemsmart_path = os.path.abspath(chemsmart_path)
@@ -87,10 +85,10 @@ class Config:
     def env_vars(self):
         """Define the environment variables to be added to the shell config."""
         return [
-            f'export PATH="{self.chemsmart_path}:$PATH"',
-            f'export PATH="{self.chemsmart_path}/chemsmart/cli:$PATH"',
-            f'export PATH="{self.chemsmart_path}/chemsmart/scripts:$PATH"',
-            f'export PYTHONPATH="{self.chemsmart_path}:$PYTHONPATH"',
+            f'export PATH="{self.chemsmart_package_path}:$PATH"',
+            f'export PATH="{self.chemsmart_package_path}/chemsmart/cli:$PATH"',
+            f'export PATH="{self.chemsmart_package_path}/chemsmart/scripts:$PATH"',
+            f'export PYTHONPATH="{self.chemsmart_package_path}:$PYTHONPATH"',
         ]
 
     def setup_environment(self):
@@ -121,7 +119,8 @@ class Config:
                 )
 
         logger.info(
-            "Please restart your terminal or run 'source ~/.bashrc' (or 'source ~/.zshrc')."
+            f"Please restart your terminal or run "
+            f"'source {os.path.basename(self.shell_config).split()[-1]}'."
         )
 
 

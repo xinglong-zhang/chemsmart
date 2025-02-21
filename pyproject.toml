@@ -16,17 +16,22 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "ase~=3.24.0",
-    "basis-set-exchange",
-    "click~=8.1.8",
-    "crest",
-    "numpy~=2.1.0",
+    "ase==3.24.0",
+    "basis_set_exchange==0.11",
+    "click==8.1.8",
+    "dictdiffer==0.9.0",
+    "filelock",
+    "joblib==1.4.2",
+    "networkx==3.4.2",
+    "numpy==2.2.2",
     "pytest~=8.3.4",
     "pyyaml",
-    "pymatgen>=2024.8.9",
-    "rdkit~=2024.09.4",
-    "scipy~=1.15.1",
+    "pymatgen==2025.1.24",
+    "rdkit==2024.9.5",
+    "scipy==1.15.1",
     "setuptools>=70.1.1",
+    "tomlkit==0.13.2",
+    "pytest==8.3.4",
 ]
 
 [project.optional-dependencies]
@@ -71,6 +76,9 @@ profile = "black"
 minversion = "6.0"
 addopts = "--strict-markers --disable-warnings"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.coverage.run]
 branch = true

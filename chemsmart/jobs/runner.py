@@ -143,7 +143,7 @@ class JobRunner(RegistryMixin):
         pass
 
     @abstractmethod
-    def _get_command(self):
+    def _get_command(self, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
@@ -165,7 +165,7 @@ class JobRunner(RegistryMixin):
     def run(self, job, **kwargs):
         self._prerun(job)
         self._write_input(job)
-        command = self._get_command()
+        command = self._get_command(**kwargs)
         env = self._update_os_environ(job)
         process = self._create_process(job, command=command, env=env)
         self._run(process, **kwargs)
@@ -177,9 +177,12 @@ class JobRunner(RegistryMixin):
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
+        logger.debug(f"All available runners: {runners}")
         jobtype = job.TYPE
+        logger.debug(f"Running job type: {jobtype}")
 
         for runner in runners:
+            logger.debug(f"Checking runner: {runner}")
             runner_jobtypes = runner.JOBTYPES
             logger.debug(f"Runner jobtypes: {runner_jobtypes}")
 

@@ -1,4 +1,3 @@
-import copy
 import logging
 import os
 import re
@@ -88,43 +87,6 @@ class GaussianJobSettings(MolecularJobSettings):
         return (
             self.gen_genecp_file is not None or self.heavy_elements is not None
         )
-
-    def merge(
-        self,
-        other,
-        keywords=("charge", "multiplicity", "title"),
-        merge_all=False,
-    ):
-        """Overwrite self settings with other settings.
-
-        Args:
-            keywords (list): Specific list of keywords to merge.
-                Defaults to charge and multiplicity.
-                If None, all settings will be merged (Caution: may cause issue if e.g.,
-                genecp log file used to prepare input without genecp).
-            other (JobSettings, dict): Settings to merge. Can also take the form of a dictionary
-            merge_all (bool): If True, merge all settings.
-            If False, only merge the settings specified in keywords.
-        """
-        other_dict = other if isinstance(other, dict) else other.__dict__
-
-        if merge_all:
-            # Update self with other for all
-            merged_dict = self.__dict__.copy()
-            merged_dict.update(other_dict)
-            return type(self)(**merged_dict)
-
-        if keywords is not None:
-            other_dict = {
-                k: other_dict[k] for k in keywords if k in other_dict
-            }
-        # Update self with other
-        merged_dict = self.__dict__.copy()
-        merged_dict.update(other_dict)
-        return type(self)(**merged_dict)
-
-    def copy(self):
-        return copy.deepcopy(self)
 
     def __getitem__(self, key):
         return self.__dict__[key]
@@ -577,17 +539,35 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         logger.debug(f"Link route for settings {self}: {link_route_string}")
         return link_route_string
 
-    def _get_link_route_string_from_jobtype(self):
+    def _get_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
         # remove "opt or opt= and freq" from route string
         pattern = re.compile(r"opt\s*(=\s*(\(.*\)|\w+))?\s*", re.IGNORECASE)
         route_string_final = re.sub(pattern, "", route_string)
         route_string_final = route_string_final.replace("freq", "")
+        # stable=opt guess=mix
+        if self.stable:
+            logger.debug(f"Stable: {self.stable}")
+            route_string_final += f" stable={self.stable}"
+        if self.guess:
+            logger.debug(f"Guess: {self.guess}")
+            route_string_final += f" guess={self.guess}"
+        else:
+            # other methods for link jobs - have not encountered yet,
+            # but may be modified in future when needed
+            pass
 
-        if self.stable is not None and self.guess is not None:
-            route_string_final += f" stable={self.stable} guess={self.guess}"
-        route_string_final += " geom=check guess=read "
         return route_string_final
+
+    def _get_link_route_string_from_jobtype(self):
+        route_string = super()._get_route_string_from_jobtype()
+        # remove "opt or opt= and freq" from route string
+
+        if "geom=check" not in route_string:
+            route_string += " geom=check"
+        if "guess=read" not in route_string:
+            route_string += " guess=read"
+        return route_string
 
 
 class GaussianTDDFTJobSettings(GaussianJobSettings):

@@ -47,9 +47,15 @@ git checkout -b my_contribution_branch
 
 Edit the files using your preferred editor (we recommend PyCharm IDE).
 
-## Format the code
+## Add in additional python packages that are imported in your new codes
 
 Run
+```bash
+make update-deps
+```
+
+## Format the code
+
 Run
 ```bash
 make fmt
@@ -119,6 +125,7 @@ virtualenv      Create a virtual environment using virtualenv.
 install         Install the project in development mode.
 configure       Run chemsmart configuration interactively.
 show            Display the current environment information.
+update-deps     Automatically update new packages that are added in the codes
 fmt             Format code using black and isort.
 lint            Run linters (ruff).
 test            Run tests and generate coverage report.

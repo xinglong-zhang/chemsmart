@@ -59,7 +59,7 @@ export g16root=~/programs/g16
 
 """
         assert gaussian_executable.envars == gassian_envars
-        print(gaussian_executable.executable_folder)
+        # print(gaussian_executable.executable_folder)
 
         # server_yaml = YAMLFile(filename=server_yaml_file)
         # assert len(server_yaml.yaml_contents_dict) == 3
