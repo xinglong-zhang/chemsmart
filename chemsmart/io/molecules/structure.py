@@ -256,11 +256,16 @@ class Molecule:
 
     @cached_property
     def rotational_temperatures(self):
-        """Obtain the rotational temperatures of the molecule.
+        """Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z"""
-        moi_in_SI_units = [i * units._amu * (1/units.m) ** 2 for i in self.moments_of_inertia]
-        return [units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k) for i in range(3)]
-
+        moi_in_SI_units = [
+            float(i) * units._amu * (1 / units.m) ** 2
+            for i in self.moments_of_inertia
+        ]
+        return [
+            units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
+            for i in range(3)
+        ]
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:

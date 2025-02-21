@@ -429,19 +429,6 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
-        expected_moments_of_inertia = np.array(
-            [
-                [0.99974, 0.02293, -0.00112],
-                [-0.02291, 0.99962, 0.01511],
-                [0.00147, -0.01508, 0.99989],
-            ]
-        )
-
-        assert np.allclose(
-            g16_output.moments_of_inertia,
-            expected_moments_of_inertia,
-            rtol=1e-3,
-        )
         assert np.allclose(
             g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
         )

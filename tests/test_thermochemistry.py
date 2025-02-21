@@ -1,7 +1,6 @@
 import os.path
 
 import numpy as np
-from ase import units
 
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.gaussian.output import (
@@ -34,7 +33,6 @@ class TestThermochemistry:
             mol_as_ase_atoms_moi_along_principal_axes,
             mol_as_ase_atoms_moi_principal_axes,
         ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
-        print(mol.moments_of_inertia_principal_axes)
 
         assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
         assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
@@ -49,51 +47,41 @@ class TestThermochemistry:
         )
 
         assert np.allclose(
-            mol.moments_of_inertia, np.array([3111.56720644, 6850.18931668, 9483.18883579]), atol=1e-4
+            mol.moments_of_inertia,
+            np.array([3111.56720644, 6850.18931668, 9483.18883579]),
+            atol=1e-4,
         )
 
         # same moments of inertia principal axes as from ase
         assert np.allclose(
             mol.moments_of_inertia_principal_axes,
-            mol_as_ase_atoms_moi_principal_axes.transpose(),
+            mol_as_ase_atoms_moi_principal_axes,
         )
 
         # test moments of inertia from molecular structure and from Gaussian output
         # can't get moments of inertia from Gaussian output due to printing *****
-        assert np.allclose(g16_output.moments_of_inertia, np.array([np.inf, np.inf, np.inf]))
+        assert np.allclose(
+            g16_output.moments_of_inertia, np.array([np.inf, np.inf, np.inf])
+        )
 
         # test moments of inertia principal axes from molecular structure and from Gaussian output
         assert np.allclose(
             mol.moments_of_inertia_principal_axes,
             g16_output.moments_of_inertia_principal_axes,
-            atol=1e-4
+            atol=1e-4,
         )
 
-        # test rotational temperatures from molecule
-        print(mol.rotational_temperatures)
-        # test rotational temperatures from Gaussian output file
-        print(g16_output.rotational_temperatures)
+        assert np.allclose(
+            g16_output.moments_of_inertia_principal_axes[0],
+            [0.99974, -0.02291, 0.00147],
+        )
 
-
-
-        # print(mol.center_of_mass)
-        # print(mol_to_ase_atoms.get_center_of_mass())
-
-        # # print(mol_to_ase_atoms.get_masses())
-        # print(mol_to_ase_atoms.get_positions())
-
-        print(mol_as_ase_atoms.get_moments_of_inertia(vectors=True))
-        a, t = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
-        # print(t * units._amu * (units.Bohr / units.m) ** 2)
-        # print(a* units.Ang)
-        print(mol.moments_of_inertia)
-        print(mol.moments_of_inertia_principal_axes)
-        print(g16_output.moments_of_inertia)
-        # print(1* units.Ang)
-        # print(1 * units.Bohr / units.m)
-        # print(units._amu)
-        # print(units._amu *(1 * units.Bohr / units.m)**2)
-        # print(0.99974* units._amu *(1 * units.Bohr / units.m)**2)
+        # test rotational temperatures from molecule (direct calc) same as from Gaussian output
+        assert np.allclose(
+            mol.rotational_temperatures,
+            g16_output.rotational_temperatures,
+            atol=1e-4,
+        )  # [0.0078, 0.00354, 0.00256]
 
         expected_E = (
             -1864.040180
@@ -238,28 +226,37 @@ class TestThermochemistry:
             mol_as_ase_atoms_moi_principal_axes,
         ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
 
-        print(mol.moments_of_inertia)
-        print(mol.to_ase().get_moments_of_inertia(vectors=False))
-        print(g16_output.moments_of_inertia)
-
         assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
         assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
         assert np.allclose(
             mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
         )
-        # assert np.allclose(
-        #     mol.moments_of_inertia_principal_axes,
-        #     mol_as_ase_atoms_moi_along_principal_axes,
-        # )
         assert np.allclose(
             mol.moments_of_inertia,
-            mol_as_ase_atoms_moi_principal_axes.transpose(),
+            mol_as_ase_atoms_moi_along_principal_axes,
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        )
+        # test moments of inertia from molecular structure and from gaussian output
+        assert np.allclose(
+            mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[0],
+            g16_output.moments_of_inertia_principal_axes[0],
         )
 
-        # test moments of inertia from molecular structure and from gaussian output
-        # assert np.allclose(
-        #     mol.moments_of_inertia, g16_output.moments_of_inertia, atol=1e-4
-        # )
+        # components X and Y are swapped but they are physically the same (same moment of inertia values)
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[1],
+            g16_output.moments_of_inertia_principal_axes[2],
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[2],
+            g16_output.moments_of_inertia_principal_axes[1],
+        )
 
         assert mol.empirical_formula == "CO2"
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
@@ -268,14 +265,3 @@ class TestThermochemistry:
         assert g16_output.rotational_temperatures == [0.56050]
         assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
-        print(g16_output.moments_of_inertia)
-        # rot temp: theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[0] * units._k)
-        print(g16_output.moments_of_inertia)
-
-        moments_of_inertia = g16_output.moments_of_inertia
-        # assert np.allclose(moments_of_inertia[0], [0.0, 1.0, 0.0], rtol=1e-6)
-        average_moi = np.mean(moments_of_inertia[1:])
-        print(average_moi)
-
-        rot_temp = units._hplanck**2 / (8 * np.pi**2 * average_moi * units._k)
-        print(rot_temp)

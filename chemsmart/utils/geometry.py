@@ -119,6 +119,8 @@ def calculate_moments_of_inertia(mass, coords):
     moi_tensor[2, 1] = moi_tensor[1, 2]
 
     # Step 3: Compute principal moments of inertia (eigenvalues)
-    evals, evecs = np.linalg.eigh(moi_tensor)  # Eigenvalues and eigenvectors
-    # instead of returning evecs.T as in ase, we return evecs directly, as in Gaussian
-    return moi_tensor, evals, evecs
+    evals, evecs = np.linalg.eigh(moi_tensor)
+    # Eigenvalues and eigenvectors
+    # NumPy’s np.linalg.eigh returns the eigenvectors as columns in a matrix
+    # so transpose to row vectors as in ASE
+    return moi_tensor, evals, evecs.transpose()

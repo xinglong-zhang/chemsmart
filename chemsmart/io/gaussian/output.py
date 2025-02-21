@@ -1414,7 +1414,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_moments_of_inertia_and_principal_axes(self):
         """Obtain moments of inertia along principal axes from the output file
-        (amu * Bohr^2) in Gaussian and convert to SI units (amu * Å^2)."""
+        (amu * Bohr^2 in Gaussian) and convert to units of (amu * Å^2)."""
         for i, line in enumerate(self.contents):
             if "Principal axes and moments of inertia" in line:
                 moments_of_inertia = []
@@ -1427,19 +1427,28 @@ class Gaussian16Output(GaussianFileMixin):
                             -1
                         ].split():
                             try:
-                                moments_of_inertia.append(float(eigenval)*units.Bohr**2)
+                                moments_of_inertia.append(
+                                    float(eigenval) * units.Bohr**2
+                                )
                             except ValueError:
                                 logger.warning(
                                     f"Could not convert '{j_line}' due to "
                                     f"Gaussian incorrect printing."
                                 )
-                                moments_of_inertia.append(np.array([np.inf]*3))
+                                moments_of_inertia.append(
+                                    np.array([np.inf] * 3)
+                                )
                     else:
                         if len(j_line.split()) == 4:
                             moments_of_inertia_principal_axes.append(
                                 np.array(j_line.split()[1:4], dtype=float)
                             )
-                return np.array(moments_of_inertia), moments_of_inertia_principal_axes
+                moments_of_inertia_principal_axes = np.array(
+                    moments_of_inertia_principal_axes
+                ).transpose()
+                return np.array(moments_of_inertia), np.array(
+                    moments_of_inertia_principal_axes
+                )
 
     @cached_property
     def rotational_symmetry_number(self):

@@ -72,9 +72,11 @@ class Thermochemistry:
 
     @property
     def moments_of_inertia(self):
-        """Obtain the moments of inertia of the molecule.
-        Array of moments of inertia along the x, y, and z axes"""
-        return self.file_object.moments_of_inertia
+        """Obtain the moments of inertia of the molecule along principal axes.
+        Direct calculation from molecular structure, since sometimes Gaussian
+        output does not print it properly (prints as ***** if values too large)
+        """
+        return self.molecule.moments_of_inertia
 
     @property
     def rotational_symmetry_number(self):
