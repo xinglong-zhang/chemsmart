@@ -1,17 +1,14 @@
 import os
 from functools import cached_property
 
+from chemsmart.utils.mixins import FileMixin
 
-class XTBInput:
+
+class XTBInput(FileMixin):
     def __init__(self, filename):
         if not os.path.exists(filename):
             raise FileNotFoundError(f"File {filename} not found.")
         self.filename = filename
-
-    @cached_property
-    def contents(self):
-        with open(self.filename) as f:
-            return [line.strip() for line in f.readlines()]
 
     @cached_property
     def content_groups(self):

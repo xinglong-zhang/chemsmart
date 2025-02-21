@@ -1,17 +1,14 @@
 import logging
 from functools import cached_property
 
+from chemsmart.utils.mixins import FileMixin
+
 logger = logging.getLogger(__name__)
 
 
-class XTBOutput:
+class XTBOutput(FileMixin):
     def __init__(self, filename):
         self.filename = filename
-
-    @cached_property
-    def contents(self):
-        with open(self.filename) as f:
-            return [line.strip() for line in f.readlines()]
 
     @property
     def normal_termination(self):
@@ -175,7 +172,9 @@ class XTBOutput:
         for i, line in enumerate(self.contents):
             if line.startswith("molecular dipole:"):
                 if "full:" in self.contents[i + 3]:
-                    total_dipole = self.contents[i + 3].split()[-1]  # total dipole in Debye
+                    total_dipole = self.contents[i + 3].split()[
+                        -1
+                    ]  # total dipole in Debye
                     return float(total_dipole)
         return None
 
@@ -199,15 +198,21 @@ class XTBOutput:
 
     @property
     def total_energy(self):
-        return self._extract_summary_information("TOTAL ENERGY")  # total energy in Eh
+        return self._extract_summary_information(
+            "TOTAL ENERGY"
+        )  # total energy in Eh
 
     @property
     def gradient_norm(self):
-        return self._extract_summary_information("GRADIENT NORM")  # gradient norm in Eh/α
+        return self._extract_summary_information(
+            "GRADIENT NORM"
+        )  # gradient norm in Eh/α
 
     @property
     def fmo_gap(self):
-        return self._extract_summary_information("HOMO-LUMO GAP")  # homo-lumo gap in eV
+        return self._extract_summary_information(
+            "HOMO-LUMO GAP"
+        )  # homo-lumo gap in eV
 
     def sum_time_hours(self, line):
         n_days = float(line.split(" d,")[0].split()[-1])
@@ -283,7 +288,10 @@ class XTBOutput:
     def solvent(self):
         if self.solvation:
             for i, line in enumerate(self.contents):
-                if "Solvent" in line and "* Solvation model:" in self.contents[i - 1]:
+                if (
+                    "Solvent" in line
+                    and "* Solvation model:" in self.contents[i - 1]
+                ):
                     return line.split()[-1]
         return None
 

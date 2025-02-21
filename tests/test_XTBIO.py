@@ -14,9 +14,9 @@ class TestXTBOutput:
         assert xtb_output.num_shells == 4
         assert xtb_output.num_electrons == 8
         assert xtb_output.hamiltonian == "GFN2-xTB"
-        assert xtb_output.restart == False
-        assert xtb_output.solvation == False
-        assert xtb_output.pc_potential == False
+        assert xtb_output.restart is False
+        assert xtb_output.solvation is False
+        assert xtb_output.pc_potential is False
         assert xtb_output.electronic_temperature == 300.0
         assert xtb_output.broyden_damping == 0.4
         assert xtb_output.net_charge == 0
@@ -65,14 +65,14 @@ class TestXTBOutput:
         assert xtb_output.molecular_mass == 18.0152864
         assert xtb_output.center_of_mass == [0.0, 0.0, -0.3156364]
         assert xtb_output.moments_of_inertia == [
-            0.5795334E+00,
-            0.1202080E+01,
-            0.1781614E+01,
+            0.5795334e00,
+            0.1202080e01,
+            0.1781614e01,
         ]
         assert xtb_output.rotational_constants == [
-            0.2908828E+02,
-            0.1402372E+02,
-            0.9462003E+01,
+            0.2908828e02,
+            0.1402372e02,
+            0.9462003e01,
         ]
         assert xtb_output.total_energy == -5.070544443465
         assert xtb_output.gradient_norm == 0.000074994303
@@ -95,9 +95,9 @@ class TestXTBOutput:
         assert xtb_output.temperature == 298.15
         assert xtb_output.density == 0.786
         assert xtb_output.solvent_mass == 41.05
-        assert xtb_output.h_bond_correction == True
-        assert xtb_output.ion_screening == False
-        assert xtb_output.surface_tension == 1.0000E-05
+        assert xtb_output.h_bond_correction
+        assert not xtb_output.ion_screening
+        assert xtb_output.surface_tension == 1.0000e-05
         assert xtb_output.gsolv == -0.008095712200
         assert xtb_output.gelec == -0.000777170108
         assert xtb_output.gsasa == -0.009170771809
@@ -286,7 +286,7 @@ class TestXTBOutput:
         assert xtb_output.num_frequencies == 27
         assert xtb_output.num_imaginary_frequencies == 0
         assert xtb_output.symmetry == "c2v"
-        assert xtb_output.rotational_number == 2
+        assert xtb_output.rotational_symmetry_number == 2
         assert xtb_output.scaling_factor == 1.0
         assert xtb_output.partition_function == {
             "vibrational": 1.99,
