@@ -623,9 +623,10 @@ class Molecule:
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
 
-    def to_rdkit(self, bond_cutoff_buffer=0.05, adjust_H=True):
+    def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
         Args:
+            add_bonds (bool): Flag to add bonds to molecule or not.
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
             From testing, see test_resonance_handling, it seems that a value of 0.1Å
             works for ozone, acetone, benzene, and probably other molecules, too.
@@ -642,37 +643,10 @@ class Molecule:
             rdkit_mol.AddAtom(Chem.Atom(symbol))
 
         # add bonds
-        for i in range(len(self.symbols)):
-            for j in range(i + 1, len(self.symbols)):
-                if adjust_H:
-                    if self.symbols[i] == "H" and self.symbols[j] == "H":
-                        # bond length of H-H is 0.74 Å
-                        # covalent radius of H is 0.31 Å
-                        cutoff_buffer = 0.2
-                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
-                        # C-H bond distance of ~ 1.09 Å
-                        # N-H bond distance of ~ 1.01 Å
-                        # O-H bond distance of ~ 0.96 Å
-                        # covalent radius of C is  0.76,
-                        # covalent radius of N is 0.71,
-                        # covalent radius of O is 0.66,
-                        cutoff_buffer = 0.1
-                    else:
-                        cutoff_buffer = bond_cutoff_buffer
-                cutoff = get_bond_cutoff(
-                    self.symbols[i], self.symbols[j], cutoff_buffer
-                )
-                bond_order = self.determine_bond_order(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
-                )
-                if bond_order > 0:
-                    bond_type = {
-                        1: Chem.BondType.SINGLE,
-                        1.5: Chem.BondType.AROMATIC,
-                        2: Chem.BondType.DOUBLE,
-                        3: Chem.BondType.TRIPLE,
-                    }[bond_order]
-                    rdkit_mol.AddBond(i, j, bond_type)
+        if add_bonds:
+            rdkit_mol = self._add_bonds_to_rdkit_mol(
+                rdkit_mol, bond_cutoff_buffer, adjust_H
+            )
 
         # Create a conformer and set 3D coordinates
         conformer = rdchem.Conformer(len(self.symbols))
@@ -702,6 +676,101 @@ class Molecule:
         Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
 
         return rdkit_mol.GetMol()
+
+    def _add_bonds_to_rdkit_mol(
+        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+    ):
+        """Add bonds to the RDKit molecule."""
+        for i in range(len(self.symbols)):
+            for j in range(i + 1, len(self.symbols)):
+                if adjust_H:
+                    if self.symbols[i] == "H" and self.symbols[j] == "H":
+                        # bond length of H-H is 0.74 Å
+                        # covalent radius of H is 0.31 Å
+                        cutoff_buffer = 0.2
+                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                        # C-H bond distance of ~ 1.09 Å
+                        # N-H bond distance of ~ 1.01 Å
+                        # O-H bond distance of ~ 0.96 Å
+                        # covalent radius of C is  0.76,
+                        # covalent radius of N is 0.71,
+                        # covalent radius of O is 0.66,
+                        cutoff_buffer = 0.1
+                    else:
+                        cutoff_buffer = bond_cutoff_buffer
+                else:
+                    cutoff_buffer = 0.3  # default buffer
+                cutoff = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer
+                )
+                print(type(cutoff))
+                bond_order = self.determine_bond_order_one_bond(
+                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                )
+                print(f"bond order: {bond_order}")
+                if bond_order > 0:
+                    bond_type = {
+                        1: Chem.BondType.SINGLE,
+                        1.5: Chem.BondType.AROMATIC,
+                        2: Chem.BondType.DOUBLE,
+                        3: Chem.BondType.TRIPLE,
+                    }[bond_order]
+                    rdkit_mol.AddBond(i, j, bond_type)
+        return rdkit_mol
+
+    def _add_bonds_to_rdkit_mol_vectorized(
+        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+    ):
+        """
+        Add bonds to the RDKit molecule using a vectorized approach to compute bond orders.
+        """
+        num_atoms = len(self.symbols)
+
+        # 1. Build an NxN cutoff matrix
+        cutoff_matrix = np.zeros((num_atoms, num_atoms))
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                # Decide on a pair-specific buffer
+                if adjust_H:
+                    if self.symbols[i] == "H" and self.symbols[j] == "H":
+                        # bond length of H-H is ~0.74 Å
+                        cutoff_buffer_ij = 0.2
+                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                        # bond length to H is ~1.0–1.1 Å
+                        cutoff_buffer_ij = 0.1
+                    else:
+                        cutoff_buffer_ij = bond_cutoff_buffer
+                else:
+                    cutoff_buffer_ij = 0.3  # some default if not adjusting H
+
+                cutoff_ij = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer_ij
+                )
+                cutoff_matrix[i, j] = cutoff_ij
+                cutoff_matrix[j, i] = cutoff_ij
+
+        # 2. Vectorized bond order calculation
+        bond_orders = self.determine_bond_order(
+            bond_length=self.distance_matrix,  # NxN distances
+            bond_cutoff=cutoff_matrix,  # NxN cutoffs
+        )
+
+        # 3. Add edges (bonds) for non-zero bond orders
+        bond_type_map = {
+            1.0: Chem.BondType.SINGLE,
+            1.5: Chem.BondType.AROMATIC,
+            2.0: Chem.BondType.DOUBLE,
+            3.0: Chem.BondType.TRIPLE,
+        }
+
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                bo = bond_orders[i, j]
+                if bo > 0:
+                    bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
+                    rdkit_mol.AddBond(i, j, bond_type)
+
+        return rdkit_mol
 
     @cached_property
     def rdkit_fingerprints(self):
@@ -768,7 +837,7 @@ class Molecule:
 
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
-                element_i, element_j = symbols[i], symbols[j]
+                element_i, element_j = str(symbols[i]), str(symbols[j])
 
                 cutoff_buffer = bond_cutoff_buffer
                 if adjust_H:
