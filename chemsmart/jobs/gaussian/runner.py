@@ -1,28 +1,20 @@
 import logging
 import os
-import sys
 import shlex
 import subprocess
 from contextlib import suppress
-from functools import lru_cache
 from datetime import datetime
+from functools import lru_cache
 from glob import glob
 from random import random
 from shutil import copy, rmtree
 
+from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
-from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.utils.periodictable import PeriodicTable
 
 pt = PeriodicTable()
-
-if sys.version_info >= (3, 10):
-    from shutil import _USE_CP_SENDFILE  # noqa F811
-
-    _USE_CP_SENDFILE = False  # noqa F811
-    # to avoid "BlockingIOError: [Errno 11] Resource temporarily unavailable:" Error when copying
-    # only works in Python 3.10
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +48,23 @@ class GaussianJobRunner(JobRunner):
     PROGRAM = "gaussian"
 
     FAKE = False
+    SCRATCH = True
+    # default to use scratch for Gaussian Jobs
+    # class attribute instead of instance attribute so it needs not be set at
+    # instance level - set during initialization (__init__).
 
-    def __init__(self, server, scratch=True, fake=False, **kwargs):
+    def __init__(self, server, scratch=None, fake=False, **kwargs):
+        # Use default SCRATCH if scratch is not explicitly set
+        if scratch is None:
+            scratch = self.SCRATCH
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
         logger.debug(f"Jobrunner num gpus: {self.num_gpus}")
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
+        logger.debug(f"Jobrunner scratch: {self.scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -183,36 +184,13 @@ class GaussianJobRunner(JobRunner):
                 )
                 rmtree(self.running_directory)
 
-            # writer = SubmitscriptWriter(job)
-            # submit_script = writer.job_submit_script
-            # run_script = writer.job_run_script
-            # err_filepath = os.path.join(job.folder, f"{job.errfile}")
-            # joblogerr_filepath = os.path.join(job.folder, "log.err")
-            # jobloginfo_filepath = os.path.join(job.folder, "log.info")
-            # pbs_errfile = os.path.join(job.folder, "pbs.err")
-            # pbs_infofile = os.path.join(job.folder, "pbs.info")
-            #
-            # files_to_remove = [
-            #     submit_script,
-            #     run_script,
-            #     err_filepath,
-            #     joblogerr_filepath,
-            #     jobloginfo_filepath,
-            #     pbs_errfile,
-            #     pbs_infofile,
-            # ]
-            #
-            # for f in files_to_remove:
-            #     with suppress(FileNotFoundError):
-            #         os.remove(f)
-
 
 class FakeGaussianJobRunner(GaussianJobRunner):
     # creates job runner process
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=True, fake=True, **kwargs):
+    def __init__(self, server, scratch=None, fake=True, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     def run(self, job, **kwargs):

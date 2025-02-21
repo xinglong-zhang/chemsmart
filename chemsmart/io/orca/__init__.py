@@ -1161,6 +1161,7 @@ ORCA_ALL_AUXILIARY_BASIS_SETS = orca_ref.orca_all_auxiliary_basis_sets
 ORCA_ALL_EXTRAPOLATION_BASIS_SETS = orca_ref.orca_all_extrapolation_basis_sets
 ORCA_ALL_JOB_TYPES = orca_ref.ORCA_JOB_TYPES
 ORCA_ALL_SOLVENTS = orca_ref.orca_all_solvents
+ORCA_ALL_SOLVENT_MODELS = orca_ref.ORCA_SOLVENT_MODELS
 ORCA_SCF_CONVERGENCE = orca_ref.ORCA_SCF_CONVERGENCE_CRITERIA
 ORCA_ALL_DENSITY_OPTIONS = orca_ref.orca_density_options
 ORCA_ALL_SCF_ALGORITHMS = orca_ref.ORCA_SCF_ALGORITHMS

@@ -1,13 +1,13 @@
 import copy
 import logging
 import os
-from contextlib import suppress
+import re
+
+from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
-from chemsmart.jobs.settings import read_molecular_job_yaml
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
-from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,12 @@ class ORCAJobSettings(MolecularJobSettings):
         gbw=True,
         freq=False,
         numfreq=False,
-        dipole=None,
-        quadrupole=None,
+        dipole=False,
+        quadrupole=False,
         mdci_cutoff=None,
         mdci_density=None,
         job_type=None,
+        title=None,
         solvent_model=None,
         solvent_id=None,
         additional_route_parameters=None,
@@ -49,6 +50,8 @@ class ORCAJobSettings(MolecularJobSettings):
         light_elements_basis=None,
         custom_solvent=None,
         forces=False,
+        input_string=None,
+        invert_constraints=False,
         **kwargs,
     ):
         super().__init__(
@@ -62,6 +65,7 @@ class ORCAJobSettings(MolecularJobSettings):
             freq=freq,
             numfreq=numfreq,
             job_type=job_type,
+            title=title,
             solvent_model=solvent_model,
             solvent_id=solvent_id,
             additional_route_parameters=additional_route_parameters,
@@ -73,6 +77,7 @@ class ORCAJobSettings(MolecularJobSettings):
             light_elements_basis=light_elements_basis,
             custom_solvent=custom_solvent,
             forces=forces,
+            input_string=input_string,
             **kwargs,
         )
 
@@ -87,9 +92,7 @@ class ORCAJobSettings(MolecularJobSettings):
         self.mdci_density = mdci_density
         self.dipole = dipole
         self.quadrupole = quadrupole
-        self.solv = (
-            self.solvent_model is not None and self.solvent_id is not None
-        )
+        self.invert_constraints = invert_constraints
 
         if forces is True and (freq is True or numfreq is True):
             raise ValueError(
@@ -100,17 +103,8 @@ class ORCAJobSettings(MolecularJobSettings):
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
     ):
-        """Overwrite self settings with other settings.
+        """Overwrite self settings with other settings."""
 
-        Args:
-            keywords (list): Specific list of keywords to merge.
-                Defaults to charge and multiplicity.
-                If None, all settings will be merged (Caution: may cause issue if e.g., genecp log file used to prepare
-                input without genecp).
-            other (JobSettings, dict): Settings to merge. Can also take the form of a dictionary
-            merge_all (bool): If True, merge all settings from other into self.
-                If False, only merge settings specified. Defaults to False.
-        """
         other_dict = other if isinstance(other, dict) else other.__dict__
 
         if merge_all:
@@ -152,11 +146,11 @@ class ORCAJobSettings(MolecularJobSettings):
     def from_comfile(cls, com_path):
         """Return orca job settings from supplied gaussian file."""
         com_path = os.path.abspath(com_path)
-        from pyatoms.io.gaussian.inputs import Gaussian16Input
+        from chemsmart.io.gaussian.input import Gaussian16Input
 
         logger.info(f"Return Settings object from {com_path}")
         gaussian_settings_from_comfile = Gaussian16Input(
-            comfile=com_path
+            filename=com_path
         ).read_settings()
         orca_default_settings = cls.default()
         return orca_default_settings.merge(
@@ -175,11 +169,11 @@ class ORCAJobSettings(MolecularJobSettings):
             OrcaJobSetting class.
         """
         log_path = os.path.abspath(log_path)
-        from pyatoms.io.gaussian.outputs import Gaussian16Output
+        from chemsmart.io.gaussian.output import Gaussian16Output
 
         logger.info(f"Return Settings object from {log_path}")
         gaussian_settings_from_logfile = Gaussian16Output(
-            log_path, **kwargs
+            log_path
         ).read_settings()
         orca_default_settings = cls.default()
         orca_settings_from_logfile = orca_default_settings.merge(
@@ -198,11 +192,11 @@ class ORCAJobSettings(MolecularJobSettings):
     def from_inpfile(cls, inp_path):
         """Return orca job settings from supplied orca .inp file."""
         inp_path = os.path.abspath(inp_path)
-        from pyatoms.io.orca.inputs import ORCAInput
+        from chemsmart.io.orca.input import ORCAInput
 
         logger.info(f"Return settings object from {inp_path}")
         orca_settings_from_inpfile = ORCAInput(
-            inpfile=inp_path
+            filename=inp_path
         ).read_settings()
         logger.info(f"with settings: {orca_settings_from_inpfile.__dict__}")
         return orca_settings_from_inpfile
@@ -211,10 +205,10 @@ class ORCAJobSettings(MolecularJobSettings):
     def from_outfile(cls, out_path):
         """Return orca job settings from supplied orca .out file."""
         out_path = os.path.abspath(out_path)
-        from pyatoms.io.orca.outputs import ORCAOutput
+        from chemsmart.io.orca.output import ORCAOutput
 
         logger.info(f"Return Settings object from {out_path}")
-        return ORCAOutput(outputfile=out_path).read_settings()
+        return ORCAOutput(filename=out_path).read_settings()
 
     @classmethod
     def from_xyzfile(cls):
@@ -257,11 +251,12 @@ class ORCAJobSettings(MolecularJobSettings):
             charge=None,
             multiplicity=None,
             gbw=True,
-            freq=False,
+            freq=True,
             numfreq=False,
             mdci_cutoff=None,
             mdci_density=None,
             job_type=None,
+            title=None,
             solvent_model=None,
             solvent_id=None,
             additional_route_parameters=None,
@@ -273,89 +268,42 @@ class ORCAJobSettings(MolecularJobSettings):
             light_elements_basis=None,
             custom_solvent=None,
             forces=False,
+            input_string=None,
+            invert_constraints=False,
         )
 
-    def write_orca_input_from_job(self, job, jobrunner, **kwargs):
-        return self.write_orca_input(
-            atoms=job.atoms, jobrunner=jobrunner, job_label=job.label, **kwargs
-        )
-
-    def write_orca_input(
-        self,
-        atoms,
-        jobrunner=None,
-        job_label=None,
-        output_dir=None,
-        make_dir_if_not_present=True,
-    ):
-        """Write Orca input to a file."""
-        logger.info(f"Writing orca input file with settings: {self.__dict__}")
-
-        if output_dir is None:
-            output_dir = "."
-        if not os.path.isdir(output_dir) and make_dir_if_not_present:
-            os.mkdir(output_dir)
-
-        # get basename/job_label for inputs/outputs writing
-        assert (
-            job_label is not None
-        ), f"Basename of Orca file to be written {job_label} cannot be None!"
-
-        atoms = AtomsWrapper.from_atoms(atoms)
-        input_filename = job_label + ".inp"
-        filepath = os.path.join(output_dir, input_filename)
-        logger.info(f"Writing inputfile {filepath} to folder {output_dir}\n")
-        logger.info(f"Writing orca file with settings: {self.__dict__}\n")
-
-        with open(filepath, "w") as f:  # will close() when we leave this block
-            self._write_route_section(f)
-            self._write_nproc_block(f, jobrunner=jobrunner)
-            self._write_mem_block(f, jobrunner=jobrunner)
-            self._write_scf_block(f)
-            self._write_solvent_block(f)
-            self._write_modred_block(f)
-            self._write_hessian_block(f)  # writes if defined in subclass
-            self._write_mdci_block(f)
-            self._write_elprop_block(f)
-            self._write_irc_block(f)  # writes if defined in subclass
-            self._write_constrained_atoms(
-                f, atoms=atoms
-            )  # writes if defined in subclass
-            self._write_geometry(f, atoms=atoms)
-            f.close()
-
-    def _write_route_section(self, f):
+    @property
+    def route_string(self):
         if self.route_to_be_written is not None:
-            self._write_route_section_from_user_input(f)
+            route_string = self._get_route_string_from_user_input()
         else:
-            self._write_route_section_default(f)
+            route_string = self._get_route_string_from_jobtype()
+        logger.debug(f"Route for settings {self}: {route_string}")
+        return route_string
 
-    def _write_route_section_from_user_input(self, f):
-        if not self.route_to_be_written.startswith("!"):
-            self.route_to_be_written = f"! {self.route_to_be_written}"
+    def _get_route_string_from_user_input(self):
         route_string = self.route_to_be_written
-        f.write(f"{route_string}\n")
+        if not route_string.startswith("!"):
+            route_string = f"! {route_string}"
+        return route_string
 
-    def _write_route_section_default(self, f):
-        route_string = self._write_route_string(job_type=self.job_type)
-        f.write(f"{route_string}\n")
-
-    def _write_route_string(self, job_type):  # noqa: PLR0912
+    def _get_route_string_from_jobtype(self):
+        """Get the ORCA job route string from the ORCA job type."""
         route_string = ""
         if not route_string.startswith("!"):
             route_string += "! "
 
         # route string depends on job type
         # determine if route string requires 'opt' keyword
-        if job_type in ("opt", "modred", "scan"):
+        if self.job_type in ("opt", "modred", "scan"):
             route_string += "Opt"
-        elif job_type == "ts":
+        elif self.job_type == "ts":
             route_string += (
                 "OptTS"  # Orca keyword for transition state optimization
             )
-        elif job_type == "irc":
+        elif self.job_type == "irc":
             route_string += "IRC"
-        elif job_type == "sp":
+        elif self.job_type == "sp":
             route_string += ""
 
         # add frequency calculation
@@ -390,8 +338,20 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {self.scf_algorithm}"
 
         # write solvent if solvation is turned on
-        if self.solv:
+        if self.solvent_model is not None and self.solvent_id is not None:
+            route_string += f" {self.solvent_model}({self.solvent_id})"
+        elif self.solvent_model is not None and self.solvent_id is None:
+            raise ValueError(
+                "Warning: Solvent model is specified but solvent identity is missing!"
+            )
+        elif self.solvent_model is None and self.solvent_id is not None:
+            logger.warning(
+                "Warning: Solvent identity is specified but solvent model is missing!\n"
+                "Defaulting to CPCM model."
+            )
             route_string += f" CPCM({self.solvent_id})"
+        else:
+            pass
 
         return route_string
 
@@ -424,173 +384,6 @@ class ORCAJobSettings(MolecularJobSettings):
             level_of_theory += f" {self.extrapolation_basis}"
         return level_of_theory
 
-    def _write_nproc_block(self, f, jobrunner):
-        # write number of processors
-        num_cores_per_node = jobrunner.server.NUM_CORES
-        n_proc = jobrunner.num_nodes * num_cores_per_node
-        f.write("# Number of processors\n")
-        f.write(f"%pal nprocs {n_proc} end\n")
-
-    def _write_mem_block(self, f, jobrunner):
-        # write memory
-        try:
-            mem = (
-                float(jobrunner.server.MAX_MEM_GIGS)
-                * 1000
-                / float(jobrunner.server.NUM_CORES)
-            )
-            mem_per_core = int(round(mem, -2))
-            f.write("# Memory per core\n")
-            f.write(f"%maxcore {mem_per_core}\n")
-        except Exception:
-            f.write("# Memory per core\n")
-            f.write(
-                "%maxcore 2000\n"
-            )  # defaults to 2000 if server max mem and num cores not set
-
-    def _write_scf_block(self, f):
-        # write SCF block
-        if self.scf_convergence or self.scf_maxiter:
-            f.write("%scf\n")
-            self._write_scf_maxiter(f)
-            self._write_scf_convergence(f)
-            f.write("end\n")
-
-    def _write_scf_maxiter(self, f):
-        # write SCF scf_maxiter
-        if self.scf_maxiter:
-            f.write(f"  maxiter {self.scf_maxiter}\n")
-
-    def _write_scf_convergence(self, f):
-        if self.scf_convergence:
-            scf_conv = self.scf_convergence.lower().strip()
-            # check that the convergence is in the list given by ORCA
-            if scf_conv.endswith("scf"):
-                scf_conv = scf_conv[:-3]
-            if scf_conv not in ORCA_SCF_CONVERGENCE:
-                raise ValueError(
-                    f"Warning: SCF convergence {self.scf_convergence} is not supported by ORCA!\n"
-                    f"Available SCF convergence options are: {ORCA_SCF_CONVERGENCE}"
-                )
-            f.write(f"convergence {scf_conv}\n")
-
-    def _write_solvent_block(self, f):
-        if self.solv and self.solvent_model.lower() == "smd":
-            f.write("%cpcm\n")
-            # write details when using SMD solvent model
-            f.write("  SMD true\n")
-            f.write(f'  SMDsolvent "{self.solvent_id}"\n')
-            if self.custom_solvent is not None:
-                # write custom solvent part, for both SMD and CPCM solvent model
-                # NOTE: orca does not support custom solvent due to requirement that solvent name in the input file
-                #       must match the name in the available solvents library
-                line_elem = self.custom_solvent.strip().split("\n")
-                for line in line_elem:
-                    f.write(f"  {line}\n")
-            f.write("end\n")
-
-    def _write_modred_block(self, f):
-        if self.modred:
-            f.write("%geom\n")
-            self._write_modred(f)
-            f.write("end\n")
-
-    def _write_modred(self, f):
-        if isinstance(self.modred, list):
-            self._write_modred_if_list(f, self.modred)
-        elif isinstance(self.modred, dict):
-            self._write_modred_if_dict(f, self.modred)
-
-    def _write_modred_if_list(self, f, modred):
-        f.write("  Constraints\n")
-        # append for modred jobs
-        # 'self.modred' as list of lists, or a single list if only one fixed constraint
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=modred, program_type="orca"
-        )
-        for prepend_string in prepend_string_list:
-            f.write(f"  {{{prepend_string} C}}\n")
-        # write 'end' for each modred specified
-        f.write("  end\n")
-
-    def _write_modred_if_dict(self, f, modred):
-        f.write("  Scan\n")
-        # append for scanning job
-        # self.modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
-        coords_list = modred["coords"]
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coords_list, program_type="orca"
-        )
-        for prepend_string in prepend_string_list:
-            f.write(
-                f"  {prepend_string} = {modred['dist_start']}, {modred['dist_end']}, "
-                f"{modred['num_steps']}  # Scanning from {modred['dist_start']} Angstrom "
-                f"to {modred['dist_end']} Angstrom in {modred['num_steps']} points. \n"
-            )
-        # write 'end' for each modred specified
-        f.write("  end\n")
-
-    def _write_hessian_block(self, f):
-        # optional in subclasses
-        pass
-
-    def _write_mdci_block(self, f):
-        if self.mdci_cutoff or self.mdci_density:
-            # write orca block for MDCI options
-            f.write("%mdci\n")
-            if self.mdci_cutoff:
-                if self.mdci_cutoff.lower() == "loose":
-                    f.write("  # loose cutoff\n")
-                    f.write("  TCutPairs 1e-3\n")
-                    f.write("  TCutPNO 1e-6\n")
-                    f.write("  TCutMKN 1e-3\n")
-                elif self.mdci_cutoff.lower() == "normal":
-                    f.write("  # normal cutoff\n")
-                    f.write("  TCutPairs 1e-4\n")
-                    f.write("  TCutPNO 3.33e-7\n")
-                    f.write("  TCutMKN 1e-3\n")
-                elif self.mdci_cutoff.lower() == "tight":
-                    f.write("  # tight cutoff\n")
-                    f.write("  TCutPairs 1e-5\n")
-                    f.write("  TCutPNO 1e-7\n")
-                    f.write("  TCutMKN 1e-4\n")
-                else:
-                    raise ValueError(
-                        f"Warning: MDCI cutoff {self.mdci_cutoff} is not supported by ORCA!\n"
-                    )
-            if self.mdci_density:
-                if self.mdci_density.lower() == "none":
-                    f.write("  Density None  # no density\n")
-                elif self.mdci_density.lower() == "unrelaxed":
-                    f.write("  Density Unrelaxed  # unrelaxed density\n")
-                elif self.mdci_density.lower() == "relaxed":
-                    f.write("  Density Relaxed  # relaxed density\n")
-                else:
-                    raise ValueError(
-                        f"Warning: MDCI density {self.mdci_density} is not supported by ORCA!\n"
-                    )
-            f.write("end\n")
-
-    def _write_elprop_block(self, f):
-        if self.dipole is not None or self.quadrupole is not None:
-            # write orca block for elprop options
-            f.write("%elprop\n")
-            if self.dipole is True:
-                f.write("  Dipole True\n")
-            elif self.dipole is False:
-                f.write("  Dipole False\n")
-            if self.quadrupole is True:
-                f.write("  Quadrupole True\n")
-            elif self.quadrupole is False:
-                f.write("  Quadrupole False\n")
-            f.write("end\n")
-
-    def _write_irc_block(self, f):
-        pass
-
-    def _write_constrained_atoms(self, f, atoms):
-        pass
-
     def _write_geometry(self, f, atoms):
         # check that both charge and multiplicity are specified
         assert self.charge is not None, "No charge found!"
@@ -610,71 +403,12 @@ class ORCAJobSettings(MolecularJobSettings):
         f.write(coordinates)
         f.write("*\n")
 
-    def apply_on(self, job, jobrunner):
-        if (
-            jobrunner.scratch
-            and jobrunner.scratch_dir is not None
-            and os.path.exists(jobrunner.scratch_dir)
-        ):
-            job_scratch_dir = os.path.join(jobrunner.scratch_dir, job.label)
-            with suppress(FileExistsError):
-                os.mkdir(job_scratch_dir)
-                logger.info(f"Folder in scratch {job_scratch_dir} is made.")
-            self.write_orca_input_from_job(
-                output_dir=job_scratch_dir, job=job, jobrunner=jobrunner
+    def _check_solvent(self, solvent_model):
+        if solvent_model.lower() not in ORCA_ALL_SOLVENT_MODELS:
+            raise ValueError(
+                f"The specified solvent model {solvent_model} is not in \n"
+                f"the available solvent models: {ORCA_ALL_SOLVENT_MODELS}"
             )
-            scratch_inputfile = os.path.join(
-                job_scratch_dir, f"{job.label}.inp"
-            )
-            assert os.path.exists(
-                scratch_inputfile
-            ), f"inputfile {scratch_inputfile} is not found"
-        elif jobrunner.scratch and not os.path.exists(jobrunner.scratch_dir):
-            logger.info(
-                f"{jobrunner.scratch_dir} does not exist! Running job in {job.folder}."
-            )
-            self.write_orca_input_from_job(
-                output_dir=job.folder, job=job, jobrunner=jobrunner
-            )
-            inputfilename = os.path.basename(
-                job.inputfile
-            )  # job.inputfile is the full path to the inputfile
-            runfolder_inputfile = os.path.join(job.folder, inputfilename)
-            assert os.path.exists(
-                runfolder_inputfile
-            ), f"inputfile {runfolder_inputfile} is not found"
-        else:
-            logger.info(f"Running job in {job.folder}.")
-            self.write_orca_input_from_job(
-                output_dir=job.folder, job=job, jobrunner=jobrunner
-            )
-            inputfilename = os.path.basename(
-                job.inputfile
-            )  # job.inputfile is the full path to the inputfile
-            runfolder_inputfile = os.path.join(job.folder, inputfilename)
-            assert os.path.exists(
-                runfolder_inputfile
-            ), f"inputfile {runfolder_inputfile} is not found"
-
-    @classmethod
-    def from_user_yaml(cls, filename, **kwargs):
-        logger.info(f"Reading project settings from {filename}")
-        config = read_molecular_job_yaml(filename)
-        return cls.from_user_config(config, **kwargs)
-
-    @classmethod
-    def from_user_config(cls, config, job_type):
-        """Generate ORCAJobSettings from a master dict containing all the settings for each job type.
-
-        Args:
-            config (dict): Master dict containing all the settings for each job type.
-            job_type (str): Job type to be generated.
-        """
-        return cls(**config[job_type])
-
-    @classmethod
-    def from_dict(cls, settings_dict):
-        return cls(**settings_dict)
 
 
 class ORCATSJobSettings(ORCAJobSettings):
@@ -697,7 +431,7 @@ class ORCATSJobSettings(ORCAJobSettings):
         self.inhess_filename = inhess_filename
         self.hybrid_hess = hybrid_hess
         self.hybrid_hess_atoms = (
-            hybrid_hess_atoms  # supplied a list; 0-indexed
+            hybrid_hess_atoms  # supplied a list; 1-indexed as per user
         )
         self.numhess = numhess
         self.recalc_hess = recalc_hess
@@ -710,108 +444,14 @@ class ORCATSJobSettings(ORCAJobSettings):
         )
         self.full_scan = full_scan  # full scan or not;  do or not abort scan after highest point is reached
 
-    def _write_hessian_block(self, f):
-        # write orca block for hessian options
-        f.write("%geom\n")
-
-        # Read initial Hessian from file if desired
-        if self.inhess:
-            f.write("  InHess Read  # Read Hessian from file\n")
-            assert (
-                self.inhess_filename is not None
-            ), "No Hessian file is given!"
-            assert os.path.exists(
-                self.inhess_filename
-            ), f"Hessian file {self.inhess_filename} is not found!"
-            f.write(f'  InHessName "{self.inhess_filename}"  # Hessian file\n')
-
-        # Hybrid Hessian for speed up of TS search
-        # TS mode is complicated and delocalized, e.g. in a concerted proton transfer reaction, can use hybrid Hessian,
-        # to calc numerical second derivatives only for atoms involved in the TS mode
-        if self.hybrid_hess:
-            assert (
-                self.hybrid_hess_atoms is not None
-            ), "No atoms are specified for hybrid Hessian calculation!"
-            hybrid_hess_atoms_string = " ".join(
-                [str(i) for i in self.hybrid_hess_atoms]
-            )
-            f.write(
-                f"  Hybrid_Hess {{{hybrid_hess_atoms_string}}} end  # Use hybrid Hessian\n"
-            )
-
-        # Hessian options
-        f.write(
-            "  Calc_Hess True  # calc initial Hessian\n"
-        )  # for ts job, initial hessian is required
-        f.write(
-            f"  NumHess {self.numhess}  # Request numerical Hessian (if analytical not available)\n"
-        )
-        f.write(
-            f"  Recalc_Hess {self.recalc_hess}   # Recalculate the Hessian every 5 step\n"
-        )
-
-        # trust radius update
-        if self.trust_radius is not None:
-            f.write(f"  Trust {self.trust_radius}\n")
-            if self.trust_radius < 0:
-                f.write("  # use fixed trust radius (default: -0.3 au)\n")
-            elif self.trust_radius > 0:
-                f.write("  # use trust radius update, i.e. 0.3 means:\n")
-                f.write(
-                    "  # start with trust radius 0.3 and use trust radius update\n"
-                )
-
-        # TS search type
-        if self.tssearch_type.lower() == "scants":
-            # for scanTS, also include in the scanning coordinates
-            assert (
-                self.scants_modred is not None
-            ), "No modred is specified for scanTS!"
-            self._write_modred_if_dict(f, self.scants_modred)
-
-        # full scan or not
-        if self.full_scan:
-            f.write("  fullScan True\n")
-        f.write("end\n")
-
-    def _write_route_section_default(self, f):
-        # route string for TS search depends on TS search type
-        route_string = self._write_route_string(job_type="ts")
+    @property
+    def route_string(self):
+        """Get the ORCA job route string for ORCA TS job; overrides parent property."""
+        self.job_type = "ts"
+        route_string = self._get_route_string_from_jobtype()
         if self.tssearch_type.lower() == "scants":
             route_string = route_string.replace("OptTS", "ScanTS")
-        f.write(f"{route_string}\n")
-
-
-class ORCAConstrainedOptJobSettings(ORCAJobSettings):
-    def __init__(
-        self, constrained_atoms=None, invert_constraints=False, **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.constrained_atoms = constrained_atoms
-        self.invert_constraints = invert_constraints
-
-    def _write_constrained_atoms(self, f, atoms=None):
-        if self.constrained_atoms is not None:
-            if isinstance(self.constrained_atoms, str):
-                from pyatoms.io.gaussian.utils import (
-                    get_list_from_string_range,
-                )
-
-                frozen_atoms_list = get_list_from_string_range(
-                    self.constrained_atoms
-                )
-            elif isinstance(self.constrained_atoms, list):
-                frozen_atoms_list = self.constrained_atoms
-            else:
-                raise ValueError(
-                    f"constrained_atoms must be a string or a list, but got {type(self.constrained_atoms)}"
-                )
-            f.write("%geom\n")
-            for i in frozen_atoms_list:
-                f.write(f"  {{ C {i-1} C }}\n")  # convert to 0-indexed
-            if self.invert_constraints:
-                f.write("  InvertConstraints True\n")
-            f.write("end\n")
+        return route_string
 
 
 class ORCAIRCJobSettings(ORCAJobSettings):
@@ -863,13 +503,16 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         self.monitor_internals = monitor_internals
         self.internal_modred = internal_modred
 
-    def _write_route_section_default(self, f):
-        # modify route string for IRC job
-        route_string = self._write_route_string(job_type="irc")
-        route_string = route_string.replace(
-            "Freq ", ""
-        )  # turn off freq calc in irc job
-        f.write(f"{route_string}\n")
+    @property
+    def route_string(self):
+        """Get the ORCA job route string for ORCA IRC job; overrides parent property."""
+        self.job_type = "irc"
+        route_string = self._get_route_string_from_jobtype()
+        if "freq" in route_string.lower():
+            route_string = re.sub(
+                r"freq", "", route_string, flags=re.IGNORECASE
+            )
+        return route_string
 
     def _write_irc_block(self, f):
         """Writes the IRC block options.
@@ -958,7 +601,7 @@ class ORCAIRCJobSettings(ORCAJobSettings):
                     ), 'No internal modred is specified for IRC job "monitor_intervals" option!'
                     prepend_string_list = (
                         get_prepend_string_list_from_modred_free_format(
-                            self.internal_modred, program_type="orca"
+                            self.internal_modred, program="orca"
                         )
                     )
                     for prepend_string in prepend_string_list:

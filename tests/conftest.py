@@ -1,7 +1,12 @@
 import os
+
 import pytest
-from chemsmart.settings.server import Server
+import rdkit.Chem.rdDistGeom as rdDistGeom
+from rdkit import Chem
+
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
 # @pytest.fixture(autouse=True)
@@ -18,7 +23,8 @@ from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 ############ Gaussian Fixtures ##################
 @pytest.fixture()
 def test_data_directory():
-    return os.path.abspath("data")
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    return os.path.abspath(os.path.join(current_directory, "data"))
 
 
 # master gaussian test directory
@@ -79,7 +85,7 @@ def gaussian_scan_inputfile(gaussian_inputs_test_directory):
     return gaussian_scan_inputfile
 
 
-@pytest.fixture
+@pytest.fixture()
 def hf_com_filepath(gaussian_inputs_test_directory):
     return os.path.join(gaussian_inputs_test_directory, "hf.com")
 
@@ -98,17 +104,17 @@ def gaussian_opt_genecp_inputfile(gaussian_inputs_genecp_directory):
     return gaussian_opt_genecp_input
 
 
-@pytest.fixture
+@pytest.fixture()
 def modred_gen_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_gen.com")
 
 
-@pytest.fixture
+@pytest.fixture()
 def modred_genecp_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(gaussian_inputs_genecp_directory, "modred_genecp.com")
 
 
-@pytest.fixture
+@pytest.fixture()
 def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(
         gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
@@ -163,6 +169,24 @@ def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):
     return gaussian_frozen_opt_outfile
 
 
+# Gaussian output file for modred
+@pytest.fixture()
+def gaussian_failed_modred_outfile(gaussian_outputs_test_directory):
+    gaussian_modred_outfile = os.path.join(
+        gaussian_outputs_test_directory, "cage_free_failed_modred.log"
+    )
+    return gaussian_modred_outfile
+
+
+# Gaussian output for scan
+@pytest.fixture()
+def gaussian_failed_scan_outfile(gaussian_outputs_test_directory):
+    gaussian_scan_outfile = os.path.join(
+        gaussian_outputs_test_directory, "cationic_failed_scan.log"
+    )
+    return gaussian_scan_outfile
+
+
 # Gaussian output file for Hirshfeld charges
 @pytest.fixture()
 def gaussian_hirshfeld_outfile(gaussian_outputs_test_directory):
@@ -180,6 +204,30 @@ def gaussian_rc_hirshfeld_outfile(gaussian_outputs_test_directory):
         "oxetane_rc_hirshfeld_sp_smd_n_n-DiMethylFormamide.log",
     )
     return gaussian_hirshfeld_outfile
+
+
+@pytest.fixture()
+def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_ozone_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "ozone.log"
+    )
+    return gaussian_ozone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_acetone_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_acetone_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "acetone.log"
+    )
+    return gaussian_acetone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_benzene_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_benzene_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "benzene.log"
+    )
+    return gaussian_benzene_opt_outfile
 
 
 # Gaussian output file for MP2 calculations
@@ -242,33 +290,33 @@ def gaussian_pbc_3d_outputfile(gaussian_pbc_outputs_test_directory):
 
 
 # text path and associated files
-@pytest.fixture
+@pytest.fixture()
 def txt_path(gaussian_test_directory):
     test_txt_path = os.path.join(gaussian_test_directory, "text")
     return os.path.abspath(test_txt_path)
 
 
-@pytest.fixture
+@pytest.fixture()
 def reference_genecp_txt_file_from_api(txt_path):
     return os.path.join(txt_path, "genecp_txt_from_api.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def genecp_txt_file_from_web(txt_path):
     return os.path.join(txt_path, "test_genecp.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gen_txt_file_from_web(txt_path):
     return os.path.join(txt_path, "test_gen.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def smd_TBME_solvent_parameters_txt_file(txt_path):
     return os.path.join(txt_path, "smd_TBME.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def Ni_def2tzvp_PCHOSi_svp_txt_file(txt_path):
     return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
 
@@ -306,17 +354,17 @@ def esp_cube_file(cube_test_directory):
 
 
 # gaussian yaml files
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "project_yaml")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_defaults(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "defaults.yaml")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_gas_solv(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "gas_solv.yaml")
 
@@ -328,13 +376,13 @@ def gaussian_yaml_settings_gas_solv_project_name(
     return os.path.join(gaussian_yaml_settings_directory, "gas_solv")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gaussian_yaml_settings_solv(gaussian_yaml_settings_directory):
     return os.path.join(gaussian_yaml_settings_directory, "solv.yaml")
 
 
 # gaussian written files
-@pytest.fixture
+@pytest.fixture()
 def gaussian_written_files_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "written_files")
 
@@ -418,6 +466,16 @@ def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file(
 
 
 @pytest.fixture()
+def gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file_v2(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_sp_from_log_with_custom_basis_from_api_v2.com",
+    )
+
+
+@pytest.fixture()
 def gaussian_modred_with_custom_basis_for_all_atoms_from_api(
     gaussian_written_files_directory,
 ):
@@ -437,27 +495,27 @@ def gaussian_written_opt_from_graphite_2d_pbc_log(
 
 
 # text path and associated files
-@pytest.fixture
+@pytest.fixture()
 def text_directory(gaussian_test_directory):
     return os.path.join(gaussian_test_directory, "text")
 
 
-@pytest.fixture
+@pytest.fixture()
 def genecp_text_file_from_web(text_directory):
     return os.path.join(text_directory, "test_genecp.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def gen_text_file_from_web(text_directory):
     return os.path.join(txt_path, "test_gen.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def smd_TBME_solvent_parameters_text_file(txt_path):
     return os.path.join(txt_path, "smd_TBME.txt")
 
 
-@pytest.fixture
+@pytest.fixture()
 def Ni_def2tzvp_PCHOSi_svp_text_file(txt_path):
     return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
 
@@ -472,7 +530,7 @@ def orca_test_directory(test_data_directory):
 # orca input files path and associated files
 @pytest.fixture()
 def inpfile_path(orca_test_directory):
-    test_inpfile_path = os.path.join(orca_test_directory, "orca_inputs")
+    test_inpfile_path = os.path.join(orca_test_directory, "inputs")
     return os.path.abspath(test_inpfile_path)
 
 
@@ -497,13 +555,13 @@ def sdf_file(test_data_directory):
 # orca input files path and associated files
 @pytest.fixture()
 def orca_inputs_directory(orca_test_directory):
-    orca_inputs_directory = os.path.join(orca_test_directory, "orca_inputs")
+    orca_inputs_directory = os.path.join(orca_test_directory, "inputs")
     return os.path.abspath(orca_inputs_directory)
 
 
 @pytest.fixture()
 def orca_dias_directory(orca_test_directory):
-    orca_dias_directory = os.path.join(orca_test_directory, "orca_dias")
+    orca_dias_directory = os.path.join(orca_test_directory, "dias")
     return os.path.abspath(orca_dias_directory)
 
 
@@ -529,7 +587,7 @@ def orca_faulty_solv(orca_inputs_directory):
 
 @pytest.fixture()
 def orca_outputs_directory(orca_test_directory):
-    orca_outputs_directory = os.path.join(orca_test_directory, "orca_outputs")
+    orca_outputs_directory = os.path.join(orca_test_directory, "outputs")
     return os.path.abspath(orca_outputs_directory)
 
 
@@ -571,9 +629,7 @@ def water_engrad_path(orca_outputs_directory):
 
 @pytest.fixture()
 def orca_errors_directory(orca_test_directory):
-    orca_errors_directory = os.path.join(
-        orca_test_directory, "orca_error_files"
-    )
+    orca_errors_directory = os.path.join(orca_test_directory, "error_files")
     return os.path.abspath(orca_errors_directory)
 
 
@@ -650,3 +706,86 @@ def jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def jobrunner_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+
+
+## conformers for testing
+@pytest.fixture()
+def methanol_molecules():
+    # molecules for testing
+    # methanol
+    methanol = Molecule.from_pubchem(identifier="CO")
+    # f = open("methanol.xyz", "w")
+    # methanol.write_coordinates(f)
+
+    # rotated methanol
+    ase_atoms = methanol.to_ase()
+    ase_atoms.rotate(90, [0, 0, 1])
+    methanol_rot1 = Molecule.from_ase_atoms(ase_atoms)
+
+    ase_atoms = methanol.to_ase()
+    ase_atoms.rotate(20, [1, 1, 1])
+    methanol_rot2 = Molecule.from_ase_atoms(ase_atoms)
+
+    methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
+
+    return methanol_molecules
+
+
+@pytest.fixture()
+def methanol_and_ethanol():
+    # molecules for testing
+    # methanol
+    methanol = Molecule.from_pubchem(identifier="CO")
+
+    # ethanol
+    ethanol = Molecule.from_pubchem(identifier="CCO")
+
+    methanol_and_ethanol = [methanol, ethanol]
+    return methanol_and_ethanol
+
+
+@pytest.fixture()
+def conformers_from_rdkit():
+    """Generate multiple conformers for a complex molecule using RDKit."""
+    smiles = "O=C([O-])CCn1c(=O)c(=O)[nH]c2cc([N+](=O)[O-])c(-n3ccc(C=NOCc4ccccc4)c3)cc21"
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)
+
+    # Generate 3D conformers
+    ps = rdDistGeom.ETKDGv3()
+    ps.randomSeed = 0xD06F00D
+    ps.numThreads = 10
+    conf_ids = rdDistGeom.EmbedMultipleConfs(mol, numConfs=300, params=ps)
+
+    # Ensure each conformer is extracted into its own unique RDKit Mol object
+    conformers = []
+    for conf_id in conf_ids:
+        single_conf_mol = Chem.Mol(mol)  # Copy molecule structure
+        single_conf_mol.RemoveAllConformers()  # Remove all existing conformers
+        single_conf_mol.AddConformer(
+            mol.GetConformer(conf_id), assignId=True
+        )  # Add only this conformer
+        conformers.append(single_conf_mol)
+
+    # Verify that each conformer contains exactly one conformer
+    for conf in conformers:
+        assert (
+            conf.GetNumConformers() == 1
+        ), "Each conformer should contain exactly one conformer."
+
+    # Convert to Molecule instances
+    conformers_from_rdkit = [
+        Molecule.from_rdkit_mol(conf) for conf in conformers
+    ]
+
+    return conformers_from_rdkit
+
+
+@pytest.fixture()
+def io_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "IOTests")
+
+
+@pytest.fixture()
+def excel_file(io_test_directory):
+    return os.path.join(io_test_directory, "test.xlsx")

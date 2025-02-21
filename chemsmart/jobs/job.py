@@ -2,11 +2,12 @@ import datetime
 import glob
 import logging
 import os
-import time
 import shutil
-from contextlib import suppress
+import time
 from abc import abstractmethod
+from contextlib import suppress
 from typing import Optional
+
 from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,9 @@ class Job(RegistryMixin):
     TYPE: Optional[str] = None
     PROGRAM: Optional[str] = None
 
-    def __init__(self, molecule, label, local=False, skip_completed=True):
+    def __init__(
+        self, molecule, label, local=False, skip_completed=True, **kwargs
+    ):
         self.molecule = molecule
         self.label = label
         self.local = local
@@ -53,10 +56,6 @@ class Job(RegistryMixin):
     def joblog(self):
         return os.path.join(self.folder, f"{self.label}.joblog")
 
-    @abstractmethod
-    def is_complete(self):
-        raise NotImplementedError
-
     def run(self, **kwargs):
         if self.is_complete() and self.skip_completed:
             logger.info(f"{self} is already complete, not running.")
@@ -78,15 +77,14 @@ class Job(RegistryMixin):
         folder = f"{prefix}.{ts}"
         return os.path.join(self.folder, folder)
 
-    def backup(self, dest_folder=None):
+    def backup(self, **kwargs):
         """Backup the current folder to a new folder.
         Return the new folder path.
         """
-        if self.folder is None:
-            return None
+        self._backup_files(**kwargs)
 
-        shutil.copytree(src=self.folder, dst=dest_folder)
-        return dest_folder
+    def _backup_files(self):
+        raise NotImplementedError
 
     def backup_file(self, file, folder=None, remove=False):
         if not os.path.exists(file):
@@ -111,3 +109,35 @@ class Job(RegistryMixin):
                 shutil.copytree(src=file, dst=newfilepath)
             else:
                 shutil.copy(src=file, dst=newfilepath)
+
+    @property
+    def all_intermediate_optimization_points(self):
+        import ase
+
+        intermediate_optimization_points_path = os.path.join(
+            self.label + "_intermediate_opt_points.xyz"
+        )
+        all_points = self._intermediate_optimization_points()
+        ase.io.write(intermediate_optimization_points_path, all_points)
+        return all_points
+
+    def optimized_structure(self):
+        output = self._output()
+        if output is not None and output.normal_termination:
+            return output.optimized_structure
+        return None
+
+    def _intermediate_optimization_points(self):
+        output = self._output()
+        if output is None:
+            return []
+        return output.all_structures
+
+    def _job_is_complete(self):
+        # private method to check if the job is complete
+        if self._output() is None:
+            return False
+        return self._output().normal_termination
+
+    def is_complete(self):
+        return self._job_is_complete()

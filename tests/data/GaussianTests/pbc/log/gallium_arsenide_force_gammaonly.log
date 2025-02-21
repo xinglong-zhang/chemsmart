@@ -1,0 +1,3191 @@
+ Entering Gaussian System, Link 0=/home/xinglong/programs/g16/g16
+ Input=/home/xinglong/scratch/gallium_arsenide_force_gammaonly/gallium_arsenide_force_gammaonly.com
+ Output=/home/xinglong/scratch/gallium_arsenide_force_gammaonly/gallium_arsenide_force_gammaonly.log
+ Initial command:
+ /home/xinglong/programs/g16/l1.exe "/home/xinglong/scratch/gallium_arsenide_force_gammaonly/Gau-2923254.inp" -scrdir="/home/xinglong/scratch/gallium_arsenide_force_gammaonly/"
+ Entering Link 1 = /home/xinglong/programs/g16/l1.exe PID=   2923256.
+  
+ Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
+  
+ This is part of the Gaussian(R) 16 program.  It is based on
+ the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
+ the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
+ the Gaussian(R) 98 system (copyright 1998, Gaussian, Inc.),
+ the Gaussian(R) 94 system (copyright 1995, Gaussian, Inc.),
+ the Gaussian 92(TM) system (copyright 1992, Gaussian, Inc.),
+ the Gaussian 90(TM) system (copyright 1990, Gaussian, Inc.),
+ the Gaussian 88(TM) system (copyright 1988, Gaussian, Inc.),
+ the Gaussian 86(TM) system (copyright 1986, Carnegie Mellon
+ University), and the Gaussian 82(TM) system (copyright 1983,
+ Carnegie Mellon University). Gaussian is a federally registered
+ trademark of Gaussian, Inc.
+  
+ This software contains proprietary and confidential information,
+ including trade secrets, belonging to Gaussian, Inc.
+  
+ This software is provided under written license and may be
+ used, copied, transmitted, or stored only in accord with that
+ written license.
+  
+ The following legend is applicable only to US Government
+ contracts under FAR:
+  
+                    RESTRICTED RIGHTS LEGEND
+  
+ Use, reproduction and disclosure by the US Government is
+ subject to restrictions as set forth in subparagraphs (a)
+ and (c) of the Commercial Computer Software - Restricted
+ Rights clause in FAR 52.227-19.
+  
+ Gaussian, Inc.
+ 340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
+  
+  
+ ---------------------------------------------------------------
+ Warning -- This program may not be used in any manner that
+ competes with the business of Gaussian, Inc. or will provide
+ assistance to any competitor of Gaussian, Inc.  The licensee
+ of this program is prohibited from giving any competitor of
+ Gaussian, Inc. access to this program.  By using this program,
+ the user acknowledges that Gaussian, Inc. is engaged in the
+ business of creating and licensing software in the field of
+ computational chemistry and represents and warrants to the
+ licensee that it is not a competitor of Gaussian, Inc. and that
+ it will not use this program in any manner prohibited above.
+ ---------------------------------------------------------------
+  
+
+ Cite this work as:
+ Gaussian 16, Revision B.01,
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
+ 
+ ******************************************
+ Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
+                21-Jun-2022 
+ ******************************************
+ %chk=gallium_arsenide_force_gammaonly.chk
+ %nprocshared=24
+ Will use up to   24 processors via shared memory.
+ %mem=60GB
+ ------------------------------------------------------
+ # PBEPBE/6-31g(d,p)/Auto SCF=Tight Force PBC=GammaOnly
+ ------------------------------------------------------
+ 1/10=7,30=1,38=1/1,3;
+ 2/12=2,17=6,18=5,40=1/2;
+ 3/5=1,6=6,7=101,11=2,25=1,30=1,65=-1,71=1,74=1009,82=28/1,2,3;
+ 4//1;
+ 5/5=2,32=2,38=5/2;
+ 6/7=2,8=2,9=2,10=2,28=1/1;
+ 7/29=1/1,2,3,16;
+ 1/10=7,30=1/3;
+ 99//99;
+ --------------------------------
+ gallium_arsenide_force_gammaonly
+ --------------------------------
+ Symbolic Z-matrix:
+ Charge =  0 Multiplicity = 1
+ Ga                    0.        0.        0. 
+ Ga                    0.        2.825     2.825 
+ Ga                    2.825     0.        2.825 
+ Ga                    2.825     2.825     0. 
+ As                    1.4125    1.4125    1.4125 
+ As                    1.4125    4.2375    4.2375 
+ As                    4.2375    1.4125    4.2375 
+ As                    4.2375    4.2375    1.4125 
+ TV                    5.65      0.        0. 
+ TV                    0.        5.65      0. 
+ TV                    0.        0.        5.65 
+ 
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Initialization pass.
+ Trust Radius=3.00D-01 FncErr=1.00D-07 GrdErr=1.00D-07 EigMax=2.50D+02 EigMin=1.00D-04
+ Number of steps in this run=      2 maximum allowed number of steps=      2.
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+                           Before rotation:                           
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         31           0        0.000000    0.000000    0.000000
+      2         31           0        0.000000    2.825000    2.825000
+      3         31           0        2.825000    0.000000    2.825000
+      4         31           0        2.825000    2.825000    0.000000
+      5         33           0        1.412500    1.412500    1.412500
+      6         33           0        1.412500    4.237500    4.237500
+      7         33           0        4.237500    1.412500    4.237500
+      8         33           0        4.237500    4.237500    1.412500
+      9         -2           0        5.650000    0.000000    0.000000
+     10         -2           0        0.000000    5.650000    0.000000
+     11         -2           0        0.000000    0.000000    5.650000
+ ---------------------------------------------------------------------
+ Lengths of translation vectors:      5.650000    5.650000    5.650000
+  Angles of translation vectors:     90.000000   90.000000   90.000000
+ ---------------------------------------------------------------------
+                          Input orientation:                          
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1         31           0       -2.118750   -2.118750   -2.118750
+      2         31           0       -2.118750    0.706250    0.706250
+      3         31           0        0.706250   -2.118750    0.706250
+      4         31           0        0.706250    0.706250   -2.118750
+      5         33           0       -0.706250   -0.706250   -0.706250
+      6         33           0       -0.706250    2.118750    2.118750
+      7         33           0        2.118750   -0.706250    2.118750
+      8         33           0        2.118750    2.118750   -0.706250
+      9         -2           0        5.650000    0.000000    0.000000
+     10         -2           0        0.000000    5.650000    0.000000
+     11         -2           0        0.000000    0.000000    5.650000
+ ---------------------------------------------------------------------
+ Lengths of translation vectors:      5.650000    5.650000    5.650000
+  Angles of translation vectors:     90.000000   90.000000   90.000000
+ ---------------------------------------------------------------------
+                    Distance matrix (angstroms):
+                    1          2          3          4          5
+     1  Ga   0.000000
+     2  Ga   3.995153   0.000000
+     3  Ga   3.995153   3.995153   0.000000
+     4  Ga   3.995153   3.995153   3.995153   0.000000
+     5  As   2.446522   2.446522   2.446522   2.446522   0.000000
+     6  As   6.156945   2.446522   4.684733   4.684733   3.995153
+     7  As   6.156945   4.684733   2.446522   4.684733   3.995153
+     8  As   6.156945   4.684733   4.684733   2.446522   3.995153
+     9  TV   8.326565   7.832691   5.424809   5.424809   6.434244
+    10  TV   8.326565   5.424809   7.832691   5.424809   6.434244
+    11  TV   8.326565   5.424809   5.424809   7.832691   6.434244
+                    6          7          8          9         10
+     6  As   0.000000
+     7  As   3.995153   0.000000
+     8  As   3.995153   3.995153   0.000000
+     9  TV   7.027099   4.178231   4.178231   0.000000
+    10  TV   4.178231   7.027099   4.178231   7.990307   0.000000
+    11  TV   4.178231   4.178231   7.027099   7.990307   7.990307
+                   11
+    11  TV   0.000000
+          Unit Cell Distance matrix (angstroms):
+                    1          2          3          4          5
+     1  Ga   0.000000
+     2  Ga   3.995153   0.000000
+     3  Ga   3.995153   3.995153   0.000000
+     4  Ga   3.995153   3.995153   3.995153   0.000000
+     5  As   2.446522   6.156945   6.156945   6.156945   0.000000
+     6  As   2.446522   2.446522   4.684733   4.684733   3.995153
+     7  As   2.446522   4.684733   2.446522   4.684733   3.995153
+     8  As   2.446522   4.684733   4.684733   2.446522   3.995153
+                    6          7          8
+     6  As   0.000000
+     7  As   3.995153   0.000000
+     8  As   3.995153   3.995153   0.000000
+ Symmetry turned off:
+ Cannot cope with ghost atoms or with translation vectors.
+ Stoichiometry    As4Ga4
+ Framework group  C1[X(As4Ga4)]
+ Deg. of freedom    18
+ Full point group                 C1      NOp   1
+ Standard basis: 6-31G(d,p) (6D, 7F)
+   240 basis functions,   664 primitive gaussians,   240 cartesian basis functions
+   128 alpha electrons      128 beta electrons
+       nuclear repulsion energy      4135.2119511369 Hartrees.
+ NAtoms=    8 NActive=    8 NUniq=    8 SFac= 1.00D+00 NAtFMM=   60 NAOKFM=F Big=F
+ Integral buffers will be    131072 words long.
+ Raffenetti 2 integral format.
+ Two-electron integral symmetry is turned off.
+ Standard density basis: Auto (5D, 7F)
+  2212 Density fitting functions
+ FOutLm=  100.00.
+ Periodicity:                           1               1               1
+ Max integer dimensions:               10              10              10
+   PBC vector 1 X=    10.6770 Y=    0.0000 Z=    0.0000
+   PBC vector 2 X=     0.0000 Y=   10.6770 Z=    0.0000
+   PBC vector 3 X=     0.0000 Y=    0.0000 Z=   10.6770
+  Recp vector 1 X=     0.0937 Y=    0.0000 Z=    0.0000
+  Recp vector 2 X=     0.0000 Y=    0.0937 Z=    0.0000
+  Recp vector 3 X=     0.0000 Y=    0.0000 Z=    0.0937
+ One-electron integrals computed using PRISM.
+ NBasis=   240 RedAO= T EigKep=  2.78D-05  NBF=   240
+ NBsUse=   240 1.00D-06 EigRej= -1.00D+00 NBFU=   240
+ NBasis=      240 NBas6D=      240 NTT=       28920   NTT6D=    28920
+ NDBShl=      284 NDBF=       2212 NDBF6D=     3004  NNucDB=        0
+ IDenFi=        4 ISolve=        4 FullAP=F BlkAPC=T NucTyp=        0
+ TolInv= 1.00D-06 TolIt=  1.00D-10 IR12=0.
+ MaxSav=        6 NSavIt=     1000 MaxIt=      2312.
+ FoFCou: FMM=F IPFlag=           0 FMFlag=           0 FMFlg1=           0
+         NFxFlg=           0 DoJE=F BraDBF=T KetDBF=T FulRan=T
+         wScrn=  0.000000 ICntrl=       600 IOpCl=  3 I1Cent=           6 NGrid=           0
+         NMat0=    1 NMatS0=   3004 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Symmetry not used in FoFCou.
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ Harris functional with IExCor= 1009 and IRadAn=       5 diagonalized for initial guess.
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ HarFok:  IExCor= 1009 AccDes= 0.00D+00 IRadAn=         5 IDoV= 2 UseB2=F ITyADJ=14
+ ICtDFT=  3500011 ScaDFX=  1.000000  1.000000  1.000000  1.000000
+ FoFCou: FMM=T IPFlag=      524288 FMFlag=      990000 FMFlg1=        1001
+         NFxFlg=           0 DoJE=T BraDBF=F KetDBF=T FulRan=T
+         wScrn=  0.000000 ICntrl=       500 IOpCl=  0 I1Cent=   200000004 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Symmetry not used in FoFCou.
+ FMM levels:   2  Number of levels for PrismC:   1
+ Requested convergence on RMS density matrix=1.00D-07 within 128 cycles.
+ Requested convergence on MAX density matrix=1.00D-05.
+ Requested convergence on             energy=1.00D-05.
+ No special actions if energy rises.
+ FoFCou: FMM=T IPFlag=           0 FMFlag=      990000 FMFlg1=        1001
+         NFxFlg=           0 DoJE=T BraDBF=T KetDBF=F FulRan=T
+         wScrn=  0.000000 ICntrl=       500 IOpCl=  0 I1Cent=           5 NGrid=           0
+         NMat0=    1 NMatS0=      1 NMatT0=    0 NMatD0=    1 NMtDS0=    0 NMtDT0=    0
+ Symmetry not used in FoFCou.
+ FMM levels:   2  Number of levels for PrismC:   1
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.27D+04 BPNorm= 1.16D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.9523613D+00    0.9523613D+00
+ ISDGMR:    1    0.4886342D+00    0.4886342D+00
+ ISDGMR:    2    0.1705698D+00    0.1705698D+00
+ ISDGMR:    3    0.4200085D-01    0.4200085D-01
+ ISDGMR:    4    0.3186848D-01    0.3186848D-01
+ ISDGMR:    5    0.1288525D-01    0.1288525D-01
+ ISDGMR:    6    0.9042103D-02    0.9042103D-02
+ ISDGMR:    7    0.5833327D-02    0.5833327D-02
+ ISDGMR:    8    0.4823837D-02    0.4823837D-02
+ ISDGMR:    9    0.3331973D-02    0.3331973D-02
+ ISDGMR:   10    0.2807197D-02    0.2807197D-02
+ ISDGMR:   11    0.2341110D-02    0.2341110D-02
+ ISDGMR:   12    0.2057373D-02    0.2057373D-02
+ ISDGMR:   13    0.1685298D-02    0.1685298D-02
+ ISDGMR:   14    0.1276287D-02    0.1276287D-02
+ ISDGMR:   15    0.1165410D-02    0.1165410D-02
+ ISDGMR:   16    0.9773112D-03    0.9773112D-03
+ ISDGMR:   17    0.7060406D-03    0.7060406D-03
+ ISDGMR:   18    0.5906923D-03    0.5906923D-03
+ ISDGMR:   19    0.4768089D-03    0.4768089D-03
+ ISDGMR:   20    0.4507866D-03    0.4507866D-03
+ ISDGMR:   21    0.3766954D-03    0.3766954D-03
+ ISDGMR:   22    0.3061652D-03    0.3061652D-03
+ ISDGMR:   23    0.2738290D-03    0.2738290D-03
+ ISDGMR:   24    0.2689042D-03    0.2689042D-03
+ ISDGMR:   25    0.2459658D-03    0.2459658D-03
+ ISDGMR:   26    0.2220115D-03    0.2220115D-03
+ ISDGMR:   27    0.2107750D-03    0.2107750D-03
+ ISDGMR:   28    0.1830145D-03    0.1830145D-03
+ ISDGMR:   29    0.1453997D-03    0.1453997D-03
+ ISDGMR:   30    0.1316229D-03    0.1316229D-03
+ ISDGMR:   31    0.1140594D-03    0.1140594D-03
+ ISDGMR:   32    0.1087540D-03    0.1087540D-03
+ ISDGMR:   33    0.1039958D-03    0.1039958D-03
+ ISDGMR:   34    0.1007457D-03    0.1007457D-03
+ ISDGMR:   35    0.9973763D-04    0.9973763D-04
+ ISDGMR:   36    0.9596447D-04    0.9596447D-04
+ ISDGMR:   37    0.9469893D-04    0.9469893D-04
+ ISDGMR:   38    0.8482186D-04    0.8482186D-04
+ ISDGMR:   39    0.8252002D-04    0.8252002D-04
+ ISDGMR:   40    0.8172420D-04    0.8172420D-04
+ ISDGMR:   41    0.8129424D-04    0.8129424D-04
+ ISDGMR:   42    0.7776171D-04    0.7776171D-04
+ ISDGMR:   43    0.6167127D-04    0.6167127D-04
+ ISDGMR:   44    0.5741581D-04    0.5741581D-04
+ ISDGMR:   45    0.5046287D-04    0.5046287D-04
+ ISDGMR:   46    0.4385914D-04    0.4385914D-04
+ ISDGMR:   47    0.4280590D-04    0.4280590D-04
+ ISDGMR:   48    0.4195316D-04    0.4195316D-04
+ ISDGMR:   49    0.4123419D-04    0.4123419D-04
+ ISDGMR:   50    0.3833244D-04    0.3833244D-04
+ ISDGMR:   51    0.3601772D-04    0.3601772D-04
+ ISDGMR:   52    0.3553772D-04    0.3553772D-04
+ ISDGMR:   53    0.3489957D-04    0.3489957D-04
+ ISDGMR:   54    0.3445093D-04    0.3445093D-04
+ ISDGMR:   55    0.3303667D-04    0.3303667D-04
+ ISDGMR:   56    0.3245255D-04    0.3245255D-04
+ ISDGMR:   57    0.3083358D-04    0.3083358D-04
+ ISDGMR:   58    0.2937888D-04    0.2937888D-04
+ ISDGMR:   59    0.2787782D-04    0.2787782D-04
+ ISDGMR:   60    0.2733394D-04    0.2733394D-04
+ ISDGMR:   61    0.2695538D-04    0.2695538D-04
+ ISDGMR:   62    0.2578636D-04    0.2578636D-04
+ ISDGMR:   63    0.2201517D-04    0.2201517D-04
+ ISDGMR:   64    0.1982031D-04    0.1982031D-04
+ ISDGMR:   65    0.1775564D-04    0.1775564D-04
+ ISDGMR:   66    0.1675053D-04    0.1675053D-04
+ ISDGMR:   67    0.1559245D-04    0.1559245D-04
+ ISDGMR:   68    0.1530660D-04    0.1530660D-04
+ ISDGMR:   69    0.1508918D-04    0.1508918D-04
+ ISDGMR:   70    0.1427126D-04    0.1427126D-04
+ ISDGMR:   71    0.1377709D-04    0.1377709D-04
+ ISDGMR:   72    0.1358266D-04    0.1358266D-04
+ ISDGMR:   73    0.1328609D-04    0.1328609D-04
+ ISDGMR:   74    0.1253690D-04    0.1253690D-04
+ ISDGMR:   75    0.1234824D-04    0.1234824D-04
+ ISDGMR:   76    0.1223499D-04    0.1223499D-04
+ ISDGMR:   77    0.1201415D-04    0.1201415D-04
+ ISDGMR:   78    0.1183189D-04    0.1183189D-04
+ ISDGMR:   79    0.1166392D-04    0.1166392D-04
+ ISDGMR:   80    0.1155518D-04    0.1155518D-04
+ ISDGMR:   81    0.1124257D-04    0.1124257D-04
+ ISDGMR:   82    0.1071256D-04    0.1071256D-04
+ ISDGMR:   83    0.1045624D-04    0.1045624D-04
+ ISDGMR:   84    0.1013536D-04    0.1013536D-04
+ ISDGMR:   85    0.9923048D-05    0.9923048D-05
+ ISDGMR:   86    0.9060982D-05    0.9060982D-05
+ ISDGMR:   87    0.8787641D-05    0.8787641D-05
+ ISDGMR:   88    0.8683736D-05    0.8683736D-05
+ ISDGMR:   89    0.8620105D-05    0.8620105D-05
+ ISDGMR:   90    0.8404676D-05    0.8404676D-05
+ ISDGMR:   91    0.7267688D-05    0.7267688D-05
+ ISDGMR:   92    0.6607356D-05    0.6607356D-05
+ ISDGMR:   93    0.6439286D-05    0.6439286D-05
+ ISDGMR:   94    0.6288249D-05    0.6288249D-05
+ ISDGMR:   95    0.5855553D-05    0.5855553D-05
+ ISDGMR:   96    0.5704269D-05    0.5704269D-05
+ ISDGMR:   97    0.5599078D-05    0.5599078D-05
+ ISDGMR:   98    0.5446347D-05    0.5446347D-05
+ ISDGMR:   99    0.5366574D-05    0.5366574D-05
+ ISDGMR:  100    0.5324098D-05    0.5324098D-05
+ ISDGMR:  101    0.5288519D-05    0.5288519D-05
+ ISDGMR:  102    0.5145527D-05    0.5145527D-05
+ ISDGMR:  103    0.5067727D-05    0.5067727D-05
+ ISDGMR:  104    0.4978083D-05    0.4978083D-05
+ ISDGMR:  105    0.4930534D-05    0.4930534D-05
+ ISDGMR:  106    0.4921242D-05    0.4921242D-05
+ ISDGMR:  107    0.4895431D-05    0.4895431D-05
+ ISDGMR:  108    0.4493126D-05    0.4493126D-05
+ ISDGMR:  109    0.4294139D-05    0.4294139D-05
+ ISDGMR:  110    0.4208915D-05    0.4208915D-05
+ ISDGMR:  111    0.3923102D-05    0.3923102D-05
+ ISDGMR:  112    0.3253474D-05    0.3253474D-05
+ ISDGMR:  113    0.2850193D-05    0.2850193D-05
+ ISDGMR:  114    0.2742628D-05    0.2742628D-05
+ ISDGMR:  115    0.2729237D-05    0.2729237D-05
+ ISDGMR:  116    0.2686786D-05    0.2686786D-05
+ ISDGMR:  117    0.2364411D-05    0.2364411D-05
+ ISDGMR:  118    0.2066158D-05    0.2066158D-05
+ ISDGMR:  119    0.2043141D-05    0.2043141D-05
+ ISDGMR:  120    0.2013513D-05    0.2013513D-05
+ ISDGMR:  121    0.1954447D-05    0.1954447D-05
+ ISDGMR:  122    0.1752809D-05    0.1752809D-05
+ ISDGMR:  123    0.1653854D-05    0.1653854D-05
+ ISDGMR:  124    0.1644133D-05    0.1644133D-05
+ ISDGMR:  125    0.1641131D-05    0.1641131D-05
+ ISDGMR:  126    0.1625061D-05    0.1625061D-05
+ ISDGMR:  127    0.1508014D-05    0.1508014D-05
+ ISDGMR:  128    0.1456893D-05    0.1456893D-05
+ ISDGMR:  129    0.1448223D-05    0.1448223D-05
+ ISDGMR:  130    0.1439776D-05    0.1439776D-05
+ ISDGMR:  131    0.1434788D-05    0.1434788D-05
+ ISDGMR:  132    0.1433005D-05    0.1433005D-05
+ ISDGMR:  133    0.1416975D-05    0.1416975D-05
+ ISDGMR:  134    0.1239287D-05    0.1239287D-05
+ ISDGMR:  135    0.1153811D-05    0.1153811D-05
+ ISDGMR:  136    0.1151914D-05    0.1151914D-05
+ ISDGMR:  137    0.1138014D-05    0.1138014D-05
+ ISDGMR:  138    0.1119695D-05    0.1119695D-05
+ ISDGMR:  139    0.9850207D-06    0.9850207D-06
+ ISDGMR:  140    0.8575435D-06    0.8575435D-06
+ ISDGMR:  141    0.8437262D-06    0.8437262D-06
+ ISDGMR:  142    0.8038946D-06    0.8038946D-06
+ ISDGMR:  143    0.8038884D-06    0.8038884D-06
+ ISDGMR:  144    0.8037119D-06    0.8037119D-06
+ ISDGMR:  145    0.7993106D-06    0.7993106D-06
+ ISDGMR:  146    0.7938000D-06    0.7938000D-06
+ ISDGMR:  147    0.7863869D-06    0.7863869D-06
+ ISDGMR:  148    0.7829002D-06    0.7829002D-06
+ ISDGMR:  149    0.7728524D-06    0.7728524D-06
+ ISDGMR:  150    0.7588381D-06    0.7588381D-06
+ ISDGMR:  151    0.7525304D-06    0.7525304D-06
+ ISDGMR:  152    0.7511491D-06    0.7511491D-06
+ ISDGMR:  153    0.7502615D-06    0.7502615D-06
+ ISDGMR:  154    0.7500799D-06    0.7500799D-06
+ ISDGMR:  155    0.7468636D-06    0.7468636D-06
+ ISDGMR:  156    0.7434995D-06    0.7434995D-06
+ ISDGMR:  157    0.7422449D-06    0.7422449D-06
+ ISDGMR:  158    0.7409577D-06    0.7409577D-06
+ ISDGMR:  159    0.7245791D-06    0.7245791D-06
+ ISDGMR:  160    0.7164028D-06    0.7164028D-06
+ ISDGMR:  161    0.7049997D-06    0.7049997D-06
+ ISDGMR:  162    0.6920516D-06    0.6920516D-06
+ ISDGMR:  163    0.6851297D-06    0.6851297D-06
+ ISDGMR:  164    0.6826463D-06    0.6826463D-06
+ ISDGMR:  165    0.6820173D-06    0.6820173D-06
+ ISDGMR:  166    0.6811840D-06    0.6811840D-06
+ ISDGMR:  167    0.6801900D-06    0.6801900D-06
+ ISDGMR:  168    0.6793366D-06    0.6793366D-06
+ ISDGMR:  169    0.6791396D-06    0.6791396D-06
+ ISDGMR:  170    0.6789421D-06    0.6789421D-06
+ ISDGMR:  171    0.6759818D-06    0.6759818D-06
+ ISDGMR:  172    0.6741950D-06    0.6741950D-06
+ ISDGMR:  173    0.6701206D-06    0.6701206D-06
+ ISDGMR:  174    0.6680515D-06    0.6680515D-06
+ ISDGMR:  175    0.6674275D-06    0.6674275D-06
+ ISDGMR:  176    0.6650181D-06    0.6650181D-06
+ ISDGMR:  177    0.6641751D-06    0.6641751D-06
+ ISDGMR:  178    0.6641186D-06    0.6641186D-06
+ ISDGMR:  179    0.6636430D-06    0.6636430D-06
+ ISDGMR:  180    0.6605395D-06    0.6605395D-06
+ ISDGMR:  181    0.6605274D-06    0.6605274D-06
+ ISDGMR:  182    0.6567970D-06    0.6567970D-06
+ ISDGMR:  183    0.6455600D-06    0.6455600D-06
+ ISDGMR:  184    0.6408704D-06    0.6408704D-06
+ ISDGMR:  185    0.6336903D-06    0.6336903D-06
+ ISDGMR:  186    0.6271173D-06    0.6271173D-06
+ ISDGMR:  187    0.6142593D-06    0.6142593D-06
+ ISDGMR:  188    0.6039187D-06    0.6039187D-06
+ ISDGMR:  189    0.5850814D-06    0.5850814D-06
+ ISDGMR:  190    0.5761538D-06    0.5761538D-06
+ ISDGMR:  191    0.5692466D-06    0.5692466D-06
+ ISDGMR:  192    0.5496501D-06    0.5496501D-06
+ ISDGMR:  193    0.5418874D-06    0.5418874D-06
+ ISDGMR:  194    0.5352879D-06    0.5352879D-06
+ ISDGMR:  195    0.5315345D-06    0.5315345D-06
+ ISDGMR:  196    0.5289862D-06    0.5289862D-06
+ ISDGMR:  197    0.5286926D-06    0.5286926D-06
+ ISDGMR:  198    0.5263571D-06    0.5263571D-06
+ ISDGMR:  199    0.5258959D-06    0.5258959D-06
+ ISDGMR:  200    0.5174870D-06    0.5174870D-06
+ ISDGMR:  201    0.5138712D-06    0.5138712D-06
+ ISDGMR:  202    0.5090527D-06    0.5090527D-06
+ ISDGMR:  203    0.4925155D-06    0.4925155D-06
+ ISDGMR:  204    0.4632780D-06    0.4632780D-06
+ ISDGMR:  205    0.4503664D-06    0.4503664D-06
+ ISDGMR:  206    0.4487361D-06    0.4487361D-06
+ ISDGMR:  207    0.4463115D-06    0.4463115D-06
+ ISDGMR:  208    0.4460800D-06    0.4460800D-06
+ ISDGMR:  209    0.4459132D-06    0.4459132D-06
+ ISDGMR:  210    0.4455168D-06    0.4455168D-06
+ ISDGMR:  211    0.4453955D-06    0.4453955D-06
+ ISDGMR:  212    0.4452717D-06    0.4452717D-06
+ ISDGMR:  213    0.4450988D-06    0.4450988D-06
+ ISDGMR:  214    0.4449345D-06    0.4449345D-06
+ ISDGMR:  215    0.4445165D-06    0.4445165D-06
+ ISDGMR:  216    0.4436776D-06    0.4436776D-06
+ ISDGMR:  217    0.4429168D-06    0.4429168D-06
+ ISDGMR:  218    0.4420860D-06    0.4420860D-06
+ ISDGMR:  219    0.4396194D-06    0.4396194D-06
+ ISDGMR:  220    0.4382513D-06    0.4382513D-06
+ ISDGMR:  221    0.4363076D-06    0.4363076D-06
+ ISDGMR:  222    0.4349313D-06    0.4349313D-06
+ ISDGMR:  223    0.4303161D-06    0.4303161D-06
+ ISDGMR:  224    0.4204038D-06    0.4204038D-06
+ ISDGMR:  225    0.4175154D-06    0.4175154D-06
+ ISDGMR:  226    0.4164798D-06    0.4164798D-06
+ ISDGMR:  227    0.4121831D-06    0.4121831D-06
+ ISDGMR:  228    0.4093280D-06    0.4093280D-06
+ ISDGMR:  229    0.4089733D-06    0.4089733D-06
+ ISDGMR:  230    0.4086699D-06    0.4086699D-06
+ ISDGMR:  231    0.4074060D-06    0.4074060D-06
+ ISDGMR:  232    0.4067754D-06    0.4067754D-06
+ ISDGMR:  233    0.4066819D-06    0.4066819D-06
+ ISDGMR:  234    0.4062190D-06    0.4062190D-06
+ ISDGMR:  235    0.4030507D-06    0.4030507D-06
+ ISDGMR:  236    0.4029114D-06    0.4029114D-06
+ ISDGMR:  237    0.4021879D-06    0.4021879D-06
+ ISDGMR:  238    0.3994332D-06    0.3994332D-06
+ ISDGMR:  239    0.3982739D-06    0.3982739D-06
+ ISDGMR:  240    0.3969921D-06    0.3969921D-06
+ ISDGMR:  241    0.3763243D-06    0.3763243D-06
+ ISDGMR:  242    0.3584353D-06    0.3584353D-06
+ ISDGMR:  243    0.3335870D-06    0.3335870D-06
+ ISDGMR:  244    0.2260346D-06    0.2260346D-06
+ ISDGMR:  245    0.1674718D-06    0.1674718D-06
+ ISDGMR:  246    0.1321618D-06    0.1321618D-06
+ ISDGMR:  247    0.1077691D-06    0.1077691D-06
+ ISDGMR:  248    0.1073531D-06    0.1073531D-06
+ ISDGMR:  249    0.1069424D-06    0.1069424D-06
+ ISDGMR:  250    0.1067407D-06    0.1067407D-06
+ ISDGMR:  251    0.1063303D-06    0.1063303D-06
+ ISDGMR:  252    0.1059005D-06    0.1059005D-06
+ ISDGMR:  253    0.1055659D-06    0.1055659D-06
+ ISDGMR:  254    0.1051147D-06    0.1051147D-06
+ ISDGMR:  255    0.1049737D-06    0.1049737D-06
+ ISDGMR:  256    0.1048900D-06    0.1048900D-06
+ ISDGMR:  257    0.1048747D-06    0.1048747D-06
+ ISDGMR:  258    0.1048349D-06    0.1048349D-06
+ ISDGMR:  259    0.1045465D-06    0.1045465D-06
+ ISDGMR:  260    0.1045159D-06    0.1045159D-06
+ ISDGMR:  261    0.1044997D-06    0.1044997D-06
+ ISDGMR:  262    0.1042348D-06    0.1042348D-06
+ ISDGMR:  263    0.1036858D-06    0.1036858D-06
+ ISDGMR:  264    0.1031702D-06    0.1031702D-06
+ ISDGMR:  265    0.1027744D-06    0.1027744D-06
+ ISDGMR:  266    0.1019329D-06    0.1019329D-06
+ ISDGMR:  267    0.1016043D-06    0.1016043D-06
+ ISDGMR:  268    0.1015241D-06    0.1015241D-06
+ ISDGMR:  269    0.1010349D-06    0.1010349D-06
+ ISDGMR:  270    0.9876689D-07    0.9876689D-07
+ ISDGMR:  271    0.9859500D-07    0.9859500D-07
+ ISDGMR:  272    0.9836078D-07    0.9836078D-07
+ ISDGMR:  273    0.9828888D-07    0.9828888D-07
+ ISDGMR:  274    0.9827971D-07    0.9827971D-07
+ ISDGMR:  275    0.9804955D-07    0.9804955D-07
+ ISDGMR:  276    0.9804808D-07    0.9804808D-07
+ ISDGMR:  277    0.9803597D-07    0.9803597D-07
+ ISDGMR:  278    0.9753901D-07    0.9753901D-07
+ ISDGMR:  279    0.9703417D-07    0.9703417D-07
+ ISDGMR:  280    0.9682985D-07    0.9682985D-07
+ ISDGMR:  281    0.9665362D-07    0.9665362D-07
+ ISDGMR:  282    0.9651891D-07    0.9651891D-07
+ ISDGMR:  283    0.9626370D-07    0.9626370D-07
+ ISDGMR:  284    0.9287677D-07    0.9287677D-07
+ ISDGMR:  285    0.8609050D-07    0.8609050D-07
+ ISDGMR:  286    0.8124596D-07    0.8124596D-07
+ ISDGMR:  287    0.7796736D-07    0.7796736D-07
+ ISDGMR:  288    0.7675365D-07    0.7675365D-07
+ ISDGMR:  289    0.7541926D-07    0.7541926D-07
+ ISDGMR:  290    0.7480472D-07    0.7480472D-07
+ ISDGMR:  291    0.7270626D-07    0.7270626D-07
+ ISDGMR:  292    0.7178244D-07    0.7178244D-07
+ ISDGMR:  293    0.7132587D-07    0.7132587D-07
+ ISDGMR:  294    0.7116566D-07    0.7116566D-07
+ ISDGMR:  295    0.7115996D-07    0.7115996D-07
+ ISDGMR:  296    0.7101411D-07    0.7101411D-07
+ ISDGMR:  297    0.7096546D-07    0.7096546D-07
+ ISDGMR:  298    0.7093576D-07    0.7093576D-07
+ ISDGMR:  299    0.7076171D-07    0.7076171D-07
+ ISDGMR:  300    0.7076159D-07    0.7076159D-07
+ ISDGMR:  301    0.7059874D-07    0.7059874D-07
+ ISDGMR:  302    0.7051303D-07    0.7051303D-07
+ ISDGMR:  303    0.7033832D-07    0.7033832D-07
+ ISDGMR:  304    0.6886009D-07    0.6886009D-07
+ ISDGMR:  305    0.6777983D-07    0.6777983D-07
+ ISDGMR:  306    0.6674198D-07    0.6674198D-07
+ ISDGMR:  307    0.6659838D-07    0.6659838D-07
+ ISDGMR:  308    0.6567891D-07    0.6567891D-07
+ ISDGMR:  309    0.6248332D-07    0.6248332D-07
+ ISDGMR:  310    0.6215718D-07    0.6215718D-07
+ ISDGMR:  311    0.6182657D-07    0.6182657D-07
+ ISDGMR:  312    0.6161219D-07    0.6161219D-07
+ ISDGMR:  313    0.6123274D-07    0.6123274D-07
+ ISDGMR:  314    0.6120394D-07    0.6120394D-07
+ ISDGMR:  315    0.6110502D-07    0.6110502D-07
+ ISDGMR:  316    0.6105591D-07    0.6105591D-07
+ ISDGMR:  317    0.6101148D-07    0.6101148D-07
+ ISDGMR:  318    0.6076424D-07    0.6076424D-07
+ ISDGMR:  319    0.6022737D-07    0.6022737D-07
+ ISDGMR:  320    0.5944918D-07    0.5944918D-07
+ ISDGMR:  321    0.5924562D-07    0.5924562D-07
+ ISDGMR:  322    0.5890991D-07    0.5890991D-07
+ ISDGMR:  323    0.5884109D-07    0.5884109D-07
+ ISDGMR:  324    0.5866081D-07    0.5866081D-07
+ ISDGMR:  325    0.5844323D-07    0.5844323D-07
+ ISDGMR:  326    0.5769626D-07    0.5769626D-07
+ ISDGMR:  327    0.5274177D-07    0.5274177D-07
+ ISDGMR:  328    0.4997626D-07    0.4997626D-07
+ ISDGMR:  329    0.4553160D-07    0.4553160D-07
+ ISDGMR:  330    0.4223409D-07    0.4223409D-07
+ ISDGMR:  331    0.4134982D-07    0.4134982D-07
+ ISDGMR:  332    0.4015714D-07    0.4015714D-07
+ ISDGMR:  333    0.3700344D-07    0.3700344D-07
+ ISDGMR:  334    0.3405996D-07    0.3405996D-07
+ ISDGMR:  335    0.3230779D-07    0.3230779D-07
+ ISDGMR:  336    0.3179036D-07    0.3179036D-07
+ ISDGMR:  337    0.3092914D-07    0.3092914D-07
+ ISDGMR:  338    0.3072807D-07    0.3072807D-07
+ ISDGMR:  339    0.3066074D-07    0.3066074D-07
+ ISDGMR:  340    0.3056755D-07    0.3056755D-07
+ ISDGMR:  341    0.3025682D-07    0.3025682D-07
+ ISDGMR:  342    0.3022805D-07    0.3022805D-07
+ ISDGMR:  343    0.3020471D-07    0.3020471D-07
+ ISDGMR:  344    0.3007874D-07    0.3007874D-07
+ ISDGMR:  345    0.3003226D-07    0.3003226D-07
+ ISDGMR:  346    0.2985466D-07    0.2985466D-07
+ ISDGMR:  347    0.2985392D-07    0.2985392D-07
+ ISDGMR:  348    0.2966304D-07    0.2966304D-07
+ ISDGMR:  349    0.2952930D-07    0.2952930D-07
+ ISDGMR:  350    0.2950249D-07    0.2950249D-07
+ ISDGMR:  351    0.2932696D-07    0.2932696D-07
+ ISDGMR:  352    0.2931514D-07    0.2931514D-07
+ ISDGMR:  353    0.2924425D-07    0.2924425D-07
+ ISDGMR:  354    0.2922521D-07    0.2922521D-07
+ ISDGMR:  355    0.2922119D-07    0.2922119D-07
+ ISDGMR:  356    0.2912709D-07    0.2912709D-07
+ ISDGMR:  357    0.2817103D-07    0.2817103D-07
+ ISDGMR:  358    0.2737017D-07    0.2737017D-07
+ ISDGMR:  359    0.2201641D-07    0.2201641D-07
+ ISDGMR:  360    0.2085310D-07    0.2085310D-07
+ ISDGMR:  361    0.1992423D-07    0.1992423D-07
+ ISDGMR:  362    0.1528181D-07    0.1528181D-07
+ ISDGMR:  363    0.1373107D-07    0.1373107D-07
+ ISDGMR:  364    0.1156402D-07    0.1156402D-07
+ ISDGMR:  365    0.1134889D-07    0.1134889D-07
+ ISDGMR:  366    0.7640925D-08    0.7640925D-08
+ ISDGMR:  367    0.6913213D-08    0.6913213D-08
+ ISDGMR:  368    0.6664445D-08    0.6664445D-08
+ ISDGMR:  369    0.6360878D-08    0.6360878D-08
+ ISDGMR:  370    0.6327763D-08    0.6327763D-08
+ ISDGMR:  371    0.6123997D-08    0.6123997D-08
+ ISDGMR:  372    0.6039923D-08    0.6039923D-08
+ ISDGMR:  373    0.5932097D-08    0.5932097D-08
+ ISDGMR:  374    0.5918860D-08    0.5918860D-08
+ ISDGMR:  375    0.5910915D-08    0.5910915D-08
+ ISDGMR:  376    0.5909716D-08    0.5909716D-08
+ ISDGMR:  377    0.5831135D-08    0.5831135D-08
+ ISDGMR:  378    0.5742031D-08    0.5742031D-08
+ ISDGMR:  379    0.5717534D-08    0.5717534D-08
+ ISDGMR:  380    0.5696546D-08    0.5696546D-08
+ ISDGMR:  381    0.5691733D-08    0.5691733D-08
+ ISDGMR:  382    0.5659520D-08    0.5659520D-08
+ ISDGMR:  383    0.5642580D-08    0.5642580D-08
+ ISDGMR:  384    0.5634732D-08    0.5634732D-08
+ ISDGMR:  385    0.5617206D-08    0.5617206D-08
+ ISDGMR:  386    0.5572042D-08    0.5572042D-08
+ ISDGMR:  387    0.5555865D-08    0.5555865D-08
+ ISDGMR:  388    0.5545739D-08    0.5545739D-08
+ ISDGMR:  389    0.5542877D-08    0.5542877D-08
+ ISDGMR:  390    0.5522373D-08    0.5522373D-08
+ ISDGMR:  391    0.5373254D-08    0.5373254D-08
+ ISDGMR:  392    0.5263044D-08    0.5263044D-08
+ ISDGMR:  393    0.4815531D-08    0.4815531D-08
+ ISDGMR:  394    0.4740228D-08    0.4740228D-08
+ ISDGMR:  395    0.4608280D-08    0.4608280D-08
+ ISDGMR:  396    0.4492113D-08    0.4492113D-08
+ ISDGMR:  397    0.3727472D-08    0.3727472D-08
+ ISDGMR:  398    0.3400801D-08    0.3400801D-08
+ ISDGMR:  399    0.3369714D-08    0.3369714D-08
+ ISDGMR:  400    0.2334950D-08    0.2334950D-08
+ ISDGMR:  401    0.2260286D-08    0.2260286D-08
+ ISDGMR:  402    0.1600160D-08    0.1600160D-08
+ ISDGMR:  403    0.1183699D-08    0.1183699D-08
+ ISDGMR:  404    0.1181168D-08    0.1181168D-08
+ ISDGMR:  405    0.1180141D-08    0.1180141D-08
+ ISDGMR:  406    0.1179427D-08    0.1179427D-08
+ ISDGMR:  407    0.1173617D-08    0.1173617D-08
+ ISDGMR:  408    0.1142761D-08    0.1142761D-08
+ ISDGMR:  409    0.1141236D-08    0.1141236D-08
+ ISDGMR:  410    0.1138951D-08    0.1138951D-08
+ ISDGMR:  411    0.1131675D-08    0.1131675D-08
+ ISDGMR:  412    0.1131365D-08    0.1131365D-08
+ ISDGMR:  413    0.1120876D-08    0.1120876D-08
+ ISDGMR:  414    0.1105737D-08    0.1105737D-08
+ ISDGMR:  415    0.1105253D-08    0.1105253D-08
+ ISDGMR:  416    0.1099722D-08    0.1099722D-08
+ ISDGMR:  417    0.1098927D-08    0.1098927D-08
+ ISDGMR:  418    0.1098347D-08    0.1098347D-08
+ ISDGMR:  419    0.1096457D-08    0.1096457D-08
+ ISDGMR:  420    0.1095764D-08    0.1095764D-08
+ ISDGMR:  421    0.1094974D-08    0.1094974D-08
+ ISDGMR:  422    0.9848950D-09    0.9848950D-09
+ ISDGMR:  423    0.6099535D-09    0.6099535D-09
+ ISDGMR:  424    0.5971502D-09    0.5971502D-09
+ ISDGMR:  425    0.5763445D-09    0.5763445D-09
+ ISDGMR:  426    0.3778140D-09    0.3778140D-09
+ ISDGMR:  427    0.3763661D-09    0.3763661D-09
+ ISDGMR:  428    0.3578191D-09    0.3578191D-09
+ ISDGMR:  429    0.3514276D-09    0.3514276D-09
+ ISDGMR:  430    0.3507816D-09    0.3507816D-09
+ ISDGMR:  431    0.3404090D-09    0.3404090D-09
+ ISDGMR:  432    0.3377707D-09    0.3377707D-09
+ ISDGMR:  433    0.3371828D-09    0.3371828D-09
+ ISDGMR:  434    0.3163083D-09    0.3163083D-09
+ ISDGMR:  435    0.3162356D-09    0.3162356D-09
+ ISDGMR:  436    0.3160812D-09    0.3160812D-09
+ ISDGMR:  437    0.3103925D-09    0.3103925D-09
+ ISDGMR:  438    0.3103230D-09    0.3103230D-09
+ ISDGMR:  439    0.3099313D-09    0.3099313D-09
+ ISDGMR:  440    0.3086846D-09    0.3086846D-09
+ ISDGMR:  441    0.3086463D-09    0.3086463D-09
+ ISDGMR:  442    0.3065760D-09    0.3065760D-09
+ ISDGMR:  443    0.3061130D-09    0.3061130D-09
+ ISDGMR:  444    0.3015181D-09    0.3015181D-09
+ ISDGMR:  445    0.2905240D-09    0.2905240D-09
+ ISDGMR:  446    0.2902181D-09    0.2902181D-09
+ ISDGMR:  447    0.2900178D-09    0.2900178D-09
+ ISDGMR:  448    0.2494097D-09    0.2494097D-09
+ ISDGMR:  449    0.2451597D-09    0.2451597D-09
+ ISDGMR:  450    0.2446814D-09    0.2446814D-09
+ ISDGMR:  451    0.1667845D-09    0.1667845D-09
+ ISDGMR:  452    0.5879832D-10    0.5879832D-10
+ IErr=     0 Err= 5.88D-11 NSaved=     2 NIter=   452 NITot=   453.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err= 0.00D+00
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.16D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.1459953D-02    0.1459953D-02
+ ISDGMR:    1    0.9899802D-03    0.9899802D-03
+ ISDGMR:    2    0.7357427D-03    0.7357427D-03
+ ISDGMR:    3    0.2877021D-03    0.2877021D-03
+ ISDGMR:    4    0.4601284D-04    0.4601284D-04
+ ISDGMR:    5    0.2586783D-04    0.2586783D-04
+ ISDGMR:    6    0.1402166D-04    0.1402166D-04
+ ISDGMR:    7    0.1043895D-04    0.1043895D-04
+ ISDGMR:    8    0.9578997D-05    0.9578997D-05
+ ISDGMR:    9    0.8843586D-05    0.8843586D-05
+ ISDGMR:   10    0.7858488D-05    0.7858488D-05
+ ISDGMR:   11    0.6931772D-05    0.6931772D-05
+ ISDGMR:   12    0.6138934D-05    0.6138934D-05
+ ISDGMR:   13    0.4946423D-05    0.4946423D-05
+ ISDGMR:   14    0.4246412D-05    0.4246412D-05
+ ISDGMR:   15    0.3795788D-05    0.3795788D-05
+ ISDGMR:   16    0.3253681D-05    0.3253681D-05
+ ISDGMR:   17    0.2945677D-05    0.2945677D-05
+ ISDGMR:   18    0.2687084D-05    0.2687084D-05
+ ISDGMR:   19    0.2311567D-05    0.2311567D-05
+ ISDGMR:   20    0.1443761D-05    0.1443761D-05
+ ISDGMR:   21    0.1173456D-05    0.1173456D-05
+ ISDGMR:   22    0.6866794D-06    0.6866794D-06
+ ISDGMR:   23    0.5327332D-06    0.5327332D-06
+ ISDGMR:   24    0.4395341D-06    0.4395341D-06
+ ISDGMR:   25    0.4021970D-06    0.4021970D-06
+ ISDGMR:   26    0.3886725D-06    0.3886725D-06
+ ISDGMR:   27    0.3471490D-06    0.3471490D-06
+ ISDGMR:   28    0.3153404D-06    0.3153404D-06
+ ISDGMR:   29    0.2956724D-06    0.2956724D-06
+ ISDGMR:   30    0.2846869D-06    0.2846869D-06
+ ISDGMR:   31    0.2829110D-06    0.2829110D-06
+ ISDGMR:   32    0.2787074D-06    0.2787074D-06
+ ISDGMR:   33    0.2762761D-06    0.2762761D-06
+ ISDGMR:   34    0.2729911D-06    0.2729911D-06
+ ISDGMR:   35    0.2655234D-06    0.2655234D-06
+ ISDGMR:   36    0.2631618D-06    0.2631618D-06
+ ISDGMR:   37    0.2628673D-06    0.2628673D-06
+ ISDGMR:   38    0.2628324D-06    0.2628324D-06
+ ISDGMR:   39    0.2617354D-06    0.2617354D-06
+ ISDGMR:   40    0.2550191D-06    0.2550191D-06
+ ISDGMR:   41    0.2452081D-06    0.2452081D-06
+ ISDGMR:   42    0.2390264D-06    0.2390264D-06
+ ISDGMR:   43    0.2243602D-06    0.2243602D-06
+ ISDGMR:   44    0.2092626D-06    0.2092626D-06
+ ISDGMR:   45    0.1887310D-06    0.1887310D-06
+ ISDGMR:   46    0.1675098D-06    0.1675098D-06
+ ISDGMR:   47    0.1572307D-06    0.1572307D-06
+ ISDGMR:   48    0.1420582D-06    0.1420582D-06
+ ISDGMR:   49    0.1408456D-06    0.1408456D-06
+ ISDGMR:   50    0.1399117D-06    0.1399117D-06
+ ISDGMR:   51    0.1366824D-06    0.1366824D-06
+ ISDGMR:   52    0.1318403D-06    0.1318403D-06
+ ISDGMR:   53    0.1264677D-06    0.1264677D-06
+ ISDGMR:   54    0.1224996D-06    0.1224996D-06
+ ISDGMR:   55    0.1198550D-06    0.1198550D-06
+ ISDGMR:   56    0.1164617D-06    0.1164617D-06
+ ISDGMR:   57    0.1141349D-06    0.1141349D-06
+ ISDGMR:   58    0.1129853D-06    0.1129853D-06
+ ISDGMR:   59    0.1091676D-06    0.1091676D-06
+ ISDGMR:   60    0.9460416D-07    0.9460416D-07
+ ISDGMR:   61    0.9180876D-07    0.9180876D-07
+ ISDGMR:   62    0.8812655D-07    0.8812655D-07
+ ISDGMR:   63    0.8622452D-07    0.8622452D-07
+ ISDGMR:   64    0.8522979D-07    0.8522979D-07
+ ISDGMR:   65    0.8110105D-07    0.8110105D-07
+ ISDGMR:   66    0.8040015D-07    0.8040015D-07
+ ISDGMR:   67    0.7754482D-07    0.7754482D-07
+ ISDGMR:   68    0.7519444D-07    0.7519444D-07
+ ISDGMR:   69    0.7360487D-07    0.7360487D-07
+ ISDGMR:   70    0.7256637D-07    0.7256637D-07
+ ISDGMR:   71    0.7101476D-07    0.7101476D-07
+ ISDGMR:   72    0.7054245D-07    0.7054245D-07
+ ISDGMR:   73    0.6920971D-07    0.6920971D-07
+ ISDGMR:   74    0.6890606D-07    0.6890606D-07
+ ISDGMR:   75    0.6832360D-07    0.6832360D-07
+ ISDGMR:   76    0.6742935D-07    0.6742935D-07
+ ISDGMR:   77    0.6733694D-07    0.6733694D-07
+ ISDGMR:   78    0.6732757D-07    0.6732757D-07
+ ISDGMR:   79    0.6732754D-07    0.6732754D-07
+ ISDGMR:   80    0.6732633D-07    0.6732633D-07
+ ISDGMR:   81    0.6727665D-07    0.6727665D-07
+ ISDGMR:   82    0.6674991D-07    0.6674991D-07
+ ISDGMR:   83    0.6655844D-07    0.6655844D-07
+ ISDGMR:   84    0.6634667D-07    0.6634667D-07
+ ISDGMR:   85    0.6612482D-07    0.6612482D-07
+ ISDGMR:   86    0.6607157D-07    0.6607157D-07
+ ISDGMR:   87    0.6605301D-07    0.6605301D-07
+ ISDGMR:   88    0.6583815D-07    0.6583815D-07
+ ISDGMR:   89    0.6563970D-07    0.6563970D-07
+ ISDGMR:   90    0.6545576D-07    0.6545576D-07
+ ISDGMR:   91    0.6543404D-07    0.6543404D-07
+ ISDGMR:   92    0.6540366D-07    0.6540366D-07
+ ISDGMR:   93    0.6533873D-07    0.6533873D-07
+ ISDGMR:   94    0.6526430D-07    0.6526430D-07
+ ISDGMR:   95    0.6497275D-07    0.6497275D-07
+ ISDGMR:   96    0.6428409D-07    0.6428409D-07
+ ISDGMR:   97    0.6422390D-07    0.6422390D-07
+ ISDGMR:   98    0.6421582D-07    0.6421582D-07
+ ISDGMR:   99    0.6419788D-07    0.6419788D-07
+ ISDGMR:  100    0.6398685D-07    0.6398685D-07
+ ISDGMR:  101    0.6331492D-07    0.6331492D-07
+ ISDGMR:  102    0.6322274D-07    0.6322274D-07
+ ISDGMR:  103    0.6322250D-07    0.6322250D-07
+ ISDGMR:  104    0.6278412D-07    0.6278412D-07
+ ISDGMR:  105    0.6227276D-07    0.6227276D-07
+ ISDGMR:  106    0.6225027D-07    0.6225027D-07
+ ISDGMR:  107    0.6222512D-07    0.6222512D-07
+ ISDGMR:  108    0.6215070D-07    0.6215070D-07
+ ISDGMR:  109    0.6205078D-07    0.6205078D-07
+ ISDGMR:  110    0.6198815D-07    0.6198815D-07
+ ISDGMR:  111    0.6188427D-07    0.6188427D-07
+ ISDGMR:  112    0.6185825D-07    0.6185825D-07
+ ISDGMR:  113    0.6184452D-07    0.6184452D-07
+ ISDGMR:  114    0.6174656D-07    0.6174656D-07
+ ISDGMR:  115    0.6165987D-07    0.6165987D-07
+ ISDGMR:  116    0.6164408D-07    0.6164408D-07
+ ISDGMR:  117    0.6164367D-07    0.6164367D-07
+ ISDGMR:  118    0.6163613D-07    0.6163613D-07
+ ISDGMR:  119    0.6159292D-07    0.6159292D-07
+ ISDGMR:  120    0.6156017D-07    0.6156017D-07
+ ISDGMR:  121    0.6154655D-07    0.6154655D-07
+ ISDGMR:  122    0.6153907D-07    0.6153907D-07
+ ISDGMR:  123    0.6153907D-07    0.6153907D-07
+ ISDGMR:  124    0.6153373D-07    0.6153373D-07
+ ISDGMR:  125    0.6146774D-07    0.6146774D-07
+ ISDGMR:  126    0.6133251D-07    0.6133251D-07
+ ISDGMR:  127    0.6131659D-07    0.6131659D-07
+ ISDGMR:  128    0.6130634D-07    0.6130634D-07
+ ISDGMR:  129    0.6116090D-07    0.6116090D-07
+ ISDGMR:  130    0.6106980D-07    0.6106980D-07
+ ISDGMR:  131    0.6081201D-07    0.6081201D-07
+ ISDGMR:  132    0.5993893D-07    0.5993893D-07
+ ISDGMR:  133    0.5776057D-07    0.5776057D-07
+ ISDGMR:  134    0.5500516D-07    0.5500516D-07
+ ISDGMR:  135    0.5308171D-07    0.5308171D-07
+ ISDGMR:  136    0.5270342D-07    0.5270342D-07
+ ISDGMR:  137    0.5230705D-07    0.5230705D-07
+ ISDGMR:  138    0.5198004D-07    0.5198004D-07
+ ISDGMR:  139    0.5155130D-07    0.5155130D-07
+ ISDGMR:  140    0.5083147D-07    0.5083147D-07
+ ISDGMR:  141    0.4853066D-07    0.4853066D-07
+ ISDGMR:  142    0.4626039D-07    0.4626039D-07
+ ISDGMR:  143    0.4578348D-07    0.4578348D-07
+ ISDGMR:  144    0.4566297D-07    0.4566297D-07
+ ISDGMR:  145    0.4562217D-07    0.4562217D-07
+ ISDGMR:  146    0.4550289D-07    0.4550289D-07
+ ISDGMR:  147    0.4510509D-07    0.4510509D-07
+ ISDGMR:  148    0.4481283D-07    0.4481283D-07
+ ISDGMR:  149    0.4417826D-07    0.4417826D-07
+ ISDGMR:  150    0.4212181D-07    0.4212181D-07
+ ISDGMR:  151    0.3952284D-07    0.3952284D-07
+ ISDGMR:  152    0.3858809D-07    0.3858809D-07
+ ISDGMR:  153    0.3838385D-07    0.3838385D-07
+ ISDGMR:  154    0.3811871D-07    0.3811871D-07
+ ISDGMR:  155    0.3780039D-07    0.3780039D-07
+ ISDGMR:  156    0.3756424D-07    0.3756424D-07
+ ISDGMR:  157    0.3750223D-07    0.3750223D-07
+ ISDGMR:  158    0.3747800D-07    0.3747800D-07
+ ISDGMR:  159    0.3720258D-07    0.3720258D-07
+ ISDGMR:  160    0.3654898D-07    0.3654898D-07
+ ISDGMR:  161    0.3536541D-07    0.3536541D-07
+ ISDGMR:  162    0.3514709D-07    0.3514709D-07
+ ISDGMR:  163    0.3415675D-07    0.3415675D-07
+ ISDGMR:  164    0.3173845D-07    0.3173845D-07
+ ISDGMR:  165    0.2949167D-07    0.2949167D-07
+ ISDGMR:  166    0.2482647D-07    0.2482647D-07
+ ISDGMR:  167    0.2186807D-07    0.2186807D-07
+ ISDGMR:  168    0.2062691D-07    0.2062691D-07
+ ISDGMR:  169    0.2010786D-07    0.2010786D-07
+ ISDGMR:  170    0.2002735D-07    0.2002735D-07
+ ISDGMR:  171    0.1989494D-07    0.1989494D-07
+ ISDGMR:  172    0.1974563D-07    0.1974563D-07
+ ISDGMR:  173    0.1961770D-07    0.1961770D-07
+ ISDGMR:  174    0.1950301D-07    0.1950301D-07
+ ISDGMR:  175    0.1939119D-07    0.1939119D-07
+ ISDGMR:  176    0.1926701D-07    0.1926701D-07
+ ISDGMR:  177    0.1912785D-07    0.1912785D-07
+ ISDGMR:  178    0.1910258D-07    0.1910258D-07
+ ISDGMR:  179    0.1901673D-07    0.1901673D-07
+ ISDGMR:  180    0.1893557D-07    0.1893557D-07
+ ISDGMR:  181    0.1882534D-07    0.1882534D-07
+ ISDGMR:  182    0.1863410D-07    0.1863410D-07
+ ISDGMR:  183    0.1856625D-07    0.1856625D-07
+ ISDGMR:  184    0.1846460D-07    0.1846460D-07
+ ISDGMR:  185    0.1836065D-07    0.1836065D-07
+ ISDGMR:  186    0.1826498D-07    0.1826498D-07
+ ISDGMR:  187    0.1825961D-07    0.1825961D-07
+ ISDGMR:  188    0.1824798D-07    0.1824798D-07
+ ISDGMR:  189    0.1820105D-07    0.1820105D-07
+ ISDGMR:  190    0.1811421D-07    0.1811421D-07
+ ISDGMR:  191    0.1810818D-07    0.1810818D-07
+ ISDGMR:  192    0.1798230D-07    0.1798230D-07
+ ISDGMR:  193    0.1787942D-07    0.1787942D-07
+ ISDGMR:  194    0.1775733D-07    0.1775733D-07
+ ISDGMR:  195    0.1737053D-07    0.1737053D-07
+ ISDGMR:  196    0.1703150D-07    0.1703150D-07
+ ISDGMR:  197    0.1678651D-07    0.1678651D-07
+ ISDGMR:  198    0.1672696D-07    0.1672696D-07
+ ISDGMR:  199    0.1666333D-07    0.1666333D-07
+ ISDGMR:  200    0.1663696D-07    0.1663696D-07
+ ISDGMR:  201    0.1659748D-07    0.1659748D-07
+ ISDGMR:  202    0.1657267D-07    0.1657267D-07
+ ISDGMR:  203    0.1655258D-07    0.1655258D-07
+ ISDGMR:  204    0.1653357D-07    0.1653357D-07
+ ISDGMR:  205    0.1652380D-07    0.1652380D-07
+ ISDGMR:  206    0.1652087D-07    0.1652087D-07
+ ISDGMR:  207    0.1650761D-07    0.1650761D-07
+ ISDGMR:  208    0.1650533D-07    0.1650533D-07
+ ISDGMR:  209    0.1650530D-07    0.1650530D-07
+ ISDGMR:  210    0.1645642D-07    0.1645642D-07
+ ISDGMR:  211    0.1637488D-07    0.1637488D-07
+ ISDGMR:  212    0.1636910D-07    0.1636910D-07
+ ISDGMR:  213    0.1634745D-07    0.1634745D-07
+ ISDGMR:  214    0.1631842D-07    0.1631842D-07
+ ISDGMR:  215    0.1631598D-07    0.1631598D-07
+ ISDGMR:  216    0.1631006D-07    0.1631006D-07
+ ISDGMR:  217    0.1627434D-07    0.1627434D-07
+ ISDGMR:  218    0.1623011D-07    0.1623011D-07
+ ISDGMR:  219    0.1617244D-07    0.1617244D-07
+ ISDGMR:  220    0.1612376D-07    0.1612376D-07
+ ISDGMR:  221    0.1569663D-07    0.1569663D-07
+ ISDGMR:  222    0.1543973D-07    0.1543973D-07
+ ISDGMR:  223    0.1534003D-07    0.1534003D-07
+ ISDGMR:  224    0.1531737D-07    0.1531737D-07
+ ISDGMR:  225    0.1512981D-07    0.1512981D-07
+ ISDGMR:  226    0.1470224D-07    0.1470224D-07
+ ISDGMR:  227    0.1459923D-07    0.1459923D-07
+ ISDGMR:  228    0.1444940D-07    0.1444940D-07
+ ISDGMR:  229    0.1434438D-07    0.1434438D-07
+ ISDGMR:  230    0.1424463D-07    0.1424463D-07
+ ISDGMR:  231    0.1420195D-07    0.1420195D-07
+ ISDGMR:  232    0.1416054D-07    0.1416054D-07
+ ISDGMR:  233    0.1415352D-07    0.1415352D-07
+ ISDGMR:  234    0.1415087D-07    0.1415087D-07
+ ISDGMR:  235    0.1410829D-07    0.1410829D-07
+ ISDGMR:  236    0.1406930D-07    0.1406930D-07
+ ISDGMR:  237    0.1402657D-07    0.1402657D-07
+ ISDGMR:  238    0.1389940D-07    0.1389940D-07
+ ISDGMR:  239    0.1360959D-07    0.1360959D-07
+ ISDGMR:  240    0.1295056D-07    0.1295056D-07
+ ISDGMR:  241    0.1277003D-07    0.1277003D-07
+ ISDGMR:  242    0.1258278D-07    0.1258278D-07
+ ISDGMR:  243    0.1232955D-07    0.1232955D-07
+ ISDGMR:  244    0.1226225D-07    0.1226225D-07
+ ISDGMR:  245    0.1188892D-07    0.1188892D-07
+ ISDGMR:  246    0.1142957D-07    0.1142957D-07
+ ISDGMR:  247    0.1109601D-07    0.1109601D-07
+ ISDGMR:  248    0.1013592D-07    0.1013592D-07
+ ISDGMR:  249    0.1011161D-07    0.1011161D-07
+ ISDGMR:  250    0.1009883D-07    0.1009883D-07
+ ISDGMR:  251    0.1006749D-07    0.1006749D-07
+ ISDGMR:  252    0.1006180D-07    0.1006180D-07
+ ISDGMR:  253    0.1004226D-07    0.1004226D-07
+ ISDGMR:  254    0.9999268D-08    0.9999268D-08
+ ISDGMR:  255    0.9931059D-08    0.9931059D-08
+ ISDGMR:  256    0.9917833D-08    0.9917833D-08
+ ISDGMR:  257    0.9911149D-08    0.9911149D-08
+ ISDGMR:  258    0.9908352D-08    0.9908352D-08
+ ISDGMR:  259    0.9906800D-08    0.9906800D-08
+ ISDGMR:  260    0.9852675D-08    0.9852675D-08
+ ISDGMR:  261    0.9833108D-08    0.9833108D-08
+ ISDGMR:  262    0.9784328D-08    0.9784328D-08
+ ISDGMR:  263    0.9707534D-08    0.9707534D-08
+ ISDGMR:  264    0.9702406D-08    0.9702406D-08
+ ISDGMR:  265    0.9686387D-08    0.9686387D-08
+ ISDGMR:  266    0.9559325D-08    0.9559325D-08
+ ISDGMR:  267    0.9436143D-08    0.9436143D-08
+ ISDGMR:  268    0.9341137D-08    0.9341137D-08
+ ISDGMR:  269    0.9253159D-08    0.9253159D-08
+ ISDGMR:  270    0.9213101D-08    0.9213101D-08
+ ISDGMR:  271    0.8858383D-08    0.8858383D-08
+ ISDGMR:  272    0.8671046D-08    0.8671046D-08
+ ISDGMR:  273    0.8543741D-08    0.8543741D-08
+ ISDGMR:  274    0.8470691D-08    0.8470691D-08
+ ISDGMR:  275    0.8455292D-08    0.8455292D-08
+ ISDGMR:  276    0.8452216D-08    0.8452216D-08
+ ISDGMR:  277    0.8443705D-08    0.8443705D-08
+ ISDGMR:  278    0.8401034D-08    0.8401034D-08
+ ISDGMR:  279    0.8378223D-08    0.8378223D-08
+ ISDGMR:  280    0.8192212D-08    0.8192212D-08
+ ISDGMR:  281    0.8137816D-08    0.8137816D-08
+ ISDGMR:  282    0.8091979D-08    0.8091979D-08
+ ISDGMR:  283    0.8013248D-08    0.8013248D-08
+ ISDGMR:  284    0.7933087D-08    0.7933087D-08
+ ISDGMR:  285    0.7868481D-08    0.7868481D-08
+ ISDGMR:  286    0.6768230D-08    0.6768230D-08
+ ISDGMR:  287    0.5309192D-08    0.5309192D-08
+ ISDGMR:  288    0.4850726D-08    0.4850726D-08
+ ISDGMR:  289    0.4793487D-08    0.4793487D-08
+ ISDGMR:  290    0.4652286D-08    0.4652286D-08
+ ISDGMR:  291    0.4600134D-08    0.4600134D-08
+ ISDGMR:  292    0.4569497D-08    0.4569497D-08
+ ISDGMR:  293    0.4380418D-08    0.4380418D-08
+ ISDGMR:  294    0.4071896D-08    0.4071896D-08
+ ISDGMR:  295    0.4036515D-08    0.4036515D-08
+ ISDGMR:  296    0.4015643D-08    0.4015643D-08
+ ISDGMR:  297    0.4008148D-08    0.4008148D-08
+ ISDGMR:  298    0.3994363D-08    0.3994363D-08
+ ISDGMR:  299    0.3988597D-08    0.3988597D-08
+ ISDGMR:  300    0.3931759D-08    0.3931759D-08
+ ISDGMR:  301    0.3930571D-08    0.3930571D-08
+ ISDGMR:  302    0.3927976D-08    0.3927976D-08
+ ISDGMR:  303    0.3887596D-08    0.3887596D-08
+ ISDGMR:  304    0.3886549D-08    0.3886549D-08
+ ISDGMR:  305    0.3856632D-08    0.3856632D-08
+ ISDGMR:  306    0.3850126D-08    0.3850126D-08
+ ISDGMR:  307    0.3818994D-08    0.3818994D-08
+ ISDGMR:  308    0.3810467D-08    0.3810467D-08
+ ISDGMR:  309    0.3804307D-08    0.3804307D-08
+ ISDGMR:  310    0.3802110D-08    0.3802110D-08
+ ISDGMR:  311    0.3763884D-08    0.3763884D-08
+ ISDGMR:  312    0.3704406D-08    0.3704406D-08
+ ISDGMR:  313    0.3615922D-08    0.3615922D-08
+ ISDGMR:  314    0.3589351D-08    0.3589351D-08
+ ISDGMR:  315    0.3554492D-08    0.3554492D-08
+ ISDGMR:  316    0.3544645D-08    0.3544645D-08
+ ISDGMR:  317    0.3541435D-08    0.3541435D-08
+ ISDGMR:  318    0.3537950D-08    0.3537950D-08
+ ISDGMR:  319    0.3535775D-08    0.3535775D-08
+ ISDGMR:  320    0.3533732D-08    0.3533732D-08
+ ISDGMR:  321    0.3516261D-08    0.3516261D-08
+ ISDGMR:  322    0.3512709D-08    0.3512709D-08
+ ISDGMR:  323    0.3511377D-08    0.3511377D-08
+ ISDGMR:  324    0.3496620D-08    0.3496620D-08
+ ISDGMR:  325    0.3495225D-08    0.3495225D-08
+ ISDGMR:  326    0.3475273D-08    0.3475273D-08
+ ISDGMR:  327    0.3425184D-08    0.3425184D-08
+ ISDGMR:  328    0.3423614D-08    0.3423614D-08
+ ISDGMR:  329    0.3314922D-08    0.3314922D-08
+ ISDGMR:  330    0.3294418D-08    0.3294418D-08
+ ISDGMR:  331    0.3291869D-08    0.3291869D-08
+ ISDGMR:  332    0.3275734D-08    0.3275734D-08
+ ISDGMR:  333    0.3223940D-08    0.3223940D-08
+ ISDGMR:  334    0.3167848D-08    0.3167848D-08
+ ISDGMR:  335    0.3067940D-08    0.3067940D-08
+ ISDGMR:  336    0.3031947D-08    0.3031947D-08
+ ISDGMR:  337    0.2989918D-08    0.2989918D-08
+ ISDGMR:  338    0.2927981D-08    0.2927981D-08
+ ISDGMR:  339    0.2912117D-08    0.2912117D-08
+ ISDGMR:  340    0.2795866D-08    0.2795866D-08
+ ISDGMR:  341    0.2672103D-08    0.2672103D-08
+ ISDGMR:  342    0.2545173D-08    0.2545173D-08
+ ISDGMR:  343    0.2522452D-08    0.2522452D-08
+ ISDGMR:  344    0.2518001D-08    0.2518001D-08
+ ISDGMR:  345    0.2498582D-08    0.2498582D-08
+ ISDGMR:  346    0.2492677D-08    0.2492677D-08
+ ISDGMR:  347    0.2492556D-08    0.2492556D-08
+ ISDGMR:  348    0.2489043D-08    0.2489043D-08
+ ISDGMR:  349    0.2483485D-08    0.2483485D-08
+ ISDGMR:  350    0.2480203D-08    0.2480203D-08
+ ISDGMR:  351    0.2437533D-08    0.2437533D-08
+ ISDGMR:  352    0.2436329D-08    0.2436329D-08
+ ISDGMR:  353    0.2432796D-08    0.2432796D-08
+ ISDGMR:  354    0.2430466D-08    0.2430466D-08
+ ISDGMR:  355    0.2429935D-08    0.2429935D-08
+ ISDGMR:  356    0.2424119D-08    0.2424119D-08
+ ISDGMR:  357    0.2417908D-08    0.2417908D-08
+ ISDGMR:  358    0.2258978D-08    0.2258978D-08
+ ISDGMR:  359    0.2218930D-08    0.2218930D-08
+ ISDGMR:  360    0.2216408D-08    0.2216408D-08
+ ISDGMR:  361    0.2208845D-08    0.2208845D-08
+ ISDGMR:  362    0.2207965D-08    0.2207965D-08
+ ISDGMR:  363    0.2186404D-08    0.2186404D-08
+ ISDGMR:  364    0.2179469D-08    0.2179469D-08
+ ISDGMR:  365    0.2178255D-08    0.2178255D-08
+ ISDGMR:  366    0.2178191D-08    0.2178191D-08
+ ISDGMR:  367    0.2164513D-08    0.2164513D-08
+ ISDGMR:  368    0.2162606D-08    0.2162606D-08
+ ISDGMR:  369    0.2137284D-08    0.2137284D-08
+ ISDGMR:  370    0.2128922D-08    0.2128922D-08
+ ISDGMR:  371    0.2126568D-08    0.2126568D-08
+ ISDGMR:  372    0.1968185D-08    0.1968185D-08
+ ISDGMR:  373    0.1950452D-08    0.1950452D-08
+ ISDGMR:  374    0.1934958D-08    0.1934958D-08
+ ISDGMR:  375    0.1932525D-08    0.1932525D-08
+ ISDGMR:  376    0.1928037D-08    0.1928037D-08
+ ISDGMR:  377    0.1786912D-08    0.1786912D-08
+ ISDGMR:  378    0.1730960D-08    0.1730960D-08
+ ISDGMR:  379    0.1635328D-08    0.1635328D-08
+ ISDGMR:  380    0.1619305D-08    0.1619305D-08
+ ISDGMR:  381    0.1619222D-08    0.1619222D-08
+ ISDGMR:  382    0.1553643D-08    0.1553643D-08
+ ISDGMR:  383    0.1461361D-08    0.1461361D-08
+ ISDGMR:  384    0.1353588D-08    0.1353588D-08
+ ISDGMR:  385    0.1304152D-08    0.1304152D-08
+ ISDGMR:  386    0.1296912D-08    0.1296912D-08
+ ISDGMR:  387    0.1045717D-08    0.1045717D-08
+ ISDGMR:  388    0.8927050D-09    0.8927050D-09
+ ISDGMR:  389    0.8806048D-09    0.8806048D-09
+ ISDGMR:  390    0.8511517D-09    0.8511517D-09
+ ISDGMR:  391    0.8346774D-09    0.8346774D-09
+ ISDGMR:  392    0.7268958D-09    0.7268958D-09
+ ISDGMR:  393    0.7265771D-09    0.7265771D-09
+ ISDGMR:  394    0.6653229D-09    0.6653229D-09
+ ISDGMR:  395    0.6286113D-09    0.6286113D-09
+ ISDGMR:  396    0.6251329D-09    0.6251329D-09
+ ISDGMR:  397    0.6212446D-09    0.6212446D-09
+ ISDGMR:  398    0.6203278D-09    0.6203278D-09
+ ISDGMR:  399    0.6143655D-09    0.6143655D-09
+ ISDGMR:  400    0.6141703D-09    0.6141703D-09
+ ISDGMR:  401    0.6009234D-09    0.6009234D-09
+ ISDGMR:  402    0.5452115D-09    0.5452115D-09
+ ISDGMR:  403    0.5437102D-09    0.5437102D-09
+ ISDGMR:  404    0.5432565D-09    0.5432565D-09
+ ISDGMR:  405    0.5370257D-09    0.5370257D-09
+ ISDGMR:  406    0.5340251D-09    0.5340251D-09
+ ISDGMR:  407    0.5282366D-09    0.5282366D-09
+ ISDGMR:  408    0.5271048D-09    0.5271048D-09
+ ISDGMR:  409    0.5219706D-09    0.5219706D-09
+ ISDGMR:  410    0.5142709D-09    0.5142709D-09
+ ISDGMR:  411    0.5139041D-09    0.5139041D-09
+ ISDGMR:  412    0.4984228D-09    0.4984228D-09
+ ISDGMR:  413    0.4945566D-09    0.4945566D-09
+ ISDGMR:  414    0.4905472D-09    0.4905472D-09
+ ISDGMR:  415    0.4431068D-09    0.4431068D-09
+ ISDGMR:  416    0.4403454D-09    0.4403454D-09
+ ISDGMR:  417    0.4383999D-09    0.4383999D-09
+ ISDGMR:  418    0.4303422D-09    0.4303422D-09
+ ISDGMR:  419    0.4300936D-09    0.4300936D-09
+ ISDGMR:  420    0.4293898D-09    0.4293898D-09
+ ISDGMR:  421    0.3338767D-09    0.3338767D-09
+ ISDGMR:  422    0.2653094D-09    0.2653094D-09
+ ISDGMR:  423    0.2652746D-09    0.2652746D-09
+ ISDGMR:  424    0.2411628D-09    0.2411628D-09
+ ISDGMR:  425    0.2401220D-09    0.2401220D-09
+ ISDGMR:  426    0.2138916D-09    0.2138916D-09
+ ISDGMR:  427    0.1770738D-09    0.1770738D-09
+ ISDGMR:  428    0.1766983D-09    0.1766983D-09
+ ISDGMR:  429    0.1648770D-09    0.1648770D-09
+ ISDGMR:  430    0.1640781D-09    0.1640781D-09
+ ISDGMR:  431    0.1640645D-09    0.1640645D-09
+ ISDGMR:  432    0.1623565D-09    0.1623565D-09
+ ISDGMR:  433    0.1599322D-09    0.1599322D-09
+ ISDGMR:  434    0.1598741D-09    0.1598741D-09
+ ISDGMR:  435    0.1591112D-09    0.1591112D-09
+ ISDGMR:  436    0.1576587D-09    0.1576587D-09
+ ISDGMR:  437    0.1576358D-09    0.1576358D-09
+ ISDGMR:  438    0.1567973D-09    0.1567973D-09
+ ISDGMR:  439    0.1559429D-09    0.1559429D-09
+ ISDGMR:  440    0.1559179D-09    0.1559179D-09
+ ISDGMR:  441    0.1486454D-09    0.1486454D-09
+ ISDGMR:  442    0.1449675D-09    0.1449675D-09
+ ISDGMR:  443    0.1420878D-09    0.1420878D-09
+ ISDGMR:  444    0.1361799D-09    0.1361799D-09
+ ISDGMR:  445    0.1361229D-09    0.1361229D-09
+ ISDGMR:  446    0.1355492D-09    0.1355492D-09
+ ISDGMR:  447    0.1286533D-09    0.1286533D-09
+ ISDGMR:  448    0.1286498D-09    0.1286498D-09
+ ISDGMR:  449    0.1263253D-09    0.1263253D-09
+ ISDGMR:  450    0.9756533D-10    0.9756533D-10
+ IErr=     0 Err= 9.76D-11 NSaved=     3 NIter=   450 NITot=   454.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err=-1.11D-16
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.29D+04 BPNorm= 1.17D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.2584996D-03    0.2584996D-03
+ ISDGMR:    1    0.1827714D-03    0.1827714D-03
+ ISDGMR:    2    0.1069881D-03    0.1069881D-03
+ ISDGMR:    3    0.4702760D-04    0.4702760D-04
+ ISDGMR:    4    0.2052900D-04    0.2052900D-04
+ ISDGMR:    5    0.5446610D-05    0.5446610D-05
+ ISDGMR:    6    0.3245688D-05    0.3245688D-05
+ ISDGMR:    7    0.2753647D-05    0.2753647D-05
+ ISDGMR:    8    0.1490045D-05    0.1490045D-05
+ ISDGMR:    9    0.1246787D-05    0.1246787D-05
+ ISDGMR:   10    0.9272099D-06    0.9272099D-06
+ ISDGMR:   11    0.7952985D-06    0.7952985D-06
+ ISDGMR:   12    0.6955700D-06    0.6955700D-06
+ ISDGMR:   13    0.5568174D-06    0.5568174D-06
+ ISDGMR:   14    0.4391496D-06    0.4391496D-06
+ ISDGMR:   15    0.3960471D-06    0.3960471D-06
+ ISDGMR:   16    0.3399977D-06    0.3399977D-06
+ ISDGMR:   17    0.2651909D-06    0.2651909D-06
+ ISDGMR:   18    0.1948653D-06    0.1948653D-06
+ ISDGMR:   19    0.1708831D-06    0.1708831D-06
+ ISDGMR:   20    0.1663839D-06    0.1663839D-06
+ ISDGMR:   21    0.1662701D-06    0.1662701D-06
+ ISDGMR:   22    0.1662376D-06    0.1662376D-06
+ ISDGMR:   23    0.1611771D-06    0.1611771D-06
+ ISDGMR:   24    0.1462001D-06    0.1462001D-06
+ ISDGMR:   25    0.1425672D-06    0.1425672D-06
+ ISDGMR:   26    0.1374755D-06    0.1374755D-06
+ ISDGMR:   27    0.1286815D-06    0.1286815D-06
+ ISDGMR:   28    0.1167714D-06    0.1167714D-06
+ ISDGMR:   29    0.9408140D-07    0.9408140D-07
+ ISDGMR:   30    0.7922997D-07    0.7922997D-07
+ ISDGMR:   31    0.5821926D-07    0.5821926D-07
+ ISDGMR:   32    0.3582703D-07    0.3582703D-07
+ ISDGMR:   33    0.3031332D-07    0.3031332D-07
+ ISDGMR:   34    0.2701852D-07    0.2701852D-07
+ ISDGMR:   35    0.2221870D-07    0.2221870D-07
+ ISDGMR:   36    0.1997473D-07    0.1997473D-07
+ ISDGMR:   37    0.1793148D-07    0.1793148D-07
+ ISDGMR:   38    0.1739226D-07    0.1739226D-07
+ ISDGMR:   39    0.1731920D-07    0.1731920D-07
+ ISDGMR:   40    0.1730789D-07    0.1730789D-07
+ ISDGMR:   41    0.1524730D-07    0.1524730D-07
+ ISDGMR:   42    0.1487847D-07    0.1487847D-07
+ ISDGMR:   43    0.1476446D-07    0.1476446D-07
+ ISDGMR:   44    0.1468589D-07    0.1468589D-07
+ ISDGMR:   45    0.1460878D-07    0.1460878D-07
+ ISDGMR:   46    0.1443118D-07    0.1443118D-07
+ ISDGMR:   47    0.1389251D-07    0.1389251D-07
+ ISDGMR:   48    0.1130256D-07    0.1130256D-07
+ ISDGMR:   49    0.1029692D-07    0.1029692D-07
+ ISDGMR:   50    0.1006627D-07    0.1006627D-07
+ ISDGMR:   51    0.9938374D-08    0.9938374D-08
+ ISDGMR:   52    0.9670001D-08    0.9670001D-08
+ ISDGMR:   53    0.9226341D-08    0.9226341D-08
+ ISDGMR:   54    0.9156942D-08    0.9156942D-08
+ ISDGMR:   55    0.9064199D-08    0.9064199D-08
+ ISDGMR:   56    0.9011207D-08    0.9011207D-08
+ ISDGMR:   57    0.9007522D-08    0.9007522D-08
+ ISDGMR:   58    0.9006537D-08    0.9006537D-08
+ ISDGMR:   59    0.9001259D-08    0.9001259D-08
+ ISDGMR:   60    0.8927965D-08    0.8927965D-08
+ ISDGMR:   61    0.8714336D-08    0.8714336D-08
+ ISDGMR:   62    0.8439112D-08    0.8439112D-08
+ ISDGMR:   63    0.8261802D-08    0.8261802D-08
+ ISDGMR:   64    0.8025434D-08    0.8025434D-08
+ ISDGMR:   65    0.7755667D-08    0.7755667D-08
+ ISDGMR:   66    0.7733207D-08    0.7733207D-08
+ ISDGMR:   67    0.7715902D-08    0.7715902D-08
+ ISDGMR:   68    0.7683012D-08    0.7683012D-08
+ ISDGMR:   69    0.7648013D-08    0.7648013D-08
+ ISDGMR:   70    0.7621004D-08    0.7621004D-08
+ ISDGMR:   71    0.7621004D-08    0.7621004D-08
+ ISDGMR:   72    0.7609725D-08    0.7609725D-08
+ ISDGMR:   73    0.7584676D-08    0.7584676D-08
+ ISDGMR:   74    0.7557948D-08    0.7557948D-08
+ ISDGMR:   75    0.7540744D-08    0.7540744D-08
+ ISDGMR:   76    0.7534987D-08    0.7534987D-08
+ ISDGMR:   77    0.7526718D-08    0.7526718D-08
+ ISDGMR:   78    0.7506437D-08    0.7506437D-08
+ ISDGMR:   79    0.7505812D-08    0.7505812D-08
+ ISDGMR:   80    0.7485302D-08    0.7485302D-08
+ ISDGMR:   81    0.7464389D-08    0.7464389D-08
+ ISDGMR:   82    0.7434853D-08    0.7434853D-08
+ ISDGMR:   83    0.7434828D-08    0.7434828D-08
+ ISDGMR:   84    0.7432002D-08    0.7432002D-08
+ ISDGMR:   85    0.7425202D-08    0.7425202D-08
+ ISDGMR:   86    0.7423385D-08    0.7423385D-08
+ ISDGMR:   87    0.7419493D-08    0.7419493D-08
+ ISDGMR:   88    0.7411941D-08    0.7411941D-08
+ ISDGMR:   89    0.7360238D-08    0.7360238D-08
+ ISDGMR:   90    0.7306708D-08    0.7306708D-08
+ ISDGMR:   91    0.7288576D-08    0.7288576D-08
+ ISDGMR:   92    0.7287278D-08    0.7287278D-08
+ ISDGMR:   93    0.7285888D-08    0.7285888D-08
+ ISDGMR:   94    0.7247491D-08    0.7247491D-08
+ ISDGMR:   95    0.7245367D-08    0.7245367D-08
+ ISDGMR:   96    0.7221577D-08    0.7221577D-08
+ ISDGMR:   97    0.7221451D-08    0.7221451D-08
+ ISDGMR:   98    0.7215711D-08    0.7215711D-08
+ ISDGMR:   99    0.7215076D-08    0.7215076D-08
+ ISDGMR:  100    0.7215048D-08    0.7215048D-08
+ ISDGMR:  101    0.7214327D-08    0.7214327D-08
+ ISDGMR:  102    0.7214318D-08    0.7214318D-08
+ ISDGMR:  103    0.7182870D-08    0.7182870D-08
+ ISDGMR:  104    0.7168007D-08    0.7168007D-08
+ ISDGMR:  105    0.7166162D-08    0.7166162D-08
+ ISDGMR:  106    0.7166131D-08    0.7166131D-08
+ ISDGMR:  107    0.7163993D-08    0.7163993D-08
+ ISDGMR:  108    0.7134497D-08    0.7134497D-08
+ ISDGMR:  109    0.7066068D-08    0.7066068D-08
+ ISDGMR:  110    0.7056738D-08    0.7056738D-08
+ ISDGMR:  111    0.7055695D-08    0.7055695D-08
+ ISDGMR:  112    0.7024278D-08    0.7024278D-08
+ ISDGMR:  113    0.6740523D-08    0.6740523D-08
+ ISDGMR:  114    0.6660356D-08    0.6660356D-08
+ ISDGMR:  115    0.6658464D-08    0.6658464D-08
+ ISDGMR:  116    0.6651244D-08    0.6651244D-08
+ ISDGMR:  117    0.6649516D-08    0.6649516D-08
+ ISDGMR:  118    0.6639650D-08    0.6639650D-08
+ ISDGMR:  119    0.6627425D-08    0.6627425D-08
+ ISDGMR:  120    0.6627374D-08    0.6627374D-08
+ ISDGMR:  121    0.6618109D-08    0.6618109D-08
+ ISDGMR:  122    0.6599820D-08    0.6599820D-08
+ ISDGMR:  123    0.6564212D-08    0.6564212D-08
+ ISDGMR:  124    0.6555922D-08    0.6555922D-08
+ ISDGMR:  125    0.6554860D-08    0.6554860D-08
+ ISDGMR:  126    0.6545027D-08    0.6545027D-08
+ ISDGMR:  127    0.6537597D-08    0.6537597D-08
+ ISDGMR:  128    0.6525216D-08    0.6525216D-08
+ ISDGMR:  129    0.6428408D-08    0.6428408D-08
+ ISDGMR:  130    0.6323622D-08    0.6323622D-08
+ ISDGMR:  131    0.6142231D-08    0.6142231D-08
+ ISDGMR:  132    0.6026463D-08    0.6026463D-08
+ ISDGMR:  133    0.5992283D-08    0.5992283D-08
+ ISDGMR:  134    0.5961246D-08    0.5961246D-08
+ ISDGMR:  135    0.5957761D-08    0.5957761D-08
+ ISDGMR:  136    0.5944910D-08    0.5944910D-08
+ ISDGMR:  137    0.5903308D-08    0.5903308D-08
+ ISDGMR:  138    0.5805360D-08    0.5805360D-08
+ ISDGMR:  139    0.5568633D-08    0.5568633D-08
+ ISDGMR:  140    0.5285308D-08    0.5285308D-08
+ ISDGMR:  141    0.5077745D-08    0.5077745D-08
+ ISDGMR:  142    0.4775007D-08    0.4775007D-08
+ ISDGMR:  143    0.4585140D-08    0.4585140D-08
+ ISDGMR:  144    0.4533778D-08    0.4533778D-08
+ ISDGMR:  145    0.4517751D-08    0.4517751D-08
+ ISDGMR:  146    0.4507508D-08    0.4507508D-08
+ ISDGMR:  147    0.4491957D-08    0.4491957D-08
+ ISDGMR:  148    0.4462712D-08    0.4462712D-08
+ ISDGMR:  149    0.4461989D-08    0.4461989D-08
+ ISDGMR:  150    0.4444595D-08    0.4444595D-08
+ ISDGMR:  151    0.4356176D-08    0.4356176D-08
+ ISDGMR:  152    0.4306904D-08    0.4306904D-08
+ ISDGMR:  153    0.4263966D-08    0.4263966D-08
+ ISDGMR:  154    0.4255432D-08    0.4255432D-08
+ ISDGMR:  155    0.4230462D-08    0.4230462D-08
+ ISDGMR:  156    0.4200032D-08    0.4200032D-08
+ ISDGMR:  157    0.4174443D-08    0.4174443D-08
+ ISDGMR:  158    0.4152518D-08    0.4152518D-08
+ ISDGMR:  159    0.4140132D-08    0.4140132D-08
+ ISDGMR:  160    0.4119852D-08    0.4119852D-08
+ ISDGMR:  161    0.4093958D-08    0.4093958D-08
+ ISDGMR:  162    0.4050349D-08    0.4050349D-08
+ ISDGMR:  163    0.3923304D-08    0.3923304D-08
+ ISDGMR:  164    0.3850608D-08    0.3850608D-08
+ ISDGMR:  165    0.3796810D-08    0.3796810D-08
+ ISDGMR:  166    0.3724383D-08    0.3724383D-08
+ ISDGMR:  167    0.3667051D-08    0.3667051D-08
+ ISDGMR:  168    0.3607833D-08    0.3607833D-08
+ ISDGMR:  169    0.3587517D-08    0.3587517D-08
+ ISDGMR:  170    0.3547367D-08    0.3547367D-08
+ ISDGMR:  171    0.3458583D-08    0.3458583D-08
+ ISDGMR:  172    0.3427090D-08    0.3427090D-08
+ ISDGMR:  173    0.3396447D-08    0.3396447D-08
+ ISDGMR:  174    0.3377292D-08    0.3377292D-08
+ ISDGMR:  175    0.3356331D-08    0.3356331D-08
+ ISDGMR:  176    0.3335805D-08    0.3335805D-08
+ ISDGMR:  177    0.3316091D-08    0.3316091D-08
+ ISDGMR:  178    0.3262717D-08    0.3262717D-08
+ ISDGMR:  179    0.3127157D-08    0.3127157D-08
+ ISDGMR:  180    0.2989289D-08    0.2989289D-08
+ ISDGMR:  181    0.2885407D-08    0.2885407D-08
+ ISDGMR:  182    0.2704141D-08    0.2704141D-08
+ ISDGMR:  183    0.2523112D-08    0.2523112D-08
+ ISDGMR:  184    0.2340721D-08    0.2340721D-08
+ ISDGMR:  185    0.2315618D-08    0.2315618D-08
+ ISDGMR:  186    0.2300915D-08    0.2300915D-08
+ ISDGMR:  187    0.2255344D-08    0.2255344D-08
+ ISDGMR:  188    0.2233708D-08    0.2233708D-08
+ ISDGMR:  189    0.2210893D-08    0.2210893D-08
+ ISDGMR:  190    0.2192209D-08    0.2192209D-08
+ ISDGMR:  191    0.2169240D-08    0.2169240D-08
+ ISDGMR:  192    0.2158068D-08    0.2158068D-08
+ ISDGMR:  193    0.2157576D-08    0.2157576D-08
+ ISDGMR:  194    0.2156045D-08    0.2156045D-08
+ ISDGMR:  195    0.2143853D-08    0.2143853D-08
+ ISDGMR:  196    0.2140766D-08    0.2140766D-08
+ ISDGMR:  197    0.2126576D-08    0.2126576D-08
+ ISDGMR:  198    0.2117521D-08    0.2117521D-08
+ ISDGMR:  199    0.2113887D-08    0.2113887D-08
+ ISDGMR:  200    0.2112093D-08    0.2112093D-08
+ ISDGMR:  201    0.2105009D-08    0.2105009D-08
+ ISDGMR:  202    0.2099047D-08    0.2099047D-08
+ ISDGMR:  203    0.2098286D-08    0.2098286D-08
+ ISDGMR:  204    0.2090738D-08    0.2090738D-08
+ ISDGMR:  205    0.2022521D-08    0.2022521D-08
+ ISDGMR:  206    0.2013243D-08    0.2013243D-08
+ ISDGMR:  207    0.1995965D-08    0.1995965D-08
+ ISDGMR:  208    0.1953710D-08    0.1953710D-08
+ ISDGMR:  209    0.1953600D-08    0.1953600D-08
+ ISDGMR:  210    0.1947196D-08    0.1947196D-08
+ ISDGMR:  211    0.1939422D-08    0.1939422D-08
+ ISDGMR:  212    0.1938682D-08    0.1938682D-08
+ ISDGMR:  213    0.1936197D-08    0.1936197D-08
+ ISDGMR:  214    0.1910659D-08    0.1910659D-08
+ ISDGMR:  215    0.1895261D-08    0.1895261D-08
+ ISDGMR:  216    0.1877246D-08    0.1877246D-08
+ ISDGMR:  217    0.1870990D-08    0.1870990D-08
+ ISDGMR:  218    0.1851896D-08    0.1851896D-08
+ ISDGMR:  219    0.1849841D-08    0.1849841D-08
+ ISDGMR:  220    0.1844212D-08    0.1844212D-08
+ ISDGMR:  221    0.1834839D-08    0.1834839D-08
+ ISDGMR:  222    0.1804705D-08    0.1804705D-08
+ ISDGMR:  223    0.1789730D-08    0.1789730D-08
+ ISDGMR:  224    0.1789084D-08    0.1789084D-08
+ ISDGMR:  225    0.1788385D-08    0.1788385D-08
+ ISDGMR:  226    0.1786117D-08    0.1786117D-08
+ ISDGMR:  227    0.1781969D-08    0.1781969D-08
+ ISDGMR:  228    0.1781643D-08    0.1781643D-08
+ ISDGMR:  229    0.1781197D-08    0.1781197D-08
+ ISDGMR:  230    0.1773616D-08    0.1773616D-08
+ ISDGMR:  231    0.1771129D-08    0.1771129D-08
+ ISDGMR:  232    0.1770920D-08    0.1770920D-08
+ ISDGMR:  233    0.1768726D-08    0.1768726D-08
+ ISDGMR:  234    0.1757948D-08    0.1757948D-08
+ ISDGMR:  235    0.1754265D-08    0.1754265D-08
+ ISDGMR:  236    0.1752433D-08    0.1752433D-08
+ ISDGMR:  237    0.1744007D-08    0.1744007D-08
+ ISDGMR:  238    0.1733135D-08    0.1733135D-08
+ ISDGMR:  239    0.1720905D-08    0.1720905D-08
+ ISDGMR:  240    0.1663954D-08    0.1663954D-08
+ ISDGMR:  241    0.1618865D-08    0.1618865D-08
+ ISDGMR:  242    0.1600034D-08    0.1600034D-08
+ ISDGMR:  243    0.1558974D-08    0.1558974D-08
+ ISDGMR:  244    0.1538156D-08    0.1538156D-08
+ ISDGMR:  245    0.1534888D-08    0.1534888D-08
+ ISDGMR:  246    0.1532314D-08    0.1532314D-08
+ ISDGMR:  247    0.1525002D-08    0.1525002D-08
+ ISDGMR:  248    0.1511317D-08    0.1511317D-08
+ ISDGMR:  249    0.1501736D-08    0.1501736D-08
+ ISDGMR:  250    0.1486407D-08    0.1486407D-08
+ ISDGMR:  251    0.1479943D-08    0.1479943D-08
+ ISDGMR:  252    0.1475033D-08    0.1475033D-08
+ ISDGMR:  253    0.1472462D-08    0.1472462D-08
+ ISDGMR:  254    0.1463929D-08    0.1463929D-08
+ ISDGMR:  255    0.1445049D-08    0.1445049D-08
+ ISDGMR:  256    0.1391722D-08    0.1391722D-08
+ ISDGMR:  257    0.1287714D-08    0.1287714D-08
+ ISDGMR:  258    0.1282890D-08    0.1282890D-08
+ ISDGMR:  259    0.1257210D-08    0.1257210D-08
+ ISDGMR:  260    0.1247612D-08    0.1247612D-08
+ ISDGMR:  261    0.1242638D-08    0.1242638D-08
+ ISDGMR:  262    0.1219118D-08    0.1219118D-08
+ ISDGMR:  263    0.1199501D-08    0.1199501D-08
+ ISDGMR:  264    0.1197124D-08    0.1197124D-08
+ ISDGMR:  265    0.1192931D-08    0.1192931D-08
+ ISDGMR:  266    0.1182760D-08    0.1182760D-08
+ ISDGMR:  267    0.1174982D-08    0.1174982D-08
+ ISDGMR:  268    0.1169283D-08    0.1169283D-08
+ ISDGMR:  269    0.1165499D-08    0.1165499D-08
+ ISDGMR:  270    0.1165384D-08    0.1165384D-08
+ ISDGMR:  271    0.1162320D-08    0.1162320D-08
+ ISDGMR:  272    0.1155966D-08    0.1155966D-08
+ ISDGMR:  273    0.1153023D-08    0.1153023D-08
+ ISDGMR:  274    0.1128331D-08    0.1128331D-08
+ ISDGMR:  275    0.1117154D-08    0.1117154D-08
+ ISDGMR:  276    0.1104295D-08    0.1104295D-08
+ ISDGMR:  277    0.1103588D-08    0.1103588D-08
+ ISDGMR:  278    0.1080246D-08    0.1080246D-08
+ ISDGMR:  279    0.1054185D-08    0.1054185D-08
+ ISDGMR:  280    0.1018912D-08    0.1018912D-08
+ ISDGMR:  281    0.1008758D-08    0.1008758D-08
+ ISDGMR:  282    0.9962086D-09    0.9962086D-09
+ ISDGMR:  283    0.9926877D-09    0.9926877D-09
+ ISDGMR:  284    0.9900518D-09    0.9900518D-09
+ ISDGMR:  285    0.9891523D-09    0.9891523D-09
+ ISDGMR:  286    0.9816460D-09    0.9816460D-09
+ ISDGMR:  287    0.9775910D-09    0.9775910D-09
+ ISDGMR:  288    0.9769032D-09    0.9769032D-09
+ ISDGMR:  289    0.9753947D-09    0.9753947D-09
+ ISDGMR:  290    0.9747053D-09    0.9747053D-09
+ ISDGMR:  291    0.9740088D-09    0.9740088D-09
+ ISDGMR:  292    0.9677875D-09    0.9677875D-09
+ ISDGMR:  293    0.9594791D-09    0.9594791D-09
+ ISDGMR:  294    0.9580020D-09    0.9580020D-09
+ ISDGMR:  295    0.9557791D-09    0.9557791D-09
+ ISDGMR:  296    0.9555926D-09    0.9555926D-09
+ ISDGMR:  297    0.9523258D-09    0.9523258D-09
+ ISDGMR:  298    0.9515424D-09    0.9515424D-09
+ ISDGMR:  299    0.9497305D-09    0.9497305D-09
+ ISDGMR:  300    0.9458803D-09    0.9458803D-09
+ ISDGMR:  301    0.9391905D-09    0.9391905D-09
+ ISDGMR:  302    0.9151101D-09    0.9151101D-09
+ ISDGMR:  303    0.8668645D-09    0.8668645D-09
+ ISDGMR:  304    0.8640051D-09    0.8640051D-09
+ ISDGMR:  305    0.8608141D-09    0.8608141D-09
+ ISDGMR:  306    0.8547446D-09    0.8547446D-09
+ ISDGMR:  307    0.8220788D-09    0.8220788D-09
+ ISDGMR:  308    0.7832787D-09    0.7832787D-09
+ ISDGMR:  309    0.7433203D-09    0.7433203D-09
+ ISDGMR:  310    0.7333578D-09    0.7333578D-09
+ ISDGMR:  311    0.6431536D-09    0.6431536D-09
+ ISDGMR:  312    0.6423372D-09    0.6423372D-09
+ ISDGMR:  313    0.6345844D-09    0.6345844D-09
+ ISDGMR:  314    0.6310553D-09    0.6310553D-09
+ ISDGMR:  315    0.6306449D-09    0.6306449D-09
+ ISDGMR:  316    0.5927975D-09    0.5927975D-09
+ ISDGMR:  317    0.5843965D-09    0.5843965D-09
+ ISDGMR:  318    0.5826871D-09    0.5826871D-09
+ ISDGMR:  319    0.5806352D-09    0.5806352D-09
+ ISDGMR:  320    0.5805910D-09    0.5805910D-09
+ ISDGMR:  321    0.5741078D-09    0.5741078D-09
+ ISDGMR:  322    0.5695557D-09    0.5695557D-09
+ ISDGMR:  323    0.5569778D-09    0.5569778D-09
+ ISDGMR:  324    0.5448320D-09    0.5448320D-09
+ ISDGMR:  325    0.5345821D-09    0.5345821D-09
+ ISDGMR:  326    0.5256803D-09    0.5256803D-09
+ ISDGMR:  327    0.4898606D-09    0.4898606D-09
+ ISDGMR:  328    0.4676447D-09    0.4676447D-09
+ ISDGMR:  329    0.4528588D-09    0.4528588D-09
+ ISDGMR:  330    0.4328391D-09    0.4328391D-09
+ ISDGMR:  331    0.4164574D-09    0.4164574D-09
+ ISDGMR:  332    0.4104976D-09    0.4104976D-09
+ ISDGMR:  333    0.4097432D-09    0.4097432D-09
+ ISDGMR:  334    0.4077120D-09    0.4077120D-09
+ ISDGMR:  335    0.4054000D-09    0.4054000D-09
+ ISDGMR:  336    0.4010149D-09    0.4010149D-09
+ ISDGMR:  337    0.4002114D-09    0.4002114D-09
+ ISDGMR:  338    0.3988452D-09    0.3988452D-09
+ ISDGMR:  339    0.3981525D-09    0.3981525D-09
+ ISDGMR:  340    0.3971910D-09    0.3971910D-09
+ ISDGMR:  341    0.3966652D-09    0.3966652D-09
+ ISDGMR:  342    0.3875840D-09    0.3875840D-09
+ ISDGMR:  343    0.3832915D-09    0.3832915D-09
+ ISDGMR:  344    0.3827944D-09    0.3827944D-09
+ ISDGMR:  345    0.3794610D-09    0.3794610D-09
+ ISDGMR:  346    0.3794541D-09    0.3794541D-09
+ ISDGMR:  347    0.3746578D-09    0.3746578D-09
+ ISDGMR:  348    0.3721077D-09    0.3721077D-09
+ ISDGMR:  349    0.3714563D-09    0.3714563D-09
+ ISDGMR:  350    0.3675433D-09    0.3675433D-09
+ ISDGMR:  351    0.3597657D-09    0.3597657D-09
+ ISDGMR:  352    0.3404966D-09    0.3404966D-09
+ ISDGMR:  353    0.3370971D-09    0.3370971D-09
+ ISDGMR:  354    0.3359550D-09    0.3359550D-09
+ ISDGMR:  355    0.3353526D-09    0.3353526D-09
+ ISDGMR:  356    0.3342465D-09    0.3342465D-09
+ ISDGMR:  357    0.3341279D-09    0.3341279D-09
+ ISDGMR:  358    0.3323525D-09    0.3323525D-09
+ ISDGMR:  359    0.3314341D-09    0.3314341D-09
+ ISDGMR:  360    0.3256305D-09    0.3256305D-09
+ ISDGMR:  361    0.3248139D-09    0.3248139D-09
+ ISDGMR:  362    0.3240114D-09    0.3240114D-09
+ ISDGMR:  363    0.3228310D-09    0.3228310D-09
+ ISDGMR:  364    0.3143594D-09    0.3143594D-09
+ ISDGMR:  365    0.3109484D-09    0.3109484D-09
+ ISDGMR:  366    0.3096386D-09    0.3096386D-09
+ ISDGMR:  367    0.3091704D-09    0.3091704D-09
+ ISDGMR:  368    0.3088087D-09    0.3088087D-09
+ ISDGMR:  369    0.3071957D-09    0.3071957D-09
+ ISDGMR:  370    0.3070530D-09    0.3070530D-09
+ ISDGMR:  371    0.3059836D-09    0.3059836D-09
+ ISDGMR:  372    0.3059720D-09    0.3059720D-09
+ ISDGMR:  373    0.3037166D-09    0.3037166D-09
+ ISDGMR:  374    0.2925915D-09    0.2925915D-09
+ ISDGMR:  375    0.2922920D-09    0.2922920D-09
+ ISDGMR:  376    0.2913530D-09    0.2913530D-09
+ ISDGMR:  377    0.2907006D-09    0.2907006D-09
+ ISDGMR:  378    0.2904314D-09    0.2904314D-09
+ ISDGMR:  379    0.2647796D-09    0.2647796D-09
+ ISDGMR:  380    0.2447942D-09    0.2447942D-09
+ ISDGMR:  381    0.2447612D-09    0.2447612D-09
+ ISDGMR:  382    0.2404916D-09    0.2404916D-09
+ ISDGMR:  383    0.2367082D-09    0.2367082D-09
+ ISDGMR:  384    0.2367014D-09    0.2367014D-09
+ ISDGMR:  385    0.2323764D-09    0.2323764D-09
+ ISDGMR:  386    0.2306125D-09    0.2306125D-09
+ ISDGMR:  387    0.2258926D-09    0.2258926D-09
+ ISDGMR:  388    0.2249127D-09    0.2249127D-09
+ ISDGMR:  389    0.2238187D-09    0.2238187D-09
+ ISDGMR:  390    0.2199292D-09    0.2199292D-09
+ ISDGMR:  391    0.2197748D-09    0.2197748D-09
+ ISDGMR:  392    0.2173463D-09    0.2173463D-09
+ ISDGMR:  393    0.2163805D-09    0.2163805D-09
+ ISDGMR:  394    0.2126451D-09    0.2126451D-09
+ ISDGMR:  395    0.2122542D-09    0.2122542D-09
+ ISDGMR:  396    0.2105096D-09    0.2105096D-09
+ ISDGMR:  397    0.2089026D-09    0.2089026D-09
+ ISDGMR:  398    0.2051459D-09    0.2051459D-09
+ ISDGMR:  399    0.2032135D-09    0.2032135D-09
+ ISDGMR:  400    0.2031764D-09    0.2031764D-09
+ ISDGMR:  401    0.2011334D-09    0.2011334D-09
+ ISDGMR:  402    0.1797039D-09    0.1797039D-09
+ ISDGMR:  403    0.1749285D-09    0.1749285D-09
+ ISDGMR:  404    0.1738619D-09    0.1738619D-09
+ ISDGMR:  405    0.1623285D-09    0.1623285D-09
+ ISDGMR:  406    0.1597684D-09    0.1597684D-09
+ ISDGMR:  407    0.1530241D-09    0.1530241D-09
+ ISDGMR:  408    0.1519093D-09    0.1519093D-09
+ ISDGMR:  409    0.1452803D-09    0.1452803D-09
+ ISDGMR:  410    0.1377069D-09    0.1377069D-09
+ ISDGMR:  411    0.1371001D-09    0.1371001D-09
+ ISDGMR:  412    0.1336228D-09    0.1336228D-09
+ ISDGMR:  413    0.1334377D-09    0.1334377D-09
+ ISDGMR:  414    0.1332935D-09    0.1332935D-09
+ ISDGMR:  415    0.1284574D-09    0.1284574D-09
+ ISDGMR:  416    0.1276089D-09    0.1276089D-09
+ ISDGMR:  417    0.1268384D-09    0.1268384D-09
+ ISDGMR:  418    0.7652520D-10    0.7652520D-10
+ IErr=     0 Err= 7.65D-11 NSaved=     5 NIter=   418 NITot=   424.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err= 0.00D+00
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.16D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.5943915D-04    0.5943915D-04
+ ISDGMR:    1    0.5030380D-04    0.5030380D-04
+ ISDGMR:    2    0.3721772D-04    0.3721772D-04
+ ISDGMR:    3    0.1232284D-04    0.1232284D-04
+ ISDGMR:    4    0.9098242D-05    0.9098242D-05
+ ISDGMR:    5    0.6552939D-05    0.6552939D-05
+ ISDGMR:    6    0.4933064D-05    0.4933064D-05
+ ISDGMR:    7    0.4572236D-05    0.4572236D-05
+ ISDGMR:    8    0.3699207D-05    0.3699207D-05
+ ISDGMR:    9    0.2259486D-05    0.2259486D-05
+ ISDGMR:   10    0.2139805D-05    0.2139805D-05
+ ISDGMR:   11    0.1491241D-05    0.1491241D-05
+ ISDGMR:   12    0.1212506D-05    0.1212506D-05
+ ISDGMR:   13    0.1054377D-05    0.1054377D-05
+ ISDGMR:   14    0.9133640D-06    0.9133640D-06
+ ISDGMR:   15    0.8832858D-06    0.8832858D-06
+ ISDGMR:   16    0.7865272D-06    0.7865272D-06
+ ISDGMR:   17    0.7256033D-06    0.7256033D-06
+ ISDGMR:   18    0.6320674D-06    0.6320674D-06
+ ISDGMR:   19    0.5284965D-06    0.5284965D-06
+ ISDGMR:   20    0.4585119D-06    0.4585119D-06
+ ISDGMR:   21    0.4447499D-06    0.4447499D-06
+ ISDGMR:   22    0.3942648D-06    0.3942648D-06
+ ISDGMR:   23    0.3675975D-06    0.3675975D-06
+ ISDGMR:   24    0.3543363D-06    0.3543363D-06
+ ISDGMR:   25    0.3072877D-06    0.3072877D-06
+ ISDGMR:   26    0.2354983D-06    0.2354983D-06
+ ISDGMR:   27    0.1479536D-06    0.1479536D-06
+ ISDGMR:   28    0.1012192D-06    0.1012192D-06
+ ISDGMR:   29    0.8388564D-07    0.8388564D-07
+ ISDGMR:   30    0.7143055D-07    0.7143055D-07
+ ISDGMR:   31    0.6271066D-07    0.6271066D-07
+ ISDGMR:   32    0.5284048D-07    0.5284048D-07
+ ISDGMR:   33    0.4994074D-07    0.4994074D-07
+ ISDGMR:   34    0.4594580D-07    0.4594580D-07
+ ISDGMR:   35    0.4532123D-07    0.4532123D-07
+ ISDGMR:   36    0.4420406D-07    0.4420406D-07
+ ISDGMR:   37    0.4332667D-07    0.4332667D-07
+ ISDGMR:   38    0.4137377D-07    0.4137377D-07
+ ISDGMR:   39    0.3932729D-07    0.3932729D-07
+ ISDGMR:   40    0.3728747D-07    0.3728747D-07
+ ISDGMR:   41    0.3625665D-07    0.3625665D-07
+ ISDGMR:   42    0.3578751D-07    0.3578751D-07
+ ISDGMR:   43    0.3489596D-07    0.3489596D-07
+ ISDGMR:   44    0.3143446D-07    0.3143446D-07
+ ISDGMR:   45    0.2814255D-07    0.2814255D-07
+ ISDGMR:   46    0.2736333D-07    0.2736333D-07
+ ISDGMR:   47    0.2680035D-07    0.2680035D-07
+ ISDGMR:   48    0.2627832D-07    0.2627832D-07
+ ISDGMR:   49    0.2549152D-07    0.2549152D-07
+ ISDGMR:   50    0.2357984D-07    0.2357984D-07
+ ISDGMR:   51    0.2283810D-07    0.2283810D-07
+ ISDGMR:   52    0.2227740D-07    0.2227740D-07
+ ISDGMR:   53    0.2227706D-07    0.2227706D-07
+ ISDGMR:   54    0.2227686D-07    0.2227686D-07
+ ISDGMR:   55    0.2206742D-07    0.2206742D-07
+ ISDGMR:   56    0.2173145D-07    0.2173145D-07
+ ISDGMR:   57    0.2109390D-07    0.2109390D-07
+ ISDGMR:   58    0.1905808D-07    0.1905808D-07
+ ISDGMR:   59    0.1784188D-07    0.1784188D-07
+ ISDGMR:   60    0.1717792D-07    0.1717792D-07
+ ISDGMR:   61    0.1625558D-07    0.1625558D-07
+ ISDGMR:   62    0.1364711D-07    0.1364711D-07
+ ISDGMR:   63    0.1291557D-07    0.1291557D-07
+ ISDGMR:   64    0.1166755D-07    0.1166755D-07
+ ISDGMR:   65    0.1114115D-07    0.1114115D-07
+ ISDGMR:   66    0.1058693D-07    0.1058693D-07
+ ISDGMR:   67    0.1015025D-07    0.1015025D-07
+ ISDGMR:   68    0.9869112D-08    0.9869112D-08
+ ISDGMR:   69    0.9841560D-08    0.9841560D-08
+ ISDGMR:   70    0.9837389D-08    0.9837389D-08
+ ISDGMR:   71    0.9797235D-08    0.9797235D-08
+ ISDGMR:   72    0.9751793D-08    0.9751793D-08
+ ISDGMR:   73    0.9472519D-08    0.9472519D-08
+ ISDGMR:   74    0.9409999D-08    0.9409999D-08
+ ISDGMR:   75    0.9354602D-08    0.9354602D-08
+ ISDGMR:   76    0.9247504D-08    0.9247504D-08
+ ISDGMR:   77    0.8963247D-08    0.8963247D-08
+ ISDGMR:   78    0.8756582D-08    0.8756582D-08
+ ISDGMR:   79    0.8565675D-08    0.8565675D-08
+ ISDGMR:   80    0.8485901D-08    0.8485901D-08
+ ISDGMR:   81    0.8385090D-08    0.8385090D-08
+ ISDGMR:   82    0.8322428D-08    0.8322428D-08
+ ISDGMR:   83    0.8276158D-08    0.8276158D-08
+ ISDGMR:   84    0.8249107D-08    0.8249107D-08
+ ISDGMR:   85    0.8182916D-08    0.8182916D-08
+ ISDGMR:   86    0.8110262D-08    0.8110262D-08
+ ISDGMR:   87    0.8081121D-08    0.8081121D-08
+ ISDGMR:   88    0.8009830D-08    0.8009830D-08
+ ISDGMR:   89    0.7953440D-08    0.7953440D-08
+ ISDGMR:   90    0.7906674D-08    0.7906674D-08
+ ISDGMR:   91    0.7902445D-08    0.7902445D-08
+ ISDGMR:   92    0.7787708D-08    0.7787708D-08
+ ISDGMR:   93    0.7614177D-08    0.7614177D-08
+ ISDGMR:   94    0.7589140D-08    0.7589140D-08
+ ISDGMR:   95    0.7586087D-08    0.7586087D-08
+ ISDGMR:   96    0.7533640D-08    0.7533640D-08
+ ISDGMR:   97    0.7476783D-08    0.7476783D-08
+ ISDGMR:   98    0.7466194D-08    0.7466194D-08
+ ISDGMR:   99    0.7452630D-08    0.7452630D-08
+ ISDGMR:  100    0.7424172D-08    0.7424172D-08
+ ISDGMR:  101    0.7356002D-08    0.7356002D-08
+ ISDGMR:  102    0.7299071D-08    0.7299071D-08
+ ISDGMR:  103    0.7294203D-08    0.7294203D-08
+ ISDGMR:  104    0.7289886D-08    0.7289886D-08
+ ISDGMR:  105    0.7209459D-08    0.7209459D-08
+ ISDGMR:  106    0.7196122D-08    0.7196122D-08
+ ISDGMR:  107    0.7189835D-08    0.7189835D-08
+ ISDGMR:  108    0.7149396D-08    0.7149396D-08
+ ISDGMR:  109    0.7085598D-08    0.7085598D-08
+ ISDGMR:  110    0.7058906D-08    0.7058906D-08
+ ISDGMR:  111    0.7050030D-08    0.7050030D-08
+ ISDGMR:  112    0.7031631D-08    0.7031631D-08
+ ISDGMR:  113    0.7031272D-08    0.7031272D-08
+ ISDGMR:  114    0.6882884D-08    0.6882884D-08
+ ISDGMR:  115    0.6702356D-08    0.6702356D-08
+ ISDGMR:  116    0.6687343D-08    0.6687343D-08
+ ISDGMR:  117    0.6570605D-08    0.6570605D-08
+ ISDGMR:  118    0.6551804D-08    0.6551804D-08
+ ISDGMR:  119    0.6537168D-08    0.6537168D-08
+ ISDGMR:  120    0.6487020D-08    0.6487020D-08
+ ISDGMR:  121    0.6463421D-08    0.6463421D-08
+ ISDGMR:  122    0.6448606D-08    0.6448606D-08
+ ISDGMR:  123    0.6447376D-08    0.6447376D-08
+ ISDGMR:  124    0.6365743D-08    0.6365743D-08
+ ISDGMR:  125    0.6350894D-08    0.6350894D-08
+ ISDGMR:  126    0.6327690D-08    0.6327690D-08
+ ISDGMR:  127    0.6324044D-08    0.6324044D-08
+ ISDGMR:  128    0.6202549D-08    0.6202549D-08
+ ISDGMR:  129    0.6201257D-08    0.6201257D-08
+ ISDGMR:  130    0.6194444D-08    0.6194444D-08
+ ISDGMR:  131    0.6149128D-08    0.6149128D-08
+ ISDGMR:  132    0.6105498D-08    0.6105498D-08
+ ISDGMR:  133    0.6100653D-08    0.6100653D-08
+ ISDGMR:  134    0.6095725D-08    0.6095725D-08
+ ISDGMR:  135    0.6003513D-08    0.6003513D-08
+ ISDGMR:  136    0.5990777D-08    0.5990777D-08
+ ISDGMR:  137    0.5989490D-08    0.5989490D-08
+ ISDGMR:  138    0.5965243D-08    0.5965243D-08
+ ISDGMR:  139    0.5880988D-08    0.5880988D-08
+ ISDGMR:  140    0.5880630D-08    0.5880630D-08
+ ISDGMR:  141    0.5874906D-08    0.5874906D-08
+ ISDGMR:  142    0.5850055D-08    0.5850055D-08
+ ISDGMR:  143    0.5816560D-08    0.5816560D-08
+ ISDGMR:  144    0.5783000D-08    0.5783000D-08
+ ISDGMR:  145    0.5728631D-08    0.5728631D-08
+ ISDGMR:  146    0.5369283D-08    0.5369283D-08
+ ISDGMR:  147    0.5229539D-08    0.5229539D-08
+ ISDGMR:  148    0.5208892D-08    0.5208892D-08
+ ISDGMR:  149    0.5152784D-08    0.5152784D-08
+ ISDGMR:  150    0.5079292D-08    0.5079292D-08
+ ISDGMR:  151    0.5044293D-08    0.5044293D-08
+ ISDGMR:  152    0.5025496D-08    0.5025496D-08
+ ISDGMR:  153    0.5005552D-08    0.5005552D-08
+ ISDGMR:  154    0.4935220D-08    0.4935220D-08
+ ISDGMR:  155    0.4641083D-08    0.4641083D-08
+ ISDGMR:  156    0.4553706D-08    0.4553706D-08
+ ISDGMR:  157    0.4467188D-08    0.4467188D-08
+ ISDGMR:  158    0.4429142D-08    0.4429142D-08
+ ISDGMR:  159    0.4408229D-08    0.4408229D-08
+ ISDGMR:  160    0.4403514D-08    0.4403514D-08
+ ISDGMR:  161    0.4402146D-08    0.4402146D-08
+ ISDGMR:  162    0.4381957D-08    0.4381957D-08
+ ISDGMR:  163    0.4353422D-08    0.4353422D-08
+ ISDGMR:  164    0.4352047D-08    0.4352047D-08
+ ISDGMR:  165    0.4343493D-08    0.4343493D-08
+ ISDGMR:  166    0.4264605D-08    0.4264605D-08
+ ISDGMR:  167    0.4222189D-08    0.4222189D-08
+ ISDGMR:  168    0.4203085D-08    0.4203085D-08
+ ISDGMR:  169    0.4144846D-08    0.4144846D-08
+ ISDGMR:  170    0.4046004D-08    0.4046004D-08
+ ISDGMR:  171    0.3977474D-08    0.3977474D-08
+ ISDGMR:  172    0.3941586D-08    0.3941586D-08
+ ISDGMR:  173    0.3931971D-08    0.3931971D-08
+ ISDGMR:  174    0.3896538D-08    0.3896538D-08
+ ISDGMR:  175    0.3807035D-08    0.3807035D-08
+ ISDGMR:  176    0.3782743D-08    0.3782743D-08
+ ISDGMR:  177    0.3764572D-08    0.3764572D-08
+ ISDGMR:  178    0.3670686D-08    0.3670686D-08
+ ISDGMR:  179    0.3658750D-08    0.3658750D-08
+ ISDGMR:  180    0.3657595D-08    0.3657595D-08
+ ISDGMR:  181    0.3651616D-08    0.3651616D-08
+ ISDGMR:  182    0.3602732D-08    0.3602732D-08
+ ISDGMR:  183    0.3532863D-08    0.3532863D-08
+ ISDGMR:  184    0.3503392D-08    0.3503392D-08
+ ISDGMR:  185    0.3448367D-08    0.3448367D-08
+ ISDGMR:  186    0.3142763D-08    0.3142763D-08
+ ISDGMR:  187    0.2702154D-08    0.2702154D-08
+ ISDGMR:  188    0.2594646D-08    0.2594646D-08
+ ISDGMR:  189    0.2505262D-08    0.2505262D-08
+ ISDGMR:  190    0.2391594D-08    0.2391594D-08
+ ISDGMR:  191    0.2364937D-08    0.2364937D-08
+ ISDGMR:  192    0.2343080D-08    0.2343080D-08
+ ISDGMR:  193    0.2327580D-08    0.2327580D-08
+ ISDGMR:  194    0.2320351D-08    0.2320351D-08
+ ISDGMR:  195    0.2316199D-08    0.2316199D-08
+ ISDGMR:  196    0.2302556D-08    0.2302556D-08
+ ISDGMR:  197    0.2294051D-08    0.2294051D-08
+ ISDGMR:  198    0.2290298D-08    0.2290298D-08
+ ISDGMR:  199    0.2287410D-08    0.2287410D-08
+ ISDGMR:  200    0.2279509D-08    0.2279509D-08
+ ISDGMR:  201    0.2268224D-08    0.2268224D-08
+ ISDGMR:  202    0.2265191D-08    0.2265191D-08
+ ISDGMR:  203    0.2260787D-08    0.2260787D-08
+ ISDGMR:  204    0.2202120D-08    0.2202120D-08
+ ISDGMR:  205    0.2199114D-08    0.2199114D-08
+ ISDGMR:  206    0.2197679D-08    0.2197679D-08
+ ISDGMR:  207    0.2195030D-08    0.2195030D-08
+ ISDGMR:  208    0.2189184D-08    0.2189184D-08
+ ISDGMR:  209    0.2188602D-08    0.2188602D-08
+ ISDGMR:  210    0.2174563D-08    0.2174563D-08
+ ISDGMR:  211    0.2129026D-08    0.2129026D-08
+ ISDGMR:  212    0.2110571D-08    0.2110571D-08
+ ISDGMR:  213    0.2070172D-08    0.2070172D-08
+ ISDGMR:  214    0.1948690D-08    0.1948690D-08
+ ISDGMR:  215    0.1921171D-08    0.1921171D-08
+ ISDGMR:  216    0.1901026D-08    0.1901026D-08
+ ISDGMR:  217    0.1889435D-08    0.1889435D-08
+ ISDGMR:  218    0.1883116D-08    0.1883116D-08
+ ISDGMR:  219    0.1881746D-08    0.1881746D-08
+ ISDGMR:  220    0.1878201D-08    0.1878201D-08
+ ISDGMR:  221    0.1874707D-08    0.1874707D-08
+ ISDGMR:  222    0.1870915D-08    0.1870915D-08
+ ISDGMR:  223    0.1865950D-08    0.1865950D-08
+ ISDGMR:  224    0.1863151D-08    0.1863151D-08
+ ISDGMR:  225    0.1861844D-08    0.1861844D-08
+ ISDGMR:  226    0.1860020D-08    0.1860020D-08
+ ISDGMR:  227    0.1859157D-08    0.1859157D-08
+ ISDGMR:  228    0.1857823D-08    0.1857823D-08
+ ISDGMR:  229    0.1856288D-08    0.1856288D-08
+ ISDGMR:  230    0.1850844D-08    0.1850844D-08
+ ISDGMR:  231    0.1843476D-08    0.1843476D-08
+ ISDGMR:  232    0.1833925D-08    0.1833925D-08
+ ISDGMR:  233    0.1796566D-08    0.1796566D-08
+ ISDGMR:  234    0.1767448D-08    0.1767448D-08
+ ISDGMR:  235    0.1743441D-08    0.1743441D-08
+ ISDGMR:  236    0.1734880D-08    0.1734880D-08
+ ISDGMR:  237    0.1712373D-08    0.1712373D-08
+ ISDGMR:  238    0.1696429D-08    0.1696429D-08
+ ISDGMR:  239    0.1683372D-08    0.1683372D-08
+ ISDGMR:  240    0.1641278D-08    0.1641278D-08
+ ISDGMR:  241    0.1628412D-08    0.1628412D-08
+ ISDGMR:  242    0.1622342D-08    0.1622342D-08
+ ISDGMR:  243    0.1609220D-08    0.1609220D-08
+ ISDGMR:  244    0.1601242D-08    0.1601242D-08
+ ISDGMR:  245    0.1598794D-08    0.1598794D-08
+ ISDGMR:  246    0.1597837D-08    0.1597837D-08
+ ISDGMR:  247    0.1594745D-08    0.1594745D-08
+ ISDGMR:  248    0.1582298D-08    0.1582298D-08
+ ISDGMR:  249    0.1564913D-08    0.1564913D-08
+ ISDGMR:  250    0.1549980D-08    0.1549980D-08
+ ISDGMR:  251    0.1531756D-08    0.1531756D-08
+ ISDGMR:  252    0.1521070D-08    0.1521070D-08
+ ISDGMR:  253    0.1511569D-08    0.1511569D-08
+ ISDGMR:  254    0.1502639D-08    0.1502639D-08
+ ISDGMR:  255    0.1444913D-08    0.1444913D-08
+ ISDGMR:  256    0.1283568D-08    0.1283568D-08
+ ISDGMR:  257    0.1194998D-08    0.1194998D-08
+ ISDGMR:  258    0.1175028D-08    0.1175028D-08
+ ISDGMR:  259    0.1173318D-08    0.1173318D-08
+ ISDGMR:  260    0.1163531D-08    0.1163531D-08
+ ISDGMR:  261    0.1162883D-08    0.1162883D-08
+ ISDGMR:  262    0.1155286D-08    0.1155286D-08
+ ISDGMR:  263    0.1150886D-08    0.1150886D-08
+ ISDGMR:  264    0.1150272D-08    0.1150272D-08
+ ISDGMR:  265    0.1149695D-08    0.1149695D-08
+ ISDGMR:  266    0.1148130D-08    0.1148130D-08
+ ISDGMR:  267    0.1146124D-08    0.1146124D-08
+ ISDGMR:  268    0.1131246D-08    0.1131246D-08
+ ISDGMR:  269    0.1125364D-08    0.1125364D-08
+ ISDGMR:  270    0.1123481D-08    0.1123481D-08
+ ISDGMR:  271    0.1113819D-08    0.1113819D-08
+ ISDGMR:  272    0.1100197D-08    0.1100197D-08
+ ISDGMR:  273    0.1074719D-08    0.1074719D-08
+ ISDGMR:  274    0.1037783D-08    0.1037783D-08
+ ISDGMR:  275    0.1014688D-08    0.1014688D-08
+ ISDGMR:  276    0.1010522D-08    0.1010522D-08
+ ISDGMR:  277    0.1007684D-08    0.1007684D-08
+ ISDGMR:  278    0.1001769D-08    0.1001769D-08
+ ISDGMR:  279    0.9935080D-09    0.9935080D-09
+ ISDGMR:  280    0.9777058D-09    0.9777058D-09
+ ISDGMR:  281    0.9691533D-09    0.9691533D-09
+ ISDGMR:  282    0.9688474D-09    0.9688474D-09
+ ISDGMR:  283    0.9680490D-09    0.9680490D-09
+ ISDGMR:  284    0.9657155D-09    0.9657155D-09
+ ISDGMR:  285    0.9654093D-09    0.9654093D-09
+ ISDGMR:  286    0.9608910D-09    0.9608910D-09
+ ISDGMR:  287    0.9591836D-09    0.9591836D-09
+ ISDGMR:  288    0.9572922D-09    0.9572922D-09
+ ISDGMR:  289    0.9562439D-09    0.9562439D-09
+ ISDGMR:  290    0.9558792D-09    0.9558792D-09
+ ISDGMR:  291    0.9546572D-09    0.9546572D-09
+ ISDGMR:  292    0.9540972D-09    0.9540972D-09
+ ISDGMR:  293    0.9463642D-09    0.9463642D-09
+ ISDGMR:  294    0.9378138D-09    0.9378138D-09
+ ISDGMR:  295    0.9368254D-09    0.9368254D-09
+ ISDGMR:  296    0.9340349D-09    0.9340349D-09
+ ISDGMR:  297    0.9333121D-09    0.9333121D-09
+ ISDGMR:  298    0.9298748D-09    0.9298748D-09
+ ISDGMR:  299    0.9235566D-09    0.9235566D-09
+ ISDGMR:  300    0.9227865D-09    0.9227865D-09
+ ISDGMR:  301    0.8807020D-09    0.8807020D-09
+ ISDGMR:  302    0.8198818D-09    0.8198818D-09
+ ISDGMR:  303    0.7778511D-09    0.7778511D-09
+ ISDGMR:  304    0.7650499D-09    0.7650499D-09
+ ISDGMR:  305    0.7576296D-09    0.7576296D-09
+ ISDGMR:  306    0.7521534D-09    0.7521534D-09
+ ISDGMR:  307    0.7175191D-09    0.7175191D-09
+ ISDGMR:  308    0.6794283D-09    0.6794283D-09
+ ISDGMR:  309    0.6383594D-09    0.6383594D-09
+ ISDGMR:  310    0.6224785D-09    0.6224785D-09
+ ISDGMR:  311    0.6156859D-09    0.6156859D-09
+ ISDGMR:  312    0.6156192D-09    0.6156192D-09
+ ISDGMR:  313    0.6098054D-09    0.6098054D-09
+ ISDGMR:  314    0.5993703D-09    0.5993703D-09
+ ISDGMR:  315    0.5974725D-09    0.5974725D-09
+ ISDGMR:  316    0.5592178D-09    0.5592178D-09
+ ISDGMR:  317    0.5364483D-09    0.5364483D-09
+ ISDGMR:  318    0.5322366D-09    0.5322366D-09
+ ISDGMR:  319    0.5285482D-09    0.5285482D-09
+ ISDGMR:  320    0.5252088D-09    0.5252088D-09
+ ISDGMR:  321    0.5105791D-09    0.5105791D-09
+ ISDGMR:  322    0.5022844D-09    0.5022844D-09
+ ISDGMR:  323    0.4859309D-09    0.4859309D-09
+ ISDGMR:  324    0.4777715D-09    0.4777715D-09
+ ISDGMR:  325    0.4712862D-09    0.4712862D-09
+ ISDGMR:  326    0.4638994D-09    0.4638994D-09
+ ISDGMR:  327    0.4565394D-09    0.4565394D-09
+ ISDGMR:  328    0.4501631D-09    0.4501631D-09
+ ISDGMR:  329    0.4464283D-09    0.4464283D-09
+ ISDGMR:  330    0.4189826D-09    0.4189826D-09
+ ISDGMR:  331    0.4162190D-09    0.4162190D-09
+ ISDGMR:  332    0.4148355D-09    0.4148355D-09
+ ISDGMR:  333    0.4111897D-09    0.4111897D-09
+ ISDGMR:  334    0.4086822D-09    0.4086822D-09
+ ISDGMR:  335    0.4066973D-09    0.4066973D-09
+ ISDGMR:  336    0.4041380D-09    0.4041380D-09
+ ISDGMR:  337    0.4037076D-09    0.4037076D-09
+ ISDGMR:  338    0.4011805D-09    0.4011805D-09
+ ISDGMR:  339    0.4000349D-09    0.4000349D-09
+ ISDGMR:  340    0.3901268D-09    0.3901268D-09
+ ISDGMR:  341    0.3769137D-09    0.3769137D-09
+ ISDGMR:  342    0.3607111D-09    0.3607111D-09
+ ISDGMR:  343    0.3597687D-09    0.3597687D-09
+ ISDGMR:  344    0.3564847D-09    0.3564847D-09
+ ISDGMR:  345    0.3550968D-09    0.3550968D-09
+ ISDGMR:  346    0.3523009D-09    0.3523009D-09
+ ISDGMR:  347    0.3522475D-09    0.3522475D-09
+ ISDGMR:  348    0.3522328D-09    0.3522328D-09
+ ISDGMR:  349    0.3508248D-09    0.3508248D-09
+ ISDGMR:  350    0.3480680D-09    0.3480680D-09
+ ISDGMR:  351    0.3474322D-09    0.3474322D-09
+ ISDGMR:  352    0.3447976D-09    0.3447976D-09
+ ISDGMR:  353    0.3447201D-09    0.3447201D-09
+ ISDGMR:  354    0.3441552D-09    0.3441552D-09
+ ISDGMR:  355    0.3439671D-09    0.3439671D-09
+ ISDGMR:  356    0.3436065D-09    0.3436065D-09
+ ISDGMR:  357    0.3426030D-09    0.3426030D-09
+ ISDGMR:  358    0.3257933D-09    0.3257933D-09
+ ISDGMR:  359    0.3185558D-09    0.3185558D-09
+ ISDGMR:  360    0.3101580D-09    0.3101580D-09
+ ISDGMR:  361    0.3101504D-09    0.3101504D-09
+ ISDGMR:  362    0.3048520D-09    0.3048520D-09
+ ISDGMR:  363    0.2958110D-09    0.2958110D-09
+ ISDGMR:  364    0.2953077D-09    0.2953077D-09
+ ISDGMR:  365    0.2925328D-09    0.2925328D-09
+ ISDGMR:  366    0.2920563D-09    0.2920563D-09
+ ISDGMR:  367    0.2917112D-09    0.2917112D-09
+ ISDGMR:  368    0.2913554D-09    0.2913554D-09
+ ISDGMR:  369    0.2905220D-09    0.2905220D-09
+ ISDGMR:  370    0.2815441D-09    0.2815441D-09
+ ISDGMR:  371    0.2791869D-09    0.2791869D-09
+ ISDGMR:  372    0.2734220D-09    0.2734220D-09
+ ISDGMR:  373    0.2724541D-09    0.2724541D-09
+ ISDGMR:  374    0.2600603D-09    0.2600603D-09
+ ISDGMR:  375    0.2574952D-09    0.2574952D-09
+ ISDGMR:  376    0.2562117D-09    0.2562117D-09
+ ISDGMR:  377    0.2551488D-09    0.2551488D-09
+ ISDGMR:  378    0.2545740D-09    0.2545740D-09
+ ISDGMR:  379    0.2404619D-09    0.2404619D-09
+ ISDGMR:  380    0.2337130D-09    0.2337130D-09
+ ISDGMR:  381    0.2336613D-09    0.2336613D-09
+ ISDGMR:  382    0.2304171D-09    0.2304171D-09
+ ISDGMR:  383    0.2265740D-09    0.2265740D-09
+ ISDGMR:  384    0.2265738D-09    0.2265738D-09
+ ISDGMR:  385    0.2254533D-09    0.2254533D-09
+ ISDGMR:  386    0.2254274D-09    0.2254274D-09
+ ISDGMR:  387    0.2188677D-09    0.2188677D-09
+ ISDGMR:  388    0.2161809D-09    0.2161809D-09
+ ISDGMR:  389    0.2143497D-09    0.2143497D-09
+ ISDGMR:  390    0.2119221D-09    0.2119221D-09
+ ISDGMR:  391    0.2094576D-09    0.2094576D-09
+ ISDGMR:  392    0.2011661D-09    0.2011661D-09
+ ISDGMR:  393    0.2011225D-09    0.2011225D-09
+ ISDGMR:  394    0.1999900D-09    0.1999900D-09
+ ISDGMR:  395    0.1997794D-09    0.1997794D-09
+ ISDGMR:  396    0.1990528D-09    0.1990528D-09
+ ISDGMR:  397    0.1989359D-09    0.1989359D-09
+ ISDGMR:  398    0.1954506D-09    0.1954506D-09
+ ISDGMR:  399    0.1948512D-09    0.1948512D-09
+ ISDGMR:  400    0.1948372D-09    0.1948372D-09
+ ISDGMR:  401    0.1913575D-09    0.1913575D-09
+ ISDGMR:  402    0.1322320D-09    0.1322320D-09
+ ISDGMR:  403    0.1278689D-09    0.1278689D-09
+ ISDGMR:  404    0.1277544D-09    0.1277544D-09
+ ISDGMR:  405    0.1254164D-09    0.1254164D-09
+ ISDGMR:  406    0.1217852D-09    0.1217852D-09
+ ISDGMR:  407    0.1033597D-09    0.1033597D-09
+ ISDGMR:  408    0.1029765D-09    0.1029765D-09
+ ISDGMR:  409    0.9988385D-10    0.9988385D-10
+ IErr=     0 Err= 9.99D-11 NSaved=     6 NIter=   409 NITot=   416.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err= 0.00D+00
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.17D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.7875172D-04    0.7875172D-04
+ ISDGMR:    1    0.6543861D-04    0.6543861D-04
+ ISDGMR:    2    0.2563188D-04    0.2563188D-04
+ ISDGMR:    3    0.1299459D-04    0.1299459D-04
+ ISDGMR:    4    0.6557461D-05    0.6557461D-05
+ ISDGMR:    5    0.4408085D-05    0.4408085D-05
+ ISDGMR:    6    0.3941551D-05    0.3941551D-05
+ ISDGMR:    7    0.3715795D-05    0.3715795D-05
+ ISDGMR:    8    0.2262078D-05    0.2262078D-05
+ ISDGMR:    9    0.1838102D-05    0.1838102D-05
+ ISDGMR:   10    0.1146052D-05    0.1146052D-05
+ ISDGMR:   11    0.1057378D-05    0.1057378D-05
+ ISDGMR:   12    0.9356713D-06    0.9356713D-06
+ ISDGMR:   13    0.8651739D-06    0.8651739D-06
+ ISDGMR:   14    0.7350844D-06    0.7350844D-06
+ ISDGMR:   15    0.6857008D-06    0.6857008D-06
+ ISDGMR:   16    0.6732450D-06    0.6732450D-06
+ ISDGMR:   17    0.6444630D-06    0.6444630D-06
+ ISDGMR:   18    0.5990961D-06    0.5990961D-06
+ ISDGMR:   19    0.5351406D-06    0.5351406D-06
+ ISDGMR:   20    0.4966751D-06    0.4966751D-06
+ ISDGMR:   21    0.4748260D-06    0.4748260D-06
+ ISDGMR:   22    0.4367019D-06    0.4367019D-06
+ ISDGMR:   23    0.3938758D-06    0.3938758D-06
+ ISDGMR:   24    0.3405353D-06    0.3405353D-06
+ ISDGMR:   25    0.2800574D-06    0.2800574D-06
+ ISDGMR:   26    0.2448480D-06    0.2448480D-06
+ ISDGMR:   27    0.1554629D-06    0.1554629D-06
+ ISDGMR:   28    0.1211897D-06    0.1211897D-06
+ ISDGMR:   29    0.5954465D-07    0.5954465D-07
+ ISDGMR:   30    0.5322455D-07    0.5322455D-07
+ ISDGMR:   31    0.4837430D-07    0.4837430D-07
+ ISDGMR:   32    0.4502621D-07    0.4502621D-07
+ ISDGMR:   33    0.4247650D-07    0.4247650D-07
+ ISDGMR:   34    0.3898497D-07    0.3898497D-07
+ ISDGMR:   35    0.3788324D-07    0.3788324D-07
+ ISDGMR:   36    0.3719655D-07    0.3719655D-07
+ ISDGMR:   37    0.3693332D-07    0.3693332D-07
+ ISDGMR:   38    0.3585433D-07    0.3585433D-07
+ ISDGMR:   39    0.3508477D-07    0.3508477D-07
+ ISDGMR:   40    0.3376044D-07    0.3376044D-07
+ ISDGMR:   41    0.3249753D-07    0.3249753D-07
+ ISDGMR:   42    0.3017474D-07    0.3017474D-07
+ ISDGMR:   43    0.2823705D-07    0.2823705D-07
+ ISDGMR:   44    0.2726161D-07    0.2726161D-07
+ ISDGMR:   45    0.2643641D-07    0.2643641D-07
+ ISDGMR:   46    0.2544423D-07    0.2544423D-07
+ ISDGMR:   47    0.2490579D-07    0.2490579D-07
+ ISDGMR:   48    0.2203316D-07    0.2203316D-07
+ ISDGMR:   49    0.2115846D-07    0.2115846D-07
+ ISDGMR:   50    0.2080967D-07    0.2080967D-07
+ ISDGMR:   51    0.2044040D-07    0.2044040D-07
+ ISDGMR:   52    0.2025257D-07    0.2025257D-07
+ ISDGMR:   53    0.1939894D-07    0.1939894D-07
+ ISDGMR:   54    0.1702887D-07    0.1702887D-07
+ ISDGMR:   55    0.1595075D-07    0.1595075D-07
+ ISDGMR:   56    0.1547885D-07    0.1547885D-07
+ ISDGMR:   57    0.1510604D-07    0.1510604D-07
+ ISDGMR:   58    0.1460191D-07    0.1460191D-07
+ ISDGMR:   59    0.1315835D-07    0.1315835D-07
+ ISDGMR:   60    0.1087007D-07    0.1087007D-07
+ ISDGMR:   61    0.1003719D-07    0.1003719D-07
+ ISDGMR:   62    0.9247819D-08    0.9247819D-08
+ ISDGMR:   63    0.8003461D-08    0.8003461D-08
+ ISDGMR:   64    0.6780461D-08    0.6780461D-08
+ ISDGMR:   65    0.6013139D-08    0.6013139D-08
+ ISDGMR:   66    0.5615337D-08    0.5615337D-08
+ ISDGMR:   67    0.5510176D-08    0.5510176D-08
+ ISDGMR:   68    0.5489711D-08    0.5489711D-08
+ ISDGMR:   69    0.5436472D-08    0.5436472D-08
+ ISDGMR:   70    0.5071246D-08    0.5071246D-08
+ ISDGMR:   71    0.4964790D-08    0.4964790D-08
+ ISDGMR:   72    0.4834494D-08    0.4834494D-08
+ ISDGMR:   73    0.4722870D-08    0.4722870D-08
+ ISDGMR:   74    0.4664897D-08    0.4664897D-08
+ ISDGMR:   75    0.4534419D-08    0.4534419D-08
+ ISDGMR:   76    0.4112570D-08    0.4112570D-08
+ ISDGMR:   77    0.3617464D-08    0.3617464D-08
+ ISDGMR:   78    0.3404438D-08    0.3404438D-08
+ ISDGMR:   79    0.3291092D-08    0.3291092D-08
+ ISDGMR:   80    0.3282700D-08    0.3282700D-08
+ ISDGMR:   81    0.3263214D-08    0.3263214D-08
+ ISDGMR:   82    0.3072077D-08    0.3072077D-08
+ ISDGMR:   83    0.2969882D-08    0.2969882D-08
+ ISDGMR:   84    0.2942799D-08    0.2942799D-08
+ ISDGMR:   85    0.2921554D-08    0.2921554D-08
+ ISDGMR:   86    0.2910194D-08    0.2910194D-08
+ ISDGMR:   87    0.2870986D-08    0.2870986D-08
+ ISDGMR:   88    0.2810203D-08    0.2810203D-08
+ ISDGMR:   89    0.2648728D-08    0.2648728D-08
+ ISDGMR:   90    0.2538015D-08    0.2538015D-08
+ ISDGMR:   91    0.2535017D-08    0.2535017D-08
+ ISDGMR:   92    0.2520226D-08    0.2520226D-08
+ ISDGMR:   93    0.2465343D-08    0.2465343D-08
+ ISDGMR:   94    0.2443557D-08    0.2443557D-08
+ ISDGMR:   95    0.2438915D-08    0.2438915D-08
+ ISDGMR:   96    0.2435620D-08    0.2435620D-08
+ ISDGMR:   97    0.2424129D-08    0.2424129D-08
+ ISDGMR:   98    0.2406771D-08    0.2406771D-08
+ ISDGMR:   99    0.2389433D-08    0.2389433D-08
+ ISDGMR:  100    0.2374717D-08    0.2374717D-08
+ ISDGMR:  101    0.2334752D-08    0.2334752D-08
+ ISDGMR:  102    0.2316470D-08    0.2316470D-08
+ ISDGMR:  103    0.2314052D-08    0.2314052D-08
+ ISDGMR:  104    0.2301744D-08    0.2301744D-08
+ ISDGMR:  105    0.2287182D-08    0.2287182D-08
+ ISDGMR:  106    0.2281478D-08    0.2281478D-08
+ ISDGMR:  107    0.2273098D-08    0.2273098D-08
+ ISDGMR:  108    0.2265546D-08    0.2265546D-08
+ ISDGMR:  109    0.2259579D-08    0.2259579D-08
+ ISDGMR:  110    0.2253261D-08    0.2253261D-08
+ ISDGMR:  111    0.2243839D-08    0.2243839D-08
+ ISDGMR:  112    0.2243701D-08    0.2243701D-08
+ ISDGMR:  113    0.2239241D-08    0.2239241D-08
+ ISDGMR:  114    0.2233149D-08    0.2233149D-08
+ ISDGMR:  115    0.2204032D-08    0.2204032D-08
+ ISDGMR:  116    0.2197805D-08    0.2197805D-08
+ ISDGMR:  117    0.2197669D-08    0.2197669D-08
+ ISDGMR:  118    0.2194632D-08    0.2194632D-08
+ ISDGMR:  119    0.2193824D-08    0.2193824D-08
+ ISDGMR:  120    0.2185287D-08    0.2185287D-08
+ ISDGMR:  121    0.2172223D-08    0.2172223D-08
+ ISDGMR:  122    0.2171922D-08    0.2171922D-08
+ ISDGMR:  123    0.2171662D-08    0.2171662D-08
+ ISDGMR:  124    0.2160826D-08    0.2160826D-08
+ ISDGMR:  125    0.2155220D-08    0.2155220D-08
+ ISDGMR:  126    0.2152798D-08    0.2152798D-08
+ ISDGMR:  127    0.2152750D-08    0.2152750D-08
+ ISDGMR:  128    0.2144006D-08    0.2144006D-08
+ ISDGMR:  129    0.2134091D-08    0.2134091D-08
+ ISDGMR:  130    0.2129396D-08    0.2129396D-08
+ ISDGMR:  131    0.2127695D-08    0.2127695D-08
+ ISDGMR:  132    0.2124416D-08    0.2124416D-08
+ ISDGMR:  133    0.2123394D-08    0.2123394D-08
+ ISDGMR:  134    0.2123257D-08    0.2123257D-08
+ ISDGMR:  135    0.2122623D-08    0.2122623D-08
+ ISDGMR:  136    0.2117930D-08    0.2117930D-08
+ ISDGMR:  137    0.2112813D-08    0.2112813D-08
+ ISDGMR:  138    0.2106227D-08    0.2106227D-08
+ ISDGMR:  139    0.2102246D-08    0.2102246D-08
+ ISDGMR:  140    0.2099624D-08    0.2099624D-08
+ ISDGMR:  141    0.2097266D-08    0.2097266D-08
+ ISDGMR:  142    0.2096184D-08    0.2096184D-08
+ ISDGMR:  143    0.2095511D-08    0.2095511D-08
+ ISDGMR:  144    0.2090268D-08    0.2090268D-08
+ ISDGMR:  145    0.2072691D-08    0.2072691D-08
+ ISDGMR:  146    0.2033743D-08    0.2033743D-08
+ ISDGMR:  147    0.2000214D-08    0.2000214D-08
+ ISDGMR:  148    0.1990238D-08    0.1990238D-08
+ ISDGMR:  149    0.1980743D-08    0.1980743D-08
+ ISDGMR:  150    0.1968174D-08    0.1968174D-08
+ ISDGMR:  151    0.1963378D-08    0.1963378D-08
+ ISDGMR:  152    0.1954264D-08    0.1954264D-08
+ ISDGMR:  153    0.1944487D-08    0.1944487D-08
+ ISDGMR:  154    0.1929113D-08    0.1929113D-08
+ ISDGMR:  155    0.1895176D-08    0.1895176D-08
+ ISDGMR:  156    0.1868723D-08    0.1868723D-08
+ ISDGMR:  157    0.1850679D-08    0.1850679D-08
+ ISDGMR:  158    0.1845165D-08    0.1845165D-08
+ ISDGMR:  159    0.1834524D-08    0.1834524D-08
+ ISDGMR:  160    0.1818178D-08    0.1818178D-08
+ ISDGMR:  161    0.1805652D-08    0.1805652D-08
+ ISDGMR:  162    0.1777086D-08    0.1777086D-08
+ ISDGMR:  163    0.1765588D-08    0.1765588D-08
+ ISDGMR:  164    0.1761136D-08    0.1761136D-08
+ ISDGMR:  165    0.1758264D-08    0.1758264D-08
+ ISDGMR:  166    0.1755422D-08    0.1755422D-08
+ ISDGMR:  167    0.1752485D-08    0.1752485D-08
+ ISDGMR:  168    0.1747328D-08    0.1747328D-08
+ ISDGMR:  169    0.1742173D-08    0.1742173D-08
+ ISDGMR:  170    0.1735290D-08    0.1735290D-08
+ ISDGMR:  171    0.1721065D-08    0.1721065D-08
+ ISDGMR:  172    0.1709734D-08    0.1709734D-08
+ ISDGMR:  173    0.1680318D-08    0.1680318D-08
+ ISDGMR:  174    0.1652346D-08    0.1652346D-08
+ ISDGMR:  175    0.1617227D-08    0.1617227D-08
+ ISDGMR:  176    0.1603978D-08    0.1603978D-08
+ ISDGMR:  177    0.1593562D-08    0.1593562D-08
+ ISDGMR:  178    0.1579451D-08    0.1579451D-08
+ ISDGMR:  179    0.1574337D-08    0.1574337D-08
+ ISDGMR:  180    0.1572855D-08    0.1572855D-08
+ ISDGMR:  181    0.1570885D-08    0.1570885D-08
+ ISDGMR:  182    0.1564599D-08    0.1564599D-08
+ ISDGMR:  183    0.1553578D-08    0.1553578D-08
+ ISDGMR:  184    0.1548333D-08    0.1548333D-08
+ ISDGMR:  185    0.1541373D-08    0.1541373D-08
+ ISDGMR:  186    0.1498080D-08    0.1498080D-08
+ ISDGMR:  187    0.1292156D-08    0.1292156D-08
+ ISDGMR:  188    0.1221383D-08    0.1221383D-08
+ ISDGMR:  189    0.1128903D-08    0.1128903D-08
+ ISDGMR:  190    0.1039974D-08    0.1039974D-08
+ ISDGMR:  191    0.1000978D-08    0.1000978D-08
+ ISDGMR:  192    0.9891535D-09    0.9891535D-09
+ ISDGMR:  193    0.9807446D-09    0.9807446D-09
+ ISDGMR:  194    0.9697735D-09    0.9697735D-09
+ ISDGMR:  195    0.9602969D-09    0.9602969D-09
+ ISDGMR:  196    0.9534644D-09    0.9534644D-09
+ ISDGMR:  197    0.9437853D-09    0.9437853D-09
+ ISDGMR:  198    0.9400618D-09    0.9400618D-09
+ ISDGMR:  199    0.9369940D-09    0.9369940D-09
+ ISDGMR:  200    0.9252899D-09    0.9252899D-09
+ ISDGMR:  201    0.9126199D-09    0.9126199D-09
+ ISDGMR:  202    0.9124854D-09    0.9124854D-09
+ ISDGMR:  203    0.9095041D-09    0.9095041D-09
+ ISDGMR:  204    0.8679582D-09    0.8679582D-09
+ ISDGMR:  205    0.8567333D-09    0.8567333D-09
+ ISDGMR:  206    0.8567328D-09    0.8567328D-09
+ ISDGMR:  207    0.8565932D-09    0.8565932D-09
+ ISDGMR:  208    0.8494701D-09    0.8494701D-09
+ ISDGMR:  209    0.8494328D-09    0.8494328D-09
+ ISDGMR:  210    0.8469124D-09    0.8469124D-09
+ ISDGMR:  211    0.8403248D-09    0.8403248D-09
+ ISDGMR:  212    0.8353923D-09    0.8353923D-09
+ ISDGMR:  213    0.8083391D-09    0.8083391D-09
+ ISDGMR:  214    0.7707348D-09    0.7707348D-09
+ ISDGMR:  215    0.7212340D-09    0.7212340D-09
+ ISDGMR:  216    0.7060293D-09    0.7060293D-09
+ ISDGMR:  217    0.7011302D-09    0.7011302D-09
+ ISDGMR:  218    0.6973847D-09    0.6973847D-09
+ ISDGMR:  219    0.6964113D-09    0.6964113D-09
+ ISDGMR:  220    0.6943901D-09    0.6943901D-09
+ ISDGMR:  221    0.6933603D-09    0.6933603D-09
+ ISDGMR:  222    0.6917281D-09    0.6917281D-09
+ ISDGMR:  223    0.6883299D-09    0.6883299D-09
+ ISDGMR:  224    0.6868720D-09    0.6868720D-09
+ ISDGMR:  225    0.6860393D-09    0.6860393D-09
+ ISDGMR:  226    0.6850896D-09    0.6850896D-09
+ ISDGMR:  227    0.6847264D-09    0.6847264D-09
+ ISDGMR:  228    0.6842603D-09    0.6842603D-09
+ ISDGMR:  229    0.6837763D-09    0.6837763D-09
+ ISDGMR:  230    0.6830797D-09    0.6830797D-09
+ ISDGMR:  231    0.6812560D-09    0.6812560D-09
+ ISDGMR:  232    0.6782304D-09    0.6782304D-09
+ ISDGMR:  233    0.6680828D-09    0.6680828D-09
+ ISDGMR:  234    0.6619098D-09    0.6619098D-09
+ ISDGMR:  235    0.6548968D-09    0.6548968D-09
+ ISDGMR:  236    0.6514932D-09    0.6514932D-09
+ ISDGMR:  237    0.6440902D-09    0.6440902D-09
+ ISDGMR:  238    0.6393791D-09    0.6393791D-09
+ ISDGMR:  239    0.6370494D-09    0.6370494D-09
+ ISDGMR:  240    0.6273944D-09    0.6273944D-09
+ ISDGMR:  241    0.6242956D-09    0.6242956D-09
+ ISDGMR:  242    0.6213666D-09    0.6213666D-09
+ ISDGMR:  243    0.6178758D-09    0.6178758D-09
+ ISDGMR:  244    0.6171783D-09    0.6171783D-09
+ ISDGMR:  245    0.6163856D-09    0.6163856D-09
+ ISDGMR:  246    0.6159367D-09    0.6159367D-09
+ ISDGMR:  247    0.6158116D-09    0.6158116D-09
+ ISDGMR:  248    0.6136763D-09    0.6136763D-09
+ ISDGMR:  249    0.6101643D-09    0.6101643D-09
+ ISDGMR:  250    0.6063074D-09    0.6063074D-09
+ ISDGMR:  251    0.6035603D-09    0.6035603D-09
+ ISDGMR:  252    0.5993249D-09    0.5993249D-09
+ ISDGMR:  253    0.5986233D-09    0.5986233D-09
+ ISDGMR:  254    0.5942989D-09    0.5942989D-09
+ ISDGMR:  255    0.5676710D-09    0.5676710D-09
+ ISDGMR:  256    0.5184563D-09    0.5184563D-09
+ ISDGMR:  257    0.4572036D-09    0.4572036D-09
+ ISDGMR:  258    0.4372291D-09    0.4372291D-09
+ ISDGMR:  259    0.4356173D-09    0.4356173D-09
+ ISDGMR:  260    0.4303940D-09    0.4303940D-09
+ ISDGMR:  261    0.4286438D-09    0.4286438D-09
+ ISDGMR:  262    0.4266946D-09    0.4266946D-09
+ ISDGMR:  263    0.4233698D-09    0.4233698D-09
+ ISDGMR:  264    0.4222397D-09    0.4222397D-09
+ ISDGMR:  265    0.4219464D-09    0.4219464D-09
+ ISDGMR:  266    0.4216374D-09    0.4216374D-09
+ ISDGMR:  267    0.4210867D-09    0.4210867D-09
+ ISDGMR:  268    0.4186830D-09    0.4186830D-09
+ ISDGMR:  269    0.4118288D-09    0.4118288D-09
+ ISDGMR:  270    0.4101381D-09    0.4101381D-09
+ ISDGMR:  271    0.4094867D-09    0.4094867D-09
+ ISDGMR:  272    0.4061658D-09    0.4061658D-09
+ ISDGMR:  273    0.4042304D-09    0.4042304D-09
+ ISDGMR:  274    0.4037144D-09    0.4037144D-09
+ ISDGMR:  275    0.3751606D-09    0.3751606D-09
+ ISDGMR:  276    0.3569451D-09    0.3569451D-09
+ ISDGMR:  277    0.3561270D-09    0.3561270D-09
+ ISDGMR:  278    0.3519024D-09    0.3519024D-09
+ ISDGMR:  279    0.3462670D-09    0.3462670D-09
+ ISDGMR:  280    0.3389205D-09    0.3389205D-09
+ ISDGMR:  281    0.3354216D-09    0.3354216D-09
+ ISDGMR:  282    0.3339650D-09    0.3339650D-09
+ ISDGMR:  283    0.3322369D-09    0.3322369D-09
+ ISDGMR:  284    0.3320193D-09    0.3320193D-09
+ ISDGMR:  285    0.3319951D-09    0.3319951D-09
+ ISDGMR:  286    0.3303221D-09    0.3303221D-09
+ ISDGMR:  287    0.3300618D-09    0.3300618D-09
+ ISDGMR:  288    0.3293386D-09    0.3293386D-09
+ ISDGMR:  289    0.3283118D-09    0.3283118D-09
+ ISDGMR:  290    0.3280728D-09    0.3280728D-09
+ ISDGMR:  291    0.3262453D-09    0.3262453D-09
+ ISDGMR:  292    0.3261350D-09    0.3261350D-09
+ ISDGMR:  293    0.3233831D-09    0.3233831D-09
+ ISDGMR:  294    0.3205673D-09    0.3205673D-09
+ ISDGMR:  295    0.3205312D-09    0.3205312D-09
+ ISDGMR:  296    0.3197913D-09    0.3197913D-09
+ ISDGMR:  297    0.3191385D-09    0.3191385D-09
+ ISDGMR:  298    0.3188103D-09    0.3188103D-09
+ ISDGMR:  299    0.3145300D-09    0.3145300D-09
+ ISDGMR:  300    0.3143091D-09    0.3143091D-09
+ ISDGMR:  301    0.3133369D-09    0.3133369D-09
+ ISDGMR:  302    0.3066137D-09    0.3066137D-09
+ ISDGMR:  303    0.3028545D-09    0.3028545D-09
+ ISDGMR:  304    0.3005459D-09    0.3005459D-09
+ ISDGMR:  305    0.3004540D-09    0.3004540D-09
+ ISDGMR:  306    0.2987962D-09    0.2987962D-09
+ ISDGMR:  307    0.2943964D-09    0.2943964D-09
+ ISDGMR:  308    0.2923839D-09    0.2923839D-09
+ ISDGMR:  309    0.2905319D-09    0.2905319D-09
+ ISDGMR:  310    0.2905070D-09    0.2905070D-09
+ ISDGMR:  311    0.2876603D-09    0.2876603D-09
+ ISDGMR:  312    0.2870465D-09    0.2870465D-09
+ ISDGMR:  313    0.2836195D-09    0.2836195D-09
+ ISDGMR:  314    0.2747749D-09    0.2747749D-09
+ ISDGMR:  315    0.2739284D-09    0.2739284D-09
+ ISDGMR:  316    0.2591409D-09    0.2591409D-09
+ ISDGMR:  317    0.2529957D-09    0.2529957D-09
+ ISDGMR:  318    0.2500025D-09    0.2500025D-09
+ ISDGMR:  319    0.2463945D-09    0.2463945D-09
+ ISDGMR:  320    0.2336567D-09    0.2336567D-09
+ ISDGMR:  321    0.2132742D-09    0.2132742D-09
+ ISDGMR:  322    0.2089388D-09    0.2089388D-09
+ ISDGMR:  323    0.2057308D-09    0.2057308D-09
+ ISDGMR:  324    0.2037713D-09    0.2037713D-09
+ ISDGMR:  325    0.2024466D-09    0.2024466D-09
+ ISDGMR:  326    0.2003257D-09    0.2003257D-09
+ ISDGMR:  327    0.1960906D-09    0.1960906D-09
+ ISDGMR:  328    0.1950759D-09    0.1950759D-09
+ ISDGMR:  329    0.1916524D-09    0.1916524D-09
+ ISDGMR:  330    0.1886392D-09    0.1886392D-09
+ ISDGMR:  331    0.1879485D-09    0.1879485D-09
+ ISDGMR:  332    0.1860096D-09    0.1860096D-09
+ ISDGMR:  333    0.1822211D-09    0.1822211D-09
+ ISDGMR:  334    0.1799174D-09    0.1799174D-09
+ ISDGMR:  335    0.1784980D-09    0.1784980D-09
+ ISDGMR:  336    0.1782622D-09    0.1782622D-09
+ ISDGMR:  337    0.1748490D-09    0.1748490D-09
+ ISDGMR:  338    0.1733624D-09    0.1733624D-09
+ ISDGMR:  339    0.1727581D-09    0.1727581D-09
+ ISDGMR:  340    0.1723761D-09    0.1723761D-09
+ ISDGMR:  341    0.1707176D-09    0.1707176D-09
+ ISDGMR:  342    0.1664501D-09    0.1664501D-09
+ ISDGMR:  343    0.1624206D-09    0.1624206D-09
+ ISDGMR:  344    0.1520457D-09    0.1520457D-09
+ ISDGMR:  345    0.1334091D-09    0.1334091D-09
+ ISDGMR:  346    0.1287633D-09    0.1287633D-09
+ ISDGMR:  347    0.1287143D-09    0.1287143D-09
+ ISDGMR:  348    0.1281864D-09    0.1281864D-09
+ ISDGMR:  349    0.1280368D-09    0.1280368D-09
+ ISDGMR:  350    0.1265937D-09    0.1265937D-09
+ ISDGMR:  351    0.1249627D-09    0.1249627D-09
+ ISDGMR:  352    0.1245090D-09    0.1245090D-09
+ ISDGMR:  353    0.1244394D-09    0.1244394D-09
+ ISDGMR:  354    0.1241504D-09    0.1241504D-09
+ ISDGMR:  355    0.1241502D-09    0.1241502D-09
+ ISDGMR:  356    0.1238615D-09    0.1238615D-09
+ ISDGMR:  357    0.1238496D-09    0.1238496D-09
+ ISDGMR:  358    0.1220168D-09    0.1220168D-09
+ ISDGMR:  359    0.1210644D-09    0.1210644D-09
+ ISDGMR:  360    0.1204115D-09    0.1204115D-09
+ ISDGMR:  361    0.1166234D-09    0.1166234D-09
+ ISDGMR:  362    0.1138716D-09    0.1138716D-09
+ ISDGMR:  363    0.1078696D-09    0.1078696D-09
+ ISDGMR:  364    0.1076621D-09    0.1076621D-09
+ ISDGMR:  365    0.1073798D-09    0.1073798D-09
+ ISDGMR:  366    0.1073798D-09    0.1073798D-09
+ ISDGMR:  367    0.1073617D-09    0.1073617D-09
+ ISDGMR:  368    0.1053745D-09    0.1053745D-09
+ ISDGMR:  369    0.1045809D-09    0.1045809D-09
+ ISDGMR:  370    0.1040572D-09    0.1040572D-09
+ ISDGMR:  371    0.1035800D-09    0.1035800D-09
+ ISDGMR:  372    0.1027336D-09    0.1027336D-09
+ ISDGMR:  373    0.1009822D-09    0.1009822D-09
+ ISDGMR:  374    0.1005835D-09    0.1005835D-09
+ ISDGMR:  375    0.1001514D-09    0.1001514D-09
+ ISDGMR:  376    0.9990074D-10    0.9990074D-10
+ IErr=     0 Err= 9.99D-11 NSaved=     6 NIter=   376 NITot=   383.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err= 0.00D+00
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.17D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.4399594D-05    0.4399594D-05
+ ISDGMR:    1    0.2433267D-05    0.2433267D-05
+ ISDGMR:    2    0.1088707D-05    0.1088707D-05
+ ISDGMR:    3    0.7361333D-06    0.7361333D-06
+ ISDGMR:    4    0.4671983D-06    0.4671983D-06
+ ISDGMR:    5    0.1983450D-06    0.1983450D-06
+ ISDGMR:    6    0.1794250D-06    0.1794250D-06
+ ISDGMR:    7    0.1457474D-06    0.1457474D-06
+ ISDGMR:    8    0.1284894D-06    0.1284894D-06
+ ISDGMR:    9    0.9335316D-07    0.9335316D-07
+ ISDGMR:   10    0.5423521D-07    0.5423521D-07
+ ISDGMR:   11    0.3748213D-07    0.3748213D-07
+ ISDGMR:   12    0.3363404D-07    0.3363404D-07
+ ISDGMR:   13    0.3288028D-07    0.3288028D-07
+ ISDGMR:   14    0.3287719D-07    0.3287719D-07
+ ISDGMR:   15    0.3238863D-07    0.3238863D-07
+ ISDGMR:   16    0.2060133D-07    0.2060133D-07
+ ISDGMR:   17    0.1567341D-07    0.1567341D-07
+ ISDGMR:   18    0.1355638D-07    0.1355638D-07
+ ISDGMR:   19    0.1193238D-07    0.1193238D-07
+ ISDGMR:   20    0.1169852D-07    0.1169852D-07
+ ISDGMR:   21    0.1161779D-07    0.1161779D-07
+ ISDGMR:   22    0.1159228D-07    0.1159228D-07
+ ISDGMR:   23    0.1145862D-07    0.1145862D-07
+ ISDGMR:   24    0.1064649D-07    0.1064649D-07
+ ISDGMR:   25    0.9979612D-08    0.9979612D-08
+ ISDGMR:   26    0.9508144D-08    0.9508144D-08
+ ISDGMR:   27    0.9093066D-08    0.9093066D-08
+ ISDGMR:   28    0.7067426D-08    0.7067426D-08
+ ISDGMR:   29    0.3791783D-08    0.3791783D-08
+ ISDGMR:   30    0.3148984D-08    0.3148984D-08
+ ISDGMR:   31    0.2925288D-08    0.2925288D-08
+ ISDGMR:   32    0.2722138D-08    0.2722138D-08
+ ISDGMR:   33    0.2594925D-08    0.2594925D-08
+ ISDGMR:   34    0.2535188D-08    0.2535188D-08
+ ISDGMR:   35    0.2468405D-08    0.2468405D-08
+ ISDGMR:   36    0.2414455D-08    0.2414455D-08
+ ISDGMR:   37    0.2383656D-08    0.2383656D-08
+ ISDGMR:   38    0.2354776D-08    0.2354776D-08
+ ISDGMR:   39    0.2318122D-08    0.2318122D-08
+ ISDGMR:   40    0.2193817D-08    0.2193817D-08
+ ISDGMR:   41    0.1966352D-08    0.1966352D-08
+ ISDGMR:   42    0.1906960D-08    0.1906960D-08
+ ISDGMR:   43    0.1856595D-08    0.1856595D-08
+ ISDGMR:   44    0.1806518D-08    0.1806518D-08
+ ISDGMR:   45    0.1666821D-08    0.1666821D-08
+ ISDGMR:   46    0.1607156D-08    0.1607156D-08
+ ISDGMR:   47    0.1543995D-08    0.1543995D-08
+ ISDGMR:   48    0.1506984D-08    0.1506984D-08
+ ISDGMR:   49    0.1317061D-08    0.1317061D-08
+ ISDGMR:   50    0.1263993D-08    0.1263993D-08
+ ISDGMR:   51    0.1249164D-08    0.1249164D-08
+ ISDGMR:   52    0.1181962D-08    0.1181962D-08
+ ISDGMR:   53    0.1148009D-08    0.1148009D-08
+ ISDGMR:   54    0.1054206D-08    0.1054206D-08
+ ISDGMR:   55    0.1028895D-08    0.1028895D-08
+ ISDGMR:   56    0.1010675D-08    0.1010675D-08
+ ISDGMR:   57    0.9900984D-09    0.9900984D-09
+ ISDGMR:   58    0.9233993D-09    0.9233993D-09
+ ISDGMR:   59    0.7592503D-09    0.7592503D-09
+ ISDGMR:   60    0.6640001D-09    0.6640001D-09
+ ISDGMR:   61    0.5902362D-09    0.5902362D-09
+ ISDGMR:   62    0.5253961D-09    0.5253961D-09
+ ISDGMR:   63    0.4457879D-09    0.4457879D-09
+ ISDGMR:   64    0.3955236D-09    0.3955236D-09
+ ISDGMR:   65    0.3692093D-09    0.3692093D-09
+ ISDGMR:   66    0.3518985D-09    0.3518985D-09
+ ISDGMR:   67    0.3341372D-09    0.3341372D-09
+ ISDGMR:   68    0.3123504D-09    0.3123504D-09
+ ISDGMR:   69    0.2965651D-09    0.2965651D-09
+ ISDGMR:   70    0.2926785D-09    0.2926785D-09
+ ISDGMR:   71    0.2897165D-09    0.2897165D-09
+ ISDGMR:   72    0.2865105D-09    0.2865105D-09
+ ISDGMR:   73    0.2813387D-09    0.2813387D-09
+ ISDGMR:   74    0.2779037D-09    0.2779037D-09
+ ISDGMR:   75    0.2772892D-09    0.2772892D-09
+ ISDGMR:   76    0.2761117D-09    0.2761117D-09
+ ISDGMR:   77    0.2735938D-09    0.2735938D-09
+ ISDGMR:   78    0.2618165D-09    0.2618165D-09
+ ISDGMR:   79    0.2462681D-09    0.2462681D-09
+ ISDGMR:   80    0.2341118D-09    0.2341118D-09
+ ISDGMR:   81    0.2330193D-09    0.2330193D-09
+ ISDGMR:   82    0.2326791D-09    0.2326791D-09
+ ISDGMR:   83    0.2223972D-09    0.2223972D-09
+ ISDGMR:   84    0.2191812D-09    0.2191812D-09
+ ISDGMR:   85    0.2176516D-09    0.2176516D-09
+ ISDGMR:   86    0.2155177D-09    0.2155177D-09
+ ISDGMR:   87    0.2104221D-09    0.2104221D-09
+ ISDGMR:   88    0.2040725D-09    0.2040725D-09
+ ISDGMR:   89    0.2034032D-09    0.2034032D-09
+ ISDGMR:   90    0.2032669D-09    0.2032669D-09
+ ISDGMR:   91    0.2024968D-09    0.2024968D-09
+ ISDGMR:   92    0.1980663D-09    0.1980663D-09
+ ISDGMR:   93    0.1928982D-09    0.1928982D-09
+ ISDGMR:   94    0.1925306D-09    0.1925306D-09
+ ISDGMR:   95    0.1915525D-09    0.1915525D-09
+ ISDGMR:   96    0.1880401D-09    0.1880401D-09
+ ISDGMR:   97    0.1835994D-09    0.1835994D-09
+ ISDGMR:   98    0.1834463D-09    0.1834463D-09
+ ISDGMR:   99    0.1834144D-09    0.1834144D-09
+ ISDGMR:  100    0.1833722D-09    0.1833722D-09
+ ISDGMR:  101    0.1820900D-09    0.1820900D-09
+ ISDGMR:  102    0.1817057D-09    0.1817057D-09
+ ISDGMR:  103    0.1811755D-09    0.1811755D-09
+ ISDGMR:  104    0.1811441D-09    0.1811441D-09
+ ISDGMR:  105    0.1806645D-09    0.1806645D-09
+ ISDGMR:  106    0.1802310D-09    0.1802310D-09
+ ISDGMR:  107    0.1802185D-09    0.1802185D-09
+ ISDGMR:  108    0.1799051D-09    0.1799051D-09
+ ISDGMR:  109    0.1798889D-09    0.1798889D-09
+ ISDGMR:  110    0.1797587D-09    0.1797587D-09
+ ISDGMR:  111    0.1795855D-09    0.1795855D-09
+ ISDGMR:  112    0.1786977D-09    0.1786977D-09
+ ISDGMR:  113    0.1780243D-09    0.1780243D-09
+ ISDGMR:  114    0.1775429D-09    0.1775429D-09
+ ISDGMR:  115    0.1771309D-09    0.1771309D-09
+ ISDGMR:  116    0.1764876D-09    0.1764876D-09
+ ISDGMR:  117    0.1759205D-09    0.1759205D-09
+ ISDGMR:  118    0.1750478D-09    0.1750478D-09
+ ISDGMR:  119    0.1749287D-09    0.1749287D-09
+ ISDGMR:  120    0.1749284D-09    0.1749284D-09
+ ISDGMR:  121    0.1749280D-09    0.1749280D-09
+ ISDGMR:  122    0.1749028D-09    0.1749028D-09
+ ISDGMR:  123    0.1748502D-09    0.1748502D-09
+ ISDGMR:  124    0.1747031D-09    0.1747031D-09
+ ISDGMR:  125    0.1745953D-09    0.1745953D-09
+ ISDGMR:  126    0.1745917D-09    0.1745917D-09
+ ISDGMR:  127    0.1745897D-09    0.1745897D-09
+ ISDGMR:  128    0.1743465D-09    0.1743465D-09
+ ISDGMR:  129    0.1735594D-09    0.1735594D-09
+ ISDGMR:  130    0.1722110D-09    0.1722110D-09
+ ISDGMR:  131    0.1713559D-09    0.1713559D-09
+ ISDGMR:  132    0.1707874D-09    0.1707874D-09
+ ISDGMR:  133    0.1702339D-09    0.1702339D-09
+ ISDGMR:  134    0.1702144D-09    0.1702144D-09
+ ISDGMR:  135    0.1701670D-09    0.1701670D-09
+ ISDGMR:  136    0.1701302D-09    0.1701302D-09
+ ISDGMR:  137    0.1701239D-09    0.1701239D-09
+ ISDGMR:  138    0.1701221D-09    0.1701221D-09
+ ISDGMR:  139    0.1701158D-09    0.1701158D-09
+ ISDGMR:  140    0.1701132D-09    0.1701132D-09
+ ISDGMR:  141    0.1701105D-09    0.1701105D-09
+ ISDGMR:  142    0.1701070D-09    0.1701070D-09
+ ISDGMR:  143    0.1701067D-09    0.1701067D-09
+ ISDGMR:  144    0.1701065D-09    0.1701065D-09
+ ISDGMR:  145    0.1700970D-09    0.1700970D-09
+ ISDGMR:  146    0.1700702D-09    0.1700702D-09
+ ISDGMR:  147    0.1700267D-09    0.1700267D-09
+ ISDGMR:  148    0.1698900D-09    0.1698900D-09
+ ISDGMR:  149    0.1692828D-09    0.1692828D-09
+ ISDGMR:  150    0.1685928D-09    0.1685928D-09
+ ISDGMR:  151    0.1682329D-09    0.1682329D-09
+ ISDGMR:  152    0.1678708D-09    0.1678708D-09
+ ISDGMR:  153    0.1672007D-09    0.1672007D-09
+ ISDGMR:  154    0.1656876D-09    0.1656876D-09
+ ISDGMR:  155    0.1635955D-09    0.1635955D-09
+ ISDGMR:  156    0.1593682D-09    0.1593682D-09
+ ISDGMR:  157    0.1534922D-09    0.1534922D-09
+ ISDGMR:  158    0.1519016D-09    0.1519016D-09
+ ISDGMR:  159    0.1514813D-09    0.1514813D-09
+ ISDGMR:  160    0.1508467D-09    0.1508467D-09
+ ISDGMR:  161    0.1498766D-09    0.1498766D-09
+ ISDGMR:  162    0.1473782D-09    0.1473782D-09
+ ISDGMR:  163    0.1437584D-09    0.1437584D-09
+ ISDGMR:  164    0.1410419D-09    0.1410419D-09
+ ISDGMR:  165    0.1372484D-09    0.1372484D-09
+ ISDGMR:  166    0.1346667D-09    0.1346667D-09
+ ISDGMR:  167    0.1323637D-09    0.1323637D-09
+ ISDGMR:  168    0.1312740D-09    0.1312740D-09
+ ISDGMR:  169    0.1302331D-09    0.1302331D-09
+ ISDGMR:  170    0.1297544D-09    0.1297544D-09
+ ISDGMR:  171    0.1293663D-09    0.1293663D-09
+ ISDGMR:  172    0.1292834D-09    0.1292834D-09
+ ISDGMR:  173    0.1291131D-09    0.1291131D-09
+ ISDGMR:  174    0.1287972D-09    0.1287972D-09
+ ISDGMR:  175    0.1286450D-09    0.1286450D-09
+ ISDGMR:  176    0.1282713D-09    0.1282713D-09
+ ISDGMR:  177    0.1257815D-09    0.1257815D-09
+ ISDGMR:  178    0.1231856D-09    0.1231856D-09
+ ISDGMR:  179    0.1218291D-09    0.1218291D-09
+ ISDGMR:  180    0.1216575D-09    0.1216575D-09
+ ISDGMR:  181    0.1215237D-09    0.1215237D-09
+ ISDGMR:  182    0.1208814D-09    0.1208814D-09
+ ISDGMR:  183    0.1203828D-09    0.1203828D-09
+ ISDGMR:  184    0.1203776D-09    0.1203776D-09
+ ISDGMR:  185    0.1203739D-09    0.1203739D-09
+ ISDGMR:  186    0.1202948D-09    0.1202948D-09
+ ISDGMR:  187    0.1193182D-09    0.1193182D-09
+ ISDGMR:  188    0.1190024D-09    0.1190024D-09
+ ISDGMR:  189    0.1170282D-09    0.1170282D-09
+ ISDGMR:  190    0.1144455D-09    0.1144455D-09
+ ISDGMR:  191    0.1102683D-09    0.1102683D-09
+ ISDGMR:  192    0.1089601D-09    0.1089601D-09
+ ISDGMR:  193    0.1070149D-09    0.1070149D-09
+ ISDGMR:  194    0.1062518D-09    0.1062518D-09
+ ISDGMR:  195    0.1058558D-09    0.1058558D-09
+ ISDGMR:  196    0.1051343D-09    0.1051343D-09
+ ISDGMR:  197    0.1048020D-09    0.1048020D-09
+ ISDGMR:  198    0.1043592D-09    0.1043592D-09
+ ISDGMR:  199    0.1043411D-09    0.1043411D-09
+ ISDGMR:  200    0.1040022D-09    0.1040022D-09
+ ISDGMR:  201    0.1038076D-09    0.1038076D-09
+ ISDGMR:  202    0.1037627D-09    0.1037627D-09
+ ISDGMR:  203    0.1037222D-09    0.1037222D-09
+ ISDGMR:  204    0.1036598D-09    0.1036598D-09
+ ISDGMR:  205    0.1034892D-09    0.1034892D-09
+ ISDGMR:  206    0.1032454D-09    0.1032454D-09
+ ISDGMR:  207    0.1030490D-09    0.1030490D-09
+ ISDGMR:  208    0.1024870D-09    0.1024870D-09
+ ISDGMR:  209    0.1023418D-09    0.1023418D-09
+ ISDGMR:  210    0.1022079D-09    0.1022079D-09
+ ISDGMR:  211    0.1021191D-09    0.1021191D-09
+ ISDGMR:  212    0.1020002D-09    0.1020002D-09
+ ISDGMR:  213    0.1018426D-09    0.1018426D-09
+ ISDGMR:  214    0.1012594D-09    0.1012594D-09
+ ISDGMR:  215    0.1009927D-09    0.1009927D-09
+ ISDGMR:  216    0.1009397D-09    0.1009397D-09
+ ISDGMR:  217    0.1006898D-09    0.1006898D-09
+ ISDGMR:  218    0.1005128D-09    0.1005128D-09
+ ISDGMR:  219    0.1004956D-09    0.1004956D-09
+ ISDGMR:  220    0.1004047D-09    0.1004047D-09
+ ISDGMR:  221    0.9876762D-10    0.9876762D-10
+ IErr=     0 Err= 9.88D-11 NSaved=     6 NIter=   221 NITot=   228.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err=-2.22D-16
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.17D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.8869094D-06    0.8869094D-06
+ ISDGMR:    1    0.6206715D-06    0.6206715D-06
+ ISDGMR:    2    0.3811919D-06    0.3811919D-06
+ ISDGMR:    3    0.9835751D-07    0.9835751D-07
+ ISDGMR:    4    0.4352545D-07    0.4352545D-07
+ ISDGMR:    5    0.3544902D-07    0.3544902D-07
+ ISDGMR:    6    0.1647936D-07    0.1647936D-07
+ ISDGMR:    7    0.1507948D-07    0.1507948D-07
+ ISDGMR:    8    0.1315083D-07    0.1315083D-07
+ ISDGMR:    9    0.1224999D-07    0.1224999D-07
+ ISDGMR:   10    0.1000806D-07    0.1000806D-07
+ ISDGMR:   11    0.8396131D-08    0.8396131D-08
+ ISDGMR:   12    0.5286552D-08    0.5286552D-08
+ ISDGMR:   13    0.3983911D-08    0.3983911D-08
+ ISDGMR:   14    0.3540671D-08    0.3540671D-08
+ ISDGMR:   15    0.3361239D-08    0.3361239D-08
+ ISDGMR:   16    0.3257861D-08    0.3257861D-08
+ ISDGMR:   17    0.2868075D-08    0.2868075D-08
+ ISDGMR:   18    0.2445331D-08    0.2445331D-08
+ ISDGMR:   19    0.2175474D-08    0.2175474D-08
+ ISDGMR:   20    0.2018898D-08    0.2018898D-08
+ ISDGMR:   21    0.1881582D-08    0.1881582D-08
+ ISDGMR:   22    0.1854780D-08    0.1854780D-08
+ ISDGMR:   23    0.1795498D-08    0.1795498D-08
+ ISDGMR:   24    0.1716869D-08    0.1716869D-08
+ ISDGMR:   25    0.1653535D-08    0.1653535D-08
+ ISDGMR:   26    0.1481705D-08    0.1481705D-08
+ ISDGMR:   27    0.1395203D-08    0.1395203D-08
+ ISDGMR:   28    0.1166779D-08    0.1166779D-08
+ ISDGMR:   29    0.5984562D-09    0.5984562D-09
+ ISDGMR:   30    0.4411691D-09    0.4411691D-09
+ ISDGMR:   31    0.3891782D-09    0.3891782D-09
+ ISDGMR:   32    0.3043088D-09    0.3043088D-09
+ ISDGMR:   33    0.2740049D-09    0.2740049D-09
+ ISDGMR:   34    0.2601669D-09    0.2601669D-09
+ ISDGMR:   35    0.2483857D-09    0.2483857D-09
+ ISDGMR:   36    0.2417830D-09    0.2417830D-09
+ ISDGMR:   37    0.2372384D-09    0.2372384D-09
+ ISDGMR:   38    0.2320616D-09    0.2320616D-09
+ ISDGMR:   39    0.2263873D-09    0.2263873D-09
+ ISDGMR:   40    0.2203514D-09    0.2203514D-09
+ ISDGMR:   41    0.2159507D-09    0.2159507D-09
+ ISDGMR:   42    0.2111617D-09    0.2111617D-09
+ ISDGMR:   43    0.2054620D-09    0.2054620D-09
+ ISDGMR:   44    0.1984847D-09    0.1984847D-09
+ ISDGMR:   45    0.1933690D-09    0.1933690D-09
+ ISDGMR:   46    0.1889379D-09    0.1889379D-09
+ ISDGMR:   47    0.1818041D-09    0.1818041D-09
+ ISDGMR:   48    0.1791826D-09    0.1791826D-09
+ ISDGMR:   49    0.1614622D-09    0.1614622D-09
+ ISDGMR:   50    0.1515265D-09    0.1515265D-09
+ ISDGMR:   51    0.1470799D-09    0.1470799D-09
+ ISDGMR:   52    0.1456428D-09    0.1456428D-09
+ ISDGMR:   53    0.1414465D-09    0.1414465D-09
+ ISDGMR:   54    0.1401211D-09    0.1401211D-09
+ ISDGMR:   55    0.1393294D-09    0.1393294D-09
+ ISDGMR:   56    0.1385702D-09    0.1385702D-09
+ ISDGMR:   57    0.1360425D-09    0.1360425D-09
+ ISDGMR:   58    0.1360373D-09    0.1360373D-09
+ ISDGMR:   59    0.1325666D-09    0.1325666D-09
+ ISDGMR:   60    0.1252798D-09    0.1252798D-09
+ ISDGMR:   61    0.1211274D-09    0.1211274D-09
+ ISDGMR:   62    0.1204715D-09    0.1204715D-09
+ ISDGMR:   63    0.1193248D-09    0.1193248D-09
+ ISDGMR:   64    0.1181289D-09    0.1181289D-09
+ ISDGMR:   65    0.1171537D-09    0.1171537D-09
+ ISDGMR:   66    0.1171137D-09    0.1171137D-09
+ ISDGMR:   67    0.1171076D-09    0.1171076D-09
+ ISDGMR:   68    0.1171012D-09    0.1171012D-09
+ ISDGMR:   69    0.1171006D-09    0.1171006D-09
+ ISDGMR:   70    0.1170904D-09    0.1170904D-09
+ ISDGMR:   71    0.1167553D-09    0.1167553D-09
+ ISDGMR:   72    0.1161643D-09    0.1161643D-09
+ ISDGMR:   73    0.1161386D-09    0.1161386D-09
+ ISDGMR:   74    0.1158420D-09    0.1158420D-09
+ ISDGMR:   75    0.1158406D-09    0.1158406D-09
+ ISDGMR:   76    0.1150949D-09    0.1150949D-09
+ ISDGMR:   77    0.1150370D-09    0.1150370D-09
+ ISDGMR:   78    0.1139370D-09    0.1139370D-09
+ ISDGMR:   79    0.1135127D-09    0.1135127D-09
+ ISDGMR:   80    0.1135116D-09    0.1135116D-09
+ ISDGMR:   81    0.1131669D-09    0.1131669D-09
+ ISDGMR:   82    0.1123227D-09    0.1123227D-09
+ ISDGMR:   83    0.1122412D-09    0.1122412D-09
+ ISDGMR:   84    0.1122059D-09    0.1122059D-09
+ ISDGMR:   85    0.1113969D-09    0.1113969D-09
+ ISDGMR:   86    0.1106032D-09    0.1106032D-09
+ ISDGMR:   87    0.1100247D-09    0.1100247D-09
+ ISDGMR:   88    0.1100049D-09    0.1100049D-09
+ ISDGMR:   89    0.1099687D-09    0.1099687D-09
+ ISDGMR:   90    0.1098657D-09    0.1098657D-09
+ ISDGMR:   91    0.1096872D-09    0.1096872D-09
+ ISDGMR:   92    0.1096266D-09    0.1096266D-09
+ ISDGMR:   93    0.1095709D-09    0.1095709D-09
+ ISDGMR:   94    0.1094126D-09    0.1094126D-09
+ ISDGMR:   95    0.1094116D-09    0.1094116D-09
+ ISDGMR:   96    0.1093864D-09    0.1093864D-09
+ ISDGMR:   97    0.1093194D-09    0.1093194D-09
+ ISDGMR:   98    0.1082836D-09    0.1082836D-09
+ ISDGMR:   99    0.1079851D-09    0.1079851D-09
+ ISDGMR:  100    0.1076842D-09    0.1076842D-09
+ ISDGMR:  101    0.1063392D-09    0.1063392D-09
+ ISDGMR:  102    0.1052924D-09    0.1052924D-09
+ ISDGMR:  103    0.1047058D-09    0.1047058D-09
+ ISDGMR:  104    0.1046862D-09    0.1046862D-09
+ ISDGMR:  105    0.1045488D-09    0.1045488D-09
+ ISDGMR:  106    0.1045448D-09    0.1045448D-09
+ ISDGMR:  107    0.1044924D-09    0.1044924D-09
+ ISDGMR:  108    0.1043584D-09    0.1043584D-09
+ ISDGMR:  109    0.1042303D-09    0.1042303D-09
+ ISDGMR:  110    0.1040499D-09    0.1040499D-09
+ ISDGMR:  111    0.1036824D-09    0.1036824D-09
+ ISDGMR:  112    0.1032315D-09    0.1032315D-09
+ ISDGMR:  113    0.1026601D-09    0.1026601D-09
+ ISDGMR:  114    0.1018863D-09    0.1018863D-09
+ ISDGMR:  115    0.9886117D-10    0.9886117D-10
+ IErr=     0 Err= 9.89D-11 NSaved=     6 NIter=   115 NITot=   122.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err= 0.00D+00
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.17D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.9208227D-07    0.9208227D-07
+ ISDGMR:    1    0.3745822D-07    0.3745822D-07
+ ISDGMR:    2    0.2873829D-07    0.2873829D-07
+ ISDGMR:    3    0.7962845D-08    0.7962845D-08
+ ISDGMR:    4    0.4072763D-08    0.4072763D-08
+ ISDGMR:    5    0.1767543D-08    0.1767543D-08
+ ISDGMR:    6    0.1311714D-08    0.1311714D-08
+ ISDGMR:    7    0.9242109D-09    0.9242109D-09
+ ISDGMR:    8    0.8190811D-09    0.8190811D-09
+ ISDGMR:    9    0.6449195D-09    0.6449195D-09
+ ISDGMR:   10    0.6285337D-09    0.6285337D-09
+ ISDGMR:   11    0.4456199D-09    0.4456199D-09
+ ISDGMR:   12    0.3549466D-09    0.3549466D-09
+ ISDGMR:   13    0.2436711D-09    0.2436711D-09
+ ISDGMR:   14    0.2243650D-09    0.2243650D-09
+ ISDGMR:   15    0.2229603D-09    0.2229603D-09
+ ISDGMR:   16    0.2227665D-09    0.2227665D-09
+ ISDGMR:   17    0.2173684D-09    0.2173684D-09
+ ISDGMR:   18    0.2119362D-09    0.2119362D-09
+ ISDGMR:   19    0.1991220D-09    0.1991220D-09
+ ISDGMR:   20    0.1871841D-09    0.1871841D-09
+ ISDGMR:   21    0.1817070D-09    0.1817070D-09
+ ISDGMR:   22    0.1797159D-09    0.1797159D-09
+ ISDGMR:   23    0.1772232D-09    0.1772232D-09
+ ISDGMR:   24    0.1755584D-09    0.1755584D-09
+ ISDGMR:   25    0.1598447D-09    0.1598447D-09
+ ISDGMR:   26    0.1480040D-09    0.1480040D-09
+ ISDGMR:   27    0.1358038D-09    0.1358038D-09
+ ISDGMR:   28    0.1298558D-09    0.1298558D-09
+ ISDGMR:   29    0.1277796D-09    0.1277796D-09
+ ISDGMR:   30    0.1248184D-09    0.1248184D-09
+ ISDGMR:   31    0.1246259D-09    0.1246259D-09
+ ISDGMR:   32    0.1244697D-09    0.1244697D-09
+ ISDGMR:   33    0.1206953D-09    0.1206953D-09
+ ISDGMR:   34    0.1175002D-09    0.1175002D-09
+ ISDGMR:   35    0.1157412D-09    0.1157412D-09
+ ISDGMR:   36    0.1152247D-09    0.1152247D-09
+ ISDGMR:   37    0.1151896D-09    0.1151896D-09
+ ISDGMR:   38    0.1151668D-09    0.1151668D-09
+ ISDGMR:   39    0.1150088D-09    0.1150088D-09
+ ISDGMR:   40    0.1148571D-09    0.1148571D-09
+ ISDGMR:   41    0.1147690D-09    0.1147690D-09
+ ISDGMR:   42    0.1145630D-09    0.1145630D-09
+ ISDGMR:   43    0.1141134D-09    0.1141134D-09
+ ISDGMR:   44    0.1136355D-09    0.1136355D-09
+ ISDGMR:   45    0.1135377D-09    0.1135377D-09
+ ISDGMR:   46    0.1135172D-09    0.1135172D-09
+ ISDGMR:   47    0.1134628D-09    0.1134628D-09
+ ISDGMR:   48    0.1129495D-09    0.1129495D-09
+ ISDGMR:   49    0.1120006D-09    0.1120006D-09
+ ISDGMR:   50    0.1118415D-09    0.1118415D-09
+ ISDGMR:   51    0.1113078D-09    0.1113078D-09
+ ISDGMR:   52    0.1109451D-09    0.1109451D-09
+ ISDGMR:   53    0.1102924D-09    0.1102924D-09
+ ISDGMR:   54    0.1101380D-09    0.1101380D-09
+ ISDGMR:   55    0.1099972D-09    0.1099972D-09
+ ISDGMR:   56    0.1097549D-09    0.1097549D-09
+ ISDGMR:   57    0.1097010D-09    0.1097010D-09
+ ISDGMR:   58    0.1093865D-09    0.1093865D-09
+ ISDGMR:   59    0.1092171D-09    0.1092171D-09
+ ISDGMR:   60    0.1092167D-09    0.1092167D-09
+ ISDGMR:   61    0.1092159D-09    0.1092159D-09
+ ISDGMR:   62    0.1092132D-09    0.1092132D-09
+ ISDGMR:   63    0.1092033D-09    0.1092033D-09
+ ISDGMR:   64    0.1091945D-09    0.1091945D-09
+ ISDGMR:   65    0.1091939D-09    0.1091939D-09
+ ISDGMR:   66    0.1091869D-09    0.1091869D-09
+ ISDGMR:   67    0.1090725D-09    0.1090725D-09
+ ISDGMR:   68    0.1089736D-09    0.1089736D-09
+ ISDGMR:   69    0.1089067D-09    0.1089067D-09
+ ISDGMR:   70    0.1087549D-09    0.1087549D-09
+ ISDGMR:   71    0.1084808D-09    0.1084808D-09
+ ISDGMR:   72    0.1084360D-09    0.1084360D-09
+ ISDGMR:   73    0.1084360D-09    0.1084360D-09
+ ISDGMR:   74    0.1084360D-09    0.1084360D-09
+ ISDGMR:   75    0.1084203D-09    0.1084203D-09
+ ISDGMR:   76    0.1083493D-09    0.1083493D-09
+ ISDGMR:   77    0.1081685D-09    0.1081685D-09
+ ISDGMR:   78    0.1081473D-09    0.1081473D-09
+ ISDGMR:   79    0.1080266D-09    0.1080266D-09
+ ISDGMR:   80    0.1077351D-09    0.1077351D-09
+ ISDGMR:   81    0.1075952D-09    0.1075952D-09
+ ISDGMR:   82    0.1071010D-09    0.1071010D-09
+ ISDGMR:   83    0.1069886D-09    0.1069886D-09
+ ISDGMR:   84    0.1069691D-09    0.1069691D-09
+ ISDGMR:   85    0.1061426D-09    0.1061426D-09
+ ISDGMR:   86    0.1061237D-09    0.1061237D-09
+ ISDGMR:   87    0.1060247D-09    0.1060247D-09
+ ISDGMR:   88    0.1058923D-09    0.1058923D-09
+ ISDGMR:   89    0.1058174D-09    0.1058174D-09
+ ISDGMR:   90    0.1057843D-09    0.1057843D-09
+ ISDGMR:   91    0.1057830D-09    0.1057830D-09
+ ISDGMR:   92    0.1056265D-09    0.1056265D-09
+ ISDGMR:   93    0.1050682D-09    0.1050682D-09
+ ISDGMR:   94    0.1048758D-09    0.1048758D-09
+ ISDGMR:   95    0.1048099D-09    0.1048099D-09
+ ISDGMR:   96    0.1046272D-09    0.1046272D-09
+ ISDGMR:   97    0.1044202D-09    0.1044202D-09
+ ISDGMR:   98    0.1040588D-09    0.1040588D-09
+ ISDGMR:   99    0.1036318D-09    0.1036318D-09
+ ISDGMR:  100    0.1025374D-09    0.1025374D-09
+ ISDGMR:  101    0.1005468D-09    0.1005468D-09
+ ISDGMR:  102    0.9944653D-10    0.9944653D-10
+ IErr=     0 Err= 9.94D-11 NSaved=     5 NIter=   102 NITot=   108.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err=-1.11D-16
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ ItDFit:  ISolve= 4 NSavIt=  1000 ITol= 0 Tol= 1.00D-10 ItMax=  2312 IStorA=2
+          Conv0= 4.70D-09 BNorm= 1.28D+04 BPNorm= 1.17D+02
+          Conv= 1.00D-10 AccInt= 1.00D-12
+ Generalized Minimum Residual for N=    2212 ITol=    0 MaxL=    1000 KMP=    1000
+        Iter   Natral Err Est   Error Estimate
+ ISDGMR:    0    0.1000305D-06    0.1000305D-06
+ ISDGMR:    1    0.5217081D-07    0.5217081D-07
+ ISDGMR:    2    0.3794203D-07    0.3794203D-07
+ ISDGMR:    3    0.8197771D-08    0.8197771D-08
+ ISDGMR:    4    0.3882677D-08    0.3882677D-08
+ ISDGMR:    5    0.2214445D-08    0.2214445D-08
+ ISDGMR:    6    0.1684467D-08    0.1684467D-08
+ ISDGMR:    7    0.1248454D-08    0.1248454D-08
+ ISDGMR:    8    0.1051743D-08    0.1051743D-08
+ ISDGMR:    9    0.9122990D-09    0.9122990D-09
+ ISDGMR:   10    0.6869378D-09    0.6869378D-09
+ ISDGMR:   11    0.6079378D-09    0.6079378D-09
+ ISDGMR:   12    0.4546334D-09    0.4546334D-09
+ ISDGMR:   13    0.3171890D-09    0.3171890D-09
+ ISDGMR:   14    0.3097328D-09    0.3097328D-09
+ ISDGMR:   15    0.2953941D-09    0.2953941D-09
+ ISDGMR:   16    0.2953832D-09    0.2953832D-09
+ ISDGMR:   17    0.2877890D-09    0.2877890D-09
+ ISDGMR:   18    0.2784006D-09    0.2784006D-09
+ ISDGMR:   19    0.2564921D-09    0.2564921D-09
+ ISDGMR:   20    0.2370671D-09    0.2370671D-09
+ ISDGMR:   21    0.2327375D-09    0.2327375D-09
+ ISDGMR:   22    0.2313144D-09    0.2313144D-09
+ ISDGMR:   23    0.2263095D-09    0.2263095D-09
+ ISDGMR:   24    0.2226787D-09    0.2226787D-09
+ ISDGMR:   25    0.2009388D-09    0.2009388D-09
+ ISDGMR:   26    0.1834510D-09    0.1834510D-09
+ ISDGMR:   27    0.1746026D-09    0.1746026D-09
+ ISDGMR:   28    0.1455317D-09    0.1455317D-09
+ ISDGMR:   29    0.1360601D-09    0.1360601D-09
+ ISDGMR:   30    0.1298136D-09    0.1298136D-09
+ ISDGMR:   31    0.1287630D-09    0.1287630D-09
+ ISDGMR:   32    0.1282823D-09    0.1282823D-09
+ ISDGMR:   33    0.1268605D-09    0.1268605D-09
+ ISDGMR:   34    0.1268052D-09    0.1268052D-09
+ ISDGMR:   35    0.1265558D-09    0.1265558D-09
+ ISDGMR:   36    0.1263538D-09    0.1263538D-09
+ ISDGMR:   37    0.1263354D-09    0.1263354D-09
+ ISDGMR:   38    0.1255197D-09    0.1255197D-09
+ ISDGMR:   39    0.1248002D-09    0.1248002D-09
+ ISDGMR:   40    0.1242475D-09    0.1242475D-09
+ ISDGMR:   41    0.1242411D-09    0.1242411D-09
+ ISDGMR:   42    0.1237318D-09    0.1237318D-09
+ ISDGMR:   43    0.1235514D-09    0.1235514D-09
+ ISDGMR:   44    0.1230099D-09    0.1230099D-09
+ ISDGMR:   45    0.1209583D-09    0.1209583D-09
+ ISDGMR:   46    0.1203324D-09    0.1203324D-09
+ ISDGMR:   47    0.1195878D-09    0.1195878D-09
+ ISDGMR:   48    0.1195465D-09    0.1195465D-09
+ ISDGMR:   49    0.1195427D-09    0.1195427D-09
+ ISDGMR:   50    0.1191872D-09    0.1191872D-09
+ ISDGMR:   51    0.1186254D-09    0.1186254D-09
+ ISDGMR:   52    0.1182143D-09    0.1182143D-09
+ ISDGMR:   53    0.1176886D-09    0.1176886D-09
+ ISDGMR:   54    0.1173409D-09    0.1173409D-09
+ ISDGMR:   55    0.1172299D-09    0.1172299D-09
+ ISDGMR:   56    0.1172076D-09    0.1172076D-09
+ ISDGMR:   57    0.1170782D-09    0.1170782D-09
+ ISDGMR:   58    0.1170371D-09    0.1170371D-09
+ ISDGMR:   59    0.1168022D-09    0.1168022D-09
+ ISDGMR:   60    0.1147020D-09    0.1147020D-09
+ ISDGMR:   61    0.1146409D-09    0.1146409D-09
+ ISDGMR:   62    0.1144704D-09    0.1144704D-09
+ ISDGMR:   63    0.1140662D-09    0.1140662D-09
+ ISDGMR:   64    0.1140485D-09    0.1140485D-09
+ ISDGMR:   65    0.1140187D-09    0.1140187D-09
+ ISDGMR:   66    0.1139530D-09    0.1139530D-09
+ ISDGMR:   67    0.1139265D-09    0.1139265D-09
+ ISDGMR:   68    0.1138832D-09    0.1138832D-09
+ ISDGMR:   69    0.1134765D-09    0.1134765D-09
+ ISDGMR:   70    0.1132187D-09    0.1132187D-09
+ ISDGMR:   71    0.1132125D-09    0.1132125D-09
+ ISDGMR:   72    0.1130390D-09    0.1130390D-09
+ ISDGMR:   73    0.1125758D-09    0.1125758D-09
+ ISDGMR:   74    0.1122318D-09    0.1122318D-09
+ ISDGMR:   75    0.1119628D-09    0.1119628D-09
+ ISDGMR:   76    0.1118671D-09    0.1118671D-09
+ ISDGMR:   77    0.1117067D-09    0.1117067D-09
+ ISDGMR:   78    0.1109356D-09    0.1109356D-09
+ ISDGMR:   79    0.1108968D-09    0.1108968D-09
+ ISDGMR:   80    0.1108960D-09    0.1108960D-09
+ ISDGMR:   81    0.1107473D-09    0.1107473D-09
+ ISDGMR:   82    0.1103541D-09    0.1103541D-09
+ ISDGMR:   83    0.1101408D-09    0.1101408D-09
+ ISDGMR:   84    0.1099194D-09    0.1099194D-09
+ ISDGMR:   85    0.1088273D-09    0.1088273D-09
+ ISDGMR:   86    0.1073021D-09    0.1073021D-09
+ ISDGMR:   87    0.1065268D-09    0.1065268D-09
+ ISDGMR:   88    0.1065255D-09    0.1065255D-09
+ ISDGMR:   89    0.1065222D-09    0.1065222D-09
+ ISDGMR:   90    0.1061863D-09    0.1061863D-09
+ ISDGMR:   91    0.1057988D-09    0.1057988D-09
+ ISDGMR:   92    0.1052984D-09    0.1052984D-09
+ ISDGMR:   93    0.1046820D-09    0.1046820D-09
+ ISDGMR:   94    0.1034923D-09    0.1034923D-09
+ ISDGMR:   95    0.1034594D-09    0.1034594D-09
+ ISDGMR:   96    0.1031785D-09    0.1031785D-09
+ ISDGMR:   97    0.1030601D-09    0.1030601D-09
+ ISDGMR:   98    0.1030475D-09    0.1030475D-09
+ ISDGMR:   99    0.1030289D-09    0.1030289D-09
+ ISDGMR:  100    0.1027439D-09    0.1027439D-09
+ ISDGMR:  101    0.1017028D-09    0.1017028D-09
+ ISDGMR:  102    0.1010442D-09    0.1010442D-09
+ ISDGMR:  103    0.1005382D-09    0.1005382D-09
+ ISDGMR:  104    0.1004241D-09    0.1004241D-09
+ ISDGMR:  105    0.1003579D-09    0.1003579D-09
+ ISDGMR:  106    0.1000776D-09    0.1000776D-09
+ ISDGMR:  107    0.9987196D-10    0.9987196D-10
+ IErr=     0 Err= 9.99D-11 NSaved=     5 NIter=   107 NITot=   113.
+          PS=    256.000000000000 PSN=    256.000000000000 RNE=    256.000000000000 Err=-1.11D-16
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ SCF Done:  E(RPBE-PBE) =  -16624.5538026     A.U. after    9 cycles
+            NFock=  9  Conv=0.44D-07     -V/T= 2.0053
+
+ **********************************************************************
+
+            Population analysis using the SCF Density.
+
+ **********************************************************************
+
+ Alpha  occ. eigenvalues -- -423.70760-423.70571-423.70571-423.70571-370.62989
+ Alpha  occ. eigenvalues -- -370.62962-370.62962-370.62962 -52.26807 -52.25897
+ Alpha  occ. eigenvalues --  -52.25897 -52.25897 -47.20169 -47.20169 -47.20169
+ Alpha  occ. eigenvalues --  -47.20064 -47.20064 -47.20064 -47.20064 -47.20064
+ Alpha  occ. eigenvalues --  -47.20064 -47.20062 -47.20062 -47.20062 -44.50401
+ Alpha  occ. eigenvalues --  -44.49840 -44.49840 -44.49840 -39.89532 -39.89532
+ Alpha  occ. eigenvalues --  -39.89532 -39.89336 -39.89336 -39.89336 -39.89336
+ Alpha  occ. eigenvalues --  -39.89336 -39.89336 -39.89311 -39.89311 -39.89311
+ Alpha  occ. eigenvalues --   -6.24494  -6.24327  -6.24327  -6.24327  -4.83068
+ Alpha  occ. eigenvalues --   -4.82811  -4.82811  -4.82811  -4.43367  -4.43367
+ Alpha  occ. eigenvalues --   -4.43367  -4.43367  -4.43367  -4.43367  -4.43367
+ Alpha  occ. eigenvalues --   -4.43367  -4.43367  -4.43367  -4.43367  -4.43367
+ Alpha  occ. eigenvalues --   -3.24619  -3.24619  -3.24619  -3.24619  -3.24619
+ Alpha  occ. eigenvalues --   -3.24619  -3.24618  -3.24618  -3.24618  -3.24618
+ Alpha  occ. eigenvalues --   -3.24618  -3.24618  -1.10968  -1.10968  -1.10968
+ Alpha  occ. eigenvalues --   -1.10965  -1.10965  -1.10965  -1.10958  -1.10958
+ Alpha  occ. eigenvalues --   -1.10958  -1.10958  -1.10958  -1.10958  -1.10927
+ Alpha  occ. eigenvalues --   -1.10927  -1.10927  -1.10925  -1.10925  -1.10920
+ Alpha  occ. eigenvalues --   -1.10920  -1.10920  -0.38325  -0.38325  -0.38325
+ Alpha  occ. eigenvalues --   -0.38113  -0.38113  -0.38113  -0.37964  -0.37964
+ Alpha  occ. eigenvalues --   -0.37964  -0.37964  -0.37964  -0.37964  -0.37959
+ Alpha  occ. eigenvalues --   -0.37959  -0.37959  -0.37888  -0.37888  -0.37848
+ Alpha  occ. eigenvalues --   -0.37848  -0.37848  -0.23649  -0.13877  -0.13877
+ Alpha  occ. eigenvalues --   -0.13877  -0.03112  -0.03112  -0.03112   0.11655
+ Alpha  occ. eigenvalues --    0.11655   0.11655   0.11655   0.11655   0.11655
+ Alpha  occ. eigenvalues --    0.21894   0.21894   0.21894
+ Alpha virt. eigenvalues --    0.26537   0.26953   0.26953   0.26953   0.28131
+ Alpha virt. eigenvalues --    0.28131   0.28131   0.34952   0.34952   0.34952
+ Alpha virt. eigenvalues --    0.51697   0.58646   0.58646   0.59572   0.59572
+ Alpha virt. eigenvalues --    0.59572   0.59572   0.59572   0.59572   0.64364
+ Alpha virt. eigenvalues --    0.64364   0.64364   0.65793   0.65793   0.65793
+ Alpha virt. eigenvalues --    0.71851   0.71851   0.71851   0.72365   0.72365
+ Alpha virt. eigenvalues --    0.72365   0.72365   0.72365   0.72365   0.75885
+ Alpha virt. eigenvalues --    0.75885   0.75885   0.77348   0.78741   0.78741
+ Alpha virt. eigenvalues --    0.78741   0.95990   0.95990   0.95990   0.98050
+ Alpha virt. eigenvalues --    0.98050   0.98050   0.98050   0.98050   0.98050
+ Alpha virt. eigenvalues --    1.03603   1.03603   1.03603   1.06264   1.06264
+ Alpha virt. eigenvalues --    1.06264   1.06365   1.06365   1.06365   1.11608
+ Alpha virt. eigenvalues --    1.11608   1.11608   1.11608   1.11608   1.11608
+ Alpha virt. eigenvalues --    1.17636   1.17636   1.17636   1.29673   1.29673
+ Alpha virt. eigenvalues --    1.29673   1.31050   1.31050   1.31050   1.33627
+ Alpha virt. eigenvalues --    1.33627   1.42532   1.42532   1.42532   1.54866
+ Alpha virt. eigenvalues --    1.54866   1.54866   1.54866   1.54866   1.54866
+ Alpha virt. eigenvalues --    1.57301   1.73926   1.73926   1.73926   1.76675
+ Alpha virt. eigenvalues --    1.76675   1.76675   2.00775   2.00775   2.00775
+ Alpha virt. eigenvalues --    2.22565   4.87900   4.87900   4.87900   5.15909
+ Alpha virt. eigenvalues --    7.86579   7.86579   7.86579   8.16627  24.13389
+ Alpha virt. eigenvalues --   24.13389  24.13389  27.47306  74.62459  74.62459
+ Alpha virt. eigenvalues --   74.62459  86.50623
+          Condensed to atoms (all electrons):
+               1          2          3          4          5          6
+     1  Ga  32.264494  -0.301861  -0.301861  -0.301861   0.062553   0.062553
+     2  Ga  -0.301861  32.264494  -0.301861  -0.301861   0.062553   0.062553
+     3  Ga  -0.301861  -0.301861  32.264494  -0.301861   0.062553   0.062553
+     4  Ga  -0.301861  -0.301861  -0.301861  32.264494   0.062553   0.062553
+     5  As   0.062553   0.062553   0.062553   0.062553  31.807125   0.111180
+     6  As   0.062553   0.062553   0.062553   0.062553   0.111180  31.807125
+     7  As   0.062553   0.062553   0.062553   0.062553   0.111180   0.111180
+     8  As   0.062553   0.062553   0.062553   0.062553   0.111180   0.111180
+               7          8
+     1  Ga   0.062553   0.062553
+     2  Ga   0.062553   0.062553
+     3  Ga   0.062553   0.062553
+     4  Ga   0.062553   0.062553
+     5  As   0.111180   0.111180
+     6  As   0.111180   0.111180
+     7  As  31.807125   0.111180
+     8  As   0.111180  31.807125
+ Mulliken charges:
+               1
+     1  Ga  -0.609124
+     2  Ga  -0.609123
+     3  Ga  -0.609123
+     4  Ga  -0.609123
+     5  As   0.609124
+     6  As   0.609123
+     7  As   0.609123
+     8  As   0.609123
+ Sum of Mulliken charges =  -0.00000
+ Mulliken charges with hydrogens summed into heavy atoms:
+               1
+     1  Ga  -0.609124
+     2  Ga  -0.609123
+     3  Ga  -0.609123
+     4  Ga  -0.609123
+     5  As   0.609124
+     6  As   0.609123
+     7  As   0.609123
+     8  As   0.609123
+ N-N= 4.135211951137D+03 E-N= 0.000000000000D+00  KE= 1.653637318905D+04
+ Calling FoFJK, ICntrl=      2527 FMM=T ISym2X=0 I1Cent= 4 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
+ RepCel:  MaxNCR=     923 NClRep=     923 NMtPBC=       1.
+ -------------------------------------------------------------------
+ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1       31           0.000000053    0.000000054    0.000000056
+      2       31           0.000000052   -0.000000058   -0.000000059
+      3       31          -0.000000057    0.000000053   -0.000000060
+      4       31          -0.000000057   -0.000000057    0.000000055
+      5       33           0.000000479    0.000000434    0.000000465
+      6       33           0.000000478   -0.000000430   -0.000000460
+      7       33          -0.000000474    0.000000433   -0.000000460
+      8       33          -0.000000474   -0.000000430    0.000000464
+              -2          -0.026129752   -0.000000008   -0.000000007
+              -2          -0.000000008   -0.026129797   -0.000000007
+              -2          -0.000000007   -0.000000007   -0.026129764
+ -------------------------------------------------------------------
+ Cartesian Forces:  Max     0.026129797 RMS     0.007878422
+ -----------------------------------------------------------------------------------------------
+                       Internal Coordinate Forces (Hartree/Bohr or radian)
+  Cent   Atom   N1       Length/X         N2         Alpha/Y        N3         Beta/Z          J
+ -----------------------------------------------------------------------------------------------
+      1  Ga           0.000000(     1)      0.000000(    12)      0.000000(    23)
+      2  Ga           0.000000(     2)     -0.000000(    13)     -0.000000(    24)
+      3  Ga          -0.000000(     3)      0.000000(    14)     -0.000000(    25)
+      4  Ga          -0.000000(     4)     -0.000000(    15)      0.000000(    26)
+      5  As           0.000000(     5)      0.000000(    16)      0.000000(    27)
+      6  As           0.000000(     6)     -0.000000(    17)     -0.000000(    28)
+      7  As          -0.000000(     7)      0.000000(    18)     -0.000000(    29)
+      8  As          -0.000000(     8)     -0.000000(    19)      0.000000(    30)
+         TV          -0.026130(     9)     -0.000000(    20)     -0.000000(    31)
+         TV          -0.000000(    10)     -0.026130(    21)     -0.000000(    32)
+         TV          -0.000000(    11)     -0.000000(    22)     -0.026130(    33)
+ -----------------------------------------------------------------------------------------------
+ Internal  Forces:  Max     0.026129797 RMS     0.007878422
+
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+ Berny optimization.
+ Search for a local minimum.
+ Step number   1 out of a maximum of    2
+ All quantities printed in internal units (Hartrees-Bohrs-Radians)
+ Second derivative matrix not updated -- first step.
+ ITU=  0
+ Angle between quadratic step and forces=   0.00 degrees.
+ Linear search not attempted -- first point.
+ Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
+                                 (Linear)    (Quad)   (Total)
+    X1       -4.00386   0.00000   0.00000   0.00000   0.00000  -4.00386
+    Y1       -4.00386   0.00000   0.00000   0.00000   0.00000  -4.00386
+    Z1       -4.00386   0.00000   0.00000   0.00000   0.00000  -4.00386
+    X2       -4.00386   0.00000   0.00000   0.00000   0.00000  -4.00386
+    Y2        1.33462  -0.00000   0.00000  -0.00000  -0.00000   1.33462
+    Z2        1.33462  -0.00000   0.00000  -0.00000  -0.00000   1.33462
+    X3        1.33462  -0.00000   0.00000  -0.00000  -0.00000   1.33462
+    Y3       -4.00386   0.00000   0.00000   0.00000   0.00000  -4.00386
+    Z3        1.33462  -0.00000   0.00000  -0.00000  -0.00000   1.33462
+    X4        1.33462  -0.00000   0.00000  -0.00000  -0.00000   1.33462
+    Y4        1.33462  -0.00000   0.00000  -0.00000  -0.00000   1.33462
+    Z4       -4.00386   0.00000   0.00000   0.00000   0.00000  -4.00386
+    X5       -1.33462   0.00000   0.00000   0.00000   0.00000  -1.33462
+    Y5       -1.33462   0.00000   0.00000   0.00000   0.00000  -1.33462
+    Z5       -1.33462   0.00000   0.00000   0.00000   0.00000  -1.33462
+    X6       -1.33462   0.00000   0.00000   0.00000   0.00000  -1.33462
+    Y6        4.00386  -0.00000   0.00000  -0.00000  -0.00000   4.00386
+    Z6        4.00386  -0.00000   0.00000  -0.00000  -0.00000   4.00386
+    X7        4.00386  -0.00000   0.00000  -0.00000  -0.00000   4.00386
+    Y7       -1.33462   0.00000   0.00000   0.00000   0.00000  -1.33462
+    Z7        4.00386  -0.00000   0.00000  -0.00000  -0.00000   4.00386
+    X8        4.00386  -0.00000   0.00000  -0.00000  -0.00000   4.00386
+    Y8        4.00386  -0.00000   0.00000  -0.00000  -0.00000   4.00386
+    Z8       -1.33462   0.00000   0.00000   0.00000   0.00000  -1.33462
+    X9       10.67695  -0.02613   0.00000  -0.02613  -0.02613  10.65082
+    Y9        0.00000  -0.00000   0.00000  -0.00000  -0.00000  -0.00000
+    Z9        0.00000  -0.00000   0.00000  -0.00000  -0.00000  -0.00000
+   X10        0.00000  -0.00000   0.00000  -0.00000  -0.00000  -0.00000
+   Y10       10.67695  -0.02613   0.00000  -0.02613  -0.02613  10.65082
+   Z10        0.00000  -0.00000   0.00000  -0.00000  -0.00000  -0.00000
+   X11        0.00000  -0.00000   0.00000  -0.00000  -0.00000  -0.00000
+   Y11        0.00000  -0.00000   0.00000  -0.00000  -0.00000  -0.00000
+   Z11       10.67695  -0.02613   0.00000  -0.02613  -0.02613  10.65082
+         Item               Value     Threshold  Converged?
+ Maximum Force            0.026130     0.000450     NO 
+ RMS     Force            0.007878     0.000300     NO 
+ Maximum Displacement     0.026130     0.001800     NO 
+ RMS     Displacement     0.007878     0.001200     NO 
+ Predicted change in Energy=-1.024147D-03
+ GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
+
+ 1\1\GINC-FERMI\Force\RPBEPBE\6-31G(d,p)/Auto\As4Ga4\XINGLONG\21-Jun-20
+ 22\0\\# PBEPBE/6-31g(d,p)/Auto SCF=Tight Force PBC=GammaOnly\\gallium_
+ arsenide_force_gammaonly\\0,1\Ga,-2.11875,-2.11875,-2.11875\Ga,-2.1187
+ 5,0.70625,0.70625\Ga,0.70625,-2.11875,0.70625\Ga,0.70625,0.70625,-2.11
+ 875\As,-0.70625,-0.70625,-0.70625\As,-0.70625,2.11875,2.11875\As,2.118
+ 75,-0.70625,2.11875\As,2.11875,2.11875,-0.70625\TV,5.65,0.,0.\TV,0.,5.
+ 65,0.\TV,0.,0.,5.65\\Version=ES64L-G16RevB.01\HF=-16624.5538026\RMSD=4
+ .437e-08\RMSF=7.878e-03\PG=C01 [X(As4Ga4)]\\@
+
+
+ Spring appears, and we are once more children.
+                                  -- Anonymous
+ Job cpu time:       1 days 10 hours 18 minutes 16.9 seconds.
+ Elapsed time:       0 days  3 hours 51 minutes  0.6 seconds.
+ File lengths (MBytes):  RWF=     31 Int=      0 D2E=      0 Chk=      9 Scr=      1
+ Normal termination of Gaussian 16 at Tue Jun 21 20:59:30 2022.

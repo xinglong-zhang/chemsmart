@@ -1,24 +1,25 @@
-import re
 import logging
-from itertools import islice
+import re
 from functools import cached_property
+from itertools import islice
+
 import numpy as np
 from ase import units
+
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.mixins import GaussianFileMixin
-from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     eV_pattern,
-    nm_pattern,
     f_pattern,
     float_pattern,
-    normal_mode_pattern,
     frozen_coordinates_pattern,
-    scf_energy_pattern,
     mp2_energy_pattern,
+    nm_pattern,
+    normal_mode_pattern,
     oniom_energy_pattern,
+    scf_energy_pattern,
 )
-from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import string2index_1based
 
 p = PeriodicTable()
@@ -26,8 +27,17 @@ logger = logging.getLogger(__name__)
 
 
 class Gaussian16Output(GaussianFileMixin):
-    def __init__(self, filename):
+    """Class to parse Gaussian 16 output files.
+    Args:
+        filename (str): Path to the Gaussian output file.
+        use_frozen (bool): To include frozen coordinates in the Molecule.
+        Defaults to False, since we do not want the frozen coordinates
+        data be passed if .log file is used to create a molecule for run.
+    """
+
+    def __init__(self, filename, use_frozen=False):
         self.filename = filename
+        self.use_frozen = use_frozen
 
     @property
     def normal_termination(self):
@@ -86,6 +96,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def charge(self):
+        """Charge of the molecule."""
         for line in self.contents:
             if "Charge" in line and "Multiplicity" in line:
                 line_elem = line.split()
@@ -93,10 +104,14 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def multiplicity(self):
+        """Multiplicity of the molecule."""
         for line in self.contents:
             if "Charge" in line and "Multiplicity" in line:
                 line_elem = line.split()
-                return int(line_elem[-1])
+                # return int(line_elem[-1])
+                # # in qmmm, not always last, e.g.,
+                # # Charge =  1 Multiplicity = 2 for low   level calculation on real  system.
+                return int(line_elem[5])
 
     @property
     def spin(self):
@@ -123,6 +138,13 @@ class Gaussian16Output(GaussianFileMixin):
                 for j_line in self.contents[i + 2 :]:
                     if len(j_line) == 0:
                         break
+                    if j_line.split()[0] not in p.PERIODIC_TABLE:
+                        if j_line.startswith("Charge ="):
+                            logger.debug(f"Skipping line: {j_line}")
+                            # e.g., in QM/MM output files, the first element is not the coordinates information
+                            # e.g., "Charge =  1 Multiplicity = 2 for low   level calculation on real  system."
+                            continue
+                        # elif j_line.startswith("TV"): we still add the line for PBC
                     coordinates_block_lines_list.append(j_line)
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
@@ -140,6 +162,10 @@ class Gaussian16Output(GaussianFileMixin):
         ):
             """Helper function to create Molecule objects."""
             num_structures = num_structures or len(orientations)
+            if self.use_frozen:
+                frozen_atoms = self.frozen_atoms_masks
+            else:
+                frozen_atoms = None
             return [
                 Molecule(
                     symbols=self.symbols,
@@ -147,7 +173,7 @@ class Gaussian16Output(GaussianFileMixin):
                     translation_vectors=orientations_pbc[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
-                    frozen_atoms=self.frozen_atoms_masks,
+                    frozen_atoms=frozen_atoms,
                     pbc_conditions=self.list_of_pbc_conditions,
                     energy=self.energies_in_eV[i],
                     forces=self.forces_in_eV_per_angstrom[i],
@@ -157,34 +183,53 @@ class Gaussian16Output(GaussianFileMixin):
 
         # If the job terminated normally
         if self.normal_termination:
-            if np.allclose(
-                self.input_orientations[-1],
-                self.input_orientations[-2],
-                rtol=1e-5,
-            ):
-                self.input_orientations.pop(-1)
-            if np.allclose(
-                self.standard_orientations[-1],
-                self.standard_orientations[-2],
-                rtol=1e-5,
-            ):
-                self.standard_orientations.pop(-1)
-
             # Use Standard orientations if available, otherwise Input orientations
-            if len(self.standard_orientations) != 0:
+            if self.standard_orientations:
+                # log file has "Standard orientation:"
+                # and standard_orientations is not None
+                try:
+                    if np.allclose(
+                        self.standard_orientations[-1],
+                        self.standard_orientations[-2],
+                        rtol=1e-5,
+                    ):
+                        self.standard_orientations.pop(-1)
+                except IndexError:
+                    # for single point jobs, there will be only one structure
+                    pass
                 orientations = self.standard_orientations
                 orientations_pbc = self.standard_orientations_pbc
             else:
+                if self.input_orientations is not None:
+                    # if the log file has "Input orientation:"
+                    try:
+                        if np.allclose(
+                            self.input_orientations[-1],
+                            self.input_orientations[-2],
+                            rtol=1e-5,
+                        ):
+                            self.input_orientations.pop(-1)
+                    except IndexError:
+                        # for single point jobs, there will be only one structure
+                        pass
                 orientations = self.input_orientations
                 orientations_pbc = self.input_orientations_pbc
             return create_molecule_list(orientations, orientations_pbc)
 
         # If the job did not terminate normally, the last structure is ignored
-        num_structures_to_use = min(
-            max(len(self.input_orientations), len(self.standard_orientations)),
-            len(self.energies),
-            len(self.forces),
-        )
+        num_structures_to_use = len(self.energies)
+        if self.standard_orientations:
+            num_structures_to_use = min(
+                len(self.standard_orientations),
+                len(self.energies),
+                len(self.forces),
+            )
+        if self.input_orientations:
+            num_structures_to_use = min(
+                len(self.input_orientations),
+                len(self.energies),
+                len(self.forces),
+            )
         # Use Standard orientations if available, otherwise Input orientations
         if self.standard_orientations:
             orientations = self.standard_orientations
@@ -216,7 +261,7 @@ class Gaussian16Output(GaussianFileMixin):
     def molecule(self):
         return self.last_structure
 
-    ######################### the following properties relate to intermediate geometry optimizations
+    ###### the following properties relate to intermediate geometry optimizations
     # for a constrained opt in e.g, scan/modred job
 
     @cached_property
@@ -288,16 +333,17 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_modredundant_group(self):
         if "modred" in self.route_string:
+            modredundant_group = []
             for i, line in enumerate(self.contents):
                 if line.startswith(
                     "The following ModRedundant input section has been read:"
                 ):
                     for j_line in self.contents[i + 1 :]:
-                        modredundant_group = []
+
                         if len(j_line) == 0:
                             break
                         modredundant_group.append(j_line)
-                    return modredundant_group
+            return modredundant_group
         return None
 
     @property
@@ -474,7 +520,8 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_modes(self):
         """Obtain list of vibrational normal modes corresponding to the vibrational frequency.
-        Returns a list of normal modes, each of num_atoms x 3 (in dx, dy, and dz for each element) vibration.
+        Returns a list of normal modes, each of num_atoms x 3
+        (in dx, dy, and dz for each element) vibration.
         """
         list_of_vib_modes = []
         for i, line in enumerate(self.contents):
@@ -515,35 +562,26 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def has_frozen_coordinates(self):
         """Check if the output file has frozen coordinates."""
-        has_frozen = []
-        for i, line_i in enumerate(self.contents):
-            if "Derivative Info." in line_i:
-                for _j, line_j in enumerate(self.contents[i + 2 :]):
-                    if "-----------------------------------" in line_j:
-                        break
-                    if line_j.split()[-2] == "Frozen":
-                        has_frozen.append(True)
-                    elif line_j.split()[-2] == "D2E/DX2":
-                        has_frozen.append(False)
-        return any(has_frozen)
+        return self.frozen_coordinate_indices is not None
 
     @cached_property
     def frozen_coordinate_indices(self):
         """Obtain list of frozen coordinate indices from the input format.
         Use 1-index to be the same as atom numbering."""
         frozen_coordinate_indices = []
-        if self.has_frozen_coordinates:
-            for i, line_i in enumerate(self.contents):
-                if "Symbolic Z-matrix:" in line_i:
-                    if len(line_i) == 0:
-                        break
-                    for j, line_j in enumerate(self.contents[i + 2 :]):
-                        line_j_elem = line_j.split()
-                        if (
-                            re.match(frozen_coordinates_pattern, line_j)
-                            and line_j_elem[1] == "-1"
-                        ):
-                            frozen_coordinate_indices.append(j + 1)
+        for i, line_i in enumerate(self.contents):
+            if "Symbolic Z-matrix:" in line_i:
+                if len(line_i) == 0:
+                    break
+                for j, line_j in enumerate(self.contents[i + 2 :]):
+                    line_j_elem = line_j.split()
+                    if (
+                        re.match(frozen_coordinates_pattern, line_j)
+                        and line_j_elem[1] == "-1"
+                    ):
+                        frozen_coordinate_indices.append(j + 1)
+        if len(frozen_coordinate_indices) == 0:
+            return None
         return frozen_coordinate_indices
 
     @cached_property
@@ -593,28 +631,18 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def frozen_atoms_masks(self):
-        """Obtain list of frozen atoms masks from the input format.
-        -1 is used for frozen atoms and 0 for free atoms."""
-        frozen_atoms_masks = []
-        if self.has_frozen_coordinates:
-            for i, line_i in enumerate(self.contents):
-                if "Symbolic Z-matrix:" in line_i:
-                    if len(line_i) == 0:
-                        break
-                    for j, line_j in enumerate(self.contents[i + 2 :]):
-                        line_j_elem = line_j.split()
-                        if (
-                            re.match(frozen_coordinates_pattern, line_j)
-                            and line_j_elem[1] == "-1"
-                        ):
-                            frozen_atoms_masks.append(-1)
-                        elif (
-                            re.match(frozen_coordinates_pattern, line_j)
-                            and line_j_elem[1] == "0"
-                        ):
-                            frozen_atoms_masks.append(0)
-            return frozen_atoms_masks
-        return None
+        """Obtain list of frozen atoms masks (-1 = frozen, 0 = free)
+        using precomputed frozen_coordinate_indices and free_coordinate_indices.
+        """
+        if not self.has_frozen_coordinates:
+            return None
+
+        # Initialize all as free (0), then mark frozen (-1)
+        masks = [0] * self.num_atoms  # 0-based list
+        for idx in self.frozen_coordinate_indices:
+            masks[idx - 1] = -1  # Convert 1-based index to 0-based
+
+        return masks
 
     @cached_property
     def scf_energies(self):
@@ -752,6 +780,8 @@ class Gaussian16Output(GaussianFileMixin):
                     )
                 else:
                     input_orientations_pbc.append(None)
+        if len(input_orientations) == 0:
+            return None, None
         return input_orientations, input_orientations_pbc
 
     @cached_property
@@ -793,6 +823,8 @@ class Gaussian16Output(GaussianFileMixin):
                     )
                 else:
                     standard_orientations_pbc.append(None)
+        if len(standard_orientations) == 0:
+            return None, None
         return standard_orientations, standard_orientations_pbc
 
     @cached_property
@@ -1332,7 +1364,6 @@ class Gaussian16Output(GaussianFileMixin):
                     all_hirshfeld_spin_densities_heavy_atoms.append(
                         hirshfeld_spin_densities_heavy_atoms
                     )
-                # print(hirshfeld_spin_densities_heavy_atoms)
 
         if (
             all_hirshfeld_charges_heavy_atoms

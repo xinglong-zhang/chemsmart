@@ -2,19 +2,20 @@ import logging
 import math
 import os
 import re
+from functools import cached_property
+
 import numpy as np
 from ase import units
-from functools import cached_property
+
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.mixins import ORCAFileMixin
-from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.molecules.structure import CoordinateBlock
-from chemsmart.utils.utils import is_float, string2index_1based
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
-    standard_coord_pattern,
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
+    standard_coord_pattern,
 )
-from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.utils import is_float, string2index_1based
 
 p = PeriodicTable()
 

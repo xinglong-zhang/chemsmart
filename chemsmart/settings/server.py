@@ -1,15 +1,14 @@
 import logging
 import os
 import shlex
-import sys
 import subprocess
+import sys
 from functools import lru_cache
 
-from chemsmart.utils.mixins import cached_property
-from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.io.yaml import YAMLFile
 from chemsmart.settings.submitters import Submitter
 from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.utils.mixins import RegistryMixin, cached_property
 
 user_settings = ChemsmartUserSettings()
 
@@ -20,6 +19,8 @@ class Server(RegistryMixin):
     def __init__(self, name, **kwargs):
         self.name = name
         self.kwargs = kwargs
+        self._num_hours = self.kwargs.get("NUM_HOURS", None)
+        self._queue_name = self.kwargs.get("QUEUE_NAME", None)
 
     def __str__(self):
         return f"Server: {self.name}"
@@ -48,13 +49,21 @@ class Server(RegistryMixin):
     def scheduler(self):
         return self.kwargs.get("SCHEDULER", None)
 
-    @cached_property
+    @property
     def queue_name(self):
-        return self.kwargs.get("QUEUE_NAME", None)
+        return self._queue_name
 
-    @cached_property
+    @queue_name.setter
+    def queue_name(self, value):
+        self._queue_name = value
+
+    @property
     def num_hours(self):
-        return self.kwargs.get("NUM_HOURS", None)
+        return self._num_hours
+
+    @num_hours.setter
+    def num_hours(self, value):
+        self._num_hours = value
 
     @cached_property
     def mem_gb(self):
@@ -279,8 +288,8 @@ class Server(RegistryMixin):
     @staticmethod
     def _check_running_jobs(job):
         """Check if the job is already running."""
-        from chemsmart.utils.cluster import ClusterHelper
         from chemsmart.jobs.gaussian import GaussianJob
+        from chemsmart.utils.cluster import ClusterHelper
 
         if not isinstance(job, GaussianJob) or job.label is None:
             return

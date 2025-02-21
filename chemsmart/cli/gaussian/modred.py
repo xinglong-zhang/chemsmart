@@ -1,12 +1,17 @@
 import logging
+
 import click
 
+from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_jobtype_options,
+    gaussian,
+)
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.gaussian.gaussian import click_gaussian_jobtype_options
-from chemsmart.cli.gaussian.gaussian import gaussian
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import (
+    MyCommand,
+    get_setting_from_jobtype_for_gaussian,
+)
 from chemsmart.utils.utils import check_charge_and_multiplicity
-from chemsmart.utils.cli import get_setting_from_jobtype
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +26,7 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    modred_settings = get_setting_from_jobtype(
+    modred_settings = get_setting_from_jobtype_for_gaussian(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 

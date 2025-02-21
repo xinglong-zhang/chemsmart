@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .idea/
+*.idea/
 
 # C extensions
 *.so
@@ -57,7 +58,6 @@ coverage.xml
 *.pot
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -134,3 +134,6 @@ dmypy.json
 
 # templates
 .github/templates/*
+
+#macos
+.DS_Store

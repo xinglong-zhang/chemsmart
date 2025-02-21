@@ -2,14 +2,16 @@ import contextlib
 import logging
 import platform
 from multiprocessing import set_start_method
+
 import click
-from chemsmart.utils.logger import create_logger
-from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.runner import JobRunner
-from chemsmart.cli.jobrunner import jobrunner_options
+
+from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
-from chemsmart.settings.server import Server
+from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.server import Server
+from chemsmart.utils.logger import create_logger
 
 system_type = platform.system()
 
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @click.group(name="run")
 @click.pass_context
-@jobrunner_options
+@click_jobrunner_options
 @logger_options
 def run(
     ctx,

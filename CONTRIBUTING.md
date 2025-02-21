@@ -12,44 +12,81 @@ This instructions are for linux base systems. (Linux, MacOS, BSD, etc.)
 - Enter the directory `cd chemsmart`
 - Add upstream repo `git remote add upstream https://github.com/xinglong-zhang/chemsmart`
 
-## Setting up your own virtual environment
+## Setting up your own conda environment
 
-Run `make virtualenv` to create a virtual environment.
-then activate it with `source .venv/bin/activate`.
+Follow the Installation Guide on README. Briefly, run
+```bash
+make env
+```
+to create a conda environment.
 
 ## Install the project in develop mode
 
-Run `make install` to install the project in develop mode.
+Then run
+```bash
+make install
+```
+to install the project in develop mode.
 
 ## Run the tests to ensure everything is working
 
-Run `make test` to run the tests.
+Run 
+```bash
+make test
+```
+to run the tests.
 
 ## Create a new branch to work on your contribution
 
-Run `git checkout -b my_contribution`
+Run
+```bash
+git checkout -b my_contribution_branch
+```
 
 ## Make your changes
 
-Edit the files using your preferred editor. (we recommend VIM or VSCode)
+Edit the files using your preferred editor (we recommend PyCharm IDE).
+
+## Add in additional python packages that are imported in your new codes
+
+Run
+```bash
+make update-deps
+```
 
 ## Format the code
 
-Run `make fmt` to format the code.
+Run
+```bash
+make fmt
+```
+to format the code. We use `isort` to sort the import statements alphabetically and `black` formatter.
 
 ## Run the linter
 
-Run `make lint` to run the linter.
+Run
+```bash
+make lint
+```
+to run the linter. We use `ruff` as linter to check for potential bugs, syntax errors, and stylistic issues.
 
 ## Test your changes
 
-Run `make test` to run the tests.
+Please include relevant tests for the new functionalities that you are introducing. Then, run
+```bash
+make test
+```
+to run these tests and make sure that they pass.
 
 Ensure code coverage report shows `100%` coverage, add tests to your PR.
 
-## Build the docs locally
+## Build the docs locally (optional)
 
-Run `make docs` to build the docs.
+Run 
+```bash
+make docs
+```
+to build the docs.
 
 Ensure your new changes are documented.
 
@@ -61,13 +98,17 @@ Example: `fix(package): update setup.py arguments 🎉` (emojis are fine too)
 
 ## Push your changes to your fork
 
-Run `git push origin my_contribution`
+Run 
+```bash
+git push origin my_contribution_branch
+```
 
 ## Submit a pull request
 
 On github interface, click on `Pull Request` button.
 
 Wait CI to run and one of the developers will review your PR.
+
 ## Makefile utilities
 
 This project comes with a `Makefile` that contains a number of useful utility.
@@ -77,21 +118,21 @@ This project comes with a `Makefile` that contains a number of useful utility.
 Usage: make <target>
 
 Targets:
-help:             ## Show the help.
-install:          ## Install the project in dev mode.
-fmt:              ## Format code using black & isort.
-lint:             ## Run pep8, black linters.
-test: lint        ## Run tests and generate coverage report.
-watch:            ## Run tests on every change.
-clean:            ## Clean unused files.
-virtualenv:       ## Create a virtual environment.
-release:          ## Create a new tag for release.
-docs:             ## Build the documentation.
-switch-to-poetry: ## Switch to poetry package manager.
-init:             ## Initialize the project based on an application template.
+help            Show the help menu.
+env             Create a Conda environment if USE_CONDA=true.
+conda-env       Create a Conda environment.
+virtualenv      Create a virtual environment using virtualenv.
+install         Install the project in development mode.
+configure       Run chemsmart configuration interactively.
+show            Display the current environment information.
+update-deps     Automatically update new packages that are added in the codes
+fmt             Format code using black and isort.
+lint            Run linters (ruff).
+test            Run tests and generate coverage report.
+clean           Remove temporary and unnecessary files.
 ```
 
-## Making a new release
+## Making a new release (TO BE IMPLEMENTED)
 
 This project uses [semantic versioning](https://semver.org/) and tags releases with `X.Y.Z`
 Every time a new tag is created and pushed to the remote repo, github actions will
@@ -100,7 +141,7 @@ automatically create a new release on github and trigger a release on PyPI.
 For this to work you need to setup a secret called `PIPY_API_TOKEN` on the project settings>secrets, 
 this token can be generated on [pypi.org](https://pypi.org/account/).
 
-To trigger a new release all you need to do is.
+To trigger a new release all you need to do is:
 
 1. If you have changes to add to the repo
     * Make your changes following the steps described above.

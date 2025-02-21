@@ -5,10 +5,12 @@ Structures for the neutral, radical cationic and radical anionic
  systems should be based on the optimised neural system."""
 import logging
 import os
+
 import click
-from chemsmart.utils.logger import create_logger
+
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"

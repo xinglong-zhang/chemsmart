@@ -4,27 +4,27 @@ import logging
 
 import click
 
-from chemsmart.cli.jobrunner import jobrunner_options
+from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.utils.logger import create_logger
-from chemsmart.settings.server import Server
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.cli import CtxObjArguments
+from chemsmart.settings.server import Server
+from chemsmart.utils.cli import CtxObjArguments, MyGroup
+from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 
 
 @click.group(name="sub", cls=MyGroup)
 @click.pass_context
-@jobrunner_options
+@click_jobrunner_options
 @logger_options
 @click.option("-t", "--time-hours", type=float, default=None)
 @click.option("-q", "--queue", type=str, help="queue")
 @click.option(
-    "-v",
+    "-v/",
     "--verbose/--no-verbose",
+    default=False,
     help="Turns on logging to stream output and debug logging.",
 )
 @click.option(

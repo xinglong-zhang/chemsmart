@@ -2,6 +2,7 @@ import inspect
 import logging
 from abc import abstractmethod
 from typing import Optional
+
 from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -72,7 +73,8 @@ class Submitter(RegistryMixin):
         ]
         if len(submitter_cls) == 0:
             raise ValueError(
-                f"No submitter of defined name: {self.name}.\nAvailable submitters: {Submitter.subclasses()}"
+                f"No submitter of defined name: {self.name}.\n"
+                f"Available submitters: {Submitter.subclasses()}"
             )
 
         assert len(submitter_cls) == 1
@@ -224,24 +226,25 @@ class PBSSubmitter(Submitter):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
     def _write_scheduler_options(self, f):
-        f.write(f"#PBS -N {self.job.label}\n")
         f.write(f"#PBS -o {self.job.label}.pbsout\n")
         f.write(f"#PBS -e {self.job.label}.pbserr\n")
         if self.server.num_gpus > 0:
             f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
         f.write(
-            f"#PBS -l select=1:ncpus={self.server.num_cores}:mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}\n"
+            f"#PBS -l select=1:ncpus={self.server.num_cores}:"
+            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}G\n"
         )
         # using only one node here
         if self.server.queue_name:
             f.write(f"#PBS -q {self.server.queue_name}\n")
         if self.server.num_hours:
-            f.write(f"#PBS -l walltime={self.server.num_hours}\n")
-        if user_settings.data.get("PROJECT"):
-            f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
-        if user_settings.data.get("EMAIL"):
-            f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
-            f.write("#PBS -m abe\n")
+            f.write(f"#PBS -l walltime={self.server.num_hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#PBS -M {user_settings.data['EMAIL']}\n")
+                f.write("#PBS -m abe\n")
         f.write("\n")
         f.write("\n")
 
@@ -268,11 +271,12 @@ class SLURMSubmitter(Submitter):
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
         if self.server.num_hours:
             f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
-        if user_settings.data.get("PROJECT"):
-            f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
-        if user_settings.data.get("EMAIL"):
-            f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
-            f.write("#SBATCH --mail-type=END,FAIL\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+                f.write("#SBATCH --mail-type=END,FAIL\n")
         f.write("\n")
         f.write("\n")
 
@@ -290,7 +294,8 @@ class SLFSubmitter(Submitter):
         f.write(f"#BSUB -J {self.job.label}\n")
         f.write(f"#BSUB -o {self.job.label}.bsubout\n")
         f.write(f"#BSUB -e {self.job.label}.bsuberr\n")
-        project_number = user_settings.data.get("PROJECT")
+        if user_settings is not None:
+            project_number = user_settings.data.get("PROJECT")
         if project_number is not None:
             f.write(f"#BSUB -P {project_number}\n")
         f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
@@ -312,7 +317,8 @@ class FUGAKUSubmitter(Submitter):
         super().__init__(name=name, job=job, server=server, **kwargs)
 
     def _write_scheduler_options(self, f):
-        f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
+        if user_settings is not None:
+            f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
         f.write("#PJM -L node=1\n")  # using one node here
         f.write(f"#PJM -L elapse={self.server.num_hours}\n")
         f.write(f"#PJM --mpi proc={self.server.num_cores}\n")

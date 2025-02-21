@@ -1,6 +1,6 @@
 from ase.data import chemical_symbols as elements
-from ase.data.vdw import vdw_radii
 from ase.data import covalent_radii
+from ase.data.vdw import vdw_radii
 
 
 class PeriodicTable:

@@ -1,10 +1,15 @@
 """CLI interface for chemsmart project."""
 
-import click
 import logging
+
+import click
+
+from chemsmart.utils.cli import MyGroup
+
+from .config import config
 from .run import run
 from .sub import sub
-from chemsmart.utils.cli import MyGroup
+from .update import update
 
 
 @click.group(cls=MyGroup)
@@ -21,6 +26,8 @@ def entry_point(ctx, verbose):
 
 entry_point.add_command(run)
 entry_point.add_command(sub)
+entry_point.add_command(config)
+entry_point.add_command(update)
 
 
 def main():  # pragma: no cover

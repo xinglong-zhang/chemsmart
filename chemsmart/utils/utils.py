@@ -1,12 +1,17 @@
+import copy
+import hashlib
+import logging
 import os
 import re
+import subprocess
 import time
-import hashlib
-import copy
-import numpy as np
 from functools import lru_cache, wraps
 from itertools import groupby
-from typing import Union
+from typing import Tuple, Union
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -161,6 +166,17 @@ def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
     return masks
 
 
+def convert_list_to_orca_frozen_list(list_of_indices, molecule):
+    """Convert a list of indices to a list of indices for Orca frozen list.
+    Use 0-indexed list.
+    """
+    num_atoms_in_molecule = len(molecule.chemical_symbols)
+    masks = [0] * num_atoms_in_molecule
+    for i in list_of_indices:
+        masks[i] = -1
+    return masks
+
+
 def str_indices_range_to_list(str_indices):
     """Convert a supplied string of indices to a list of indices. All 1-indexed.
 
@@ -205,10 +221,12 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
     if ":" not in stridx:
         try:
             if int(stridx) < 0:
+                # return integer itself if negative
                 return int(stridx)
             else:
-                # Convert to integer and adjust to 0-based
+
                 return int(stridx) - 1
+
         except ValueError:
             # If it's not an integer, check if it's alphanumeric
             if stridx.isnumeric():
@@ -323,11 +341,11 @@ def convert_modred_list_to_string(modred_list):
 
 
 def get_prepend_string_list_from_modred_free_format(
-    input_modred, program_type="gaussian"
+    input_modred, program="gaussian"
 ):
     """Get prepend string list from either a list of lists or a list.
     e.g., [[1,2],[5,6]] or [1,2] -> ['B 1 2', 'B 5 6']
-    program_type: gaussian or orca, variable to decide the index to start from
+    program: gaussian or orca, variable to decide the index to start from
     Gaussian starts from 1, while orca starts from 0
     For chemsmart applications in homogeneous catalysis, we will use 1-indexing throughout,
     since this is what we usually see when we use GaussView or Avogadro to visualise the structures.
@@ -344,24 +362,24 @@ def get_prepend_string_list_from_modred_free_format(
         num_list = len(input_modred)
         for i in range(num_list):
             prepend_string = get_prepend_string_for_modred(input_modred[i])
-            if program_type == "gaussian":
+            if program == "gaussian":
                 modred_string = convert_modred_list_to_string(input_modred[i])
-            elif program_type == "orca":
+            elif program == "orca":
                 modred_string = convert_modred_list_to_string(
                     [a - 1 for a in input_modred[i]]
                 )
             else:
                 raise ValueError(
-                    f"Program type should be either gaussian or orca, but the given type is {program_type}!"
+                    f"Program type should be either gaussian or orca, but the given type is {program}!"
                 )
             each_frozen_string = f"{prepend_string} {modred_string}"
             prepend_string_list.append(each_frozen_string)
     elif isinstance(input_modred[0], int):
         # for a single list; e.g.: [2,3]
         prepend_string = get_prepend_string_for_modred(input_modred)
-        if program_type == "gaussian":
+        if program == "gaussian":
             modred_string = convert_modred_list_to_string(input_modred)
-        elif program_type == "orca":
+        elif program == "orca":
             modred_string = convert_modred_list_to_string(
                 [a - 1 for a in input_modred]
             )
@@ -416,3 +434,196 @@ def check_charge_and_multiplicity(settings):
         raise ValueError(
             "Charge and multiplicity must be set for Gaussian jobs."
         )
+
+
+def cmp_with_ignore(f1, f2, ignore_string=None):
+    """
+    Compare two files with an option to ignore lines containing a specific string
+    or a list of strings.
+
+    Arguments:
+    f1 -- First file name
+    f2 -- Second file name
+    ignore_string -- Ignore lines containing this string or any member in a list of strings
+     during content comparison. [default: None]
+
+    Returns:
+    True if the files are the same except where the lines contain ignore string, False otherwise.
+    """
+
+    if ignore_string is not None:
+
+        if isinstance(ignore_string, str):
+            ignore_string = [ignore_string]
+        elif isinstance(ignore_string, list):
+            ignore_string = ignore_string
+        else:
+            raise ValueError(
+                "ignore_string should be either a string or a list of strings."
+            )
+    with open(f1, "r") as fp1, open(f2, "r") as fp2:
+        for line1, line2 in zip(fp1, fp2):
+            # Skip lines containing the ignore_string
+            if ignore_string and any(
+                ignore in line1 or ignore in line2 for ignore in ignore_string
+            ):
+                continue
+            # Compare the current lines
+            if line1 != line2:
+                return False
+        # Ensure both files have reached EOF (no extra lines in one file)
+        return fp1.read() == fp2.read()
+
+
+def run_command(command):
+    """Runs a shell command using subprocess.Popen and captures its output."""
+    try:
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            logger.info(f"Error running {command}: {stderr.strip()}")
+            return None
+        return stdout.strip()
+    except Exception as e:
+        logger.error(f"Exception while running {command}: {e}")
+        return None
+
+
+def kabsch_align(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Kabsch algorithm for molecular alignment.
+    From https://hunterheidenreich.com/posts/kabsch_algorithm/"""
+    # Center molecules
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+
+    # Optimal translation
+    t = centroid_Q - centroid_P
+
+    # Center the points
+    p = P - centroid_P
+    q = Q - centroid_Q
+
+    # Compute the covariance matrix
+    H = np.dot(p.T, q)
+
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+
+    # Validate right-handed coordinate system
+    if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
+        Vt[-1, :] *= -1.0
+
+    # Optimal rotation
+    R = np.dot(Vt.T, U.T)
+
+    # rotate p
+    p = np.dot(p, R.T)
+
+    # RMSD
+    rmsd = np.sqrt(np.sum(np.square(p - q)) / P.shape[0])
+
+    return p, q, R, t, rmsd
+
+
+def kabsch_align2(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """Kabsch algorithm for optimal molecular alignment.
+    (This does not seem to work correctly?)
+
+    Returns:
+    - aligned_P: P after rotation and translation to match Q's position
+    - R: Optimal rotation matrix
+    - t: Optimal translation vector
+    - rmsd: Root Mean Square Deviation after alignment
+    """
+    assert P.shape == Q.shape, "Input matrices must have the same dimensions"
+
+    # Compute centroids and center coordinates
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+    centered_P = P - centroid_P
+    centered_Q = Q - centroid_Q
+
+    # Compute covariance matrix
+    H = centered_P.T @ centered_Q
+
+    # Singular Value Decomposition
+    U, S, Vt = np.linalg.svd(H)
+
+    # Ensure proper rotation (right-hand system)
+    det_sign = np.linalg.det(Vt.T @ U.T)
+    if det_sign < 0:
+        Vt[-1, :] *= -1
+
+    # Compute optimal rotation matrix
+    R = Vt.T @ U.T
+
+    # Apply rotation to centered_P (corrected from original)
+    rotated_P = centered_P @ R  # Changed from R.T to R
+
+    # Apply final translation to Q's coordinate system
+    aligned_P = rotated_P + centroid_Q  # Translate to Q's position
+
+    # Calculate RMSD using centered coordinates
+    rmsd = np.sqrt(np.mean(np.sum((rotated_P - centered_Q) ** 2, axis=1)))
+
+    return aligned_P, Q, R, centroid_Q - centroid_P, rmsd
+
+
+def extract_number(filename):
+    """Extracts the numeric part from the filename."""
+    match = re.search(r"c(\d+)\*?", filename)
+    if match:
+        return int(match.group(1))
+    else:
+        return float("inf")  # If no number is found, place it at the end
+
+
+## file handling
+
+
+def search_file(filename):
+    """Searches for a file in the current directory and its subdirectories securely."""
+    try:
+        # Search for the absolute file path
+        result = subprocess.run(
+            ["find", ".", "-name", filename],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_path = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        # Search for the absolute directory path
+        result = subprocess.run(
+            ["find", ".", "-name", filename, "-exec", "dirname", "{}", ";"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_dir = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        if absolute_file_path and absolute_file_dir:
+            return absolute_file_path, absolute_file_dir
+        else:
+            logger.error(f"{filename} not found! Check your Excel file.")
+            return None, None
+    except subprocess.CalledProcessError:
+        logger.error(f"Error occurred while searching for {filename}.")
+        return None, None

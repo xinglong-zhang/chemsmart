@@ -1,6 +1,8 @@
-import click
 import functools
 import logging
+import os
+
+import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
@@ -50,14 +52,14 @@ def click_gaussian_settings_options(f):
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the atoms"
+        "-c", "--charge", type=int, default=None, help="charge of the molecule"
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the atoms",
+        help="multiplicity of the molecule",
     )
     @click.option(
         "-x",
@@ -74,7 +76,8 @@ def click_gaussian_settings_options(f):
         "--index",
         type=str,
         default=None,
-        help="index of atom of ase db to be used",
+        help="Index of molecules to use; 1-based indices. "
+        "Default to the last molecule structure. 1-based index.",
     )
     @click.option(
         "-o",
@@ -95,14 +98,16 @@ def click_gaussian_settings_options(f):
         "--append-additional-info",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the input file. E.g, scrf=read",
+        help="additional information to be appended at the end of the "
+        "input file. E.g, scrf=read",
     )
     @click.option(
         "-C",
         "--custom-solvent",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the input file. E.g, scrf=read",
+        help="additional information to be appended at the end of the "
+        "input file. E.g, scrf=read",
     )
     @click.option(
         "-d",
@@ -111,6 +116,11 @@ def click_gaussian_settings_options(f):
         default=None,
         help="dieze tag for gaussian job; possible options include "
         '"n", "p", "t" to get "#n", "#p", "#t", respectively',
+    )
+    @click.option(
+        "--forces/--no-forces",
+        default=False,
+        help="Whether to calculate forces.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -133,19 +143,19 @@ def click_gaussian_jobtype_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="list of coordinates to be fixed for modred or scan job",
+        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
     )
     @click.option(
         "-s",
         "--step-size",
         default=None,
-        help="step size of coordinates to scan",
+        help="Step size of coordinates to scan.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="step size of coordinates to scan",
+        help="Step size of coordinates to scan.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -193,7 +203,8 @@ def click_gaussian_td_options(f):
             ["singlets", "triplets", "50-50"], case_sensitive=False
         ),
         default="singlets",
-        help='States for closed-shell singlet systems.\nOptions choice =["Singlets", "Triplets", "50-50"]',
+        help="States for closed-shell singlet systems.\n"
+        'Options choice =["Singlets", "Triplets", "50-50"]',
     )
     @click.option(
         "-r",
@@ -208,15 +219,17 @@ def click_gaussian_td_options(f):
         type=int,
         default=3,
         help="Solve for M states (the default is 3). "
-        "If 50-50, this gives the number of each type of state to solve (i.e., 3 singlets and 3 triplets).",
+        "If 50-50, this gives the number of each type of state to solve "
+        "(i.e., 3 singlets and 3 triplets).",
     )
     @click.option(
         "-e",
         "--eqsolv",
         type=str,
         default=None,
-        help="Whether to perform equilibrium or non-equilibrium PCM solvation. NonEqSolv is the default except "
-        "for excited state opt and when  excited state density is requested (e.g., Density=Current or All).",
+        help="Whether to perform equilibrium or non-equilibrium PCM solvation. "
+        "NonEqSolv is the default except for excited state opt and when "
+        "excited state density is requested (e.g., Density=Current or All).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -233,10 +246,10 @@ def click_gaussian_td_options(f):
     "--pubchem",
     type=str,
     default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
+    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
 )
 @click.pass_context
-def gaussian(  # noqa: PLR0912, PLR0915
+def gaussian(
     ctx,
     project,
     filename,
@@ -253,9 +266,10 @@ def gaussian(  # noqa: PLR0912, PLR0915
     append_additional_info,
     custom_solvent,
     dieze_tag,
+    forces,
     pubchem,
 ):
-    import os
+
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
 
@@ -273,12 +287,13 @@ def gaussian(  # noqa: PLR0912, PLR0915
     elif filename.endswith((".com", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
-    elif filename.endswith(".xyz"):
-        job_settings = GaussianJobSettings.default()
+    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
     else:
-        raise ValueError(
-            f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
-        )
+        job_settings = GaussianJobSettings.default()
+    # else:
+    #     raise ValueError(
+    #         f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
+    #     )
 
     # Update keywords
     keywords = (
@@ -313,8 +328,11 @@ def gaussian(  # noqa: PLR0912, PLR0915
     if dieze_tag is not None:
         job_settings.dieze_tag = dieze_tag
         keywords += ("dieze_tag",)
+    if forces:
+        job_settings.forces = forces
+        keywords += ("forces",)
 
-    # obtain atoms structure
+    # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -352,11 +370,27 @@ def gaussian(  # noqa: PLR0912, PLR0915
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
+    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        list_of_indices = get_list_from_string_range(index)
-        molecules = [molecules[i - 1] for i in list_of_indices]
+        try:
+            # try to get molecule using python style string indexing,
+            # but in 1-based
+            from chemsmart.utils.utils import string2index_1based
+
+            index = string2index_1based(index)
+            molecules = molecules[index]
+            if not isinstance(molecules, list):
+                molecules = [molecules]
+        except ValueError:
+            # except user defined indices such as s='[1-3,28-31,34-41]'
+            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
+            index = get_list_from_string_range(index)
+            molecules = [molecules[i - 1] for i in index]
+
+    logger.debug(f"Obtained molecules: {molecules}")
 
     # store objects
     ctx.obj["project_settings"] = project_settings
@@ -366,7 +400,6 @@ def gaussian(  # noqa: PLR0912, PLR0915
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
-    ctx.obj["filename"] = filename
     ctx.obj["filename"] = filename
 
 

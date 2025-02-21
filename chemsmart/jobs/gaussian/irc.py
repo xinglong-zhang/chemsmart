@@ -1,6 +1,7 @@
-from copy import deepcopy
 import logging
+from copy import deepcopy
 from typing import Type
+
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
 

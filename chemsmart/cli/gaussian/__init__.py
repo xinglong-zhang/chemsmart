@@ -10,6 +10,7 @@ from .modred import modred
 from .nci import nci
 from .opt import opt
 from .resp import resp
+from .saopt import saopt
 from .scan import scan
 from .singlepoint import sp
 from .tddft import td
@@ -29,6 +30,7 @@ __all__ = [
     "nci",
     "opt",
     "resp",
+    "saopt",
     "scan",
     "sp",
     "td",

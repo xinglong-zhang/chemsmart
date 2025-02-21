@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from urllib.error import HTTPError, URLError
 
 from ase.data.pubchem import analyze_input, base_url
+
 from chemsmart.io.molecules.structure import Molecule
 
 try:

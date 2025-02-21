@@ -1,5 +1,6 @@
 import logging
 import os
+
 import yaml
 
 from chemsmart.utils.utils import update_dict_with_existing_keys
@@ -22,6 +23,7 @@ class MolecularJobSettings:
         freq=True,
         numfreq=False,
         job_type=None,
+        title=None,
         solvent_model=None,
         solvent_id=None,
         additional_route_parameters=None,
@@ -33,6 +35,7 @@ class MolecularJobSettings:
         light_elements_basis=None,
         custom_solvent=None,
         forces=False,
+        input_string=None,
         **kwargs,
     ):
         self.ab_initio = ab_initio
@@ -45,6 +48,7 @@ class MolecularJobSettings:
         self.freq = freq
         self.numfreq = numfreq
         self.job_type = job_type
+        self.title = title
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
         self.additional_route_parameters = additional_route_parameters
@@ -76,6 +80,33 @@ class MolecularJobSettings:
             self.custom_solvent = None
 
         self.forces = forces
+        self.input_string = input_string
+
+    def remove_solvent(self):
+        self.solvent_model = None
+        self.solvent_id = None
+
+    def update_solvent(self, solvent_model=None, solvent_id=None):
+        """Update solvent model and solvent identity for implicit solvation.
+
+        Solvent models available: ['pcm', 'iefpcm', 'cpcm', 'smd', 'dipole', 'ipcm', 'scipcm'].
+        """
+        # update only if not None; do not update to default value of None
+        if solvent_model is not None:
+            self._check_solvent(solvent_model)
+            self.solvent_model = solvent_model
+
+        if solvent_id is not None:
+            self.solvent_id = solvent_id
+
+    def _check_solvent(self, solvent_model):
+        pass
+
+    def modify_solvent(self, remove_solvent=False, **kwargs):
+        if not remove_solvent:
+            self.update_solvent(**kwargs)
+        else:
+            self.remove_solvent()
 
     def set_custom_solvent_via_file(self, filename):
         if not os.path.exists(os.path.expanduser(filename)):
@@ -89,25 +120,38 @@ class MolecularJobSettings:
 
         self.custom_solvent = "\n".join(lines)
 
+    @classmethod
+    def from_dict(cls, settings_dict):
+        return cls(**settings_dict)
 
-def read_molecular_job_yaml(filename):
+
+def read_molecular_job_yaml(filename, program="gaussian"):
     # read in defaults, if exists
     file_directory = os.path.dirname(filename)
     default_file = os.path.join(file_directory, "defaults.yaml")
+    default_config = {}
     if os.path.exists(default_file):
         with open(default_file) as f:
             default_config = yaml.safe_load(f)
-        # logger.info(
-        #     f"Using the following pre-set defaults: \n{default_config}"
-        # )
-    # else:
-    #     logger.warning("Default file settings does not exist.\n")
-    #     # from chemsmart.jobs.orca.settings import ORCAJobSettings
-    #
-    #     # default_config = ORCAJobSettings.default().__dict__
-    #     logger.warning(
-    #         f"Using the following pre-set defaults: \n{default_config}"
-    #     )
+        logger.debug(
+            f"Using the following pre-set defaults: \n{default_config}"
+        )
+    else:
+        logger.warning("Default file settings does not exist.\n")
+        if program == "gaussian":
+            from chemsmart.settings.gaussian import GaussianJobSettings
+
+            default_config = GaussianJobSettings.default().__dict__
+        elif program == "orca":
+            from chemsmart.settings.orca import ORCAJobSettings
+
+            default_config = ORCAJobSettings.default().__dict__
+        else:
+            # other programs may be implemented in future
+            pass
+        logger.debug(
+            f"Using the following pre-set defaults: \n{default_config}"
+        )
 
     # job types
     gas_phase_jobs = [

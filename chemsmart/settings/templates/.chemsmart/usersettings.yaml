@@ -1,0 +1,4 @@
+##PROJECT: 1234567  # alias ACCOUNT FOR SLURM
+##SCRATCH: /scratch/abc/1234567  # SCRATCH DIRECTORY
+EMAIL: abc@gmail.com
+

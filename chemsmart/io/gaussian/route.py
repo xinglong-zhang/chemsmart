@@ -1,18 +1,16 @@
 import logging
 
-from chemsmart.io.gaussian import GaussianRefs
-
-gaussian_ab_initio = GaussianRefs().gaussian_ab_initio
-gaussian_functionals = GaussianRefs().gaussian_dft_fuctionals
-gaussian_bases = GaussianRefs().gaussian_basis_sets
-gaussian_solvation_models = GaussianRefs().gaussian_solvation_models
-gaussian_additional_route_parameters = (
-    GaussianRefs().gaussian_additional_route_parameters
+from chemsmart.io.gaussian import (
+    GAUSSIAN_AB_INITIO,
+    GAUSSIAN_ADDITIONAL_OPT_OPTIONS,
+    GAUSSIAN_ADDITIONAL_ROUTE_PARAMETERS,
+    GAUSSIAN_BASES,
+    GAUSSIAN_DIEZE_TAGS,
+    GAUSSIAN_FUNCTIONALS,
 )
-gaussian_additional_opt_options = (
-    GaussianRefs().gaussian_additional_opt_options
+from chemsmart.io.gaussian import (
+    GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
 )
-gaussian_dieze_tags = GaussianRefs().gaussian_dieze_tags
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +84,7 @@ class GaussianRoute:
         dieze_tag = None
         # dieze_tag '# ', '#N', '#P' '#T'
         if "#" in self.route_string and any(
-            self.route_string.startswith(tag) for tag in gaussian_dieze_tags
+            self.route_string.startswith(tag) for tag in GAUSSIAN_DIEZE_TAGS
         ):
             dieze_tag = self.route_string[0:2]
         return dieze_tag
@@ -129,7 +127,7 @@ class GaussianRoute:
         # get ab initio method by looking through the route string
         ab_initio = None
         for each_input in self.route_inputs:
-            if any(ab in each_input for ab in gaussian_ab_initio):
+            if any(ab in each_input for ab in GAUSSIAN_AB_INITIO):
                 ab_initio = each_input
         return ab_initio
 
@@ -153,7 +151,7 @@ class GaussianRoute:
             else:  # '/' not in route
                 if any(
                     functional in each_input
-                    for functional in gaussian_functionals
+                    for functional in GAUSSIAN_FUNCTIONALS
                 ):
                     functional = each_input
                 if "empiricaldispersion" in each_input:
@@ -161,7 +159,7 @@ class GaussianRoute:
                     functional_with_dispersion = functional + " " + dispersion
                     functional = functional_with_dispersion
                 if (
-                    any(basisset in each_input for basisset in gaussian_bases)
+                    any(basisset in each_input for basisset in GAUSSIAN_BASES)
                     and "generic" not in each_input
                 ):
                     basis = each_input
@@ -178,7 +176,7 @@ class GaussianRoute:
             for each_input in self.route_inputs
             if any(
                 route_parameter in each_input
-                for route_parameter in gaussian_additional_route_parameters
+                for route_parameter in GAUSSIAN_ADDITIONAL_ROUTE_PARAMETERS
             )
         ]
 
@@ -204,7 +202,7 @@ class GaussianRoute:
                         # <-- `eigentest` already included in writing in GaussianSettings.write_gaussian_input()
                         if any(
                             option in opt_option
-                            for option in gaussian_additional_opt_options
+                            for option in GAUSSIAN_ADDITIONAL_OPT_OPTIONS
                         ):
                             additional_opt_options.append(
                                 opt_option
