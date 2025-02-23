@@ -51,6 +51,10 @@ class Molecule:
         The forces on the atoms in the molecule in eV/Å.
     velocities: numpy array
         The velocities of the atoms in the molecule.
+    qm_high/medium/low_level_atoms：list of integers to define QM/MM layers
+        The atoms that are treated at the high/medium/low level of theory.
+    qm_link_atoms: list of tuples of integers
+        The atom pairs that are treated as link atoms in QM/MM calculations.
     info: dict
         A dictionary containing additional information about the molecule.
     """
@@ -67,6 +71,10 @@ class Molecule:
         energy=None,
         forces=None,
         velocities=None,
+        qm_high_level_atoms=None,
+        qm_medium_level_atoms=None,
+        qm_low_level_atoms=None,
+        qm_link_atoms=None,
         info=None,
     ):
         self.symbols = symbols
@@ -81,6 +89,10 @@ class Molecule:
         self.velocities = velocities
         self.info = info
         self._num_atoms = len(self.symbols)
+        self.qm_high_level_atoms=qm_high_level_atoms
+        self.qm_medium_level_atoms=qm_medium_level_atoms
+        self.qm_low_level_atoms=qm_medium_level_atoms
+        self.qm_link_atoms=qm_link_atoms
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -513,18 +525,35 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        if self.frozen_atoms is None:
+        if self.frozen_atoms is None and self.qm_high_level_atoms is None:
             for i, (s, (x, y, z)) in enumerate(
                 zip(self.chemical_symbols, self.positions)
             ):
                 f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
-        else:
+        elif self.frozen_atoms is not None and self.qm_high_level_atoms is None:
             for i, (s, (x, y, z)) in enumerate(
                 zip(self.chemical_symbols, self.positions)
             ):
                 f.write(
                     f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
                 )
+        elif self.frozen_atoms is None and self.qm_high_level_atoms is not None:
+            for i, (s, (x, y, z)) in enumerate(
+                zip(self.chemical_symbols, self.positions)
+            ):
+                line=f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
+                if i + 1 in self.qm_high_level_atoms:
+                    line += " H"  # High-level QM atoms
+                elif i + 1 in self.qm_medium_level_atoms:
+                    line += " M"  # Medium-level QM atoms
+                elif i + 1 in self.qm_low_level_atoms:
+                    line += " L"  # Low-level QM atoms
+                elif any((i + 1) in pair for pair in self.qm_link_atoms):
+                    pair_with_atom = next(pair for pair in self.qm_link_atoms if (i + 1) in pair)
+                    other_atom = pair_with_atom[0] if pair_with_atom[1] == (i + 1) else pair_with_atom[1]
+                    line += f" {other_atom}"  # Append link atom information
+                f.write(line + "\n")
+
 
     def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
@@ -911,6 +940,11 @@ class CoordinateBlock:
         """Returns a list of contraints in Gaussian format where 0 means unconstrained
         and -1 means constrained."""
         return self._get_constraints()
+
+    @property
+    def qm_layers(self):
+        """Returns a list of QM layers in Gaussian format."""
+        return self._get_qm_layers()
 
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
