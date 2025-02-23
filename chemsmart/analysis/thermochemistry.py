@@ -32,17 +32,25 @@ class Thermochemistry:
         filename,
         temperature,
         pressure,
-        alpha = None,
-        s_freq_cutoff = None,
-        h_freq_cutoff = None,
+        alpha=None,
+        s_freq_cutoff=None,
+        h_freq_cutoff=None,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
         self.alpha = alpha
-        self.s_freq_cutoff = s_freq_cutoff * units._c * 1e2 if s_freq_cutoff is not None else None  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.h_freq_cutoff = h_freq_cutoff * units._c * 1e2 if h_freq_cutoff is not None else None  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.s_freq_cutoff = (
+            s_freq_cutoff * units._c * 1e2
+            if s_freq_cutoff is not None
+            else None
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.h_freq_cutoff = (
+            h_freq_cutoff * units._c * 1e2
+            if h_freq_cutoff is not None
+            else None
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
         self.m = (
             self.molecule.mass
             * units._amu  # converts mass from g/mol to kg/molecule
@@ -433,7 +441,9 @@ class Thermochemistry:
         if self.alpha is None:
             self.alpha = 4
         if freq_cutoff is None:
-            freq_cutoff = 100 * units._c * 1e2  # convert the unit of cutoff frequency from cm^-1 to Hz
+            freq_cutoff = (
+                100 * units._c * 1e2
+            )  # convert the unit of cutoff frequency from cm^-1 to Hz
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]
         return damp
 
@@ -458,7 +468,16 @@ class Thermochemistry:
         bav = 1.00e-44
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
-        entropy = [R * (1/2 + np.log((8 * np.pi**3 * mu_prime_k * units._k * self.T)**(1/2))) for mu_prime_k in mu_prime]
+        entropy = [
+            R
+            * (
+                1 / 2
+                + np.log(
+                    (8 * np.pi**3 * mu_prime_k * units._k * self.T) ** (1 / 2)
+                )
+            )
+            for mu_prime_k in mu_prime
+        ]
         return entropy
 
     @property
@@ -467,7 +486,11 @@ class Thermochemistry:
         Formula:
             S^rrho_v,K = R * (Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))
         """
-        entropy = [R * (t / self.T) / (math.exp(t / self.T) - 1) - np.log(1 - math.exp(-t / self.T)) for t in self.theta]
+        entropy = [
+            R * (t / self.T) / (math.exp(t / self.T) - 1)
+            - np.log(1 - math.exp(-t / self.T))
+            for t in self.theta
+        ]
         return entropy
 
     @property
@@ -478,7 +501,11 @@ class Thermochemistry:
         """
         vib_entropy = []
         for j in range(0, len(self.v)):
-            vib_entropy.append(self.entropy_dumping_function[j] * self.rrho_entropy[j] + (1 - self.entropy_dumping_function[j]) * self.freerot_entropy[j])
+            vib_entropy.append(
+                self.entropy_dumping_function[j] * self.rrho_entropy[j]
+                + (1 - self.entropy_dumping_function[j])
+                * self.freerot_entropy[j]
+            )
         return sum(vib_entropy)
 
     @property
@@ -487,7 +514,10 @@ class Thermochemistry:
         Formula:
             E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
         """
-        energy = [R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
+        energy = [
+            R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
+            for t in self.theta
+        ]
         return energy
 
     @property
@@ -498,7 +528,11 @@ class Thermochemistry:
         """
         vib_energy = []
         for j in range(0, len(self.v)):
-            vib_energy.append(self.enthalpy_dumping_function[j] * self.rrho_internal_energy[j] + (1 - self.enthalpy_dumping_function[j]) * 1/2 * R * self.T)
+            vib_energy.append(
+                self.enthalpy_dumping_function[j]
+                * self.rrho_internal_energy[j]
+                + (1 - self.enthalpy_dumping_function[j]) * 1 / 2 * R * self.T
+            )
         return sum(vib_energy)
 
     @property
@@ -536,7 +570,9 @@ class Thermochemistry:
         where:
             E0 = the total electronic energy (Hartree)
         """
-        return self.energies + (self.qrrho_total_internal_energy + R * self.T) / (hartree_to_joules * units._Nav)
+        return self.energies + (
+            self.qrrho_total_internal_energy + R * self.T
+        ) / (hartree_to_joules * units._Nav)
 
     @property
     def qrrho_gibbs_free_energy(self):
@@ -544,7 +580,9 @@ class Thermochemistry:
         Formula:
             G^qrrho_corr = H^qrrho_corr - T * S^qrrho_tot
         """
-        return self.qrrho_enthalpy - self.T * self.qrrho_total_entropy / (hartree_to_joules * units._Nav)
+        return self.qrrho_enthalpy - self.T * self.qrrho_total_entropy / (
+            hartree_to_joules * units._Nav
+        )
 
     def get_thermochemistry(self):
         pass
@@ -596,7 +634,10 @@ class GaussianThermochemistry(Thermochemistry):
         Example in Gaussian output:
         Thermal correction to Enthalpy=                  0.082202
         """
-        return self.thermal_correction_energy + units._k * self.T / hartree_to_joules
+        return (
+            self.thermal_correction_energy
+            + units._k * self.T / hartree_to_joules
+        )
 
     @property
     def thermal_correction_free_energy(self):
@@ -606,7 +647,10 @@ class GaussianThermochemistry(Thermochemistry):
         Example in Gaussian output:
         Thermal correction to Gibbs Free Energy=         0.055064
         """
-        return self.thermal_correction_enthalpy - self.T * self.total_entropy / (hartree_to_joules * units._Nav)
+        return (
+            self.thermal_correction_enthalpy
+            - self.T * self.total_entropy / (hartree_to_joules * units._Nav)
+        )
 
     @property
     def sum_of_electronic_and_zero_point_energies(self):
