@@ -8,3 +8,4 @@ bohr_to_meter = (
     1 * units.Bohr / units.m
 )  # 1 Bohr = 0.52917721067 Å = 0.52917721067e-10 m
 amu_to_kg = 1 * units._amu  # 1 amu = 1.66053906660e-27 kg
+hartree_to_joules = 4.35974434e-18  # 1 Hartree = 4.35974434 × 10^-18 Joules
