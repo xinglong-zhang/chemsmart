@@ -91,7 +91,7 @@ class Molecule:
         self._num_atoms = len(self.symbols)
         self.qm_high_level_atoms=qm_high_level_atoms
         self.qm_medium_level_atoms=qm_medium_level_atoms
-        self.qm_low_level_atoms=qm_medium_level_atoms
+        self.qm_low_level_atoms=qm_low_level_atoms
         self.qm_link_atoms=qm_link_atoms
 
         # Define bond order classification multipliers (avoiding redundancy)
@@ -525,34 +525,25 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        if self.frozen_atoms is None and self.qm_high_level_atoms is None:
-            for i, (s, (x, y, z)) in enumerate(
+        for i, (s, (x, y, z)) in enumerate(
                 zip(self.chemical_symbols, self.positions)
-            ):
-                f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
-        elif self.frozen_atoms is not None and self.qm_high_level_atoms is None:
-            for i, (s, (x, y, z)) in enumerate(
-                zip(self.chemical_symbols, self.positions)
-            ):
-                f.write(
-                    f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
-                )
-        elif self.frozen_atoms is None and self.qm_high_level_atoms is not None:
-            for i, (s, (x, y, z)) in enumerate(
-                zip(self.chemical_symbols, self.positions)
-            ):
-                line=f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n"
-                if i + 1 in self.qm_high_level_atoms:
-                    line += " H"  # High-level QM atoms
-                elif i + 1 in self.qm_medium_level_atoms:
-                    line += " M"  # Medium-level QM atoms
-                elif i + 1 in self.qm_low_level_atoms:
-                    line += " L"  # Low-level QM atoms
-                elif any((i + 1) in pair for pair in self.qm_link_atoms):
-                    pair_with_atom = next(pair for pair in self.qm_link_atoms if (i + 1) in pair)
-                    other_atom = pair_with_atom[0] if pair_with_atom[1] == (i + 1) else pair_with_atom[1]
-                    line += f" {other_atom}"  # Append link atom information
-                f.write(line + "\n")
+        ):
+            line=f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            if self.frozen_atoms is not None:
+                line=f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            if self.qm_high_level_atoms is not None and i+1 in self.qm_high_level_atoms:
+                line += " H"  # High-level QM atoms
+            elif self.qm_medium_level_atoms is not None and i+1 in self.qm_medium_level_atoms:
+                line += " M"  # Medium-level QM atoms
+            elif self.qm_low_level_atoms is not None and i+1 in self.qm_low_level_atoms:
+                line += " L"  # Low-level QM atoms
+            if self.qm_link_atoms is not None:
+                for pair in self.qm_link_atoms:
+                    if (i + 1) in pair:
+                        other_atom = pair[0] if pair[1] == (i + 1) else pair[1]
+                        line += f" {other_atom}"
+            f.write(line + "\n")
+        return f
 
 
     def _write_gaussian_pbc_coordinates(self, f):
