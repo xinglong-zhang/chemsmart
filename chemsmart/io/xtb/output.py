@@ -301,14 +301,17 @@ class XTBOutput(FileMixin):
                     else:
                         summary_block.append(j_line)
                 summary_blocks.append(summary_block)
+        if len(summary_blocks) == 0:
+            return None
         return summary_blocks
 
     def _extract_summary_information(self, keyword):
         # make sure it only extracts from SUMMARY block
         last_summary_block = self.get_all_summary_blocks()[-1]
-        for line in last_summary_block:
-            if keyword in line:
-                return float(line.split()[-3])
+        if last_summary_block:
+            for line in last_summary_block:
+                if keyword in line:
+                    return float(line.split()[-3])
         return None
 
     @property
@@ -338,7 +341,8 @@ class XTBOutput(FileMixin):
     @property
     def anisotropic_xc(self):
         """Direction-dependent exchange-correlation energy contribution,
-        which accounts for electronic interactions beyond spherical approximation."""
+        which accounts for electronic interactions beyond spherical approximation.
+        """
         return self._extract_summary_information("-> anisotropic XC")
 
     @property
@@ -414,9 +418,10 @@ class XTBOutput(FileMixin):
         """Finite displacement step size used to compute the numerical Hessian.'
         A smaller step gives more accurate results but can be computationally expensive.
         Default is 0.005 Å, which balances accuracy and efficiency."""
-        for line in self.numerical_hessian_block:
-            if "Step length" in line:
-                return float(line.split()[-1])
+        if self.numerical_hessian_block:
+            for line in self.numerical_hessian_block:
+                if "step length" in line:
+                    return float(line.split()[-1])
 
     @property
     def scc_accuracy(self):
@@ -424,25 +429,29 @@ class XTBOutput(FileMixin):
         for the Hessian calculation. Lower values (e.g., 0.10000) indicate stricter
         convergence, higher values (e.g., 0.50000) speed up calculation but may
         introduce slight inaccuracies."""
-        for line in self.numerical_hessian_block:
-            if "SCC accuracy" in line:
-                return float(line.split()[-1])
+        if self.numerical_hessian_block:
+            for line in self.numerical_hessian_block:
+                if "SCC accuracy" in line:
+                    return float(line.split()[-1])
 
     @property
     def hessian_scale_factor(self):
         """Hessian scaling factor, applied to adjust vibrational frequencies."""
-        for line in self.numerical_hessian_block:
-            if "Hessian scale factor" in line:
-                return float(line.split()[-1])
+        if self.numerical_hessian_block:
+            for line in self.numerical_hessian_block:
+                if "Hessian scale factor" in line:
+                    return float(line.split()[-1])
 
     @property
     def rms_gradient(self):
         """Root mean square (RMS) gradient, a measure of the convergence of the
         numerical Hessian calculation. Lower values indicate better convergence.
-        Generally, values below 0.001 Eh/a₀ suggest a well-converged structure."""
-        for line in self.numerical_hessian_block:
-            if "RMS gradient" in line:
-                return float(line.split()[-1])
+        Generally, values below 0.001 Eh/a₀ suggest a well-converged structure.
+        """
+        if self.numerical_hessian_block:
+            for line in self.numerical_hessian_block:
+                if "RMS gradient" in line:
+                    return float(line.split()[-1])
 
     @property
     def molecular_dipole_lines(self):
@@ -489,9 +498,7 @@ class XTBOutput(FileMixin):
             if line.startswith("molecular quadrupole (traceless):"):
                 for j_line in self.contents[i + 2 : i + 5]:
                     # only get 3 lines
-                    quadrupole_lines.append(
-                        j_line
-                    )
+                    quadrupole_lines.append(j_line)
         if len(quadrupole_lines) == 0:
             return None
         return quadrupole_lines
@@ -502,16 +509,21 @@ class XTBOutput(FileMixin):
         if self.molecular_quadrupole_lines is not None:
             for line in self.molecular_quadrupole_lines:
                 if line.startswith("q only:"):
-                    xx, xy, yy, xz, yz, zz = [float(x) for x in line.split()[-6:]]
+                    xx, xy, yy, xz, yz, zz = [
+                        float(x) for x in line.split()[-6:]
+                    ]
                     # convert to tensor
                     return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+
     @property
     def q_dip_molecular_quadrupole(self):
         """Molecular quadrupole from both charge and dipole moment contributions."""
         if self.molecular_quadrupole_lines is not None:
             for line in self.molecular_quadrupole_lines:
                 if line.startswith("q+dip:"):
-                    xx, xy, yy, xz, yz, zz = [float(x) for x in line.split()[-6:]]
+                    xx, xy, yy, xz, yz, zz = [
+                        float(x) for x in line.split()[-6:]
+                    ]
                     # convert to tensor
                     return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
 
@@ -522,96 +534,11 @@ class XTBOutput(FileMixin):
         if self.molecular_quadrupole_lines is not None:
             for line in self.molecular_quadrupole_lines:
                 if line.startswith("full:"):
-                    xx, xy, yy, xz, yz, zz = [float(x) for x in line.split()[-6:]]
+                    xx, xy, yy, xz, yz, zz = [
+                        float(x) for x in line.split()[-6:]
+                    ]
                     # convert to tensor
                     return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
-
-    def _extract_final_information(self, keyword):
-        for line in reversed(self.contents):
-            if keyword in line:
-                return float(
-                    line.split(keyword)[-1].strip().split()[0].strip()
-                )
-        return None
-
-    @property
-    def total_energy(self):
-        return self._extract_final_information(
-            "TOTAL ENERGY"
-        )  # total energy in Eh
-
-    @property
-    def gradient_norm(self):
-        return self._extract_final_information(
-            "GRADIENT NORM"
-        )  # gradient norm in Eh/α
-
-    @property
-    def fmo_gap(self):
-        """Extract HOMO-LUMO gap, in eV"""
-        fmo_gap = self._extract_final_information("HOMO-LUMO GAP")
-        assert np.isclose(
-            self.lumo_energy - self.homo_energy, fmo_gap, atol=1e-3
-        )
-        return fmo_gap
-
-    def sum_time_hours(self, line):
-        n_days = float(line.split(" d,")[0].split()[-1])
-        n_hours = float(line.split(" h,")[0].split()[-1])
-        n_minutes = float(line.split(" min,")[0].split()[-1])
-        n_seconds = float(line.split(" sec")[0].split()[-1])
-        total_seconds = (
-            n_days * 24 * 60 * 60
-            + n_hours * 60 * 60
-            + n_minutes * 60
-            + n_seconds
-        )
-        total_hours = round(total_seconds / 3600, 6)
-        return total_hours
-
-    def elapsed_walltime_by_jobs(self, task_name):
-        elapsed_walltime = []
-        for i, line in enumerate(self.contents):
-            if task_name in self.contents[i - 1] and "wall-time:" in line:
-                total_hours = self.sum_time_hours(line)
-                elapsed_walltime.append(total_hours)
-        if elapsed_walltime:
-            return elapsed_walltime
-        return None
-
-    def cpu_runtime_by_jobs(self, task_name):
-        cpu_runtime = []
-        for i, line in enumerate(self.contents):
-            if task_name in self.contents[i - 2] and "cpu-time:" in line:
-                total_hours = self.sum_time_hours(line)
-                cpu_runtime.append(total_hours)
-        if cpu_runtime:
-            return cpu_runtime
-        return None
-
-    @property
-    def total_wall_time(self):
-        if self.elapsed_walltime_by_jobs("total:"):
-            return round(sum(self.elapsed_walltime_by_jobs("total:")), 6)
-        return None
-
-    @property
-    def total_cpu_time(self):
-        if self.cpu_runtime_by_jobs("total:"):
-            return round(sum(self.cpu_runtime_by_jobs("total:")), 6)
-        return None
-
-    @property
-    def scf_wall_time(self):
-        if self.elapsed_walltime_by_jobs("SCF:"):
-            return round(sum(self.elapsed_walltime_by_jobs("SCF:")), 6)
-        return None
-
-    @property
-    def scf_cpu_time(self):
-        if self.cpu_runtime_by_jobs("SCF:"):
-            return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
-        return None
 
     @property
     def dielectric_constant(self):
@@ -676,8 +603,6 @@ class XTBOutput(FileMixin):
                 if "Surface tension" in line:
                     return float(line.split()[-4])  # surface tension in Eh
         return None
-
-
 
     """
     GEOMETRY OPTIMIZATION
@@ -757,9 +682,9 @@ class XTBOutput(FileMixin):
             return round(sum(self.cpu_runtime_by_jobs("ANC optimizer:")), 6)
         return None
 
-    #"""
-    #CALCULATION OF VIBRATIONAL FREQUENCIES
-    #"""
+    # """
+    # CALCULATION OF VIBRATIONAL FREQUENCIES
+    # """
 
     @cached_property
     def vibrational_frequencies(self):
@@ -904,31 +829,141 @@ class XTBOutput(FileMixin):
             return partition_function
         return None
 
+    def _get_thermodynamics_block(self):
+        """Get thermodynamics block."""
+        for i, line in enumerate(self.contents):
+            if "THERMODYNAMIC" in line:
+                thermodynamics_block = []
+                for j_line in self.contents[i + 2 :]:
+                    if len(j_line) == 0:
+                        break
+                    if "::::::::" in j_line or "........" in j_line:
+                        continue
+                    thermodynamics_block.append(j_line)
+                return thermodynamics_block
+        return None
+
+    def _extract_thermodynamics_information(self, keyword):
+        """Extract thermodynamic information from the output file."""
+        thermodynamics_block = self._get_thermodynamics_block()
+        if thermodynamics_block:
+            for line in thermodynamics_block:
+                if keyword in line:
+                    return float(line.split()[-3])
+        return None
+
     @property
     def zero_point_energy(self):
         """Zero point energy in Eh"""
-        return self._extract_summary_information("zero point energy")
+        return self._extract_thermodynamics_information("zero point energy")
 
     @property
     def grrho_without_zpve(self):
         """Free energy in Eh within the rigid-rotor-harmonic-oscillator (RRHO) approximation,
         excluding zero-point vibrational energy (ZPVE)"""
-        return self._extract_summary_information("G(RRHO) w/o ZPVE")
+        return self._extract_thermodynamics_information("G(RRHO) w/o ZPVE")
 
     @property
     def grrho_contribution(self):
         """Contribution of RRHO approximation to free energy in Eh"""
-        return self._extract_summary_information("G(RRHO) contrib.")
+        return self._extract_thermodynamics_information("G(RRHO) contrib.")
+
+    def _extract_final_information(self, keyword):
+        for line in reversed(self.contents):
+            if keyword in line:
+                return float(
+                    line.split(keyword)[-1].strip().split()[0].strip()
+                )
+        return None
+
+    @property
+    def total_energy(self):
+        return self._extract_final_information(
+            "TOTAL ENERGY"
+        )  # total energy in Eh
+
+    @property
+    def gradient_norm(self):
+        return self._extract_final_information(
+            "GRADIENT NORM"
+        )  # gradient norm in Eh/α
+
+    @property
+    def fmo_gap(self):
+        """Extract HOMO-LUMO gap, in eV"""
+        fmo_gap = self._extract_final_information("HOMO-LUMO GAP")
+        assert np.isclose(
+            self.lumo_energy - self.homo_energy, fmo_gap, atol=1e-3
+        )
+        return fmo_gap
 
     @property
     def total_enthalpy(self):
         """Total enthalpy in Eh"""
-        return self._extract_summary_information("TOTAL ENTHALPY")
+        return self._extract_final_information("TOTAL ENTHALPY")
 
     @property
     def total_free_energy(self):
         """Total free energy in Eh"""
-        return self._extract_summary_information("TOTAL FREE ENERGY")
+        return self._extract_final_information("TOTAL FREE ENERGY")
+
+    def sum_time_hours(self, line):
+        n_days = float(line.split(" d,")[0].split()[-1])
+        n_hours = float(line.split(" h,")[0].split()[-1])
+        n_minutes = float(line.split(" min,")[0].split()[-1])
+        n_seconds = float(line.split(" sec")[0].split()[-1])
+        total_seconds = (
+            n_days * 24 * 60 * 60
+            + n_hours * 60 * 60
+            + n_minutes * 60
+            + n_seconds
+        )
+        total_hours = round(total_seconds / 3600, 6)
+        return total_hours
+
+    def elapsed_walltime_by_jobs(self, task_name):
+        elapsed_walltime = []
+        for i, line in enumerate(self.contents):
+            if task_name in self.contents[i - 1] and "wall-time:" in line:
+                total_hours = self.sum_time_hours(line)
+                elapsed_walltime.append(total_hours)
+        if elapsed_walltime:
+            return elapsed_walltime
+        return None
+
+    def cpu_runtime_by_jobs(self, task_name):
+        cpu_runtime = []
+        for i, line in enumerate(self.contents):
+            if task_name in self.contents[i - 2] and "cpu-time:" in line:
+                total_hours = self.sum_time_hours(line)
+                cpu_runtime.append(total_hours)
+        if cpu_runtime:
+            return cpu_runtime
+        return None
+
+    @property
+    def total_wall_time(self):
+        if self.elapsed_walltime_by_jobs("total:"):
+            return round(sum(self.elapsed_walltime_by_jobs("total:")), 6)
+        return None
+
+    @property
+    def total_cpu_time(self):
+        if self.cpu_runtime_by_jobs("total:"):
+            return round(sum(self.cpu_runtime_by_jobs("total:")), 6)
+        return None
+
+    @property
+    def scf_wall_time(self):
+        if self.elapsed_walltime_by_jobs("SCF:"):
+            return round(sum(self.elapsed_walltime_by_jobs("SCF:")), 6)
+        return None
+
+    @property
+    def scf_cpu_time(self):
+        if self.cpu_runtime_by_jobs("SCF:"):
+            return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
+        return None
 
     @property
     def hessian_wall_time(self):

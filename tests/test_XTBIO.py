@@ -1,5 +1,7 @@
 import os.path
+
 import numpy as np
+
 from chemsmart.io.xtb.output import XTBOutput
 
 
@@ -7,6 +9,7 @@ class TestXTBOutput:
     def test_sp_output(self, xtb_sp_outfile):
         assert os.path.exists(xtb_sp_outfile)
         xtb_output = XTBOutput(filename=xtb_sp_outfile)
+        assert xtb_output.xtb_version == "6.7.1"
         assert xtb_output.normal_termination
         assert xtb_output.route_string == "xtb xtbopt.coord"
         assert xtb_output.num_basis_functions == 6
@@ -42,38 +45,43 @@ class TestXTBOutput:
         assert xtb_output.s6_in_model_hessian is None
         assert xtb_output.homo_energy == -12.1467
         assert xtb_output.lumo_energy == 2.2442
+        assert xtb_output.total_energy_without_gsasa_hb is None
         assert xtb_output.scc_energy == -5.104925504312
         assert xtb_output.isotropic_es == 0.031459394051
         assert xtb_output.anisotropic_es == 0.000394673573
         assert xtb_output.anisotropic_xc == -0.000882256681
         assert xtb_output.dispersion_energy == -0.000141082937
+        assert xtb_output.solvation_energy_gsolv is None
+        assert xtb_output.electronic_solvation_energy_gelec is None
+        assert xtb_output.surface_area_solvation_energy_gsasa is None
+        assert xtb_output.hydrogen_bonding_solvation_energy_ghb is None
+        assert xtb_output.empirical_shift_correction_gshift is None
         assert xtb_output.repulsion_energy == 0.034381060848
+        assert xtb_output.additional_restraining_energy == 0.0
+        assert not xtb_output.numfreq
+        assert xtb_output.hessian_step_length is None
+        assert xtb_output.scc_accuracy is None
+        assert xtb_output.hessian_scale_factor is None
+        assert xtb_output.rms_gradient is None
         assert xtb_output.total_charge == 0
-        assert np.allclose(xtb_output.qonly_molecular_dipole, [-0.0, 0.0, 0.607])
-        assert np.allclose(xtb_output.full_molecular_dipole, [-0.0, -0.0, 0.872])
+        assert np.allclose(
+            xtb_output.qonly_molecular_dipole, [-0.0, 0.0, 0.607]
+        )
+        assert np.allclose(
+            xtb_output.full_molecular_dipole, [-0.0, -0.0, 0.872]
+        )
         assert xtb_output.total_molecular_dipole_moment == 2.217
         assert np.allclose(
             xtb_output.qonly_molecular_quadrupole,
-            [
-                [1.311, 0.0, 0.0],
-                [0.0, -0.492, 0.0],
-                [0.0, 0.0, -0.819]
-            ])
+            [[1.311, 0.0, 0.0], [0.0, -0.492, 0.0], [0.0, 0.0, -0.819]],
+        )
         assert np.allclose(
             xtb_output.q_dip_molecular_quadrupole,
-            [
-                [1.747, 0.0, 0.0],
-                [0.0, -0.572, 0.0],
-                [0.0, 0.0, -1.176]
-            ]
+            [[1.747, 0.0, 0.0], [0.0, -0.572, 0.0], [0.0, 0.0, -1.176]],
         )
         assert np.allclose(
             xtb_output.full_molecular_quadrupole,
-            [
-                [1.951, 0.0, 0.0],
-                [0.0, -0.831, 0.0],
-                [0.0, 0.0, -1.121]
-            ]
+            [[1.951, 0.0, 0.0], [0.0, -0.831, 0.0], [0.0, 0.0, -1.121]],
         )
         assert xtb_output.total_energy == -5.070544443464
         assert xtb_output.gradient_norm == 0.000075164743
@@ -142,6 +150,9 @@ class TestXTBOutput:
         assert len(all_summary_blocks) == 2
         assert len(all_summary_blocks[0]) == 11
 
+        assert not xtb_output.solvent_on
+        assert xtb_output.total_energy_without_gsasa_hb is None
+
     def test_opt_gbsa_output(self, xtb_opt_gbsa_outfile):
         assert os.path.exists(xtb_opt_gbsa_outfile)
         xtb_output = XTBOutput(filename=xtb_opt_gbsa_outfile)
@@ -162,11 +173,19 @@ class TestXTBOutput:
         assert xtb_output.h_bond_correction
         assert not xtb_output.ion_screening
         assert xtb_output.surface_tension == 1.0000e-05
-        assert xtb_output.gsolv == -0.008095712200
-        assert xtb_output.gelec == -0.000777170108
-        assert xtb_output.gsasa == -0.009170771809
-        assert xtb_output.hydrogen_bonding_solvation_energy_ghb == -0.000195045636
-        assert xtb_output.gshift == 0.002047275352
+        assert xtb_output.solvent_on
+        assert np.isclose(
+            xtb_output.total_energy_without_gsasa_hb, -16.150734982370
+        )
+        assert xtb_output.solvation_energy_gsolv == -0.008095712200
+        assert xtb_output.electronic_solvation_energy_gelec == -0.000777170108
+        assert (
+            xtb_output.surface_area_solvation_energy_gsasa == -0.009170771809
+        )
+        assert (
+            xtb_output.hydrogen_bonding_solvation_energy_ghb == -0.000195045636
+        )
+        assert xtb_output.empirical_shift_correction_gshift == 0.002047275352
         assert xtb_output.degrees_of_freedom == 27
         assert xtb_output.optimized_structure_block == [
             "xtb: 6.7.1 (edcfbbe)",
@@ -278,7 +297,11 @@ class TestXTBOutput:
             1.91,
         ]
 
-        assert len(xtb_output.vibrational_frequencies) == len(xtb_output.reduced_masses) == 33
+        assert (
+            len(xtb_output.vibrational_frequencies)
+            == len(xtb_output.reduced_masses)
+            == 33
+        )
         assert xtb_output.ir_intensities == [
             0.64,
             1.05,
@@ -369,3 +392,24 @@ class TestXTBOutput:
         assert xtb_output.grrho_contribution == 0.058516627312
         assert xtb_output.total_enthalpy == -16.067220717226
         assert xtb_output.total_free_energy == -16.099537329248
+
+        assert np.isclose(xtb_output.solvation_energy_gsolv, -0.008096007916)
+        assert np.isclose(
+            xtb_output.electronic_solvation_energy_gelec, -0.000777374495
+        )
+        assert np.isclose(
+            xtb_output.surface_area_solvation_energy_gsasa, -0.009170822306
+        )
+        assert np.isclose(
+            xtb_output.hydrogen_bonding_solvation_energy_ghb, -0.000195086467
+        )
+        assert np.isclose(
+            xtb_output.empirical_shift_correction_gshift, 0.002047275352
+        )
+        assert np.isclose(xtb_output.repulsion_energy, 0.284654889204)
+        assert xtb_output.additional_restraining_energy == 0.0
+        assert xtb_output.numfreq
+        assert xtb_output.hessian_step_length == 0.005
+        assert xtb_output.scc_accuracy == 0.3
+        assert xtb_output.hessian_scale_factor == 1.0
+        assert xtb_output.rms_gradient == 0.00055
