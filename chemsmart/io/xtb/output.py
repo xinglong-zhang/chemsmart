@@ -445,48 +445,86 @@ class XTBOutput(FileMixin):
                 return float(line.split()[-1])
 
     @property
-    def molecular_dipole(self):
+    def molecular_dipole_lines(self):
         dipole_lines = []
         for i, line in enumerate(self.contents):
             if line.startswith("molecular dipole:"):
                 for j_line in self.contents[i + 2 : i + 4]:
-                    dipole_lines.append(j_line.split(":")[1].strip().split())
+                    # only get two lines
+                    dipole_lines.append(j_line)
         if len(dipole_lines) == 0:
             return None
-        dipole_data = {
-            "q_only": [float(x) for x in dipole_lines[0][0:3]],
-            "full": [float(x) for x in dipole_lines[1][0:3]],
-        }
-        return dipole_data
+        return dipole_lines
 
     @property
-    def total_dipole(self):
-        for i, line in enumerate(self.contents):
-            if line.startswith("molecular dipole:"):
-                if "full:" in self.contents[i + 3]:
-                    total_dipole = self.contents[i + 3].split()[
-                        -1
-                    ]  # total dipole in Debye
-                    return float(total_dipole)
-        return None
+    def qonly_molecular_dipole(self):
+        """Charge only dipole, computed only from atomic partial charges
+        (electrostatic contribution)."""
+        if self.molecular_dipole_lines is not None:
+            for line in self.molecular_dipole_lines:
+                if line.startswith("q only:"):
+                    return np.array([float(x) for x in line.split()[-3:]])
 
     @property
-    def molecular_quadrupole(self):
+    def full_molecular_dipole(self):
+        """Actual dipole moment including both charge distribution
+        and electronic polarization contributions"""
+        if self.molecular_dipole_lines is not None:
+            for line in self.molecular_dipole_lines:
+                if line.startswith("full:"):
+                    return np.array([float(x) for x in line.split()[1:4]])
+
+    @property
+    def total_molecular_dipole_moment(self):
+        """Total molecular dipole moment, in Debye."""
+        if self.molecular_dipole_lines is not None:
+            for line in self.molecular_dipole_lines:
+                if line.startswith("full:"):
+                    return float(line.split()[-1])
+
+    @property
+    def molecular_quadrupole_lines(self):
         quadrupole_lines = []
         for i, line in enumerate(self.contents):
             if line.startswith("molecular quadrupole (traceless):"):
                 for j_line in self.contents[i + 2 : i + 5]:
+                    # only get 3 lines
                     quadrupole_lines.append(
-                        j_line.split(":")[1].strip().split()
+                        j_line
                     )
         if len(quadrupole_lines) == 0:
             return None
-        quadrupole_data = {
-            "q_only": [float(x) for x in quadrupole_lines[0][0:6]],
-            "q+dip": [float(x) for x in quadrupole_lines[1][0:6]],
-            "full": [float(x) for x in quadrupole_lines[2][0:6]],
-        }
-        return quadrupole_data
+        return quadrupole_lines
+
+    @property
+    def qonly_molecular_quadrupole(self):
+        """Charge-only quadrupole moment, computed from atomic partial charges."""
+        if self.molecular_quadrupole_lines is not None:
+            for line in self.molecular_quadrupole_lines:
+                if line.startswith("q only:"):
+                    xx, xy, yy, xz, yz, zz = [float(x) for x in line.split()[-6:]]
+                    # convert to tensor
+                    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+    @property
+    def q_dip_molecular_quadrupole(self):
+        """Molecular quadrupole from both charge and dipole moment contributions."""
+        if self.molecular_quadrupole_lines is not None:
+            for line in self.molecular_quadrupole_lines:
+                if line.startswith("q+dip:"):
+                    xx, xy, yy, xz, yz, zz = [float(x) for x in line.split()[-6:]]
+                    # convert to tensor
+                    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+
+    @property
+    def full_molecular_quadrupole(self):
+        """Full molecular quadrupole moment, including charge, dipole, and quadrupole
+        contributions."""
+        if self.molecular_quadrupole_lines is not None:
+            for line in self.molecular_quadrupole_lines:
+                if line.startswith("full:"):
+                    xx, xy, yy, xz, yz, zz = [float(x) for x in line.split()[-6:]]
+                    # convert to tensor
+                    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
 
     def _extract_final_information(self, keyword):
         for line in reversed(self.contents):

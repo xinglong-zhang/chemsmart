@@ -1,5 +1,5 @@
 import os.path
-
+import numpy as np
 from chemsmart.io.xtb.output import XTBOutput
 
 
@@ -49,16 +49,32 @@ class TestXTBOutput:
         assert xtb_output.dispersion_energy == -0.000141082937
         assert xtb_output.repulsion_energy == 0.034381060848
         assert xtb_output.total_charge == 0
-        assert xtb_output.molecular_dipole == {
-            "q_only": [-0.0, 0.0, 0.607],
-            "full": [-0.0, -0.0, 0.872],
-        }
-        assert xtb_output.total_dipole == 2.217
-        assert xtb_output.molecular_quadrupole == {
-            "q_only": [1.311, 0.0, -0.492, 0.0, 0.0, -0.819],
-            "q+dip": [1.747, 0.0, -0.572, -0.0, 0.0, -1.176],
-            "full": [1.951, 0.0, -0.831, -0.0, 0.0, -1.121],
-        }
+        assert np.allclose(xtb_output.qonly_molecular_dipole, [-0.0, 0.0, 0.607])
+        assert np.allclose(xtb_output.full_molecular_dipole, [-0.0, -0.0, 0.872])
+        assert xtb_output.total_molecular_dipole_moment == 2.217
+        assert np.allclose(
+            xtb_output.qonly_molecular_quadrupole,
+            [
+                [1.311, 0.0, 0.0],
+                [0.0, -0.492, 0.0],
+                [0.0, 0.0, -0.819]
+            ])
+        assert np.allclose(
+            xtb_output.q_dip_molecular_quadrupole,
+            [
+                [1.747, 0.0, 0.0],
+                [0.0, -0.572, 0.0],
+                [0.0, 0.0, -1.176]
+            ]
+        )
+        assert np.allclose(
+            xtb_output.full_molecular_quadrupole,
+            [
+                [1.951, 0.0, 0.0],
+                [0.0, -0.831, 0.0],
+                [0.0, 0.0, -1.121]
+            ]
+        )
         assert xtb_output.total_energy == -5.070544443464
         assert xtb_output.gradient_norm == 0.000075164743
         assert xtb_output.fmo_gap == 14.390891673350
