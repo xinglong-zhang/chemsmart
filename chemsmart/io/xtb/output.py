@@ -312,32 +312,137 @@ class XTBOutput(FileMixin):
         return None
 
     @property
+    def total_energy_without_gsasa_hb(self):
+        """Total free energy (electronic + thermal) of system without contributions
+        from GSASA (Generalized Solvent Accessible Surface Area) and hydrogen
+        bonding (hb) corrections."""
+        return self._extract_summary_information("total w/o Gsasa/hb")
+
+    @property
     def scc_energy(self):
+        """Electronic energy from self-consistent charge (SCC) calculation."""
         return self._extract_summary_information("SCC energy")
 
     @property
     def isotropic_es(self):
+        """Coulombic interactions assuming a spherical charge distribution
+        (simplified electrostatics)."""
         return self._extract_summary_information("-> isotropic ES")
 
     @property
     def anisotropic_es(self):
+        """Electrostatic interactions considering directional charge effects
+        (higher-order multipoles)."""
         return self._extract_summary_information("-> anisotropic ES")
 
     @property
     def anisotropic_xc(self):
+        """Direction-dependent exchange-correlation energy contribution,
+        which accounts for electronic interactions beyond spherical approximation."""
         return self._extract_summary_information("-> anisotropic XC")
 
     @property
-    def dispersion(self):
+    def dispersion_energy(self):
+        """Dispersion (van der Waals) correction, capturing weak
+        interactions between non-bonded atoms."""
         return self._extract_summary_information("-> dispersion")
 
     @property
+    def solvation_energy_gsolv(self):
+        """Energy correction due to solvation effects (implicit solvent model).
+        Gsolv in xtb."""
+        return self._extract_summary_information("-> Gsolv")
+
+    @property
+    def electronic_solvation_energy_gelec(self):
+        """Electronic solvation energy contribution, Gelec in xtb."""
+        return self._extract_summary_information("-> Gelec")
+
+    @property
+    def surface_area_solvation_energy_gsasa(self):
+        """SASA solvation energy contribution, Gsasa in xtb."""
+        return self._extract_summary_information("-> Gsasa")
+
+    @property
+    def hydrogen_bonding_solvation_energy_ghb(self):
+        """Hydrogen bonding solvation correction."""
+        return self._extract_summary_information("-> Ghb")
+
+    @property
+    def empirical_shift_correction_gshift(self):
+        """Empirical shift correction, Gshift in xtb."""
+        return self._extract_summary_information("-> Gshift")
+
+    @property
     def repulsion_energy(self):
+        """Pauli repulsion energy between overlapping electron densities."""
         return self._extract_summary_information("repulsion energy")
+
+    @property
+    def additional_restraining_energy(self):
+        """Additional restraining energy."""
+        return self._extract_summary_information("add. restraining")
 
     @property
     def total_charge(self):
         return self._extract_summary_information("total charge")
+
+    # Numerical Hessian
+    @cached_property
+    def numerical_hessian_block(self):
+        """Information under Numerical Hessian block."""
+        for i, line in enumerate(self.contents):
+            if "Numerical Hessian" in line:
+                numerical_hessian_block = []
+                for j_line in self.contents[i + 2 :]:
+                    if len(j_line) == 0:
+                        break
+                    numerical_hessian_block.append(j_line)
+                return numerical_hessian_block
+        return None
+
+    @property
+    def numfreq(self):
+        """If numerical hessian is turned on."""
+        for line in self.contents:
+            if "Numerical Hessian" in line:
+                return True
+        return False
+
+    @property
+    def hessian_step_length(self):
+        """Finite displacement step size used to compute the numerical Hessian.'
+        A smaller step gives more accurate results but can be computationally expensive.
+        Default is 0.005 Å, which balances accuracy and efficiency."""
+        for line in self.numerical_hessian_block:
+            if "Step length" in line:
+                return float(line.split()[-1])
+
+    @property
+    def scc_accuracy(self):
+        """SCC accuracy, controls the self-consistent charge (SCC) cycle convergence
+        for the Hessian calculation. Lower values (e.g., 0.10000) indicate stricter
+        convergence, higher values (e.g., 0.50000) speed up calculation but may
+        introduce slight inaccuracies."""
+        for line in self.numerical_hessian_block:
+            if "SCC accuracy" in line:
+                return float(line.split()[-1])
+
+    @property
+    def hessian_scale_factor(self):
+        """Hessian scaling factor, applied to adjust vibrational frequencies."""
+        for line in self.numerical_hessian_block:
+            if "Hessian scale factor" in line:
+                return float(line.split()[-1])
+
+    @property
+    def rms_gradient(self):
+        """Root mean square (RMS) gradient, a measure of the convergence of the
+        numerical Hessian calculation. Lower values indicate better convergence.
+        Generally, values below 0.001 Eh/a₀ suggest a well-converged structure."""
+        for line in self.numerical_hessian_block:
+            if "RMS gradient" in line:
+                return float(line.split()[-1])
 
     @property
     def molecular_dipole(self):
@@ -534,25 +639,7 @@ class XTBOutput(FileMixin):
                     return float(line.split()[-4])  # surface tension in Eh
         return None
 
-    @property
-    def gsolv(self):
-        return self._extract_summary_information("-> Gsolv")
 
-    @property
-    def gelec(self):
-        return self._extract_summary_information("-> Gelec")
-
-    @property
-    def gsasa(self):
-        return self._extract_summary_information("-> Gsasa")
-
-    @property
-    def ghb(self):
-        return self._extract_summary_information("-> Ghb")
-
-    @property
-    def gshift(self):
-        return self._extract_summary_information("-> Gshift")
 
     """
     GEOMETRY OPTIMIZATION
@@ -632,14 +719,15 @@ class XTBOutput(FileMixin):
             return round(sum(self.cpu_runtime_by_jobs("ANC optimizer:")), 6)
         return None
 
-    """
-    CALCULATION OF VIBRATIONAL FREQUENCIES
-    """
+    #"""
+    #CALCULATION OF VIBRATIONAL FREQUENCIES
+    #"""
 
     @cached_property
     def vibrational_frequencies(self):
         """Read the vibrational frequencies from the XTB output file.
-        The first six frequencies correspond to the rotations and translations of the molecule.
+        The first six (for non-linear molecules) or five (for linear molecules)
+        frequencies correspond to translations (3x) or rotations (3x/2x) of the molecule.
         """
         found_frequency_printout = False
         for i, line in enumerate(self.contents):
@@ -647,13 +735,13 @@ class XTBOutput(FileMixin):
                 found_frequency_printout = True
                 continue
             if found_frequency_printout and line.startswith(
-                "projected vibrational frequencies (cm⁻¹)"
+                "projected vibrational frequencies"
             ):
                 frequencies = []
                 for j_line in self.contents[i + 1 :]:
                     if "reduced masses (amu)" in j_line:
                         break
-                    freq_line = j_line.split(":")[1].strip().split()
+                    freq_line = j_line.split(":")[-1].strip().split()
                     for freq in freq_line:
                         frequencies.append(float(freq))
                 return frequencies
@@ -678,10 +766,10 @@ class XTBOutput(FileMixin):
     def ir_intensities(self):
         """Obtain list of IR intensities corresponding to the vibrational frequency."""
         for i, line in enumerate(self.contents):
-            if line.startswith("IR intensities (km·mol⁻¹)"):
+            if line.startswith("IR intensities ("):
                 ir_intensities = []
                 for j_line in self.contents[i + 1 :]:
-                    if "Raman intensities (Ä⁴*amu⁻¹)" in j_line:
+                    if "Raman intensities" in j_line:
                         break
                     ir_intensity_line = j_line.split()[1::2]
                     for ir_intensity in ir_intensity_line:
@@ -693,7 +781,7 @@ class XTBOutput(FileMixin):
     def raman_intensities(self):
         """Obtain list of Raman intensities corresponding to the vibrational frequency."""
         for i, line in enumerate(self.contents):
-            if line.startswith("Raman intensities (Ä⁴*amu⁻¹)"):
+            if line.startswith("Raman intensities ("):
                 raman_intensities = []
                 for j_line in self.contents[i + 1 :]:
                     if "output can be read by thermo" in j_line:
@@ -760,7 +848,7 @@ class XTBOutput(FileMixin):
         if im_freq_cutoff:
             return float(im_freq_cutoff)
 
-    # Hessian SETUP information
+    # ^^ Hessian SETUP information
 
     @property
     def partition_function(self):

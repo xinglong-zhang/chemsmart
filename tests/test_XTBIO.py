@@ -46,7 +46,7 @@ class TestXTBOutput:
         assert xtb_output.isotropic_es == 0.031459394051
         assert xtb_output.anisotropic_es == 0.000394673573
         assert xtb_output.anisotropic_xc == -0.000882256681
-        assert xtb_output.dispersion == -0.000141082937
+        assert xtb_output.dispersion_energy == -0.000141082937
         assert xtb_output.repulsion_energy == 0.034381060848
         assert xtb_output.total_charge == 0
         assert xtb_output.molecular_dipole == {
@@ -149,7 +149,7 @@ class TestXTBOutput:
         assert xtb_output.gsolv == -0.008095712200
         assert xtb_output.gelec == -0.000777170108
         assert xtb_output.gsasa == -0.009170771809
-        assert xtb_output.ghb == -0.000195045636
+        assert xtb_output.hydrogen_bonding_solvation_energy_ghb == -0.000195045636
         assert xtb_output.gshift == 0.002047275352
         assert xtb_output.degrees_of_freedom == 27
         assert xtb_output.optimized_structure_block == [
@@ -261,6 +261,8 @@ class TestXTBOutput:
             1.85,
             1.91,
         ]
+
+        assert len(xtb_output.vibrational_frequencies) == len(xtb_output.reduced_masses) == 33
         assert xtb_output.ir_intensities == [
             0.64,
             1.05,
