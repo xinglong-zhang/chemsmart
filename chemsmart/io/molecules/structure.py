@@ -1071,6 +1071,18 @@ class CoordinateBlock:
             return None
 
 
+class XTBCoordinateBlock(CoordinateBlock):
+    """Class to create coordinate block object to abstract the geometry.
+    Corresponds to XTB coordinates."""
+    pass
+
+
+class SDFCoordinateBlock(CoordinateBlock):
+    """Class to create coordinate block object to abstract the geometry.
+    Corresponds to SDF coordinates."""
+    pass
+
+
 class SDFFile(FileMixin):
     """SDF file object."""
 
