@@ -416,6 +416,37 @@ class TestMoleculeAdvanced:
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
 
+    def test_qmmm_atoms_handling(self):
+        """Test QM/MM atoms handling."""
+        mol = Molecule(
+            symbols=["O", "H","H","Cl"],
+            positions=np.array([[-4.84098481, -0.56828899, 0.00000000],
+                                [-3.88098484, -0.56804789,0.00000000],
+                                [-5.16121212, 0.33672729, 0.00000000],
+                                [-1.93181817, -0.59090908, 0.00000000]]),
+            qm_high_level_atoms=[4],
+            qm_low_level_atoms=[1,2],
+            qm_medium_level_atoms=[3],
+            qm_link_atoms=[(1,3)],
+        )
+
+        assert mol.qm_high_level_atoms == [4]
+        assert mol.qm_low_level_atoms  == [1,2]
+        assert mol.qm_medium_level_atoms == [3]
+        assert mol.qm_link_atoms == [(1,3)]
+        try:
+            with open("tmp.xyz", "w") as f:
+                mol._write_gaussian_coordinates(f)
+            with open("tmp.xyz", "r") as f:
+                lines=f.readlines()
+                assert lines ==      ['O       -4.8409848100   -0.5682889900    0.0000000000 L 3\n',
+                                  'H       -3.8809848400   -0.5680478900    0.0000000000 L\n',
+                                  'H       -5.1612121200    0.3367272900    0.0000000000 M 1\n',
+                                  'Cl      -1.9318181700   -0.5909090800    0.0000000000 H\n',  ]
+        finally:
+            if os.path.exists("tmp.xyz"):
+                os.remove("tmp.xyz")
+
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""
         mol = Molecule(
