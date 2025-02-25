@@ -63,7 +63,7 @@ class Thermochemistry:
         if self.moments_of_inertia is not None:
             self.I = self.moments_of_inertia * (
                 units._amu * (units.Bohr / units.m) ** 2
-            )  # convert the unit of moments of inertia from amu Å^2 to kg m^2
+            )  # convert the unit of moments of inertia from amu Bohr^2 to kg m^2
         if self.vibrational_frequencies is not None:
             self.v = [
                 k * units._c * 1e2 for k in self.vibrational_frequencies
@@ -201,7 +201,7 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
-        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[0] * units._k)
+        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I * units._k)
         return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
@@ -367,12 +367,12 @@ class Thermochemistry:
     def vibrational_heat_capacity(self):
         """Obtain the vibrational contribution to the heat capacity in J mol^-1 K^-1.
         Formula:
-            C_v = R * Σ(exp(Θ_v,K / T) * ((Θ_v,K / T) / (exp(-Θ_v,K / T) - 1))^2)
+            C_v = R * Σ(exp(-Θ_v,K / T) * ((Θ_v,K / T) / (exp(-Θ_v,K / T) - 1))^2)
         """
         if self.molecule.is_monoatomic:
             return 0
         c = [
-            math.exp(t / self.T)
+            math.exp(-t / self.T)
             * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
             for t in self.theta
         ]
