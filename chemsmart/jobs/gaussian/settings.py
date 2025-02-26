@@ -633,3 +633,80 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
         route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
 
         return route_string
+
+
+class GaussianQMMMJobSettings(GaussianJobSettings):
+    def __init__(
+        self,
+        functional_high,
+        basis_high,
+        functional_medium,
+        basis_medium,
+        functional_low,
+        basis_low,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        link_atoms=None,
+        **kwargs,
+    ):
+        """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
+        Args:
+            high_level_atoms (list): List of high level atoms.
+            medium_level_atoms (list): List of medium level atoms.
+            low_level_atoms (list): List of low level atoms.
+            link_atoms (list): List of link atoms.
+            **kwargs: Additional keyword arguments.
+        """
+        super().__init__(**kwargs)
+        self.functional_high = functional_high
+        self.basis_high = basis_high
+        self.functional_medium = functional_medium
+        self.basis_medium = basis_medium
+        self.functional_low = functional_low
+        self.basis_low = basis_low
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.link_atoms = link_atoms
+
+        if self.functional_high is not None and self.basis_high is not None:
+            self.high_level_of_theory = f"{self.functional_high}/{self.basis_high}"
+        elif self.functional_high is not None and self.basis_high is None:
+            #TODO
+            pass
+
+        else:
+            raise ValueError(f"High level of theory is not specified!")
+
+
+        if self.functional_medium is not None and self.basis_medium is not None:
+            self.medium_level_of_theory = f"{self.functional_medium}/{self.basis_medium}"
+        elif self.functional_medium is not None and self.basis_medium is None:
+            self.medium_level_of_theory = f"{self.functional_medium}"  # medium level if there is only one, eg., PM6,
+            # it can be supplied either as functional_medium or basis_medium
+        elif self.functional_medium is None and self.basis_medium is not None:
+            self.medium_level_of_theory = f"{self.basis_medium}"
+        else:
+            self.medium_level_of_theory = None
+
+        #TODO: self.low_level_of_theory
+
+
+    def _get_route_string_from_jobtype(self):
+        route_string = super()._get_route_string_from_jobtype()
+
+        oniom_string = "oniom"
+        if self.high_level_of_theory is not None:
+            oniom_string += f"({self.high_level_of_theory}"
+        if self.medium_level_of_theory is not None:
+            oniom_string += f":{self.medium_level_of_theory}"
+        if self.low_level_of_theory is not None:
+            oniom_string += f":{self.low_level_of_theory})"
+
+
+        if "oniom" not in route_string:
+            route_string += f" {oniom_string}"
+
+
+        return route_string
