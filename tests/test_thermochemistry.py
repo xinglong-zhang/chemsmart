@@ -243,6 +243,7 @@ class TestThermochemistry:
         assert np.allclose(
             mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
         )
+        assert np.isclose(g16_output.moments_of_inertia[-1], 43.27307045, atol=1e-4)
         assert np.allclose(
             mol.moments_of_inertia_principal_axes[0],
             g16_output.moments_of_inertia_principal_axes[0],
