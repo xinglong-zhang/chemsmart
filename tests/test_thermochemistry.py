@@ -275,7 +275,7 @@ class TestThermochemistry:
             1389.0254,
             2472.7660,
         ]
-        assert mol.is_linear is True
+        assert mol.is_linear
         assert (
             g16_output.num_vib_frequencies == 4
         )  # vDOF = 3 * num_atoms - 5 since CO2 is a linear molecule
