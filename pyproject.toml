@@ -24,14 +24,12 @@ dependencies = [
     "joblib==1.4.2",
     "networkx==3.4.2",
     "numpy==2.2.2",
-    "pytest~=8.3.4",
+    "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.1.24",
     "rdkit==2024.3.2",
     "scipy==1.15.1",
-    "setuptools>=70.1.1",
     "tomlkit==0.13.2",
-    "pytest==8.3.4",
 ]
 
 [project.optional-dependencies]
