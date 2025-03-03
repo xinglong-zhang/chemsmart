@@ -162,6 +162,34 @@ class TestRouteString:
         assert r3a.basis == "def2svp"
         assert r3a.additional_route_parameters == "nosymm guess=mix"
 
+    def test_solvent_in_route(self):
+        s4a = (
+            "# opt=(recalcfc=5) freq mn15 def2svp scrf=(dipole,solvent=water)"
+        )
+        r4a = GaussianRoute(s4a)
+        assert r4a.additional_opt_options_in_route == "recalcfc=5"
+        assert r4a.solvent_model == "dipole"
+        assert r4a.solvent_id == "water"
+        assert r4a.additional_solvent_options is None
+
+        s4b = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(smd,solvent=generic,read)"
+        r4b = GaussianRoute(s4b)
+        assert r4b.solvent_model == "smd"
+        assert r4b.solvent_id == "generic,read"
+        assert r4b.additional_solvent_options is None
+
+        s4c = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(cpcm,solvent=toluene,iterative)"
+        r4c = GaussianRoute(s4c)
+        assert r4c.solvent_model == "cpcm"
+        assert r4c.solvent_id == "toluene"
+        assert r4c.additional_solvent_options == "iterative"
+
+        s4d = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(cpcm,iterative,solvent=toluene)"
+        r4d = GaussianRoute(s4d)
+        assert r4d.solvent_model == "cpcm"
+        assert r4d.solvent_id == "toluene"
+        assert r4d.additional_solvent_options == "iterative"
+
 
 class TestGaussian16Input:
     def test_read_gaussian_input(self, gaussian_opt_inputfile):
