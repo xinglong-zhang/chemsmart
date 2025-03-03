@@ -179,14 +179,21 @@ def click_gaussian_solvent_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="solvent model to be used for single point.",
+        help="Solvent model to be used for single point.",
     )
     @click.option(
         "-si",
         "--solvent-id",
         type=str,
         default=None,
-        help="solvent ID to be used for single point.",
+        help="Solvent ID to be used for single point.",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help="Additional solvent options in scrf=() route.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
