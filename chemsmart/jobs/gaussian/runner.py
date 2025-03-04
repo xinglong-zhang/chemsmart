@@ -184,24 +184,7 @@ class GaussianJobRunner(JobRunner):
                 )
                 rmtree(self.running_directory)
 
-            # also remove .err and .pbs* and .slurm* files
-            err_file = f"{job.folder}/{job.label}.err"
-            logger.info(f"Removing file {err_file}.")
-            os.remove(err_file)
-
-            for file in glob(f"{job.folder}/{job.label}.pbs*"):
-                logger.info(f"Removing file {file}.")
-                os.remove(file)
-
-            for file in glob(f"{job.folder}/{job.label}.slurm*"):
-                with suppress(FileNotFoundError):
-                    logger.info(f"Removing file {file}.")
-                    os.remove(file)
-
-            for file in glob(f"{job.folder}/{job.label}.err"):
-                with suppress(FileNotFoundError):
-                    logger.info(f"Removing file {file}.")
-                    os.remove(file)
+            self._remove_err_files(job)
 
 
 class FakeGaussianJobRunner(GaussianJobRunner):
