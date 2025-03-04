@@ -83,7 +83,8 @@ class XTBJobSettings(MolecularJobSettings):
         gaussian_settings_from_comfile = Gaussian16Input(
             filename=com_path
         ).read_settings()
-        return gaussian_settings_from_comfile
+        xtb_default_settings = cls.default()
+        return xtb_default_settings.merge(gaussian_settings_from_comfile, merge_all=True)
 
     @classmethod
     def from_inpfile(cls, filename):
@@ -99,14 +100,8 @@ class XTBJobSettings(MolecularJobSettings):
         orca_settings_from_inpfile = ORCAInput(
             filename=inp_path
         ).read_settings()
-        gaussian_default_settings = cls.default()
-        gaussian_settings_from_inpfile = gaussian_default_settings.merge(
-            orca_settings_from_inpfile, merge_all=True
-        )
-        logger.info(
-            f"with settings: {gaussian_settings_from_inpfile.__dict__}"
-        )
-        return gaussian_settings_from_inpfile
+        xtb_default_settings = cls.default()
+        return xtb_default_settings.merge(orca_settings_from_inpfile, merge_all=True)
 
     @classmethod
     def from_logfile(cls, filename):
@@ -129,7 +124,8 @@ class XTBJobSettings(MolecularJobSettings):
                 filename=log_path
             ).read_settings()
 
-        return settings
+        xtb_default_settings = cls.default()
+        return xtb_default_settings.merge(settings, merge_all=True)
 
     @classmethod
     def from_outfile(cls, filename):
@@ -143,14 +139,10 @@ class XTBJobSettings(MolecularJobSettings):
         orca_settings_from_outfile = ORCAOutput(
             filename=out_path
         ).read_settings()
-        gaussian_default_settings = cls.default()
-        gaussian_settings_from_outfile = gaussian_default_settings.merge(
+        xtb_default_settings = cls.default()
+        return xtb_default_settings.merge(
             orca_settings_from_outfile, merge_all=True
         )
-        logger.info(
-            f"with settings: {gaussian_settings_from_outfile.__dict__}"
-        )
-        return gaussian_settings_from_outfile
 
     @classmethod
     def default(cls):
@@ -179,207 +171,3 @@ class XTBJobSettings(MolecularJobSettings):
         if filepath.endswith(".xyz"):
             return cls.default()
         raise ValueError(f"Could not create {cls} from {filepath}")
-
-    @property
-    def route_string(self):
-        if self.route_to_be_written is not None:
-            route_string = self._get_route_string_from_user_input()
-        else:
-            route_string = self._get_route_string_from_jobtype()
-        logger.debug(f"Route for settings {self}: {route_string}")
-        return route_string
-
-    def _get_route_string_from_user_input(self):
-        route_string = self.route_to_be_written
-        if not route_string.startswith("#"):
-            route_string = (
-                f"#{self.dieze_tag} {route_string}"
-                if self.dieze_tag is not None
-                else f"# {route_string}"
-            )
-        return route_string
-
-    def get_light_elements(self, molecule):
-        if self.heavy_elements is None:
-            return None
-
-        unique_atoms = set(molecule.chemical_symbols)
-        light_elements_set = unique_atoms - set(self.heavy_elements)
-        light_elements_list = list(light_elements_set)
-
-        sorted_light_elements_list = pt.sorted_periodic_table_list(
-            light_elements_list
-        )
-        logger.info(
-            f"Light elements in structure: {sorted_light_elements_list}"
-        )
-        return sorted_light_elements_list
-
-    def _get_route_string_from_jobtype(self):
-        route_string = ""
-        if self.dieze_tag is not None:
-            route_string += (
-                f"#{self.dieze_tag}"  # e.g. dieze_tag='p' to get '#p'
-            )
-        else:
-            route_string += "#"
-
-        # write opt with additional options e.g., maxstep, calcall etc
-        if self.additional_opt_options_in_route is not None:
-            if self.job_type == "opt":
-                route_string += (
-                    f" opt=({self.additional_opt_options_in_route})"
-                )
-            elif self.job_type == "ts":
-                if "calcall" not in self.additional_opt_options_in_route:
-                    route_string += f" opt=(ts,calcfc,noeigentest,{self.additional_opt_options_in_route})"
-                else:
-                    route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
-            elif self.job_type == "modred":
-                route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = True
-            elif self.job_type == "scan":
-                route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = False
-            elif self.job_type == "sp":
-                route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
-        elif self.additional_opt_options_in_route is None:
-            if self.job_type == "opt":
-                route_string += " opt"
-            elif self.job_type == "ts":
-                route_string += " opt=(ts,calcfc,noeigentest)"
-            elif self.job_type == "modred":
-                route_string += " opt=modredundant"
-                self.freq = True
-            elif self.job_type == "scan":
-                route_string += " opt=modredundant"
-                self.freq = False
-            elif self.job_type == "sp":
-                route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
-
-        # write frequency
-        if self.freq and not self.numfreq:
-            route_string += " freq"
-        elif not self.freq and self.numfreq:
-            route_string += " freq=numer"
-
-        # write functional and basis
-        if self.basis is None:
-            raise ValueError("Warning: Basis is missing!")
-        if self.ab_initio is not None and self.functional is None:
-            method = self.ab_initio
-        elif self.ab_initio is None and self.functional is not None:
-            method = self.functional
-        elif self.ab_initio is not None and self.functional is not None:
-            raise ValueError(
-                "Warning: Both ab initio and DFT functional are provided!"
-            )
-        else:
-            raise ValueError(
-                "Warning: Both ab initio and DFT functional are missing!"
-            )
-
-        # write basis set
-        route_string += f" {method} {self.basis}"
-
-        # write forces calculation
-        if self.forces:
-            route_string += " force"
-
-        if self.custom_solvent is not None:
-            if self.solvent_model is None and self.solvent_id is None:
-                route_string += (
-                    " scrf=(pcm,read)"  # using pcm model as default
-                )
-            else:
-                # Set default values if any of solvent_model or solvent_id are None
-                solvent_model = self.solvent_model or "pcm"
-                solvent_id = self.solvent_id or "generic,read"
-                route_string += f" scrf=({solvent_model},solvent={solvent_id})"
-        elif (
-            self.solvent_model is not None and self.solvent_id is not None
-        ):  # solvation is turned on
-            route_string += (
-                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
-            )
-        elif (self.solvent_model is not None and self.solvent_id is None) or (
-            self.solvent_model is None and self.solvent_id is not None
-        ):  # if one is provided but the other not
-            raise ValueError(
-                f"Both solvent model and solvent ID need to be specified.\n"
-                f"Currently, solvent model is {self.solvent_model} and solvent id is {self.solvent_id}!"
-            )
-
-        # write additional parameters for route
-        if self.additional_route_parameters is not None:
-            route_string += f" {self.additional_route_parameters}"
-
-        # write job type specific route
-        if self.job_type == "nci":
-            route_string += " output=wfn"  # output wavefunction file for NCI
-        elif self.job_type == "wbi":
-            route_string += " pop=nboread"  # write bond order matrix
-        return route_string
-
-    @property
-    def _genecp_elements_specified(self):
-        return (
-            self.heavy_elements is not None
-            and self.heavy_elements_basis is not None
-        )
-
-    @property
-    def _genecp_file_specified(self):
-        return self.gen_genecp_file is not None and os.path.exists(
-            self.gen_genecp_file
-        )
-
-    def get_genecp_section(self, molecule):
-        if self._genecp_elements_specified:
-            logger.info(
-                f"GENECP elements specified:\n"
-                f"Heavy elements: {self.heavy_elements}\n"
-                f"Heavy elements basis: {self.heavy_elements_basis}\n"
-                f"Light elements basis: {self.light_elements_basis}\n"
-            )
-            # Method 1 for getting genecp
-            # Need to supply self.heavy_elements, self.heavy_elements_basis
-            # and self.light_elements_basis
-            heavy_elements_in_structure = self.prune_heavy_elements(molecule)
-
-            genecp_section = GenGenECPSection.from_bse_api(
-                light_elements=self.get_light_elements(molecule),
-                light_elements_basis=self.light_elements_basis,
-                heavy_elements=heavy_elements_in_structure,
-                heavy_elements_basis=self.heavy_elements_basis,
-            )
-
-        elif self._genecp_file_specified:
-            logger.info(f"GENECP file specified: {self.gen_genecp_file}")
-            # Method 2 for getting genecp:
-            # Supplied path to genecp file
-            genecp_section = GenGenECPSection.from_genecp_path(
-                genecp_path=self.gen_genecp_file
-            )
-        else:
-            raise ValueError("Could not get GenECPSection")
-        return genecp_section
-
-    def prune_heavy_elements(self, molecule):
-        # heavy atoms list supplied from settings contains all heavy atoms needed for
-        # heavy_atom_basis but in each structure, some heave atoms supplied from settings
-        # may not appear in the structure
-        if self.heavy_elements is None:
-            return None
-        return list(
-            set(molecule.chemical_symbols).intersection(self.heavy_elements)
-        )
-
-    def _check_solvent(self, solvent_model):
-        if solvent_model.lower() not in GAUSSIAN_SOLVATION_MODELS:
-            raise ValueError(
-                f"The specified solvent model {solvent_model} is not in \n"
-                f"the available solvent models: {GAUSSIAN_SOLVATION_MODELS}"
-            )
