@@ -398,8 +398,8 @@ class ORCAOutput(ORCAFileMixin):
 
         def create_molecule_list(orientations, num_structures):
             """Helper function to create Molecule objects."""
-            if self.forces is not None:
-                forces = self.forces
+            if self.forces_in_eV_per_angstrom is not None:
+                forces = self.forces_in_eV_per_angstrom
             else:
                 forces = [None] * num_structures
 
@@ -409,8 +409,8 @@ class ORCAOutput(ORCAFileMixin):
                     positions=orientations[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
-                    energy=self.energies[i],  # use energies in Hartree
-                    forces=forces[i],  # use forces in Hartree/Bohr
+                    energy=self.energies_in_eV[i],
+                    forces=forces[i],
                 )
                 for i in range(num_structures)
             ]
@@ -434,7 +434,7 @@ class ORCAOutput(ORCAFileMixin):
                 positions=orientations[-1],
                 charge=self.charge,
                 multiplicity=self.multiplicity,
-                energy=self.energies[-1],
+                energy=self.energies_in_eV[-1],
                 forces=None,
             )  # last gradient/forces calculation is not done, if the geometry is optimized
             molecules_list.append(optimized_molecule)
