@@ -89,6 +89,10 @@ def link(
 
     logger.debug(f"Label for job: {label}")
 
+    # automatically use unrestricted dft if link job
+    if not link_settings.functional.lower().startswith("u"):
+        link_settings.functional = "u" + link_settings.functional
+
     logger.info(
         f"Link job {jobtype} settings from project: {link_settings.__dict__}"
     )
