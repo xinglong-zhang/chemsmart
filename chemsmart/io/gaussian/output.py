@@ -175,8 +175,8 @@ class Gaussian16Output(GaussianFileMixin):
                     multiplicity=self.multiplicity,
                     frozen_atoms=frozen_atoms,
                     pbc_conditions=self.list_of_pbc_conditions,
-                    energy=self.energies[i],  # use energies in Hartree
-                    forces=self.forces[i],  # use forces in Hartree/Bohr
+                    energy=self.energies_in_eV[i],
+                    forces=self.forces_in_eV_per_angstrom[i],
                 )
                 for i in range(num_structures)
             ]
