@@ -33,11 +33,19 @@ class Gaussian16Output(GaussianFileMixin):
         use_frozen (bool): To include frozen coordinates in the Molecule.
         Defaults to False, since we do not want the frozen coordinates
         data be passed if .log file is used to create a molecule for run.
+        include_intermediate (bool): To include intermediate steps in the Molecule.
+        by default include_intermediate=False, we ignore those pre-optimization points
+        such that the pointns obtained will be the same as points visualized in Gaussview.
+        For data collection, one may set include_intermediate=True to get all datapoints,
+        including those pre-optimization points. This feature allows user to use the index
+        to select a geometry on a scan.log Gaussian output file as input for a fresh calculation
+        of (any) other job.
     """
 
-    def __init__(self, filename, use_frozen=False):
+    def __init__(self, filename, use_frozen=False, include_intermediate=False):
         self.filename = filename
         self.use_frozen = use_frozen
+        self.include_intermediate = include_intermediate
 
     @property
     def normal_termination(self):
@@ -238,13 +246,29 @@ class Gaussian16Output(GaussianFileMixin):
             len(self.energies_in_eV),
             len(self.forces_in_eV_per_angstrom),
         )
-        return create_molecule_list(
+        all_structures = create_molecule_list(
             orientations,
             orientations_pbc,
             self.energies_in_eV,
             self.forces_in_eV_per_angstrom,
             num_structures=num_structures_to_use,
         )
+
+        if self.optimized_steps_indices and not self.include_intermediate:
+            # if not including intermediate steps
+            logger.info(
+                "Ignoring intermediate geometry optimimzation for each constrained opt."
+            )
+            logger.debug(
+                f"Optimized steps indices: {self.optimized_steps_indices}"
+            )
+            all_structures = [
+                all_structures[i] for i in self.optimized_steps_indices
+            ]
+        logger.info(
+            f"Total number of structures located: {len(all_structures)}"
+        )
+        return all_structures
 
     @cached_property
     def optimized_structure(self):

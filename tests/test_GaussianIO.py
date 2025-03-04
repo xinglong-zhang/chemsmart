@@ -1150,7 +1150,9 @@ class TestGaussian16Output:
     def test_read_scan_outputfile(self, gaussian_failed_scan_outfile):
         assert os.path.exists(gaussian_failed_scan_outfile)
         g16_scan = Gaussian16Output(
-            filename=gaussian_failed_scan_outfile, use_frozen=True
+            filename=gaussian_failed_scan_outfile,
+            use_frozen=True,
+            include_intermediate=False,
         )
         assert not g16_scan.normal_termination
         assert g16_scan.num_atoms == 110
@@ -1169,6 +1171,28 @@ class TestGaussian16Output:
             "num_steps": 10,
             "step_size": -0.1,
         }
+        assert len(g16_scan.all_structures) == 1
+
+        g16_scan_all_int = Gaussian16Output(
+            filename=gaussian_failed_scan_outfile,
+            use_frozen=True,
+            include_intermediate=True,
+        )
+        assert not g16_scan_all_int.normal_termination
+        assert g16_scan_all_int.num_atoms == 110
+        assert len(g16_scan_all_int.alpha_occ_eigenvalues) == 217
+        assert (
+            g16_scan_all_int.alpha_occ_eigenvalues[0]
+            == -19.75707 * units.Hartree
+        )
+        assert (
+            g16_scan_all_int.alpha_occ_eigenvalues[-1]
+            == -0.33917 * units.Hartree
+        )
+        assert len(g16_scan_all_int.alpha_virtual_eigenvalues) == 895
+
+        assert len(g16_scan_all_int.all_structures) == 9
+        # 10 orientations with last structure (failed job) removed
 
     def test_read_hirshfeld_charges_outputfile(
         self, gaussian_hirshfeld_outfile
