@@ -1,9 +1,12 @@
-import math
 import os.path
 
 import numpy as np
 
-from chemsmart.analysis.thermochemistry import Thermochemistry
+from chemsmart.analysis.thermochemistry import (
+    GaussianThermochemistry,
+    Thermochemistry,
+    qRRHOThermochemistry,
+)
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
 )
@@ -106,7 +109,7 @@ class TestThermochemistry:
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
         # here T = 298.15 K, P = 1 atm = 101325 Pa
         # k_B = 1.380649 * 10^-23 J/K
-        # h = 6.62607015 * 10^-34 J s
+        # h = 6.62606957 * 10^-34 J s
         # A_N = 6.0221408e+23 mol^-1
         # using these constants, we got 8.732609925501497e+48
         expected_translational_partition_function = (
@@ -117,7 +120,7 @@ class TestThermochemistry:
                 * 1.380649
                 * 1e-23
                 * 298.15
-                / (6.62607015 * 1e-34 * 6.62607015 * 1e-34)
+                / (6.62606957 * 1e-34 * 6.62606957 * 1e-34)
             )
         ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
         assert np.isclose(
@@ -144,7 +147,7 @@ class TestThermochemistry:
                 * 1.380649
                 * 1e-23
                 * 598.15
-                / (6.62607015 * 1e-34 * 6.62607015 * 1e-34)
+                / (6.62606957 * 1e-34 * 6.62606957 * 1e-34)
             )
         ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / (1.2 * 101325))
 
@@ -210,12 +213,37 @@ class TestThermochemistry:
     def test_thermochemistry_co2_gaussian_output(
         self, gaussian_co2_opt_outfile
     ):
-        """Values from Goodvices, as a reference:
-                goodvibes -f 100 -c 1.0 -t 298.15 co2.log
-        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-           ********************************************************************************************************************************
-        o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
-           ********************************************************************************************************************************
+        """Values from Gaussian output
+        Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
+        Zero-point vibrational energy      30919.1 (Joules/Mol)
+                                           7.38984 (Kcal/Mol)
+        Vibrational temperatures:    940.59   940.59  1998.50  3557.76
+               (Kelvin)
+
+        Zero-point correction=                           0.011776 (Hartree/Particle)
+        Thermal correction to Energy=                    0.014410
+        Thermal correction to Enthalpy=                  0.015354
+        Thermal correction to Gibbs Free Energy=        -0.008927
+        Sum of electronic and zero-point Energies=           -188.432903
+        Sum of electronic and thermal Energies=              -188.430269
+        Sum of electronic and thermal Enthalpies=            -188.429325
+        Sum of electronic and thermal Free Energies=         -188.453606
+
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.043              6.920             51.103
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             37.270
+        Rotational               0.592              1.987             13.083
+        Vibrational              7.561              1.952              0.751
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.127619D+05          4.105917          9.454223
+        Total V=0       0.333203D+10          9.522709         21.926848
+        Vib (Bot)       0.418410D-05         -5.378398        -12.384219
+        Vib (V=0)       0.109243D+01          0.038394          0.088406
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.114679D+08          7.059482         16.255059
+        Rotational      0.265970D+03          2.424833          5.583383
         """
         assert os.path.exists(gaussian_co2_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
@@ -245,7 +273,9 @@ class TestThermochemistry:
         assert np.allclose(
             mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
         )
-        assert np.isclose(g16_output.moments_of_inertia[-1], 43.27307045, atol=1e-4)
+        assert np.isclose(
+            g16_output.moments_of_inertia[-1], 43.27307045, atol=1e-4
+        )
         assert np.allclose(
             mol.moments_of_inertia_principal_axes[0],
             g16_output.moments_of_inertia_principal_axes[0],
@@ -262,7 +292,7 @@ class TestThermochemistry:
         )
 
         assert mol.empirical_formula == "CO2"
-        assert np.isclose(mol.mass, 44.01, rtol=1e-2)
+        assert np.isclose(g16_output.mass, 43.98983)
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -188.444680, rtol=1e-6)
         assert np.isclose(g16_output.zero_point_energy, 0.011776, rtol=1e-6)
@@ -284,69 +314,96 @@ class TestThermochemistry:
             temperature=298.15,  # in Kelvin
             pressure=1,  # in atm
         )
+        gaussian_thermochem1 = GaussianThermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+        )
 
-        """Values from Gaussian output
-        Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
-        
-                            E (Thermal)             CV                S
-                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
-        Total                    9.043              6.920             51.103
-        Electronic               0.000              0.000              0.000
-        Translational            0.889              2.981             37.270
-        Rotational               0.592              1.987             13.083
-        Vibrational              7.561              1.952              0.751
-                              Q            Log10(Q)             Ln(Q)
-        Total Bot       0.127619D+05          4.105917          9.454223
-        Total V=0       0.333203D+10          9.522709         21.926848
-        Vib (Bot)       0.418410D-05         -5.378398        -12.384219
-        Vib (V=0)       0.109243D+01          0.038394          0.088406
-        Electronic      0.100000D+01          0.000000          0.000000
-        Translational   0.114679D+08          7.059482         16.255059
-        Rotational      0.265970D+03          2.424833          5.583383
-        """
+        assert np.isclose(
+            gaussian_thermochem1.zero_point_vibrational_energy, 30919.1
+        )
+        assert np.allclose(
+            gaussian_thermochem1.vibrational_temperatures,
+            [940.59, 940.59, 1998.50, 3557.76],
+        )
+        assert np.isclose(
+            gaussian_thermochem1.zero_point_correction, 0.011776, rtol=1e-4
+        )
+        assert np.isclose(
+            gaussian_thermochem1.thermal_correction_energy, 0.014410, rtol=1e-4
+        )
+        assert np.isclose(
+            gaussian_thermochem1.thermal_correction_enthalpy,
+            0.015354,
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.thermal_correction_free_energy,
+            -0.008927,
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_zero_point_energies,
+            -188.432903,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_thermal_energies,
+            -188.430269,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_thermal_enthalpies,
+            -188.429325,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_thermal_free_energies,
+            -188.453606,
+        )
 
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
         # here T = 298.15 K, P = 1 atm = 101325 Pa
-        # k_B = 1.38064852 * 10^-23 J/K
-        # h = 6.62607015 * 10^-34 J s
-        # N_A = 6.022140857 * 10^23 mol^-1
-        # using these constants, we got 11475738.782739257
+        # k_B = 1.3806488 * 10^-23 J/K
+        # h = 6.62606957 * 10^-34 J s
+        # N_A = 6.02214129 * 10^23 mol^-1
+        # using these constants, we got 11467858.194120048
         expected_translational_partition_function = (
             2
             * np.pi
-            * (mol.mass / (6.022140857 * 1e23 * 1000))
-            * 1.38064852
+            * (g16_output.mass / (6.02214129 * 1e23 * 1000))
+            * 1.3806488
             * 1e-23
             * 298.15
-            / (6.62607015 * 1e-34) ** 2
-        ) ** (3 / 2) * (1.38064852 * 1e-23 * 298.15 / 101325)
+            / (6.62606957 * 1e-34) ** 2
+        ) ** (3 / 2) * (1.3806488 * 1e-23 * 298.15 / 101325)
         assert np.isclose(
             thermochem1.translational_partition_function,
             expected_translational_partition_function,
         )
         assert np.isclose(
-            thermochem1.translational_partition_function, 0.114679e08, rtol=1e4
+            thermochem1.translational_partition_function,
+            0.114679e08,
         )
 
-        # S_t = R * [ln(q_t) + 1 + d / 2]
-        # R = 8.314459861448581 J mol^-1 K^-1
-        # d = 2 for linear molecules
-        # using these constants, we got 151.78666481171763 J mol^-1 K^-1
-        expected_translational_entropy = 8.314459861448581 * (
-            np.log(expected_translational_partition_function) + 1 + 2 / 2
+        # S_t = R * [ln(q_t) + 1 + 3 / 2]
+        # R = 8.314462145468951 J mol^-1 K^-1
+        # using these constants, we got 155.9382259343905 J mol^-1 K^-1
+        expected_translational_entropy = 8.314462145468951 * (
+            np.log(expected_translational_partition_function) + 1 + 3 / 2
         )
         assert np.isclose(
             thermochem1.translational_entropy,
             expected_translational_entropy,
         )
         assert np.isclose(
-            thermochem1.translational_entropy, 37.270 * cal_to_joules, rtol=1e2
+            thermochem1.translational_entropy,
+            37.270 * cal_to_joules,
+            rtol=1e-3,
         )
 
         # E_t = 3/2 * R * T
-        # we got 3718.4343115363413 J mol^-1
+        # we got 3718.4353330073513 J mol^-1
         expected_translational_internal_energy = (
-            3 / 2 * 8.314459861448581 * 298.15
+            3 / 2 * 8.314462145468951 * 298.15
         )
         assert np.isclose(
             thermochem1.translational_internal_energy,
@@ -355,12 +412,12 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.translational_internal_energy,
             0.889 * cal_to_joules * 1000,
-            rtol=1e1,
+            rtol=1e0,
         )
 
         # C_t = 3/2 * R
-        # we got 12.47168979217287 J mol^-1 K^-1
-        expected_translational_heat_capacity = 3 / 2 * 8.314459861448581
+        # we got 12.471693218203427 J mol^-1 K^-1
+        expected_translational_heat_capacity = 3 / 2 * 8.314462145468951
         assert np.isclose(
             thermochem1.translational_heat_capacity,
             expected_translational_heat_capacity,
@@ -368,7 +425,7 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.translational_heat_capacity,
             2.981 * cal_to_joules,
-            rtol=1e-1,
+            rtol=1e-3,
         )
 
         # q_e = ω_0
@@ -385,7 +442,7 @@ class TestThermochemistry:
 
         # S_e = R * ln(q_e)
         # we got 0 J mol^-1 K^-1
-        expected_electronic_entropy = 8.314459861448581 * np.log(
+        expected_electronic_entropy = 8.314462145468951 * np.log(
             expected_electronic_partition_function
         )
         assert np.isclose(
@@ -419,24 +476,24 @@ class TestThermochemistry:
 
         # q_r = 1 / σ_r * (T / Θ_r)
         # Θ_r = h^2 / (8 * pi^2 * I * k_B)
-        # 1 Bohr = 0.5291772105638411 Angstrom, 1 Angstrom = 1 * 10^-10 m
-        # using these constants, we got 265.9698605567915
+        # 1 Angstrom = 1 * 10^-10 m
+        # using these constants, we got 265.9699419335578
         expected_rotational_partition_function = (
             1
             / g16_output.rotational_symmetry_number
             * (
                 298.15
                 / (
-                    (6.62607015 * 1e-34) ** 2
+                    (6.62606957 * 1e-34) ** 2
                     / (
                         8
                         * np.pi**2
                         * (
-                            mol.moments_of_inertia
-                            / (6.022140857 * 1e23 * 1000)
-                            * (0.5291772105638411 * 1e-10) ** 2
+                            g16_output.moments_of_inertia[-1]
+                            / (6.02214129 * 1e23 * 1000)
+                            * 1e-10**2
                         )
-                        * 1.38064852
+                        * 1.3806488
                         * 1e-23
                     )
                 )
@@ -447,12 +504,13 @@ class TestThermochemistry:
             expected_rotational_partition_function,
         )
         assert np.isclose(
-            thermochem1.rotational_partition_function, 0.265970e03, rtol=1e-1
+            thermochem1.rotational_partition_function,
+            0.265970e03,
         )
 
         # S_r = R * (ln(q_r) + 1)
-        # we got 54.7372736743199 J mol^-1 K^-1
-        expected_rotational_entropy = 8.314459861448581 * (
+        # we got 54.737291254812845 J mol^-1 K^-1
+        expected_rotational_entropy = 8.314462145468951 * (
             np.log(expected_rotational_partition_function) + 1
         )
         assert np.isclose(
@@ -460,12 +518,12 @@ class TestThermochemistry:
             expected_rotational_entropy,
         )
         assert np.isclose(
-            thermochem1.rotational_entropy, 13.083 * cal_to_joules, rtol=1e-1
+            thermochem1.rotational_entropy, 13.083 * cal_to_joules, rtol=1e-3
         )
 
         # E_r = R * T
-        # we got 2478.956207690894 J mol^-1
-        expected_rotational_internal_energy = 8.314459861448581 * 298.15
+        # we got 2478.956888671568 J mol^-1
+        expected_rotational_internal_energy = 8.314462145468951 * 298.15
         assert np.isclose(
             thermochem1.rotational_internal_energy,
             expected_rotational_internal_energy,
@@ -473,11 +531,11 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.rotational_internal_energy,
             0.592 * cal_to_joules * 1000,
-            rtol=1e1,
+            rtol=1e0,
         )
 
         # C_r = R
-        expected_rotational_heat_capacity = 8.314459861448581
+        expected_rotational_heat_capacity = 8.314462145468951
         assert np.isclose(
             thermochem1.rotational_heat_capacity,
             expected_rotational_heat_capacity,
@@ -485,7 +543,7 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.rotational_heat_capacity,
             1.987 * cal_to_joules,
-            rtol=1e-2,
+            rtol=1e-3,
         )
 
         # q_v = q_1 * q_2 * ... * q_vDOF
@@ -493,67 +551,26 @@ class TestThermochemistry:
         # q_v,K = exp(-Θ_v,K / (2 * T)) / (1 - exp(-Θ_v,K / T))
         # Θ_v,K = h * v_K / k_B
         # c = 2.99792458 * 10^10 cm s^-1
-        expected_theta_1 = (
-            6.62607015
+        vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
+        expected_theta = (
+            6.62606957
             * 1e-34
-            * g16_output.vibrational_frequencies[0]
+            * vibrational_frequencies
             * 2.99792458
             * 1e10
-            / (1.38064852 * 1e-23)
+            / (1.3806488 * 1e-23)
         )
-        expected_theta_2 = (
-            6.62607015
-            * 1e-34
-            * g16_output.vibrational_frequencies[1]
-            * 2.99792458
-            * 1e10
-            / (1.38064852 * 1e-23)
-        )
-        expected_theta_3 = (
-            6.62607015
-            * 1e-34
-            * g16_output.vibrational_frequencies[2]
-            * 2.99792458
-            * 1e10
-            / (1.38064852 * 1e-23)
-        )
-        expected_theta_4 = (
-            6.62607015
-            * 1e-34
-            * g16_output.vibrational_frequencies[3]
-            * 2.99792458
-            * 1e10
-            / (1.38064852 * 1e-23)
-        )
-        expected_q_1_BOT = math.exp(-expected_theta_1 / (2 * 298.15)) / (
-            1 - math.exp(-expected_theta_1 / 298.15)
-        )
-        expected_q_2_BOT = math.exp(-expected_theta_2 / (2 * 298.15)) / (
-            1 - math.exp(-expected_theta_2 / 298.15)
-        )
-        expected_q_3_BOT = math.exp(-expected_theta_3 / (2 * 298.15)) / (
-            1 - math.exp(-expected_theta_3 / 298.15)
-        )
-        expected_q_4_BOT = math.exp(-expected_theta_4 / (2 * 298.15)) / (
-            1 - math.exp(-expected_theta_4 / 298.15)
-        )
-        # we got [0.21571794219328444, 0.21571794219328444, 0.03507487817334666, 0.002563489617325113]
-        expected_vibrational_partition_function_by_mode_BOT = [
-            expected_q_1_BOT,
-            expected_q_2_BOT,
-            expected_q_3_BOT,
-            expected_q_4_BOT,
-        ]
+        # we got [0.21571805, 0.21571805, 0.03507491, 0.00256349]
+        expected_vibrational_partition_function_by_mode_BOT = np.exp(
+            -expected_theta / (2 * 298.15)
+        ) / (1 - np.exp(-expected_theta / 298.15))
         assert np.allclose(
             thermochem1.vibrational_partition_function_by_mode_BOT,
             expected_vibrational_partition_function_by_mode_BOT,
         )
-        # we got 4.184082811907725e-06
-        expected_vibrational_partition_function_BOT = (
-            expected_q_1_BOT
-            * expected_q_2_BOT
-            * expected_q_3_BOT
-            * expected_q_4_BOT
+        # we got 4.184098315130738e-06
+        expected_vibrational_partition_function_BOT = np.prod(
+            expected_vibrational_partition_function_by_mode_BOT
         )
         assert np.isclose(
             thermochem1.vibrational_partition_function_BOT,
@@ -562,32 +579,21 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.vibrational_partition_function_BOT,
             0.418410e-05,
-            rtol=1e-8,
         )
 
         # For the zero reference point is the first vibrational energy level (V=0)
         # q_v,K = 1 / (1 - exp(-Θ_v,K / T))
-        expected_q_1_V0 = 1 / (1 - math.exp(-expected_theta_1 / 298.15))
-        expected_q_2_V0 = 1 / (1 - math.exp(-expected_theta_2 / 298.15))
-        expected_q_3_V0 = 1 / (1 - math.exp(-expected_theta_3 / 298.15))
-        expected_q_4_V0 = 1 / (1 - math.exp(-expected_theta_4 / 298.15))
-        # we got [1.044549566691688, 1.044549566691688, 1.001228737283563, 1.0000065714358344]
-        expected_vibrational_partition_function_by_mode_V0 = [
-            expected_q_1_V0,
-            expected_q_2_V0,
-            expected_q_3_V0,
-            expected_q_4_V0,
-        ]
+        # we got [1.04454961, 1.04454961, 1.00122874, 1.00000657]
+        expected_vibrational_partition_function_by_mode_V0 = 1 / (
+            1 - np.exp(-expected_theta / 298.15)
+        )
         assert np.allclose(
             thermochem1.vibrational_partition_function_by_mode_V0,
             expected_vibrational_partition_function_by_mode_V0,
         )
-        # we got 1.0924316314141918
-        expected_vibrational_partition_function_V0 = (
-            expected_q_1_V0
-            * expected_q_2_V0
-            * expected_q_3_V0
-            * expected_q_4_V0
+        # we got 1.0924317232036713
+        expected_vibrational_partition_function_V0 = np.prod(
+            expected_vibrational_partition_function_by_mode_V0
         )
         assert np.isclose(
             thermochem1.vibrational_partition_function_V0,
@@ -596,60 +602,27 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.vibrational_partition_function_V0,
             0.109243e01,
-            rtol=1e-4,
         )
 
         # S_v = R * Σ((Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T)))
-        # we got 3.1412459957707966 J mol^-1 K^-1
-        expected_vibrational_entropy = 8.314459861448581 * (
-            (
-                (expected_theta_1 / 298.15)
-                / (math.exp(expected_theta_1 / 298.15) - 1)
-                - np.log(1 - math.exp(-expected_theta_1 / 298.15))
-            )
-            + (
-                (expected_theta_2 / 298.15)
-                / (math.exp(expected_theta_2 / 298.15) - 1)
-                - np.log(1 - math.exp(-expected_theta_2 / 298.15))
-            )
-            + (
-                (expected_theta_3 / 298.15)
-                / (math.exp(expected_theta_3 / 298.15) - 1)
-                - np.log(1 - math.exp(-expected_theta_3 / 298.15))
-            )
-            + (
-                (expected_theta_4 / 298.15)
-                / (math.exp(expected_theta_4 / 298.15) - 1)
-                - np.log(1 - math.exp(-expected_theta_4 / 298.15))
-            )
+        # we got 3.1412492303422708 J mol^-1 K^-1
+        expected_vibrational_entropy = 8.314462145468951 * np.sum(
+            (expected_theta / 298.15) / (np.exp(expected_theta / 298.15) - 1)
+            - np.log(1 - np.exp(-expected_theta / 298.15))
         )
         assert np.isclose(
             thermochem1.vibrational_entropy,
             expected_vibrational_entropy,
         )
         assert np.isclose(
-            thermochem1.vibrational_entropy, 0.751 * cal_to_joules, rtol=1e-4
+            thermochem1.vibrational_entropy, 0.751 * cal_to_joules, rtol=1e-3
         )
 
         # E_v = R * Σ(Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1)))
-        # we got 31636.50907329069 J mol^-1
-        expected_vibrational_internal_energy = 8.314459861448581 * (
-            (
-                expected_theta_1
-                * (1 / 2 + 1 / (math.exp(expected_theta_1 / 298.15) - 1))
-            )
-            + (
-                expected_theta_2
-                * (1 / 2 + 1 / (math.exp(expected_theta_2 / 298.15) - 1))
-            )
-            + (
-                expected_theta_3
-                * (1 / 2 + 1 / (math.exp(expected_theta_3 / 298.15) - 1))
-            )
-            + (
-                expected_theta_4
-                * (1 / 2 + 1 / (math.exp(expected_theta_4 / 298.15) - 1))
-            )
+        # we got 31636.50928586775 J mol^-1
+        expected_vibrational_internal_energy = 8.314462145468951 * np.sum(
+            expected_theta
+            * (1 / 2 + 1 / (np.exp(expected_theta / 298.15) - 1))
         )
         assert np.isclose(
             thermochem1.vibrational_internal_energy,
@@ -658,44 +631,18 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.vibrational_internal_energy,
             7.561 * cal_to_joules * 1000,
-            rtol=1e1,
+            rtol=1e0,
         )
 
         # C_v = R * Σ(exp(-Θ_v,K / T) * ((Θ_v,K / T) / (exp(-Θ_v,K / T) - 1))^2)
-        # we got 8.168650902687183 J mol^-1 K^-1
-        expected_vibrational_heat_capacity = 8.314459861448581 * (
-            (
-                math.exp(-expected_theta_1 / 298.15)
-                * (
-                    (expected_theta_1 / 298.15)
-                    / (math.exp(-expected_theta_1 / 298.15) - 1)
-                )
-                ** 2
+        # we got 8.16865700927472 J mol^-1 K^-1
+        expected_vibrational_heat_capacity = 8.314462145468951 * np.sum(
+            np.exp(-expected_theta / 298.15)
+            * (
+                (expected_theta / 298.15)
+                / (np.exp(-expected_theta / 298.15) - 1)
             )
-            + (
-                math.exp(-expected_theta_2 / 298.15)
-                * (
-                    (expected_theta_2 / 298.15)
-                    / (math.exp(-expected_theta_2 / 298.15) - 1)
-                )
-                ** 2
-            )
-            + (
-                math.exp(-expected_theta_3 / 298.15)
-                * (
-                    (expected_theta_3 / 298.15)
-                    / (math.exp(-expected_theta_3 / 298.15) - 1)
-                )
-                ** 2
-            )
-            + (
-                math.exp(-expected_theta_4 / 298.15)
-                * (
-                    (expected_theta_4 / 298.15)
-                    / (math.exp(-expected_theta_4 / 298.15) - 1)
-                )
-                ** 2
-            )
+            ** 2
         )
         assert np.isclose(
             thermochem1.vibrational_heat_capacity,
@@ -704,11 +651,11 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.vibrational_heat_capacity,
             1.952 * cal_to_joules,
-            rtol=1e-2,
+            rtol=1e-3,
         )
 
         # q_tot = q_t * q_r * q_v * q_e
-        # we got 3334320528.7441
+        # we got 3332032092.51935
         expected_total_partition_function = (
             expected_translational_partition_function
             * expected_rotational_partition_function
@@ -719,12 +666,10 @@ class TestThermochemistry:
             thermochem1.total_partition_function,
             expected_total_partition_function,
         )
-        assert np.isclose(
-            thermochem1.total_partition_function, 0.333203e10, rtol=1e7
-        )
+        assert np.isclose(thermochem1.total_partition_function, 0.333203e10)
 
         # S_tot = S_t + S_r + S_v + S_e
-        # we got 209.66518448180832 J mol^-1 K^-1
+        # we got 213.81676641954562 J mol^-1 K^-1
         expected_total_entropy = (
             expected_translational_entropy
             + expected_rotational_entropy
@@ -736,11 +681,11 @@ class TestThermochemistry:
             expected_total_entropy,
         )
         assert np.isclose(
-            thermochem1.total_entropy, 51.103 * cal_to_joules, rtol=1e1
+            thermochem1.total_entropy, 51.103 * cal_to_joules, rtol=1e-3
         )
 
         # E_tot = E_t + E_r + E_v + E_e
-        # we got 37833.899592517926 J mol^-1
+        # we got 37833.90150754667 J mol^-1
         expected_total_internal_energy = (
             expected_translational_internal_energy
             + expected_rotational_internal_energy
@@ -754,11 +699,11 @@ class TestThermochemistry:
         assert np.isclose(
             thermochem1.total_internal_energy,
             9.043 * cal_to_joules * 1000,
-            rtol=1e1,
+            rtol=1e0,
         )
 
         # C_tot = C_t + C_r + C_v + C_e
-        # we got 28.954800556308633 J mol^-1 K^-1
+        # we got 28.954812372947096 J mol^-1 K^-1
         expected_total_heat_capacity = (
             expected_translational_heat_capacity
             + expected_rotational_heat_capacity
@@ -770,5 +715,267 @@ class TestThermochemistry:
             expected_total_heat_capacity,
         )
         assert np.isclose(
-            thermochem1.total_heat_capacity, 6.920 * cal_to_joules, rtol=1e-2
+            thermochem1.total_heat_capacity, 6.920 * cal_to_joules, rtol=1e-3
+        )
+
+    def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
+        """Values from Goodvices, as a reference:
+                goodvibes -f 100 -c 1.0 -t 298.15 co2.log
+        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+           ********************************************************************************************************************************
+        o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
+           ********************************************************************************************************************************
+        """
+        assert os.path.exists(gaussian_co2_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
+        assert g16_output.normal_termination
+        qrrho_thermochem1 = qRRHOThermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,  # in Kelvin
+            concentration=1.0,  # in mol/L
+        )
+        vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
+
+        # when arguments are not specified, the quasi-rrho calculation use
+        # default cutoff frequency of 100 cm^-1 for both entropy and enthalpy
+        # and default alpha of 4
+        # we got [0.9994528, 0.9994528, 0.99997314, 0.99999733]
+        expected_damping_function = 1 / (
+            1 + (100 / vibrational_frequencies) ** 4
+        )
+        assert np.allclose(
+            qrrho_thermochem1.entropy_dumping_function,
+            expected_damping_function,
+        )
+        assert np.allclose(
+            qrrho_thermochem1.enthalpy_dumping_function,
+            expected_damping_function,
+        )
+
+        # S_R,K = R * (1/2 + ln((8 * pi^3 * u'_K * k_B * T / h^2)^(1/2)))
+        # u'_K = u_K * B_av / (u_K + B_av)
+        # u_K = h / (8 * pi^2 * v_K)
+        # B_av = 1 * 10^44 kg m^2
+        expected_mu = (
+            6.62606957
+            * 1e-34
+            / (8 * np.pi**2 * vibrational_frequencies * 2.99792458 * 1e10)
+        )
+        expected_mu_prime = expected_mu * 1.00e-44 / (expected_mu + 1.00e-44)
+        # we got [4.13969469, 4.13969469, 1.00669595, -1.39088804] in J mol^-1 K^-1
+        expected_freerot_entropy = 8.314462145468951 * (
+            1 / 2
+            + np.log(
+                (
+                    8
+                    * np.pi**3
+                    * expected_mu_prime
+                    * 1.3806488
+                    * 1e-23
+                    * 298.15
+                    / (6.62606957 * 1e-34) ** 2
+                )
+                ** (1 / 2)
+            )
+        )
+        assert np.allclose(
+            qrrho_thermochem1.freerot_entropy,
+            expected_freerot_entropy,
+        )
+
+        # S^rrho_v,K = R * (Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))
+        # Θ_v,K = h * v_K / k_B
+        expected_theta = (
+            6.62606957
+            * 1e-34
+            * vibrational_frequencies
+            * 2.99792458
+            * 1e10
+            / (1.3806488 * 1e-23)
+        )
+        # we got [1.21211969e+00, 1.21211969e+00, 6.97078497e-02, 6.58556458e-04] in J mol^-1 K^-1
+        expected_rrho_entropy = 8.314462145468951 * (
+            expected_theta / 298.15
+        ) / (np.exp(expected_theta / 298.15) - 1) - np.log(
+            1 - np.exp(-expected_theta / 298.15)
+        )
+        assert np.allclose(
+            qrrho_thermochem1.rrho_entropy,
+            expected_rrho_entropy,
+        )
+
+        # S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
+        # we got 2.497831161981913 J mol^-1 K^-1
+        expected_qrrho_vibrational_entropy = np.sum(
+            expected_damping_function * expected_rrho_entropy
+            + (1 - expected_damping_function) * expected_freerot_entropy
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_vibrational_entropy,
+            expected_qrrho_vibrational_entropy,
+        )
+
+        # E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
+        # we got [4258.62774713, 4258.62774713, 8328.63418484, 14790.61960677] in J mol^-1
+        expected_rrho_internal_energy = (
+            8.314462145468951
+            * expected_theta
+            * (1 / 2 + 1 / (np.exp(expected_theta / 298.15) - 1))
+        )
+        assert np.allclose(
+            qrrho_thermochem1.rrho_internal_energy,
+            expected_rrho_internal_energy,
+        )
+
+        # E^qrrho_v = Σ(w(v_K) * E^rrho_v,K + (1 - w(v_K)) * 1/2 * R * T)
+        # we got 31632.978467909088 J mol^-1
+        expected_qrrho_vibrational_internal_energy = np.sum(
+            expected_damping_function * expected_rrho_internal_energy
+            + (1 - expected_damping_function)
+            * 1
+            / 2
+            * 8.314462145468951
+            * 298.15
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_vibrational_internal_energy,
+            expected_qrrho_vibrational_internal_energy,
+        )
+
+        # q_t,c = (2 * pi * m * k_B * T / h^2)^(3/2) * (1 / c)
+        # we got 468737.7730646621
+        expected_translational_partition_function_concentration = (
+            2
+            * np.pi
+            * (g16_output.mass / (6.02214129 * 1e23 * 1000))
+            * 1.3806488
+            * 1e-23
+            * 298.15
+            / (6.62606957 * 1e-34) ** 2
+        ) ** (3 / 2) * (1 / (1.0 * 6.02214129 * 1e23 * 1000))
+        assert np.isclose(
+            qrrho_thermochem1.translational_partition_function_concentration,
+            expected_translational_partition_function_concentration,
+        )
+
+        # S_t,c = R * [ln(q_t) + 1 + 3/2]
+        # we got 129.3547289549365 J mol^-1 K^-1
+        expected_translational_entropy_concentration = 8.314462145468951 * (
+            np.log(expected_translational_partition_function_concentration)
+            + 1
+            + 3 / 2
+        )
+
+        # S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
+        # we got 129.3547289549365 + 54.737291254812845 + 2.497831161981913 + 0 = 186.58985137173124 J mol^-1 K^-1
+        expected_rotational_entropy = 8.314462145468951 * (
+            np.log(
+                1
+                / g16_output.rotational_symmetry_number
+                * (
+                    298.15
+                    / (
+                        (6.62606957 * 1e-34) ** 2
+                        / (
+                            8
+                            * np.pi**2
+                            * (
+                                g16_output.moments_of_inertia[-1]
+                                / (6.02214129 * 1e23 * 1000)
+                                * 1e-10**2
+                            )
+                            * 1.3806488
+                            * 1e-23
+                        )
+                    )
+                )
+            )
+            + 1
+        )
+        expected_electronic_entropy = 8.314462145468951 * np.log(
+            g16_output.multiplicity
+        )
+        expected_qrrho_total_entropy = (
+            expected_translational_entropy_concentration
+            + expected_rotational_entropy
+            + expected_qrrho_vibrational_entropy
+            + expected_electronic_entropy
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_total_entropy,
+            expected_qrrho_total_entropy,
+        )
+
+        # E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
+        # we got 3718.4353330073513 + 2478.956888671568 + 31632.978467909088 + 0 = 37830.37068958801 J mol^-1
+        expected_translational_internal_energy = (
+            3 / 2 * 8.314462145468951 * 298.15
+        )
+        expected_rotational_internal_energy = 8.314462145468951 * 298.15
+        expected_electronic_internal_energy = 0
+        expected_qrrho_total_internal_energy = (
+            expected_translational_internal_energy
+            + expected_rotational_internal_energy
+            + expected_qrrho_vibrational_internal_energy
+            + expected_electronic_internal_energy
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_total_internal_energy,
+            expected_qrrho_total_internal_energy,
+        )
+
+        # E0 in Hartree
+        assert np.isclose(qrrho_thermochem1.energies, -188.444680)
+
+        # ZPE in Hartree
+        assert np.isclose(
+            qrrho_thermochem1.zero_point_energy_hartree, 0.011776, rtol=1e-4
+        )
+
+        # H = E0 + E_tot + k_B * T in Hartree
+        assert np.isclose(qrrho_thermochem1.enthalpy, -188.429325)
+
+        # T * S_tot in Hartree
+        assert np.isclose(
+            qrrho_thermochem1.entropy_times_temperature, 0.021262
+        )
+
+        # T * S^qrrho_tot in Hartree
+        # 1 Hartree = 4.35974434 × 10^-18 Joules
+        # 1 mol = 6.02214129 * 10^23 Particle
+        # we got 0.021189019922516258 Hartree
+        expected_qrrho_entropy_times_temperture = (
+            298.15 * expected_qrrho_total_entropy
+        ) / (4.35974434e-18 * 6.02214129 * 1e23)
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_entropy_times_temperture,
+            expected_qrrho_entropy_times_temperture,
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_entropy_times_temperture, 0.021262
+        )
+
+        # G = H - T * S_tot
+        assert np.isclose(qrrho_thermochem1.gibbs_free_energy, -188.450587)
+
+        # H^qrrho = E0 + E^qrrho_tot + R * T
+        # we got -188.42932698796437 Hartree
+        expected_qrrho_enthalpy = g16_output.energies[-1] + (
+            expected_qrrho_total_internal_energy + 8.314462145468951 * 298.15
+        ) / (4.35974434e-18 * 6.02214129 * 1e23)
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_enthalpy,
+            expected_qrrho_enthalpy,
+        )
+        # G^qrrho_corr = H^qrrho - T * S^qrrho_tot
+        # we got -188.45051600788688 Hartree
+        expected_qrrho_gibbs_free_energy = (
+            expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperture
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_gibbs_free_energy,
+            expected_qrrho_gibbs_free_energy,
+        )
+        assert np.isclose(
+            qrrho_thermochem1.qrrho_gibbs_free_energy, -188.450588
         )

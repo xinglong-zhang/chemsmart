@@ -1398,6 +1398,12 @@ class Gaussian16Output(GaussianFileMixin):
         index = string2index_1based(index)
         return self.all_structures[index]
 
+    @property
+    def mass(self):
+        for line in self.contents:
+            if "Molecular mass:" and "amu." in line:
+                return float(line.split()[2])
+
     @cached_property
     def moments_of_inertia(self):
         """Obtain moments of inertia from the output file which are in atomic units
