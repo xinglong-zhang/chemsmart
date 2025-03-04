@@ -18,6 +18,10 @@ class XYZFile(FileMixin):
     def molecule(self):
         return self.get_molecule(index="-1")
 
+    @cached_property
+    def comments(self):
+        return self.get_comments(index="-1")
+
     def _get_molecules_and_comments(self, index=":", return_list=False):
         """Return a molecule object or a list of molecule objects from an xyz file.
         The xzy file can either contain a single molecule, as conventionally, or a list
@@ -56,3 +60,9 @@ class XYZFile(FileMixin):
             index=index, return_list=return_list
         )
         return molecules
+
+    def get_comments(self, index=":", return_list=False):
+        _, comments = self._get_molecules_and_comments(
+            index=index, return_list=return_list
+        )
+        return comments
