@@ -382,6 +382,7 @@ def gaussian(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
+        logger.debug(f"Using molecule with index: {index}")
         try:
             # try to get molecule using python style string indexing,
             # but in 1-based
