@@ -97,6 +97,13 @@ def link(
         f"Link job {jobtype} settings from project: {link_settings.__dict__}"
     )
 
+    if jobtype == "irc":
+        from chemsmart.jobs.gaussian import GaussianJob
+
+        return GaussianJob.from_jobtype(
+            jobtype=jobtype, molecule=molecule, settings=link_settings, label=label, **kwargs
+        )
+
     from chemsmart.jobs.gaussian.link import GaussianLinkJob
 
     return GaussianLinkJob(

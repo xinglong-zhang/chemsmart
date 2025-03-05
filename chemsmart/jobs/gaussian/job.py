@@ -147,6 +147,14 @@ class GaussianJob(Job):
                 label=label,
                 **kwargs,
             )
+        elif jobtype.lower() == "irc":
+            from chemsmart.jobs.gaussian.irc import GaussianIRCJob
+            return GaussianIRCJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
         else:
             raise ValueError(f"Invalid job type: {jobtype}")
 

@@ -137,7 +137,7 @@ def click_gaussian_jobtype_options(f):
         "--jobtype",
         type=str,
         default=None,
-        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp", "irc"]',
     )
     @click.option(
         "-c",
