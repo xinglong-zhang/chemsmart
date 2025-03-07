@@ -3,7 +3,6 @@ import logging
 import os
 
 import click
-from ase import units
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
