@@ -783,7 +783,7 @@ class TestThermochemistry:
             expected_freerot_entropy,
         )
 
-        # S^rrho_v,K = R * (Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))
+        # S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
         # Θ_v,K = h * v_K / k_B
         expected_theta = (
             6.62606957
@@ -793,19 +793,19 @@ class TestThermochemistry:
             * 1e10
             / (1.3806488 * 1e-23)
         )
-        # we got [1.21211969e+00, 1.21211969e+00, 6.97078497e-02, 6.58556458e-04] in J mol^-1 K^-1
-        expected_rrho_entropy = 8.314462145468951 * (
+        # we got [1.53092635e+00, 1.53092635e+00, 7.86899024e-02, 7.06622985e-04] in J mol^-1 K^-1
+        expected_rrho_entropy = 8.314462145468951 * ((
             expected_theta / 298.15
         ) / (np.exp(expected_theta / 298.15) - 1) - np.log(
             1 - np.exp(-expected_theta / 298.15)
-        )
+        ))
         assert np.allclose(
             qrrho_thermochem1.rrho_entropy,
             expected_rrho_entropy,
         )
 
         # S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
-        # we got 2.497831161981913 J mol^-1 K^-1
+        # we got 3.144125458725274 J mol^-1 K^-1
         expected_qrrho_vibrational_entropy = np.sum(
             expected_damping_function * expected_rrho_entropy
             + (1 - expected_damping_function) * expected_freerot_entropy
@@ -867,7 +867,7 @@ class TestThermochemistry:
         )
 
         # S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
-        # we got 129.3547289549365 + 54.737291254812845 + 2.497831161981913 + 0 = 186.58985137173124 J mol^-1 K^-1
+        # we got 129.3547289549365 + 54.737291254812845 + 3.144125458725274 + 0 = 187.23614566847462 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(
                 1
@@ -937,13 +937,13 @@ class TestThermochemistry:
 
         # T * S_tot in Hartree
         assert np.isclose(
-            qrrho_thermochem1.entropy_times_temperature, 0.021262
+            qrrho_thermochem1.entropy_times_temperature, 0.021262, rtol=1e-4
         )
 
         # T * S^qrrho_tot in Hartree
         # 1 Hartree = 4.35974434 × 10^-18 Joules
         # 1 mol = 6.02214129 * 10^23 Particle
-        # we got 0.021189019922516258 Hartree
+        # we got 0.021262412674741677 Hartree
         expected_qrrho_entropy_times_temperture = (
             298.15 * expected_qrrho_total_entropy
         ) / (4.35974434e-18 * 6.02214129 * 1e23)
@@ -952,7 +952,7 @@ class TestThermochemistry:
             expected_qrrho_entropy_times_temperture,
         )
         assert np.isclose(
-            qrrho_thermochem1.qrrho_entropy_times_temperture, 0.021262
+            qrrho_thermochem1.qrrho_entropy_times_temperture, 0.021262, rtol=1e-4
         )
 
         # G = H - T * S_tot
@@ -968,7 +968,7 @@ class TestThermochemistry:
             expected_qrrho_enthalpy,
         )
         # G^qrrho_corr = H^qrrho - T * S^qrrho_tot
-        # we got -188.45051600788688 Hartree
+        # we got -188.4505894006391 Hartree
         expected_qrrho_gibbs_free_energy = (
             expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperture
         )

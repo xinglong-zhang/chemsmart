@@ -535,11 +535,11 @@ class qRRHOThermochemistry(Thermochemistry):
     def rrho_entropy(self):
         """Obtain the RRHO vibrational entropy in J mol^-1 K^-1.
         Formula:
-            S^rrho_v,K = R * (Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))
+            S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
         """
         entropy = [
-            R * (t / self.T) / (math.exp(t / self.T) - 1)
-            - np.log(1 - math.exp(-t / self.T))
+            R * ((t / self.T) / (math.exp(t / self.T) - 1)
+            - np.log(1 - math.exp(-t / self.T)))
             for t in self.theta
         ]
         return entropy
