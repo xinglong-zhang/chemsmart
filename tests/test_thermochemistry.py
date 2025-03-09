@@ -794,11 +794,10 @@ class TestThermochemistry:
             / (1.3806488 * 1e-23)
         )
         # we got [1.53092635e+00, 1.53092635e+00, 7.86899024e-02, 7.06622985e-04] in J mol^-1 K^-1
-        expected_rrho_entropy = 8.314462145468951 * ((
-            expected_theta / 298.15
-        ) / (np.exp(expected_theta / 298.15) - 1) - np.log(
-            1 - np.exp(-expected_theta / 298.15)
-        ))
+        expected_rrho_entropy = 8.314462145468951 * (
+            (expected_theta / 298.15) / (np.exp(expected_theta / 298.15) - 1)
+            - np.log(1 - np.exp(-expected_theta / 298.15))
+        )
         assert np.allclose(
             qrrho_thermochem1.rrho_entropy,
             expected_rrho_entropy,
@@ -952,7 +951,9 @@ class TestThermochemistry:
             expected_qrrho_entropy_times_temperture,
         )
         assert np.isclose(
-            qrrho_thermochem1.qrrho_entropy_times_temperture, 0.021262, rtol=1e-4
+            qrrho_thermochem1.qrrho_entropy_times_temperture,
+            0.021262,
+            rtol=1e-4,
         )
 
         # G = H - T * S_tot
@@ -978,4 +979,34 @@ class TestThermochemistry:
         )
         assert np.isclose(
             qrrho_thermochem1.qrrho_gibbs_free_energy, -188.450588
+        )
+
+        """Values from Goodvices, as a reference:
+                goodvibes -f 100 -c 0.5 -t 598.15 co2.log
+        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+           ********************************************************************************************************************************
+        o  co2                                       -188.444680   0.011776   -188.424452   0.049327   0.049327   -188.473778   -188.473779
+           ********************************************************************************************************************************
+        """
+        qrrho_thermochem2 = qRRHOThermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=598.15,  # in Kelvin
+            concentration=0.5,  # in mol/L
+        )
+        assert np.isclose(qrrho_thermochem2.energies, -188.444680)
+        assert np.isclose(
+            qrrho_thermochem2.zero_point_energy_hartree, 0.011776, rtol=1e-4
+        )
+        assert np.isclose(qrrho_thermochem2.enthalpy, -188.424452)
+        assert np.isclose(
+            qrrho_thermochem2.entropy_times_temperature, 0.049327, rtol=1e-4
+        )
+        assert np.isclose(
+            qrrho_thermochem2.qrrho_entropy_times_temperture,
+            0.049327,
+            rtol=1e-4,
+        )
+        assert np.isclose(qrrho_thermochem2.gibbs_free_energy, -188.473778)
+        assert np.isclose(
+            qrrho_thermochem2.qrrho_gibbs_free_energy, -188.473779
         )
