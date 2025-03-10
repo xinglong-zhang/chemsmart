@@ -81,6 +81,8 @@ class Thermochemistry:
         Direct calculation from molecular structure, since sometimes Gaussian
         output does not print it properly (prints as ***** if values too large)
         """
+        if self.molecule.is_monoatomic:
+            return None
         if self.molecule.is_linear:
             return self.file_object.moments_of_inertia[-1]
         return self.file_object.moments_of_inertia
