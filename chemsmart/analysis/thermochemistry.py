@@ -709,11 +709,19 @@ class qRRHOThermochemistry(Thermochemistry):
 
     @property
     def qrrho_gibbs_free_energy(self):
-        """
+        """Obtain the Gibbs free energy in Hartree, by quasi-RRHO corrections to both entropy and enthalpy.
         Formula:
             G^qrrho = H^qrrho - T * S^qrrho_tot
         """
         return self.qrrho_enthalpy - self.qrrho_entropy_times_temperture
+
+    @property
+    def qrrho_gibbs_free_energy_qs(self):
+        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to entropy only.
+        Formula:
+            G^qrrho_qs = H - T * S^qrrho_tot
+        """
+        return self.enthalpy - self.qrrho_entropy_times_temperture
 
 
 class GaussianThermochemistry(Thermochemistry):
