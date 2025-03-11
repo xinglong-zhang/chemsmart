@@ -308,64 +308,12 @@ class TestThermochemistry:
         assert (
             g16_output.num_vib_frequencies == 4
         )  # vDOF = 3 * num_atoms - 5 since CO2 is a linear molecule
+
         thermochem1 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,  # in Kelvin
             pressure=1,  # in atm
         )
-        gaussian_thermochem1 = GaussianThermochemistry(
-            filename=gaussian_co2_opt_outfile,
-            temperature=298.15,
-            pressure=1,
-        )
-
-        assert np.isclose(
-            gaussian_thermochem1.zero_point_vibrational_energy,
-            30919.1,
-            atol=1e-1,
-        )
-        assert np.allclose(
-            gaussian_thermochem1.vibrational_temperatures,
-            [940.59, 940.59, 1998.50, 3557.76],
-            atol=1e-2,
-        )
-        assert np.isclose(
-            gaussian_thermochem1.zero_point_correction, 0.011776, atol=1e-6
-        )
-        assert np.isclose(
-            gaussian_thermochem1.thermal_correction_energy, 0.014410, atol=1e-6
-        )
-        assert np.isclose(
-            gaussian_thermochem1.thermal_correction_enthalpy,
-            0.015354,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            gaussian_thermochem1.thermal_correction_free_energy,
-            -0.008927,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            gaussian_thermochem1.sum_of_electronic_and_zero_point_energies,
-            -188.432903,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            gaussian_thermochem1.sum_of_electronic_and_thermal_energies,
-            -188.430269,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            gaussian_thermochem1.sum_of_electronic_and_thermal_enthalpies,
-            -188.429325,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            gaussian_thermochem1.sum_of_electronic_and_thermal_free_energies,
-            -188.453606,
-            atol=1e-6,
-        )
-
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
         # here T = 298.15 K, P = 1 atm = 101325 Pa
         # k_B = 1.3806488 * 10^-23 J/K
@@ -722,6 +670,58 @@ class TestThermochemistry:
         )
         assert np.isclose(
             thermochem1.total_heat_capacity, 6.920 * cal_to_joules, rtol=1e-3
+        )
+
+        gaussian_thermochem1 = GaussianThermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.zero_point_vibrational_energy,
+            30919.1,
+            atol=1e-1,
+        )
+        assert np.allclose(
+            gaussian_thermochem1.vibrational_temperatures,
+            [940.59, 940.59, 1998.50, 3557.76],
+            atol=1e-2,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.zero_point_correction, 0.011776, atol=1e-6
+        )
+        assert np.isclose(
+            gaussian_thermochem1.thermal_correction_energy, 0.014410, atol=1e-6
+        )
+        assert np.isclose(
+            gaussian_thermochem1.thermal_correction_enthalpy,
+            0.015354,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.thermal_correction_free_energy,
+            -0.008927,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_zero_point_energies,
+            -188.432903,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_thermal_energies,
+            -188.430269,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_thermal_enthalpies,
+            -188.429325,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            gaussian_thermochem1.sum_of_electronic_and_thermal_free_energies,
+            -188.453606,
+            atol=1e-6,
         )
 
     def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
@@ -1167,6 +1167,94 @@ class TestThermochemistry:
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -2.91512971456)
         assert mol.is_monoatomic
+
+        thermochem2 = GaussianThermochemistry(
+            filename=gaussian_he_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+        )
+        assert np.isclose(
+            thermochem2.translational_partition_function, 0.314751e06
+        )
+        assert np.isclose(
+            thermochem2.translational_entropy,
+            30.125 * cal_to_joules,
+            rtol=1e-3,
+        )
+        assert np.isclose(
+            thermochem2.translational_internal_energy,
+            0.889 * cal_to_joules * 1000,
+            rtol=1e0,
+        )
+        assert np.isclose(
+            thermochem2.translational_heat_capacity,
+            2.981 * cal_to_joules,
+            rtol=1e-3,
+        )
+        assert np.isclose(
+            thermochem2.electronic_partition_function, 0.100000e01
+        )
+        assert np.isclose(
+            thermochem2.electronic_entropy, 0.000 * cal_to_joules, rtol=1e-3
+        )
+        assert np.isclose(
+            thermochem2.electronic_internal_energy,
+            0.000 * cal_to_joules * 1000,
+            rtol=1e0,
+        )
+        assert np.isclose(
+            thermochem2.electronic_heat_capacity,
+            0.000 * cal_to_joules,
+            rtol=1e-3,
+        )
+        assert np.isclose(
+            thermochem2.rotational_partition_function, 0.100000e01
+        )
+        assert np.isclose(
+            thermochem2.rotational_entropy, 0.000 * cal_to_joules, rtol=1e-3
+        )
+        assert np.isclose(
+            thermochem2.rotational_internal_energy,
+            0.000 * cal_to_joules * 1000,
+            rtol=1e0,
+        )
+        assert np.isclose(
+            thermochem2.rotational_heat_capacity,
+            0.000 * cal_to_joules,
+            rtol=1e-3,
+        )
+        assert np.isclose(
+            thermochem2.vibrational_partition_function_BOT, 0.100000e01
+        )
+        assert np.isclose(
+            thermochem2.vibrational_partition_function_V0, 0.100000e01
+        )
+        assert np.isclose(
+            thermochem2.vibrational_entropy, 0.000 * cal_to_joules, rtol=1e-3
+        )
+        assert np.isclose(
+            thermochem2.vibrational_internal_energy,
+            0.000 * cal_to_joules * 1000,
+            rtol=1e0,
+        )
+        assert np.isclose(
+            thermochem2.vibrational_heat_capacity,
+            0.000 * cal_to_joules,
+            rtol=1e-3,
+        )
+        assert np.isclose(thermochem2.total_partition_function, 0.314751e06)
+        assert np.isclose(
+            thermochem2.total_entropy, 30.125 * cal_to_joules, rtol=1e-3
+        )
+        assert np.isclose(
+            thermochem2.total_internal_energy,
+            0.889 * cal_to_joules * 1000,
+            rtol=1e0,
+        )
+        assert np.isclose(
+            thermochem2.total_heat_capacity, 2.981 * cal_to_joules, rtol=1e-3
+        )
+
         gaussian_thermochem2 = GaussianThermochemistry(
             filename=gaussian_he_opt_outfile,
             temperature=298.15,
@@ -1212,4 +1300,45 @@ class TestThermochemistry:
             gaussian_thermochem2.sum_of_electronic_and_thermal_free_energies,
             -2.927083,
             atol=1e-6,
+        )
+
+    def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
+        """Values from Goodvibes, as a reference:
+                goodvibes -f 1000 -c 0.5 -t 598.15 -q he.log
+        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
+           **********************************************************************************************************************************************
+        o  He                                          -2.915130   0.000000     -2.910394     -2.910394   0.025951   0.025951     -2.936345     -2.936345
+           **********************************************************************************************************************************************
+        """
+        assert os.path.exists(gaussian_he_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_he_opt_outfile)
+        assert g16_output.normal_termination
+        qrrho_thermochem_he = qRRHOThermochemistry(
+            filename=gaussian_he_opt_outfile,
+            temperature=598.15,  # in Kelvin
+            concentration=0.5,  # in mol/L
+            s_freq_cutoff=1000,  # in cm^-1
+            h_freq_cutoff=1000,  # in cm^-1
+        )
+        assert np.isclose(qrrho_thermochem_he.energies, -2.915130, atol=1e-6)
+        assert np.isclose(
+            qrrho_thermochem_he.zero_point_energy_hartree, 0.000000, atol=1e-6
+        )
+        assert np.isclose(qrrho_thermochem_he.enthalpy, -2.910394, atol=1e-6)
+        assert np.isclose(
+            qrrho_thermochem_he.qrrho_enthalpy, -2.910394, atol=1e-6
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.entropy_times_temperature, 0.025951, atol=1e-6
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.qrrho_entropy_times_temperture,
+            0.025951,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.gibbs_free_energy, -2.936345, atol=1e-6
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.qrrho_gibbs_free_energy, -2.936345, atol=1e-6
         )
