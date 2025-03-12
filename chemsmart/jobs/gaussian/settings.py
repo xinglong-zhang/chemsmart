@@ -647,7 +647,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
-        link_atoms=None,
+        bonded_atoms=None,
         **kwargs,
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
@@ -668,35 +668,36 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
-        self.link_atoms = link_atoms
+        self.bonded_atoms = bonded_atoms
+        #TODO: atom type, partial charges, and scale factors for QM/MM
 
-        if self.functional_high is not None and self.basis_high is not None:
-            self.high_level_of_theory = f"{self.functional_high}/{self.basis_high}"
-        elif self.functional_high is not None and self.basis_high is None:
-            #TODO
-            pass
+        #If the user only specifies the parameters of two layers, the low-level layer will be omitted
+    def validate_and_assign_level(self, functional, basis, level_name):
+        """Validates functional and basis set for a given level and returns formatted theory string."""
+        if functional is None and basis is not None:
+            raise ValueError(f"Functional for {level_name} level of theory is not specified!")
+        if functional is not None and basis is None:
+            raise ValueError(f"Basis set for {level_name} level of theory is not specified!")
+        return f"{functional}/{basis}" if functional and basis else None
 
-        else:
-            raise ValueError(f"High level of theory is not specified!")
 
-
-        if self.functional_medium is not None and self.basis_medium is not None:
-            self.medium_level_of_theory = f"{self.functional_medium}/{self.basis_medium}"
-        elif self.functional_medium is not None and self.basis_medium is None:
-            self.medium_level_of_theory = f"{self.functional_medium}"  # medium level if there is only one, eg., PM6,
-            # it can be supplied either as functional_medium or basis_medium
-        elif self.functional_medium is None and self.basis_medium is not None:
-            self.medium_level_of_theory = f"{self.basis_medium}"
-        else:
-            self.medium_level_of_theory = None
-
-        #TODO: self.low_level_of_theory
 
 
     def _get_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
 
         oniom_string = "oniom"
+        self.high_level_of_theory = self.validate_and_assign_level(
+            self.functional_high, self.basis_high, "high"
+        )
+        self.medium_level_of_theory = self.validate_and_assign_level(
+            self.functional_medium, self.basis_medium, "medium"
+        )
+        # Validate and assign low-level parameters (Optional)
+        self.low_level_of_theory = self.validate_and_assign_level(
+            self.functional_low, self.basis_low, "low"
+        ) if self.functional_medium is None and self.basis_medium is None else None
+
         if self.high_level_of_theory is not None:
             oniom_string += f"({self.high_level_of_theory}"
         if self.medium_level_of_theory is not None:

@@ -74,7 +74,7 @@ class Molecule:
         qm_high_level_atoms=None,
         qm_medium_level_atoms=None,
         qm_low_level_atoms=None,
-        qm_link_atoms=None,
+        qm_bonded_atoms=None,
         info=None,
     ):
         self.symbols = symbols
@@ -92,7 +92,7 @@ class Molecule:
         self.qm_high_level_atoms=qm_high_level_atoms
         self.qm_medium_level_atoms=qm_medium_level_atoms
         self.qm_low_level_atoms=qm_low_level_atoms
-        self.qm_link_atoms=qm_link_atoms
+        self.qm_bonded_atoms=qm_bonded_atoms
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -525,23 +525,25 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        for i, (s, (x, y, z)) in enumerate(
-                zip(self.chemical_symbols, self.positions)
-        ):
-            line=f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+        for i, (s, (x, y, z)) in enumerate(zip(self.chemical_symbols, self.positions)):
+            line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
-                line=f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if self.qm_high_level_atoms is not None and i+1 in self.qm_high_level_atoms:
-                line += " H"  # High-level QM atoms
-            elif self.qm_medium_level_atoms is not None and i+1 in self.qm_medium_level_atoms:
-                line += " M"  # Medium-level QM atoms
-            elif self.qm_low_level_atoms is not None and i+1 in self.qm_low_level_atoms:
-                line += " L"  # Low-level QM atoms
-            if self.qm_link_atoms is not None:
-                for pair in self.qm_link_atoms:
-                    if (i + 1) in pair:
-                        other_atom = pair[0] if pair[1] == (i + 1) else pair[1]
-                        line += f" {other_atom}"
+                line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
+            if self.qm_high_level_atoms and (i + 1) in self.qm_high_level_atoms:
+                line += " H"
+            elif self.qm_medium_level_atoms and (i + 1) in self.qm_medium_level_atoms:
+                line += " M"
+            elif self.qm_low_level_atoms and (i + 1) in self.qm_low_level_atoms:
+                line += " L"
+            # Handle QM link atoms and bonded-to atoms
+            if self.qm_bonded_atoms:
+                for atom1, atom2 in self.qm_bonded_atoms:
+                    if (i + 1) == atom1 and ((atom1 in self.qm_medium_level_atoms and atom2 in self.qm_high_level_atoms)\
+                            or (atom1 in self.qm_low_level_atoms and atom2 in self.qm_medium_level_atoms)):
+                        line += f" H {atom2}"  # atom1 (low-level) gets link atom
+                    elif (i + 1) == atom2 and ((atom2 in self.qm_medium_level_atoms and atom1 in self.qm_high_level_atoms)\
+                            or (atom2 in self.qm_low_level_atoms and atom1 in self.qm_medium_level_atoms)):
+                        line += f" H {atom1}"  # atom2 (low-level) gets link atom
             f.write(line + "\n")
         return f
 
