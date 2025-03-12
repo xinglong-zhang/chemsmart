@@ -97,6 +97,7 @@ class GaussianRoute:
             "opt" in self.route_string
             and "ts" not in self.route_string
             and "modred" not in self.route_string
+            and "stable=opt" not in self.route_string
         ):
             job_type = "opt"
         elif "opt=modred" in self.route_string:
@@ -112,6 +113,10 @@ class GaussianRoute:
             in self.route_string
         ):
             job_type = "resp"
+        elif "stable=opt" in self.route_string:
+            job_type = (
+                "link"  # so far only using stable=opt to determine link job
+            )
         else:
             job_type = "sp"
         return job_type
