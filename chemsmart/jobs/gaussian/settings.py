@@ -636,6 +636,8 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
 
 
 class GaussianQMMMJobSettings(GaussianJobSettings):
+    low_level_charges: object
+
     def __init__(
         self,
         functional_high=None,
@@ -645,12 +647,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         functional_low=None,
         basis_low=None,
         force_field=None,
-        high_level_charges=None,
-        high_level_spin=None,
-        medium_level_charges=None,
-        medium_level_spin=None,
-        low_level_charges=None,
-        low_level_spin=None,
+        model_high_level_charges=None,
+        model_high_level_spin=None,
+        model_low_level_charges=None,
+        model_low_level_spin=None,
+        real_low_level_charges=None,
+        real_low_level_spin=None,
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
@@ -668,7 +670,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             low_level_atoms (list): List of low level atoms.
             bonded_atoms (list): List of bonded atoms.
             scale_factor1 (float) (optional): Scale factor for bonds between QM and MM region,default=1.0
-            scale_factor2 (float) (optional): Scale factor for angles involving MM and MM region,default=1.0
+            scale_factor2 (float) (optional): Scale factor for angles involving QM and MM region,default=1.0
             scale_factor3 (float) (optional): Scale factor for torsions, default=1.0
             **kwargs: Additional keyword arguments.
         """
@@ -680,12 +682,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.functional_low = functional_low
         self.basis_low = basis_low
         self.force_field = force_field
-        self.high_level_charges = high_level_charges
-        self.high_level_spin = high_level_spin
-        self.medium_level_charges = medium_level_charges
-        self.medium_level_spin = medium_level_spin
-        self.low_level_charges = low_level_charges
-        self.low_level_spin = low_level_spin
+        self.model_level_charges = model_high_level_charges
+        self.model_high_level_spin = model_high_level_spin
+        self.model_low_level_charges = model_low_level_charges
+        self.model_low_level_spin = model_low_level_spin
+        self.real_low_level_charges = real_low_level_charges
+        self.real_low_level_spin = real_low_level_spin
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms

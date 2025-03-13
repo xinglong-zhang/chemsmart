@@ -112,7 +112,15 @@ class GaussianInputWriter(InputWriter):
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
-        f.write(f"{charge} {multiplicity}\n")
+        line = f"{charge} {multiplicity}\n"
+        if (
+            self.settings.model_high_level_charges
+            and self.settings.model_high_level_spin
+            and self.settings.model_low_level_charges
+            and self.settings.model_low_level_spin
+        ):
+            line += f" {self.settings.model_high_level_charges} {self.settings.model_high_level_spin} {self.settings.model_low_level_charges} {self.settings.model_low_level_spin}\n"
+        f.write(line)
 
     def _write_cartesian_coordinates(self, f):
         logger.debug(
