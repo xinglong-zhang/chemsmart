@@ -585,6 +585,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         return link_route_string
 
     def _get_route_string_from_jobtype(self):
+        """First route string."""
         route_string = super()._get_route_string_from_jobtype()
         # remove "opt or opt= and freq" from route string
         pattern = re.compile(r"opt\s*(=\s*(\(.*\)|\w+))?\s*", re.IGNORECASE)
@@ -605,6 +606,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         return route_string_final
 
     def _get_link_route_string_from_jobtype(self):
+        """Link route string."""
         route_string = super()._get_route_string_from_jobtype()
         # remove "opt or opt= and freq" from route string
 

@@ -3,6 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_irc_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @gaussian.command("link", cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click_gaussian_irc_options
 @click.option(
     "-st",
     "--stable",
@@ -46,6 +48,13 @@ def link(
     step_size,
     num_steps,
     route,
+    flat_irc,
+    predictor,
+    recorrect,
+    recalc_step,
+    maxpoints,
+    maxcycles,
+    stepsize,
     **kwargs,
 ):
     from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
@@ -98,10 +107,27 @@ def link(
     )
 
     if jobtype == "irc":
+        from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
+
+        irc_job_settings = GaussianIRCJobSettings(
+            flat_irc=flat_irc,
+            predictor=predictor,
+            recorrect=recorrect,
+            recalc_step=recalc_step,
+            maxpoints=maxpoints,
+            maxcycles=maxcycles,
+            stepsize=stepsize,
+        )
+        job_settings = irc_job_settings.merge(link_settings, merge_all=True)
+        print(job_settings.__dict__)
         from chemsmart.jobs.gaussian import GaussianJob
 
         return GaussianJob.from_jobtype(
-            jobtype=jobtype, molecule=molecule, settings=link_settings, label=label, **kwargs
+            jobtype=jobtype,
+            molecule=molecule,
+            settings=job_settings,
+            label=label,
+            **kwargs,
         )
 
     from chemsmart.jobs.gaussian.link import GaussianLinkJob

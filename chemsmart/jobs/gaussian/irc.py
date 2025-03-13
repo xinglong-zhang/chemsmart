@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class GaussianIRCJob(GaussianJob):
     TYPE = "g16irc"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
+    def __init__(self, molecule, settings=None, label=None, link=False,**kwargs):
         super().__init__(
             molecule=molecule,
             settings=settings,
@@ -20,6 +20,7 @@ class GaussianIRCJob(GaussianJob):
         )
         self.settings = settings
         self.settings.freq = False  # turn off freq calc for IRC
+        self.settings.link = link
 
     @classmethod
     def settings_class(cls) -> Type[GaussianIRCJobSettings]:
@@ -35,6 +36,17 @@ class GaussianIRCJob(GaussianJob):
                 label += "_flat"
 
         ircf_settings.job_type = "ircf"
+        if ircf_settings.link:
+            from chemsmart.jobs.gaussian.link import GaussianLinkJob
+            from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+            ircf_settings = GaussianLinkJobSettings(**ircf_settings.__dict__)
+            return GaussianLinkJob(
+                molecule=self.molecule,
+                settings=ircf_settings,
+                label=label,
+                skip_completed=self.skip_completed,
+            )
+
         return GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircf_settings,
@@ -51,6 +63,14 @@ class GaussianIRCJob(GaussianJob):
             if self.settings.flat_irc:
                 label += "_flat"
         ircr_settings.job_type = "ircr"
+        if ircr_settings.link:
+            from chemsmart.jobs.gaussian.link import GaussianLinkJob
+            return GaussianLinkJob(
+                molecule=self.molecule,
+                settings=ircr_settings,
+                label=label,
+                skip_completed=self.skip_completed,
+            )
         return GaussianGeneralJob(
             molecule=self.molecule,
             settings=ircr_settings,

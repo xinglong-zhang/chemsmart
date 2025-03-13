@@ -2,7 +2,10 @@ import logging
 
 import click
 
-from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_irc_options,
+    gaussian,
+)
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -12,57 +15,7 @@ logger = logging.getLogger(__name__)
 
 @gaussian.command(cls=MyCommand)
 @click_job_options
-@click.option(
-    "-fl/",
-    "--flat-irc/--no-flat-irc",
-    type=bool,
-    default=False,
-    help="whether to run flat irc or not",
-)
-@click.option(
-    "-pt",
-    "--predictor",
-    type=click.Choice(
-        ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
-    ),
-    default=None,
-    help="Type of predictors used for IRC. Examples include[HPC, EulerPC, LQA, DVV, Euler].",
-)
-@click.option(
-    "-rc",
-    "--recorrect",
-    type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
-    default=None,
-    help='Recorrection step of HPC and EulerPC IRCs. options are: ["Never", "Always", "Test"].',
-)
-@click.option(
-    "-rs",
-    "--recalc-step",
-    type=int,
-    default=6,
-    help="Compute the Hessian analytically every N predictor steps or every |N| corrector steps if N<0. ",
-)
-@click.option(
-    "-p",
-    "--maxpoints",
-    type=int,
-    default=512,
-    help="Number of points along reaction path to examine.",
-)
-@click.option(
-    "-c",
-    "--maxcycles",
-    type=int,
-    default=128,
-    help="Maximum number of steps along IRC to run.",
-)
-@click.option(
-    "-s",
-    "--stepsize",
-    type=int,
-    default=20,
-    help="Step size along reaction path, in units of 0.01 Bohr.",
-)
+@click_gaussian_irc_options
 @click.pass_context
 def irc(
     ctx,
