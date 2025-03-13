@@ -71,11 +71,8 @@ class Molecule:
         energy=None,
         forces=None,
         velocities=None,
-        qm_high_level_atoms=None,
-        qm_medium_level_atoms=None,
-        qm_low_level_atoms=None,
-        qm_bonded_atoms=None,
         info=None,
+        qmmm_settings=None,
     ):
         self.symbols = symbols
         self.positions = positions
@@ -89,10 +86,7 @@ class Molecule:
         self.velocities = velocities
         self.info = info
         self._num_atoms = len(self.symbols)
-        self.qm_high_level_atoms=qm_high_level_atoms
-        self.qm_medium_level_atoms=qm_medium_level_atoms
-        self.qm_low_level_atoms=qm_low_level_atoms
-        self.qm_bonded_atoms=qm_bonded_atoms
+        self.qmmm_settings = qmmm_settings
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -525,28 +519,75 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        for i, (s, (x, y, z)) in enumerate(zip(self.chemical_symbols, self.positions)):
+        job_settings = self.qmmm_settings
+        for i, (s, (x, y, z)) in enumerate(
+            zip(self.chemical_symbols, self.positions)
+        ):
             line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
                 line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if self.qm_high_level_atoms and (i + 1) in self.qm_high_level_atoms:
+            if (
+                job_settings.high_level_atoms
+                and (i + 1) in job_settings.high_level_atoms
+            ):
                 line += " H"
-            elif self.qm_medium_level_atoms and (i + 1) in self.qm_medium_level_atoms:
+            elif (
+                job_settings.medium_level_atoms
+                and (i + 1) in job_settings.medium_level_atoms
+            ):
                 line += " M"
-            elif self.qm_low_level_atoms and (i + 1) in self.qm_low_level_atoms:
+            elif (
+                job_settings.low_level_atoms
+                and (i + 1) in job_settings.low_level_atoms
+            ):
                 line += " L"
             # Handle QM link atoms and bonded-to atoms
-            if self.qm_bonded_atoms:
-                for atom1, atom2 in self.qm_bonded_atoms:
-                    if (i + 1) == atom1 and ((atom1 in self.qm_medium_level_atoms and atom2 in self.qm_high_level_atoms)\
-                            or (atom1 in self.qm_low_level_atoms and atom2 in self.qm_medium_level_atoms)):
-                        line += f" H {atom2}"  # atom1 (low-level) gets link atom
-                    elif (i + 1) == atom2 and ((atom2 in self.qm_medium_level_atoms and atom1 in self.qm_high_level_atoms)\
-                            or (atom2 in self.qm_low_level_atoms and atom1 in self.qm_medium_level_atoms)):
-                        line += f" H {atom1}"  # atom2 (low-level) gets link atom
+            if job_settings.bonded_atoms:
+                for atom1, atom2 in job_settings.bonded_atoms:
+                    if (i + 1) == atom1 and (
+                        (
+                            atom1 in job_settings.medium_level_atoms
+                            and atom2 in job_settings.high_level_atoms
+                        )
+                        or (
+                            atom1 in job_settings.low_level_atoms
+                            and atom2 in job_settings.medium_level_atoms
+                        )
+                    ):
+                        line += (
+                            f" H {atom2}"  # atom1 (low-level) gets link atom
+                        )
+                        if hasattr(
+                            job_settings, "scale_factor_initialization"
+                        ):
+                            scale_factor = (
+                                job_settings.scale_factor_initialization()
+                            )
+                            if scale_factor:
+                                line += f" {scale_factor}"
+                    elif (i + 1) == atom2 and (
+                        (
+                            atom2 in job_settings.medium_level_atoms
+                            and atom1 in job_settings.high_level_atoms
+                        )
+                        or (
+                            atom2 in job_settings.low_level_atoms
+                            and atom1 in job_settings.medium_level_atoms
+                        )
+                    ):
+                        line += (
+                            f" H {atom1}"  # atom2 (low-level) gets link atom
+                        )
+                        if hasattr(
+                            job_settings, "scale_factor_initialization"
+                        ):
+                            scale_factor = (
+                                job_settings.scale_factor_initialization()
+                            )
+                            if scale_factor:
+                                line += f" {scale_factor}"
             f.write(line + "\n")
         return f
-
 
     def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
@@ -933,11 +974,6 @@ class CoordinateBlock:
         """Returns a list of contraints in Gaussian format where 0 means unconstrained
         and -1 means constrained."""
         return self._get_constraints()
-
-    @property
-    def qm_layers(self):
-        """Returns a list of QM layers in Gaussian format."""
-        return self._get_qm_layers()
 
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into

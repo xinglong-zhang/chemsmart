@@ -638,24 +638,38 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
 class GaussianQMMMJobSettings(GaussianJobSettings):
     def __init__(
         self,
-        functional_high,
-        basis_high,
-        functional_medium,
-        basis_medium,
-        functional_low,
-        basis_low,
+        functional_high=None,
+        basis_high=None,
+        functional_medium=None,
+        basis_medium=None,
+        functional_low=None,
+        basis_low=None,
+        force_field=None,
+        high_level_charges=None,
+        high_level_spin=None,
+        medium_level_charges=None,
+        medium_level_spin=None,
+        low_level_charges=None,
+        low_level_spin=None,
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
         bonded_atoms=None,
+        scale_factor1=None,
+        scale_factor2=None,
+        scale_factor3=None,
         **kwargs,
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
         Args:
+            force_field (optional): force field to assign partial charges for MM region
             high_level_atoms (list): List of high level atoms.
-            medium_level_atoms (list): List of medium level atoms.
+            medium_level_atoms (list) : List of medium level atoms.
             low_level_atoms (list): List of low level atoms.
-            link_atoms (list): List of link atoms.
+            bonded_atoms (list): List of bonded atoms.
+            scale_factor1 (float) (optional): Scale factor for bonds between QM and MM region,default=1.0
+            scale_factor2 (float) (optional): Scale factor for angles involving MM and MM region,default=1.0
+            scale_factor3 (float) (optional): Scale factor for torsions, default=1.0
             **kwargs: Additional keyword arguments.
         """
         super().__init__(**kwargs)
@@ -665,23 +679,42 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.basis_medium = basis_medium
         self.functional_low = functional_low
         self.basis_low = basis_low
+        self.force_field = force_field
+        self.high_level_charges = high_level_charges
+        self.high_level_spin = high_level_spin
+        self.medium_level_charges = medium_level_charges
+        self.medium_level_spin = medium_level_spin
+        self.low_level_charges = low_level_charges
+        self.low_level_spin = low_level_spin
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
-        #TODO: atom type, partial charges, and scale factors for QM/MM
+        self.scale_factor1 = scale_factor1
+        self.scale_factor2 = scale_factor2
+        self.scale_factor3 = scale_factor3
+        # If the user only specifies the parameters of two layers, the low-level layer will be omitted
 
-        #If the user only specifies the parameters of two layers, the low-level layer will be omitted
     def validate_and_assign_level(self, functional, basis, level_name):
         """Validates functional and basis set for a given level and returns formatted theory string."""
         if functional is None and basis is not None:
-            raise ValueError(f"Functional for {level_name} level of theory is not specified!")
+            raise ValueError(
+                f"Functional for {level_name} level of theory is not specified!"
+            )
         if functional is not None and basis is None:
-            raise ValueError(f"Basis set for {level_name} level of theory is not specified!")
+            raise ValueError(
+                f"Basis set for {level_name} level of theory is not specified!"
+            )
         return f"{functional}/{basis}" if functional and basis else None
 
-
-
+    def scale_factor_initialization(self):
+        """Initializes scale factors."""
+        scale_factor = f"{self.scale_factor1}"
+        if self.scale_factor2 is not None:
+            scale_factor += f" {self.scale_factor2}"
+            if self.scale_factor3 is not None:
+                scale_factor += f" {self.scale_factor3}"
+        return scale_factor if scale_factor is not None else str(1.0)
 
     def _get_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
@@ -690,13 +723,20 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.high_level_of_theory = self.validate_and_assign_level(
             self.functional_high, self.basis_high, "high"
         )
-        self.medium_level_of_theory = self.validate_and_assign_level(
-            self.functional_medium, self.basis_medium, "medium"
-        )
+        if self.force_field is not None:
+            self.medium_level_of_theory = self.force_field
+        else:
+            self.medium_level_of_theory = self.validate_and_assign_level(
+                self.functional_medium, self.basis_medium, "medium"
+            )
         # Validate and assign low-level parameters (Optional)
-        self.low_level_of_theory = self.validate_and_assign_level(
-            self.functional_low, self.basis_low, "low"
-        ) if self.functional_medium is None and self.basis_medium is None else None
+        self.low_level_of_theory = (
+            self.validate_and_assign_level(
+                self.functional_low, self.basis_low, "low"
+            )
+            if self.functional_medium is None and self.basis_medium is None
+            else None
+        )
 
         if self.high_level_of_theory is not None:
             oniom_string += f"({self.high_level_of_theory}"
@@ -705,9 +745,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         if self.low_level_of_theory is not None:
             oniom_string += f":{self.low_level_of_theory})"
 
-
         if "oniom" not in route_string:
             route_string += f" {oniom_string}"
-
 
         return route_string

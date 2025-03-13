@@ -5,8 +5,9 @@ from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
+    str_indices_range_to_list,
 )
-from chemsmart.utils.utils import str_indices_range_to_list
+
 logger = logging.getLogger(__name__)
 
 
