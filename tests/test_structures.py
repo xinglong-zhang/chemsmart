@@ -449,7 +449,7 @@ class TestMoleculeAdvanced:
         with open("tmp.xyz", "r") as f:
             lines = [
                 line.strip() for line in f.readlines()
-            ]  # Remove whitespace inconsistencies
+            ]
 
             expected_lines = [
                 "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
