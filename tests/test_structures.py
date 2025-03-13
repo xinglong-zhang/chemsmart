@@ -447,9 +447,7 @@ class TestMoleculeAdvanced:
         with open("tmp.xyz", "w") as f:
             mol._write_gaussian_coordinates(f)
         with open("tmp.xyz", "r") as f:
-            lines = [
-                line.strip() for line in f.readlines()
-            ]
+            lines = [line.strip() for line in f.readlines()]
 
             expected_lines = [
                 "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",

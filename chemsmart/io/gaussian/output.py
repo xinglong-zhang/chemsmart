@@ -1401,6 +1401,61 @@ class Gaussian16Output(GaussianFileMixin):
         # TODO: to be implemented
         pass
 
+    @cached_property
+    def oniom_cutting_bonds(self):
+        """Obtain the cutting bonds in the ONIOM calculation.
+        Returns:
+            cutting bonds as a dictionary"""
+        cutting_bonds = {}
+        for i, line in enumerate(self.contents):
+            if "Cut between" in line:
+                atom1 = int(self.contents[i].split()[5])
+                atom2 = int(self.contents[i].split()[8])
+                factor1 = float(self.contents[i].split()[10])
+                factor2 = float(self.contents[i].split()[11])
+                cutting_bonds[(atom1, atom2)] = (factor1, factor2)
+        return cutting_bonds
+
+    @cached_property
+    def oniom_get_charge_and_multiplicity(self):
+        """Obtain the charge and multiplicity of the system in the ONIOM calculation.
+        Returns:
+            charge and multiplicity as a dictionary"""
+        charge_multiplicity = {}
+        for line in self.contents:
+            if "Charge" in line and "low   level calculation on real" in line:
+                charge_multiplicity["low-level, real system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "high  level calculation on model" in line:
+                charge_multiplicity["high-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "low   level calculation on model" in line:
+                charge_multiplicity["low-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+        return charge_multiplicity
+
+    @cached_property
+    def oniom_getting_layer_energies(self):
+        """Obtain the energy of the high and low layer in the ONIOM calculation.
+        Returns:
+            energy of the high and low layer as a dictionary"""
+        #TODO: need to be combined with oniom_energies
+        energies = {}
+        for line in self.contents:
+            if "method:  low" in line and "model" in line:
+                energies["low-level, model system"] = float(line.split()[-1])
+            if "method:  high" in line and "model" in line:
+                energies["high-level, model system"] = float(line.split()[-1])
+            if "method:  low" in line and "real" in line:
+                energies["low-level, real system"] = float(line.split()[-1])
+        return energies
+
 
 class Gaussian16WBIOutput(Gaussian16Output):
     def __init__(self, filename):
