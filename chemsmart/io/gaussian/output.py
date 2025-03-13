@@ -1445,7 +1445,7 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain the energy of the high and low layer in the ONIOM calculation.
         Returns:
             energy of the high and low layer as a dictionary"""
-        #TODO: need to be combined with oniom_energies
+        # TODO: need to be combined with oniom_energies
         energies = {}
         for line in self.contents:
             if "method:  low" in line and "model" in line:
