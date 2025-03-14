@@ -86,4 +86,3 @@ source = ["chemsmart"]
 [tool.mkdocs]
 site_name = "chemsmart"
 theme = "readthedocs"
-

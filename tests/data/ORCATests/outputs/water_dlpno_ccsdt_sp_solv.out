@@ -3,31 +3,31 @@
                                  * O   R   C   A *
                                  *****************
 
-                                            #,                                       
-                                            ###                                      
-                                            ####                                     
-                                            #####                                    
-                                            ######                                   
-                                           ########,                                 
-                                     ,,################,,,,,                         
-                               ,,#################################,,                 
-                          ,,##########################################,,             
-                       ,#########################################, ''#####,          
-                    ,#############################################,,   '####,        
-                  ,##################################################,,,,####,       
-                ,###########''''           ''''###############################       
-              ,#####''   ,,,,##########,,,,          '''####'''          '####       
-            ,##' ,,,,###########################,,,                        '##       
-           ' ,,###''''                  '''############,,,                           
+                                            #,
+                                            ###
+                                            ####
+                                            #####
+                                            ######
+                                           ########,
+                                     ,,################,,,,,
+                               ,,#################################,,
+                          ,,##########################################,,
+                       ,#########################################, ''#####,
+                    ,#############################################,,   '####,
+                  ,##################################################,,,,####,
+                ,###########''''           ''''###############################
+              ,#####''   ,,,,##########,,,,          '''####'''          '####
+            ,##' ,,,,###########################,,,                        '##
+           ' ,,###''''                  '''############,,,
          ,,##''                                '''############,,,,        ,,,,,,###''
-      ,#''                                            '''#######################'''  
-     '                                                          ''''####''''         
-             ,#######,   #######,   ,#######,      ##                                
-            ,#'     '#,  ##    ##  ,#'     '#,    #''#        ######   ,####,        
-            ##       ##  ##   ,#'  ##            #'  '#       #        #'  '#        
-            ##       ##  #######   ##           ,######,      #####,   #    #        
-            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#        
-             '#######'   ##     ##  '#######'  #'      '#     #####' # '####'        
+      ,#''                                            '''#######################'''
+     '                                                          ''''####''''
+             ,#######,   #######,   ,#######,      ##
+            ,#'     '#,  ##    ##  ,#'     '#,    #''#        ######   ,####,
+            ##       ##  ##   ,#'  ##            #'  '#       #        #'  '#
+            ##       ##  #######   ##           ,######,      #####,   #    #
+            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#
+             '#######'   ##     ##  '#######'  #'      '#     #####' # '####'
 
 
 
@@ -135,12 +135,12 @@
 
 Your calculation utilizes the SMD solvation module
 Please cite in your paper:
-A.V. Marenich, C.J. Cramer, D.G. Truhlar J. Phys. Chem. B, 113, (2009), 6378 
+A.V. Marenich, C.J. Cramer, D.G. Truhlar J. Phys. Chem. B, 113, (2009), 6378
 
 ================================================================================
 
 ----- Orbital basis set information -----
-Your calculation utilizes the basis: cc-pVDZ 
+Your calculation utilizes the basis: cc-pVDZ
        H, B-Ne : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
                  T. H. Dunning, Jr., J. Chem. Phys. 90, 1007 (1989)
             He : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
@@ -177,7 +177,7 @@ Your calculation utilizes the AutoAux generation procedure.
 
 WARNING: Post HF methods need fully converged wavefunctions
   ===> : Setting SCFConvForced true
-         You can overwrite this default with %scf ConvForced false 
+         You can overwrite this default with %scf ConvForced false
 
 
 WARNING: MDCI localization with Augmented Hessian Foster-Boys
@@ -198,7 +198,7 @@ NAME = water_dlpno_ccsdt_sp_solv.inp
 |  7>   SMD true
 |  8>   SMDsolvent "water"
 |  9> end
-| 10> %scf 
+| 10> %scf
 | 11>   maxiter 500
 | 12> end
 | 13> % mdci
@@ -233,7 +233,7 @@ NAME = water_dlpno_ccsdt_sp_solv.inp
 | 42>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
 | 43>   H   0.75520524233942      0.00000000000000     -0.50967030177046
 | 44> *
-| 45> 
+| 45>
 | 46>                          ****END OF INPUT****
 ================================================================================
 
@@ -242,7 +242,7 @@ NAME = water_dlpno_ccsdt_sp_solv.inp
                    *****************************************
 
 ----- Orbital basis set information -----
-Your calculation utilizes the basis: cc-pVDZ 
+Your calculation utilizes the basis: cc-pVDZ
        H, B-Ne : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
                  T. H. Dunning, Jr., J. Chem. Phys. 90, 1007 (1989)
             He : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
@@ -264,7 +264,7 @@ Your calculation utilizes the auxiliary basis: def2/JK
    H-Ba, Hf-Rn: F. Weigend, J. Comput. Chem. 29, 167 (2008).
 
 ----- AuxC basis set information -----
-Your calculation utilizes the auxiliary basis: cc-pVTZ/C 
+Your calculation utilizes the auxiliary basis: cc-pVTZ/C
   Obtained from the EMSL Basis Set Exchange (bse.pnl.gov) Feb. 2017
   H-He, B-F, Al-Ar, Ga-Kr : F. Weigend, A. Kohn, C. Hattig, J. Chem. Phys. 116, 3175 (2002)
              Li-Be, Na-Mg : C. Haettig, Phys. Chem. Chem. Phys. 7, 59 (2005)
@@ -289,23 +289,23 @@ All done
            *              working on a common directory               *
            ************************************************************
 ------------------------------------------------------------------------------
-                   ___                                                        
-                  /   \      - P O W E R E D   B Y -                         
-                 /     \                                                     
-                 |  |  |   _    _      __       _____    __    __             
-                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |          
-                  \  \/   | |  | |   /    \    | | | |  |  | /  /          
-                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /          
-                |  |  |   |  __  | /  /__\  \  |    /   |      \           
-                |  |  |   | |  | | |   __   |  |    \   |  |\   \          
-                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \       
-                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/        
-                                                                              
-                      - O R C A' S   B I G   F R I E N D -                    
-                                      &                                       
-                       - I N T E G R A L  F E E D E R -                       
-                                                                              
- v1 FN, 2020, v2 2021                                                         
+                   ___
+                  /   \      - P O W E R E D   B Y -
+                 /     \
+                 |  |  |   _    _      __       _____    __    __
+                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |
+                  \  \/   | |  | |   /    \    | | | |  |  | /  /
+                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /
+                |  |  |   |  __  | /  /__\  \  |    /   |      \
+                |  |  |   | |  | | |   __   |  |    \   |  |\   \
+                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \
+                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/
+
+                      - O R C A' S   B I G   F R I E N D -
+                                      &
+                       - I N T E G R A L  F E E D E R -
+
+ v1 FN, 2020, v2 2021
 ------------------------------------------------------------------------------
 
 
@@ -519,7 +519,7 @@ Total Energy       :          -76.03928716 Eh           -2069.13420 eV
              **** ENERGY FILE WAS UPDATED (water_dlpno_ccsdt_sp_solv.en.tmp) ****
              **** THE GBW FILE WAS UPDATED (water_dlpno_ccsdt_sp_solv.gbw) ****
              **** DENSITY water_dlpno_ccsdt_sp_solv.scfp WAS UPDATED ****
-Total SCF time: 0 days 0 hours 0 min 0 sec 
+Total SCF time: 0 days 0 hours 0 min 0 sec
 
 Maximum memory used throughout the entire SCF-calculation: 226.3 MB
 
@@ -537,7 +537,7 @@ Maximum memory used throughout the entire SCF-calculation: 226.3 MB
 
 Wavefunction type
 -----------------
-Correlation treatment                      ...      CCSD     
+Correlation treatment                      ...      CCSD
 Single excitations                         ... ON
 Orbital optimization                       ... OFF
 Calculation of Z vector                    ... OFF
@@ -615,12 +615,12 @@ Orbital range for localization           ... 1 to 4
 Localization criterion                   ... FOSTER-BOYS (AUGMENTED HESSIAN)
 Doing the dipole integrals     ... o.k.
 Initial value of the localization sum :     0.079668
-ITERATION   0 : L=    1.8641893840 DL=  1.78e+00 (AVERGE_DL)=    0.5453625482 
-ITERATION   1 : L=    2.4506352005 DL=  5.86e-01 (AVERGE_DL)=    0.3126355217 
-ITERATION   2 : L=    2.4821191510 DL=  3.15e-02 (AVERGE_DL)=    0.0724384227 
-ITERATION   3 : L=    2.4829270659 DL=  8.08e-04 (AVERGE_DL)=    0.0116039854 
-ITERATION   4 : L=    2.4829465516 DL=  1.95e-05 (AVERGE_DL)=    0.0018021147 
-ITERATION   5 : L=    2.4829474121 DL=  8.60e-07 (AVERGE_DL)=    0.0003786991 
+ITERATION   0 : L=    1.8641893840 DL=  1.78e+00 (AVERGE_DL)=    0.5453625482
+ITERATION   1 : L=    2.4506352005 DL=  5.86e-01 (AVERGE_DL)=    0.3126355217
+ITERATION   2 : L=    2.4821191510 DL=  3.15e-02 (AVERGE_DL)=    0.0724384227
+ITERATION   3 : L=    2.4829270659 DL=  8.08e-04 (AVERGE_DL)=    0.0116039854
+ITERATION   4 : L=    2.4829465516 DL=  1.95e-05 (AVERGE_DL)=    0.0018021147
+ITERATION   5 : L=    2.4829474121 DL=  8.60e-07 (AVERGE_DL)=    0.0003786991
 LOCALIZATION SUM CONVERGED
 
 ------------------------------------------------------
@@ -636,7 +636,7 @@ Davidson threshold:      2000
 Diagonalization method:  LAPACK
 Iter:    0   L: 2.4829474121   Grad. norm: 6.660664e-04
    *** Likely close to a maximum now. ***
-       Augmented Hessian eigenvalues:  1.01e-07 -1.37e+00 -3.41e+00 -4.91e+00 ... 
+       Augmented Hessian eigenvalues:  1.01e-07 -1.37e+00 -3.41e+00 -4.91e+00 ...
 Iter:    1   L: 2.4829474625   Grad. norm: 2.474837e-08
 LOCALIZATION HAS CONVERGED.
 
@@ -804,7 +804,7 @@ Total time for the integral transformation: 0.1 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -883,7 +883,7 @@ Total time for the integral transformation: 0.1 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -901,7 +901,7 @@ Spin component scaling                      .... not used
 
    .... Finished loop over pairs
 
- PNO Occupation Number Statistics: 
+ PNO Occupation Number Statistics:
   | Av. % of trace(Dij) retained        ...  99.997171966493
   | sigma^2 in % of trace(Dij) retained ...   2.66e-06
   | Av. % of trace(Di) retained         ... 100.000000000000
@@ -973,9 +973,9 @@ Finished
 
 
 -------------------------------------
-Pair Pair Term precalculation with     
-RI-(ij|mn) and (im|jn) transformation  
-ON THE FLY                             
+Pair Pair Term precalculation with
+RI-(ij|mn) and (im|jn) transformation
+ON THE FLY
 -------------------------------------
 
    IBatch   1 (of   1)              ... done (    0.030 sec)
@@ -1062,8 +1062,8 @@ E(CORR)(strong-pairs)                      ...     -0.210191456
 E(CORR)(weak-pairs)                        ...     -0.000007674
 E(CORR)(corrected)                         ...     -0.210199130
 E(TOT)                                     ...    -76.249486330
-Singles Norm <S|S>**1/2                    ...      0.015865203  
-T1 diagnostic                              ...      0.005609196  
+Singles Norm <S|S>**1/2                    ...      0.015865203
+T1 diagnostic                              ...      0.005609196
 
 ------------------
 LARGEST AMPLITUDES
@@ -1103,14 +1103,14 @@ Fock matrix occ-virt block is zero --> Setting DT_in_Triples to false.
 Number of Triples that are to be computed   ...        16
 
  . . . . . . . . .
-10% done  
-20% done  
-30% done  
-40% done  
-50% done  
-60% done  
-70% done  
-80% done  
+10% done
+20% done
+30% done
+40% done
+50% done
+60% done
+70% done
+80% done
 90% done               (      0.015 sec)
 Triples timings:
 Total time for T0               ...     0.019 sec
@@ -1209,7 +1209,7 @@ Total Time for computing (T)           ...        0.019 sec (  1.1% of ALL)
 
 Maximum memory used throughout the entire MDCI-calculation: 95.3 MB
 ----- Orbital basis set information -----
-Your calculation utilizes the basis: cc-pVTZ 
+Your calculation utilizes the basis: cc-pVTZ
        H, B-Ne : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
                  T. H. Dunning, Jr., J. Chem. Phys. 90, 1007 (1989)
             He : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
@@ -1235,7 +1235,7 @@ Your calculation utilizes the auxiliary basis: def2/JK
    H-Ba, Hf-Rn: F. Weigend, J. Comput. Chem. 29, 167 (2008).
 
 ----- AuxC basis set information -----
-Your calculation utilizes the auxiliary basis: cc-pVTZ/C 
+Your calculation utilizes the auxiliary basis: cc-pVTZ/C
   Obtained from the EMSL Basis Set Exchange (bse.pnl.gov) Feb. 2017
   H-He, B-F, Al-Ar, Ga-Kr : F. Weigend, A. Kohn, C. Hattig, J. Chem. Phys. 116, 3175 (2002)
              Li-Be, Na-Mg : C. Haettig, Phys. Chem. Chem. Phys. 7, 59 (2005)
@@ -1278,23 +1278,23 @@ Trying to determine its content:
            *              working on a common directory               *
            ************************************************************
 ------------------------------------------------------------------------------
-                   ___                                                        
-                  /   \      - P O W E R E D   B Y -                         
-                 /     \                                                     
-                 |  |  |   _    _      __       _____    __    __             
-                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |          
-                  \  \/   | |  | |   /    \    | | | |  |  | /  /          
-                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /          
-                |  |  |   |  __  | /  /__\  \  |    /   |      \           
-                |  |  |   | |  | | |   __   |  |    \   |  |\   \          
-                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \       
-                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/        
-                                                                              
-                      - O R C A' S   B I G   F R I E N D -                    
-                                      &                                       
-                       - I N T E G R A L  F E E D E R -                       
-                                                                              
- v1 FN, 2020, v2 2021                                                         
+                   ___
+                  /   \      - P O W E R E D   B Y -
+                 /     \
+                 |  |  |   _    _      __       _____    __    __
+                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |
+                  \  \/   | |  | |   /    \    | | | |  |  | /  /
+                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /
+                |  |  |   |  __  | /  /__\  \  |    /   |      \
+                |  |  |   | |  | | |   __   |  |    \   |  |\   \
+                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \
+                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/
+
+                      - O R C A' S   B I G   F R I E N D -
+                                      &
+                       - I N T E G R A L  F E E D E R -
+
+ v1 FN, 2020, v2 2021
 ------------------------------------------------------------------------------
 
 
@@ -1502,7 +1502,7 @@ Total Energy       :          -76.06979202 Eh           -2069.96428 eV
              **** ENERGY FILE WAS UPDATED (water_dlpno_ccsdt_sp_solv.en.tmp) ****
              **** THE GBW FILE WAS UPDATED (water_dlpno_ccsdt_sp_solv.gbw) ****
              **** DENSITY water_dlpno_ccsdt_sp_solv.scfp WAS UPDATED ****
-Total SCF time: 0 days 0 hours 0 min 1 sec 
+Total SCF time: 0 days 0 hours 0 min 1 sec
 
 Maximum memory used throughout the entire SCF-calculation: 226.9 MB
 
@@ -1520,7 +1520,7 @@ Maximum memory used throughout the entire SCF-calculation: 226.9 MB
 
 Wavefunction type
 -----------------
-Correlation treatment                      ...      CCSD     
+Correlation treatment                      ...      CCSD
 Single excitations                         ... ON
 Orbital optimization                       ... OFF
 Calculation of Z vector                    ... OFF
@@ -1598,14 +1598,14 @@ Orbital range for localization           ... 1 to 4
 Localization criterion                   ... FOSTER-BOYS (AUGMENTED HESSIAN)
 Doing the dipole integrals     ... o.k.
 Initial value of the localization sum :     0.188925
-ITERATION   0 : L=    2.3156262592 DL=  2.13e+00 (AVERGE_DL)=    0.5953571579 
-ITERATION   1 : L=    2.3841410535 DL=  6.85e-02 (AVERGE_DL)=    0.1068603405 
-ITERATION   2 : L=    2.4002847158 DL=  1.61e-02 (AVERGE_DL)=    0.0518710940 
-ITERATION   3 : L=    2.4026615561 DL=  2.38e-03 (AVERGE_DL)=    0.0199032673 
-ITERATION   4 : L=    2.4028746321 DL=  2.13e-04 (AVERGE_DL)=    0.0059592496 
-ITERATION   5 : L=    2.4028978566 DL=  2.32e-05 (AVERGE_DL)=    0.0019674233 
-ITERATION   6 : L=    2.4029001601 DL=  2.30e-06 (AVERGE_DL)=    0.0006196151 
-ITERATION   7 : L=    2.4029003892 DL=  2.29e-07 (AVERGE_DL)=    0.0001953740 
+ITERATION   0 : L=    2.3156262592 DL=  2.13e+00 (AVERGE_DL)=    0.5953571579
+ITERATION   1 : L=    2.3841410535 DL=  6.85e-02 (AVERGE_DL)=    0.1068603405
+ITERATION   2 : L=    2.4002847158 DL=  1.61e-02 (AVERGE_DL)=    0.0518710940
+ITERATION   3 : L=    2.4026615561 DL=  2.38e-03 (AVERGE_DL)=    0.0199032673
+ITERATION   4 : L=    2.4028746321 DL=  2.13e-04 (AVERGE_DL)=    0.0059592496
+ITERATION   5 : L=    2.4028978566 DL=  2.32e-05 (AVERGE_DL)=    0.0019674233
+ITERATION   6 : L=    2.4029001601 DL=  2.30e-06 (AVERGE_DL)=    0.0006196151
+ITERATION   7 : L=    2.4029003892 DL=  2.29e-07 (AVERGE_DL)=    0.0001953740
 LOCALIZATION SUM CONVERGED
 
 ------------------------------------------------------
@@ -1621,7 +1621,7 @@ Davidson threshold:      2000
 Diagonalization method:  LAPACK
 Iter:    0   L: 2.4029003892   Grad. norm: 2.921695e-04
    *** Likely close to a maximum now. ***
-       Augmented Hessian eigenvalues:  4.91e-08 -1.27e+00 -3.10e+00 -4.51e+00 ... 
+       Augmented Hessian eigenvalues:  4.91e-08 -1.27e+00 -3.10e+00 -4.51e+00 ...
 Iter:    1   L: 2.4029004137   Grad. norm: 2.345220e-08
 LOCALIZATION HAS CONVERGED.
 
@@ -1789,7 +1789,7 @@ Total time for the integral transformation: 0.1 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -1868,7 +1868,7 @@ Total time for the integral transformation: 0.1 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -1886,7 +1886,7 @@ Spin component scaling                      .... not used
 
    .... Finished loop over pairs
 
- PNO Occupation Number Statistics: 
+ PNO Occupation Number Statistics:
   | Av. % of trace(Dij) retained        ...  99.986555762273
   | sigma^2 in % of trace(Dij) retained ...   3.57e-06
   | Av. % of trace(Di) retained         ...  99.999765966155
@@ -1958,9 +1958,9 @@ Finished
 
 
 -------------------------------------
-Pair Pair Term precalculation with     
-RI-(ij|mn) and (im|jn) transformation  
-ON THE FLY                             
+Pair Pair Term precalculation with
+RI-(ij|mn) and (im|jn) transformation
+ON THE FLY
 -------------------------------------
 
    IBatch   1 (of   1)              ... done (    0.143 sec)
@@ -2047,8 +2047,8 @@ E(CORR)(strong-pairs)                      ...     -0.266604408
 E(CORR)(weak-pairs)                        ...     -0.000104869
 E(CORR)(corrected)                         ...     -0.266709277
 E(TOT)                                     ...    -76.336501134
-Singles Norm <S|S>**1/2                    ...      0.017180965  
-T1 diagnostic                              ...      0.006074389  
+Singles Norm <S|S>**1/2                    ...      0.017180965
+T1 diagnostic                              ...      0.006074389
 
 ------------------
 LARGEST AMPLITUDES
@@ -2088,14 +2088,14 @@ Fock matrix occ-virt block is zero --> Setting DT_in_Triples to false.
 Number of Triples that are to be computed   ...        16
 
  . . . . . . . . .
-10% done  
-20% done  
-30% done  
-40% done  
-50% done  
-60% done  
-70% done  
-80% done  
+10% done
+20% done
+30% done
+40% done
+50% done
+60% done
+70% done
+80% done
 90% done               (      0.135 sec)
 Triples timings:
 Total time for T0               ...     0.151 sec
@@ -2205,7 +2205,7 @@ NOTE: In case the method needs a correlation auxilliary basis set, for the calcu
 -----------------------------------------------------------------
                       EP1 - MDCI extrapolation:
 -----------------------------------------------------------------
-NOTE: We use as reference SCF energy, for the extrapolation, the one from the MDCI module and not the one 
+NOTE: We use as reference SCF energy, for the extrapolation, the one from the MDCI module and not the one
 from the SCF calculation. In case the first step is a DFT calculation these two might be different.
 
 NOTE: For the SCF part we extrapolate based on the scheme proposed in J. Chem. Phys. 2008, 129, 184116
@@ -2220,7 +2220,7 @@ Beta(2/3)      :  2.460 (correlation extrapolation)
 
 SCF energy with basis cc-pVDZ:                          -76.039287200
 SCF energy with basis cc-pVTZ:                          -76.069791857
-Extrapolated CBS SCF energy (2/3) :                     -76.079712467 (-0.009920610) 
+Extrapolated CBS SCF energy (2/3) :                     -76.079712467 (-0.009920610)
 
 MDCI energy with basis cc-pVDZ:                          -0.212988450
 MDCI energy with basis cc-pVTZ:                          -0.273957423
@@ -2242,7 +2242,7 @@ FINAL SINGLE POINT ENERGY       -76.389296274587
 
   WARNING: The energy has been calculated at the MDCI level but the densities
            used in the property calculations are still SCF densities
-           MDCI response densities have not been calculated 
+           MDCI response densities have not been calculated
            use %mdci Density linearized end
            or  %mdci Density unrelaxed end
            or  %mdci Density orbopt end

@@ -1,8 +1,8 @@
-# Default Gaussian settings for calculations 
+# Default Gaussian settings for calculations
 gas:
   functional: m062x  # quotes required for string with spaces
   basis: def2svp
-solv: 
+solv:
   functional: m062x
   basis: def2tzvp
   freq: False

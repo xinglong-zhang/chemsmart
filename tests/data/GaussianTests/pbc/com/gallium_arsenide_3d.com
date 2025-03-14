@@ -1,7 +1,7 @@
 %chk=gallium_arsenide.chk
 %nprocshared=24
 %mem=60GB
-# PBEPBE/6-31g(d,p)/Auto SCF=Tight 
+# PBEPBE/6-31g(d,p)/Auto SCF=Tight
 
 gallium_arsenide
 
@@ -17,4 +17,3 @@ gallium_arsenide
  TV                 5.650000    0.000000    0.000000
  TV                 0.000000    5.650000    0.000000
  TV                 0.000000    0.000000    5.650000
-

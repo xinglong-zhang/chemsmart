@@ -1,8 +1,8 @@
-# Default ORCA settings for calculations 
+# Default ORCA settings for calculations
 gas:
   functional: m062x  # quotes required for string with spaces
   basis: def2-svp
-solv: 
+solv:
   functional: m062x
   basis: def2-tzvp
   freq: False

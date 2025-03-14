@@ -1,6 +1,6 @@
-# Default Gaussian settings for calculations 
+# Default Gaussian settings for calculations
 gas: Null
-solv: 
+solv:
   functional: m062x
   basis: def2tzvp
   solvent_model: smd

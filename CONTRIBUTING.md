@@ -30,7 +30,7 @@ to install the project in develop mode.
 
 ## Run the tests to ensure everything is working
 
-Run 
+Run
 ```bash
 make test
 ```
@@ -82,7 +82,7 @@ Ensure code coverage report shows `100%` coverage, add tests to your PR.
 
 ## Build the docs locally (optional)
 
-Run 
+Run
 ```bash
 make docs
 ```
@@ -98,7 +98,7 @@ Example: `fix(package): update setup.py arguments 🎉` (emojis are fine too)
 
 ## Push your changes to your fork
 
-Run 
+Run
 ```bash
 git push origin my_contribution_branch
 ```
@@ -113,7 +113,7 @@ Wait CI to run and one of the developers will review your PR.
 
 This project comes with a `Makefile` that contains a number of useful utility.
 
-```bash 
+```bash
 ❯ make
 Usage: make <target>
 
@@ -138,7 +138,7 @@ This project uses [semantic versioning](https://semver.org/) and tags releases w
 Every time a new tag is created and pushed to the remote repo, github actions will
 automatically create a new release on github and trigger a release on PyPI.
 
-For this to work you need to setup a secret called `PIPY_API_TOKEN` on the project settings>secrets, 
+For this to work you need to setup a secret called `PIPY_API_TOKEN` on the project settings>secrets,
 this token can be generated on [pypi.org](https://pypi.org/account/).
 
 To trigger a new release all you need to do is:

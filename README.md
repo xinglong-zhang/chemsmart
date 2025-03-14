@@ -7,7 +7,7 @@
 ---
 Chemsmart is a python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
-It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster. 
+It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster.
 
 Users can customize their own HPC server settings and project settings to run different jobs, without modifying the codes in this package.
 
@@ -20,7 +20,7 @@ Once conda has been installed successfully, one can clone this package to a loca
 ```bash
 git clone https://github.com/xinglong-zhang/chemsmart.git
 ```
-First, cd into chemsmart folder. For linux and MacOS systems which support `make`, users can run 
+First, cd into chemsmart folder. For linux and MacOS systems which support `make`, users can run
 
 ```bash
 make env
@@ -35,7 +35,7 @@ If conda is not installed, one can run
 make env USE_CONDA=false
 ```
 
-or 
+or
 
 ```bash
 make virtualenv
@@ -88,8 +88,8 @@ SERVER:
         export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
         export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
 GAUSSIAN:
-    EXEFOLDER: ~/bin/g16 
-    LOCAL_RUN: True 
+    EXEFOLDER: ~/bin/g16
+    LOCAL_RUN: True
     SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
@@ -104,10 +104,10 @@ GAUSSIAN:
         export SCRATCH=/tmp # required if scratch is true
         export GAUSS_EXEDIR=~/bin/g16
         export g16root=~/bin/g16
-           
+
 ORCA:
     EXEFOLDER: ~/bin/orca_6_0_1
-    LOCAL_RUN: False 
+    LOCAL_RUN: False
     ENVARS: |
         export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
@@ -123,7 +123,7 @@ gas:
   basis: def2svp
   solvent_model: smd
   solvent_id: dichloroethane
-solv: 
+solv:
   functional: m062x
   basis: def2tzvp
   freq: False
@@ -163,7 +163,7 @@ solv:
   scf_algorithm: KDIIS
   scf_maxiter: 500
   mdci_cutoff: Normal
-  mdci_density: None    
+  mdci_density: None
   dipole: False
   solvent_model: SMD
   solvent_id: "toluene"
@@ -177,7 +177,7 @@ One also need to set up scratch directories where scratch jobs may be run (for G
 
 Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
 
-The `make configure` will also add the required paths to the user `~/.bashrc` file. User may need to do 
+The `make configure` will also add the required paths to the user `~/.bashrc` file. User may need to do
 
 ```bash
 source ~/.bashrc
@@ -186,7 +186,7 @@ source ~/.bashrc
 to effect the changes.
 
 ---
-Once `make configure` is done, one can optionally run 
+Once `make configure` is done, one can optionally run
 ```bash
 make fmt
 ```
@@ -195,7 +195,7 @@ and
 ```bash
 make lint
 ```
-to format and lint the codes (this should have been handled by the developers). Also optionally, one can run 
+to format and lint the codes (this should have been handled by the developers). Also optionally, one can run
 
 ```bash
 make test
@@ -212,7 +212,7 @@ make clean
 
 ## Testing Installations
 
-Installations is deemed successfully if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
+Installations is deemed successfully if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run
 
 ```bash
 chemsmart --help
@@ -234,12 +234,12 @@ where `<server_name>` is the one of the servers specified in `~/.chemsmart/serve
 
 If one wants to submit geometry optimization with frozen atoms in the molecule (such as https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it), one can do:
 
-```bash 
+```bash
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> opt -f <indices_of_atoms_to_freeze>
 ```
 For example, to submit the geometry optimization job with atoms numbered 1 to 10 frozen, one can do
 
-```bash 
+```bash
 chemsmart sub -s shared gaussian -p test -f input.com opt -f 1-10
 ```
 Note that 1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.
@@ -327,7 +327,7 @@ or
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j modred -c [1,4]
 ```
 
-or 
+or
 
 ```bash
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j ts
@@ -349,7 +349,7 @@ If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps 
 To optimize unique structure from an md trajectory file, do:
 
 ```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt 
+chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt
 ```
 This optimizes all the unique structures available in the md trajectory `<input_file>`. Typically, the `<input_file>` is a list of all structures on an md trajectory obtained by ASE md run and named `md.traj`. (TODO: this method is not properly implemented in chemsmart yet.)
 
@@ -358,11 +358,11 @@ To optimize a fixed number of lowest energy structures, `<num_structures_to_opt>
 ```bash
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt -n <n_conformers_to_opt>
 ```
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
+If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file.
 
 Two grouper types for determining/clustering unique structures are available from CLI option `-g`:
 
-1) Sequential grouper (default), selected by option value of seq, which sequentially checks for unique structures in a given list of md structures, and 
+1) Sequential grouper (default), selected by option value of seq, which sequentially checks for unique structures in a given list of md structures, and
 
 2) Self-consistent grouper, selected by option value of sc, which self-consistently checks for unique structures in a given list of md structures using the reverse Cuthill–McKee algorithm for structure clustering. By default, only the last 0.1 proportion of the structures of the md.traj file is considered. This can be changed via cli option `-x <proportion_structures_to_use>`.
 
@@ -488,7 +488,7 @@ chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt
 will take the 5th structure (1-indexed, as in chemsmart) from ase database file, `small.db`, to create the input file for geometry optimization.
 
 ---
-Similar commands exists for ORCA job submssions. One can run 
+Similar commands exists for ORCA job submssions. One can run
 
 ```bash
 chemsmart sub orca --help

@@ -4,9 +4,9 @@
  Initial command:
  /home/xinglong/programs/g16/l1.exe "/home/xinglong/pbc/gallium_arsenide/Gau-1316630.inp" -scrdir="/home/xinglong/pbc/gallium_arsenide/"
  Entering Link 1 = /home/xinglong/programs/g16/l1.exe PID=   1316632.
-  
+
  Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
-  
+
  This is part of the Gaussian(R) 16 program.  It is based on
  the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
  the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
@@ -19,28 +19,28 @@
  University), and the Gaussian 82(TM) system (copyright 1983,
  Carnegie Mellon University). Gaussian is a federally registered
  trademark of Gaussian, Inc.
-  
+
  This software contains proprietary and confidential information,
  including trade secrets, belonging to Gaussian, Inc.
-  
+
  This software is provided under written license and may be
  used, copied, transmitted, or stored only in accord with that
  written license.
-  
+
  The following legend is applicable only to US Government
  contracts under FAR:
-  
+
                     RESTRICTED RIGHTS LEGEND
-  
+
  Use, reproduction and disclosure by the US Government is
  subject to restrictions as set forth in subparagraphs (a)
  and (c) of the Commercial Computer Software - Restricted
  Rights clause in FAR 52.227-19.
-  
+
  Gaussian, Inc.
  340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
-  
-  
+
+
  ---------------------------------------------------------------
  Warning -- This program may not be used in any manner that
  competes with the business of Gaussian, Inc. or will provide
@@ -53,30 +53,30 @@
  licensee that it is not a competitor of Gaussian, Inc. and that
  it will not use this program in any manner prohibited above.
  ---------------------------------------------------------------
-  
+
 
  Cite this work as:
  Gaussian 16, Revision B.01,
- M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
- M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
- G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
- J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
- J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
- F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
- T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
- G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
- J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
- T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
- F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
- V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
- K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
- J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
- J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria,
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone,
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich,
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian,
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young,
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone,
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega,
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda,
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai,
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta,
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin,
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand,
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar,
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi,
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas,
  J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
- 
+
  ******************************************
  Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
-                24-May-2022 
+                24-May-2022
  ******************************************
  %chk=gallium_arsenide.chk
  %nprocshared=24
@@ -97,19 +97,19 @@
  ----------------
  Symbolic Z-matrix:
  Charge =  0 Multiplicity = 1
- Ga                    0.        0.        0. 
- Ga                    0.        2.825     2.825 
- Ga                    2.825     0.        2.825 
- Ga                    2.825     2.825     0. 
- As                    1.4125    1.4125    1.4125 
- As                    1.4125    4.2375    4.2375 
- As                    4.2375    1.4125    4.2375 
- As                    4.2375    4.2375    1.4125 
- TV                    5.65      0.        0. 
- TV                    0.        5.65      0. 
- TV                    0.        0.        5.65 
- 
-                           Before rotation:                           
+ Ga                    0.        0.        0.
+ Ga                    0.        2.825     2.825
+ Ga                    2.825     0.        2.825
+ Ga                    2.825     2.825     0.
+ As                    1.4125    1.4125    1.4125
+ As                    1.4125    4.2375    4.2375
+ As                    4.2375    1.4125    4.2375
+ As                    4.2375    4.2375    1.4125
+ TV                    5.65      0.        0.
+ TV                    0.        5.65      0.
+ TV                    0.        0.        5.65
+
+                           Before rotation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -129,7 +129,7 @@
  Lengths of translation vectors:      5.650000    5.650000    5.650000
   Angles of translation vectors:     90.000000   90.000000   90.000000
  ---------------------------------------------------------------------
-                          Input orientation:                          
+                          Input orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z

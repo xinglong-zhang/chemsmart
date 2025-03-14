@@ -1,11 +1,11 @@
-# Default ORCA settings for calculations 
+# Default ORCA settings for calculations
 gas:
   functional: m062x  # quotes required for string with spaces
   basis: def2-svp
   freq: True  # specify frequency calc with job
   numfreq: False  # specify numerical freq calc with job
   defgrid: DEFGRID3
-solv: 
+solv:
   functional: m062x  # quotes required for string with spaces
   basis: def2-qzvpd
   defgrid: DEFGRID3

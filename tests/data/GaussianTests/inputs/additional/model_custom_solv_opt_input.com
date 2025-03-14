@@ -30,4 +30,3 @@ HBondBasicity=0.54
 SurfaceTensionAtInterface=15.7173744
 CarbonAromaticity=0.0
 ElectronegativeHalogenicity=0.00
-

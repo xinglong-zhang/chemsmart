@@ -4,9 +4,9 @@
  Initial command:
  /home/users/astar/bmsi/zhangx5/programs/g16/l1.exe "/scratch/users/astar/ihpc/vummalet/xinglong/yx/ts_guess/Gau-2901931.inp" -scrdir="/scratch/users/astar/ihpc/vummalet/xinglong/yx/ts_guess/"
  Entering Link 1 = /home/users/astar/bmsi/zhangx5/programs/g16/l1.exe PID=   2901933.
-  
+
  Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
-  
+
  This is part of the Gaussian(R) 16 program.  It is based on
  the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
  the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
@@ -19,28 +19,28 @@
  University), and the Gaussian 82(TM) system (copyright 1983,
  Carnegie Mellon University). Gaussian is a federally registered
  trademark of Gaussian, Inc.
-  
+
  This software contains proprietary and confidential information,
  including trade secrets, belonging to Gaussian, Inc.
-  
+
  This software is provided under written license and may be
  used, copied, transmitted, or stored only in accord with that
  written license.
-  
+
  The following legend is applicable only to US Government
  contracts under FAR:
-  
+
                     RESTRICTED RIGHTS LEGEND
-  
+
  Use, reproduction and disclosure by the US Government is
  subject to restrictions as set forth in subparagraphs (a)
  and (c) of the Commercial Computer Software - Restricted
  Rights clause in FAR 52.227-19.
-  
+
  Gaussian, Inc.
  340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
-  
-  
+
+
  ---------------------------------------------------------------
  Warning -- This program may not be used in any manner that
  competes with the business of Gaussian, Inc. or will provide
@@ -53,30 +53,30 @@
  licensee that it is not a competitor of Gaussian, Inc. and that
  it will not use this program in any manner prohibited above.
  ---------------------------------------------------------------
-  
+
 
  Cite this work as:
  Gaussian 16, Revision B.01,
- M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
- M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
- G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
- J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
- J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
- F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
- T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
- G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
- J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
- T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
- F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
- V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
- K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
- J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
- J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria,
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone,
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich,
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian,
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young,
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone,
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega,
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda,
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai,
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta,
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin,
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand,
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar,
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi,
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas,
  J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
- 
+
  ******************************************
  Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
-                15-Jun-2024 
+                15-Jun-2024
  ******************************************
  %chk=R_scan_scan.chk
  %nprocshared=64
@@ -109,122 +109,122 @@
  ------------
  Symbolic Z-matrix:
  Charge =  1 Multiplicity = 1
- C                     1.18209  -0.39561  -1.05564 
- O                     0.79162  -0.87588  -2.10115 
- C                     1.10428  -1.30284   0.15563 
- N                     1.91222  -1.38382   1.2196 
- N                     0.21843  -2.30119   0.29268 
- C                     3.03802  -0.54794   1.55408 
- N                     1.5425   -2.38275   2.04456 
- C                     0.50913  -2.92849   1.46652 
- C                    -0.9223   -2.70595  -0.54911 
- C                     4.14792  -0.53945   0.70563 
- C                     2.93228   0.26625   2.69101 
- C                    -0.36589  -4.01702   2.02398 
- H                    -1.32424  -1.77177  -0.96052 
- C                     5.1534    0.39112   0.9807 
- C                     3.97269   1.16158   2.92729 
- H                    -0.76753  -3.65958   2.99005 
- H                     0.24381  -4.91173   2.21131 
- C                     5.07462   1.26121   2.06983 
- O                    -1.12483   0.19162  -0.0199 
- C                     6.13386   2.29927   2.31913 
- H                     5.73336   3.30264   2.10712 
- H                     6.45948   2.28785   3.3684 
- H                     7.01161   2.14036   1.68075 
- C                     1.73869   0.20099   3.6045 
- H                     0.79119   0.19616   3.04198 
- H                     1.75744  -0.71991   4.20473 
- H                     1.73123   1.05936   4.2875 
- C                     4.26247  -1.47914  -0.46412 
- H                     3.82586  -2.46089  -0.23433 
- H                     3.76273  -1.07742  -1.36122 
- H                     5.3172   -1.62446  -0.72899 
- H                     3.90906   1.82322   3.7946 
- H                     6.02409   0.43109   0.32242 
- C                    -1.94224  -3.28772   0.42541 
- H                    -2.30803  -2.49077   1.10265 
- O                    -1.39169  -4.36733   1.1412 
- H                    -2.80045  -3.67981  -0.13318 
- C                    -0.48082  -3.6911   -1.65688 
- H                    -0.16924  -3.09639  -2.52341 
- H                    -1.3691   -4.26974  -1.94943 
- C                     0.64599  -4.62251  -1.27287 
- C                     1.97062  -4.2186   -1.48323 
- C                     0.41126  -5.87356  -0.69159 
- C                     3.03671  -5.0361   -1.10794 
- H                     2.16074  -3.2541   -1.96418 
- C                     1.47522  -6.69375  -0.31719 
- H                    -0.61521  -6.20162  -0.52069 
- C                     2.79052  -6.27537  -0.51837 
- H                     4.06317  -4.71246  -1.28962 
- H                     1.27536  -7.66976   0.12765 
- H                     3.62153  -6.9198   -0.22907 
- C                     1.79267   0.94399  -0.9131 
- C                     1.51899   1.64577   0.22292 
- C                     2.65906   1.50257  -1.93919 
- C                     2.1018    2.9204    0.48732 
- H                     0.83012   1.22563   0.95613 
- C                     3.26377   2.7687   -1.69732 
- C                     2.95203   0.82578  -3.14911 
- C                     1.81518   3.59026   1.70003 
- C                     3.00051   3.48295  -0.45212 
- C                     4.12128   3.30623  -2.68395 
- H                     2.50349  -0.14592  -3.34788 
- C                     3.79807   1.37814  -4.08974 
- C                     2.41611   4.79437   1.99302 
- H                     1.11817   3.12556   2.40259 
- C                     3.60187   4.72032  -0.12447 
- C                     4.38497   2.63251  -3.85834 
- H                     4.58753   4.2768   -2.52461 
- H                     4.00805   0.83749  -5.01341 
- C                     3.31784   5.3579    1.06805 
- H                     2.19895   5.31036   2.92876 
- H                     4.30355   5.19114  -0.81064 
- H                     5.04892   3.0738   -4.60221 
- H                     3.79703   6.31164   1.29354 
- C                    -1.67673   0.56012   1.18275 
- H                    -2.09101  -0.29935   1.75761 
- H                    -0.93984   1.04131   1.87388 
- C                    -2.77525   1.58569   0.9429 
- C                    -4.05997   1.21008   0.59447 
- C                    -2.39603   2.95355   0.83245 
- C                    -5.02539   2.1913    0.18622 
- C                    -3.28731   3.91016   0.42056 
- H                    -1.36674   3.22972   1.07735 
- C                    -6.37323   1.85869  -0.13143 
- C                    -4.6253    3.55676   0.09447 
- H                    -2.98472   4.95622   0.3418 
- C                    -7.2636    2.82801  -0.52791 
- H                    -6.70781   0.82403  -0.04356 
- C                    -5.56931   4.53481  -0.31984 
- C                    -6.8595    4.18108  -0.62798 
- H                    -8.29374   2.55489  -0.76052 
- H                    -5.24794   5.57614  -0.38512 
- H                    -7.57729   4.93924  -0.94304 
- C                    -4.48712  -0.22174   0.63924 
- C                    -4.68194  -0.98687  -0.53248 
- C                    -4.82394  -0.80286   1.86452 
- C                    -5.24821  -2.26766  -0.45758 
- C                    -5.34131  -2.09815   1.93548 
- H                    -4.69682  -0.21334   2.77434 
- C                    -5.56622  -2.83415   0.77243 
- H                    -5.42912  -2.82533  -1.38034 
- H                    -5.59702  -2.52374   2.9071 
- H                    -5.99717  -3.83427   0.82491 
- C                    -4.32232  -0.51291  -1.88522 
- H                    -4.83484  -1.04827  -2.71552 
- O                    -3.5151    0.35134  -2.15217 
- H                    -0.03768   0.70485  -2.9866 
- O                    -0.69707   1.40577  -2.86629 
- Li                   -1.87737   1.05691  -1.42095 
- H                    -0.89133   1.76386  -3.74054 
- 
+ C                     1.18209  -0.39561  -1.05564
+ O                     0.79162  -0.87588  -2.10115
+ C                     1.10428  -1.30284   0.15563
+ N                     1.91222  -1.38382   1.2196
+ N                     0.21843  -2.30119   0.29268
+ C                     3.03802  -0.54794   1.55408
+ N                     1.5425   -2.38275   2.04456
+ C                     0.50913  -2.92849   1.46652
+ C                    -0.9223   -2.70595  -0.54911
+ C                     4.14792  -0.53945   0.70563
+ C                     2.93228   0.26625   2.69101
+ C                    -0.36589  -4.01702   2.02398
+ H                    -1.32424  -1.77177  -0.96052
+ C                     5.1534    0.39112   0.9807
+ C                     3.97269   1.16158   2.92729
+ H                    -0.76753  -3.65958   2.99005
+ H                     0.24381  -4.91173   2.21131
+ C                     5.07462   1.26121   2.06983
+ O                    -1.12483   0.19162  -0.0199
+ C                     6.13386   2.29927   2.31913
+ H                     5.73336   3.30264   2.10712
+ H                     6.45948   2.28785   3.3684
+ H                     7.01161   2.14036   1.68075
+ C                     1.73869   0.20099   3.6045
+ H                     0.79119   0.19616   3.04198
+ H                     1.75744  -0.71991   4.20473
+ H                     1.73123   1.05936   4.2875
+ C                     4.26247  -1.47914  -0.46412
+ H                     3.82586  -2.46089  -0.23433
+ H                     3.76273  -1.07742  -1.36122
+ H                     5.3172   -1.62446  -0.72899
+ H                     3.90906   1.82322   3.7946
+ H                     6.02409   0.43109   0.32242
+ C                    -1.94224  -3.28772   0.42541
+ H                    -2.30803  -2.49077   1.10265
+ O                    -1.39169  -4.36733   1.1412
+ H                    -2.80045  -3.67981  -0.13318
+ C                    -0.48082  -3.6911   -1.65688
+ H                    -0.16924  -3.09639  -2.52341
+ H                    -1.3691   -4.26974  -1.94943
+ C                     0.64599  -4.62251  -1.27287
+ C                     1.97062  -4.2186   -1.48323
+ C                     0.41126  -5.87356  -0.69159
+ C                     3.03671  -5.0361   -1.10794
+ H                     2.16074  -3.2541   -1.96418
+ C                     1.47522  -6.69375  -0.31719
+ H                    -0.61521  -6.20162  -0.52069
+ C                     2.79052  -6.27537  -0.51837
+ H                     4.06317  -4.71246  -1.28962
+ H                     1.27536  -7.66976   0.12765
+ H                     3.62153  -6.9198   -0.22907
+ C                     1.79267   0.94399  -0.9131
+ C                     1.51899   1.64577   0.22292
+ C                     2.65906   1.50257  -1.93919
+ C                     2.1018    2.9204    0.48732
+ H                     0.83012   1.22563   0.95613
+ C                     3.26377   2.7687   -1.69732
+ C                     2.95203   0.82578  -3.14911
+ C                     1.81518   3.59026   1.70003
+ C                     3.00051   3.48295  -0.45212
+ C                     4.12128   3.30623  -2.68395
+ H                     2.50349  -0.14592  -3.34788
+ C                     3.79807   1.37814  -4.08974
+ C                     2.41611   4.79437   1.99302
+ H                     1.11817   3.12556   2.40259
+ C                     3.60187   4.72032  -0.12447
+ C                     4.38497   2.63251  -3.85834
+ H                     4.58753   4.2768   -2.52461
+ H                     4.00805   0.83749  -5.01341
+ C                     3.31784   5.3579    1.06805
+ H                     2.19895   5.31036   2.92876
+ H                     4.30355   5.19114  -0.81064
+ H                     5.04892   3.0738   -4.60221
+ H                     3.79703   6.31164   1.29354
+ C                    -1.67673   0.56012   1.18275
+ H                    -2.09101  -0.29935   1.75761
+ H                    -0.93984   1.04131   1.87388
+ C                    -2.77525   1.58569   0.9429
+ C                    -4.05997   1.21008   0.59447
+ C                    -2.39603   2.95355   0.83245
+ C                    -5.02539   2.1913    0.18622
+ C                    -3.28731   3.91016   0.42056
+ H                    -1.36674   3.22972   1.07735
+ C                    -6.37323   1.85869  -0.13143
+ C                    -4.6253    3.55676   0.09447
+ H                    -2.98472   4.95622   0.3418
+ C                    -7.2636    2.82801  -0.52791
+ H                    -6.70781   0.82403  -0.04356
+ C                    -5.56931   4.53481  -0.31984
+ C                    -6.8595    4.18108  -0.62798
+ H                    -8.29374   2.55489  -0.76052
+ H                    -5.24794   5.57614  -0.38512
+ H                    -7.57729   4.93924  -0.94304
+ C                    -4.48712  -0.22174   0.63924
+ C                    -4.68194  -0.98687  -0.53248
+ C                    -4.82394  -0.80286   1.86452
+ C                    -5.24821  -2.26766  -0.45758
+ C                    -5.34131  -2.09815   1.93548
+ H                    -4.69682  -0.21334   2.77434
+ C                    -5.56622  -2.83415   0.77243
+ H                    -5.42912  -2.82533  -1.38034
+ H                    -5.59702  -2.52374   2.9071
+ H                    -5.99717  -3.83427   0.82491
+ C                    -4.32232  -0.51291  -1.88522
+ H                    -4.83484  -1.04827  -2.71552
+ O                    -3.5151    0.35134  -2.15217
+ H                    -0.03768   0.70485  -2.9866
+ O                    -0.69707   1.40577  -2.86629
+ Li                   -1.87737   1.05691  -1.42095
+ H                    -0.89133   1.76386  -3.74054
+
  Add virtual bond connecting atoms H77        and H56        Dist= 3.78D+00.
  Add virtual bond connecting atoms H107       and O2         Dist= 3.77D+00.
  The following ModRedundant input section has been read:
- B       1      19 S  10 -0.100                                                
- 
+ B       1      19 S  10 -0.100
+
 
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
  Berny optimization.
@@ -870,7 +870,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -2476,10 +2476,10 @@
    D298       0.59806   0.00027   0.00000  -0.00205  -0.00206   0.59601
    D299       3.01738   0.00000   0.00000  -0.00142  -0.00142   3.01596
          Item               Value     Threshold  Converged?
- Maximum Force            0.001556     0.000450     NO 
+ Maximum Force            0.001556     0.000450     NO
  RMS     Force            0.000112     0.000300     YES
- Maximum Displacement     0.429993     0.001800     NO 
- RMS     Displacement     0.108914     0.001200     NO 
+ Maximum Displacement     0.429993     0.001800     NO
+ RMS     Displacement     0.108914     0.001200     NO
  Predicted change in Energy=-6.917201D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -2489,7 +2489,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -3581,10 +3581,10 @@
    D298       0.59601   0.00069   0.00198   0.00191   0.00390   0.59990
    D299       3.01596  -0.00043   0.00137   0.00127   0.00264   3.01860
          Item               Value     Threshold  Converged?
- Maximum Force            0.013685     0.000450     NO 
- RMS     Force            0.001878     0.000300     NO 
- Maximum Displacement     0.377009     0.001800     NO 
- RMS     Displacement     0.091016     0.001200     NO 
+ Maximum Force            0.013685     0.000450     NO
+ RMS     Force            0.001878     0.000300     NO
+ Maximum Displacement     0.377009     0.001800     NO
+ RMS     Displacement     0.091016     0.001200     NO
  Predicted change in Energy=-6.951565D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -3594,7 +3594,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -4533,10 +4533,10 @@
    D298       0.59990   0.00059  -0.00169   0.00000  -0.00169   0.59821
    D299       3.01860  -0.00046  -0.00112   0.00000  -0.00112   3.01748
          Item               Value     Threshold  Converged?
- Maximum Force            0.007982     0.000450     NO 
- RMS     Force            0.001043     0.000300     NO 
- Maximum Displacement     0.141489     0.001800     NO 
- RMS     Displacement     0.037747     0.001200     NO 
+ Maximum Force            0.007982     0.000450     NO
+ RMS     Force            0.001043     0.000300     NO
+ Maximum Displacement     0.141489     0.001800     NO
+ RMS     Displacement     0.037747     0.001200     NO
  Predicted change in Energy=-1.693678D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -4546,7 +4546,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -5596,10 +5596,10 @@
    D298       0.59821   0.00031  -0.00001   0.00767   0.00765   0.60586
    D299       3.01748  -0.00004  -0.00000   0.00469   0.00467   3.02215
          Item               Value     Threshold  Converged?
- Maximum Force            0.001386     0.000450     NO 
+ Maximum Force            0.001386     0.000450     NO
  RMS     Force            0.000113     0.000300     YES
- Maximum Displacement     0.204222     0.001800     NO 
- RMS     Displacement     0.042580     0.001200     NO 
+ Maximum Displacement     0.204222     0.001800     NO
+ RMS     Displacement     0.042580     0.001200     NO
  Predicted change in Energy=-3.647551D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -5609,7 +5609,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -6747,10 +6747,10 @@
    D298       0.60586  -0.00069  -0.00553   0.00218  -0.00335   0.60251
    D299       3.02215  -0.00018  -0.00338   0.00238  -0.00100   3.02115
          Item               Value     Threshold  Converged?
- Maximum Force            0.006880     0.000450     NO 
- RMS     Force            0.000923     0.000300     NO 
- Maximum Displacement     0.186384     0.001800     NO 
- RMS     Displacement     0.041476     0.001200     NO 
+ Maximum Force            0.006880     0.000450     NO
+ RMS     Force            0.000923     0.000300     NO
+ Maximum Displacement     0.186384     0.001800     NO
+ RMS     Displacement     0.041476     0.001200     NO
  Predicted change in Energy=-4.419323D-04
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -6760,7 +6760,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -7849,10 +7849,10 @@
    D298       0.60251  -0.00020  -0.00135   0.00000  -0.00135   0.60117
    D299       3.02115   0.00001  -0.00164   0.00000  -0.00164   3.01951
          Item               Value     Threshold  Converged?
- Maximum Force            0.001304     0.000450     NO 
+ Maximum Force            0.001304     0.000450     NO
  RMS     Force            0.000199     0.000300     YES
- Maximum Displacement     0.068255     0.001800     NO 
- RMS     Displacement     0.014643     0.001200     NO 
+ Maximum Displacement     0.068255     0.001800     NO
+ RMS     Displacement     0.014643     0.001200     NO
  Predicted change in Energy=-1.016551D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -7862,7 +7862,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -8928,10 +8928,10 @@
    D298       0.60117  -0.00008  -0.00085   0.00000  -0.00085   0.60032
    D299       3.01951  -0.00009  -0.00038   0.00000  -0.00038   3.01913
          Item               Value     Threshold  Converged?
- Maximum Force            0.002305     0.000450     NO 
+ Maximum Force            0.002305     0.000450     NO
  RMS     Force            0.000251     0.000300     YES
- Maximum Displacement     0.034126     0.001800     NO 
- RMS     Displacement     0.007595     0.001200     NO 
+ Maximum Displacement     0.034126     0.001800     NO
+ RMS     Displacement     0.007595     0.001200     NO
  Predicted change in Energy=-2.397155D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -8941,7 +8941,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -10004,10 +10004,10 @@
    D298       0.60032   0.00005   0.00103   0.00151   0.00253   0.60285
    D299       3.01913  -0.00004   0.00102   0.00387   0.00489   3.02402
          Item               Value     Threshold  Converged?
- Maximum Force            0.000783     0.000450     NO 
+ Maximum Force            0.000783     0.000450     NO
  RMS     Force            0.000090     0.000300     YES
- Maximum Displacement     0.071190     0.001800     NO 
- RMS     Displacement     0.012115     0.001200     NO 
+ Maximum Displacement     0.071190     0.001800     NO
+ RMS     Displacement     0.012115     0.001200     NO
  Predicted change in Energy=-9.453577D-06
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -10017,7 +10017,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -11085,10 +11085,10 @@
    D298       0.60285   0.00020  -0.00200   0.00173  -0.00027   0.60257
    D299       3.02402   0.00022  -0.00331   0.00632   0.00300   3.02702
          Item               Value     Threshold  Converged?
- Maximum Force            0.001691     0.000450     NO 
+ Maximum Force            0.001691     0.000450     NO
  RMS     Force            0.000164     0.000300     YES
- Maximum Displacement     0.085504     0.001800     NO 
- RMS     Displacement     0.014101     0.001200     NO 
+ Maximum Displacement     0.085504     0.001800     NO
+ RMS     Displacement     0.014101     0.001200     NO
  Predicted change in Energy=-2.123562D-05
  GradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGradGrad
 
@@ -11098,7 +11098,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z

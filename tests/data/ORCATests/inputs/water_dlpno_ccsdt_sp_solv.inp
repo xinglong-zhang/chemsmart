@@ -7,7 +7,7 @@
   SMD true
   SMDsolvent "water"
 end
-%scf 
+%scf
   maxiter 500
 end
 % mdci

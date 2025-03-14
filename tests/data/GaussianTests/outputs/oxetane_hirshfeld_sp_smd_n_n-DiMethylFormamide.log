@@ -4,9 +4,9 @@
  Initial command:
  /home/users/astar/bmsi/zhangx5/programs/g16/l1.exe "/scratch/users/astar/bmsi/zhangx5/oxetane_opt_solv_sp_smd_n_n-DiMethylFormamide_hirshfeld_smd_n_n-DiMethylFormamide/Gau-1330163.inp" -scrdir="/scratch/users/astar/bmsi/zhangx5/oxetane_opt_solv_sp_smd_n_n-DiMethylFormamide_hirshfeld_smd_n_n-DiMethylFormamide/"
  Entering Link 1 = /home/users/astar/bmsi/zhangx5/programs/g16/l1.exe PID=   1330165.
-  
+
  Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
-  
+
  This is part of the Gaussian(R) 16 program.  It is based on
  the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
  the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
@@ -19,28 +19,28 @@
  University), and the Gaussian 82(TM) system (copyright 1983,
  Carnegie Mellon University). Gaussian is a federally registered
  trademark of Gaussian, Inc.
-  
+
  This software contains proprietary and confidential information,
  including trade secrets, belonging to Gaussian, Inc.
-  
+
  This software is provided under written license and may be
  used, copied, transmitted, or stored only in accord with that
  written license.
-  
+
  The following legend is applicable only to US Government
  contracts under FAR:
-  
+
                     RESTRICTED RIGHTS LEGEND
-  
+
  Use, reproduction and disclosure by the US Government is
  subject to restrictions as set forth in subparagraphs (a)
  and (c) of the Commercial Computer Software - Restricted
  Rights clause in FAR 52.227-19.
-  
+
  Gaussian, Inc.
  340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
-  
-  
+
+
  ---------------------------------------------------------------
  Warning -- This program may not be used in any manner that
  competes with the business of Gaussian, Inc. or will provide
@@ -53,30 +53,30 @@
  licensee that it is not a competitor of Gaussian, Inc. and that
  it will not use this program in any manner prohibited above.
  ---------------------------------------------------------------
-  
+
 
  Cite this work as:
  Gaussian 16, Revision B.01,
- M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
- M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
- G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
- J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
- J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
- F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
- T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
- G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
- J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
- T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
- F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
- V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
- K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
- J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
- J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria,
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone,
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich,
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian,
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young,
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone,
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega,
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda,
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai,
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta,
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin,
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand,
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar,
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi,
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas,
  J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
- 
+
  ******************************************
  Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
-                25-Dec-2024 
+                25-Dec-2024
  ******************************************
  %chk=oxetane_opt_solv_sp_smd_n_n-DiMethylFormamide_hirshfeld_smd_n_n-DiMethylFor
  mamide.chk
@@ -99,41 +99,41 @@
  ------------
  Symbolic Z-matrix:
  Charge =  0 Multiplicity = 1
- O                    -5.52653   1.1215   -0.18719 
- O                    -1.78384  -0.37007   0.19657 
- C                    -4.0949   -0.19475   0.68818 
- C                    -4.29349   1.31666   0.51375 
- C                    -5.52515  -0.2716    0.13803 
- C                    -3.05195  -0.78346  -0.23233 
- C                    -0.74383  -0.82449  -0.62992 
- H                    -3.53418   1.83203  -0.09671 
- H                    -4.43784   1.87291   1.45493 
- H                    -6.29063  -0.52197   0.89092 
- H                    -5.67024  -0.91316  -0.74718 
- H                    -3.24239  -0.43804  -1.26955 
- H                    -3.12452  -1.88925  -0.23883 
- H                    -0.74211  -1.93208  -0.6723 
- H                    -0.89314  -0.46428  -1.66743 
- H                    -3.94689  -0.54634   1.71726 
- C                     0.57916  -0.32139  -0.08919 
- H                     0.70473  -0.68329   0.94406 
- H                     0.5512    0.77941  -0.045 
- C                     1.76292  -0.77624  -0.94626 
- H                     1.78106  -1.87679  -0.98445 
- H                     1.62148  -0.41699  -1.9778 
- C                     3.07963  -0.26871  -0.41328 
- C                     3.8109   -1.01332   0.52107 
- C                     3.57331   0.98331  -0.80217 
- C                     5.00498  -0.52275   1.05083 
- H                     3.43911  -1.9929    0.83327 
- C                     4.76662   1.47782  -0.27499 
- H                     3.01439   1.57517  -1.53196 
- C                     5.48687   0.72557   0.65432 
- H                     5.56311  -1.11956   1.77502 
- H                     5.13741   2.45412  -0.59358 
- H                     6.42198   1.10972   1.06598 
- 
-                          Input orientation:                          
+ O                    -5.52653   1.1215   -0.18719
+ O                    -1.78384  -0.37007   0.19657
+ C                    -4.0949   -0.19475   0.68818
+ C                    -4.29349   1.31666   0.51375
+ C                    -5.52515  -0.2716    0.13803
+ C                    -3.05195  -0.78346  -0.23233
+ C                    -0.74383  -0.82449  -0.62992
+ H                    -3.53418   1.83203  -0.09671
+ H                    -4.43784   1.87291   1.45493
+ H                    -6.29063  -0.52197   0.89092
+ H                    -5.67024  -0.91316  -0.74718
+ H                    -3.24239  -0.43804  -1.26955
+ H                    -3.12452  -1.88925  -0.23883
+ H                    -0.74211  -1.93208  -0.6723
+ H                    -0.89314  -0.46428  -1.66743
+ H                    -3.94689  -0.54634   1.71726
+ C                     0.57916  -0.32139  -0.08919
+ H                     0.70473  -0.68329   0.94406
+ H                     0.5512    0.77941  -0.045
+ C                     1.76292  -0.77624  -0.94626
+ H                     1.78106  -1.87679  -0.98445
+ H                     1.62148  -0.41699  -1.9778
+ C                     3.07963  -0.26871  -0.41328
+ C                     3.8109   -1.01332   0.52107
+ C                     3.57331   0.98331  -0.80217
+ C                     5.00498  -0.52275   1.05083
+ H                     3.43911  -1.9929    0.83327
+ C                     4.76662   1.47782  -0.27499
+ H                     3.01439   1.57517  -1.53196
+ C                     5.48687   0.72557   0.65432
+ H                     5.56311  -1.11956   1.77502
+ H                     5.13741   2.45412  -0.59358
+ H                     6.42198   1.10972   1.06598
+
+                          Input orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -312,7 +312,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -910,7 +910,7 @@
          Total Dipole             -0.330306  -0.963110   0.071897
 
  Hirshfeld charges, spin densities, dipoles, and CM5 charges using IRadAn=      5:
-              Q-H        S-H        Dx         Dy         Dz        Q-CM5   
+              Q-H        S-H        Dx         Dy         Dz        Q-CM5
      1  O   -0.222183   0.000000  -0.121486  -0.118753  -0.104620  -0.309536
      2  O   -0.175602   0.000000   0.024882  -0.086174   0.133652  -0.278764
      3  C   -0.030469   0.000000  -0.008461  -0.029311  -0.015572  -0.089643
@@ -946,7 +946,7 @@
     33  H    0.050255   0.000000  -0.143072   0.058847  -0.063056   0.104944
        Tot  -0.000048   0.000000  -0.115184  -0.372524   0.003797  -0.000048
  Hirshfeld charges with hydrogens summed into heavy atoms:
-              Q-H       Q-CM5   
+              Q-H       Q-CM5
      1  O   -0.222183  -0.309536
      2  O   -0.175602  -0.278764
      3  C    0.011726   0.012018
@@ -962,10 +962,10 @@
     26  C   -0.003356  -0.003234
     28  C   -0.003272  -0.003152
     30  C   -0.009174  -0.009170
- 
+
  EQQ= 0.000000000000E+00 EQD= 0.000000000000E+00 EDD= 0.691277451101E-02
  EQQ+QD+DD= 0.691277451101E-02
- 
+
  1\1\GINC-X1001C1S5B1N1\SP\RM062X\def2TZVP\C13H18O2\ZHANGX5\25-Dec-2024
  \0\\# m062x def2tzvp scrf=(smd,solvent=n,n-DiMethylFormamide) pop=hirs
  hfeld\\Gaussian job\\0,1\O,0,-5.526535,1.121499,-0.187186\O,0,-1.78383

@@ -3,31 +3,31 @@
                                  * O   R   C   A *
                                  *****************
 
-                                            #,                                       
-                                            ###                                      
-                                            ####                                     
-                                            #####                                    
-                                            ######                                   
-                                           ########,                                 
-                                     ,,################,,,,,                         
-                               ,,#################################,,                 
-                          ,,##########################################,,             
-                       ,#########################################, ''#####,          
-                    ,#############################################,,   '####,        
-                  ,##################################################,,,,####,       
-                ,###########''''           ''''###############################       
-              ,#####''   ,,,,##########,,,,          '''####'''          '####       
-            ,##' ,,,,###########################,,,                        '##       
-           ' ,,###''''                  '''############,,,                           
+                                            #,
+                                            ###
+                                            ####
+                                            #####
+                                            ######
+                                           ########,
+                                     ,,################,,,,,
+                               ,,#################################,,
+                          ,,##########################################,,
+                       ,#########################################, ''#####,
+                    ,#############################################,,   '####,
+                  ,##################################################,,,,####,
+                ,###########''''           ''''###############################
+              ,#####''   ,,,,##########,,,,          '''####'''          '####
+            ,##' ,,,,###########################,,,                        '##
+           ' ,,###''''                  '''############,,,
          ,,##''                                '''############,,,,        ,,,,,,###''
-      ,#''                                            '''#######################'''  
-     '                                                          ''''####''''         
-             ,#######,   #######,   ,#######,      ##                                
-            ,#'     '#,  ##    ##  ,#'     '#,    #''#        ######   ,####,        
-            ##       ##  ##   ,#'  ##            #'  '#       #        #'  '#        
-            ##       ##  #######   ##           ,######,      #####,   #    #        
-            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#        
-             '#######'   ##     ##  '#######'  #'      '#     #####' # '####'        
+      ,#''                                            '''#######################'''
+     '                                                          ''''####''''
+             ,#######,   #######,   ,#######,      ##
+            ,#'     '#,  ##    ##  ,#'     '#,    #''#        ######   ,####,
+            ##       ##  ##   ,#'  ##            #'  '#       #        #'  '#
+            ##       ##  #######   ##           ,######,      #####,   #    #
+            '#,     ,#'  ##    ##  '#,     ,#' ,#      #,         ##   #,  ,#
+             '#######'   ##     ##  '#######'  #'      '#     #####' # '####'
 
 
 
@@ -143,7 +143,7 @@ The coordinates will be read from file: udc3_mCF3_c8_ts_ircr_dias_p1_f2.xyz
 ================================================================================
 
 ----- Orbital basis set information -----
-Your calculation utilizes the basis: cc-pVDZ 
+Your calculation utilizes the basis: cc-pVDZ
        H, B-Ne : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
                  T. H. Dunning, Jr., J. Chem. Phys. 90, 1007 (1989)
             He : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
@@ -180,7 +180,7 @@ Your calculation utilizes the AutoAux generation procedure.
 
 WARNING: Post HF methods need fully converged wavefunctions
   ===> : Setting SCFConvForced true
-         You can overwrite this default with %scf ConvForced false 
+         You can overwrite this default with %scf ConvForced false
 
 
 WARNING: MDCI localization with Augmented Hessian Foster-Boys
@@ -228,8 +228,8 @@ NAME = udc3_mCF3_c8_ts_ircr_dias_p7_f2_sp.inp
 | 34> Dipole False
 | 35> end
 | 36> * xyzfile 0 1 udc3_mCF3_c8_ts_ircr_dias_p7_f2.xyz
-| 37> 
-| 38> 
+| 37>
+| 38>
 | 39>                          ****END OF INPUT****
 ================================================================================
 
@@ -238,7 +238,7 @@ NAME = udc3_mCF3_c8_ts_ircr_dias_p7_f2_sp.inp
                    *****************************************
 
 ----- Orbital basis set information -----
-Your calculation utilizes the basis: cc-pVDZ 
+Your calculation utilizes the basis: cc-pVDZ
        H, B-Ne : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
                  T. H. Dunning, Jr., J. Chem. Phys. 90, 1007 (1989)
             He : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
@@ -260,7 +260,7 @@ Your calculation utilizes the auxiliary basis: def2/JK
    H-Ba, Hf-Rn: F. Weigend, J. Comput. Chem. 29, 167 (2008).
 
 ----- AuxC basis set information -----
-Your calculation utilizes the auxiliary basis: cc-pVTZ/C 
+Your calculation utilizes the auxiliary basis: cc-pVTZ/C
   Obtained from the EMSL Basis Set Exchange (bse.pnl.gov) Feb. 2017
   H-He, B-F, Al-Ar, Ga-Kr : F. Weigend, A. Kohn, C. Hattig, J. Chem. Phys. 116, 3175 (2002)
              Li-Be, Na-Mg : C. Haettig, Phys. Chem. Chem. Phys. 7, 59 (2005)
@@ -295,23 +295,23 @@ support) will be disabled for this port.
            *              working on a common directory               *
            ************************************************************
 ------------------------------------------------------------------------------
-                   ___                                                        
-                  /   \      - P O W E R E D   B Y -                         
-                 /     \                                                     
-                 |  |  |   _    _      __       _____    __    __             
-                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |          
-                  \  \/   | |  | |   /    \    | | | |  |  | /  /          
-                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /          
-                |  |  |   |  __  | /  /__\  \  |    /   |      \           
-                |  |  |   | |  | | |   __   |  |    \   |  |\   \          
-                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \       
-                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/        
-                                                                              
-                      - O R C A' S   B I G   F R I E N D -                    
-                                      &                                       
-                       - I N T E G R A L  F E E D E R -                       
-                                                                              
- v1 FN, 2020, v2 2021                                                         
+                   ___
+                  /   \      - P O W E R E D   B Y -
+                 /     \
+                 |  |  |   _    _      __       _____    __    __
+                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |
+                  \  \/   | |  | |   /    \    | | | |  |  | /  /
+                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /
+                |  |  |   |  __  | /  /__\  \  |    /   |      \
+                |  |  |   | |  | | |   __   |  |    \   |  |\   \
+                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \
+                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/
+
+                      - O R C A' S   B I G   F R I E N D -
+                                      &
+                       - I N T E G R A L  F E E D E R -
+
+ v1 FN, 2020, v2 2021
 ------------------------------------------------------------------------------
 
 
@@ -543,7 +543,7 @@ HIRSHFELD ANALYSIS
 Total integrated alpha density =    130.999999516
 Total integrated beta density  =    130.999999516
 
-  ATOM     CHARGE      SPIN    
+  ATOM     CHARGE      SPIN
    0 O   -0.169783    0.000000
    1 O   -0.302312    0.000000
    2 O   -0.276622    0.000000
@@ -592,7 +592,7 @@ Total integrated beta density  =    130.999999516
 
   TOTAL   0.000001    0.000000
 
-Total SCF time: 0 days 0 hours 1 min 17 sec 
+Total SCF time: 0 days 0 hours 1 min 17 sec
 
 Maximum memory used throughout the entire SCF-calculation: 259.2 MB
 --------------------------------------------------------------------------
@@ -620,7 +620,7 @@ support) will be disabled for this port.
 
 Wavefunction type
 -----------------
-Correlation treatment                      ...      CCSD     
+Correlation treatment                      ...      CCSD
 Single excitations                         ... ON
 Orbital optimization                       ... OFF
 Calculation of Z vector                    ... OFF
@@ -700,80 +700,80 @@ Orbital range for localization           ... 35 to 130
 Localization criterion                   ... FOSTER-BOYS (AUGMENTED HESSIAN)
 Doing the dipole integrals     ... o.k.
 Initial value of the localization sum :  9202.917715
-ITERATION   0 : L= 9280.0676719719 DL=  7.71e+01 (AVERGE_DL)=    0.1300724805 
-ITERATION   1 : L= 9295.0382344573 DL=  1.50e+01 (AVERGE_DL)=    0.0572976273 
-ITERATION   2 : L= 9296.5532783309 DL=  1.52e+00 (AVERGE_DL)=    0.0182276291 
-ITERATION   3 : L= 9296.9630245063 DL=  4.10e-01 (AVERGE_DL)=    0.0094792730 
-ITERATION   4 : L= 9297.0828169795 DL=  1.20e-01 (AVERGE_DL)=    0.0051254540 
-ITERATION   5 : L= 9297.1132955236 DL=  3.05e-02 (AVERGE_DL)=    0.0025853223 
-ITERATION   6 : L= 9297.1228166463 DL=  9.52e-03 (AVERGE_DL)=    0.0014449794 
-ITERATION   7 : L= 9297.1274925575 DL=  4.68e-03 (AVERGE_DL)=    0.0010126298 
-ITERATION   8 : L= 9297.1308754813 DL=  3.38e-03 (AVERGE_DL)=    0.0008613183 
-ITERATION   9 : L= 9297.1337647074 DL=  2.89e-03 (AVERGE_DL)=    0.0007959913 
-ITERATION  10 : L= 9297.1363512208 DL=  2.59e-03 (AVERGE_DL)=    0.0007531387 
-ITERATION  11 : L= 9297.1386866036 DL=  2.34e-03 (AVERGE_DL)=    0.0007156433 
-ITERATION  12 : L= 9297.1407902752 DL=  2.10e-03 (AVERGE_DL)=    0.0006792139 
-ITERATION  13 : L= 9297.1426751716 DL=  1.88e-03 (AVERGE_DL)=    0.0006429265 
-ITERATION  14 : L= 9297.1443541593 DL=  1.68e-03 (AVERGE_DL)=    0.0006067941 
-ITERATION  15 : L= 9297.1458413820 DL=  1.49e-03 (AVERGE_DL)=    0.0005710914 
-ITERATION  16 : L= 9297.1471521529 DL=  1.31e-03 (AVERGE_DL)=    0.0005361434 
-ITERATION  17 : L= 9297.1483024372 DL=  1.15e-03 (AVERGE_DL)=    0.0005022503 
-ITERATION  18 : L= 9297.1493082566 DL=  1.01e-03 (AVERGE_DL)=    0.0004696535 
-ITERATION  19 : L= 9297.1501852560 DL=  8.77e-04 (AVERGE_DL)=    0.0004385481 
-ITERATION  20 : L= 9297.1509482171 DL=  7.63e-04 (AVERGE_DL)=    0.0004090428 
-ITERATION  21 : L= 9297.1516109082 DL=  6.63e-04 (AVERGE_DL)=    0.0003812178 
-ITERATION  22 : L= 9297.1521858641 DL=  5.75e-04 (AVERGE_DL)=    0.0003550870 
-ITERATION  23 : L= 9297.1526843753 DL=  4.99e-04 (AVERGE_DL)=    0.0003306397 
-ITERATION  24 : L= 9297.1531164683 DL=  4.32e-04 (AVERGE_DL)=    0.0003078266 
-ITERATION  25 : L= 9297.1534910033 DL=  3.75e-04 (AVERGE_DL)=    0.0002865918 
-ITERATION  26 : L= 9297.1538157365 DL=  3.25e-04 (AVERGE_DL)=    0.0002668585 
-ITERATION  27 : L= 9297.1540974277 DL=  2.82e-04 (AVERGE_DL)=    0.0002485445 
-ITERATION  28 : L= 9297.1543419265 DL=  2.44e-04 (AVERGE_DL)=    0.0002315560 
-ITERATION  29 : L= 9297.1545543225 DL=  2.12e-04 (AVERGE_DL)=    0.0002158195 
-ITERATION  30 : L= 9297.1547389761 DL=  1.85e-04 (AVERGE_DL)=    0.0002012317 
-ITERATION  31 : L= 9297.1548996683 DL=  1.61e-04 (AVERGE_DL)=    0.0001877219 
-ITERATION  32 : L= 9297.1550396326 DL=  1.40e-04 (AVERGE_DL)=    0.0001751968 
-ITERATION  33 : L= 9297.1551616757 DL=  1.22e-04 (AVERGE_DL)=    0.0001635966 
-ITERATION  34 : L= 9297.1552681896 DL=  1.07e-04 (AVERGE_DL)=    0.0001528343 
-ITERATION  35 : L= 9297.1553612548 DL=  9.31e-05 (AVERGE_DL)=    0.0001428601 
-ITERATION  36 : L= 9297.1554426417 DL=  8.14e-05 (AVERGE_DL)=    0.0001335964 
-ITERATION  37 : L= 9297.1555138993 DL=  7.13e-05 (AVERGE_DL)=    0.0001250067 
-ITERATION  38 : L= 9297.1555763414 DL=  6.24e-05 (AVERGE_DL)=    0.0001170189 
-ITERATION  39 : L= 9297.1556311086 DL=  5.48e-05 (AVERGE_DL)=    0.0001095918 
-ITERATION  40 : L= 9297.1556791953 DL=  4.81e-05 (AVERGE_DL)=    0.0001026905 
-ITERATION  41 : L= 9297.1557214521 DL=  4.23e-05 (AVERGE_DL)=    0.0000962645 
-ITERATION  42 : L= 9297.1557586157 DL=  3.72e-05 (AVERGE_DL)=    0.0000902768 
-ITERATION  43 : L= 9297.1557913289 DL=  3.27e-05 (AVERGE_DL)=    0.0000846991 
-ITERATION  44 : L= 9297.1558201558 DL=  2.88e-05 (AVERGE_DL)=    0.0000795091 
-ITERATION  45 : L= 9297.1558455642 DL=  2.54e-05 (AVERGE_DL)=    0.0000746459 
-ITERATION  46 : L= 9297.1558679818 DL=  2.24e-05 (AVERGE_DL)=    0.0000701153 
-ITERATION  47 : L= 9297.1558877798 DL=  1.98e-05 (AVERGE_DL)=    0.0000658913 
-ITERATION  48 : L= 9297.1559052664 DL=  1.75e-05 (AVERGE_DL)=    0.0000619256 
-ITERATION  49 : L= 9297.1559207287 DL=  1.55e-05 (AVERGE_DL)=    0.0000582310 
-ITERATION  50 : L= 9297.1559344044 DL=  1.37e-05 (AVERGE_DL)=    0.0000547636 
-ITERATION  51 : L= 9297.1559465122 DL=  1.21e-05 (AVERGE_DL)=    0.0000515290 
-ITERATION  52 : L= 9297.1559572317 DL=  1.07e-05 (AVERGE_DL)=    0.0000484846 
-ITERATION  53 : L= 9297.1559667324 DL=  9.50e-06 (AVERGE_DL)=    0.0000456452 
-ITERATION  54 : L= 9297.1559751551 DL=  8.42e-06 (AVERGE_DL)=    0.0000429777 
-ITERATION  55 : L= 9297.1559826244 DL=  7.47e-06 (AVERGE_DL)=    0.0000404723 
-ITERATION  56 : L= 9297.1559892551 DL=  6.63e-06 (AVERGE_DL)=    0.0000381326 
-ITERATION  57 : L= 9297.1559951363 DL=  5.88e-06 (AVERGE_DL)=    0.0000359129 
-ITERATION  58 : L= 9297.1560003620 DL=  5.23e-06 (AVERGE_DL)=    0.0000338525 
-ITERATION  59 : L= 9297.1560050029 DL=  4.64e-06 (AVERGE_DL)=    0.0000319020 
-ITERATION  60 : L= 9297.1560091269 DL=  4.12e-06 (AVERGE_DL)=    0.0000300730 
-ITERATION  61 : L= 9297.1560127927 DL=  3.67e-06 (AVERGE_DL)=    0.0000283535 
-ITERATION  62 : L= 9297.1560160554 DL=  3.26e-06 (AVERGE_DL)=    0.0000267489 
-ITERATION  63 : L= 9297.1560189547 DL=  2.90e-06 (AVERGE_DL)=    0.0000252151 
-ITERATION  64 : L= 9297.1560215355 DL=  2.58e-06 (AVERGE_DL)=    0.0000237900 
-ITERATION  65 : L= 9297.1560238312 DL=  2.30e-06 (AVERGE_DL)=    0.0000224374 
-ITERATION  66 : L= 9297.1560258747 DL=  2.04e-06 (AVERGE_DL)=    0.0000211696 
-ITERATION  67 : L= 9297.1560276959 DL=  1.82e-06 (AVERGE_DL)=    0.0000199842 
-ITERATION  68 : L= 9297.1560293166 DL=  1.62e-06 (AVERGE_DL)=    0.0000188524 
-ITERATION  69 : L= 9297.1560307613 DL=  1.44e-06 (AVERGE_DL)=    0.0000177995 
-ITERATION  70 : L= 9297.1560320475 DL=  1.29e-06 (AVERGE_DL)=    0.0000167948 
-ITERATION  71 : L= 9297.1560331956 DL=  1.15e-06 (AVERGE_DL)=    0.0000158678 
-ITERATION  72 : L= 9297.1560342175 DL=  1.02e-06 (AVERGE_DL)=    0.0000149698 
-ITERATION  73 : L= 9297.1560351292 DL=  9.12e-07 (AVERGE_DL)=    0.0000141398 
+ITERATION   0 : L= 9280.0676719719 DL=  7.71e+01 (AVERGE_DL)=    0.1300724805
+ITERATION   1 : L= 9295.0382344573 DL=  1.50e+01 (AVERGE_DL)=    0.0572976273
+ITERATION   2 : L= 9296.5532783309 DL=  1.52e+00 (AVERGE_DL)=    0.0182276291
+ITERATION   3 : L= 9296.9630245063 DL=  4.10e-01 (AVERGE_DL)=    0.0094792730
+ITERATION   4 : L= 9297.0828169795 DL=  1.20e-01 (AVERGE_DL)=    0.0051254540
+ITERATION   5 : L= 9297.1132955236 DL=  3.05e-02 (AVERGE_DL)=    0.0025853223
+ITERATION   6 : L= 9297.1228166463 DL=  9.52e-03 (AVERGE_DL)=    0.0014449794
+ITERATION   7 : L= 9297.1274925575 DL=  4.68e-03 (AVERGE_DL)=    0.0010126298
+ITERATION   8 : L= 9297.1308754813 DL=  3.38e-03 (AVERGE_DL)=    0.0008613183
+ITERATION   9 : L= 9297.1337647074 DL=  2.89e-03 (AVERGE_DL)=    0.0007959913
+ITERATION  10 : L= 9297.1363512208 DL=  2.59e-03 (AVERGE_DL)=    0.0007531387
+ITERATION  11 : L= 9297.1386866036 DL=  2.34e-03 (AVERGE_DL)=    0.0007156433
+ITERATION  12 : L= 9297.1407902752 DL=  2.10e-03 (AVERGE_DL)=    0.0006792139
+ITERATION  13 : L= 9297.1426751716 DL=  1.88e-03 (AVERGE_DL)=    0.0006429265
+ITERATION  14 : L= 9297.1443541593 DL=  1.68e-03 (AVERGE_DL)=    0.0006067941
+ITERATION  15 : L= 9297.1458413820 DL=  1.49e-03 (AVERGE_DL)=    0.0005710914
+ITERATION  16 : L= 9297.1471521529 DL=  1.31e-03 (AVERGE_DL)=    0.0005361434
+ITERATION  17 : L= 9297.1483024372 DL=  1.15e-03 (AVERGE_DL)=    0.0005022503
+ITERATION  18 : L= 9297.1493082566 DL=  1.01e-03 (AVERGE_DL)=    0.0004696535
+ITERATION  19 : L= 9297.1501852560 DL=  8.77e-04 (AVERGE_DL)=    0.0004385481
+ITERATION  20 : L= 9297.1509482171 DL=  7.63e-04 (AVERGE_DL)=    0.0004090428
+ITERATION  21 : L= 9297.1516109082 DL=  6.63e-04 (AVERGE_DL)=    0.0003812178
+ITERATION  22 : L= 9297.1521858641 DL=  5.75e-04 (AVERGE_DL)=    0.0003550870
+ITERATION  23 : L= 9297.1526843753 DL=  4.99e-04 (AVERGE_DL)=    0.0003306397
+ITERATION  24 : L= 9297.1531164683 DL=  4.32e-04 (AVERGE_DL)=    0.0003078266
+ITERATION  25 : L= 9297.1534910033 DL=  3.75e-04 (AVERGE_DL)=    0.0002865918
+ITERATION  26 : L= 9297.1538157365 DL=  3.25e-04 (AVERGE_DL)=    0.0002668585
+ITERATION  27 : L= 9297.1540974277 DL=  2.82e-04 (AVERGE_DL)=    0.0002485445
+ITERATION  28 : L= 9297.1543419265 DL=  2.44e-04 (AVERGE_DL)=    0.0002315560
+ITERATION  29 : L= 9297.1545543225 DL=  2.12e-04 (AVERGE_DL)=    0.0002158195
+ITERATION  30 : L= 9297.1547389761 DL=  1.85e-04 (AVERGE_DL)=    0.0002012317
+ITERATION  31 : L= 9297.1548996683 DL=  1.61e-04 (AVERGE_DL)=    0.0001877219
+ITERATION  32 : L= 9297.1550396326 DL=  1.40e-04 (AVERGE_DL)=    0.0001751968
+ITERATION  33 : L= 9297.1551616757 DL=  1.22e-04 (AVERGE_DL)=    0.0001635966
+ITERATION  34 : L= 9297.1552681896 DL=  1.07e-04 (AVERGE_DL)=    0.0001528343
+ITERATION  35 : L= 9297.1553612548 DL=  9.31e-05 (AVERGE_DL)=    0.0001428601
+ITERATION  36 : L= 9297.1554426417 DL=  8.14e-05 (AVERGE_DL)=    0.0001335964
+ITERATION  37 : L= 9297.1555138993 DL=  7.13e-05 (AVERGE_DL)=    0.0001250067
+ITERATION  38 : L= 9297.1555763414 DL=  6.24e-05 (AVERGE_DL)=    0.0001170189
+ITERATION  39 : L= 9297.1556311086 DL=  5.48e-05 (AVERGE_DL)=    0.0001095918
+ITERATION  40 : L= 9297.1556791953 DL=  4.81e-05 (AVERGE_DL)=    0.0001026905
+ITERATION  41 : L= 9297.1557214521 DL=  4.23e-05 (AVERGE_DL)=    0.0000962645
+ITERATION  42 : L= 9297.1557586157 DL=  3.72e-05 (AVERGE_DL)=    0.0000902768
+ITERATION  43 : L= 9297.1557913289 DL=  3.27e-05 (AVERGE_DL)=    0.0000846991
+ITERATION  44 : L= 9297.1558201558 DL=  2.88e-05 (AVERGE_DL)=    0.0000795091
+ITERATION  45 : L= 9297.1558455642 DL=  2.54e-05 (AVERGE_DL)=    0.0000746459
+ITERATION  46 : L= 9297.1558679818 DL=  2.24e-05 (AVERGE_DL)=    0.0000701153
+ITERATION  47 : L= 9297.1558877798 DL=  1.98e-05 (AVERGE_DL)=    0.0000658913
+ITERATION  48 : L= 9297.1559052664 DL=  1.75e-05 (AVERGE_DL)=    0.0000619256
+ITERATION  49 : L= 9297.1559207287 DL=  1.55e-05 (AVERGE_DL)=    0.0000582310
+ITERATION  50 : L= 9297.1559344044 DL=  1.37e-05 (AVERGE_DL)=    0.0000547636
+ITERATION  51 : L= 9297.1559465122 DL=  1.21e-05 (AVERGE_DL)=    0.0000515290
+ITERATION  52 : L= 9297.1559572317 DL=  1.07e-05 (AVERGE_DL)=    0.0000484846
+ITERATION  53 : L= 9297.1559667324 DL=  9.50e-06 (AVERGE_DL)=    0.0000456452
+ITERATION  54 : L= 9297.1559751551 DL=  8.42e-06 (AVERGE_DL)=    0.0000429777
+ITERATION  55 : L= 9297.1559826244 DL=  7.47e-06 (AVERGE_DL)=    0.0000404723
+ITERATION  56 : L= 9297.1559892551 DL=  6.63e-06 (AVERGE_DL)=    0.0000381326
+ITERATION  57 : L= 9297.1559951363 DL=  5.88e-06 (AVERGE_DL)=    0.0000359129
+ITERATION  58 : L= 9297.1560003620 DL=  5.23e-06 (AVERGE_DL)=    0.0000338525
+ITERATION  59 : L= 9297.1560050029 DL=  4.64e-06 (AVERGE_DL)=    0.0000319020
+ITERATION  60 : L= 9297.1560091269 DL=  4.12e-06 (AVERGE_DL)=    0.0000300730
+ITERATION  61 : L= 9297.1560127927 DL=  3.67e-06 (AVERGE_DL)=    0.0000283535
+ITERATION  62 : L= 9297.1560160554 DL=  3.26e-06 (AVERGE_DL)=    0.0000267489
+ITERATION  63 : L= 9297.1560189547 DL=  2.90e-06 (AVERGE_DL)=    0.0000252151
+ITERATION  64 : L= 9297.1560215355 DL=  2.58e-06 (AVERGE_DL)=    0.0000237900
+ITERATION  65 : L= 9297.1560238312 DL=  2.30e-06 (AVERGE_DL)=    0.0000224374
+ITERATION  66 : L= 9297.1560258747 DL=  2.04e-06 (AVERGE_DL)=    0.0000211696
+ITERATION  67 : L= 9297.1560276959 DL=  1.82e-06 (AVERGE_DL)=    0.0000199842
+ITERATION  68 : L= 9297.1560293166 DL=  1.62e-06 (AVERGE_DL)=    0.0000188524
+ITERATION  69 : L= 9297.1560307613 DL=  1.44e-06 (AVERGE_DL)=    0.0000177995
+ITERATION  70 : L= 9297.1560320475 DL=  1.29e-06 (AVERGE_DL)=    0.0000167948
+ITERATION  71 : L= 9297.1560331956 DL=  1.15e-06 (AVERGE_DL)=    0.0000158678
+ITERATION  72 : L= 9297.1560342175 DL=  1.02e-06 (AVERGE_DL)=    0.0000149698
+ITERATION  73 : L= 9297.1560351292 DL=  9.12e-07 (AVERGE_DL)=    0.0000141398
 LOCALIZATION SUM CONVERGED
 
 ------------------------------------------------------
@@ -793,7 +793,7 @@ Max. Davidson iterations 128
 Max. Davidson dimension  10
 Iter:    0   L: 9297.1560351292   Grad. norm: 3.948440e-02
    *** Likely close to a maximum now. ***
-       Augmented Hessian eigenvalues:  1.64e-05 -3.59e-02 -3.77e-02 -4.26e-02 ... 
+       Augmented Hessian eigenvalues:  1.64e-05 -3.59e-02 -3.77e-02 -4.26e-02 ...
 Iter:    1   L: 9297.1560433097   Grad. norm: 5.550761e-05
 Iter:    2   L: 9297.1560428047   Grad. norm: 3.718717e-02
 Iter:    3   L: 9297.1560433061   Grad. norm: 5.305900e-04
@@ -950,8 +950,8 @@ Orbital range for localization           ... 0 to 34
 Localization criterion                   ... FOSTER-BOYS (AUGMENTED HESSIAN)
 Doing the dipole integrals     ... o.k.
 Initial value of the localization sum :  3121.236910
-ITERATION   0 : L= 3121.2369914537 DL=  8.19e-05 (AVERGE_DL)=    0.0003709991 
-ITERATION   1 : L= 3121.2369914537 DL=  0.00e+00 (AVERGE_DL)=    0.0000000000 
+ITERATION   0 : L= 3121.2369914537 DL=  8.19e-05 (AVERGE_DL)=    0.0003709991
+ITERATION   1 : L= 3121.2369914537 DL=  0.00e+00 (AVERGE_DL)=    0.0000000000
 LOCALIZATION SUM CONVERGED
 
 ------------------------------------------------------
@@ -967,7 +967,7 @@ Davidson threshold:      2000
 Diagonalization method:  LAPACK
 Iter:    0   L: 3121.2369914537   Grad. norm: 1.038358e-02
    *** Likely close to a maximum now. ***
-       Augmented Hessian eigenvalues:  7.75e-08 -2.01e+01 -2.05e+01 -2.52e+01 ... 
+       Augmented Hessian eigenvalues:  7.75e-08 -2.01e+01 -2.05e+01 -2.52e+01 ...
 Iter:    1   L: 3121.2369914925   Grad. norm: 3.982848e-13
 LOCALIZATION HAS CONVERGED.
 
@@ -1098,7 +1098,7 @@ Dipole-based pair screening          .... used
    .... Finished loop over pairs
 
                   =====================================
-                  1212 OF 4656 PAIRS WERE SKIPPED 
+                  1212 OF 4656 PAIRS WERE SKIPPED
                   =====================================
 
 Total time spent in the prescreening                  ...     0.011 sec
@@ -1133,7 +1133,7 @@ Total time for the integral transformation: 6.2 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -1212,7 +1212,7 @@ Total time for the integral transformation: 6.1 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -1230,7 +1230,7 @@ Spin component scaling                      .... not used
 
    .... Finished loop over pairs
 
- PNO Occupation Number Statistics: 
+ PNO Occupation Number Statistics:
   | Av. % of trace(Dij) retained        ...  97.085098610665
   | sigma^2 in % of trace(Dij) retained ...   1.22e+01
   | Av. % of trace(Di) retained         ...  99.999424906310
@@ -1306,9 +1306,9 @@ Finished
 
 
 -------------------------------------
-Pair Pair Term precalculation with     
-RI-(ij|mn) and (im|jn) transformation  
-ON THE FLY                             
+Pair Pair Term precalculation with
+RI-(ij|mn) and (im|jn) transformation
+ON THE FLY
 -------------------------------------
 
    IBatch   1 (of   1)              ... done (   36.840 sec)
@@ -1399,8 +1399,8 @@ E(CORR)(strong-pairs)                      ...     -5.395146832
 E(CORR)(weak-pairs)                        ...     -0.032900207
 E(CORR)(corrected)                         ...     -5.428047038
 E(TOT)                                     ...  -2186.707001379
-Singles Norm <S|S>**1/2                    ...      0.165253510  
-T1 diagnostic                              ...      0.011926145  
+Singles Norm <S|S>**1/2                    ...      0.165253510
+T1 diagnostic                              ...      0.011926145
 
 ------------------
 LARGEST AMPLITUDES
@@ -1440,14 +1440,14 @@ Fock matrix occ-virt block is zero --> Setting DT_in_Triples to false.
 Number of Triples that are to be computed   ...      9300
 
  . . . . . . . . .
-10% done  
-20% done  
-30% done  
-40% done  
-50% done  
-60% done  
-70% done  
-80% done  
+10% done
+20% done
+30% done
+40% done
+50% done
+60% done
+70% done
+80% done
 90% done               (    107.821 sec)
 Triples timings:
 Total time for T0               ...   117.592 sec
@@ -1561,7 +1561,7 @@ support) will be disabled for this port.
 [x1003c5s2b0n0:3477767] 47 more processes have sent help message help-mpi-btl-openib-cpc-base.txt / no cpcs for port
 [x1003c5s2b0n0:3477767] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
 ----- Orbital basis set information -----
-Your calculation utilizes the basis: cc-pVTZ 
+Your calculation utilizes the basis: cc-pVTZ
        H, B-Ne : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
                  T. H. Dunning, Jr., J. Chem. Phys. 90, 1007 (1989)
             He : Obtained from the ccRepo (grant-hill.group.shef.ac.uk/ccrepo) Feb. 2017
@@ -1587,7 +1587,7 @@ Your calculation utilizes the auxiliary basis: def2/JK
    H-Ba, Hf-Rn: F. Weigend, J. Comput. Chem. 29, 167 (2008).
 
 ----- AuxC basis set information -----
-Your calculation utilizes the auxiliary basis: cc-pVTZ/C 
+Your calculation utilizes the auxiliary basis: cc-pVTZ/C
   Obtained from the EMSL Basis Set Exchange (bse.pnl.gov) Feb. 2017
   H-He, B-F, Al-Ar, Ga-Kr : F. Weigend, A. Kohn, C. Hattig, J. Chem. Phys. 116, 3175 (2002)
              Li-Be, Na-Mg : C. Haettig, Phys. Chem. Chem. Phys. 7, 59 (2005)
@@ -1640,23 +1640,23 @@ support) will be disabled for this port.
            *              working on a common directory               *
            ************************************************************
 ------------------------------------------------------------------------------
-                   ___                                                        
-                  /   \      - P O W E R E D   B Y -                         
-                 /     \                                                     
-                 |  |  |   _    _      __       _____    __    __             
-                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |          
-                  \  \/   | |  | |   /    \    | | | |  |  | /  /          
-                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /          
-                |  |  |   |  __  | /  /__\  \  |    /   |      \           
-                |  |  |   | |  | | |   __   |  |    \   |  |\   \          
-                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \       
-                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/        
-                                                                              
-                      - O R C A' S   B I G   F R I E N D -                    
-                                      &                                       
-                       - I N T E G R A L  F E E D E R -                       
-                                                                              
- v1 FN, 2020, v2 2021                                                         
+                   ___
+                  /   \      - P O W E R E D   B Y -
+                 /     \
+                 |  |  |   _    _      __       _____    __    __
+                 |  |  |  | |  | |    /  \     |  _  \  |  |  /  |
+                  \  \/   | |  | |   /    \    | | | |  |  | /  /
+                 / \  \   | |__| |  /  /\  \   | |_| |  |  |/  /
+                |  |  |   |  __  | /  /__\  \  |    /   |      \
+                |  |  |   | |  | | |   __   |  |    \   |  |\   \
+                \     /   | |  | | |  |  |  |  | |\  \  |  | \   \
+                 \___/    |_|  |_| |__|  |__|  |_| \__\ |__|  \__/
+
+                      - O R C A' S   B I G   F R I E N D -
+                                      &
+                       - I N T E G R A L  F E E D E R -
+
+ v1 FN, 2020, v2 2021
 ------------------------------------------------------------------------------
 
 
@@ -1887,7 +1887,7 @@ HIRSHFELD ANALYSIS
 Total integrated alpha density =    130.999996531
 Total integrated beta density  =    130.999996531
 
-  ATOM     CHARGE      SPIN    
+  ATOM     CHARGE      SPIN
    0 O   -0.169439    0.000000
    1 O   -0.307040    0.000000
    2 O   -0.282127    0.000000
@@ -1936,7 +1936,7 @@ Total integrated beta density  =    130.999996531
 
   TOTAL   0.000007    0.000000
 
-Total SCF time: 0 days 0 hours 9 min 15 sec 
+Total SCF time: 0 days 0 hours 9 min 15 sec
 
 Maximum memory used throughout the entire SCF-calculation: 316.0 MB
 --------------------------------------------------------------------------
@@ -1964,7 +1964,7 @@ support) will be disabled for this port.
 
 Wavefunction type
 -----------------
-Correlation treatment                      ...      CCSD     
+Correlation treatment                      ...      CCSD
 Single excitations                         ... ON
 Orbital optimization                       ... OFF
 Calculation of Z vector                    ... OFF
@@ -2044,62 +2044,62 @@ Orbital range for localization           ... 35 to 130
 Localization criterion                   ... FOSTER-BOYS (AUGMENTED HESSIAN)
 Doing the dipole integrals     ... o.k.
 Initial value of the localization sum :  9001.507781
-ITERATION   0 : L= 9240.5989769650 DL=  2.39e+02 (AVERGE_DL)=    0.2289809597 
-ITERATION   1 : L= 9290.8610031495 DL=  5.03e+01 (AVERGE_DL)=    0.1049874953 
-ITERATION   2 : L= 9294.3312059195 DL=  3.47e+00 (AVERGE_DL)=    0.0275863984 
-ITERATION   3 : L= 9295.9390449605 DL=  1.61e+00 (AVERGE_DL)=    0.0187775473 
-ITERATION   4 : L= 9296.8526248633 DL=  9.14e-01 (AVERGE_DL)=    0.0141543799 
-ITERATION   5 : L= 9297.1798578857 DL=  3.27e-01 (AVERGE_DL)=    0.0084712235 
-ITERATION   6 : L= 9297.2814586563 DL=  1.02e-01 (AVERGE_DL)=    0.0047202617 
-ITERATION   7 : L= 9297.3132047110 DL=  3.17e-02 (AVERGE_DL)=    0.0026385326 
-ITERATION   8 : L= 9297.3262142597 DL=  1.30e-02 (AVERGE_DL)=    0.0016890741 
-ITERATION   9 : L= 9297.3342715436 DL=  8.06e-03 (AVERGE_DL)=    0.0013292660 
-ITERATION  10 : L= 9297.3407300769 DL=  6.46e-03 (AVERGE_DL)=    0.0011901030 
-ITERATION  11 : L= 9297.3463700586 DL=  5.64e-03 (AVERGE_DL)=    0.0011121322 
-ITERATION  12 : L= 9297.3513728728 DL=  5.00e-03 (AVERGE_DL)=    0.0010474294 
-ITERATION  13 : L= 9297.3557900415 DL=  4.42e-03 (AVERGE_DL)=    0.0009842141 
-ITERATION  14 : L= 9297.3596522404 DL=  3.86e-03 (AVERGE_DL)=    0.0009203116 
-ITERATION  15 : L= 9297.3629932857 DL=  3.34e-03 (AVERGE_DL)=    0.0008559704 
-ITERATION  16 : L= 9297.3658536782 DL=  2.86e-03 (AVERGE_DL)=    0.0007920095 
-ITERATION  17 : L= 9297.3682791240 DL=  2.43e-03 (AVERGE_DL)=    0.0007293120 
-ITERATION  18 : L= 9297.3703179680 DL=  2.04e-03 (AVERGE_DL)=    0.0006686665 
-ITERATION  19 : L= 9297.3720187025 DL=  1.70e-03 (AVERGE_DL)=    0.0006107111 
-ITERATION  20 : L= 9297.3734279552 DL=  1.41e-03 (AVERGE_DL)=    0.0005559196 
-ITERATION  21 : L= 9297.3745890248 DL=  1.16e-03 (AVERGE_DL)=    0.0005045994 
-ITERATION  22 : L= 9297.3755410207 DL=  9.52e-04 (AVERGE_DL)=    0.0004569147 
-ITERATION  23 : L= 9297.3763184801 DL=  7.77e-04 (AVERGE_DL)=    0.0004129110 
-ITERATION  24 : L= 9297.3769513073 DL=  6.33e-04 (AVERGE_DL)=    0.0003725290 
-ITERATION  25 : L= 9297.3774650456 DL=  5.14e-04 (AVERGE_DL)=    0.0003356515 
-ITERATION  26 : L= 9297.3778812085 DL=  4.16e-04 (AVERGE_DL)=    0.0003020990 
-ITERATION  27 : L= 9297.3782177624 DL=  3.37e-04 (AVERGE_DL)=    0.0002716720 
-ITERATION  28 : L= 9297.3784895745 DL=  2.72e-04 (AVERGE_DL)=    0.0002441473 
-ITERATION  29 : L= 9297.3787088776 DL=  2.19e-04 (AVERGE_DL)=    0.0002193007 
-ITERATION  30 : L= 9297.3788856762 DL=  1.77e-04 (AVERGE_DL)=    0.0001969051 
-ITERATION  31 : L= 9297.3790281282 DL=  1.42e-04 (AVERGE_DL)=    0.0001767470 
-ITERATION  32 : L= 9297.3791428578 DL=  1.15e-04 (AVERGE_DL)=    0.0001586190 
-ITERATION  33 : L= 9297.3792352403 DL=  9.24e-05 (AVERGE_DL)=    0.0001423353 
-ITERATION  34 : L= 9297.3793096160 DL=  7.44e-05 (AVERGE_DL)=    0.0001277124 
-ITERATION  35 : L= 9297.3793694925 DL=  5.99e-05 (AVERGE_DL)=    0.0001145898 
-ITERATION  36 : L= 9297.3794176961 DL=  4.82e-05 (AVERGE_DL)=    0.0001028152 
-ITERATION  37 : L= 9297.3794565034 DL=  3.88e-05 (AVERGE_DL)=    0.0000922517 
-ITERATION  38 : L= 9297.3794877507 DL=  3.12e-05 (AVERGE_DL)=    0.0000827797 
-ITERATION  39 : L= 9297.3795129159 DL=  2.52e-05 (AVERGE_DL)=    0.0000742879 
-ITERATION  40 : L= 9297.3795331866 DL=  2.03e-05 (AVERGE_DL)=    0.0000666732 
-ITERATION  41 : L= 9297.3795495174 DL=  1.63e-05 (AVERGE_DL)=    0.0000598442 
-ITERATION  42 : L= 9297.3795626781 DL=  1.32e-05 (AVERGE_DL)=    0.0000537224 
-ITERATION  43 : L= 9297.3795732841 DL=  1.06e-05 (AVERGE_DL)=    0.0000482273 
-ITERATION  44 : L= 9297.3795818358 DL=  8.55e-06 (AVERGE_DL)=    0.0000433056 
-ITERATION  45 : L= 9297.3795887343 DL=  6.90e-06 (AVERGE_DL)=    0.0000388952 
-ITERATION  46 : L= 9297.3795942978 DL=  5.56e-06 (AVERGE_DL)=    0.0000349294 
-ITERATION  47 : L= 9297.3795987882 DL=  4.49e-06 (AVERGE_DL)=    0.0000313803 
-ITERATION  48 : L= 9297.3796024144 DL=  3.63e-06 (AVERGE_DL)=    0.0000281996 
-ITERATION  49 : L= 9297.3796053422 DL=  2.93e-06 (AVERGE_DL)=    0.0000253388 
-ITERATION  50 : L= 9297.3796077065 DL=  2.36e-06 (AVERGE_DL)=    0.0000227707 
-ITERATION  51 : L= 9297.3796096174 DL=  1.91e-06 (AVERGE_DL)=    0.0000204704 
-ITERATION  52 : L= 9297.3796111623 DL=  1.54e-06 (AVERGE_DL)=    0.0000184069 
-ITERATION  53 : L= 9297.3796124120 DL=  1.25e-06 (AVERGE_DL)=    0.0000165546 
-ITERATION  54 : L= 9297.3796134218 DL=  1.01e-06 (AVERGE_DL)=    0.0000148807 
-ITERATION  55 : L= 9297.3796142404 DL=  8.19e-07 (AVERGE_DL)=    0.0000133987 
+ITERATION   0 : L= 9240.5989769650 DL=  2.39e+02 (AVERGE_DL)=    0.2289809597
+ITERATION   1 : L= 9290.8610031495 DL=  5.03e+01 (AVERGE_DL)=    0.1049874953
+ITERATION   2 : L= 9294.3312059195 DL=  3.47e+00 (AVERGE_DL)=    0.0275863984
+ITERATION   3 : L= 9295.9390449605 DL=  1.61e+00 (AVERGE_DL)=    0.0187775473
+ITERATION   4 : L= 9296.8526248633 DL=  9.14e-01 (AVERGE_DL)=    0.0141543799
+ITERATION   5 : L= 9297.1798578857 DL=  3.27e-01 (AVERGE_DL)=    0.0084712235
+ITERATION   6 : L= 9297.2814586563 DL=  1.02e-01 (AVERGE_DL)=    0.0047202617
+ITERATION   7 : L= 9297.3132047110 DL=  3.17e-02 (AVERGE_DL)=    0.0026385326
+ITERATION   8 : L= 9297.3262142597 DL=  1.30e-02 (AVERGE_DL)=    0.0016890741
+ITERATION   9 : L= 9297.3342715436 DL=  8.06e-03 (AVERGE_DL)=    0.0013292660
+ITERATION  10 : L= 9297.3407300769 DL=  6.46e-03 (AVERGE_DL)=    0.0011901030
+ITERATION  11 : L= 9297.3463700586 DL=  5.64e-03 (AVERGE_DL)=    0.0011121322
+ITERATION  12 : L= 9297.3513728728 DL=  5.00e-03 (AVERGE_DL)=    0.0010474294
+ITERATION  13 : L= 9297.3557900415 DL=  4.42e-03 (AVERGE_DL)=    0.0009842141
+ITERATION  14 : L= 9297.3596522404 DL=  3.86e-03 (AVERGE_DL)=    0.0009203116
+ITERATION  15 : L= 9297.3629932857 DL=  3.34e-03 (AVERGE_DL)=    0.0008559704
+ITERATION  16 : L= 9297.3658536782 DL=  2.86e-03 (AVERGE_DL)=    0.0007920095
+ITERATION  17 : L= 9297.3682791240 DL=  2.43e-03 (AVERGE_DL)=    0.0007293120
+ITERATION  18 : L= 9297.3703179680 DL=  2.04e-03 (AVERGE_DL)=    0.0006686665
+ITERATION  19 : L= 9297.3720187025 DL=  1.70e-03 (AVERGE_DL)=    0.0006107111
+ITERATION  20 : L= 9297.3734279552 DL=  1.41e-03 (AVERGE_DL)=    0.0005559196
+ITERATION  21 : L= 9297.3745890248 DL=  1.16e-03 (AVERGE_DL)=    0.0005045994
+ITERATION  22 : L= 9297.3755410207 DL=  9.52e-04 (AVERGE_DL)=    0.0004569147
+ITERATION  23 : L= 9297.3763184801 DL=  7.77e-04 (AVERGE_DL)=    0.0004129110
+ITERATION  24 : L= 9297.3769513073 DL=  6.33e-04 (AVERGE_DL)=    0.0003725290
+ITERATION  25 : L= 9297.3774650456 DL=  5.14e-04 (AVERGE_DL)=    0.0003356515
+ITERATION  26 : L= 9297.3778812085 DL=  4.16e-04 (AVERGE_DL)=    0.0003020990
+ITERATION  27 : L= 9297.3782177624 DL=  3.37e-04 (AVERGE_DL)=    0.0002716720
+ITERATION  28 : L= 9297.3784895745 DL=  2.72e-04 (AVERGE_DL)=    0.0002441473
+ITERATION  29 : L= 9297.3787088776 DL=  2.19e-04 (AVERGE_DL)=    0.0002193007
+ITERATION  30 : L= 9297.3788856762 DL=  1.77e-04 (AVERGE_DL)=    0.0001969051
+ITERATION  31 : L= 9297.3790281282 DL=  1.42e-04 (AVERGE_DL)=    0.0001767470
+ITERATION  32 : L= 9297.3791428578 DL=  1.15e-04 (AVERGE_DL)=    0.0001586190
+ITERATION  33 : L= 9297.3792352403 DL=  9.24e-05 (AVERGE_DL)=    0.0001423353
+ITERATION  34 : L= 9297.3793096160 DL=  7.44e-05 (AVERGE_DL)=    0.0001277124
+ITERATION  35 : L= 9297.3793694925 DL=  5.99e-05 (AVERGE_DL)=    0.0001145898
+ITERATION  36 : L= 9297.3794176961 DL=  4.82e-05 (AVERGE_DL)=    0.0001028152
+ITERATION  37 : L= 9297.3794565034 DL=  3.88e-05 (AVERGE_DL)=    0.0000922517
+ITERATION  38 : L= 9297.3794877507 DL=  3.12e-05 (AVERGE_DL)=    0.0000827797
+ITERATION  39 : L= 9297.3795129159 DL=  2.52e-05 (AVERGE_DL)=    0.0000742879
+ITERATION  40 : L= 9297.3795331866 DL=  2.03e-05 (AVERGE_DL)=    0.0000666732
+ITERATION  41 : L= 9297.3795495174 DL=  1.63e-05 (AVERGE_DL)=    0.0000598442
+ITERATION  42 : L= 9297.3795626781 DL=  1.32e-05 (AVERGE_DL)=    0.0000537224
+ITERATION  43 : L= 9297.3795732841 DL=  1.06e-05 (AVERGE_DL)=    0.0000482273
+ITERATION  44 : L= 9297.3795818358 DL=  8.55e-06 (AVERGE_DL)=    0.0000433056
+ITERATION  45 : L= 9297.3795887343 DL=  6.90e-06 (AVERGE_DL)=    0.0000388952
+ITERATION  46 : L= 9297.3795942978 DL=  5.56e-06 (AVERGE_DL)=    0.0000349294
+ITERATION  47 : L= 9297.3795987882 DL=  4.49e-06 (AVERGE_DL)=    0.0000313803
+ITERATION  48 : L= 9297.3796024144 DL=  3.63e-06 (AVERGE_DL)=    0.0000281996
+ITERATION  49 : L= 9297.3796053422 DL=  2.93e-06 (AVERGE_DL)=    0.0000253388
+ITERATION  50 : L= 9297.3796077065 DL=  2.36e-06 (AVERGE_DL)=    0.0000227707
+ITERATION  51 : L= 9297.3796096174 DL=  1.91e-06 (AVERGE_DL)=    0.0000204704
+ITERATION  52 : L= 9297.3796111623 DL=  1.54e-06 (AVERGE_DL)=    0.0000184069
+ITERATION  53 : L= 9297.3796124120 DL=  1.25e-06 (AVERGE_DL)=    0.0000165546
+ITERATION  54 : L= 9297.3796134218 DL=  1.01e-06 (AVERGE_DL)=    0.0000148807
+ITERATION  55 : L= 9297.3796142404 DL=  8.19e-07 (AVERGE_DL)=    0.0000133987
 LOCALIZATION SUM CONVERGED
 
 ------------------------------------------------------
@@ -2119,7 +2119,7 @@ Max. Davidson iterations 128
 Max. Davidson dimension  10
 Iter:    0   L: 9297.3796142404   Grad. norm: 3.740084e-02
    *** Likely close to a maximum now. ***
-       Augmented Hessian eigenvalues:  8.12e-06 -6.98e-02 -7.01e-02 -7.60e-02 ... 
+       Augmented Hessian eigenvalues:  8.12e-06 -6.98e-02 -7.01e-02 -7.60e-02 ...
 Iter:    1   L: 9297.3796183017   Grad. norm: 1.210562e-05
 Iter:    2   L: 9297.3796178182   Grad. norm: 3.557078e-02
 Iter:    3   L: 9297.3796183017   Grad. norm: 1.407666e-06
@@ -2276,8 +2276,8 @@ Orbital range for localization           ... 0 to 34
 Localization criterion                   ... FOSTER-BOYS (AUGMENTED HESSIAN)
 Doing the dipole integrals     ... o.k.
 Initial value of the localization sum :  3121.233667
-ITERATION   0 : L= 3121.2338005832 DL=  1.34e-04 (AVERGE_DL)=    0.0004742805 
-ITERATION   1 : L= 3121.2338005832 DL=  0.00e+00 (AVERGE_DL)=    0.0000000000 
+ITERATION   0 : L= 3121.2338005832 DL=  1.34e-04 (AVERGE_DL)=    0.0004742805
+ITERATION   1 : L= 3121.2338005832 DL=  0.00e+00 (AVERGE_DL)=    0.0000000000
 LOCALIZATION SUM CONVERGED
 
 ------------------------------------------------------
@@ -2293,7 +2293,7 @@ Davidson threshold:      2000
 Diagonalization method:  LAPACK
 Iter:    0   L: 3121.2338005832   Grad. norm: 1.078054e-02
    *** Likely close to a maximum now. ***
-       Augmented Hessian eigenvalues:  8.27e-08 -2.01e+01 -2.05e+01 -2.52e+01 ... 
+       Augmented Hessian eigenvalues:  8.27e-08 -2.01e+01 -2.05e+01 -2.52e+01 ...
 Iter:    1   L: 3121.2338006246   Grad. norm: 2.137519e-12
 LOCALIZATION HAS CONVERGED.
 
@@ -2424,7 +2424,7 @@ Dipole-based pair screening          .... used
    .... Finished loop over pairs
 
                   =====================================
-                  1188 OF 4656 PAIRS WERE SKIPPED 
+                  1188 OF 4656 PAIRS WERE SKIPPED
                   =====================================
 
 Total time spent in the prescreening                  ...     0.031 sec
@@ -2459,7 +2459,7 @@ Total time for the integral transformation: 8.3 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -2538,7 +2538,7 @@ Total time for the integral transformation: 8.0 sec
 INITIAL GUESS AND PNO GENERATION
 --------------------------------
 
-PNO truncation parameters                   .... 
+PNO truncation parameters                   ....
     PAOOverlapThresh   =        1.000e-08
 
     TCutPairs          =        1.000e-04
@@ -2556,7 +2556,7 @@ Spin component scaling                      .... not used
 
    .... Finished loop over pairs
 
- PNO Occupation Number Statistics: 
+ PNO Occupation Number Statistics:
   | Av. % of trace(Dij) retained        ...  96.977929021178
   | sigma^2 in % of trace(Dij) retained ...   1.02e+01
   | Av. % of trace(Di) retained         ...  99.998999630858
@@ -2632,9 +2632,9 @@ Finished
 
 
 -------------------------------------
-Pair Pair Term precalculation with     
-RI-(ij|mn) and (im|jn) transformation  
-ON THE FLY                             
+Pair Pair Term precalculation with
+RI-(ij|mn) and (im|jn) transformation
+ON THE FLY
 -------------------------------------
 
    IBatch   1 (of   2)              ... done (  109.342 sec)
@@ -2732,8 +2732,8 @@ E(CORR)(strong-pairs)                      ...     -6.765519666
 E(CORR)(weak-pairs)                        ...     -0.044587162
 E(CORR)(corrected)                         ...     -6.810106828
 E(TOT)                                     ...  -2188.745840206
-Singles Norm <S|S>**1/2                    ...      0.159813950  
-T1 diagnostic                              ...      0.011533578  
+Singles Norm <S|S>**1/2                    ...      0.159813950
+T1 diagnostic                              ...      0.011533578
 
 ------------------
 LARGEST AMPLITUDES
@@ -2773,14 +2773,14 @@ Fock matrix occ-virt block is zero --> Setting DT_in_Triples to false.
 Number of Triples that are to be computed   ...     10482
 
  . . . . . . . . .
-10% done  
-20% done  
-30% done  
-40% done  
-50% done  
-60% done  
-70% done  
-80% done  
+10% done
+20% done
+30% done
+40% done
+50% done
+60% done
+70% done
+80% done
 90% done               (    671.072 sec)
 Triples timings:
 Total time for T0               ...   692.924 sec
@@ -2893,7 +2893,7 @@ NOTE: In case the method needs a correlation auxilliary basis set, for the calcu
 -----------------------------------------------------------------
                       EP1 - MDCI extrapolation:
 -----------------------------------------------------------------
-NOTE: We use as reference SCF energy, for the extrapolation, the one from the MDCI module and not the one 
+NOTE: We use as reference SCF energy, for the extrapolation, the one from the MDCI module and not the one
 from the SCF calculation. In case the first step is a DFT calculation these two might be different.
 
 NOTE: For the SCF part we extrapolate based on the scheme proposed in J. Chem. Phys. 2008, 129, 184116
@@ -2908,7 +2908,7 @@ Beta(2/3)      :  2.460 (correlation extrapolation)
 
 SCF energy with basis cc-pVDZ:                        -2181.278954341
 SCF energy with basis cc-pVTZ:                        -2181.935733378
-Extrapolated CBS SCF energy (2/3) :                   -2182.149328583 (-0.213595205) 
+Extrapolated CBS SCF energy (2/3) :                   -2182.149328583 (-0.213595205)
 
 MDCI energy with basis cc-pVDZ:                          -5.585166482
 MDCI energy with basis cc-pVTZ:                          -7.077092594
@@ -2930,7 +2930,7 @@ FINAL SINGLE POINT ENERGY     -2190.098207790369
 
   WARNING: The energy has been calculated at the MDCI level but the densities
            used in the property calculations are still SCF densities
-           MDCI response densities have not been calculated 
+           MDCI response densities have not been calculated
            use %mdci Density linearized end
            or  %mdci Density unrelaxed end
            or  %mdci Density orbopt end

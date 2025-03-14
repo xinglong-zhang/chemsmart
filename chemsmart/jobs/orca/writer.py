@@ -252,8 +252,8 @@ class ORCAInputWriter(InputWriter):
                 f'  InHessName "{self.settings.inhess_filename}"  # Hessian file\n'
             )
 
-        """Hybrid Hessian for speed up of TS search: TS mode is complicated and delocalized, 
-        e.g. in a concerted proton transfer reaction, can use hybrid Hessian to calc 
+        """Hybrid Hessian for speed up of TS search: TS mode is complicated and delocalized,
+        e.g. in a concerted proton transfer reaction, can use hybrid Hessian to calc
         numerical second derivatives only for atoms involved in the TS mode"""
         if self.settings.hybrid_hess:
             assert (

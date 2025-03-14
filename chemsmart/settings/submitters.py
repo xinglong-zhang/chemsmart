@@ -28,7 +28,7 @@ class RunScript:
         #!/usr/bin/env python
         import os
         os.environ['OMP_NUM_THREADS'] = '1'
-        
+
         from chemsmart.cli.run import run
 
         def run_job():

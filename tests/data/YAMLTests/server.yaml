@@ -17,7 +17,7 @@ SERVER:
         export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
         export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
 GAUSSIAN:
-    EXEFOLDER: ~/programs/g16 
+    EXEFOLDER: ~/programs/g16
     LOCAL_RUN: True  # local run True to use serial_command
     SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
@@ -33,7 +33,7 @@ GAUSSIAN:
         export SCRATCH=~/scratch  # required if scratch is true
         export GAUSS_EXEDIR=~/programs/g16
         export g16root=~/programs/g16
-           
+
 ORCA:
     EXEFOLDER: ~/programs/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command

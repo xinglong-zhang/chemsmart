@@ -14,7 +14,7 @@ SERVER:
     EXTRA_COMMANDS: |
         #extra commands to activate chemsmart environment in submission script
 GAUSSIAN:
-    EXEFOLDER: ~/bin/g16 
+    EXEFOLDER: ~/bin/g16
     LOCAL_RUN: True  # local run True to use serial_command
     SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
@@ -30,9 +30,8 @@ GAUSSIAN:
         export SCRATCH=~/scratch  # required if scratch is true
         export GAUSS_EXEDIR=~/bin/g16
         export g16root=~/bin/g16
-           
+
 ORCA:
     EXEFOLDER: ~/bin/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command
     SCRATCH: True  # set scratch to False to run in job folder
-

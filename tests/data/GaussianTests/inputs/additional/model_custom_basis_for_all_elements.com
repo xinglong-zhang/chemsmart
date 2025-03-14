@@ -3,7 +3,7 @@
 %mem=20GB
 # opt freq m062x gen
 
-From Gaussian inputfile 
+From Gaussian inputfile
 
 0 1
 C       -0.5448210000   -1.1694570000    0.0001270000
@@ -174,4 +174,3 @@ D    1   1.00
 F    1   1.00
       0.706000000            1.0000000
 ****
-

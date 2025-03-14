@@ -4,9 +4,9 @@
  Initial command:
  /home/gaussian/programs/g16/l1.exe "/home/gaussian/scratch/pop1_ketone_model_opt_radical_anion_r1s50_gas/Gau-110016.inp" -scrdir="/home/gaussian/scratch/pop1_ketone_model_opt_radical_anion_r1s50_gas/"
  Entering Link 1 = /home/gaussian/programs/g16/l1.exe PID=    110018.
-  
+
  Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
-  
+
  This is part of the Gaussian(R) 16 program.  It is based on
  the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
  the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
@@ -19,28 +19,28 @@
  University), and the Gaussian 82(TM) system (copyright 1983,
  Carnegie Mellon University). Gaussian is a federally registered
  trademark of Gaussian, Inc.
-  
+
  This software contains proprietary and confidential information,
  including trade secrets, belonging to Gaussian, Inc.
-  
+
  This software is provided under written license and may be
  used, copied, transmitted, or stored only in accord with that
  written license.
-  
+
  The following legend is applicable only to US Government
  contracts under FAR:
-  
+
                     RESTRICTED RIGHTS LEGEND
-  
+
  Use, reproduction and disclosure by the US Government is
  subject to restrictions as set forth in subparagraphs (a)
  and (c) of the Commercial Computer Software - Restricted
  Rights clause in FAR 52.227-19.
-  
+
  Gaussian, Inc.
  340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
-  
-  
+
+
  ---------------------------------------------------------------
  Warning -- This program may not be used in any manner that
  competes with the business of Gaussian, Inc. or will provide
@@ -53,30 +53,30 @@
  licensee that it is not a competitor of Gaussian, Inc. and that
  it will not use this program in any manner prohibited above.
  ---------------------------------------------------------------
-  
+
 
  Cite this work as:
  Gaussian 16, Revision B.01,
- M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
- M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
- G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
- J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
- J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
- F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
- T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
- G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
- J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
- T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
- F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
- V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
- K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
- J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
- J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria,
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone,
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich,
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian,
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young,
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone,
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega,
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda,
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai,
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta,
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin,
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand,
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar,
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi,
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas,
  J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
- 
+
  ******************************************
  Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
-                 5-May-2024 
+                 5-May-2024
  ******************************************
  %chk=pop1_ketone_model_opt_radical_anion_r1s50_gas.chk
  %nprocshared=64
@@ -99,57 +99,57 @@
  ------------
  Symbolic Z-matrix:
  Charge = -1 Multiplicity = 2
- O                    -7.63162  -0.05698  -0.06024 
- C                    -6.39889  -0.0425   -0.04121 
- C                    -5.59863  -1.09068   0.59135 
- C                    -5.60461   1.02569  -0.64794 
- C                    -4.23318  -1.07211   0.59436 
- C                    -4.23973   1.04039  -0.60992 
- C                    -3.47681  -0.00772   0.00245 
- H                    -3.68727  -1.85905   1.12012 
- H                    -3.69753   1.8417   -1.1171 
- H                     0.55081  -0.84588   0.78657 
- C                    -2.04313   0.00477   0.01859 
- C                    -1.35717   1.2546    0.1716 
- C                    -1.33811  -1.22664  -0.11869 
- C                    -1.89002   2.46423   0.66151 
- N                    -0.02022   1.50361  -0.10401 
- N                     0.00737  -1.45526   0.18443 
- C                    -1.83698  -2.44214  -0.62914 
- C                    -0.88956   3.42791   0.62979 
- H                    -2.90621   2.57472   1.02891 
- C                     0.28882   2.81048   0.15087 
- H                     0.64627   0.87982  -0.54734 
- C                     0.3372   -2.77078  -0.06304 
- C                    -0.82924  -3.39181  -0.57634 
- H                    -2.83741  -2.56057  -1.03588 
- H                    -0.95273   4.46261   0.95597 
- C                     1.56707   3.39855  -0.01392 
- C                     1.59645  -3.38028   0.10626 
- H                    -0.86683  -4.41983  -0.92661 
- C                     2.78493   2.7394   -0.16072 
- H                     1.59807   4.48536   0.07044 
- C                     2.85545  -2.77387   0.18493 
- H                     1.59944  -4.46844   0.04682 
- N                     3.0068    1.39971  -0.1628 
- C                     4.04936   3.47506  -0.24223 
- N                     3.13885  -1.43565   0.08234 
- C                     4.11519  -3.44039   0.29098 
- C                     4.36579   1.24633  -0.19219 
- C                     5.03057   2.5435   -0.26497 
- H                     4.13796   4.56001  -0.26152 
- C                     4.49936  -1.22074   0.07153 
- H                     2.51587  -0.64553  -0.08044 
- C                     5.11689  -2.48751   0.21583 
- H                     4.22415  -4.51688   0.39743 
- C                     5.07103   0.05159  -0.08516 
- H                     6.10887   2.69051  -0.30418 
- H                     6.19181  -2.64787   0.25353 
- H                     6.16057   0.10295  -0.10134 
- H                    -6.15266  -1.88591   1.09473 
- H                    -6.16223   1.80926  -1.16545 
- 
-                          Input orientation:                          
+ O                    -7.63162  -0.05698  -0.06024
+ C                    -6.39889  -0.0425   -0.04121
+ C                    -5.59863  -1.09068   0.59135
+ C                    -5.60461   1.02569  -0.64794
+ C                    -4.23318  -1.07211   0.59436
+ C                    -4.23973   1.04039  -0.60992
+ C                    -3.47681  -0.00772   0.00245
+ H                    -3.68727  -1.85905   1.12012
+ H                    -3.69753   1.8417   -1.1171
+ H                     0.55081  -0.84588   0.78657
+ C                    -2.04313   0.00477   0.01859
+ C                    -1.35717   1.2546    0.1716
+ C                    -1.33811  -1.22664  -0.11869
+ C                    -1.89002   2.46423   0.66151
+ N                    -0.02022   1.50361  -0.10401
+ N                     0.00737  -1.45526   0.18443
+ C                    -1.83698  -2.44214  -0.62914
+ C                    -0.88956   3.42791   0.62979
+ H                    -2.90621   2.57472   1.02891
+ C                     0.28882   2.81048   0.15087
+ H                     0.64627   0.87982  -0.54734
+ C                     0.3372   -2.77078  -0.06304
+ C                    -0.82924  -3.39181  -0.57634
+ H                    -2.83741  -2.56057  -1.03588
+ H                    -0.95273   4.46261   0.95597
+ C                     1.56707   3.39855  -0.01392
+ C                     1.59645  -3.38028   0.10626
+ H                    -0.86683  -4.41983  -0.92661
+ C                     2.78493   2.7394   -0.16072
+ H                     1.59807   4.48536   0.07044
+ C                     2.85545  -2.77387   0.18493
+ H                     1.59944  -4.46844   0.04682
+ N                     3.0068    1.39971  -0.1628
+ C                     4.04936   3.47506  -0.24223
+ N                     3.13885  -1.43565   0.08234
+ C                     4.11519  -3.44039   0.29098
+ C                     4.36579   1.24633  -0.19219
+ C                     5.03057   2.5435   -0.26497
+ H                     4.13796   4.56001  -0.26152
+ C                     4.49936  -1.22074   0.07153
+ H                     2.51587  -0.64553  -0.08044
+ C                     5.11689  -2.48751   0.21583
+ H                     4.22415  -4.51688   0.39743
+ C                     5.07103   0.05159  -0.08516
+ H                     6.10887   2.69051  -0.30418
+ H                     6.19181  -2.64787   0.25353
+ H                     6.16057   0.10295  -0.10134
+ H                    -6.15266  -1.88591   1.09473
+ H                    -6.16223   1.80926  -1.16545
+
+                          Input orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -486,7 +486,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -848,7 +848,7 @@
  ***********************************************************************
  Excited states from <AA,BB:AA,BB> singles matrix:
  ***********************************************************************
- 
+
  ExtSpn:  IState=     1 X2= 1.056 Y2= 0.056 X2-Y2-1= 6.66D-16
           S2Grnd=  0.886 Ra=  0.034 Rb=  0.051 T=  0.120 S2Ext=  0.205 S2=  1.091
  ExtSpn:  IState=     2 X2= 1.085 Y2= 0.085 X2-Y2-1=-5.55D-16
@@ -1318,7 +1318,7 @@
         50        -0.0037     -0.0008     -0.0000      0.0045      0.0030
 
  Excitation energies and oscillator strengths:
- 
+
  Excited State   1:  2.316-A      0.7744 eV 1601.13 nm  f=0.0084  <S**2>=1.091
     104A ->108A        0.15573
     105A ->107A       -0.12440
@@ -1327,9 +1327,9 @@
     105B ->106B        0.26021
     106A <-107A        0.12114
  This state for optimization and/or second-order correction.
- Total Energy, E(TD-HF/TD-DFT) =  -1294.28558247    
+ Total Energy, E(TD-HF/TD-DFT) =  -1294.28558247
  Copying the excited state density for this state as the 1-particle RhoCI density.
- 
+
  Excited State   2:  3.280-A      1.0201 eV 1215.37 nm  f=0.0632  <S**2>=2.440
     105A ->107A       -0.47710
     105A ->108A       -0.13399
@@ -1339,7 +1339,7 @@
     105B ->107B       -0.12754
     105A <-107A       -0.16669
     105B <-106B        0.16854
- 
+
  Excited State   3:  2.146-A      1.5020 eV  825.44 nm  f=0.0086  <S**2>=0.901
     106A ->107A       -0.11914
     106A ->108A        0.25699
@@ -1351,7 +1351,7 @@
     105B ->107B        0.86043
     103B <-106B        0.10419
     105B <-107B        0.10703
- 
+
  Excited State   4:  2.955-A      2.0520 eV  604.20 nm  f=0.0577  <S**2>=1.934
     104A ->107A        0.35318
     105A ->107A       -0.10370
@@ -1361,7 +1361,7 @@
     103B ->106B       -0.61206
     103B ->107B        0.13095
     105B ->108B        0.10873
- 
+
  Excited State   5:  2.882-A      2.1157 eV  586.03 nm  f=0.1696  <S**2>=1.827
     103A ->107A       -0.24941
     105A ->107A        0.45316
@@ -1370,7 +1370,7 @@
     103B ->107B       -0.22359
     104B ->106B        0.64211
     105B ->106B        0.36380
- 
+
  Excited State   6:  2.646-A      2.4471 eV  506.66 nm  f=0.5303  <S**2>=1.500
     103A ->107A        0.27786
     105A ->107A        0.65923
@@ -1379,7 +1379,7 @@
     104B ->107B        0.10369
     105B ->106B        0.28743
     105B ->108B        0.17625
- 
+
  Excited State   7:  2.493-A      2.6665 eV  464.97 nm  f=0.3164  <S**2>=1.304
     103A ->107A       -0.23086
     105A ->107A        0.18472
@@ -1393,7 +1393,7 @@
     104B ->107B       -0.48289
     105B ->106B        0.17451
     105B ->108B       -0.23636
- 
+
  Excited State   8:  2.490-A      2.8332 eV  437.61 nm  f=0.2367  <S**2>=1.300
     104A ->107A       -0.16250
     106A ->108A        0.52814
@@ -1402,7 +1402,7 @@
     104B ->106B       -0.22853
     104B ->107B        0.21285
     105B ->107B       -0.43481
- 
+
  Excited State   9:  3.173-A      3.0814 eV  402.37 nm  f=0.0056  <S**2>=2.267
     102A ->107A       -0.17069
     102B ->106B        0.87844
@@ -1410,7 +1410,7 @@
     102B ->108B        0.22104
     102B ->115B        0.14546
     102B ->117B       -0.22138
- 
+
  Excited State  10:  2.730-A      3.2134 eV  385.83 nm  f=0.0544  <S**2>=1.613
     100A ->107A        0.12252
     100A ->108A       -0.14820
@@ -1423,7 +1423,7 @@
     103B ->107B        0.29169
     104B ->107B        0.58831
     105B ->108B       -0.14458
- 
+
  Excited State  11:  3.468-A      3.2777 eV  378.27 nm  f=0.0022  <S**2>=2.756
     101A ->107A       -0.24611
     101A ->108A       -0.12006
@@ -1439,7 +1439,7 @@
     105B ->111B       -0.10409
     105B ->112B       -0.34595
     105B ->114B        0.15099
- 
+
  Excited State  12:  3.089-A      3.3555 eV  369.49 nm  f=0.0022  <S**2>=2.135
      95A ->107A       -0.12771
     103A ->107A       -0.10580
@@ -1459,7 +1459,7 @@
     104B ->106B        0.13008
     104B ->108B        0.23900
     105B ->108B        0.48428
- 
+
  Excited State  13:  3.164-A      3.3963 eV  365.05 nm  f=0.0402  <S**2>=2.253
     100A ->107A        0.37895
     100A ->108A       -0.31957
@@ -1472,7 +1472,7 @@
     103B ->107B       -0.18684
     104B ->106B       -0.13318
     104B ->107B       -0.22600
- 
+
  Excited State  14:  2.308-A      3.5764 eV  346.67 nm  f=0.0099  <S**2>=1.082
     103A ->107A       -0.28363
     104A ->107A       -0.28701
@@ -1481,7 +1481,7 @@
     106A ->117A        0.20221
     103B ->106B       -0.12733
     105B ->108B        0.20000
- 
+
  Excited State  15:  2.341-A      3.6040 eV  344.02 nm  f=0.1539  <S**2>=1.120
     100A ->107A        0.17383
     100A ->108A       -0.15286
@@ -1496,7 +1496,7 @@
     104B ->106B        0.10238
     104B ->107B       -0.21385
     105B ->108B       -0.14388
- 
+
  Excited State  16:  2.378-A      3.6596 eV  338.79 nm  f=0.3910  <S**2>=1.164
     102A ->107A        0.13226
     103A ->107A        0.55426
@@ -1510,7 +1510,7 @@
     103B ->107B        0.30728
     104B ->106B        0.33385
     104B ->107B        0.10126
- 
+
  Excited State  17:  3.252-A      3.6907 eV  335.93 nm  f=0.0273  <S**2>=2.393
      95A ->107A       -0.11584
     103A ->107A        0.25835
@@ -1529,14 +1529,14 @@
     105B ->116B       -0.11446
     105B ->117B        0.33374
     105B ->118B        0.10580
- 
+
  Excited State  18:  2.631-A      3.6970 eV  335.37 nm  f=0.0014  <S**2>=1.481
     102A ->107A        0.80078
     102A ->108A        0.30096
     102A ->113A        0.12068
     102A ->116A        0.28892
     102B ->106B        0.21527
- 
+
  Excited State  19:  2.703-A      3.8718 eV  320.22 nm  f=0.2122  <S**2>=1.576
      94A ->107A        0.11460
     103A ->107A       -0.20255
@@ -1559,7 +1559,7 @@
     104B ->106B       -0.14784
     104B ->107B        0.20212
     105B ->108B       -0.15239
- 
+
  Excited State  20:  3.041-A      3.9218 eV  316.14 nm  f=0.0875  <S**2>=2.063
     101A ->107A       -0.12263
     103A ->107A        0.19091
@@ -1581,7 +1581,7 @@
     105B ->108B        0.15729
     105B ->110B        0.13104
     105B ->112B        0.22482
- 
+
  Excited State  21:  2.773-A      3.9461 eV  314.19 nm  f=0.0362  <S**2>=1.672
     103A ->107A       -0.16923
     104A ->108A       -0.18377
@@ -1606,7 +1606,7 @@
     104B ->108B       -0.13680
     105B ->108B       -0.30063
     105B ->112B        0.15835
- 
+
  Excited State  22:  2.480-A      3.9949 eV  310.36 nm  f=0.0877  <S**2>=1.288
     100A ->107A       -0.18672
     103A ->107A        0.16636
@@ -1626,7 +1626,7 @@
     103B ->107B       -0.14216
     103B ->108B        0.13926
     105B ->108B        0.38530
- 
+
  Excited State  23:  2.382-A      4.0171 eV  308.64 nm  f=0.0308  <S**2>=1.168
     103A ->109A       -0.12387
     104A ->108A       -0.14020
@@ -1640,7 +1640,7 @@
     106A ->121A        0.10991
      98B ->107B       -0.10581
     103B ->108B        0.11004
- 
+
  Excited State  24:  3.170-A      4.0813 eV  303.79 nm  f=0.0017  <S**2>=2.263
      94A ->107A        0.10784
      97A ->107A        0.10411
@@ -1657,7 +1657,7 @@
      99B ->106B        0.51707
     100B ->106B       -0.18068
     103B ->108B       -0.13418
- 
+
  Excited State  25:  2.226-A      4.0981 eV  302.54 nm  f=0.0005  <S**2>=0.988
     104A ->109A        0.14674
     106A ->109A       -0.15069
@@ -1666,7 +1666,7 @@
     106A ->112A       -0.17762
     106A ->117A        0.17117
     106A ->123A       -0.11032
- 
+
  Excited State  26:  3.007-A      4.1212 eV  300.85 nm  f=0.0150  <S**2>=2.011
      95A ->107A       -0.11342
      98A ->108A        0.13427
@@ -1685,7 +1685,7 @@
     101B ->106B       -0.20628
     101B ->107B       -0.21899
     103B ->108B        0.11304
- 
+
  Excited State  27:  3.029-A      4.2337 eV  292.85 nm  f=0.0809  <S**2>=2.044
      95A ->107A        0.17169
      96A ->107A       -0.16547
@@ -1706,7 +1706,7 @@
     103B ->106B        0.13224
     104B ->107B       -0.16108
     105B ->117B        0.15643
- 
+
  Excited State  28:  2.720-A      4.3012 eV  288.25 nm  f=0.0588  <S**2>=1.600
      95A ->107A        0.14554
      96A ->107A       -0.17755
@@ -1730,7 +1730,7 @@
     101B ->107B       -0.23962
     105B ->109B       -0.23302
     105B ->110B       -0.13367
- 
+
  Excited State  29:  2.463-A      4.3178 eV  287.15 nm  f=0.0577  <S**2>=1.266
     100A ->107A       -0.19426
     100A ->108A        0.16893
@@ -1747,7 +1747,7 @@
     105B ->110B       -0.26484
     105B ->111B       -0.15036
     105B ->112B       -0.21400
- 
+
  Excited State  30:  2.697-A      4.3324 eV  286.18 nm  f=0.0361  <S**2>=1.568
      96A ->107A        0.16862
     100A ->107A        0.30233
@@ -1772,7 +1772,7 @@
     105B ->109B       -0.19343
     105B ->110B       -0.12083
     105B ->112B       -0.12825
- 
+
  Excited State  31:  2.724-A      4.3623 eV  284.22 nm  f=0.0066  <S**2>=1.605
      96A ->107A       -0.22132
     105A ->108A        0.17697
@@ -1783,7 +1783,7 @@
      96B ->106B        0.22795
      97B ->106B       -0.25173
      98B ->106B        0.10772
- 
+
  Excited State  32:  2.706-A      4.4078 eV  281.29 nm  f=0.0028  <S**2>=1.580
     100A ->107A        0.11688
     101A ->107A        0.65770
@@ -1795,7 +1795,7 @@
     105B ->109B        0.45183
     105B ->110B        0.10009
     105B ->114B        0.12266
- 
+
  Excited State  33:  2.715-A      4.4256 eV  280.15 nm  f=0.0012  <S**2>=1.593
     100A ->107A        0.21680
     103A ->108A       -0.22586
@@ -1815,7 +1815,7 @@
     104B ->108B        0.10626
     105B ->108B       -0.11546
     105B ->117B       -0.10508
- 
+
  Excited State  34:  2.973-A      4.4396 eV  279.27 nm  f=0.0257  <S**2>=1.960
      93A ->107A       -0.11994
     101A ->110A       -0.18754
@@ -1841,7 +1841,7 @@
     100B ->114B       -0.11885
     100B ->115B       -0.11723
     101B ->106B        0.10714
- 
+
  Excited State  35:  2.658-A      4.4734 eV  277.16 nm  f=0.0259  <S**2>=1.516
     101A ->107A       -0.19741
     105A ->109A       -0.18139
@@ -1863,7 +1863,7 @@
     105B ->112B       -0.38111
     105B ->114B        0.22212
     105B ->116B        0.12753
- 
+
  Excited State  36:  2.660-A      4.4860 eV  276.38 nm  f=0.0051  <S**2>=1.520
     104A ->108A       -0.11348
     105A ->110A        0.15689
@@ -1881,7 +1881,7 @@
     104B ->108B        0.14636
     105B ->109B       -0.22859
     105B ->112B        0.15764
- 
+
  Excited State  37:  2.822-A      4.4893 eV  276.17 nm  f=0.0116  <S**2>=1.741
     104A ->108A       -0.11177
     105A ->112A        0.16174
@@ -1905,7 +1905,7 @@
     105B ->115B       -0.16789
     105B ->116B       -0.12932
     105B ->117B       -0.11108
- 
+
  Excited State  38:  2.665-A      4.5261 eV  273.93 nm  f=0.0469  <S**2>=1.525
     103A ->108A       -0.13600
     105A ->108A        0.12491
@@ -1922,7 +1922,7 @@
      98B ->107B       -0.14752
      99B ->107B       -0.33870
      99B ->108B       -0.12320
- 
+
  Excited State  39:  2.279-A      4.5624 eV  271.75 nm  f=0.0018  <S**2>=1.048
     104A ->111A        0.11161
     105A ->109A       -0.10068
@@ -1935,7 +1935,7 @@
     106A ->119A        0.10217
     106A ->120A       -0.15246
     105B ->112B        0.10751
- 
+
  Excited State  40:  2.702-A      4.6544 eV  266.38 nm  f=0.0178  <S**2>=1.575
      98A ->107A       -0.13668
     106A ->116A        0.27483
@@ -1953,7 +1953,7 @@
      99B ->107B        0.28440
     102B ->107B       -0.21810
     105B ->115B       -0.12258
- 
+
  Excited State  41:  3.167-A      4.6823 eV  264.79 nm  f=0.0062  <S**2>=2.257
      96A ->107A       -0.10374
      97A ->107A        0.56640
@@ -1964,7 +1964,7 @@
      96B ->106B        0.30133
      97B ->106B        0.22360
      97B ->107B        0.12790
- 
+
  Excited State  42:  2.614-A      4.7346 eV  261.87 nm  f=0.0060  <S**2>=1.459
      96A ->107A       -0.11472
      98A ->107A        0.10324
@@ -1988,7 +1988,7 @@
     105B ->115B        0.26043
     105B ->116B        0.17237
     105B ->117B        0.13765
- 
+
  Excited State  43:  2.363-A      4.7521 eV  260.90 nm  f=0.0074  <S**2>=1.146
     104A ->108A        0.10382
     105A ->114A        0.11779
@@ -2007,7 +2007,7 @@
     102B ->107B        0.11347
     105B ->110B        0.10941
     105B ->117B       -0.10969
- 
+
  Excited State  44:  2.656-A      4.7704 eV  259.90 nm  f=0.0116  <S**2>=1.514
      99A ->107A        0.27794
     104A ->108A       -0.12392
@@ -2027,7 +2027,7 @@
     105B ->115B        0.16225
     105B ->116B        0.14405
     105B ->117B        0.17897
- 
+
  Excited State  45:  2.923-A      4.7980 eV  258.41 nm  f=0.0073  <S**2>=1.886
     105A ->109A       -0.11553
     105A ->110A       -0.11729
@@ -2045,7 +2045,7 @@
     105B ->114B        0.23712
     105B ->115B        0.21303
     105B ->119B       -0.17821
- 
+
  Excited State  46:  2.648-A      4.8059 eV  257.98 nm  f=0.0077  <S**2>=1.503
      99A ->107A       -0.12973
     103A ->108A        0.18309
@@ -2068,7 +2068,7 @@
     105B ->110B        0.18498
     105B ->115B        0.22268
     105B ->117B        0.20785
- 
+
  Excited State  47:  2.449-A      4.8211 eV  257.17 nm  f=0.0006  <S**2>=1.249
      99A ->107A        0.10653
     105A ->109A       -0.14679
@@ -2086,7 +2086,7 @@
     102B ->107B        0.49362
     103B ->108B       -0.15895
     105B ->110B       -0.12181
- 
+
  Excited State  48:  2.668-A      4.8303 eV  256.68 nm  f=0.0027  <S**2>=1.529
      95A ->107A        0.12566
     104A ->108A       -0.24135
@@ -2105,7 +2105,7 @@
     100B ->112B        0.11144
     102B ->107B        0.48450
     104B ->108B        0.14231
- 
+
  Excited State  49:  2.422-A      4.8511 eV  255.58 nm  f=0.0035  <S**2>=1.216
      99A ->107A        0.12098
     103A ->108A       -0.10874
@@ -2130,7 +2130,7 @@
      98B ->106B        0.11610
     102B ->107B        0.30007
     105B ->112B       -0.10252
- 
+
  Excited State  50:  2.851-A      4.8561 eV  255.32 nm  f=0.0030  <S**2>=1.781
     103B ->109B       -0.17274
     104B ->109B        0.14866

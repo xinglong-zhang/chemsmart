@@ -1,4 +1,4 @@
-# Default Gaussian settings for calculations 
+# Default Gaussian settings for calculations
 chk: True
 freq: True
 job_type: Null

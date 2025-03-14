@@ -4,9 +4,9 @@
  Initial command:
  /home/users/astar/bmsi/zhangx5/programs/g16/l1.exe "/scratch/users/astar/bmsi/zhangx5/oxetane_opt_solv_rc_sp_smd_n_n-DiMethylFormamide_hirshfeld_smd_n_n-DiMethylFormamide/Gau-1329629.inp" -scrdir="/scratch/users/astar/bmsi/zhangx5/oxetane_opt_solv_rc_sp_smd_n_n-DiMethylFormamide_hirshfeld_smd_n_n-DiMethylFormamide/"
  Entering Link 1 = /home/users/astar/bmsi/zhangx5/programs/g16/l1.exe PID=   1329631.
-  
+
  Copyright (c) 1988-2017, Gaussian, Inc.  All Rights Reserved.
-  
+
  This is part of the Gaussian(R) 16 program.  It is based on
  the Gaussian(R) 09 system (copyright 2009, Gaussian, Inc.),
  the Gaussian(R) 03 system (copyright 2003, Gaussian, Inc.),
@@ -19,28 +19,28 @@
  University), and the Gaussian 82(TM) system (copyright 1983,
  Carnegie Mellon University). Gaussian is a federally registered
  trademark of Gaussian, Inc.
-  
+
  This software contains proprietary and confidential information,
  including trade secrets, belonging to Gaussian, Inc.
-  
+
  This software is provided under written license and may be
  used, copied, transmitted, or stored only in accord with that
  written license.
-  
+
  The following legend is applicable only to US Government
  contracts under FAR:
-  
+
                     RESTRICTED RIGHTS LEGEND
-  
+
  Use, reproduction and disclosure by the US Government is
  subject to restrictions as set forth in subparagraphs (a)
  and (c) of the Commercial Computer Software - Restricted
  Rights clause in FAR 52.227-19.
-  
+
  Gaussian, Inc.
  340 Quinnipiac St., Bldg. 40, Wallingford CT 06492
-  
-  
+
+
  ---------------------------------------------------------------
  Warning -- This program may not be used in any manner that
  competes with the business of Gaussian, Inc. or will provide
@@ -53,30 +53,30 @@
  licensee that it is not a competitor of Gaussian, Inc. and that
  it will not use this program in any manner prohibited above.
  ---------------------------------------------------------------
-  
+
 
  Cite this work as:
  Gaussian 16, Revision B.01,
- M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria, 
- M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone, 
- G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich, 
- J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian, 
- J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young, 
- F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone, 
- T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega, 
- G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda, 
- J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai, 
- T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta, 
- F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin, 
- V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand, 
- K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar, 
- J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi, 
- J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas, 
+ M. J. Frisch, G. W. Trucks, H. B. Schlegel, G. E. Scuseria,
+ M. A. Robb, J. R. Cheeseman, G. Scalmani, V. Barone,
+ G. A. Petersson, H. Nakatsuji, X. Li, M. Caricato, A. V. Marenich,
+ J. Bloino, B. G. Janesko, R. Gomperts, B. Mennucci, H. P. Hratchian,
+ J. V. Ortiz, A. F. Izmaylov, J. L. Sonnenberg, D. Williams-Young,
+ F. Ding, F. Lipparini, F. Egidi, J. Goings, B. Peng, A. Petrone,
+ T. Henderson, D. Ranasinghe, V. G. Zakrzewski, J. Gao, N. Rega,
+ G. Zheng, W. Liang, M. Hada, M. Ehara, K. Toyota, R. Fukuda,
+ J. Hasegawa, M. Ishida, T. Nakajima, Y. Honda, O. Kitao, H. Nakai,
+ T. Vreven, K. Throssell, J. A. Montgomery, Jr., J. E. Peralta,
+ F. Ogliaro, M. J. Bearpark, J. J. Heyd, E. N. Brothers, K. N. Kudin,
+ V. N. Staroverov, T. A. Keith, R. Kobayashi, J. Normand,
+ K. Raghavachari, A. P. Rendell, J. C. Burant, S. S. Iyengar,
+ J. Tomasi, M. Cossi, J. M. Millam, M. Klene, C. Adamo, R. Cammi,
+ J. W. Ochterski, R. L. Martin, K. Morokuma, O. Farkas,
  J. B. Foresman, and D. J. Fox, Gaussian, Inc., Wallingford CT, 2016.
- 
+
  ******************************************
  Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017
-                25-Dec-2024 
+                25-Dec-2024
  ******************************************
  %chk=oxetane_opt_solv_rc_sp_smd_n_n-DiMethylFormamide_hirshfeld_smd_n_n-DiMethyl
  Formamide.chk
@@ -99,41 +99,41 @@
  ------------
  Symbolic Z-matrix:
  Charge =  1 Multiplicity = 2
- O                    -5.52653   1.1215   -0.18719 
- O                    -1.78384  -0.37007   0.19657 
- C                    -4.0949   -0.19475   0.68818 
- C                    -4.29349   1.31666   0.51375 
- C                    -5.52515  -0.2716    0.13803 
- C                    -3.05195  -0.78346  -0.23233 
- C                    -0.74383  -0.82449  -0.62992 
- H                    -3.53418   1.83203  -0.09671 
- H                    -4.43784   1.87291   1.45493 
- H                    -6.29063  -0.52197   0.89092 
- H                    -5.67024  -0.91316  -0.74718 
- H                    -3.24239  -0.43804  -1.26955 
- H                    -3.12452  -1.88925  -0.23883 
- H                    -0.74211  -1.93208  -0.6723 
- H                    -0.89314  -0.46428  -1.66743 
- H                    -3.94689  -0.54634   1.71726 
- C                     0.57916  -0.32139  -0.08919 
- H                     0.70473  -0.68329   0.94406 
- H                     0.5512    0.77941  -0.045 
- C                     1.76292  -0.77624  -0.94626 
- H                     1.78106  -1.87679  -0.98445 
- H                     1.62148  -0.41699  -1.9778 
- C                     3.07963  -0.26871  -0.41328 
- C                     3.8109   -1.01332   0.52107 
- C                     3.57331   0.98331  -0.80217 
- C                     5.00498  -0.52275   1.05083 
- H                     3.43911  -1.9929    0.83327 
- C                     4.76662   1.47782  -0.27499 
- H                     3.01439   1.57517  -1.53196 
- C                     5.48687   0.72557   0.65432 
- H                     5.56311  -1.11956   1.77502 
- H                     5.13741   2.45412  -0.59358 
- H                     6.42198   1.10972   1.06598 
- 
-                          Input orientation:                          
+ O                    -5.52653   1.1215   -0.18719
+ O                    -1.78384  -0.37007   0.19657
+ C                    -4.0949   -0.19475   0.68818
+ C                    -4.29349   1.31666   0.51375
+ C                    -5.52515  -0.2716    0.13803
+ C                    -3.05195  -0.78346  -0.23233
+ C                    -0.74383  -0.82449  -0.62992
+ H                    -3.53418   1.83203  -0.09671
+ H                    -4.43784   1.87291   1.45493
+ H                    -6.29063  -0.52197   0.89092
+ H                    -5.67024  -0.91316  -0.74718
+ H                    -3.24239  -0.43804  -1.26955
+ H                    -3.12452  -1.88925  -0.23883
+ H                    -0.74211  -1.93208  -0.6723
+ H                    -0.89314  -0.46428  -1.66743
+ H                    -3.94689  -0.54634   1.71726
+ C                     0.57916  -0.32139  -0.08919
+ H                     0.70473  -0.68329   0.94406
+ H                     0.5512    0.77941  -0.045
+ C                     1.76292  -0.77624  -0.94626
+ H                     1.78106  -1.87679  -0.98445
+ H                     1.62148  -0.41699  -1.9778
+ C                     3.07963  -0.26871  -0.41328
+ C                     3.8109   -1.01332   0.52107
+ C                     3.57331   0.98331  -0.80217
+ C                     5.00498  -0.52275   1.05083
+ H                     3.43911  -1.9929    0.83327
+ C                     4.76662   1.47782  -0.27499
+ H                     3.01439   1.57517  -1.53196
+ C                     5.48687   0.72557   0.65432
+ H                     5.56311  -1.11956   1.77502
+ H                     5.13741   2.45412  -0.59358
+ H                     6.42198   1.10972   1.06598
+
+                          Input orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -312,7 +312,7 @@
  Full point group                 C1      NOp   1
  Largest Abelian subgroup         C1      NOp   1
  Largest concise Abelian subgroup C1      NOp   1
-                         Standard orientation:                         
+                         Standard orientation:
  ---------------------------------------------------------------------
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
@@ -1286,7 +1286,7 @@
          Total Dipole              8.990731   0.146256  -0.322000
 
  Hirshfeld charges, spin densities, dipoles, and CM5 charges using IRadAn=      5:
-              Q-H        S-H        Dx         Dy         Dz        Q-CM5   
+              Q-H        S-H        Dx         Dy         Dz        Q-CM5
      1  O    0.100231   0.610176  -0.036852  -0.037850  -0.038000   0.012879
      2  O   -0.169411   0.003115   0.020112  -0.086487   0.129771  -0.272573
      3  C   -0.000709   0.019163  -0.007040  -0.040493  -0.040149  -0.059884
@@ -1322,7 +1322,7 @@
     33  H    0.050632   0.000005  -0.143258   0.058855  -0.063061   0.105320
        Tot   0.999954   1.000000   0.035374  -0.311352  -0.002600   0.999954
  Hirshfeld charges and spin densities with hydrogens summed into heavy atoms:
-              Q-H        S-H       Q-CM5   
+              Q-H        S-H       Q-CM5
      1  O    0.100231   0.610176   0.012879
      2  O   -0.169411   0.003115  -0.272573
      3  C    0.078562   0.021583   0.078854
@@ -1338,10 +1338,10 @@
     26  C   -0.002640   0.000001  -0.002519
     28  C   -0.002728  -0.000004  -0.002608
     30  C   -0.008150   0.000085  -0.008146
- 
+
  EQQ= 0.846013749503E-01 EQD=-0.561525166854E-01 EDD= 0.107897536450E-01
  EQQ+QD+DD= 0.392386119099E-01
- 
+
                           Isotropic Fermi Contact Couplings
         Atom                 a.u.       MegaHertz       Gauss      10(-4) cm-1
      1  O(17)              0.10702     -64.87803     -23.15010     -21.64098
@@ -1462,135 +1462,135 @@
               Baa    -1.4795   107.053    38.199    35.709  0.5871  0.5865  0.5580
      1 O(17)  Bbb    -1.4508   104.977    37.459    35.017 -0.6023  0.7770 -0.1830
               Bcc     2.9302  -212.030   -75.658   -70.726 -0.5409 -0.2286  0.8094
- 
+
               Baa    -0.0107     0.772     0.275     0.257  0.3950 -0.4898  0.7772
      2 O(17)  Bbb    -0.0044     0.319     0.114     0.106  0.6688  0.7334  0.1222
               Bcc     0.0151    -1.091    -0.389    -0.364  0.6298 -0.4715 -0.6172
- 
+
               Baa    -0.0225    -3.020    -1.078    -1.007 -0.5969  0.7780 -0.1961
      3 C(13)  Bbb    -0.0113    -1.519    -0.542    -0.507  0.1206  0.3286  0.9367
               Bcc     0.0338     4.539     1.620     1.514  0.7932  0.5355 -0.2900
- 
+
               Baa    -0.0712    -9.558    -3.411    -3.188  0.1029  0.9303  0.3522
      4 C(13)  Bbb    -0.0286    -3.836    -1.369    -1.279  0.8368 -0.2723  0.4749
               Bcc     0.0998    13.394     4.779     4.468 -0.5377 -0.2458  0.8065
- 
+
               Baa    -0.0702    -9.425    -3.363    -3.144  0.8172  0.0006  0.5763
      5 C(13)  Bbb    -0.0275    -3.688    -1.316    -1.230 -0.1276  0.9754  0.1799
               Bcc     0.0977    13.114     4.679     4.374 -0.5620 -0.2206  0.7972
- 
+
               Baa    -0.0215    -2.885    -1.029    -0.962 -0.6262  0.7620 -0.1651
      6 C(13)  Bbb    -0.0187    -2.516    -0.898    -0.839  0.3548  0.4671  0.8099
               Bcc     0.0402     5.401     1.927     1.801  0.6942  0.4486 -0.5628
- 
+
               Baa    -0.0024    -0.317    -0.113    -0.106  0.2617 -0.1798  0.9483
      7 C(13)  Bbb    -0.0016    -0.221    -0.079    -0.074 -0.0611  0.9774  0.2022
               Bcc     0.0040     0.538     0.192     0.179  0.9632  0.1108 -0.2448
- 
+
               Baa    -0.0171    -9.103    -3.248    -3.037 -0.2079 -0.5961  0.7755
      8 H(1)   Bbb    -0.0105    -5.592    -1.995    -1.865  0.5814  0.5623  0.5881
               Bcc     0.0275    14.695     5.244     4.902  0.7866 -0.5732 -0.2297
- 
+
               Baa    -0.0173    -9.251    -3.301    -3.086 -0.3652  0.7426  0.5613
      9 H(1)   Bbb    -0.0136    -7.233    -2.581    -2.413  0.9069  0.4200  0.0344
               Bcc     0.0309    16.485     5.882     5.499  0.2102 -0.5216  0.8269
- 
+
               Baa    -0.0172    -9.157    -3.267    -3.054  0.4791 -0.3294  0.8136
     10 H(1)   Bbb    -0.0135    -7.188    -2.565    -2.398  0.6335  0.7713 -0.0608
               Bcc     0.0306    16.345     5.832     5.452  0.6075 -0.5446 -0.5782
- 
+
               Baa    -0.0169    -9.010    -3.215    -3.005  0.7781 -0.1518 -0.6095
     11 H(1)   Bbb    -0.0103    -5.500    -1.963    -1.835  0.5644  0.5947  0.5725
               Bcc     0.0272    14.511     5.178     4.840 -0.2756  0.7895 -0.5484
- 
+
               Baa    -0.0051    -2.734    -0.975    -0.912 -0.6049  0.7828 -0.1463
     12 H(1)   Bbb    -0.0028    -1.518    -0.542    -0.506  0.3013  0.3951  0.8678
               Bcc     0.0080     4.251     1.517     1.418  0.7371  0.4809 -0.4748
- 
+
               Baa    -0.0040    -2.110    -0.753    -0.704  0.0916  0.0531  0.9944
     13 H(1)   Bbb    -0.0022    -1.193    -0.426    -0.398  0.8667 -0.4959 -0.0534
               Bcc     0.0062     3.303     1.179     1.102  0.4903  0.8668 -0.0915
- 
+
               Baa    -0.0011    -0.610    -0.218    -0.203  0.0133  0.2360  0.9717
     14 H(1)   Bbb    -0.0009    -0.484    -0.173    -0.162 -0.5985  0.7803 -0.1813
               Bcc     0.0021     1.094     0.390     0.365  0.8010  0.5791 -0.1516
- 
+
               Baa    -0.0013    -0.667    -0.238    -0.223 -0.3762  0.8893 -0.2601
     15 H(1)   Bbb    -0.0011    -0.588    -0.210    -0.196  0.2782  0.3762  0.8838
               Bcc     0.0024     1.255     0.448     0.419  0.8838  0.2601 -0.3889
- 
+
               Baa    -0.0065    -3.448    -1.230    -1.150 -0.6200 -0.3530  0.7007
     16 H(1)   Bbb    -0.0053    -2.838    -1.013    -0.947 -0.6199  0.7678 -0.1617
               Bcc     0.0118     6.286     2.243     2.097  0.4809  0.5346  0.6949
- 
+
               Baa    -0.0013    -0.168    -0.060    -0.056 -0.0668  0.3957  0.9159
     17 C(13)  Bbb    -0.0009    -0.127    -0.045    -0.042  0.0409  0.9183 -0.3938
               Bcc     0.0022     0.295     0.105     0.098  0.9969 -0.0112  0.0776
- 
+
               Baa    -0.0006    -0.344    -0.123    -0.115 -0.2228  0.9610 -0.1638
     18 H(1)   Bbb    -0.0006    -0.306    -0.109    -0.102 -0.2147  0.1155  0.9698
               Bcc     0.0012     0.651     0.232     0.217  0.9509  0.2513  0.1806
- 
+
               Baa    -0.0008    -0.451    -0.161    -0.151  0.0118  0.1487  0.9888
     19 H(1)   Bbb    -0.0007    -0.348    -0.124    -0.116 -0.0360  0.9883 -0.1482
               Bcc     0.0015     0.800     0.285     0.267  0.9993  0.0339 -0.0170
- 
+
               Baa    -0.0005    -0.069    -0.025    -0.023 -0.0332  0.6873  0.7256
     20 C(13)  Bbb    -0.0005    -0.067    -0.024    -0.022 -0.2952  0.6869 -0.6641
               Bcc     0.0010     0.136     0.049     0.045  0.9549  0.2363 -0.1801
- 
+
               Baa    -0.0004    -0.193    -0.069    -0.064  0.0537  0.2412  0.9690
     21 H(1)   Bbb    -0.0003    -0.171    -0.061    -0.057 -0.3995  0.8945 -0.2005
               Bcc     0.0007     0.364     0.130     0.121  0.9152  0.3764 -0.1444
- 
+
               Baa    -0.0004    -0.211    -0.075    -0.070 -0.2199  0.9680 -0.1205
     22 H(1)   Bbb    -0.0004    -0.198    -0.071    -0.066  0.2749  0.1800  0.9445
               Bcc     0.0008     0.409     0.146     0.136  0.9360  0.1746 -0.3058
- 
+
               Baa    -0.0004    -0.049    -0.018    -0.016  0.1049 -0.4149  0.9038
     23 C(13)  Bbb    -0.0003    -0.044    -0.016    -0.015 -0.0609  0.9044  0.4223
               Bcc     0.0007     0.093     0.033     0.031  0.9926  0.0993 -0.0696
- 
+
               Baa    -0.0002    -0.031    -0.011    -0.010 -0.2228  0.9341  0.2788
     24 C(13)  Bbb    -0.0001    -0.015    -0.005    -0.005  0.0691 -0.2702  0.9603
               Bcc     0.0003     0.046     0.016     0.015  0.9724  0.2332 -0.0043
- 
+
               Baa    -0.0003    -0.034    -0.012    -0.011  0.0841  0.7221  0.6866
     25 C(13)  Bbb    -0.0002    -0.021    -0.008    -0.007  0.1511 -0.6903  0.7075
               Bcc     0.0004     0.055     0.020     0.018  0.9849  0.0443 -0.1671
- 
+
               Baa    -0.0001    -0.019    -0.007    -0.006 -0.1359 -0.1663  0.9767
     26 C(13)  Bbb    -0.0001    -0.016    -0.006    -0.006 -0.1305  0.9802  0.1487
               Bcc     0.0003     0.035     0.013     0.012  0.9821  0.1072  0.1549
- 
+
               Baa    -0.0002    -0.105    -0.037    -0.035  0.0613 -0.4322  0.8997
     27 H(1)   Bbb    -0.0002    -0.098    -0.035    -0.033 -0.3283  0.8425  0.4271
               Bcc     0.0004     0.203     0.072     0.068  0.9426  0.3216  0.0902
- 
+
               Baa    -0.0002    -0.021    -0.008    -0.007 -0.0504 -0.4422  0.8955
     28 C(13)  Bbb    -0.0001    -0.018    -0.007    -0.006  0.0716  0.8927  0.4448
               Bcc     0.0003     0.040     0.014     0.013  0.9962 -0.0865  0.0133
- 
+
               Baa    -0.0003    -0.135    -0.048    -0.045  0.1341 -0.4841  0.8647
     29 H(1)   Bbb    -0.0002    -0.127    -0.045    -0.042  0.1602  0.8717  0.4632
               Bcc     0.0005     0.262     0.094     0.087  0.9779 -0.0764 -0.1945
- 
+
               Baa    -0.0002    -0.024    -0.009    -0.008 -0.0387  0.8718  0.4884
     30 C(13)  Bbb    -0.0001    -0.009    -0.003    -0.003  0.2183 -0.4695  0.8555
               Bcc     0.0002     0.033     0.012     0.011  0.9751  0.1398 -0.1721
- 
+
               Baa    -0.0001    -0.058    -0.021    -0.020 -0.1307 -0.1638  0.9778
     31 H(1)   Bbb    -0.0001    -0.056    -0.020    -0.019 -0.2070  0.9690  0.1347
               Bcc     0.0002     0.115     0.041     0.038  0.9696  0.1848  0.1605
- 
+
               Baa    -0.0001    -0.069    -0.025    -0.023 -0.0260 -0.5286  0.8485
     32 H(1)   Bbb    -0.0001    -0.067    -0.024    -0.023  0.1584  0.8359  0.5255
               Bcc     0.0003     0.136     0.049     0.045  0.9870 -0.1480 -0.0620
- 
+
               Baa    -0.0001    -0.054    -0.019    -0.018 -0.0370  0.7720  0.6345
     33 H(1)   Bbb    -0.0001    -0.048    -0.017    -0.016 -0.0967 -0.6348  0.7666
               Bcc     0.0002     0.102     0.037     0.034  0.9946 -0.0330  0.0981
- 
+
 
  ---------------------------------------------------------------------------------
 

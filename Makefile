@@ -58,7 +58,7 @@ install:          ## Install the project in development mode.
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
 	@echo "Running chemsmart configuration..."
-	$(ENV_PREFIX)$(CHEMSMART_PATH) config 
+	$(ENV_PREFIX)$(CHEMSMART_PATH) config
 	@echo "Running chemsmart server configuration..."
 	$(ENV_PREFIX)$(CHEMSMART_PATH) config server || { echo "Error: chemsmart server configuration failed."; exit 1; }
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
@@ -121,4 +121,3 @@ clean: ## Remove temporary and unnecessary files.
 	@find ./ -name 'Thumbs.db' -exec rm -f {} + 2>/dev/null
 	@find ./ -name '*~' -exec rm -f {} + 2>/dev/null
 	@rm -rf .cache .pytest_cache build dist *.egg-info htmlcov .tox .coverage.* docs/_build 2>/dev/null
-
