@@ -30,6 +30,7 @@ class GaussianJobSettings(MolecularJobSettings):
         dieze_tag=None,
         solvent_model=None,
         solvent_id=None,
+        additional_solvent_options=None,
         additional_opt_options_in_route=None,
         additional_route_parameters=None,
         route_to_be_written=None,
@@ -70,6 +71,7 @@ class GaussianJobSettings(MolecularJobSettings):
         )
         self.chk = chk
         self.dieze_tag = dieze_tag
+        self.additional_solvent_options = additional_solvent_options
         self.additional_opt_options_in_route = additional_opt_options_in_route
         self.append_additional_info = append_additional_info
 
@@ -248,6 +250,7 @@ class GaussianJobSettings(MolecularJobSettings):
             dieze_tag=None,
             solvent_model=None,
             solvent_id=None,
+            additional_solvent_options=None,
             additional_opt_options_in_route=None,
             additional_route_parameters=None,
             route_to_be_written=None,
@@ -382,19 +385,17 @@ class GaussianJobSettings(MolecularJobSettings):
 
         if self.custom_solvent is not None:
             if self.solvent_model is None and self.solvent_id is None:
-                route_string += (
-                    " scrf=(pcm,read)"  # using pcm model as default
-                )
+                route_string += " scrf=(pcm,read"  # using pcm model as default
             else:
                 # Set default values if any of solvent_model or solvent_id are None
                 solvent_model = self.solvent_model or "pcm"
                 solvent_id = self.solvent_id or "generic,read"
-                route_string += f" scrf=({solvent_model},solvent={solvent_id})"
+                route_string += f" scrf=({solvent_model},solvent={solvent_id}"
         elif (
             self.solvent_model is not None and self.solvent_id is not None
         ):  # solvation is turned on
             route_string += (
-                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
+                f" scrf=({self.solvent_model},solvent={self.solvent_id}"
             )
         elif (self.solvent_model is not None and self.solvent_id is None) or (
             self.solvent_model is None and self.solvent_id is not None
@@ -403,6 +404,12 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Both solvent model and solvent ID need to be specified.\n"
                 f"Currently, solvent model is {self.solvent_model} and solvent id is {self.solvent_id}!"
             )
+
+        if "scrf" in route_string:
+            if self.additional_solvent_options is not None:
+                route_string += f",{self.additional_solvent_options})"
+            else:
+                route_string += ")"
 
         # write additional parameters for route
         if self.additional_route_parameters is not None:

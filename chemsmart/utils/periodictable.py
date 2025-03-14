@@ -1,7 +1,4 @@
-try:
-    from periodictable import elements
-except ImportError:
-    from ase.data import chemical_symbols as elements
+from ase.data import chemical_symbols as elements
 
 
 class PeriodicTable:

@@ -184,6 +184,8 @@ class GaussianJobRunner(JobRunner):
                 )
                 rmtree(self.running_directory)
 
+            self._remove_err_files(job)
+
 
 class FakeGaussianJobRunner(GaussianJobRunner):
     # creates job runner process

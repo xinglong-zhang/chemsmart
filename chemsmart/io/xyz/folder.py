@@ -1,13 +1,13 @@
 import logging
 
-from chemsmart.utils.mixins import FolderMixin
+from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class XYZFolder(FolderMixin):
+class XYZFolder(BaseFolder):
     def __init__(self, folder):
         self.folder = folder
 

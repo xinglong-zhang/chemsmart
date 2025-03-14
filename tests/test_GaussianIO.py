@@ -162,6 +162,34 @@ class TestRouteString:
         assert r3a.basis == "def2svp"
         assert r3a.additional_route_parameters == "nosymm guess=mix"
 
+    def test_solvent_in_route(self):
+        s4a = (
+            "# opt=(recalcfc=5) freq mn15 def2svp scrf=(dipole,solvent=water)"
+        )
+        r4a = GaussianRoute(s4a)
+        assert r4a.additional_opt_options_in_route == "recalcfc=5"
+        assert r4a.solvent_model == "dipole"
+        assert r4a.solvent_id == "water"
+        assert r4a.additional_solvent_options is None
+
+        s4b = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(smd,solvent=generic,read)"
+        r4b = GaussianRoute(s4b)
+        assert r4b.solvent_model == "smd"
+        assert r4b.solvent_id == "generic,read"
+        assert r4b.additional_solvent_options is None
+
+        s4c = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(cpcm,solvent=toluene,iterative)"
+        r4c = GaussianRoute(s4c)
+        assert r4c.solvent_model == "cpcm"
+        assert r4c.solvent_id == "toluene"
+        assert r4c.additional_solvent_options == "iterative"
+
+        s4d = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(cpcm,iterative,solvent=toluene)"
+        r4d = GaussianRoute(s4d)
+        assert r4d.solvent_model == "cpcm"
+        assert r4d.solvent_id == "toluene"
+        assert r4d.additional_solvent_options == "iterative"
+
 
 class TestGaussian16Input:
     def test_read_gaussian_input(self, gaussian_opt_inputfile):
@@ -1122,7 +1150,9 @@ class TestGaussian16Output:
     def test_read_scan_outputfile(self, gaussian_failed_scan_outfile):
         assert os.path.exists(gaussian_failed_scan_outfile)
         g16_scan = Gaussian16Output(
-            filename=gaussian_failed_scan_outfile, use_frozen=True
+            filename=gaussian_failed_scan_outfile,
+            use_frozen=True,
+            include_intermediate=False,
         )
         assert not g16_scan.normal_termination
         assert g16_scan.num_atoms == 110
@@ -1141,6 +1171,28 @@ class TestGaussian16Output:
             "num_steps": 10,
             "step_size": -0.1,
         }
+        assert len(g16_scan.all_structures) == 1
+
+        g16_scan_all_int = Gaussian16Output(
+            filename=gaussian_failed_scan_outfile,
+            use_frozen=True,
+            include_intermediate=True,
+        )
+        assert not g16_scan_all_int.normal_termination
+        assert g16_scan_all_int.num_atoms == 110
+        assert len(g16_scan_all_int.alpha_occ_eigenvalues) == 217
+        assert (
+            g16_scan_all_int.alpha_occ_eigenvalues[0]
+            == -19.75707 * units.Hartree
+        )
+        assert (
+            g16_scan_all_int.alpha_occ_eigenvalues[-1]
+            == -0.33917 * units.Hartree
+        )
+        assert len(g16_scan_all_int.alpha_virtual_eigenvalues) == 895
+
+        assert len(g16_scan_all_int.all_structures) == 9
+        # 10 orientations with last structure (failed job) removed
 
     def test_read_hirshfeld_charges_outputfile(
         self, gaussian_hirshfeld_outfile

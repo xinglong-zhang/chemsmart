@@ -237,6 +237,10 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.solvent_id
 
     @property
+    def additional_solvent_options(self):
+        return self.route_object.additional_solvent_options
+
+    @property
     def additional_opt_options_in_route(self):
         return self.route_object.additional_opt_options_in_route
 
@@ -265,6 +269,7 @@ class GaussianFileMixin(FileMixin):
             dieze_tag=self.dieze_tag,
             solvent_model=self.solvent_model,
             solvent_id=self.solvent_id,
+            additional_solvent_options=self.additional_solvent_options,
             additional_opt_options_in_route=self.additional_opt_options_in_route,
             additional_route_parameters=self.additional_route_parameters,
             route_to_be_written=None,
@@ -556,3 +561,8 @@ class FolderMixin:
                 if file.endswith(filetype):
                     all_files.append(os.path.join(subdir, file))
         return all_files
+
+
+class BaseFolder(FolderMixin):
+    def __init__(self, folder_path):
+        self.folder_path = folder_path
