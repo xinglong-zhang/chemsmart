@@ -431,8 +431,8 @@ class TestMoleculeAdvanced:
             ),
             qmmm_settings=GaussianQMMMJobSettings(
                 high_level_atoms=[4],
-                low_level_atoms=[1, 2],
                 medium_level_atoms=[3],
+                low_level_atoms=[1, 2],
                 bonded_atoms=[(1, 3)],
                 scale_factor1=0.9,
                 scale_factor2=0.8,

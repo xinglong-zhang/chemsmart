@@ -1,5 +1,10 @@
+import pytest
+
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianJobSettings,
+    GaussianQMMMJobSettings,
+)
 from chemsmart.jobs.settings import read_molecular_job_yaml
 
 
@@ -109,6 +114,50 @@ class TestGaussianJobSettings:
         assert settings.basis == "def2-svp"
         assert settings.solvent_model is None
         assert settings.solvent_id is None
+
+
+class TestGaussianQMMMJobSettings:
+    def test_qmmm_settings(self):
+        settings1 = GaussianQMMMJobSettings(
+            functional_high="b3lyp",
+            basis_high="6-31g(d)",
+            force_field_low="uff",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        assert settings1.route_string == "# oniom(b3lyp/6-31g(d):uff)"
+
+        settings2 = GaussianQMMMJobSettings(
+            functional_high="mn15",
+            basis_high="def2svp",
+            functional_medium="b3lyp",
+            basis_medium="6-31g(d)",
+            force_field_low="uff",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        assert (
+            settings2.route_string
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff)"
+        )
+
+        settings3 = GaussianQMMMJobSettings(
+            functional_high="mn15",
+            basis_high="def2svp",
+            force_field_high="uff",
+            functional_medium="b3lyp",
+            basis_medium="6-31g(d)",
+            force_field_low="uff",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        # assert settings3.route_string == "# oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
+        # ValueError: For high level of theory, one should specify only functional/basis or force field!
+        with pytest.raises(ValueError):
+            settings3.route_string
 
 
 class TestGaussianRoute:

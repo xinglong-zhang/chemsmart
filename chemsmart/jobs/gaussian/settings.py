@@ -30,7 +30,6 @@ class GaussianJobSettings(MolecularJobSettings):
         dieze_tag=None,
         solvent_model=None,
         solvent_id=None,
-        additional_solvent_options=None,
         additional_opt_options_in_route=None,
         additional_route_parameters=None,
         route_to_be_written=None,
@@ -71,7 +70,6 @@ class GaussianJobSettings(MolecularJobSettings):
         )
         self.chk = chk
         self.dieze_tag = dieze_tag
-        self.additional_solvent_options = additional_solvent_options
         self.additional_opt_options_in_route = additional_opt_options_in_route
         self.append_additional_info = append_additional_info
 
@@ -250,7 +248,6 @@ class GaussianJobSettings(MolecularJobSettings):
             dieze_tag=None,
             solvent_model=None,
             solvent_id=None,
-            additional_solvent_options=None,
             additional_opt_options_in_route=None,
             additional_route_parameters=None,
             route_to_be_written=None,
@@ -385,17 +382,19 @@ class GaussianJobSettings(MolecularJobSettings):
 
         if self.custom_solvent is not None:
             if self.solvent_model is None and self.solvent_id is None:
-                route_string += " scrf=(pcm,read"  # using pcm model as default
+                route_string += (
+                    " scrf=(pcm,read)"  # using pcm model as default
+                )
             else:
                 # Set default values if any of solvent_model or solvent_id are None
                 solvent_model = self.solvent_model or "pcm"
                 solvent_id = self.solvent_id or "generic,read"
-                route_string += f" scrf=({solvent_model},solvent={solvent_id}"
+                route_string += f" scrf=({solvent_model},solvent={solvent_id})"
         elif (
             self.solvent_model is not None and self.solvent_id is not None
         ):  # solvation is turned on
             route_string += (
-                f" scrf=({self.solvent_model},solvent={self.solvent_id}"
+                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
             )
         elif (self.solvent_model is not None and self.solvent_id is None) or (
             self.solvent_model is None and self.solvent_id is not None
@@ -404,12 +403,6 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Both solvent model and solvent ID need to be specified.\n"
                 f"Currently, solvent model is {self.solvent_model} and solvent id is {self.solvent_id}!"
             )
-
-        if "scrf" in route_string:
-            if self.additional_solvent_options is not None:
-                route_string += f",{self.additional_solvent_options})"
-            else:
-                route_string += ")"
 
         # write additional parameters for route
         if self.additional_route_parameters is not None:
@@ -649,10 +642,13 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self,
         functional_high=None,
         basis_high=None,
+        force_field_high=None,
         functional_medium=None,
         basis_medium=None,
+        force_field_medium=None,
         functional_low=None,
         basis_low=None,
+        force_field_low=None,
         force_field=None,
         model_high_level_charges=None,
         model_high_level_spin=None,
@@ -684,11 +680,13 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         super().__init__(**kwargs)
         self.functional_high = functional_high
         self.basis_high = basis_high
+        self.force_field_high = force_field_high
         self.functional_medium = functional_medium
         self.basis_medium = basis_medium
+        self.force_field_medium = force_field_medium
         self.functional_low = functional_low
         self.basis_low = basis_low
-        self.force_field = force_field
+        self.force_field_low = force_field_low
         self.model_level_charges = model_high_level_charges
         self.model_high_level_spin = model_high_level_spin
         self.model_low_level_charges = model_low_level_charges
@@ -704,17 +702,46 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.scale_factor3 = scale_factor3
         # If the user only specifies the parameters of two layers, the low-level layer will be omitted
 
-    def validate_and_assign_level(self, functional, basis, level_name):
-        """Validates functional and basis set for a given level and returns formatted theory string."""
-        if functional is None and basis is not None:
+        self.basis = self.basis_high
+
+    def validate_and_assign_level(
+        self, functional, basis, force_fied, level_name
+    ):
+        """Validates functional and basis set for a given level and returns formatted theory string.
+        Return level of theory if both functional and basis are specified, or force field if both are not specified.
+        """
+
+        level_of_theory = None
+
+        if (
+            functional is not None
+            and basis is not None
+            and force_fied is not None
+        ):
             raise ValueError(
-                f"Functional for {level_name} level of theory is not specified!"
+                f"For {level_name} level of theory, one should specify only functional/basis or force field!"
             )
-        if functional is not None and basis is None:
-            raise ValueError(
-                f"Basis set for {level_name} level of theory is not specified!"
-            )
-        return f"{functional}/{basis}" if functional and basis else None
+
+        if force_fied:
+            assert (
+                functional is None and basis is None
+            ), f"Force field is given for {level_name} level of theory, thus no functional and basis should be given!"
+            level_of_theory = force_fied
+        else:
+            # if force field is not given, then functional and basis can be given,
+            # so that level of theory takes functional and basis set
+            # but functional and basis set can also not be given, in which case,
+            # all 3 are None and overall level of theory for that layer is None.
+            if functional and basis:
+                level_of_theory = f"{functional}/{basis}"
+            else:
+                level_of_theory = None
+
+        logger.debug(
+            f"Obtained level of theory {level_of_theory} for {level_name} level."
+        )
+
+        return level_of_theory
 
     def scale_factor_initialization(self):
         """Initializes scale factors."""
@@ -726,25 +753,26 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         return scale_factor if scale_factor is not None else str(1.0)
 
     def _get_route_string_from_jobtype(self):
-        route_string = super()._get_route_string_from_jobtype()
+        # route_string = super()._get_route_string_from_jobtype()
+        route_string = "# "
 
         oniom_string = "oniom"
         self.high_level_of_theory = self.validate_and_assign_level(
-            self.functional_high, self.basis_high, "high"
+            self.functional_high,
+            self.basis_high,
+            self.force_field_high,
+            "high",
         )
-        if self.force_field is not None:
-            self.medium_level_of_theory = self.force_field
-        else:
-            self.medium_level_of_theory = self.validate_and_assign_level(
-                self.functional_medium, self.basis_medium, "medium"
-            )
-        # Validate and assign low-level parameters (Optional)
-        self.low_level_of_theory = (
-            self.validate_and_assign_level(
-                self.functional_low, self.basis_low, "low"
-            )
-            if self.functional_medium is None and self.basis_medium is None
-            else None
+
+        self.medium_level_of_theory = self.validate_and_assign_level(
+            self.functional_medium,
+            self.basis_medium,
+            self.force_field_medium,
+            "medium",
+        )
+
+        self.low_level_of_theory = self.validate_and_assign_level(
+            self.functional_low, self.basis_low, self.force_field_low, "low"
         )
 
         if self.high_level_of_theory is not None:
@@ -754,7 +782,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         if self.low_level_of_theory is not None:
             oniom_string += f":{self.low_level_of_theory})"
 
-        if "oniom" not in route_string:
-            route_string += f" {oniom_string}"
+        route_string += oniom_string
 
         return route_string
