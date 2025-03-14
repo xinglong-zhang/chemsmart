@@ -53,8 +53,7 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = scratch
-        if self.scratch:
-            self._set_scratch()
+        self._scratch_dir = None  # Underlying storage for the scratch_dir
 
         self.fake = fake
 
@@ -78,7 +77,29 @@ class JobRunner(RegistryMixin):
     @property
     @lru_cache(maxsize=12)
     def scratch_dir(self):
+        # If _scratch_dir is set via the setter, return it
+        if self._scratch_dir is not None:
+            return self._scratch_dir
         return self._set_scratch()
+
+    @scratch_dir.setter
+    def scratch_dir(self, value):
+        """Set the scratch_dir and clear the cache if needed."""
+        if value is not None:
+            # Expand user path and validate
+            value = os.path.expanduser(value)
+            if not os.path.exists(value):
+                raise FileNotFoundError(
+                    f"Cannot set scratch_dir: directory does not exist: {value}"
+                )
+            logger.info(f"Manually setting scratch_dir to: {value}")
+        else:
+            logger.info("Clearing scratch_dir to None")
+
+        # Update the underlying value
+        self._scratch_dir = value
+        # Clear the cache to force recomputation next time if needed
+        self._set_scratch.cache_clear()
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
@@ -96,7 +117,7 @@ class JobRunner(RegistryMixin):
             scratch_dir = user_settings.scratch
 
         if scratch_dir is not None:
-            # check that the scratch folder exists
+            # Check that the scratch folder exists
             scratch_dir = os.path.expanduser(scratch_dir)
             if not os.path.exists(scratch_dir):
                 raise FileNotFoundError(

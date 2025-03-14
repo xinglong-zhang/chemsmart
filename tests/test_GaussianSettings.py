@@ -119,6 +119,8 @@ class TestGaussianJobSettings:
 class TestGaussianQMMMJobSettings:
     def test_qmmm_settings(self):
         settings1 = GaussianQMMMJobSettings(
+            job_type="opt",
+            freq=True,
             functional_high="b3lyp",
             basis_high="6-31g(d)",
             force_field_low="uff",
@@ -126,7 +128,7 @@ class TestGaussianQMMMJobSettings:
             qm_charge=0,
             qm_multiplicity=1,
         )
-        assert settings1.route_string == "# oniom(b3lyp/6-31g(d):uff)"
+        assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
 
         settings2 = GaussianQMMMJobSettings(
             functional_high="mn15",
@@ -158,6 +160,64 @@ class TestGaussianQMMMJobSettings:
         # ValueError: For high level of theory, one should specify only functional/basis or force field!
         with pytest.raises(ValueError):
             settings3.route_string
+
+        # settings with solvent specification
+        settings4 = GaussianQMMMJobSettings(
+            functional_high="mn15",
+            basis_high="def2svp",
+            functional_medium="b3lyp",
+            basis_medium="6-31g(d)",
+            force_field_low="uff",
+            solvent_model="smd",
+            solvent_id="toluene",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        assert (
+            settings4.route_string
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for opt job
+        settings5 = GaussianQMMMJobSettings(
+            job_type="opt",
+            freq=True,
+            functional_high="mn15",
+            basis_high="def2svp",
+            functional_medium="b3lyp",
+            basis_medium="6-31g(d)",
+            force_field_low="uff",
+            solvent_model="smd",
+            solvent_id="toluene",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        assert (
+            settings5.route_string
+            == "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
+        # settings with solvent specification for ts job
+        settings5 = GaussianQMMMJobSettings(
+            job_type="ts",
+            freq=True,
+            functional_high="mn15",
+            basis_high="def2svp",
+            functional_medium="b3lyp",
+            basis_medium="6-31g(d)",
+            force_field_low="uff",
+            solvent_model="smd",
+            solvent_id="toluene",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        assert (
+            settings5.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
 
 
 class TestGaussianRoute:

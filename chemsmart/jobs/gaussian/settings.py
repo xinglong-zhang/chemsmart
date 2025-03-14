@@ -309,13 +309,44 @@ class GaussianJobSettings(MolecularJobSettings):
 
     def _get_route_string_from_jobtype(self):
         route_string = ""
+
+        dieze_tag = self._get_dieze_tag()
+        route_string += dieze_tag
+
+        job_route = self._get_job_route()
+        route_string += job_route
+
+        freq_string = self._get_freq_string()
+        route_string += freq_string
+
+        level_of_theory_string = self._get_level_of_theory_string()
+        route_string += level_of_theory_string
+
+        force_string = self._get_force_string()
+        route_string += force_string
+
+        solvent_string = self._get_solvent_string()
+        route_string += solvent_string
+
+        additional_string = self._get_additional_string()
+        route_string += additional_string
+
+        return route_string
+
+    def _get_dieze_tag(self):
+        """Get dieze tag from job type."""
+        route_string = ""
         if self.dieze_tag is not None:
             route_string += (
                 f"#{self.dieze_tag}"  # e.g. dieze_tag='p' to get '#p'
             )
         else:
             route_string += "#"
+        return route_string
 
+    def _get_job_route(self):
+        """Get route corresponding to job type."""
+        route_string = ""
         # write opt with additional options e.g., maxstep, calcall etc
         if self.additional_opt_options_in_route is not None:
             if self.job_type == "opt":
@@ -329,13 +360,10 @@ class GaussianJobSettings(MolecularJobSettings):
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
             elif self.job_type == "modred":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = True
             elif self.job_type == "scan":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
             if self.job_type == "opt":
                 route_string += " opt"
@@ -343,22 +371,43 @@ class GaussianJobSettings(MolecularJobSettings):
                 route_string += " opt=(ts,calcfc,noeigentest)"
             elif self.job_type == "modred":
                 route_string += " opt=modredundant"
-                self.freq = True
             elif self.job_type == "scan":
                 route_string += " opt=modredundant"
-                self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
+        return route_string
 
+    def _set_freq_from_job_type(self):
+        """Set freq for different job type.
+        Some sensible defaults have been used here."""
+        if self.job_type in ["opt", "ts", "modred"]:
+            self.freq = True
+            self.numfreq = False
+        elif self.job_type in ["sp", "scan"]:
+            self.freq = False
+            self.numfreq = False
+
+    def _get_freq_string(self):
+        """Get freq string for route."""
+        route_string = ""
+        self._set_freq_from_job_type()
         # write frequency
         if self.freq and not self.numfreq:
             route_string += " freq"
         elif not self.freq and self.numfreq:
             route_string += " freq=numer"
+        elif self.freq and self.numfreq:
+            raise ValueError(
+                "Both freq and numfreq cannot be True at the same time!"
+            )
+        return route_string
 
-        # write functional and basis
+    def _get_level_of_theory_string(self):
+        """Get level of theory string for route."""
+        route_string = ""
+
         if self.basis is None:
+            # both ab initio and DFT functional require basis
             raise ValueError("Warning: Basis is missing!")
         if self.ab_initio is not None and self.functional is None:
             method = self.ab_initio
@@ -376,10 +425,19 @@ class GaussianJobSettings(MolecularJobSettings):
         # write basis set
         route_string += f" {method} {self.basis}"
 
+        return route_string
+
+    def _get_force_string(self):
+        """Get force string for route."""
+        route_string = ""
         # write forces calculation
         if self.forces:
             route_string += " force"
+        return route_string
 
+    def _get_solvent_string(self):
+        """Get solvent string for route."""
+        route_string = ""
         if self.custom_solvent is not None:
             if self.solvent_model is None and self.solvent_id is None:
                 route_string += (
@@ -403,6 +461,13 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Both solvent model and solvent ID need to be specified.\n"
                 f"Currently, solvent model is {self.solvent_model} and solvent id is {self.solvent_id}!"
             )
+
+        return route_string
+
+    def _get_additional_string(self):
+        """Get additional info string for route.
+        Additional Route Parameters + job specific parameters."""
+        route_string = ""
 
         # write additional parameters for route
         if self.additional_route_parameters is not None:
@@ -702,7 +767,14 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.scale_factor3 = scale_factor3
         # If the user only specifies the parameters of two layers, the low-level layer will be omitted
 
-        self.basis = self.basis_high
+        # populate self.functional and self.basis so that
+        # it will not raise errors in parent class
+        self.functional = (
+            self.functional_high
+            or self.functional_medium
+            or self.functional_low
+        )
+        self.basis = self.basis_high or self.basis_medium or self.basis_low
 
     def validate_and_assign_level(
         self, functional, basis, force_fied, level_name
@@ -748,11 +820,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 scale_factor += f" {self.scale_factor3}"
         return scale_factor if scale_factor is not None else str(1.0)
 
-    def _get_route_string_from_jobtype(self):
-        route_string = super()._get_route_string_from_jobtype()
-        route_string = "# "
-
-        oniom_string = "oniom"
+    def _get_level_of_theory_string(self):
+        """Get ONIOM level of theory for route string."""
+        oniom_string = " oniom"
         self.high_level_of_theory = self.validate_and_assign_level(
             self.functional_high,
             self.basis_high,
@@ -778,6 +848,4 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         if self.low_level_of_theory is not None:
             oniom_string += f":{self.low_level_of_theory})"
 
-        route_string += oniom_string
-
-        return route_string
+        return oniom_string
