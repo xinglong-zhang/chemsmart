@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0  # Use the latest version at the time of writing
+    hooks:
+      - id: check-yaml  # Checks YAML file syntax
+      - id: end-of-file-fixer  # Ensures files end with a newline
+      - id: trailing-whitespace  # Removes trailing whitespace
+
+  - repo: https://github.com/psf/black
+    rev: 24.3.0  # Use the latest version of Black
+    hooks:
+      - id: black  # Auto-formats Python code
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0  # Use the latest version of Flake8
+    hooks:
+      - id: flake8  # Lints Python code
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort  # sort import statements
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files  # check for large files
