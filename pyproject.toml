@@ -43,7 +43,7 @@ test = [
     "pytest-cov",
     "gitchangelog",
     "mkdocs",
-    "pre-commit>=3.6.0",  # Add pre-commit here
+    "pre-commit>=3.6.0",
 ]
 
 [project.urls]
