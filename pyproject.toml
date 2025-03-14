@@ -23,7 +23,7 @@ dependencies = [
     "filelock",
     "joblib==1.4.2",
     "networkx==3.4.2",
-    "numpy==2.2.2",
+    "numpy~=1.26.4",
     "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.1.24",
@@ -43,6 +43,7 @@ test = [
     "pytest-cov",
     "gitchangelog",
     "mkdocs",
+    "pre-commit>=3.6.0",
 ]
 
 [project.urls]
