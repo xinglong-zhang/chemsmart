@@ -713,11 +713,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         level_of_theory = None
 
-        if (
-            functional is not None
-            and basis is not None
-            and force_fied is not None
-        ):
+        if functional and basis and force_fied:
             raise ValueError(
                 f"For {level_name} level of theory, one should specify only functional/basis or force field!"
             )
@@ -730,11 +726,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         else:
             # if force field is not given, then functional and basis can be given,
             # so that level of theory takes functional and basis set
-            # but functional and basis set can also not be given, in which case,
-            # all 3 are None and overall level of theory for that layer is None.
             if functional and basis:
                 level_of_theory = f"{functional}/{basis}"
             else:
+                # but functional and basis set can also not be given, in which case,
+                # all 3 are None and overall level of theory for that layer is None.
                 level_of_theory = None
 
         logger.debug(
@@ -753,7 +749,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         return scale_factor if scale_factor is not None else str(1.0)
 
     def _get_route_string_from_jobtype(self):
-        # route_string = super()._get_route_string_from_jobtype()
+        route_string = super()._get_route_string_from_jobtype()
         route_string = "# "
 
         oniom_string = "oniom"

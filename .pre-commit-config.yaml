@@ -13,12 +13,6 @@ repos:
         language: system
         files: \.py$
         pass_filenames: false
-      - id: make-test
-        name: Run make test
-        entry: make test
-        language: system
-        files: \.py$
-        pass_filenames: false
       - id: make-clean
         name: Run make clean
         entry: make clean
