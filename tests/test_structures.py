@@ -10,6 +10,7 @@ from rdkit import Chem
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.xyz.file import XYZFile
+from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
 
 class TestCoordinateBlock:
@@ -415,6 +416,51 @@ class TestMoleculeAdvanced:
 
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
+
+    def test_qmmm_atoms_handling(self):
+        """Test QM/MM atoms handling."""
+        mol = Molecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.00000000],
+                    [-3.88098484, -0.56804789, 0.00000000],
+                    [-5.16121212, 0.33672729, 0.00000000],
+                    [-1.93181817, -0.59090908, 0.00000000],
+                ]
+            ),
+            qmmm_settings=GaussianQMMMJobSettings(
+                high_level_atoms=[4],
+                low_level_atoms=[1, 2],
+                medium_level_atoms=[3],
+                bonded_atoms=[(1, 3)],
+                scale_factor1=0.9,
+                scale_factor2=0.8,
+                scale_factor3=0.7,
+            ),
+        )
+
+        assert mol.qmmm_settings.high_level_atoms == [4]
+        assert mol.qmmm_settings.low_level_atoms == [1, 2]
+        assert mol.qmmm_settings.medium_level_atoms == [3]
+        assert mol.qmmm_settings.bonded_atoms == [(1, 3)]
+        with open("tmp.xyz", "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open("tmp.xyz", "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+
+            expected_lines = [
+                "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
+                "H -3.8809848400 -0.5680478900 0.0000000000 L",
+                "H -5.1612121200 0.3367272900 0.0000000000 M",
+                "Cl -1.9318181700 -0.5909090800 0.0000000000 H",
+            ]
+
+            assert [" ".join(line.split()) for line in lines] == [
+                " ".join(line.split()) for line in expected_lines
+            ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
+        if os.path.exists("tmp.xyz"):
+            os.remove("tmp.xyz")
 
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""

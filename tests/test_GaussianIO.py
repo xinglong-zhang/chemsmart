@@ -1304,6 +1304,24 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_oniom_outputfile)
         g16_oniom = Gaussian16Output(filename=gaussian_oniom_outputfile)
         assert g16_oniom.normal_termination is False
+        assert g16_oniom.oniom_cutting_bonds == {
+            (49, 50): (0.700189, 0.700189),
+            (80, 81): (0.700189, 0.700189),
+            (176, 177): (0.700189, 0.700189),
+            (198, 199): (0.700189, 0.700189),
+            (217, 218): (0.700189, 0.700189),
+            (439, 438): (0.700189, 0.700189),
+        }
+        assert g16_oniom.oniom_get_charge_and_multiplicity == {
+            "low-level, real system": (1, 2),
+            "high-level, model system": (1, 1),
+            "low-level, model system": (1, 1),
+        }
+        assert g16_oniom.oniom_getting_layer_energies == {
+            "high-level, model system": -5303.002072980664,
+            "low-level, model system": 6.767438788151,
+            "low-level, real system": 9.234384095059,
+        }
         assert g16_oniom.num_atoms == 483
         assert len(g16_oniom.oniom_energies) == 2
         assert g16_oniom.oniom_energies[0] == -5278.927903743607

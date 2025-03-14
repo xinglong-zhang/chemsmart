@@ -636,26 +636,42 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
 
 
 class GaussianQMMMJobSettings(GaussianJobSettings):
+    low_level_charges: object
+
     def __init__(
         self,
-        functional_high,
-        basis_high,
-        functional_medium,
-        basis_medium,
-        functional_low,
-        basis_low,
+        functional_high=None,
+        basis_high=None,
+        functional_medium=None,
+        basis_medium=None,
+        functional_low=None,
+        basis_low=None,
+        force_field=None,
+        model_high_level_charges=None,
+        model_high_level_spin=None,
+        model_low_level_charges=None,
+        model_low_level_spin=None,
+        real_low_level_charges=None,
+        real_low_level_spin=None,
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
-        link_atoms=None,
+        bonded_atoms=None,
+        scale_factor1=None,
+        scale_factor2=None,
+        scale_factor3=None,
         **kwargs,
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
         Args:
+            force_field (optional): force field to assign partial charges for MM region
             high_level_atoms (list): List of high level atoms.
-            medium_level_atoms (list): List of medium level atoms.
+            medium_level_atoms (list) : List of medium level atoms.
             low_level_atoms (list): List of low level atoms.
-            link_atoms (list): List of link atoms.
+            bonded_atoms (list): List of bonded atoms.
+            scale_factor1 (float) (optional): Scale factor for bonds between QM and MM region,default=1.0
+            scale_factor2 (float) (optional): Scale factor for angles involving QM and MM region,default=1.0
+            scale_factor3 (float) (optional): Scale factor for torsions, default=1.0
             **kwargs: Additional keyword arguments.
         """
         super().__init__(**kwargs)
@@ -665,38 +681,65 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.basis_medium = basis_medium
         self.functional_low = functional_low
         self.basis_low = basis_low
+        self.force_field = force_field
+        self.model_level_charges = model_high_level_charges
+        self.model_high_level_spin = model_high_level_spin
+        self.model_low_level_charges = model_low_level_charges
+        self.model_low_level_spin = model_low_level_spin
+        self.real_low_level_charges = real_low_level_charges
+        self.real_low_level_spin = real_low_level_spin
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
-        self.link_atoms = link_atoms
+        self.bonded_atoms = bonded_atoms
+        self.scale_factor1 = scale_factor1
+        self.scale_factor2 = scale_factor2
+        self.scale_factor3 = scale_factor3
+        # If the user only specifies the parameters of two layers, the low-level layer will be omitted
 
-        if self.functional_high is not None and self.basis_high is not None:
-            self.high_level_of_theory = f"{self.functional_high}/{self.basis_high}"
-        elif self.functional_high is not None and self.basis_high is None:
-            #TODO
-            pass
+    def validate_and_assign_level(self, functional, basis, level_name):
+        """Validates functional and basis set for a given level and returns formatted theory string."""
+        if functional is None and basis is not None:
+            raise ValueError(
+                f"Functional for {level_name} level of theory is not specified!"
+            )
+        if functional is not None and basis is None:
+            raise ValueError(
+                f"Basis set for {level_name} level of theory is not specified!"
+            )
+        return f"{functional}/{basis}" if functional and basis else None
 
-        else:
-            raise ValueError(f"High level of theory is not specified!")
-
-
-        if self.functional_medium is not None and self.basis_medium is not None:
-            self.medium_level_of_theory = f"{self.functional_medium}/{self.basis_medium}"
-        elif self.functional_medium is not None and self.basis_medium is None:
-            self.medium_level_of_theory = f"{self.functional_medium}"  # medium level if there is only one, eg., PM6,
-            # it can be supplied either as functional_medium or basis_medium
-        elif self.functional_medium is None and self.basis_medium is not None:
-            self.medium_level_of_theory = f"{self.basis_medium}"
-        else:
-            self.medium_level_of_theory = None
-
-        #TODO: self.low_level_of_theory
-
+    def scale_factor_initialization(self):
+        """Initializes scale factors."""
+        scale_factor = f"{self.scale_factor1}"
+        if self.scale_factor2 is not None:
+            scale_factor += f" {self.scale_factor2}"
+            if self.scale_factor3 is not None:
+                scale_factor += f" {self.scale_factor3}"
+        return scale_factor if scale_factor is not None else str(1.0)
 
     def _get_route_string_from_jobtype(self):
         route_string = super()._get_route_string_from_jobtype()
 
         oniom_string = "oniom"
+        self.high_level_of_theory = self.validate_and_assign_level(
+            self.functional_high, self.basis_high, "high"
+        )
+        if self.force_field is not None:
+            self.medium_level_of_theory = self.force_field
+        else:
+            self.medium_level_of_theory = self.validate_and_assign_level(
+                self.functional_medium, self.basis_medium, "medium"
+            )
+        # Validate and assign low-level parameters (Optional)
+        self.low_level_of_theory = (
+            self.validate_and_assign_level(
+                self.functional_low, self.basis_low, "low"
+            )
+            if self.functional_medium is None and self.basis_medium is None
+            else None
+        )
+
         if self.high_level_of_theory is not None:
             oniom_string += f"({self.high_level_of_theory}"
         if self.medium_level_of_theory is not None:
@@ -704,9 +747,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         if self.low_level_of_theory is not None:
             oniom_string += f":{self.low_level_of_theory})"
 
-
         if "oniom" not in route_string:
             route_string += f" {oniom_string}"
-
 
         return route_string
