@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 class GaussianIRCJob(GaussianJob):
     TYPE = "g16irc"
 
-    def __init__(self, molecule, settings=None, label=None, link=False,**kwargs):
+    def __init__(
+        self, molecule, settings=None, label=None, link=False, **kwargs
+    ):
         super().__init__(
             molecule=molecule,
             settings=settings,
@@ -38,7 +40,10 @@ class GaussianIRCJob(GaussianJob):
         ircf_settings.job_type = "ircf"
         if ircf_settings.link:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
-            from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+            from chemsmart.jobs.gaussian.settings import (
+                GaussianLinkJobSettings,
+            )
+
             ircf_settings = GaussianLinkJobSettings(**ircf_settings.__dict__)
             return GaussianLinkJob(
                 molecule=self.molecule,
@@ -65,6 +70,7 @@ class GaussianIRCJob(GaussianJob):
         ircr_settings.job_type = "ircr"
         if ircr_settings.link:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
+
             return GaussianLinkJob(
                 molecule=self.molecule,
                 settings=ircr_settings,
