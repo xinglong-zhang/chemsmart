@@ -210,6 +210,10 @@ class TestThermochemistry:
             thermochem1.translational_partition_function, 1.15e7, rtol=1e5
         )
 
+
+class TestThermochemistryCO2:
+    """CO2 is used as an example to test the thermochemical properties of linear molecules."""
+
     def test_thermochemistry_co2_gaussian_output(
         self, gaussian_co2_opt_outfile
     ):
@@ -1205,6 +1209,10 @@ class TestThermochemistry:
             qrrho_thermochem3.qrrho_gibbs_free_energy, -188.453757, atol=1e-6
         )
 
+
+class TestThermochemistryHe:
+    """He is used as an example to test the thermochemical properties of monoatomic molecules."""
+
     def test_thermochemistry_he_gaussian_output(self, gaussian_he_opt_outfile):
         """Values from Gaussian output
         Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
@@ -1446,6 +1454,10 @@ class TestThermochemistry:
             -2.936345,
             atol=1e-6,
         )
+
+
+class TestThermochemistryH2O:
+    """Water is used as an example to test the thermochemical properties of non-linear polyatomic molecules."""
 
     def test_thermochemistry_water_gaussian_output(
         self, gaussian_mp2_outputfile
