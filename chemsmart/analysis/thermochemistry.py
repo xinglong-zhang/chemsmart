@@ -47,6 +47,9 @@ class Thermochemistry:
             self.I = self.moments_of_inertia * (
                 units._amu * (units.Ang / units.m) ** 2
             )  # convert the unit of moments of inertia from amu Å^2 to kg m^2
+            self.Bav = (
+                units._hplanck / self.average_rotational_constant
+            )  # convert the unit of average moments of inertia from Hz to kg m^2
         if self.vibrational_frequencies is not None:
             self.v = [
                 k * units._c * 1e2 for k in self.vibrational_frequencies
@@ -86,6 +89,15 @@ class Thermochemistry:
         if self.molecule.is_linear:
             return self.file_object.moments_of_inertia[-1]
         return self.file_object.moments_of_inertia
+
+    @property
+    def average_rotational_constant(self):
+        if self.molecule.is_linear:
+            return units._hplanck / (8 * np.pi**2 * self.I)
+        rotational_constant = [
+            units._hplanck / (8 * np.pi**2 * i) for i in self.I
+        ]
+        return sum(rotational_constant) / len(rotational_constant)
 
     @property
     def rotational_symmetry_number(self):
@@ -457,10 +469,12 @@ class qRRHOThermochemistry(Thermochemistry):
         alpha=None,
         s_freq_cutoff=None,
         h_freq_cutoff=None,
+        bav_conf=False,
     ):
         super().__init__(filename, temperature, pressure=1.0)
         self.concentration = concentration
         self.alpha = alpha
+        self.bav_conf = bav_conf
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
             if s_freq_cutoff is not None
@@ -510,7 +524,10 @@ class qRRHOThermochemistry(Thermochemistry):
             u_K = h / (8 * pi^2 * v_K)
             B_av = average molecular moment of inertia (kg m^2), 10^-44 is used for the global treatment
         """
-        bav = 1.00e-44
+        if self.bav_conf:
+            bav = self.Bav
+        else:
+            bav = 1.00e-44
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
         entropy = [
@@ -666,7 +683,7 @@ class qRRHOThermochemistry(Thermochemistry):
         )
 
     @property
-    def qrrho_entropy_times_temperture(self):
+    def qrrho_entropy_times_temperature(self):
         """Obtain the quasi-RRHO entropy times temperature in Hartree.
         Formula:
             T * S^qrrho_tot
@@ -715,7 +732,7 @@ class qRRHOThermochemistry(Thermochemistry):
         Formula:
             G^qrrho = H^qrrho - T * S^qrrho_tot
         """
-        return self.qrrho_enthalpy - self.qrrho_entropy_times_temperture
+        return self.qrrho_enthalpy - self.qrrho_entropy_times_temperature
 
     @property
     def qrrho_gibbs_free_energy_qs(self):
@@ -723,7 +740,7 @@ class qRRHOThermochemistry(Thermochemistry):
         Formula:
             G^qrrho_qs = H - T * S^qrrho_tot
         """
-        return self.enthalpy - self.qrrho_entropy_times_temperture
+        return self.enthalpy - self.qrrho_entropy_times_temperature
 
 
 class GaussianThermochemistry(Thermochemistry):

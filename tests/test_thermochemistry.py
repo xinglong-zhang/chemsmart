@@ -755,7 +755,7 @@ class TestThermochemistry:
         # S_R,K = R * (1/2 + ln((8 * pi^3 * u'_K * k_B * T / h^2)^(1/2)))
         # u'_K = u_K * B_av / (u_K + B_av)
         # u_K = h / (8 * pi^2 * v_K)
-        # B_av = 1 * 10^44 kg m^2
+        # B_av = 1 * 10^-44 kg m^2
         expected_mu = (
             6.62606957
             * 1e-34
@@ -923,15 +923,15 @@ class TestThermochemistry:
         # 1 Hartree = 4.35974434 × 10^-18 Joules
         # 1 mol = 6.02214129 * 10^23 Particle
         # we got 0.021262412674747003 Hartree
-        expected_qrrho_entropy_times_temperture = (
+        expected_qrrho_entropy_times_temperature = (
             298.15 * expected_qrrho_total_entropy
         ) / (4.35974434e-18 * 6.02214129 * 1e23)
         assert np.isclose(
-            qrrho_thermochem1.qrrho_entropy_times_temperture,
-            expected_qrrho_entropy_times_temperture,
+            qrrho_thermochem1.qrrho_entropy_times_temperature,
+            expected_qrrho_entropy_times_temperature,
         )
         assert np.isclose(
-            qrrho_thermochem1.qrrho_entropy_times_temperture,
+            qrrho_thermochem1.qrrho_entropy_times_temperature,
             0.021262,
             atol=1e-6,
         )
@@ -944,7 +944,7 @@ class TestThermochemistry:
         # G^qrrho_qs = H - T * S^qrrho_tot
         # we got -188.45058764882157 Hartree
         expected_qrrho_gibbs_free_energy_qs = (
-            expected_enthalpy - expected_qrrho_entropy_times_temperture
+            expected_enthalpy - expected_qrrho_entropy_times_temperature
         )
         assert np.isclose(
             qrrho_thermochem1.qrrho_gibbs_free_energy,
@@ -954,6 +954,89 @@ class TestThermochemistry:
             qrrho_thermochem1.qrrho_gibbs_free_energy_qs,
             -188.450588,
             atol=1e-6,
+        )
+
+        qrrho_thermochem1_bav = qRRHOThermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,  # in Kelvin
+            concentration=1.0,  # in mol/L
+            bav_conf=True,  # calculate Bav from moment of inertia
+        )
+
+        expected_i = (
+            g16_output.moments_of_inertia[-1]
+            / (6.02214129 * 1e23 * 1000)
+            * 1e-10**2
+        )
+        # we got B_av = 5.673571123562528 * 10^-44 kg m^2
+        expected_bav = (
+            6.62606957
+            * 1e-34
+            / (6.62606957 * 1e-34 / (8 * np.pi**2 * expected_i))
+        )
+        expected_mu_prime_bav = (
+            expected_mu * expected_bav / (expected_mu + expected_bav)
+        )
+        # we got S_R,K = [4.13984132, 4.13984132, 1.00676497, -1.39084927] in J mol^-1 K^-1
+        expected_freerot_entropy_bav = 8.314462145468951 * (
+            1 / 2
+            + np.log(
+                (
+                    8
+                    * np.pi**3
+                    * expected_mu_prime_bav
+                    * 1.3806488
+                    * 1e-23
+                    * 298.15
+                    / (6.62606957 * 1e-34) ** 2
+                )
+                ** (1 / 2)
+            )
+        )
+        assert np.allclose(
+            qrrho_thermochem1_bav.freerot_entropy,
+            expected_freerot_entropy_bav,
+        )
+
+        # we got S^qrrho_v = 3.144125621155249 J mol^-1 K^-1
+        expected_qrrho_vibrational_entropy_bav = np.sum(
+            expected_entropy_damping_function * expected_rrho_entropy
+            + (1 - expected_entropy_damping_function)
+            * expected_freerot_entropy_bav
+        )
+        assert np.isclose(
+            qrrho_thermochem1_bav.qrrho_vibrational_entropy,
+            expected_qrrho_vibrational_entropy_bav,
+        )
+
+        # we got S^qrrho_tot = 187.23614583095147 J mol^-1 K^-1
+        expected_qrrho_total_entropy_bav = (
+            expected_translational_entropy_concentration
+            + expected_rotational_entropy
+            + expected_qrrho_vibrational_entropy_bav
+            + expected_electronic_entropy
+        )
+        assert np.isclose(
+            qrrho_thermochem1_bav.qrrho_total_entropy,
+            expected_qrrho_total_entropy_bav,
+        )
+
+        # we got T * S^qrrho_tot = 0.021262412693192442 Hartree
+        expected_qrrho_entropy_times_temperature_bav = (
+            298.15 * expected_qrrho_total_entropy_bav
+        ) / (4.35974434e-18 * 6.02214129 * 1e23)
+        assert np.isclose(
+            qrrho_thermochem1_bav.qrrho_entropy_times_temperature,
+            expected_qrrho_entropy_times_temperature_bav,
+        )
+
+        # we got -188.45058764884 Hartree
+        expected_qrrho_gibbs_free_energy_qs_bav = (
+            expected_enthalpy - expected_qrrho_entropy_times_temperature_bav
+        )
+        assert np.isclose(
+            qrrho_thermochem1_bav.qrrho_gibbs_free_energy,
+            expected_qrrho_gibbs_free_energy_qs_bav,
         )
 
         """Values from Goodvibes, as a reference:
@@ -1028,7 +1111,7 @@ class TestThermochemistry:
         # G^qrrho = H^qrrho - T * S^qrrho_tot
         # we got -188.45058899363912 Hartree
         expected_qrrho_gibbs_free_energy = (
-            expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperture
+            expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature
         )
         assert np.isclose(
             qrrho_thermochem1.qrrho_gibbs_free_energy,
@@ -1059,7 +1142,7 @@ class TestThermochemistry:
             qrrho_thermochem2.entropy_times_temperature, 0.049327, atol=1e-6
         )
         assert np.isclose(
-            qrrho_thermochem2.qrrho_entropy_times_temperture,
+            qrrho_thermochem2.qrrho_entropy_times_temperature,
             0.049327,
             atol=1e-6,
         )
@@ -1111,7 +1194,7 @@ class TestThermochemistry:
             qrrho_thermochem3.entropy_times_temperature, 0.021262, atol=1e-6
         )
         assert np.isclose(
-            qrrho_thermochem3.qrrho_entropy_times_temperture,
+            qrrho_thermochem3.qrrho_entropy_times_temperature,
             0.021781,
             atol=1e-6,
         )
@@ -1334,7 +1417,7 @@ class TestThermochemistry:
             qrrho_thermochem_he.entropy_times_temperature, 0.025951, atol=1e-6
         )
         assert np.isclose(
-            qrrho_thermochem_he.qrrho_entropy_times_temperture,
+            qrrho_thermochem_he.qrrho_entropy_times_temperature,
             0.025951,
             atol=1e-6,
         )
@@ -1343,6 +1426,25 @@ class TestThermochemistry:
         )
         assert np.isclose(
             qrrho_thermochem_he.qrrho_gibbs_free_energy, -2.936345, atol=1e-6
+        )
+
+        qrrho_thermochem_he_bav = qRRHOThermochemistry(
+            filename=gaussian_he_opt_outfile,
+            temperature=598.15,  # in Kelvin
+            concentration=0.5,  # in mol/L
+            s_freq_cutoff=1000,  # in cm^-1
+            h_freq_cutoff=1000,  # in cm^-1
+            bav_conf=True,  # calculate Bav from moment of inertia
+        )
+        assert np.isclose(
+            qrrho_thermochem_he_bav.entropy_times_temperature,
+            0.025951,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_he_bav.qrrho_gibbs_free_energy,
+            -2.936345,
+            atol=1e-6,
         )
 
     def test_thermochemistry_water_gaussian_output(
@@ -1590,7 +1692,7 @@ class TestThermochemistry:
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.qrrho_entropy_times_temperture,
+            qrrho_thermochem_water.qrrho_entropy_times_temperature,
             0.098221,
             atol=1e-6,
         )
@@ -1601,4 +1703,56 @@ class TestThermochemistry:
             qrrho_thermochem_water.qrrho_gibbs_free_energy,
             -76.387445,
             atol=1e-6,
+        )
+        qrrho_thermochem_water_bav = qRRHOThermochemistry(
+            filename=gaussian_mp2_outputfile,
+            temperature=1298.15,  # in Kelvin
+            concentration=2.0,  # in mol/L
+            s_freq_cutoff=500,  # in cm^-1
+            h_freq_cutoff=500,  # in cm^-1
+            bav_conf=True,  # calculate Bav from moment of inertia
+        )
+        vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
+        moments_of_inertia = np.array(g16_output.moments_of_inertia)
+        expected_mu = (
+            6.62606957
+            * 1e-34
+            / (8 * np.pi**2 * vibrational_frequencies * 2.99792458 * 1e10)
+        )
+        expected_i = moments_of_inertia / (6.02214129 * 1e23 * 1000) * 1e-10**2
+        expected_b = 6.62606957 * 1e-34 / (8 * np.pi**2 * expected_i)
+        # we got 509139618973.4277 Hz
+        expected_average_rotational_constant = sum(expected_b) / len(
+            expected_b
+        )
+        assert np.isclose(
+            qrrho_thermochem_water_bav.average_rotational_constant,
+            expected_average_rotational_constant,
+        )
+        # we got B_av = 1.3014248593264196 * 10^-45 kg m^2
+        expected_bav = (
+            6.62606957 * 1e-34 / expected_average_rotational_constant
+        )
+        expected_mu_prime_bav = (
+            expected_mu * expected_bav / (expected_mu + expected_bav)
+        )
+        # we got S_R,K = [6.46111664, 2.91465036, 2.77994671] in J mol^-1 K^-1
+        expected_freerot_entropy_bav = 8.314462145468951 * (
+            1 / 2
+            + np.log(
+                (
+                    8
+                    * np.pi**3
+                    * expected_mu_prime_bav
+                    * 1.3806488
+                    * 1e-23
+                    * 1298.15
+                    / (6.62606957 * 1e-34) ** 2
+                )
+                ** (1 / 2)
+            )
+        )
+        assert np.allclose(
+            qrrho_thermochem_water_bav.freerot_entropy,
+            expected_freerot_entropy_bav,
         )
