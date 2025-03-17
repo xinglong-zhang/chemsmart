@@ -219,6 +219,27 @@ class TestGaussianQMMMJobSettings:
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
 
+        # settings with solvent specification for ts job
+        settings6 = GaussianQMMMJobSettings(
+            job_type="ts",
+            freq=False,
+            numfreq=True,
+            functional_high="mn15",
+            basis_high="def2svp",
+            functional_medium="b3lyp",
+            basis_medium="6-31g(d)",
+            force_field_low="uff",
+            solvent_model="smd",
+            solvent_id="toluene",
+            qm_atoms=[1, 2, 3],
+            qm_charge=0,
+            qm_multiplicity=1,
+        )
+        assert (
+            settings6.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+        )
+
 
 class TestGaussianRoute:
     gas_route = "opt=(ts,calcfc,noeigentest) freq m062x def2svp"
