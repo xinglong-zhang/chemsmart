@@ -118,25 +118,24 @@ class GaussianInputWriter(InputWriter):
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
         line = f"{charge} {multiplicity}\n"
-        if (
-            self.settings.model_high_level_charge
-            and self.settings.model_high_level_spin
-            and self.settings.model_low_level_charge
-            and self.settings.model_low_level_spin
-        ):
-            line += f" {self.settings.model_high_level_charge} {self.settings.model_high_level_spin} {self.settings.model_low_level_charge} {self.settings.model_low_level_spin}\n"
         f.write(line)
 
     def _write_charge_and_multiplicity_qmmm(self, f):
         logger.debug("Writing charge and multiplicity for QM/MM.")
-        line = f"{self.settings.model_high_level_charge} {self.settings.multiplicity}\n"
-
-        charge = self.settings.charge
-        multiplicity = self.settings.multiplicity
         assert (
-            charge is not None and multiplicity is not None
-        ), "Charge and multiplicity must be specified!"
-        line = f"{charge} {multiplicity}\n"
+            self.settings.high_level_charges
+            and self.settings.high_level_multiplicity
+        ) and (
+            (
+                self.settings.medium_level_charges
+                and self.settings.medium_level_multiplicity
+            )
+            or (
+                self.settings.low_level_charges
+                and self.settings.low_level_multiplicity
+            )
+        ), "Charge and multiplicity of every layer must be specified!"
+        line = f"{self.settings.charge_and_multiplicity}\n"
         f.write(line)
 
     def _write_cartesian_coordinates_normal_jobs(self, f):

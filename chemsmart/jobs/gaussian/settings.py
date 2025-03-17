@@ -5,6 +5,7 @@ import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
+from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -701,7 +702,6 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
 
 
 class GaussianQMMMJobSettings(GaussianJobSettings):
-    low_level_charges: object
 
     def __init__(
         self,
@@ -714,13 +714,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         functional_low=None,
         basis_low=None,
         force_field_low=None,
-        force_field=None,
-        model_high_level_charge=None,
-        model_high_level_spin=None,
-        model_low_level_charges=None,
-        model_low_level_spin=None,
-        real_low_level_charges=None,
-        real_low_level_spin=None,
+        high_level_charges=None,
+        high_level_multiplicity=None,
+        medium_level_charges=None,
+        medium_level_multiplicity=None,
+        low_level_charges=None,
+        low_level_multiplicity=None,
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
@@ -728,18 +727,24 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         scale_factor1=None,
         scale_factor2=None,
         scale_factor3=None,
+        num_atoms=None,
         **kwargs,
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
         Args:
-            force_field (optional): force field to assign partial charges for MM region
-            high_level_atoms (list): List of lists of high level atoms.
+            functional_high/medium/low: Functional for high/medium/low level of theory
+            basis_high/medium/low: Basis set for high/medium/low level of theory
+            force_field_high/medium/low: Force field for high/medium/low level of theory (if specified)
+            high/medium/low_level_charge (int): Charge for high level of theory
+            high/medium/low_level_multiplicity (int): Multiplicity for high level of theory
+            high_level_atoms (list or string): List of high level atoms.
             medium_level_atoms (list) : List of medium level atoms.
             low_level_atoms (list): List of low level atoms.
-            bonded_atoms (list): List of bonded atoms.
+            bonded_atoms (list of tuples): List of bonded atoms.
             scale_factor1 (float) (optional): Scale factor for bonds between QM and MM region,default=1.0
             scale_factor2 (float) (optional): Scale factor for angles involving QM and MM region,default=1.0
             scale_factor3 (float) (optional): Scale factor for torsions, default=1.0
+            num_atoms (int): Number of atoms in the system.
             **kwargs: Additional keyword arguments.
         """
         super().__init__(**kwargs)
@@ -752,12 +757,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.functional_low = functional_low
         self.basis_low = basis_low
         self.force_field_low = force_field_low
-        self.model_high_level_charge = model_high_level_charge
-        self.model_high_level_spin = model_high_level_spin
-        self.model_low_level_charge = model_low_level_charges
-        self.model_low_level_spin = model_low_level_spin
-        self.real_low_level_charges = real_low_level_charges
-        self.real_low_level_spin = real_low_level_spin
+        self.high_level_charges = high_level_charges
+        self.high_level_multiplicity = high_level_multiplicity
+        self.medium_level_charges = medium_level_charges
+        self.medium_level_multiplicity = medium_level_multiplicity
+        self.low_level_charges = low_level_charges
+        self.low_level_multiplicity = low_level_multiplicity
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
@@ -765,6 +770,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.scale_factor1 = scale_factor1
         self.scale_factor2 = scale_factor2
         self.scale_factor3 = scale_factor3
+        self.num_atoms = num_atoms
         # If the user only specifies the parameters of two layers, the low-level layer will be omitted
 
         # populate self.functional and self.basis so that
@@ -781,8 +787,13 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         """Obtain the list of partition levels for the atoms in the system."""
         return self._get_partition_levels()
 
+    @property
+    def charge_and_multiplicity(self):
+        """Obtain charge and multiplicity string."""
+        return self._get_charge_and_multiplicity()
+
     def validate_and_assign_level(
-        self, functional, basis, force_fied, level_name
+        self, functional, basis, force_field, level_name
     ):
         """Validates functional and basis set for a given level and returns formatted theory string.
         Return level of theory if both functional and basis are specified, or force field if both are not specified.
@@ -790,16 +801,16 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         level_of_theory = None
 
-        if functional and basis and force_fied:
+        if functional and basis and force_field:
             raise ValueError(
                 f"For {level_name} level of theory, one should specify only functional/basis or force field!"
             )
 
-        if force_fied:
+        if force_field:
             assert (
                 functional is None and basis is None
             ), f"Force field is given for {level_name} level of theory, thus no functional and basis should be given!"
-            level_of_theory = force_fied
+            level_of_theory = force_field
         else:
             # if force field is not given, then functional and basis can be given,
             # so that level of theory takes functional and basis set
@@ -877,16 +888,61 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             self.medium_level_atoms = get_list_from_string_range(
                 self.medium_level_atoms
             )
-        if self.low_level_atoms and not isinstance(self.low_level_atoms, list):
-            self.low_level_atoms = get_list_from_string_range(
-                self.low_level_atoms
+        if self.low_level_atoms is None:
+            # set the rest of the atoms as low level atoms
+            default_layer = list(range(1, self.num_atoms + 1))
+            medium_level_atoms = (
+                self.medium_level_atoms if self.medium_level_atoms else []
             )
-        partition_levels = []
-        for i, atom in enumerate(self.molecule.chemical_symbols):
-            if i + 1 in self.high_level_atoms:
-                partition_levels.append("H")
-            elif i + 1 in self.medium_level_atoms:
-                partition_levels.append("M")
-            elif i + 1 in self.low_level_atoms:
-                partition_levels.append("L")
-        return partition_levels
+            self.low_level_atoms = list(
+                set(default_layer)
+                - set(medium_level_atoms)
+                - set(self.high_level_atoms)
+            )
+            if self.low_level_atoms and not isinstance(
+                self.low_level_atoms, list
+            ):
+                self.low_level_atoms = get_list_from_string_range(
+                    self.low_level_atoms
+                )
+        return (
+            self.high_level_atoms,
+            self.medium_level_atoms,
+            self.low_level_atoms,
+        )
+
+    def _get_charge_and_multiplicity(self):
+        """Obtain charge and multiplicity string."""
+        charge_and_multiplicity = ""
+        if (
+            self.high_level_charges is not None
+            and self.high_level_multiplicity is not None
+        ):
+            if (
+                self.medium_level_multiplicity is None
+                and self.medium_level_charges is None
+            ):
+                charge_and_multiplicity = (
+                    f"{self.low_level_charges} {self.low_level_multiplicity} "
+                    + f"{self.high_level_charges} {self.high_level_multiplicity} "
+                    * 2
+                )
+            elif (
+                self.low_level_charges is None
+                and self.low_level_multiplicity is None
+            ):
+                charge_and_multiplicity = (
+                    f"{self.medium_level_charges} {self.medium_level_multiplicity} "
+                    + f"{self.high_level_charges} {self.high_level_multiplicity} "
+                    * 2
+                )
+            else:
+                charge_and_multiplicity = (
+                    f"{self.low_level_charges} {self.low_level_multiplicity} "
+                    + f"{self.medium_level_charges} {self.medium_level_multiplicity} "
+                    * 2
+                    + f"{self.high_level_charges} {self.high_level_multiplicity} "
+                    * 3
+                )
+
+        return charge_and_multiplicity
