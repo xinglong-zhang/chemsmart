@@ -187,11 +187,11 @@ class Gaussian16Output(GaussianFileMixin):
                 Molecule(
                     symbols=self.symbols,
                     positions=orientations[i],
-                    translation_vectors=orientations_pbc[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
                     frozen_atoms=frozen_atoms,
                     pbc_conditions=self.list_of_pbc_conditions,
+                    translation_vectors=orientations_pbc[i],
                     energy=energies[i],
                     forces=forces[i],
                 )

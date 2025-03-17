@@ -1,7 +1,10 @@
 import logging
 import os.path
 
-from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianLinkJobSettings,
+    GaussianQMMMJobSettings,
+)
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
@@ -38,7 +41,10 @@ class GaussianInputWriter(InputWriter):
         self._write_gaussian_header(f)
         self._write_route_section(f)
         self._write_gaussian_title(f)
-        self._write_charge_and_multiplicity(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._write_charge_and_multiplicity_qmmm(f)
+        else:
+            self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
         if not isinstance(self.settings, GaussianLinkJobSettings):
             self._append_modredundant(f)
@@ -113,15 +119,27 @@ class GaussianInputWriter(InputWriter):
         ), "Charge and multiplicity must be specified!"
         line = f"{charge} {multiplicity}\n"
         if (
-            self.settings.model_high_level_charges
+            self.settings.model_high_level_charge
             and self.settings.model_high_level_spin
-            and self.settings.model_low_level_charges
+            and self.settings.model_low_level_charge
             and self.settings.model_low_level_spin
         ):
-            line += f" {self.settings.model_high_level_charges} {self.settings.model_high_level_spin} {self.settings.model_low_level_charges} {self.settings.model_low_level_spin}\n"
+            line += f" {self.settings.model_high_level_charge} {self.settings.model_high_level_spin} {self.settings.model_low_level_charge} {self.settings.model_low_level_spin}\n"
         f.write(line)
 
-    def _write_cartesian_coordinates(self, f):
+    def _write_charge_and_multiplicity_qmmm(self, f):
+        logger.debug("Writing charge and multiplicity for QM/MM.")
+        line = f"{self.settings.model_high_level_charge} {self.settings.multiplicity}\n"
+
+        charge = self.settings.charge
+        multiplicity = self.settings.multiplicity
+        assert (
+            charge is not None and multiplicity is not None
+        ), "Charge and multiplicity must be specified!"
+        line = f"{charge} {multiplicity}\n"
+        f.write(line)
+
+    def _write_cartesian_coordinates_normal_jobs(self, f):
         logger.debug(
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )

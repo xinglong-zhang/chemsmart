@@ -917,6 +917,23 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
         assert all([a == b for a, b in zip(coordinates, written_coordinates)])
 
 
+class TestQMMMinMolecule:
+    def test_atoms_in_leves(self, tmpdir):
+        methyl_3_hexane = Molecule.from_pubchem("11507")
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.low_level_atoms = [7, 8, 9]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        # bonded_atoms_high_medium
+        # bonded_atoms_medium_low
+
+        written_input = os.path.join(tmpdir, "tmp.txt")
+        print(methyl_3_hexane.bonded_atoms)
+
+        methyl_3_hexane.write(written_input, format="com")
+        print(written_input)
+
+
 class TestSDFFile:
     def test_converts_sdf_string_to_molecule_object(self, tmpdir):
         sdf_string = """6999790

@@ -1,6 +1,7 @@
 import pytest
 
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.settings import (
     GaussianJobSettings,
     GaussianQMMMJobSettings,
@@ -239,6 +240,44 @@ class TestGaussianQMMMJobSettings:
             settings6.route_string
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
+
+    def test_qmmm_settings_for_atoms(self):
+        mol1 = Molecule.from_pubchem(81184)
+        print(mol1)
+
+        settings1 = GaussianQMMMJobSettings(
+            job_type="opt",
+            freq=True,
+            functional_high="b3lyp",
+            basis_high="6-31g(d)",
+            force_field_low="uff",
+            high_level_atoms=[[1, 2, 3], [8, 9, 10]],
+            qm_charge=0,
+            qm_multiplicity=1,
+            bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
+        )
+
+        print(settings1.partition_level_strings)
+
+        # example input dppeFeCl2_phenyldioxazolone_qmmm.com
+        settings2 = GaussianQMMMJobSettings(
+            job_type="opt",
+            freq=True,
+            functional_high="b3lyp",
+            basis_high="6-31g(d)",
+            force_field_low="uff",
+            high_level_atoms=[
+                [18 - 28],
+                [29 - 39],
+                [40 - 50],
+                [51 - 61],
+                [62 - 72],
+            ],
+            qm_charge=0,
+            qm_multiplicity=1,
+            bonded_atoms=[[2, 18], [2, 29], [1, 40], [1, 51], [16, 62]],
+        )
+        print(settings2.partition_level_strings)
 
 
 class TestGaussianRoute:
