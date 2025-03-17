@@ -788,9 +788,15 @@ def xtb_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "XTBTests")
 
 
-# @pytest.fixture()
-# def xtb_inputs_directory(xtb_test_directory):
-#     return os.path.join(xtb_test_directory, "inputs")
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    return os.path.join(xtb_test_directory, "inputs")
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    xtb_default_inputfile = os.path.join(xtb_inputs_directory, "default.inp")
+    return xtb_default_inputfile
 
 
 @pytest.fixture()

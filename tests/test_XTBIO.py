@@ -2,7 +2,45 @@ import os.path
 
 import numpy as np
 
+from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
+
+
+class TestXTBInput:
+    def test_default_input(self, xtb_default_inputfile):
+        assert os.path.exists(xtb_default_inputfile)
+        xtb_input = XTBInput(filename=xtb_default_inputfile)
+        assert xtb_input.charge == 0
+        assert xtb_input.spin == 0
+        assert xtb_input.method == "GFN2-xTB"
+        assert xtb_input.scc
+        assert xtb_input.periodic is False
+        assert xtb_input.dispersion_energy_scale == 1.0
+        assert xtb_input.max_iterations == 250
+        assert xtb_input.electronic_temperature == 300.0
+        assert xtb_input.broyden_damping == 0.4
+        assert xtb_input.guess_charges is None
+        assert xtb_input.engine == "rf"
+        assert xtb_input.optimization_level == "normal"
+        assert xtb_input.anc_microcycles == 20
+        assert xtb_input.max_optcycles == 0
+        assert xtb_input.max_displacement == 1.0
+        assert xtb_input.low_frequency_cutoff == 0.01
+        assert xtb_input.hessian_model == "old"
+        assert xtb_input.s6_in_model_hessian == 20.0
+        assert xtb_input.stretch_force_constant == 0.4
+        assert xtb_input.bend_force_constant == 0.13
+        assert xtb_input.torsion_force_constant == 0.75e-2
+        assert xtb_input.out_of_plane_force_constant == 0.0
+        assert xtb_input.additional_vdw_contribution == 0.0
+        assert xtb_input.electrostatic_contribution == 0.0
+        assert xtb_input.distance_cutoff == 8.366600265340756
+        assert xtb_input.exact_rational_function is False
+        assert xtb_input.average_convergence is False
+        assert xtb_input.temperature == 298.15
+        assert xtb_input.rotor_cutoff == 50.0
+        assert xtb_input.imaginary_frequency_cutoff == -20.0
+        assert xtb_input.scaling_factor == 1.0
 
 
 class TestXTBOutput:
