@@ -66,6 +66,10 @@ class Molecule:
         charge=None,
         multiplicity=None,
         frozen_atoms=None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        bonded_atoms=None,
         pbc_conditions=None,
         translation_vectors=None,
         energy=None,
@@ -79,6 +83,10 @@ class Molecule:
         self.charge = charge
         self.multiplicity = multiplicity
         self.frozen_atoms = frozen_atoms
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self.energy = energy
@@ -441,14 +449,14 @@ class Molecule:
 
         return rdkit_mol
 
-    def write_coordinates(self, f, program=None):
+    def write_coordinates(self, f, program=None, job_settings=None):
         """Write the coordinates of the molecule to a file.
         No empty end line at the end of the file."""
         if program is None:
             program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
-            self._write_gaussian_coordinates(f)
-            self._write_gaussian_pbc_coordinates(f)
+            self._write_gaussian_coordinates(f, job_settings)
+            self._write_gaussian_pbc_coordinates(f, job_settings)
         elif program.lower() == "orca":
             self._write_orca_coordinates(f)
             self._write_orca_pbc_coordinates(f)
@@ -514,44 +522,37 @@ class Molecule:
             self.write_coordinates(f, program="gaussian")
             f.write("\n")
 
-    def _write_gaussian_coordinates(self, f):
+    def _write_gaussian_coordinates(self, f, job_settings):
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        job_settings = self.qmmm_settings
         for i, (s, (x, y, z)) in enumerate(
             zip(self.chemical_symbols, self.positions)
         ):
             line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
                 line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if (
-                job_settings.high_level_atoms
-                and (i + 1) in job_settings.high_level_atoms
-            ):
+            if self.high_level_atoms and (i + 1) in self.high_level_atoms:
                 line += " H"
             elif (
-                job_settings.medium_level_atoms
-                and (i + 1) in job_settings.medium_level_atoms
+                self.medium_level_atoms and (i + 1) in self.medium_level_atoms
             ):
                 line += " M"
-            elif (
-                job_settings.low_level_atoms
-                and (i + 1) in job_settings.low_level_atoms
-            ):
+            elif self.low_level_atoms and (i + 1) in self.low_level_atoms:
                 line += " L"
+
             # Handle QM link atoms and bonded-to atoms
-            if job_settings.bonded_atoms:
-                for atom1, atom2 in job_settings.bonded_atoms:
+            if self.bonded_atoms:
+                for atom1, atom2 in self.bonded_atoms:
                     if (i + 1) == atom1 and (
                         (
-                            atom1 in job_settings.medium_level_atoms
-                            and atom2 in job_settings.high_level_atoms
+                            atom1 in self.medium_level_atoms
+                            and atom2 in self.high_level_atoms
                         )
                         or (
-                            atom1 in job_settings.low_level_atoms
-                            and atom2 in job_settings.medium_level_atoms
+                            atom1 in self.low_level_atoms
+                            and atom2 in self.medium_level_atoms
                         )
                     ):
                         line += (
@@ -567,12 +568,12 @@ class Molecule:
                                 line += f" {scale_factor}"
                     elif (i + 1) == atom2 and (
                         (
-                            atom2 in job_settings.medium_level_atoms
-                            and atom1 in job_settings.high_level_atoms
+                            atom2 in self.medium_level_atoms
+                            and atom1 in self.high_level_atoms
                         )
                         or (
-                            atom2 in job_settings.low_level_atoms
-                            and atom1 in job_settings.medium_level_atoms
+                            atom2 in self.low_level_atoms
+                            and atom1 in self.medium_level_atoms
                         )
                     ):
                         line += (
@@ -589,7 +590,7 @@ class Molecule:
             f.write(line + "\n")
         return f
 
-    def _write_gaussian_pbc_coordinates(self, f):
+    def _write_gaussian_pbc_coordinates(self, f, job_settings):
         """Write the coordinates of the molecule with PBC conditions to a file."""
         if self.pbc_conditions is not None:
             assert (

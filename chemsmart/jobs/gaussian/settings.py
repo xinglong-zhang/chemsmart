@@ -715,7 +715,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         basis_low=None,
         force_field_low=None,
         force_field=None,
-        model_high_level_charges=None,
+        model_high_level_charge=None,
         model_high_level_spin=None,
         model_low_level_charges=None,
         model_low_level_spin=None,
@@ -733,7 +733,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
         Args:
             force_field (optional): force field to assign partial charges for MM region
-            high_level_atoms (list): List of high level atoms.
+            high_level_atoms (list): List of lists of high level atoms.
             medium_level_atoms (list) : List of medium level atoms.
             low_level_atoms (list): List of low level atoms.
             bonded_atoms (list): List of bonded atoms.
@@ -752,9 +752,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.functional_low = functional_low
         self.basis_low = basis_low
         self.force_field_low = force_field_low
-        self.model_level_charges = model_high_level_charges
+        self.model_high_level_charge = model_high_level_charge
         self.model_high_level_spin = model_high_level_spin
-        self.model_low_level_charges = model_low_level_charges
+        self.model_low_level_charge = model_low_level_charges
         self.model_low_level_spin = model_low_level_spin
         self.real_low_level_charges = real_low_level_charges
         self.real_low_level_spin = real_low_level_spin
@@ -775,6 +775,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             or self.functional_low
         )
         self.basis = self.basis_high or self.basis_medium or self.basis_low
+
+    @property
+    def partition_level_strings(self):
+        """Obtain the list of partition levels for the atoms in the system."""
+        return self._get_partition_levels()
 
     def validate_and_assign_level(
         self, functional, basis, force_fied, level_name
@@ -849,3 +854,39 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             oniom_string += f":{self.low_level_of_theory})"
 
         return oniom_string
+
+    def _get_partition_levels(self):
+        """Obtain the list of partition levels for the atoms in the system.
+        Returns:
+            list: List of partition levels as strings (H, M, L) for the atoms in the system.
+        """
+        # convert atom indices to lists if they are not already so
+        # for example high_level_atoms=[[18-28], [29-39], [40-50], [51-61], [62-72]],
+        # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
+        from chemsmart.utils.utils import get_list_from_string_range
+
+        if self.high_level_atoms and not isinstance(
+            self.high_level_atoms, list
+        ):
+            self.high_level_atoms = get_list_from_string_range(
+                self.high_level_atoms
+            )
+        if self.medium_level_atoms and not isinstance(
+            self.medium_level_atoms, list
+        ):
+            self.medium_level_atoms = get_list_from_string_range(
+                self.medium_level_atoms
+            )
+        if self.low_level_atoms and not isinstance(self.low_level_atoms, list):
+            self.low_level_atoms = get_list_from_string_range(
+                self.low_level_atoms
+            )
+        partition_levels = []
+        for i, atom in enumerate(self.molecule.chemical_symbols):
+            if i + 1 in self.high_level_atoms:
+                partition_levels.append("H")
+            elif i + 1 in self.medium_level_atoms:
+                partition_levels.append("M")
+            elif i + 1 in self.low_level_atoms:
+                partition_levels.append("L")
+        return partition_levels
