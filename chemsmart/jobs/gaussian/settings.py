@@ -925,6 +925,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         For 3-layers ONIOM, the format is:
         cRealL sRealL [cIntM sIntM [cIntL sIntL [cModH sModH [cModM sModM [cModL sModL]]]]]
+        Real, Int=Intermediate system, and Mod=Model system, and second character
+        is one of: H, M and L for the High, Medium and Low levels).
         """
         charge_and_multiplicity = ""
         if (
