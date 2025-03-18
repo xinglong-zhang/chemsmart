@@ -554,6 +554,10 @@ class Molecule:
                             atom1 in self.low_level_atoms
                             and atom2 in self.medium_level_atoms
                         )
+                        or (
+                            atom1 in self.low_level_atoms
+                            and atom2 in self.high_level_atoms
+                        )
                     ):
                         line += (
                             f" H {atom2}"  # atom1 (low-level) gets link atom
