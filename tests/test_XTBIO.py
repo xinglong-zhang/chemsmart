@@ -37,10 +37,35 @@ class TestXTBInput:
         assert xtb_input.distance_cutoff == 8.366600265340756
         assert xtb_input.exact_rational_function is False
         assert xtb_input.average_convergence is False
-        assert xtb_input.temperature == 298.15
+        assert xtb_input.thermo_temperature == 298.15
         assert xtb_input.rotor_cutoff == 50.0
         assert xtb_input.imaginary_frequency_cutoff == -20.0
         assert xtb_input.scaling_factor == 1.0
+        assert xtb_input.md_temperature == 298.15
+        assert xtb_input.md_time == 50.0
+        assert xtb_input.dump_structure == 50.0
+        assert xtb_input.velocity_in_trj is False
+        assert xtb_input.nvt_ensemble
+        assert xtb_input.skip_interval == 500
+        assert xtb_input.md_step == 4.0
+        assert xtb_input.hydrogen_mass == 4
+        assert xtb_input.shake_algorithm == 2
+        assert xtb_input.md_scc_accuracy == 2.0
+        assert xtb_input.force_writing_restart is False
+        assert xtb_input.hess_scc_accuracy == 0.3
+        assert xtb_input.hess_step == 0.005
+        assert xtb_input.hess_scale == 1.0
+        assert xtb_input.modef_n == 31
+        assert xtb_input.modef_step == 1.0
+        assert xtb_input.modef_update == 0.2
+        assert xtb_input.modef_local == 0
+        assert xtb_input.modef_threshold == 0.0
+        assert xtb_input.projected_mode == 0
+        assert xtb_input.mode_following == 7
+        assert xtb_input.cube_step == 0.4
+        assert xtb_input.density_matrix_threshold == 0.05
+        assert xtb_input.boundary_offset == 3.0
+        assert xtb_input.cube_output == 1
 
 
 class TestXTBOutput:
