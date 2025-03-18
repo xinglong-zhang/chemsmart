@@ -917,7 +917,10 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     def _get_charge_and_multiplicity(self):
         """Obtain charge and multiplicity string.
         For two-layer ONIOM jobs, the format for this input line is:
-        chrg_real-low spin_real-low [chrg_model-high spin_model-high [chrg_model-low spin_model-low [chrg_real-high spin_real-high]]]
+
+        chrg_real-low spin_real-low [chrg_model-high spin_model-high
+                                    [chrg_model-low spin_model-low [chrg_real-high spin_real-high]]]
+
         Fourth pair applies only to ONIOM=SValue calculations.
         When only a single value pair is specified, all levels will use those values.
         If two pairs of values are included, then third pair defaults to same values as second pair.
