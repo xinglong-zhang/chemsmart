@@ -5,7 +5,6 @@ import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
-from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -714,11 +713,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         functional_low=None,
         basis_low=None,
         force_field_low=None,
-        high_level_charges=None,
+        high_level_charge=None,
         high_level_multiplicity=None,
-        medium_level_charges=None,
+        medium_level_charge=None,
         medium_level_multiplicity=None,
-        low_level_charges=None,
+        low_level_charge=None,
         low_level_multiplicity=None,
         high_level_atoms=None,
         medium_level_atoms=None,
@@ -757,11 +756,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.functional_low = functional_low
         self.basis_low = basis_low
         self.force_field_low = force_field_low
-        self.high_level_charges = high_level_charges
+        self.high_level_charge = high_level_charge
         self.high_level_multiplicity = high_level_multiplicity
-        self.medium_level_charges = medium_level_charges
+        self.medium_level_charges = medium_level_charge
         self.medium_level_multiplicity = medium_level_multiplicity
-        self.low_level_charges = low_level_charges
+        self.low_level_charge = low_level_charge
         self.low_level_multiplicity = low_level_multiplicity
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
@@ -795,11 +794,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     def validate_and_assign_level(
         self, functional, basis, force_field, level_name
     ):
-        """Validates functional and basis set for a given level and returns formatted theory string.
-        Return level of theory if both functional and basis are specified, or force field if both are not specified.
+        """Validates functional and basis set for a given level
+        and returns formatted theory string.
+        Return level of theory if both functional and basis are specified,
+        or force field if both are not specified.
         """
-
-        level_of_theory = None
 
         if functional and basis and force_field:
             raise ValueError(
@@ -807,9 +806,10 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             )
 
         if force_field:
-            assert (
-                functional is None and basis is None
-            ), f"Force field is given for {level_name} level of theory, thus no functional and basis should be given!"
+            assert functional is None and basis is None, (
+                f"Force field is given for {level_name} level of theory, "
+                f"thus no functional and basis should be given!"
+            )
             level_of_theory = force_field
         else:
             # if force field is not given, then functional and basis can be given,
@@ -843,18 +843,21 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             self.functional_high,
             self.basis_high,
             self.force_field_high,
-            "high",
+            level_name="high",
         )
 
         self.medium_level_of_theory = self.validate_and_assign_level(
             self.functional_medium,
             self.basis_medium,
             self.force_field_medium,
-            "medium",
+            level_name="medium",
         )
 
         self.low_level_of_theory = self.validate_and_assign_level(
-            self.functional_low, self.basis_low, self.force_field_low, "low"
+            self.functional_low,
+            self.basis_low,
+            self.force_field_low,
+            level_name="low",
         )
 
         if self.high_level_of_theory is not None:
@@ -912,10 +915,20 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         )
 
     def _get_charge_and_multiplicity(self):
-        """Obtain charge and multiplicity string."""
+        """Obtain charge and multiplicity string.
+        For two-layer ONIOM jobs, the format for this input line is:
+        chrg_real-low spin_real-low [chrg_model-high spin_model-high [chrg_model-low spin_model-low [chrg_real-high spin_real-high]]]
+        Fourth pair applies only to ONIOM=SValue calculations.
+        When only a single value pair is specified, all levels will use those values.
+        If two pairs of values are included, then third pair defaults to same values as second pair.
+        If final pair is omitted for an S-value job, it defaults to values for the real system at low level.
+
+        For 3-layers ONIOM, the format is:
+        cRealL sRealL [cIntM sIntM [cIntL sIntL [cModH sModH [cModM sModM [cModL sModL]]]]]
+        """
         charge_and_multiplicity = ""
         if (
-            self.high_level_charges is not None
+            self.high_level_charge is not None
             and self.high_level_multiplicity is not None
         ):
             if (
@@ -923,25 +936,25 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 and self.medium_level_charges is None
             ):
                 charge_and_multiplicity = (
-                    f"{self.low_level_charges} {self.low_level_multiplicity} "
-                    + f"{self.high_level_charges} {self.high_level_multiplicity} "
+                    f"{self.low_level_charge} {self.low_level_multiplicity} "
+                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
                     * 2
                 )
             elif (
-                self.low_level_charges is None
+                self.low_level_charge is None
                 and self.low_level_multiplicity is None
             ):
                 charge_and_multiplicity = (
                     f"{self.medium_level_charges} {self.medium_level_multiplicity} "
-                    + f"{self.high_level_charges} {self.high_level_multiplicity} "
+                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
                     * 2
                 )
             else:
                 charge_and_multiplicity = (
-                    f"{self.low_level_charges} {self.low_level_multiplicity} "
+                    f"{self.low_level_charge} {self.low_level_multiplicity} "
                     + f"{self.medium_level_charges} {self.medium_level_multiplicity} "
                     * 2
-                    + f"{self.high_level_charges} {self.high_level_multiplicity} "
+                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
                     * 3
                 )
 

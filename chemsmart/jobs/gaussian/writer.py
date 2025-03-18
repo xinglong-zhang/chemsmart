@@ -123,7 +123,7 @@ class GaussianInputWriter(InputWriter):
     def _write_charge_and_multiplicity_qmmm(self, f):
         logger.debug("Writing charge and multiplicity for QM/MM.")
         assert (
-            self.settings.high_level_charges
+            self.settings.high_level_charge
             and self.settings.high_level_multiplicity
         ) and (
             (
@@ -131,7 +131,7 @@ class GaussianInputWriter(InputWriter):
                 and self.settings.medium_level_multiplicity
             )
             or (
-                self.settings.low_level_charges
+                self.settings.low_level_charge
                 and self.settings.low_level_multiplicity
             )
         ), "Charge and multiplicity of every layer must be specified!"
