@@ -127,7 +127,7 @@ class GaussianInputWriter(InputWriter):
             and self.settings.high_level_multiplicity
         ) and (
             (
-                self.settings.medium_level_charges
+                self.settings.medium_level_charge
                 and self.settings.medium_level_multiplicity
             )
             or (
@@ -138,7 +138,7 @@ class GaussianInputWriter(InputWriter):
         line = f"{self.settings.charge_and_multiplicity}\n"
         f.write(line)
 
-    def _write_cartesian_coordinates_normal_jobs(self, f):
+    def _write_cartesian_coordinates(self, f):
         logger.debug(
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )

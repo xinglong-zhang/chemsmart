@@ -758,7 +758,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.force_field_low = force_field_low
         self.high_level_charge = high_level_charge
         self.high_level_multiplicity = high_level_multiplicity
-        self.medium_level_charges = medium_level_charge
+        self.medium_level_charge = medium_level_charge
         self.medium_level_multiplicity = medium_level_multiplicity
         self.low_level_charge = low_level_charge
         self.low_level_multiplicity = low_level_multiplicity
@@ -780,6 +780,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             or self.functional_low
         )
         self.basis = self.basis_high or self.basis_medium or self.basis_low
+
+        if self.high_level_charge is not None:
+            self.charge=self.high_level_charge
+        if self.high_level_multiplicity is not None:
+            self.multiplicity=self.high_level_multiplicity
 
     @property
     def partition_level_strings(self):
@@ -902,12 +907,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 - set(medium_level_atoms)
                 - set(self.high_level_atoms)
             )
-            if self.low_level_atoms and not isinstance(
-                self.low_level_atoms, list
-            ):
-                self.low_level_atoms = get_list_from_string_range(
-                    self.low_level_atoms
-                )
+        if self.low_level_atoms and not isinstance(
+            self.low_level_atoms, list
+        ):
+            self.low_level_atoms = get_list_from_string_range(
+                self.low_level_atoms
+            )
         return (
             self.high_level_atoms,
             self.medium_level_atoms,
@@ -925,6 +930,8 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         When only a single value pair is specified, all levels will use those values.
         If two pairs of values are included, then third pair defaults to same values as second pair.
         If final pair is omitted for an S-value job, it defaults to values for the real system at low level.
+        For such two-layer ONIOM jobs, users are required to specify the charge and multiplicity of high-level
+         layer and low-level layer, instead high and medium level.
 
         For 3-layers ONIOM, the format is:
         cRealL sRealL [cIntM sIntM [cIntL sIntL [cModH sModH [cModM sModM [cModL sModL]]]]]
@@ -938,7 +945,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         ):
             if (
                 self.medium_level_multiplicity is None
-                and self.medium_level_charges is None
+                and self.medium_level_charge is None
             ):
                 charge_and_multiplicity = (
                     f"{self.low_level_charge} {self.low_level_multiplicity} "
@@ -946,18 +953,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                     * 2
                 )
             elif (
-                self.low_level_charge is None
-                and self.low_level_multiplicity is None
+                self.low_level_charge is not None
+                and self.low_level_multiplicity is not None
             ):
                 charge_and_multiplicity = (
-                    f"{self.medium_level_charges} {self.medium_level_multiplicity} "
-                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                    * 2
-                )
-            else:
-                charge_and_multiplicity = (
                     f"{self.low_level_charge} {self.low_level_multiplicity} "
-                    + f"{self.medium_level_charges} {self.medium_level_multiplicity} "
+                    + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
                     * 2
                     + f"{self.high_level_charge} {self.high_level_multiplicity} "
                     * 3

@@ -76,7 +76,6 @@ class Molecule:
         forces=None,
         velocities=None,
         info=None,
-        qmmm_settings=None,
     ):
         self.symbols = symbols
         self.positions = positions
@@ -94,7 +93,6 @@ class Molecule:
         self.velocities = velocities
         self.info = info
         self._num_atoms = len(self.symbols)
-        self.qmmm_settings = qmmm_settings
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -457,6 +455,8 @@ class Molecule:
         if program.lower() == "gaussian":
             self._write_gaussian_coordinates(f, job_settings)
             self._write_gaussian_pbc_coordinates(f, job_settings)
+            # if job_settings.lower() == "qmmm"
+            #     self._write_gaussian_coordinates(f, job_settings)
         elif program.lower() == "orca":
             self._write_orca_coordinates(f)
             self._write_orca_pbc_coordinates(f)
