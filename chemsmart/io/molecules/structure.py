@@ -66,10 +66,6 @@ class Molecule:
         charge=None,
         multiplicity=None,
         frozen_atoms=None,
-        high_level_atoms=None,
-        medium_level_atoms=None,
-        low_level_atoms=None,
-        bonded_atoms=None,
         pbc_conditions=None,
         translation_vectors=None,
         energy=None,
@@ -82,10 +78,6 @@ class Molecule:
         self.charge = charge
         self.multiplicity = multiplicity
         self.frozen_atoms = frozen_atoms
-        self.high_level_atoms = high_level_atoms
-        self.medium_level_atoms = medium_level_atoms
-        self.low_level_atoms = low_level_atoms
-        self.bonded_atoms = bonded_atoms
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self.energy = energy
@@ -453,10 +445,8 @@ class Molecule:
         if program is None:
             program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
-            self._write_gaussian_coordinates(f, job_settings)
-            self._write_gaussian_pbc_coordinates(f, job_settings)
-            # if job_settings.lower() == "qmmm"
-            #     self._write_gaussian_coordinates(f, job_settings)
+            self._write_gaussian_coordinates(f, job_settings=None)
+            self._write_gaussian_pbc_coordinates(f, job_settings=None)
         elif program.lower() == "orca":
             self._write_orca_coordinates(f)
             self._write_orca_pbc_coordinates(f)
@@ -533,64 +523,68 @@ class Molecule:
             line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
                 line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if self.high_level_atoms and (i + 1) in self.high_level_atoms:
-                line += " H"
-            elif (
-                self.medium_level_atoms and (i + 1) in self.medium_level_atoms
-            ):
-                line += " M"
-            elif self.low_level_atoms and (i + 1) in self.low_level_atoms:
-                line += " L"
+            if job_settings is not None:
+                if (
+                    job_settings.high_level_atoms
+                    and (i + 1) in job_settings.partition_level_strings[0]
+                ):
+                    line += " H"
+                elif (
+                    job_settings.medium_level_atoms
+                    and (i + 1) in job_settings.partition_level_strings[1]
+                ):
+                    line += " M"
+                elif (
+                    job_settings.low_level_atoms
+                    and (i + 1) in job_settings.low_level_atoms
+                ):
+                    line += " L"
 
-            # Handle QM link atoms and bonded-to atoms
-            if self.bonded_atoms:
-                for atom1, atom2 in self.bonded_atoms:
-                    if (i + 1) == atom1 and (
-                        (
-                            atom1 in self.medium_level_atoms
-                            and atom2 in self.high_level_atoms
-                        )
-                        or (
-                            atom1 in self.low_level_atoms
-                            and atom2 in self.medium_level_atoms
-                        )
-                        or (
-                            atom1 in self.low_level_atoms
-                            and atom2 in self.high_level_atoms
-                        )
-                    ):
-                        line += (
-                            f" H {atom2}"  # atom1 (low-level) gets link atom
-                        )
-                        if hasattr(
-                            job_settings, "scale_factor_initialization"
-                        ):
-                            scale_factor = (
-                                job_settings.scale_factor_initialization()
+                # Handle QM link atoms and bonded-to atoms
+                if job_settings is not None and job_settings.bonded_atoms:
+                    for atom1, atom2 in job_settings.bonded_atoms:
+                        if (i + 1) == atom1 and (
+                            (
+                                atom1 in job_settings.medium_level_atoms
+                                and atom2 in job_settings.high_level_atoms
                             )
-                            if scale_factor:
-                                line += f" {scale_factor}"
-                    elif (i + 1) == atom2 and (
-                        (
-                            atom2 in self.medium_level_atoms
-                            and atom1 in self.high_level_atoms
-                        )
-                        or (
-                            atom2 in self.low_level_atoms
-                            and atom1 in self.medium_level_atoms
-                        )
-                    ):
-                        line += (
-                            f" H {atom1}"  # atom2 (low-level) gets link atom
-                        )
-                        if hasattr(
-                            job_settings, "scale_factor_initialization"
-                        ):
-                            scale_factor = (
-                                job_settings.scale_factor_initialization()
+                            or (
+                                atom1 in job_settings.low_level_atoms
+                                and atom2 in job_settings.medium_level_atoms
                             )
-                            if scale_factor:
-                                line += f" {scale_factor}"
+                            or (
+                                atom1 in job_settings.low_level_atoms
+                                and atom2 in job_settings.high_level_atoms
+                            )
+                        ):
+                            line += f" H {atom2}"  # atom1 (low-level) gets link atom
+                            if hasattr(
+                                job_settings, "scale_factor_initialization"
+                            ):
+                                scale_factor = (
+                                    job_settings.scale_factor_initialization()
+                                )
+                                if scale_factor not in [None, "None", ""]:
+                                    line += f" {scale_factor}"
+                        elif (i + 1) == atom2 and (
+                            (
+                                atom2 in job_settings.medium_level_atoms
+                                and atom1 in job_settings.high_level_atoms
+                            )
+                            or (
+                                atom2 in job_settings.low_level_atoms
+                                and atom1 in job_settings.medium_level_atoms
+                            )
+                        ):
+                            line += f" H {atom1}"  # atom2 (low-level) gets link atom
+                            if hasattr(
+                                job_settings, "scale_factor_initialization"
+                            ):
+                                scale_factor = (
+                                    job_settings.scale_factor_initialization()
+                                )
+                                if scale_factor not in [None, "None", ""]:
+                                    line += f" {scale_factor}"
             f.write(line + "\n")
         return f
 
@@ -1053,7 +1047,7 @@ class CoordinateBlock:
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
-            if len(line_elements) > 4:
+            if len(line_elements) > 4 and line[-1].isdigit():
                 if np.isclose(atomic_number, second_value, atol=10e-6):
                     # happens in cube file, where the second value is the same as
                     # the atomic number but in float format

@@ -9,6 +9,7 @@ from .link import link
 from .modred import modred
 from .nci import nci
 from .opt import opt
+from .qmmm import qmmm
 from .resp import resp
 from .saopt import saopt
 from .scan import scan
@@ -16,7 +17,6 @@ from .singlepoint import sp
 from .tddft import td
 from .ts import ts
 from .wbi import wbi
-from .qmmm import qmmm
 
 __all__ = [
     "com",

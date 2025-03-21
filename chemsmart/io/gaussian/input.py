@@ -165,7 +165,7 @@ class Gaussian16Input(GaussianFileMixin):
         for line in self.contents:
             line_elements = line.split()
             if (
-                    (len(line_elements) == 2 or len(line_elements) == 12)
+                (len(line_elements) == 2 or len(line_elements) == 12)
                 and line_elements[0].replace("-", "").isdigit()
                 and line_elements[1].isdigit()
             ):

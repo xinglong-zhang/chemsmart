@@ -1,3 +1,4 @@
+import ast
 import copy
 import logging
 import os
@@ -780,11 +781,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             or self.functional_low
         )
         self.basis = self.basis_high or self.basis_medium or self.basis_low
+        self.title = "Gaussian QM/MM job"
 
         if self.high_level_charge is not None:
-            self.charge=self.high_level_charge
+            self.charge = self.high_level_charge
         if self.high_level_multiplicity is not None:
-            self.multiplicity=self.high_level_multiplicity
+            self.multiplicity = self.high_level_multiplicity
 
     @property
     def partition_level_strings(self):
@@ -898,7 +900,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             )
         if self.low_level_atoms is None:
             # set the rest of the atoms as low level atoms
-            default_layer = list(range(1, self.num_atoms + 1))
+            default_layer = list(range(1, int(self.num_atoms) + 1))
             medium_level_atoms = (
                 self.medium_level_atoms if self.medium_level_atoms else []
             )
@@ -907,16 +909,18 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 - set(medium_level_atoms)
                 - set(self.high_level_atoms)
             )
-        if self.low_level_atoms and not isinstance(
-            self.low_level_atoms, list
-        ):
+        if self.low_level_atoms and not isinstance(self.low_level_atoms, list):
             self.low_level_atoms = get_list_from_string_range(
                 self.low_level_atoms
             )
+
+        if isinstance(self.bonded_atoms, str):
+            self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
         return (
             self.high_level_atoms,
             self.medium_level_atoms,
             self.low_level_atoms,
+            self.bonded_atoms,
         )
 
     def _get_charge_and_multiplicity(self):

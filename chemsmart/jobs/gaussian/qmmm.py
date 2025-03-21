@@ -8,4 +8,3 @@ class GaussianQMMMJob(GaussianJob):
         super().__init__(
             molecule=molecule, settings=settings, label=label, **kwargs
         )
-
