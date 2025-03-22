@@ -58,6 +58,58 @@ class XTBInput(FileMixin):
                 return 0
         return 0
 
+    # Content group: cube
+
+    @property
+    def cube_step(self):
+        """Specify the grid spacing for cube file, default is 0.4"""
+        try:
+            return float(self._get_key("cube", "step", "0.4"))
+        except ValueError:
+            return 0.4
+
+    @property
+    def density_matrix_threshold(self):
+        """Set the density matrix neglect threshold, default is 0.05"""
+        try:
+            return float(self._get_key("cube", "pthr", "0.05"))
+        except ValueError:
+            return 0.05
+
+    @property
+    def boundary_offset(self):
+        """Set the grid boundary offset, default is 3.0"""
+        try:
+            return float(self._get_key("cube", "boff", "3.0"))
+        except ValueError:
+            return 3.0
+
+    @property
+    def cube_output(self):
+        """Set cube output, 0 = writing molden file, 1 = writing cube file (default), 2 = no file output"""
+        try:
+            return int(self._get_key("cube", "cal", "1"))
+        except ValueError:
+            return 1
+
+    # Content group: embedding
+
+    @property
+    def atom_type(self):
+        """Set the default atom type for point charges"""
+        at = self._get_key("embedding", "at")
+        if at is not None:
+            try:
+                return int(at)
+            except ValueError:
+                return None
+        return None
+
+    @property
+    def isotropic_electrostatic(self):
+        """Determine whether to use isotropic electrostatic with point charges, default is True"""
+        return self._get_key("embedding", "es", "true").lower() == "true"
+
     # Content group: gfn
 
     @property
@@ -86,36 +138,176 @@ class XTBInput(FileMixin):
         except ValueError:
             return 1.0
 
-    # Content group: scc
+    # Content group: hess
 
     @property
-    def max_iterations(self):
-        """Set the maximum number of SCC iterations, default is 250"""
+    def hess_scc_accuracy(self):
+        """Set SCC accuracy level in Hessian runs, default is 0.3"""
         try:
-            return int(self._get_key("scc", "maxiterations", "250"))
+            return float(self._get_key("hess", "sccacc", "0.3"))
         except ValueError:
-            return 250
+            return 0.3
 
     @property
-    def electronic_temperature(self):
-        """Set the electronic temperature for the Fermi smearing in K, default is 300.0 K"""
+    def hess_step(self):
+        """Set the Cartesian displacement increment for numerical Hessian, default is 0.005"""
         try:
-            return float(self._get_key("scc", "temp", "300.0"))
+            return float(self._get_key("hess", "step", "0.005"))
         except ValueError:
-            return 300.0
+            return 0.005
 
     @property
-    def broyden_damping(self):
-        """Set the damping for the Broyden convergence accelerator, default is 0.4"""
+    def hess_scale(self):
+        """Set the scaling factor for the hessian elements, default is 1.0"""
         try:
-            return float(self._get_key("scc", "broydamp", "0.4"))
+            return float(self._get_key("hess", "scale", "1.0"))
         except ValueError:
-            return 0.4
+            return 1.0
+
+    # Content group: md
 
     @property
-    def guess_charges(self):
-        """Specify the guess charges for GFN2-xTB SCC calculation"""
-        return self._get_key("scc", "guess")
+    def md_temperature(self):
+        """Set the temperature for MD thermostat or GBSA solvation in K, default is 298.15 K"""
+        try:
+            return float(self._get_key("md", "temp", "298.15"))
+        except ValueError:
+            return 298.15
+
+    @property
+    def md_time(self):
+        """Set the MD run time in ps, default is 50.0 ps"""
+        try:
+            return float(self._get_key("md", "time", "50.0"))
+        except ValueError:
+            return 50.0
+
+    @property
+    def dump_structure(self):
+        """Set the interval for trajectory printout in fs, default is 50 fs"""
+        try:
+            return float(self._get_key("md", "dump", "50.0"))
+        except ValueError:
+            return 50.0
+
+    @property
+    def velocity_in_trj(self):
+        """Determine whether velocities should be included in the trajectory (trj) file, default is False"""
+        return int(self._get_key("md", "velo", "0")) == 1
+
+    @property
+    def nvt_ensemble(self):
+        """Specify whether to use a thermostat (perform simulation in NVT ensemble), or the NVE ensemble is used, default is True"""
+        return int(self._get_key("md", "nvt", "1")) == 1
+
+    @property
+    def skip_interval(self):
+        """Define the skip interval for -mdav and -mdopt calculations, default is 500"""
+        try:
+            return int(self._get_key("md", "skip", "500"))
+        except ValueError:
+            return 500
+
+    @property
+    def md_step(self):
+        """Set MD time step in fs, default is 4.0 fs"""
+        try:
+            return float(self._get_key("md", "step", "4.0"))
+        except ValueError:
+            return 4.0
+
+    @property
+    def hydrogen_mass(self):
+        """Set hydrogen mass to this value in amu, default is 4 amu"""
+        try:
+            return int(self._get_key("md", "hmass", "4"))
+        except ValueError:
+            return 4
+
+    @property
+    def shake_algorithm(self):
+        """Control SHAKE algorithm to constrain bonds, 0 = off, 1 = X-H only, 2 = all bonds (default)"""
+        try:
+            return int(self._get_key("md", "shake", "2"))
+        except ValueError:
+            return 2
+
+    @property
+    def md_scc_accuracy(self):
+        """Set SCC accuracy level in MD, default is 2.0"""
+        try:
+            return float(self._get_key("md", "sccacc", "2.0"))
+        except ValueError:
+            return 2.0
+
+    @property
+    def force_writing_restart(self):
+        """Determine whether to force the writing of a restart file at each dump step, default is False"""
+        return int(self._get_key("md", "forcewrrestart", "0")) == 1
+
+    # Content group: modef
+
+    @property
+    def modef_n(self):
+        """Specify the number of points along the normal mode path scan"""
+        n = self._get_key("modef", "n")
+        if n is not None:
+            try:
+                return int(n)
+            except ValueError:
+                return None
+        return None
+
+    @property
+    def modef_step(self):
+        """Set the step lengths for scan, default is 1.0"""
+        try:
+            return float(self._get_key("modef", "step", "1.0"))
+        except ValueError:
+            return 1.0
+
+    @property
+    def modef_update(self):
+        """Update the search mode by a fraction of the displacement at every step, 0.0 means no update, default is 0.2"""
+        try:
+            return float(self._get_key("modef", "updat", "0.2"))
+        except ValueError:
+            return 0.2
+
+    @property
+    def modef_local(self):
+        """Specify the type of normal modes used, 0 = canonical normal modes (default), 1 = Pipek-Mezey localized modes"""
+        try:
+            return int(self._get_key("modef", "local", "0"))
+        except ValueError:
+            return 0
+
+    @property
+    def modef_threshold(self):
+        """Set the frequency threshold up to which frequency modes are used for mode based conformer search, default is 0.0"""
+        try:
+            return float(self._get_key("modef", "vthr", "0.0"))
+        except ValueError:
+            return 0.0
+
+    @property
+    def projected_mode(self):
+        """Set the number of second mode which should be projected out in mode following, default is 0"""
+        try:
+            return int(self._get_key("modef", "prj", "0"))
+        except ValueError:
+            return 0
+
+    @property
+    def mode_following(self):
+        """Specify the mode number to follow"""
+        mode = self._get_key("modef", "mode")
+        if mode is not None:
+            try:
+                return int(mode)
+            except ValueError:
+                return None
+        return None
 
     # Content group: opt
 
@@ -263,6 +455,107 @@ class XTBInput(FileMixin):
         """average the energy and gradient before checking for convergence, default is False"""
         return self._get_key("opt", "average conv", "false").lower() == "true"
 
+    # Content group: path
+
+    @property
+    def pathfinder_runs(self):
+        """Set the number of runs for pathfinder, default is 3"""
+        try:
+            return int(self._get_key("path", "nrun", "3"))
+        except ValueError:
+            return 3
+
+    @property
+    def path_points(self):
+        """Set the number of points on the path to optimize, default is 50"""
+        try:
+            return int(self._get_key("path", "npoint", "50"))
+        except ValueError:
+            return 50
+
+    @property
+    def path_optimization_steps(self):
+        """Set the number of steps to optimize the points on the path, default is 3"""
+        try:
+            return int(self._get_key("path", "anopt", "3"))
+        except ValueError:
+            return 3
+
+    @property
+    def rmsd_push_factor(self):
+        """Set the factor for RMSD criterium pushing away from the reactant structure, default is 0.05"""
+        try:
+            return float(self._get_key("path", "kpush", "0.05"))
+        except ValueError:
+            return 0.05
+
+    @property
+    def rmsd_pull_factor(self):
+        """Set the factor for RMSD criterium pulling towards the product structure, default is -0.04"""
+        try:
+            return float(self._get_key("path", "kpull", "-0.04"))
+        except ValueError:
+            return -0.04
+
+    @property
+    def rmsd_width(self):
+        """Set the width of the RMSD criterium, default is 0.7"""
+        try:
+            return float(self._get_key("path", "alp", "0.7"))
+        except ValueError:
+            return 0.7
+
+    # Content group: scc
+
+    @property
+    def max_iterations(self):
+        """Set the maximum number of SCC iterations, default is 250"""
+        try:
+            return int(self._get_key("scc", "maxiterations", "250"))
+        except ValueError:
+            return 250
+
+    @property
+    def electronic_temperature(self):
+        """Set the electronic temperature for the Fermi smearing in K, default is 300.0 K"""
+        try:
+            return float(self._get_key("scc", "temp", "300.0"))
+        except ValueError:
+            return 300.0
+
+    @property
+    def broyden_damping(self):
+        """Set the damping for the Broyden convergence accelerator, default is 0.4"""
+        try:
+            return float(self._get_key("scc", "broydamp", "0.4"))
+        except ValueError:
+            return 0.4
+
+    @property
+    def guess_charges(self):
+        """Specify the guess charges for GFN2-xTB SCC calculation"""
+        return self._get_key("scc", "guess")
+
+    # Content group: symmetry
+
+    @property
+    def symmetry_threshold(self):
+        """Set the point group symmetrization threshold, default is 0.1"""
+        try:
+            return float(self._get_key("symmetry", "desy", "0.1"))
+        except ValueError:
+            return 0.1
+
+    @property
+    def symmetry_max_atoms(self):
+        """Set the maximum number of atoms for point group determination.
+        If the number of atoms exceeds this value, symmetry determination is skipped.
+        Default is 200, 0 switches it off"""
+        try:
+            return int(self._get_key("symmetry", "maxat", "200"))
+        except ValueError:
+            return 200
+
     # Content group: thermo
 
     @property
@@ -297,207 +590,49 @@ class XTBInput(FileMixin):
         except ValueError:
             return 1.0
 
-    # Content group: md
+    # Content group: wall
 
     @property
-    def md_temperature(self):
-        """Set the temperature for MD thermostat or GBSA solvation in K, default is 298.15 K"""
+    def wall_potential(self):
+        """Set kind of wall potential used, default is polynomial"""
+        return self._get_key("wall", "potential", "polynomial")
+
+    @property
+    def wall_potential_exponent(self):
+        """Specify the exponent of polynomial wall potential, default is 30"""
         try:
-            return float(self._get_key("md", "temp", "298.15"))
+            return int(self._get_key("wall", "alpha", "30"))
         except ValueError:
-            return 298.15
+            return 30
 
     @property
-    def md_time(self):
-        """Set the MD run time in ps, default is 50.0 ps"""
+    def logfermi_bias_exponent(self):
+        """Specify the exponent of logfermi bias potential, default is 6.0"""
         try:
-            return float(self._get_key("md", "time", "50.0"))
+            return float(self._get_key("wall", "beta", "6.0"))
         except ValueError:
-            return 50.0
+            return 6.0
 
     @property
-    def dump_structure(self):
-        """Set the interval for trajectory printout in fs, default is 50 fs"""
+    def wall_temperature(self):
+        """Set the temperature of the logfermi wall, default is 300.0 K"""
         try:
-            return float(self._get_key("md", "dump", "50.0"))
+            return float(self._get_key("wall", "temp", "300.0"))
         except ValueError:
-            return 50.0
+            return 300.0
 
     @property
-    def velocity_in_trj(self):
-        """Determine whether velocities should be included in the trajectory (trj) file, default is False"""
-        return int(self._get_key("md", "velo", "0")) == 1
-
-    @property
-    def nvt_ensemble(self):
-        """Specify whether to use a thermostat (perform simulation in NVT ensemble), or the NVE ensemble is used, default is True"""
-        return int(self._get_key("md", "nvt", "1")) == 1
-
-    @property
-    def skip_interval(self):
-        """Define the skip interval for -mdav and -mdopt calculations, default is 500"""
+    def auto_scale(self):
+        """Set the scales axis of automatic determined wall potentials by real, default is 1.0"""
         try:
-            return int(self._get_key("md", "skip", "500"))
-        except ValueError:
-            return 500
-
-    @property
-    def md_step(self):
-        """Set MD time step in fs, default is 4.0 fs"""
-        try:
-            return float(self._get_key("md", "step", "4.0"))
-        except ValueError:
-            return 4.0
-
-    @property
-    def hydrogen_mass(self):
-        """Set hydrogen mass to this value in amu, default is 4 amu"""
-        try:
-            return int(self._get_key("md", "hmass", "4"))
-        except ValueError:
-            return 4
-
-    @property
-    def shake_algorithm(self):
-        """Control SHAKE algorithm to constrain bonds, 0 = off, 1 = X-H only, 2 = all bonds (default)"""
-        try:
-            return int(self._get_key("md", "shake", "2"))
-        except ValueError:
-            return 2
-
-    @property
-    def md_scc_accuracy(self):
-        """Set SCC accuracy level in MD, default is 2.0"""
-        try:
-            return float(self._get_key("md", "sccacc", "2.0"))
-        except ValueError:
-            return 2.0
-
-    @property
-    def force_writing_restart(self):
-        """Determine whether to force the writing of a restart file at each dump step, default is False"""
-        return int(self._get_key("md", "forcewrrestart", "0")) == 1
-
-    # Content group: hess
-
-    @property
-    def hess_scc_accuracy(self):
-        """Set SCC accuracy level in Hessian runs, default is 0.3"""
-        try:
-            return float(self._get_key("hess", "sccacc", "0.3"))
-        except ValueError:
-            return 0.3
-
-    @property
-    def hess_step(self):
-        """Set the Cartesian displacement increment for numerical Hessian, default is 0.005"""
-        try:
-            return float(self._get_key("hess", "step", "0.005"))
-        except ValueError:
-            return 0.005
-
-    @property
-    def hess_scale(self):
-        """Set the scaling factor for the hessian elements, default is 1.0"""
-        try:
-            return float(self._get_key("hess", "scale", "1.0"))
-        except ValueError:
-            return 1.0
-
-    # Content group: modef
-
-    @property
-    def modef_n(self):
-        """Specify the number of points along the normal mode path scan"""
-        n = self._get_key("modef", "n")
-        if n is not None:
-            try:
-                return int(n)
-            except ValueError:
-                return None
-        return None
-
-    @property
-    def modef_step(self):
-        """Set the step lengths for scan, default is 1.0"""
-        try:
-            return float(self._get_key("modef", "step", "1.0"))
+            return float(self._get_key("wall", "autoscale", "1.0"))
         except ValueError:
             return 1.0
 
     @property
-    def modef_update(self):
-        """Update the search mode by a fraction of the displacement at every step, 0.0 means no update, default is 0.2"""
+    def axis_shift(self):
+        """Set the constant offset used in automatic dermined wall potential axis, default is 3.5"""
         try:
-            return float(self._get_key("modef", "updat", "0.2"))
+            return float(self._get_key("wall", "axisshift", "3.5"))
         except ValueError:
-            return 0.2
-
-    @property
-    def modef_local(self):
-        """Specify the type of normal modes used, 0 = canonical normal modes (default), 1 = Pipek-Mezey localized modes"""
-        try:
-            return int(self._get_key("modef", "local", "0"))
-        except ValueError:
-            return 0
-
-    @property
-    def modef_threshold(self):
-        """Set the frequency threshold up to which frequency modes are used for mode based conformer search, default is 0.0"""
-        try:
-            return float(self._get_key("modef", "vthr", "0.0"))
-        except ValueError:
-            return 0.0
-
-    @property
-    def projected_mode(self):
-        """Set the number of second mode which should be projected out in mode following, default is 0"""
-        try:
-            return int(self._get_key("modef", "prj", "0"))
-        except ValueError:
-            return 0
-
-    @property
-    def mode_following(self):
-        """Specify the mode number to follow"""
-        mode = self._get_key("modef", "mode")
-        if mode is not None:
-            try:
-                return int(mode)
-            except ValueError:
-                return None
-        return None
-
-    # Content group: cube
-
-    @property
-    def cube_step(self):
-        """Specify the grid spacing for cube file, default is 0.4"""
-        try:
-            return float(self._get_key("cube", "step", "0.4"))
-        except ValueError:
-            return 0.4
-
-    @property
-    def density_matrix_threshold(self):
-        """Set the density matrix neglect threshold, default is 0.05"""
-        try:
-            return float(self._get_key("cube", "pthr", "0.05"))
-        except ValueError:
-            return 0.05
-
-    @property
-    def boundary_offset(self):
-        """Set the grid boundary offset, default is 3.0"""
-        try:
-            return float(self._get_key("cube", "boff", "3.0"))
-        except ValueError:
-            return 3.0
-
-    @property
-    def cube_output(self):
-        """Set cube output, 0 = writing molden file, 1 = writing cube file (default), 2 = no file output"""
-        try:
-            return int(self._get_key("cube", "cal", "1"))
-        except ValueError:
-            return 1
+            return 3.5

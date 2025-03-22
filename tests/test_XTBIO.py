@@ -66,6 +66,28 @@ class TestXTBInput:
         assert xtb_input.density_matrix_threshold == 0.05
         assert xtb_input.boundary_offset == 3.0
         assert xtb_input.cube_output == 1
+        assert xtb_input.symmetry_threshold == 0.1
+        assert xtb_input.symmetry_max_atoms == 200
+        assert xtb_input.atom_type == 7
+        assert xtb_input.isotropic_electrostatic
+        assert xtb_input.pathfinder_runs == 3
+        assert xtb_input.path_points == 50
+        assert xtb_input.path_optimization_steps == 3
+        assert xtb_input.rmsd_push_factor == 0.05
+        assert xtb_input.rmsd_pull_factor == -0.04
+        assert xtb_input.rmsd_width == 0.7
+        assert xtb_input.wall_potential == "polynomial"
+        assert xtb_input.wall_potential_exponent == 30
+        assert xtb_input.logfermi_bias_exponent == 6.0
+        assert xtb_input.wall_temperature == 300.0
+        assert xtb_input.auto_scale == 1.0
+        assert xtb_input.axis_shift == 3.5
+
+    def test_sp_alpb_input(self, xtb_sp_alpb_inputfile):
+        assert os.path.exists(xtb_sp_alpb_inputfile)
+        xtb_input = XTBInput(filename=xtb_sp_alpb_inputfile)
+        assert xtb_input.charge == 0
+        assert xtb_input.spin == 0
 
 
 class TestXTBOutput:

@@ -800,6 +800,14 @@ def xtb_default_inputfile(xtb_inputs_directory):
 
 
 @pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    xtb_sp_alpb_inputfile = os.path.join(
+        xtb_inputs_directory, "alpb_water.inp"
+    )
+    return xtb_sp_alpb_inputfile
+
+
+@pytest.fixture()
 def xtb_outputs_directory(xtb_test_directory):
     return os.path.join(xtb_test_directory, "outputs")
 

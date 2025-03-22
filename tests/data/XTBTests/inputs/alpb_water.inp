@@ -1,5 +1,5 @@
-$cmd xtb --input default.inp --define --copy coord
-$date 2025/03/22 at 15:34:34.155     
+$cmd xtb --define --copy coord --alpb water
+$date 2025/03/22 at 15:26:14.838     
 $chrg 0
 $spin 0
 $gfn
@@ -58,6 +58,14 @@ $hess
    sccacc=0.29999999999999999
    step=0.50000000000000001E-2
    scale=1.0000000000000000
+$solvation
+   solvent=water
+   ion_st=0.0000000000000000
+   ion_rad=0.0000000000000000
+   grid=normal
+   alpb=true
+   kernel=p16
+   cosmo=false
 $modef
    n=31
    step=1.0000000000000000
