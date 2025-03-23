@@ -170,6 +170,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        qmmm_settings,
     ):
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -180,6 +181,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._qmmm_settings = qmmm_settings
 
     def opt_settings(self):
         return self._opt_settings
@@ -208,6 +210,9 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
     def wbi_settings(self):
         return self._wbi_settings
 
+    def qmmm_settings(self):
+        return self._qmmm_settings
+
     @classmethod
     def from_yaml(cls, filename):
         builder = YamlGaussianProjectSettingsBuilder(filename=filename)
@@ -228,6 +233,7 @@ class YamlGaussianProjectSettingsBuilder:
         sp_settings = self._project_settings_for_job(job_type="sp")
         td_settings = self._project_settings_for_job(job_type="td")
         wbi_settings = self._project_settings_for_job(job_type="wbi")
+        qmmm_settings = self._project_settings_for_job(job_type="qmmm")
 
         project_settings = YamlGaussianProjectSettings(
             opt_settings=opt_settings,
@@ -239,6 +245,7 @@ class YamlGaussianProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            qmmm_settings=qmmm_settings,
         )
 
         name = self._parse_project_name()

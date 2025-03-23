@@ -429,23 +429,23 @@ class TestMoleculeAdvanced:
                     [-1.93181817, -0.59090908, 0.00000000],
                 ]
             ),
-            qmmm_settings=GaussianQMMMJobSettings(
-                high_level_atoms=[4],
-                medium_level_atoms=[3],
-                low_level_atoms=[1, 2],
-                bonded_atoms=[(1, 3)],
-                scale_factor1=0.9,
-                scale_factor2=0.8,
-                scale_factor3=0.7,
-            ),
+        )
+        qmmm_settings = GaussianQMMMJobSettings(
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 3)],
+            scale_factor1=0.9,
+            scale_factor2=0.8,
+            scale_factor3=0.7,
         )
 
-        assert mol.qmmm_settings.high_level_atoms == [4]
-        assert mol.qmmm_settings.low_level_atoms == [1, 2]
-        assert mol.qmmm_settings.medium_level_atoms == [3]
-        assert mol.qmmm_settings.bonded_atoms == [(1, 3)]
+        assert qmmm_settings.high_level_atoms == [4]
+        assert qmmm_settings.low_level_atoms == [1, 2]
+        assert qmmm_settings.medium_level_atoms == [3]
+        assert qmmm_settings.bonded_atoms == [(1, 3)]
         with open("tmp.xyz", "w") as f:
-            mol._write_gaussian_coordinates(f)
+            mol._write_gaussian_coordinates(f, job_settings=qmmm_settings)
         with open("tmp.xyz", "r") as f:
             lines = [line.strip() for line in f.readlines()]
 

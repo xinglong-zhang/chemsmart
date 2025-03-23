@@ -43,9 +43,10 @@ class GaussianInputWriter(InputWriter):
         self._write_gaussian_title(f)
         if isinstance(self.settings, GaussianQMMMJobSettings):
             self._write_charge_and_multiplicity_qmmm(f)
+            self._write_cartesian_coordinates_qmmm(f)
         else:
             self._write_charge_and_multiplicity(f)
-        self._write_cartesian_coordinates(f)
+            self._write_cartesian_coordinates(f)
         if not isinstance(self.settings, GaussianLinkJobSettings):
             self._append_modredundant(f)
         self._append_gen_genecp_basis(f)  # then write genecp info
@@ -127,7 +128,7 @@ class GaussianInputWriter(InputWriter):
             and self.settings.high_level_multiplicity
         ) and (
             (
-                self.settings.medium_level_charges
+                self.settings.medium_level_charge
                 and self.settings.medium_level_multiplicity
             )
             or (
@@ -138,12 +139,22 @@ class GaussianInputWriter(InputWriter):
         line = f"{self.settings.charge_and_multiplicity}\n"
         f.write(line)
 
-    def _write_cartesian_coordinates_normal_jobs(self, f):
+    def _write_cartesian_coordinates(self, f):
         logger.debug(
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f, program="gaussian")
+        f.write("\n")
+
+    def _write_cartesian_coordinates_qmmm(self, f):
+        logger.debug(
+            f"Writing QM/MM Cartesian coordinates of molecule: {self.job.molecule}."
+        )
+        assert self.job.molecule is not None, "No molecular geometry found!"
+        self.job.molecule.write_coordinates(
+            f, program="gaussian", job_settings=self.settings
+        )
         f.write("\n")
 
     def _append_modredundant(self, f):

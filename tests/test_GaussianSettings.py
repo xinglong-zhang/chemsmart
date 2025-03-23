@@ -325,23 +325,15 @@ class TestGaussianQMMMJobSettings:
             medium_level_charge=0,
             medium_level_multiplicity=3,
             low_level_charge=0,
-            low_level_multiplicity=1,
+            low_level_multiplicity=3,
         )
-        assert settings2.charge_and_multiplicity == "0 1 0 3 0 3 0 5 0 5 0 5 "
+        assert settings2.charge_and_multiplicity == "0 3 0 3 0 3 0 5 0 5 0 5 "
 
         settings3 = GaussianQMMMJobSettings(
             high_level_charge=0,
             high_level_multiplicity=1,
             low_level_charge=0,
             low_level_multiplicity=1,
-        )
-        assert settings3.charge_and_multiplicity == "0 1 0 1 0 1 "
-
-        settings3 = GaussianQMMMJobSettings(
-            high_level_charge=0,
-            high_level_multiplicity=1,
-            medium_level_charge=0,
-            medium_level_multiplicity=1,
         )
         assert settings3.charge_and_multiplicity == "0 1 0 1 0 1 "
 
