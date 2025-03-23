@@ -11,7 +11,6 @@ from rdkit import Chem
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.xyz.file import XYZFile
-from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 from chemsmart.utils.utils import cmp_with_ignore
 
 
@@ -942,7 +941,7 @@ class TestQMMMinMolecule:
             written_input2, qmmm_written_xyz_only_file, shallow=False
         )  # writes input file as expected
 
-    def test_qmmm_atoms_handling(self):
+    def test_qmmm_atoms_handling(self, tmpdir):
         """Test QM/MM atoms handling."""
         mol = Molecule(
             symbols=["O", "H", "H", "Cl"],
@@ -954,24 +953,22 @@ class TestQMMMinMolecule:
                     [-1.93181817, -0.59090908, 0.00000000],
                 ]
             ),
-        )
-        qmmm_settings = GaussianQMMMJobSettings(
             high_level_atoms=[4],
             medium_level_atoms=[3],
             low_level_atoms=[1, 2],
             bonded_atoms=[(1, 3)],
-            scale_factor1=0.9,
-            scale_factor2=0.8,
-            scale_factor3=0.7,
+            scale_factors={(1, 3): [0.9, 0.8, 0.7]},
         )
 
-        assert qmmm_settings.high_level_atoms == [4]
-        assert qmmm_settings.low_level_atoms == [1, 2]
-        assert qmmm_settings.medium_level_atoms == [3]
-        assert qmmm_settings.bonded_atoms == [(1, 3)]
-        with open("tmp.xyz", "w") as f:
-            mol._write_gaussian_coordinates(f, job_settings=qmmm_settings)
-        with open("tmp.xyz", "r") as f:
+        assert mol.high_level_atoms == [4]
+        assert mol.low_level_atoms == [1, 2]
+        assert mol.medium_level_atoms == [3]
+        assert mol.bonded_atoms == [(1, 3)]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
             lines = [line.strip() for line in f.readlines()]
 
             expected_lines = [

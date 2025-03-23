@@ -544,7 +544,7 @@ class Molecule:
         if program is None:
             program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
-            self._write_gaussian_coordinates(f, job_settings=None)
+            self._write_gaussian_coordinates(f)
             self._write_gaussian_pbc_coordinates(f, job_settings=None)
         elif program.lower() == "orca":
             self._write_orca_coordinates(f)
@@ -595,7 +595,7 @@ class Molecule:
             if xyz_only:
                 self._write_orca_coordinates(f)
             else:
-                self._write_gaussian_coordinates(f, job_settings=job_settings)
+                self._write_gaussian_coordinates(f)
 
     def write_com(
         self,
@@ -622,7 +622,7 @@ class Molecule:
             self.write_coordinates(f, program="gaussian")
             f.write("\n")
 
-    def _write_gaussian_coordinates(self, f, job_settings):
+    def _write_gaussian_coordinates(self, f):
 
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
