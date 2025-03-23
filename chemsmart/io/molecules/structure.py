@@ -66,6 +66,10 @@ class Molecule:
         charge=None,
         multiplicity=None,
         frozen_atoms=None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        bonded_atoms=None,
         pbc_conditions=None,
         translation_vectors=None,
         energy=None,
@@ -78,6 +82,10 @@ class Molecule:
         self.charge = charge
         self.multiplicity = multiplicity
         self.frozen_atoms = frozen_atoms
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self.energy = energy
@@ -174,6 +182,90 @@ class Molecule:
             return Symbols.fromsymbols(self.symbols).get_chemical_formula(
                 mode=mode, empirical=empirical
             )
+
+    @property
+    def partition_level_strings(self):
+        """Obtain the list of partition levels for the atoms in the system."""
+        return self._get_partition_level_strings()
+
+    def _get_partition_levels(self):
+        """Obtain the list of partition levels for the atoms in the system.
+        Returns:
+            list: List of partition levels as strings (H, M, L) for the atoms in the system.
+        """
+        # convert atom indices to lists if they are not already so
+        # for example high_level_atoms=[[18-28], [29-39], [40-50], [51-61], [62-72]],
+        # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
+        from chemsmart.utils.utils import get_list_from_string_range
+
+        if self.high_level_atoms:
+            if not isinstance(self.high_level_atoms, list):
+                high_level_atoms = get_list_from_string_range(
+                    self.high_level_atoms
+                )
+            else:
+                high_level_atoms = self.high_level_atoms
+        else:
+            high_level_atoms = []
+        if self.medium_level_atoms:
+            if not isinstance(self.medium_level_atoms, list):
+                medium_level_atoms = get_list_from_string_range(
+                    self.medium_level_atoms
+                )
+            else:
+                medium_level_atoms = self.medium_level_atoms
+        else:
+            medium_level_atoms = []
+        if self.low_level_atoms is None:
+            # low level atoms not given
+            if len(high_level_atoms) != 0:
+                # set the rest of the atoms as low level atoms
+                default_layer = list(range(1, int(self.num_atoms) + 1))
+                low_level_atoms = list(
+                    set(default_layer)
+                    - set(medium_level_atoms)
+                    - set(high_level_atoms)
+                )
+            else:
+                # high level also not given
+                low_level_atoms = []
+        else:
+            if not isinstance(self.low_level_atoms, list):
+                low_level_atoms = get_list_from_string_range(
+                    self.low_level_atoms
+                )
+            else:
+                low_level_atoms = self.low_level_atoms
+
+            if len(high_level_atoms) != 0:
+                # check that low level atoms add up to the total number of atoms
+                if (
+                    len(low_level_atoms)
+                    + len(high_level_atoms)
+                    + len(medium_level_atoms)
+                    != self.num_atoms
+                ):
+                    raise ValueError(
+                        "The number of low + medium + high level atoms be equal to the number of atoms in the molecule!"
+                    )
+
+        return high_level_atoms, medium_level_atoms, low_level_atoms
+
+    def _get_partition_level_strings(self):
+        """Obtain the list of partition levels for the atoms in the system.
+        H = high, M = medium, L = low."""
+        high_level_atoms, medium_level_atoms, low_level_atoms = (
+            self._get_partition_levels()
+        )
+        partition_level_strings = []
+        for i in range(1, self.num_atoms + 1):
+            if i in high_level_atoms:
+                partition_level_strings.append("H")
+            elif i in medium_level_atoms:
+                partition_level_strings.append("M")
+            elif i in low_level_atoms:
+                partition_level_strings.append("L")
+        return partition_level_strings
 
     def copy(self):
         return copy.deepcopy(self)
@@ -513,6 +605,8 @@ class Molecule:
             f.write("\n")
 
     def _write_gaussian_coordinates(self, f, job_settings):
+        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
@@ -523,7 +617,7 @@ class Molecule:
             line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
                 line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if job_settings is not None:
+            if isinstance(job_settings, GaussianQMMMJobSettings):
                 if (
                     job_settings.high_level_atoms
                     and (i + 1) in job_settings.partition_level_strings[0]

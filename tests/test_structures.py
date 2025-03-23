@@ -417,51 +417,6 @@ class TestMoleculeAdvanced:
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
 
-    def test_qmmm_atoms_handling(self):
-        """Test QM/MM atoms handling."""
-        mol = Molecule(
-            symbols=["O", "H", "H", "Cl"],
-            positions=np.array(
-                [
-                    [-4.84098481, -0.56828899, 0.00000000],
-                    [-3.88098484, -0.56804789, 0.00000000],
-                    [-5.16121212, 0.33672729, 0.00000000],
-                    [-1.93181817, -0.59090908, 0.00000000],
-                ]
-            ),
-        )
-        qmmm_settings = GaussianQMMMJobSettings(
-            high_level_atoms=[4],
-            medium_level_atoms=[3],
-            low_level_atoms=[1, 2],
-            bonded_atoms=[(1, 3)],
-            scale_factor1=0.9,
-            scale_factor2=0.8,
-            scale_factor3=0.7,
-        )
-
-        assert qmmm_settings.high_level_atoms == [4]
-        assert qmmm_settings.low_level_atoms == [1, 2]
-        assert qmmm_settings.medium_level_atoms == [3]
-        assert qmmm_settings.bonded_atoms == [(1, 3)]
-        with open("tmp.xyz", "w") as f:
-            mol._write_gaussian_coordinates(f, job_settings=qmmm_settings)
-        with open("tmp.xyz", "r") as f:
-            lines = [line.strip() for line in f.readlines()]
-
-            expected_lines = [
-                "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
-                "H -3.8809848400 -0.5680478900 0.0000000000 L",
-                "H -5.1612121200 0.3367272900 0.0000000000 M",
-                "Cl -1.9318181700 -0.5909090800 0.0000000000 H",
-            ]
-
-            assert [" ".join(line.split()) for line in lines] == [
-                " ".join(line.split()) for line in expected_lines
-            ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
-        if os.path.exists("tmp.xyz"):
-            os.remove("tmp.xyz")
-
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""
         mol = Molecule(
@@ -918,20 +873,109 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
 
 
 class TestQMMMinMolecule:
-    def test_atoms_in_leves(self, tmpdir):
+    def test_atoms_in_levels_wrong_low_level(self, tmpdir):
         methyl_3_hexane = Molecule.from_pubchem("11507")
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.low_level_atoms = [7, 8, 9]
         methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
-        # bonded_atoms_high_medium
-        # bonded_atoms_medium_low
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+
+        with pytest.raises(ValueError):
+            methyl_3_hexane.partition_level_strings
+            # should raise error since high + medium + low is not equal to total number of atoms
 
         written_input = os.path.join(tmpdir, "tmp.txt")
         print(methyl_3_hexane.bonded_atoms)
 
         methyl_3_hexane.write(written_input, format="com")
         print(written_input)
+
+    def test_atoms_in_levels_default_low_level(self, tmpdir):
+        methyl_3_hexane = Molecule.from_pubchem("11507")
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+
+        assert methyl_3_hexane.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "M",
+            "M",
+            "M",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
+
+        written_input = os.path.join(tmpdir, "tmp.txt")
+        print(methyl_3_hexane.bonded_atoms)
+
+        methyl_3_hexane.write(written_input, format="com")
+        print(written_input)
+
+    def test_qmmm_atoms_handling(self):
+        """Test QM/MM atoms handling."""
+        mol = Molecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.00000000],
+                    [-3.88098484, -0.56804789, 0.00000000],
+                    [-5.16121212, 0.33672729, 0.00000000],
+                    [-1.93181817, -0.59090908, 0.00000000],
+                ]
+            ),
+        )
+        qmmm_settings = GaussianQMMMJobSettings(
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 3)],
+            scale_factor1=0.9,
+            scale_factor2=0.8,
+            scale_factor3=0.7,
+        )
+
+        assert qmmm_settings.high_level_atoms == [4]
+        assert qmmm_settings.low_level_atoms == [1, 2]
+        assert qmmm_settings.medium_level_atoms == [3]
+        assert qmmm_settings.bonded_atoms == [(1, 3)]
+        with open("tmp.xyz", "w") as f:
+            mol._write_gaussian_coordinates(f, job_settings=qmmm_settings)
+        with open("tmp.xyz", "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+
+            expected_lines = [
+                "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
+                "H -3.8809848400 -0.5680478900 0.0000000000 L",
+                "H -5.1612121200 0.3367272900 0.0000000000 M",
+                "Cl -1.9318181700 -0.5909090800 0.0000000000 H",
+            ]
+
+            assert [" ".join(line.split()) for line in lines] == [
+                " ".join(line.split()) for line in expected_lines
+            ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
+        if os.path.exists("tmp.xyz"):
+            os.remove("tmp.xyz")
 
 
 class TestSDFFile:

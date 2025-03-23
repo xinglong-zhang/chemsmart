@@ -1,4 +1,3 @@
-import ast
 import copy
 import logging
 import os
@@ -789,11 +788,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             self.multiplicity = self.high_level_multiplicity
 
     @property
-    def partition_level_strings(self):
-        """Obtain the list of partition levels for the atoms in the system."""
-        return self._get_partition_levels()
-
-    @property
     def charge_and_multiplicity(self):
         """Obtain charge and multiplicity string."""
         return self._get_charge_and_multiplicity()
@@ -876,53 +870,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         return oniom_string
 
-    def _get_partition_levels(self):
-        """Obtain the list of partition levels for the atoms in the system.
-        Returns:
-            list: List of partition levels as strings (H, M, L) for the atoms in the system.
-        """
-        # convert atom indices to lists if they are not already so
-        # for example high_level_atoms=[[18-28], [29-39], [40-50], [51-61], [62-72]],
-        # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
-        from chemsmart.utils.utils import get_list_from_string_range
-
-        if self.high_level_atoms and not isinstance(
-            self.high_level_atoms, list
-        ):
-            self.high_level_atoms = get_list_from_string_range(
-                self.high_level_atoms
-            )
-        if self.medium_level_atoms and not isinstance(
-            self.medium_level_atoms, list
-        ):
-            self.medium_level_atoms = get_list_from_string_range(
-                self.medium_level_atoms
-            )
-        if self.low_level_atoms is None:
-            # set the rest of the atoms as low level atoms
-            default_layer = list(range(1, int(self.num_atoms) + 1))
-            medium_level_atoms = (
-                self.medium_level_atoms if self.medium_level_atoms else []
-            )
-            self.low_level_atoms = list(
-                set(default_layer)
-                - set(medium_level_atoms)
-                - set(self.high_level_atoms)
-            )
-        if self.low_level_atoms and not isinstance(self.low_level_atoms, list):
-            self.low_level_atoms = get_list_from_string_range(
-                self.low_level_atoms
-            )
-
-        if isinstance(self.bonded_atoms, str):
-            self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
-        return (
-            self.high_level_atoms,
-            self.medium_level_atoms,
-            self.low_level_atoms,
-            self.bonded_atoms,
-        )
-
     def _get_charge_and_multiplicity(self):
         """Obtain charge and multiplicity string.
         For two-layer ONIOM jobs, the format for this input line is:
@@ -947,25 +894,57 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             self.high_level_charge is not None
             and self.high_level_multiplicity is not None
         ):
+            # high level charge and multiplicity are specified
             if (
-                self.medium_level_multiplicity is None
-                and self.medium_level_charge is None
-            ):
-                charge_and_multiplicity = (
-                    f"{self.low_level_charge} {self.low_level_multiplicity} "
-                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                    * 2
-                )
-            elif (
                 self.low_level_charge is not None
                 and self.low_level_multiplicity is not None
             ):
-                charge_and_multiplicity = (
-                    f"{self.low_level_charge} {self.low_level_multiplicity} "
-                    + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
-                    * 2
-                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                    * 3
-                )
+                # low level charge and multiplicity are specified
+                if (
+                    self.medium_level_multiplicity is None
+                    and self.medium_level_charge is None
+                ):
+                    # no medium level charge and multiplicity are specified
+                    # two layer ONIOM
+                    charge_and_multiplicity = (
+                        f"{self.low_level_charge} {self.low_level_multiplicity} "
+                        + f"{self.high_level_charge} {self.high_level_multiplicity} "
+                        * 2  # TODO: why is this multiplied by 2?
+                    )
+                else:
+                    # medium level charge and multiplicity are specified
+                    # 3 layer ONIOM
+                    charge_and_multiplicity = (
+                        f"{self.low_level_charge} {self.low_level_multiplicity} "
+                        + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
+                        * 2
+                        + f"{self.high_level_charge} {self.high_level_multiplicity} "
+                        * 3
+                    )
+            else:
+                # no low level charge and multiplicity are specified
+                # this is okay
+                if (
+                    self.medium_level_charge is not None
+                    and self.medium_level_multiplicity is not None
+                ):
+                    # cases where high level and medium levels are DFT, but low level MM
+                    charge_and_multiplicity = (
+                        f"{self.high_level_charge} {self.high_level_multiplicity} "
+                        + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
+                        * 2
+                    )  # TODO: check if this is the right input?
+                else:
+                    # no medium level charge and multiplicity specified
+                    # can be 2-layer ONIOM without medium layer or
+                    # 3-layer ONIOM with medium level as MM
+                    charge_and_multiplicity = (
+                        f"{self.high_level_charge} {self.high_level_multiplicity} "
+                        * 2
+                    )  # TODO: check if this is the right input?
+        else:
+            raise ValueError(
+                "Charge and multiplicity for high level of theory must be specified!"
+            )
 
         return charge_and_multiplicity
