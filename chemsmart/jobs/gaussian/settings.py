@@ -704,15 +704,15 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
     def __init__(
         self,
-        functional_high=None,
-        basis_high=None,
-        force_field_high=None,
-        functional_medium=None,
-        basis_medium=None,
-        force_field_medium=None,
-        functional_low=None,
-        basis_low=None,
-        force_field_low=None,
+        high_level_functional=None,
+        high_level_basis=None,
+        high_level_force_field=None,
+        medium_level_functional=None,
+        medium_level_basis=None,
+        medium_level_force_field=None,
+        low_level_functional=None,
+        low_level_basis=None,
+        low_level_force_field=None,
         high_level_charge=None,
         high_level_multiplicity=None,
         medium_level_charge=None,
@@ -731,9 +731,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
         Args:
-            functional_high/medium/low: Functional for high/medium/low level of theory
-            basis_high/medium/low: Basis set for high/medium/low level of theory
-            force_field_high/medium/low: Force field for high/medium/low level of theory (if specified)
+            high_level_functional/medium_level_functional/low_level_functional: Functional for high/medium/low level of theory
+            high_level_basis/medium_level_basis/low_level_basis: Basis set for high/medium/low level of theory
+            high_level_force_field/medium_level_force_field/low_level_force_field: Force field for high/medium/low level of theory (if specified)
             high/medium/low_level_charge (int): Charge for high level of theory
             high/medium/low_level_multiplicity (int): Multiplicity for high level of theory
             high_level_atoms (list or string): List of high level atoms.
@@ -747,15 +747,15 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             **kwargs: Additional keyword arguments.
         """
         super().__init__(**kwargs)
-        self.functional_high = functional_high
-        self.basis_high = basis_high
-        self.force_field_high = force_field_high
-        self.functional_medium = functional_medium
-        self.basis_medium = basis_medium
-        self.force_field_medium = force_field_medium
-        self.functional_low = functional_low
-        self.basis_low = basis_low
-        self.force_field_low = force_field_low
+        self.high_level_functional = high_level_functional
+        self.high_level_basis = high_level_basis
+        self.high_level_force_field = high_level_force_field
+        self.medium_level_functional = medium_level_functional
+        self.medium_level_basis = medium_level_basis
+        self.medium_level_force_field = medium_level_force_field
+        self.low_level_functional = low_level_functional
+        self.low_level_basis = low_level_basis
+        self.low_level_force_field = low_level_force_field
         self.high_level_charge = high_level_charge
         self.high_level_multiplicity = high_level_multiplicity
         self.medium_level_charge = medium_level_charge
@@ -775,11 +775,15 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         # populate self.functional and self.basis so that
         # it will not raise errors in parent class
         self.functional = (
-            self.functional_high
-            or self.functional_medium
-            or self.functional_low
+            self.high_level_functional
+            or self.medium_level_functional
+            or self.low_level_functional
         )
-        self.basis = self.basis_high or self.basis_medium or self.basis_low
+        self.basis = (
+            self.high_level_basis
+            or self.medium_level_basis
+            or self.low_level_basis
+        )
         self.title = "Gaussian QM/MM job"
 
         if self.high_level_charge is not None:
@@ -841,23 +845,23 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         """Get ONIOM level of theory for route string."""
         oniom_string = " oniom"
         self.high_level_of_theory = self.validate_and_assign_level(
-            self.functional_high,
-            self.basis_high,
-            self.force_field_high,
+            self.high_level_functional,
+            self.high_level_basis,
+            self.high_level_force_field,
             level_name="high",
         )
 
         self.medium_level_of_theory = self.validate_and_assign_level(
-            self.functional_medium,
-            self.basis_medium,
-            self.force_field_medium,
+            self.medium_level_functional,
+            self.medium_level_basis,
+            self.medium_level_force_field,
             level_name="medium",
         )
 
         self.low_level_of_theory = self.validate_and_assign_level(
-            self.functional_low,
-            self.basis_low,
-            self.force_field_low,
+            self.low_level_functional,
+            self.low_level_basis,
+            self.low_level_force_field,
             level_name="low",
         )
 
