@@ -1242,7 +1242,7 @@ class CoordinateBlock:
         return positions
 
     def _get_constraints(self):
-        _, _, constraints= (
+        _, _, constraints = (
             self._get_atomic_numbers_positions_and_constraints()
         )
         if len(constraints) == 0:

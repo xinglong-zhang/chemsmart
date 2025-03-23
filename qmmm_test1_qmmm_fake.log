@@ -1,0 +1,58 @@
+ Entering Gaussian System, FakeGaussianRunner
+ Input=/Users/taipanlan/scratch/qmmm_test1_qmmm/qmmm_test1_qmmm_fake.com
+ Output=/Users/taipanlan/scratch/qmmm_test1_qmmm/qmmm_test1_qmmm_fake.log
+ ******************************************
+ Fake Gaussian Executable
+ ******************************************
+ %chk=qmmm_test1_qmmm_fake.chk
+ %nprocshared=12
+ %mem=400GB
+ -------------------------------------------
+ # oniom(mn15/def2svp:b3lyp/6-31g(d):amber)
+ -------------------------------------------
+ Charge =  0 Multiplicity = 1
+                          Input orientation:                             
+ ------------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)       
+ Number     Number       Type             X           Y           Z      
+ ------------------------------------------------------------------------
+   1          0          0                  0.0           0.0           0.0
+   2          9          0             -1.04151           0.0      -2.12611
+   3          9          0             -2.03368      -1.14289     -0.412219
+   4          9          0             -2.03368       1.14289     -0.412219
+   5          6          0             -1.29904           0.0         -0.75
+   6          6          0                  0.0           0.0           0.0
+   7          1          0                  0.0           0.0           1.1
+   8          8          0              1.12583           0.0         -0.65
+ ------------------------------------------------------------------------
+ Stoichiometry    C2HF3OX                       Standard orientation:                             
+ ------------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)       
+ Number     Number       Type             X           Y           Z      
+ ------------------------------------------------------------------------
+   1          0          0                  0.0           0.0           0.0
+   2          9          0             -1.04151           0.0      -2.12611
+   3          9          0             -2.03368      -1.14289     -0.412219
+   4          9          0             -2.03368       1.14289     -0.412219
+   5          6          0             -1.29904           0.0         -0.75
+   6          6          0                  0.0           0.0           0.0
+   7          1          0                  0.0           0.0           1.1
+   8          8          0              1.12583           0.0         -0.65
+ ------------------------------------------------------------------------
+ ! Dummy Rotational constant values and dummy SCF energy value...
+ Rotational constants (GHZ):          11.4493930           9.4805599           5.3596246
+ Standard basis: def2svp:b3lyp/6-31g(d):amber) (5D, 7F)
+ NAtoms=    8
+ SCF Done:  E(RONIOM(MN15) =  -503.2632313445352  A.U. after   14 cycles
+ Mulliken charges:
+               1
+      1   X     0.049342
+      2   F      0.81132
+      3   F     0.341859
+      4   F     0.720676
+      5   C     0.649534
+      6   C     0.378816
+      7   H     0.699926
+      8   O      0.21717
+ Elapsed time: xx
+ Normal termination of Gaussian 16 (fake executable) at 2025-03-23 15:13:52.604917.
