@@ -1,4 +1,5 @@
 import os
+from filecmp import cmp
 
 import networkx as nx
 import numpy as np
@@ -11,6 +12,7 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+from chemsmart.utils.utils import cmp_with_ignore
 
 
 class TestCoordinateBlock:
@@ -33,6 +35,7 @@ Cl      -3.0556310000   -0.1578960000   -0.0001400000
 """
         cb = CoordinateBlock(coordinate_block=coordinates_string)
         assert cb.symbols.get_chemical_formula() == "C7H5ClO"
+        assert cb.molecule.partition_level_strings is None
 
     def test_read_gaussian_cb_with_tv(self):
         coordinates_string = """
@@ -52,6 +55,7 @@ TV                -1.219952    2.133447    0.000000
             [2.475315, 0.000000, 0.000000],
             [-1.219952, 2.133447, 0.000000],
         ]
+        assert cb.molecule.partition_level_strings is None
 
     def test_read_gaussian_cb_frozen_atoms(self):
         coordinates_string = """
@@ -89,6 +93,9 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
             0,
             0,
         ]
+        assert cb.molecule.partition_level_strings is None
+
+        # TODO: add in coordinate blocks for QMMM jobs
 
 
 class TestStructures:
@@ -135,6 +142,7 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+        assert molecule.partition_level_strings is None
 
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
@@ -886,13 +894,9 @@ class TestQMMMinMolecule:
             methyl_3_hexane.partition_level_strings
             # should raise error since high + medium + low is not equal to total number of atoms
 
-        written_input = os.path.join(tmpdir, "tmp.txt")
-        print(methyl_3_hexane.bonded_atoms)
-
-        methyl_3_hexane.write(written_input, format="com")
-        print(written_input)
-
-    def test_atoms_in_levels_default_low_level(self, tmpdir):
+    def test_atoms_in_levels_default_low_level(
+        self, tmpdir, qmmm_written_xyz_file, qmmm_written_xyz_only_file
+    ):
         methyl_3_hexane = Molecule.from_pubchem("11507")
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
@@ -926,11 +930,17 @@ class TestQMMMinMolecule:
             "L",
         ]
 
-        written_input = os.path.join(tmpdir, "tmp.txt")
-        print(methyl_3_hexane.bonded_atoms)
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        methyl_3_hexane.write(written_input, format="xyz", xyz_only=False)
+        assert cmp_with_ignore(
+            written_input, qmmm_written_xyz_file, ignore_string="tmp"
+        )  # writes input file as expected
 
-        methyl_3_hexane.write(written_input, format="com")
-        print(written_input)
+        written_input2 = os.path.join(tmpdir, "tmp_xyz_only.xyz")
+        methyl_3_hexane.write(written_input2, format="xyz", xyz_only=True)
+        assert cmp(
+            written_input2, qmmm_written_xyz_only_file, shallow=False
+        )  # writes input file as expected
 
     def test_qmmm_atoms_handling(self):
         """Test QM/MM atoms handling."""

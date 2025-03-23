@@ -494,6 +494,18 @@ def gaussian_written_opt_from_graphite_2d_pbc_log(
     )
 
 
+@pytest.fixture()
+def qmmm_written_xyz_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "qmmm_written.xyz")
+
+
+@pytest.fixture()
+def qmmm_written_xyz_only_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "qmmm_written_xyz_only.xyz"
+    )
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):

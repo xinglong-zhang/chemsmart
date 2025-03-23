@@ -51,10 +51,13 @@ class Molecule:
         The forces on the atoms in the molecule in eV/Å.
     velocities: numpy array
         The velocities of the atoms in the molecule.
-    qm_high/medium/low_level_atoms：list of integers to define QM/MM layers
+    qm high/medium/low_level_atoms：list of integers to define QM/MM layers
         The atoms that are treated at the high/medium/low level of theory.
-    qm_link_atoms: list of tuples of integers
-        The atom pairs that are treated as link atoms in QM/MM calculations.
+    bonded_atoms: list of tuples of integers
+        The atom pairs that are treated as bonded in QM/MM calculations.
+    scale factors: a dictionary of scale factors for QM/MM calculations,
+        where the key is the bonded atom pair indices and the value is
+        a list of scale factors for (low, medium, high).
     info: dict
         A dictionary containing additional information about the molecule.
     """
@@ -70,6 +73,7 @@ class Molecule:
         medium_level_atoms=None,
         low_level_atoms=None,
         bonded_atoms=None,
+        scale_factors=None,
         pbc_conditions=None,
         translation_vectors=None,
         energy=None,
@@ -86,6 +90,7 @@ class Molecule:
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
+        self.scale_factors = scale_factors
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self.energy = energy
@@ -265,6 +270,8 @@ class Molecule:
                 partition_level_strings.append("M")
             elif i in low_level_atoms:
                 partition_level_strings.append("L")
+        if len(partition_level_strings) == 0:
+            return None
         return partition_level_strings
 
     def copy(self):
@@ -550,7 +557,8 @@ class Molecule:
             )
 
     def write(self, filename, format="xyz", **kwargs):
-        """Write the molecule to a file."""
+        """Write the molecule to a file. Support for file format conversion.
+        For Gaussian com file, default route string is used."""
         if format.lower() == "xyz":
             self.write_xyz(filename, **kwargs)
         elif format.lower() == "com":
@@ -560,8 +568,15 @@ class Molecule:
         else:
             raise ValueError(f"Format {format} is not supported for writing.")
 
-    def write_xyz(self, filename, **kwargs):
-        """Write the molecule to an XYZ file."""
+    def write_xyz(self, filename, xyz_only=True, job_settings=None, **kwargs):
+        """Write the molecule to an XYZ file.
+        Args:
+            filename (str): The name of the file to write to.
+            xyz_only (bool): If True, only write the XYZ coordinates; else
+                             write the XYZ coordinates and additional information
+                             such as frozen atoms and high/medium/low level atoms.
+        """
+
         with open(filename, "w") as f:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
@@ -577,7 +592,10 @@ class Molecule:
             logger.info(f"Writing outputfile to {filename}")
             f.write(f"{self.num_atoms}\n")
             f.write(f"{xyz_info}\n")
-            self._write_orca_coordinates(f)
+            if xyz_only:
+                self._write_orca_coordinates(f)
+            else:
+                self._write_gaussian_coordinates(f, job_settings=job_settings)
 
     def write_com(
         self,
@@ -605,7 +623,6 @@ class Molecule:
             f.write("\n")
 
     def _write_gaussian_coordinates(self, f, job_settings):
-        from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
@@ -617,68 +634,84 @@ class Molecule:
             line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
                 line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if isinstance(job_settings, GaussianQMMMJobSettings):
-                if (
-                    job_settings.high_level_atoms
-                    and (i + 1) in job_settings.partition_level_strings[0]
-                ):
-                    line += " H"
-                elif (
-                    job_settings.medium_level_atoms
-                    and (i + 1) in job_settings.partition_level_strings[1]
-                ):
-                    line += " M"
-                elif (
-                    job_settings.low_level_atoms
-                    and (i + 1) in job_settings.low_level_atoms
-                ):
-                    line += " L"
+            if self.partition_level_strings is not None:
+                line += f" {self.partition_level_strings[i]}"
 
-                # Handle QM link atoms and bonded-to atoms
-                if job_settings is not None and job_settings.bonded_atoms:
-                    for atom1, atom2 in job_settings.bonded_atoms:
-                        if (i + 1) == atom1 and (
-                            (
-                                atom1 in job_settings.medium_level_atoms
-                                and atom2 in job_settings.high_level_atoms
-                            )
-                            or (
-                                atom1 in job_settings.low_level_atoms
-                                and atom2 in job_settings.medium_level_atoms
-                            )
-                            or (
-                                atom1 in job_settings.low_level_atoms
-                                and atom2 in job_settings.high_level_atoms
-                            )
-                        ):
-                            line += f" H {atom2}"  # atom1 (low-level) gets link atom
-                            if hasattr(
-                                job_settings, "scale_factor_initialization"
-                            ):
-                                scale_factor = (
-                                    job_settings.scale_factor_initialization()
-                                )
-                                if scale_factor not in [None, "None", ""]:
-                                    line += f" {scale_factor}"
-                        elif (i + 1) == atom2 and (
-                            (
-                                atom2 in job_settings.medium_level_atoms
-                                and atom1 in job_settings.high_level_atoms
-                            )
-                            or (
-                                atom2 in job_settings.low_level_atoms
-                                and atom1 in job_settings.medium_level_atoms
-                            )
-                        ):
-                            line += f" H {atom1}"  # atom2 (low-level) gets link atom
-                            if hasattr(
-                                job_settings, "scale_factor_initialization"
-                            ):
-                                scale_factor = (
-                                    job_settings.scale_factor_initialization()
-                                )
-                                if scale_factor not in [None, "None", ""]:
-                                    line += f" {scale_factor}"
+            # Handle QM link atoms and bonded-to atoms
+            for atom1, atom2 in self.bonded_atoms:
+                atom1_level = self._determine_level_from_atom_index(atom1)
+                atom2_level = self._determine_level_from_atom_index(atom2)
+                if (
+                    (atom1_level == atom2_level == "H")
+                    or (atom1_level == atom2_level == "M")
+                    or (atom1_level == atom2_level == "L")
+                ):
+                    raise ValueError(
+                        f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+                    )
+                elif atom1_level == "H" and (
+                    atom2_level == "M" or atom2_level == "L"
+                ):
+                    if (i + 1) == atom2:
+                        line += f" H {atom1}"
+                elif atom1_level == "M" and atom2_level == "L":
+                    if (i + 1) == atom2:
+                        line += f" H {atom1}"
+                elif (
+                    atom1_level == "M" or atom1_level == "L"
+                ) and atom2_level == "H":
+                    # lower level line will get the link atom (Hydrogen)
+                    if (i + 1) == atom1:
+                        line += f" H {atom2}"
+                elif atom1_level == "L" and atom2_level == "M":
+                    if (i + 1) == atom1:
+                        line += f" H {atom2}"
+
+            if self.scale_factors is not None:
+                logger.warning(
+                    "WARNING: Please be advised that you know what you are doing,"
+                    " as you are overriding Gaussian defaults for determining"
+                    "scale factors.\n Please specify scale factors for each required"
+                    "bonded atoms."
+                )
+                for (
+                    atom1,
+                    atom2,
+                ), scale_factors in self.scale_factors.items():
+                    atom1_level = self._determine_level_from_atom_index(atom1)
+                    atom2_level = self._determine_level_from_atom_index(atom2)
+                    if not isinstance(scale_factors, list):
+                        raise ValueError(
+                            "Scale factors should be a list for each atom pair!"
+                        )
+                    if (
+                        atom1_level == atom2_level == "H"
+                        or atom1_level == atom2_level == "M"
+                        or atom1_level == atom2_level == "L"
+                    ):
+                        raise ValueError(
+                            f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+                        )
+                    elif atom1_level == "H" and (
+                        atom2_level == "M" or atom2_level == "L"
+                    ):
+                        if (i + 1) == atom2:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+                    elif atom1_level == "M" and atom2_level == "L":
+                        if (i + 1) == atom2:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+                    elif (
+                        atom1_level == "M" or atom1_level == "L"
+                    ) and atom2_level == "H":
+                        if (i + 1) == atom1:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
+                    elif atom1_level == "L" and atom2_level == "M":
+                        if (i + 1) == atom1:
+                            for scale_factor in scale_factors:
+                                line += f" {float(scale_factor)}"
             f.write(line + "\n")
         return f
 
@@ -711,6 +744,19 @@ class Molecule:
     def _write_orca_pbc_coordinates(self, f):
         # ORCA cannot do PBC calculations
         pass
+
+    def _determine_level_from_atom_index(self, atom_index):
+        """Determine the partition level of an atom based on its index."""
+        if self.high_level_atoms is not None:
+            if atom_index in self.high_level_atoms:
+                return "H"
+            elif atom_index in self.medium_level_atoms:
+                return "M"
+            else:
+                # if high level atoms is given, then low level atoms will be needed
+                return "L"
+        else:
+            return None
 
     def __repr__(self):
         return f"{self.__class__.__name__}<{self.empirical_formula}>"
