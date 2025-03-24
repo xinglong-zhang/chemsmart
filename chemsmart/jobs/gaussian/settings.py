@@ -446,7 +446,12 @@ class GaussianJobSettings(MolecularJobSettings):
             else:
                 # Set default values if any of solvent_model or solvent_id are None
                 solvent_model = self.solvent_model or "pcm"
-                solvent_id = self.solvent_id or "generic,read"
+                if self.solvent_id is None:
+                    solvent_id = "read"
+                elif self.solvent_id == "generic":
+                    solvent_id = "generic,read"
+                else:
+                    solvent_id = self.solvent_id
                 route_string += f" scrf=({solvent_model},solvent={solvent_id})"
         elif (
             self.solvent_model is not None and self.solvent_id is not None
@@ -723,10 +728,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         medium_level_atoms=None,
         low_level_atoms=None,
         bonded_atoms=None,
-        scale_factor1=None,
-        scale_factor2=None,
-        scale_factor3=None,
-        num_atoms=None,
+        scale_factors=None,
         **kwargs,
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
@@ -740,10 +742,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             medium_level_atoms (list) : List of medium level atoms.
             low_level_atoms (list): List of low level atoms.
             bonded_atoms (list of tuples): List of bonded atoms.
-            scale_factor1 (float) (optional): Scale factor for bonds between QM and MM region,default=1.0
-            scale_factor2 (float) (optional): Scale factor for angles involving QM and MM region,default=1.0
-            scale_factor3 (float) (optional): Scale factor for torsions, default=1.0
-            num_atoms (int): Number of atoms in the system.
+            scale_factors (dict) (optional):  A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom pair indices and the value is a list of scale factors for (low, medium, high).
             **kwargs: Additional keyword arguments.
         """
         super().__init__(**kwargs)
@@ -766,10 +765,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
-        self.scale_factor1 = scale_factor1
-        self.scale_factor2 = scale_factor2
-        self.scale_factor3 = scale_factor3
-        self.num_atoms = num_atoms
+        self.scale_factors = scale_factors
         # If the user only specifies the parameters of two layers, the low-level layer will be omitted
 
         # populate self.functional and self.basis so that
@@ -832,14 +828,14 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         return level_of_theory
 
-    def scale_factor_initialization(self):
-        """Initializes scale factors."""
-        scale_factor = f"{self.scale_factor1}"
-        if self.scale_factor2 is not None:
-            scale_factor += f" {self.scale_factor2}"
-            if self.scale_factor3 is not None:
-                scale_factor += f" {self.scale_factor3}"
-        return scale_factor if scale_factor is not None else str(1.0)
+    # def scale_factor_initialization(self):
+    #     """Initializes scale factors."""
+    #     scale_factor = f"{self.scale_factor1}"
+    #     if self.scale_factor2 is not None:
+    #         scale_factor += f" {self.scale_factor2}"
+    #         if self.scale_factor3 is not None:
+    #             scale_factor += f" {self.scale_factor3}"
+    #     return scale_factor if scale_factor is not None else str(1.0)
 
     def _get_level_of_theory_string(self):
         """Get ONIOM level of theory for route string."""

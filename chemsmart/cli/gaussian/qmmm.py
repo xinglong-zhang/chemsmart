@@ -1,3 +1,4 @@
+import ast
 import logging
 
 import click
@@ -9,6 +10,7 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
 )
+from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
 
@@ -72,37 +74,37 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-hc",
     "--high-level-charge",
-    type=str,
+    type=int,
     help="High level layer charge.",
 )
 @click.option(
     "-hm",
     "--high-level-multiplicity",
-    type=str,
+    type=int,
     help="High level layer spin multiplicity.",
 )
 @click.option(
     "-mc",
     "--medium-level-charge",
-    type=str,
+    type=int,
     help="Medium level layer charge.",
 )
 @click.option(
     "-mm",
     "--medium-level-multiplicity",
-    type=str,
+    type=int,
     help="Medium level layer spin multiplicity.",
 )
 @click.option(
     "-lc",
     "--low-level-charge",
-    type=str,
+    type=int,
     help="Low level layer charge.",
 )
 @click.option(
     "-lm",
     "--low-level-multiplicity",
-    type=str,
+    type=int,
     help="Low level layer spin multiplicity.",
 )
 @click.option(
@@ -129,45 +131,12 @@ logger = logging.getLogger(__name__)
     help="List of tuples of the bonds to be cut, specified by two atomic indexes in each tuple.",
 )
 @click.option(
-    "-sf1",
-    "--scale-factor1",
-    type=str,
-    help="Scale factor for bonds between QM and MM region,default=1.0.",
+    "-s",
+    "--scale-factors",
+    type=dict,
+    help="A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom "
+    "pair indices and the value is a list of scale factors for (low, medium, high).",
 )
-@click.option(
-    "-sf2",
-    "--scale-factor2",
-    type=str,
-    help="Scale factor for angles involving  MM and MM region,default=1.0.",
-)
-@click.option(
-    "-sf3",
-    "--scale-factor3",
-    type=str,
-    help="Scale factor for torsions, default=1.0",
-)
-@click.option(
-    "-na",
-    "--num-atoms",
-    type=str,
-    help="Number of atoms in the system.",
-    # can be optional if this can be read from input file.
-)
-@click.option(
-    "-j",
-    "--jobtype",
-    type=str,
-    help="job type, e.g., opt, sp, etc..",
-    # can be optional if this can be read from input file.
-)
-
-# @click.pass_context
-# def cli(ctx, **kwargs):
-#     """Main CLI Command"""
-#     ctx.ensure_object(dict)
-#     ctx.obj["settings"] = kwargs
-
-
 @click.pass_context
 def qmmm(
     ctx,
@@ -190,11 +159,7 @@ def qmmm(
     medium_level_atoms,
     low_level_atoms,
     bonded_atoms,
-    scale_factor1,
-    scale_factor2,
-    scale_factor3,
-    num_atoms,
-    jobtype,
+    scale_factors,
     **kwargs,
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
@@ -202,6 +167,7 @@ def qmmm(
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
+    qmmm_settings.jobtype = "qmmm"
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
@@ -218,86 +184,44 @@ def qmmm(
     # convert from GaussianJobSettings instance to GaussianQMMMJobSettings instance
     qmmm_settings = GaussianQMMMJobSettings(**qmmm_settings.__dict__)
 
+    # populate cli options
+    qmmm_settings.high_level_functional = high_level_functional
+    qmmm_settings.high_level_basis = high_level_basis
+    qmmm_settings.high_level_force_field = high_level_force_field
+    qmmm_settings.medium_level_functional = medium_level_functional
+    qmmm_settings.medium_level_basis = medium_level_basis
+    qmmm_settings.medium_level_force_field = medium_level_force_field
+    qmmm_settings.low_level_functional = low_level_functional
+    qmmm_settings.low_level_basis = low_level_basis
+    qmmm_settings.low_level_force_field = low_level_force_field
+    qmmm_settings.high_level_charge = high_level_charge
+    qmmm_settings.high_level_multiplicity = high_level_multiplicity
+    qmmm_settings.medium_level_charge = medium_level_charge
+    qmmm_settings.medium_level_multiplicity = medium_level_multiplicity
+    qmmm_settings.low_level_charge = low_level_charge
+    qmmm_settings.low_level_multiplicity = low_level_multiplicity
+
     # get molecule
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]
 
     # populate cli options by attaching QMMM parameters to the molecule
-    molecule.high_level_functional = high_level_functional
-    molecule.high_level_basis = high_level_basis
-    molecule.high_level_force_field = high_level_force_field
-    molecule.medium_level_functional = medium_level_functional
+    if high_level_atoms is not None:
+        high_level_atoms = get_list_from_string_range(high_level_atoms)
+        molecule.high_level_atoms = high_level_atoms
+    if medium_level_atoms is not None:
+        medium_level_atoms = get_list_from_string_range(medium_level_atoms)
+        molecule.medium_level_atoms = medium_level_atoms
+    if low_level_atoms is not None:
+        low_level_atoms = get_list_from_string_range(low_level_atoms)
+        molecule.low_level_atoms = low_level_atoms
+    if bonded_atoms is not None:
+        bonded_atoms = ast.literal_eval(bonded_atoms)
+        molecule.bonded_atoms = bonded_atoms
 
-    qmmm_settings.high_level_functional = high_level_functional
-
-    # td_settings.states = states
-    # td_settings.root = root
-    # td_settings.nstates = nstates
-    # td_settings.eqsolv = eqsolv
-    #
-    # # project_settings = ctx.obj["project_settings"]
-    # # qmmm_settings = project_settings.qmmm_settings()
-    # # if qmmm_settings is None:
-    # #     logger.warning("qmmm_settings is None! Using default settings.")
-    # qmmm_settings = GaussianQMMMJobSettings()
-    #
-    # job_settings = ctx.obj.get("job_settings", {})
-    # keywords = ctx.obj.get("keywords", {})
-    #
-    # qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
-    # qmmm_settings = GaussianQMMMJobSettings(**qmmm_settings.__dict__)
-    #
-    # # Assigning QM/MM parameters
-    # qmmm_parameters = {
-    #     "functional_high": functional_high,
-    #     "basis_high": basis_high,
-    #     "force_field_high": force_field_high,
-    #     "functional_medium": functional_medium,
-    #     "basis_medium": basis_medium,
-    #     "force_field_medium": force_field_medium,
-    #     "functional_low": functional_low,
-    #     "basis_low": basis_low,
-    #     "force_field_low": force_field_low,
-    #     "high_level_charge": high_level_charge,
-    #     "high_level_multiplicity": high_level_multiplicity,
-    #     "medium_level_charge": medium_level_charge,
-    #     "medium_level_multiplicity": medium_level_multiplicity,
-    #     "low_level_charge": low_level_charge,
-    #     "low_level_multiplicity": low_level_multiplicity,
-    #     "high_level_atoms": high_level_atoms,
-    #     "medium_level_atoms": medium_level_atoms,
-    #     "low_level_atoms": low_level_atoms,
-    #     "bonded_atoms": bonded_atoms,
-    #     "scale_factor1": scale_factor1,
-    #     "scale_factor2": scale_factor2,
-    #     "scale_factor3": scale_factor3,
-    #     "num_atoms": num_atoms,
-    #     "jobtype": jobtype,
-    # }
-    #
-    # if high_level_charge is not None:
-    #     qmmm_settings.charge = high_level_charge
-    # if high_level_multiplicity is not None:
-    #     qmmm_settings.multiplicity = high_level_multiplicity
-    #
-    # for key, value in qmmm_parameters.items():
-    #     setattr(qmmm_settings, key, value)
-    #
-    # # get molecule
-    # molecules = ctx.obj["molecules"]
-    # molecule = molecules[-1]
-    #
-    # # attach QMMM parameters to the molecule
-    #
-    # logger.info(f"ONIOM calculation of molecule: {molecule}.")
-    #
-    # # Get label for the job
-    # label = ctx.obj.get("label", "default_label")  # ✅ Default added
-    # if jobtype:
-    #     label = f"{label}_{jobtype}_QM/MM"
-    #
-    # logger.debug(f"Label for job: {label}")
-    # logger.info(f"Running QM/MM job with settings: {qmmm_settings.__dict__}")
+    if scale_factors is not None:
+        scale_factors = ast.literal_eval(scale_factors)
+        molecule.scale_factors = scale_factors
 
     from chemsmart.jobs.gaussian.qmmm import GaussianQMMMJob
 

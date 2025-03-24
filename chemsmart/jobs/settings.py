@@ -169,11 +169,15 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     ]
     sp_job = ["sp"]
     td_job = ["td"]
-    all_jobs = gas_phase_jobs + sp_job + td_job
+    qmmm_job = ["qmmm"]
+    all_jobs = gas_phase_jobs + sp_job + td_job + qmmm_job
 
     # read in project config
     with open(filename) as f:
         project_config = yaml.safe_load(f)
+        logger.debug(
+            f"Project settings from yaml {filename}: \n{project_config}"
+        )
 
     # populate job settings for different jobs
     all_project_configs = {}  # store all job settings in a dict
@@ -218,13 +222,29 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     # check if td settings exist (optional)
     if "td" in project_config:
         td_config = project_config["td"]
-        for job in td_job:  # jobs using td config s
+        for job in td_job:  # jobs using td config
             all_project_configs[job] = (
                 default_config.copy()
             )  # populate defaults
             all_project_configs[job]["job_type"] = job  # update job_type
             all_project_configs[job] = update_dict_with_existing_keys(
                 all_project_configs[job], td_config
+            )
+
+    # check if td settings exist (optional)
+    if "qmmm" in project_config:
+        print("qmmm settings found")
+        print(project_config["qmmm"])
+        qmmm_config = project_config["qmmm"]
+        for job in qmmm_job:  # jobs using qmmm config
+            print(job)
+            all_project_configs[job] = (
+                default_config.copy()
+            )  # populate defaults
+            all_project_configs[job]["job_type"] = job  # update job_type
+            print(all_project_configs[job])
+            all_project_configs[job] = update_dict_with_existing_keys(
+                all_project_configs[job], qmmm_config
             )
 
     return all_project_configs

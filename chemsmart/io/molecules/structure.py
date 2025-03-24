@@ -637,35 +637,36 @@ class Molecule:
             if self.partition_level_strings is not None:
                 line += f" {self.partition_level_strings[i]}"
 
-            # Handle QM link atoms and bonded-to atoms
-            for atom1, atom2 in self.bonded_atoms:
-                atom1_level = self._determine_level_from_atom_index(atom1)
-                atom2_level = self._determine_level_from_atom_index(atom2)
-                if (
-                    (atom1_level == atom2_level == "H")
-                    or (atom1_level == atom2_level == "M")
-                    or (atom1_level == atom2_level == "L")
-                ):
-                    raise ValueError(
-                        f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
-                    )
-                elif atom1_level == "H" and (
-                    atom2_level == "M" or atom2_level == "L"
-                ):
-                    if (i + 1) == atom2:
-                        line += f" H {atom1}"
-                elif atom1_level == "M" and atom2_level == "L":
-                    if (i + 1) == atom2:
-                        line += f" H {atom1}"
-                elif (
-                    atom1_level == "M" or atom1_level == "L"
-                ) and atom2_level == "H":
-                    # lower level line will get the link atom (Hydrogen)
-                    if (i + 1) == atom1:
-                        line += f" H {atom2}"
-                elif atom1_level == "L" and atom2_level == "M":
-                    if (i + 1) == atom1:
-                        line += f" H {atom2}"
+            if self.bonded_atoms is not None:
+                # Handle QM link atoms and bonded-to atoms
+                for atom1, atom2 in self.bonded_atoms:
+                    atom1_level = self._determine_level_from_atom_index(atom1)
+                    atom2_level = self._determine_level_from_atom_index(atom2)
+                    if (
+                        (atom1_level == atom2_level == "H")
+                        or (atom1_level == atom2_level == "M")
+                        or (atom1_level == atom2_level == "L")
+                    ):
+                        raise ValueError(
+                            f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+                        )
+                    elif atom1_level == "H" and (
+                        atom2_level == "M" or atom2_level == "L"
+                    ):
+                        if (i + 1) == atom2:
+                            line += f" H {atom1}"
+                    elif atom1_level == "M" and atom2_level == "L":
+                        if (i + 1) == atom2:
+                            line += f" H {atom1}"
+                    elif (
+                        atom1_level == "M" or atom1_level == "L"
+                    ) and atom2_level == "H":
+                        # lower level line will get the link atom (Hydrogen)
+                        if (i + 1) == atom1:
+                            line += f" H {atom2}"
+                    elif atom1_level == "L" and atom2_level == "M":
+                        if (i + 1) == atom1:
+                            line += f" H {atom2}"
 
             if self.scale_factors is not None:
                 logger.warning(
@@ -746,7 +747,7 @@ class Molecule:
         pass
 
     def _determine_level_from_atom_index(self, atom_index):
-        """Determine the partition level of an atom based on its index."""
+        """Determine the partition level of an atom based on its integer index."""
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"

@@ -26,6 +26,10 @@ class Gaussian16Input(GaussianFileMixin):
         """
         return content_blocks_by_paragraph(string_list=self.contents)
 
+    @cached_property
+    def num_content_groups(self):
+        return len(self.content_groups)
+
     @property
     def coordinate_block(self):
         from chemsmart.io.molecules.structure import CoordinateBlock
@@ -75,6 +79,33 @@ class Gaussian16Input(GaussianFileMixin):
     @property
     def route_string(self):
         return self._get_route()
+
+    @property
+    def has_frozen_coordinates(self):
+        return self.coordinate_block.constrained_atoms
+
+    @property
+    def frozen_coordinate_indices(self):
+        frozen_coordinate_indices = []
+        if self.has_frozen_coordinates:
+            for i, frozen_mask in enumerate(list(self.molecule.frozen_atoms)):
+                if frozen_mask == -1:
+                    # use 1-index throughout
+                    frozen_coordinate_indices.append(i + 1)
+        if len(frozen_coordinate_indices) == 0:
+            return None
+        return frozen_coordinate_indices
+
+    @property
+    def free_coordinate_indices(self):
+        """Obtain list of free coordinate indices from the input format."""
+        if self.frozen_coordinate_indices is None:
+            return None
+        return [
+            i
+            for i in range(self.num_atoms)
+            if i not in self.frozen_coordinate_indices
+        ]
 
     @property
     def gen_genecp_group(self):

@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.gaussian.settings import (
     GaussianIRCJobSettings,
     GaussianJobSettings,
+    GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -96,16 +97,25 @@ class GaussianProjectSettings(RegistryMixin):
     @classmethod
     def from_project(cls, project):
         """Get project settings based on project name."""
+        # try to get project from project name in user project settings directory
         user_project_settings = cls._from_user_project_name(project)
         if user_project_settings is not None:
             return user_project_settings
-        else:
-            chemsmart_test_project_settings = (
-                cls._from_chemsmart_test_projects(project)
-            )
-            if chemsmart_test_project_settings is not None:
-                return chemsmart_test_project_settings
+        # if cannot get in user project settings directory, try to get from chemsmart test projects
+        chemsmart_test_project_settings = cls._from_chemsmart_test_projects(
+            project
+        )
+        if chemsmart_test_project_settings is not None:
+            return chemsmart_test_project_settings
 
+        # if both of above failed, try to get from chemsmart template projects
+        chemsmart_template_project_settings = (
+            cls._from_chemsmart_template_projects(project)
+        )
+        if chemsmart_template_project_settings is not None:
+            return chemsmart_template_project_settings
+
+        # all else failed, raise FileNotFoundError
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
@@ -137,15 +147,12 @@ class GaussianProjectSettings(RegistryMixin):
             return settings
 
     @classmethod
-    def _from_chemsmart_test_projects(cls, project_name):
-        """Get .yaml project settings file from chemsmart test projects."""
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        test_projects_dir = os.path.join(
-            current_file_dir, "../../tests/data/GaussianTests/project_yaml"
-        )
-
+    def _from_chemsmart_project_in_chemsmart_path(
+        cls, project_name, chemsmart_path
+    ):
+        """Get .yaml project settings file from chemsmart projects in chemsmart path."""
         project_name_yaml_path = os.path.join(
-            test_projects_dir, f"{project_name}.yaml"
+            chemsmart_path, f"{project_name}.yaml"
         )
         project_settings_manager = GaussianProjectSettingsManager(
             filename=project_name_yaml_path
@@ -154,6 +161,29 @@ class GaussianProjectSettings(RegistryMixin):
 
         if settings is not None:
             return settings
+
+    @classmethod
+    def _from_chemsmart_test_projects(cls, project_name):
+        """Get .yaml project settings file from chemsmart test projects."""
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        test_projects_dir = os.path.join(
+            current_file_dir, "../../tests/data/GaussianTests/project_yaml"
+        )
+
+        return cls._from_chemsmart_project_in_chemsmart_path(
+            project_name, test_projects_dir
+        )
+
+    @classmethod
+    def _from_chemsmart_template_projects(cls, project_name):
+        """Get .yaml project settings file from chemsmart test projects."""
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        template_projects_dir = os.path.join(
+            current_file_dir, "./templates/.chemsmart/gaussian"
+        )
+        return cls._from_chemsmart_project_in_chemsmart_path(
+            project_name, template_projects_dir
+        )
 
 
 class YamlGaussianProjectSettings(GaussianProjectSettings):
@@ -262,6 +292,7 @@ class YamlGaussianProjectSettingsBuilder:
         settings_mapping = {
             "irc": GaussianIRCJobSettings,
             "td": GaussianTDDFTJobSettings,
+            "qmmm": GaussianQMMMJobSettings,
         }
 
         try:
