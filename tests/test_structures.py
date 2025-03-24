@@ -111,7 +111,7 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
         assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
 
 
-        # TODO: add in coordinate blocks for QMMM jobs
+        # TODO:
 
 
 class TestStructures:

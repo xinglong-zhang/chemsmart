@@ -718,12 +718,18 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         low_level_functional=None,
         low_level_basis=None,
         low_level_force_field=None,
-        high_level_charge=None,
-        high_level_multiplicity=None,
-        medium_level_charge=None,
-        medium_level_multiplicity=None,
-        low_level_charge=None,
-        low_level_multiplicity=None,
+        real_low_charge_and_multiplicity=None,
+        int_med_charge_and_multiplicity=None,
+        int_low_charge_and_multiplicity=None,
+        model_high_charge_and_multiplicity=None,
+        model_med_charge_and_multiplicity=None,
+        model_low_charge_and_multiplicity=None,
+        # high_level_charge=None,
+        # high_level_multiplicity=None,
+        # medium_level_charge=None,
+        # medium_level_multiplicity=None,
+        # low_level_charge=None,
+        # low_level_multiplicity=None,
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
@@ -737,8 +743,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             high_level_functional/medium_level_functional/low_level_functional: Functional for high/medium/low level of theory
             high_level_basis/medium_level_basis/low_level_basis: Basis set for high/medium/low level of theory
             high_level_force_field/medium_level_force_field/low_level_force_field: Force field for high/medium/low level of theory (if specified)
-            high/medium/low_level_charge (int): Charge for high level of theory
-            high/medium/low_level_multiplicity (int): Multiplicity for high level of theory
+            real_low_charge_and_multiplicity (tuple): Charge and multiplicity of real system
+            int_med/low_charge_and_multiplicity (tuple): Charge and multiplicity of intermediate layer for medium/low level of theory
+            model_high/med/low_charge_and_multiplicity (tuple): Charge and multiplicity of model system for high/medium/low level of theory
             high_level_atoms (list or string): List of high level atoms.
             medium_level_atoms (list) : List of medium level atoms.
             low_level_atoms (list): List of low level atoms.
@@ -770,12 +777,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.low_level_functional = low_level_functional
         self.low_level_basis = low_level_basis
         self.low_level_force_field = low_level_force_field
-        self.high_level_charge = high_level_charge
-        self.high_level_multiplicity = high_level_multiplicity
-        self.medium_level_charge = medium_level_charge
-        self.medium_level_multiplicity = medium_level_multiplicity
-        self.low_level_charge = low_level_charge
-        self.low_level_multiplicity = low_level_multiplicity
+        self.real_low_charge_and_multiplicity = real_low_charge_and_multiplicity
+        self.int_med_charge_and_multiplicity = int_med_charge_and_multiplicity
+        self.int_low_charge_and_multiplicity = int_low_charge_and_multiplicity
+        self.model_high_charge_and_multiplicity = model_high_charge_and_multiplicity
+        self.model_med_charge_and_multiplicity = model_med_charge_and_multiplicity
+        self.model_low_charge_and_multiplicity = model_low_charge_and_multiplicity
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
@@ -798,12 +805,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         )
         self.title = "Gaussian QM/MM job"
 
-        if self.low_level_charge is not None:
+        if self.real_low_charge_and_multiplicity is not None:
             #the charge and multiplicity of the real system equal to
             # that of the low_level_charge and low_level_multiplicity
-            self.charge = self.low_level_charge
-        if self.low_level_multiplicity is not None:
-            self.multiplicity = self.low_level_multiplicity
+            self.charge = self.real_low_charge_and_multiplicity[0]
+            self.multiplicity = self.real_low_charge_and_multiplicity[1]
 
 
     @property
@@ -899,37 +905,47 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         Real, Int=Intermediate system, and Mod=Model system, and second character
         is one of: H, M and L for the High, Medium and Low levels).
         """
-        charge_and_multiplicity = ""
-        if (
-            self.high_level_charge is not None
-            and self.high_level_multiplicity is not None
-        ):
-            assert self.low_level_charge is not None and self.low_level_multiplicity is not None, (
-                "Charge and multiplicity for the real system must be specified!"
-            )
-            # high level charge and multiplicity are specified
-            # low level charge and multiplicity are specified
-            if (
-                self.medium_level_multiplicity is None
-                and self.medium_level_charge is None
-            ):
-                # no medium level charge and multiplicity are specified
-                # two layer ONIOM
-                charge_and_multiplicity = (
-                    f"{self.low_level_charge} {self.low_level_multiplicity} "
-                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                    * 2  # for a two layer ONIOM, the high-level region will be calculated
-                    # at high and low level-of-theory. Hence, its charge and multiplicity
-                    # need to be specified twice for high and low level calculation.
-                )
-            else:
-                # medium level charge and multiplicity are specified
-                # 3 layer ONIOM
-                charge_and_multiplicity = (
-                    f"{self.low_level_charge} {self.low_level_multiplicity} "
-                    + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
-                    * 2
-                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                    * 3
-                )
+        assert self.real_low_charge_and_multiplicity, (
+            "Charge and multiplicity for the real system must be specified!"
+        )
+        charge_and_multiplicity_list=[self.real_low_charge_and_multiplicity,
+                                      self.int_med_charge_and_multiplicity,
+                                      self.int_low_charge_and_multiplicity,
+                                      self.model_high_charge_and_multiplicity,
+                                      self.model_med_charge_and_multiplicity,
+                                      self.model_low_charge_and_multiplicity]
+        #Defaults for missing charge / spin multiplicity pairs are taken from the next highest
+        # calculation level and / or system size.
+        if all(var is None for var in charge_and_multiplicity_list[1:]):
+            #only charge and multiplicity of real system is specified,
+            #so the charge and multiplicity of other systems will be the same as the real system
+            for i in range(1,len(charge_and_multiplicity_list)):
+                charge_and_multiplicity_list[i]=self.real_low_charge_and_multiplicity
+        elif all(var is None for var in charge_and_multiplicity_list[2:]):
+            # only charge and multiplicity of real system and that of intermediate layer,
+            # medium level-of-theory are specified, the charge and multiplicity of other
+            # systems will be the same as the intermediate layer
+            for i in range(2,len(charge_and_multiplicity_list)):
+                charge_and_multiplicity_list[i]=self.int_med_charge_and_multiplicity
+        elif all(var is None for var in charge_and_multiplicity_list[3:]):
+            # only charge and multiplicity of real system, intermediate layer, medium level-of-theory
+            # and intermediate layer, medium level-of-theory are specified, the charge and multiplicity of other
+            # systems will be the same as intermediate layer, medium level-of-theory,...
+            for i in range(3,len(charge_and_multiplicity_list)):
+                charge_and_multiplicity_list[i]=self.int_med_charge_and_multiplicity
+        elif all(var is None for var in charge_and_multiplicity_list[4:]):
+            #the rest systems will follow the model system, high level-of-theory
+            for i in range(4,len(charge_and_multiplicity_list)):
+                charge_and_multiplicity_list[i]=self.model_high_charge_and_multiplicity
+        elif all(var is None for var in charge_and_multiplicity_list[5:]):
+                charge_and_multiplicity_list[-1]=self.model_med_charge_and_multiplicity
+        elif all(var is not None for var in charge_and_multiplicity_list):
+            pass
+        else:
+            raise ValueError("The charge and multiplicity of lower level-of-theory cannot overide the higher ones!")
+        updated_list=[]
+        for charge_and_multiplicity in charge_and_multiplicity_list:
+            updated_list.append(str(charge_and_multiplicity[0]))
+            updated_list.append(str(charge_and_multiplicity[1]))
+        charge_and_multiplicity=' '.join(updated_list)
         return charge_and_multiplicity
