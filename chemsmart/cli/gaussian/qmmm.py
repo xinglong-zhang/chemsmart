@@ -125,6 +125,14 @@ logger = logging.getLogger(__name__)
     type=str,
     help="Atom indices for low level.",
 )
+
+@click.option(
+    "-l",
+    "--link-atoms",
+    type=str,
+    help="Atom indices for link atoms.",
+)
+
 @click.option(
     "-b",
     "--bonded-atoms",

@@ -57,7 +57,7 @@ TV                -1.219952    2.133447    0.000000
         assert cb.molecule.partition_level_strings is None
 
     def test_read_gaussian_cb_frozen_atoms(self):
-        coordinates_string = """
+        coordinates_string1 = """
 C        -1      -0.5448210000   -1.1694570000    0.0001270000
 C        -1       0.8378780000   -1.0476350000    0.0001900000
 C        -1       1.4329940000    0.2194290000    0.0001440000
@@ -73,10 +73,10 @@ O        0       3.6625230000   -0.6037690000   -0.0002940000
 H        0       3.3025560000    1.3842410000    0.0001510000
 Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 """
-        cb = CoordinateBlock(coordinate_block=coordinates_string)
-        assert cb.symbols.get_chemical_formula() == "C7H5ClO"
-        assert cb.molecule.empirical_formula == "C7H5ClO"
-        assert cb.molecule.frozen_atoms == [
+        cb1 = CoordinateBlock(coordinate_block=coordinates_string1)
+        assert cb1.symbols.get_chemical_formula() == "C7H5ClO"
+        assert cb1.molecule.empirical_formula == "C7H5ClO"
+        assert cb1.molecule.frozen_atoms == [
             -1,
             -1,
             -1,
@@ -92,7 +92,24 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
             0,
             0,
         ]
-        assert cb.molecule.partition_level_strings is None
+        assert cb1.molecule.partition_level_strings is None
+
+        coordinates_string2 = """ 
+  F     -1.041506214819     0.000000000000    -2.126109488809 M
+  F     -2.033681935634    -1.142892069126    -0.412218766901 M
+  F     -2.033681935634     1.142892069126    -0.412218766901 M
+  C     -1.299038105677     0.000000000000    -0.750000000000 M H 5
+  C      0.000000000000     0.000000000000     0.000000000000 H
+  H      0.000000000000     0.000000000000     1.100000000000 H
+  O      1.125833024920     0.000000000000    -0.650000000000 H
+ """
+        cb2 = CoordinateBlock(coordinate_block=coordinates_string2)
+        assert cb2.symbols.get_chemical_formula() == "C2HF3O"
+        assert cb2.molecule.empirical_formula == "C2HF3O"
+        assert cb2.molecule.partition_level_strings == ['M', 'M', 'M', 'M', 'H', 'H', 'H']
+        assert cb2.molecule.high_level_atoms == [5,6,7]
+        assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
+
 
         # TODO: add in coordinate blocks for QMMM jobs
 

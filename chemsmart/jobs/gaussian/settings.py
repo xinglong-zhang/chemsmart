@@ -727,6 +727,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
+        link_atoms=None,
         bonded_atoms=None,
         scale_factors=None,
         **kwargs,
@@ -744,6 +745,20 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             bonded_atoms (list of tuples): List of bonded atoms.
             scale_factors (dict) (optional):  A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom pair indices and the value is a list of scale factors for (low, medium, high).
             **kwargs: Additional keyword arguments.
+
+            Information about scale factors:
+            The scale factors are used to scale the bond lengths between different layers.
+            For example, in a two-layer ONIOM calculation, if a C-C bond is cut between low and high layers, the
+            C atom from the low layer will be substituted by an H atom (link atom) when conducting the high-level
+            calculation. Instead of directly placing an H atom at the position of the C atom, the link atom (H)
+            needs to be aligned along with the bond vector of the original C-C bond.
+            Note that the bond distances of C-C and C-H bond are different. Both scale_factor1 and scale_factor2
+            can be set as 0.709, which represents the ratio of a standard C-C bond length (1.084 Å) to a standard
+            C-H bond length (1.528 Å). That is, a link atom (H) is placed at a distance of 0.709 times the bond
+            length of the original C-C bond for both low-level and high-level calculations.
+            If not specified, scale factors will be calculated by the ratio of covalent radiis. If only one scale
+            factor is specified, it will be used for all layers. If two scale factors are specified for a 3-layer
+            ONIOM calculation, both the high- and medium-layer will use the second scale factor.
         """
         super().__init__(**kwargs)
         self.high_level_functional = high_level_functional
@@ -764,6 +779,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         self.high_level_atoms = high_level_atoms
         self.medium_level_atoms = medium_level_atoms
         self.low_level_atoms = low_level_atoms
+        self.link_atoms = link_atoms
         self.bonded_atoms = bonded_atoms
         self.scale_factors = scale_factors
         # If the user only specifies the parameters of two layers, the low-level layer will be omitted
@@ -782,10 +798,13 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         )
         self.title = "Gaussian QM/MM job"
 
-        if self.high_level_charge is not None:
-            self.charge = self.high_level_charge
-        if self.high_level_multiplicity is not None:
-            self.multiplicity = self.high_level_multiplicity
+        if self.low_level_charge is not None:
+            #the charge and multiplicity of the real system equal to
+            # that of the low_level_charge and low_level_multiplicity
+            self.charge = self.low_level_charge
+        if self.low_level_multiplicity is not None:
+            self.multiplicity = self.low_level_multiplicity
+
 
     @property
     def charge_and_multiplicity_string(self):
@@ -885,57 +904,32 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             self.high_level_charge is not None
             and self.high_level_multiplicity is not None
         ):
-            # high level charge and multiplicity are specified
-            if (
-                self.low_level_charge is not None
-                and self.low_level_multiplicity is not None
-            ):
-                # low level charge and multiplicity are specified
-                if (
-                    self.medium_level_multiplicity is None
-                    and self.medium_level_charge is None
-                ):
-                    # no medium level charge and multiplicity are specified
-                    # two layer ONIOM
-                    charge_and_multiplicity = (
-                        f"{self.low_level_charge} {self.low_level_multiplicity} "
-                        + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                        * 2  # TODO: why is this multiplied by 2?
-                    )
-                else:
-                    # medium level charge and multiplicity are specified
-                    # 3 layer ONIOM
-                    charge_and_multiplicity = (
-                        f"{self.low_level_charge} {self.low_level_multiplicity} "
-                        + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
-                        * 2
-                        + f"{self.high_level_charge} {self.high_level_multiplicity} "
-                        * 3
-                    )
-            else:
-                # no low level charge and multiplicity are specified
-                # this is okay
-                if (
-                    self.medium_level_charge is not None
-                    and self.medium_level_multiplicity is not None
-                ):
-                    # cases where high level and medium levels are DFT, but low level MM
-                    charge_and_multiplicity = (
-                        f"{self.high_level_charge} {self.high_level_multiplicity} "
-                        + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
-                        * 2
-                    )  # TODO: check if this is the right input?
-                else:
-                    # no medium level charge and multiplicity specified
-                    # can be 2-layer ONIOM without medium layer or
-                    # 3-layer ONIOM with medium level as MM
-                    charge_and_multiplicity = (
-                        f"{self.high_level_charge} {self.high_level_multiplicity} "
-                        * 2
-                    )  # TODO: check if this is the right input?
-        else:
-            raise ValueError(
-                "Charge and multiplicity for high level of theory must be specified!"
+            assert self.low_level_charge is not None and self.low_level_multiplicity is not None, (
+                "Charge and multiplicity for the real system must be specified!"
             )
-
+            # high level charge and multiplicity are specified
+            # low level charge and multiplicity are specified
+            if (
+                self.medium_level_multiplicity is None
+                and self.medium_level_charge is None
+            ):
+                # no medium level charge and multiplicity are specified
+                # two layer ONIOM
+                charge_and_multiplicity = (
+                    f"{self.low_level_charge} {self.low_level_multiplicity} "
+                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
+                    * 2  # for a two layer ONIOM, the high-level region will be calculated
+                    # at high and low level-of-theory. Hence, its charge and multiplicity
+                    # need to be specified twice for high and low level calculation.
+                )
+            else:
+                # medium level charge and multiplicity are specified
+                # 3 layer ONIOM
+                charge_and_multiplicity = (
+                    f"{self.low_level_charge} {self.low_level_multiplicity} "
+                    + f"{self.medium_level_charge} {self.medium_level_multiplicity} "
+                    * 2
+                    + f"{self.high_level_charge} {self.high_level_multiplicity} "
+                    * 3
+                )
         return charge_and_multiplicity

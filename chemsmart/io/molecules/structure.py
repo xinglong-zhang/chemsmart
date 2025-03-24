@@ -9,10 +9,12 @@ import numpy as np
 from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
+from chempy import atomic_number
 from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
+from sympy.utilities.iterables import partitions
 
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.io.xyz.file import XYZFile
@@ -1115,6 +1117,12 @@ class CoordinateBlock:
         and -1 means constrained."""
         return self._get_constraints()
 
+    @property
+    def partitions(self):
+        """Returns a list of partitions in Gaussian ONIOM format, where 'H', 'M', 'L'
+        means high, medium, low level atoms respectively."""
+        return self._get_partitions()
+
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class."""
@@ -1124,6 +1132,9 @@ class CoordinateBlock:
             frozen_atoms=self.constrained_atoms,
             pbc_conditions=self.pbc_conditions,
             translation_vectors=self.translation_vectors,
+            high_level_atoms=self.partitions[1],
+            medium_level_atoms=self.partitions[2],
+            low_level_atoms=self.partitions[3],
         )
 
     def _get_symbols(self):
@@ -1217,9 +1228,10 @@ class CoordinateBlock:
             )
         return atomic_numbers, np.array(positions), constraints
 
+
     def _get_atomic_numbers(self):
         """Obtain a list of symbols as atomic numbers."""
-        atomic_numbers, _, _ = (
+        atomic_numbers, _, _= (
             self._get_atomic_numbers_positions_and_constraints()
         )
         return atomic_numbers
@@ -1230,7 +1242,7 @@ class CoordinateBlock:
         return positions
 
     def _get_constraints(self):
-        _, _, constraints = (
+        _, _, constraints= (
             self._get_atomic_numbers_positions_and_constraints()
         )
         if len(constraints) == 0:
@@ -1238,6 +1250,56 @@ class CoordinateBlock:
         if all(constraint == 0 for constraint in constraints):
             return None
         return constraints
+
+    def _get_partitions(self):
+        partitions=[]
+        high_level_atoms=[]
+        medium_level_atoms=[]
+        low_level_atoms=[]
+        test=[]
+        i=1
+        for line in self.coordinate_block:
+            if line.startswith(
+                "TV"
+            ):  # cases where PBC system occurs in Gaussian
+                continue
+
+            line_elements = line.strip().split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+            if (len(line_elements) > 5 and
+                  all(line_elements[i].strip().replace('.', '', 1).replace('-', '', 1).isdigit()
+                      for i in range(2, 5))):
+                    # happens in cube file and frozen atoms case
+                if line_elements[5]=='H':
+                    high_level_atoms.append(i)
+                    partitions.append('H')
+                elif line_elements[5]=='M':
+                    medium_level_atoms.append(i)
+                    partitions.append('M')
+                elif line_elements[5]=='L':
+                    low_level_atoms.append(i)
+                    partitions.append('L')
+                i+=1
+            elif (len(line_elements) > 4 and
+                  all(line_elements[i].strip().replace('.', '', 1).replace('-', '', 1).isdigit()
+                      for i in range(1, 4))):
+                if line_elements[4].strip() == 'H':
+                    high_level_atoms.append(i)
+                    partitions.append('H')
+                elif line_elements[4].strip() == 'M':
+                    medium_level_atoms.append(i)
+                    partitions.append('M')
+                elif line_elements[4] == 'L':
+                    low_level_atoms.append(i)
+                    partitions.append('L')
+                i += 1
+            # else:
+            #     raise ValueError(f"Partition level not found in the coordinate block: {self.coordinate_block}!")
+        return partitions, high_level_atoms, medium_level_atoms, low_level_atoms
+
 
     def _get_translation_vectors(self):
         tvs = []
