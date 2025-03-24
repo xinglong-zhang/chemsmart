@@ -788,7 +788,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             self.multiplicity = self.high_level_multiplicity
 
     @property
-    def charge_and_multiplicity(self):
+    def charge_and_multiplicity_string(self):
         """Obtain charge and multiplicity string."""
         return self._get_charge_and_multiplicity()
 
@@ -827,15 +827,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         )
 
         return level_of_theory
-
-    # def scale_factor_initialization(self):
-    #     """Initializes scale factors."""
-    #     scale_factor = f"{self.scale_factor1}"
-    #     if self.scale_factor2 is not None:
-    #         scale_factor += f" {self.scale_factor2}"
-    #         if self.scale_factor3 is not None:
-    #             scale_factor += f" {self.scale_factor3}"
-    #     return scale_factor if scale_factor is not None else str(1.0)
 
     def _get_level_of_theory_string(self):
         """Get ONIOM level of theory for route string."""
