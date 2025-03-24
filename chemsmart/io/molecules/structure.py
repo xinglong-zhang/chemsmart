@@ -9,12 +9,10 @@ import numpy as np
 from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
-from chempy import atomic_number
 from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
-from sympy.utilities.iterables import partitions
 
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.io.xyz.file import XYZFile
@@ -1117,11 +1115,6 @@ class CoordinateBlock:
         and -1 means constrained."""
         return self._get_constraints()
 
-    @property
-    def partitions(self):
-        """Returns a list of partitions in Gaussian ONIOM format, where 'H', 'M', 'L'
-        means high, medium, low level atoms respectively."""
-        return self._get_partitions()
 
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
