@@ -538,14 +538,14 @@ class Molecule:
 
         return rdkit_mol
 
-    def write_coordinates(self, f, program=None, job_settings=None):
+    def write_coordinates(self, f, program=None):
         """Write the coordinates of the molecule to a file.
         No empty end line at the end of the file."""
         if program is None:
             program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
             self._write_gaussian_coordinates(f)
-            self._write_gaussian_pbc_coordinates(f, job_settings=None)
+            self._write_gaussian_pbc_coordinates(f)
         elif program.lower() == "orca":
             self._write_orca_coordinates(f)
             self._write_orca_pbc_coordinates(f)
@@ -568,7 +568,7 @@ class Molecule:
         else:
             raise ValueError(f"Format {format} is not supported for writing.")
 
-    def write_xyz(self, filename, xyz_only=True, job_settings=None, **kwargs):
+    def write_xyz(self, filename, xyz_only=True, **kwargs):
         """Write the molecule to an XYZ file.
         Args:
             filename (str): The name of the file to write to.
@@ -716,7 +716,7 @@ class Molecule:
             f.write(line + "\n")
         return f
 
-    def _write_gaussian_pbc_coordinates(self, f, job_settings):
+    def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
         if self.pbc_conditions is not None:
             assert (

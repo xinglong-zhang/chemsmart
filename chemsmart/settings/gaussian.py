@@ -296,11 +296,18 @@ class YamlGaussianProjectSettingsBuilder:
         }
 
         try:
+            logger.debug(f"Reading Configuration from {self.filename}")
             job_type_config = self._read_config().get(job_type)
+            logger.debug(
+                f"Getting job type configuration for {job_type} settings from {self.filename}\n"
+                f"Obtained {job_type_config}"
+            )
             if job_type_config is not None:
-                return settings_mapping.get(
+                settings = settings_mapping.get(
                     job_type, GaussianJobSettings
                 ).from_dict(job_type_config)
+                logger.debug(f"Job settings for {job_type} is {settings}.")
+                return settings
         except KeyError as e:
             raise RuntimeError(
                 f"Gaussian settings for job {job_type} cannot be found!\n"

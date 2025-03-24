@@ -42,7 +42,7 @@ def entry_point(filename, index):
         molecules[0].write_xyz(file_basename + "_single.xyz")
     else:
         for i, molecule in enumerate(molecules):
-            molecule.write_xyz(file_basename + f"_{i+1}.xyz")
+            molecule.write_xyz(file_basename + f"_{i + 1}.xyz")
 
 
 if __name__ == "__main__":
