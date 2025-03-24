@@ -1228,10 +1228,9 @@ class CoordinateBlock:
             )
         return atomic_numbers, np.array(positions), constraints
 
-
     def _get_atomic_numbers(self):
         """Obtain a list of symbols as atomic numbers."""
-        atomic_numbers, _, _= (
+        atomic_numbers, _, _ = (
             self._get_atomic_numbers_positions_and_constraints()
         )
         return atomic_numbers
