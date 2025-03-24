@@ -106,10 +106,17 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
         cb2 = CoordinateBlock(coordinate_block=coordinates_string2)
         assert cb2.symbols.get_chemical_formula() == "C2HF3O"
         assert cb2.molecule.empirical_formula == "C2HF3O"
-        assert cb2.molecule.partition_level_strings == ['M', 'M', 'M', 'M', 'H', 'H', 'H']
-        assert cb2.molecule.high_level_atoms == [5,6,7]
+        assert cb2.molecule.partition_level_strings == [
+            "M",
+            "M",
+            "M",
+            "M",
+            "H",
+            "H",
+            "H",
+        ]
+        assert cb2.molecule.high_level_atoms == [5, 6, 7]
         assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
-
 
         # TODO:
 

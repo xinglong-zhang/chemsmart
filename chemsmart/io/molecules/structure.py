@@ -131,6 +131,13 @@ class Molecule:
             raise ValueError(
                 "The number of symbols and positions should be the same!"
             )
+        # update partition levels if availabel
+        if self.high_level_atoms is not None:
+            (
+                self.high_level_atoms,
+                self.medium_level_atoms,
+                self.low_level_atoms,
+            ) = self._get_partition_levels()
 
     def __len__(self):
         return len(self.chemical_symbols)
@@ -1115,6 +1122,10 @@ class CoordinateBlock:
         and -1 means constrained."""
         return self._get_constraints()
 
+    @property
+    def partitions(self):
+        """Returns a list of partition levels for the atoms."""
+        return self._get_partitions()
 
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
@@ -1244,12 +1255,11 @@ class CoordinateBlock:
         return constraints
 
     def _get_partitions(self):
-        partitions=[]
-        high_level_atoms=[]
-        medium_level_atoms=[]
-        low_level_atoms=[]
-        test=[]
-        i=1
+        partitions = []
+        high_level_atoms = []
+        medium_level_atoms = []
+        low_level_atoms = []
+        i = 1
         for line in self.coordinate_block:
             if line.startswith(
                 "TV"
@@ -1261,37 +1271,51 @@ class CoordinateBlock:
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
                 continue
-            if (len(line_elements) > 5 and
-                  all(line_elements[i].strip().replace('.', '', 1).replace('-', '', 1).isdigit()
-                      for i in range(2, 5))):
-                    # happens in cube file and frozen atoms case
-                if line_elements[5]=='H':
+            if len(line_elements) > 5 and all(
+                line_elements[i]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for i in range(2, 5)
+            ):
+                # happens in cube file and frozen atoms case
+                if line_elements[5] == "H":
                     high_level_atoms.append(i)
-                    partitions.append('H')
-                elif line_elements[5]=='M':
+                    partitions.append("H")
+                elif line_elements[5] == "M":
                     medium_level_atoms.append(i)
-                    partitions.append('M')
-                elif line_elements[5]=='L':
+                    partitions.append("M")
+                elif line_elements[5] == "L":
                     low_level_atoms.append(i)
-                    partitions.append('L')
-                i+=1
-            elif (len(line_elements) > 4 and
-                  all(line_elements[i].strip().replace('.', '', 1).replace('-', '', 1).isdigit()
-                      for i in range(1, 4))):
-                if line_elements[4].strip() == 'H':
+                    partitions.append("L")
+                i += 1
+            elif len(line_elements) > 4 and all(
+                line_elements[i]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for i in range(1, 4)
+            ):
+                if line_elements[4].strip() == "H":
                     high_level_atoms.append(i)
-                    partitions.append('H')
-                elif line_elements[4].strip() == 'M':
+                    partitions.append("H")
+                elif line_elements[4].strip() == "M":
                     medium_level_atoms.append(i)
-                    partitions.append('M')
-                elif line_elements[4] == 'L':
+                    partitions.append("M")
+                elif line_elements[4] == "L":
                     low_level_atoms.append(i)
-                    partitions.append('L')
+                    partitions.append("L")
                 i += 1
             # else:
             #     raise ValueError(f"Partition level not found in the coordinate block: {self.coordinate_block}!")
-        return partitions, high_level_atoms, medium_level_atoms, low_level_atoms
-
+        return (
+            partitions,
+            high_level_atoms,
+            medium_level_atoms,
+            low_level_atoms,
+        )
 
     def _get_translation_vectors(self):
         tvs = []

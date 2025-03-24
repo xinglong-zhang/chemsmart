@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from chemsmart.io.gaussian.route import GaussianRoute
@@ -241,22 +243,17 @@ class TestGaussianQMMMJobSettings:
             == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
         )
 
-    def test_qmmm_settings_for_atoms(self):
+    def test_qmmm_settings_for_atoms(self, gaussian_inputs_test_directory):
         mol1 = Molecule.from_pubchem("81184")
-        print(mol1)
 
-        settings1 = GaussianQMMMJobSettings(
-            functional_high="b3lyp",
-            basis_high="6-31g(d)",
-            force_field_low="uff",
+        settings1 = Molecule(
+            symbols=mol1.symbols,
+            positions=mol1.positions,
             high_level_atoms=[1, 2, 3, 8, 9, 10],
             bonded_atoms=[[1, 2], [2, 3], [8, 9], [9, 10]],
-            num_atoms=27,
-            job_type="opt",
-            freq=True,
         )
-        assert settings1.partition_level_strings[0] == [1, 2, 3, 8, 9, 10]
-        assert settings1.partition_level_strings[-1] == [
+        assert settings1.high_level_atoms == [1, 2, 3, 8, 9, 10]
+        assert settings1.low_level_atoms == [
             4,
             5,
             6,
@@ -279,69 +276,94 @@ class TestGaussianQMMMJobSettings:
             26,
             27,
         ]
+        assert settings1.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "H",
+            "H",
+            "H",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
 
         # Test for 3-layer ONIOM calculation with example input dppeFeCl2_phenyldioxazolone_qmmm.com
-        settings2 = GaussianQMMMJobSettings(
-            functional_high="b3lyp",
-            basis_high="6-31g(d)",
-            force_field_low="uff",
+        mol2 = Molecule._read_gaussian_inputfile(
+            os.path.join(
+                gaussian_inputs_test_directory,
+                "qmmm/dppeFeCl2_phenyldioxazolone_qmmm.com",
+            )
+        )
+        settings2 = Molecule(
+            symbols=mol2.symbols,
+            positions=mol2.positions,
             high_level_atoms="[18-28,29-39,40-50,51-61,62-72]",
             medium_level_atoms=[1, 2, 3, 16],
             bonded_atoms=[[2, 18], [2, 29], [1, 40], [1, 51], [16, 62]],
-            num_atoms=72,
-            job_type="opt",
-            freq=True,
         )
-        assert settings2.partition_level_strings[0] == list(
-            range(18, 29)
-        ) + list(range(29, 40)) + list(range(40, 51)) + list(
-            range(51, 62)
-        ) + list(
-            range(62, 73)
-        )
-        assert settings2.partition_level_strings[1] == [1, 2, 3, 16]
-        assert settings2.partition_level_strings[-1] == list(range(4, 16)) + [
-            17
-        ]
+        assert settings2.high_level_atoms == list(range(18, 29)) + list(
+            range(29, 40)
+        ) + list(range(40, 51)) + list(range(51, 62)) + list(range(62, 73))
+        assert settings2.medium_level_atoms == [1, 2, 3, 16]
+        assert settings2.low_level_atoms == list(range(4, 16)) + [17]
 
     def test_qmmm_settings_for_charge_and_multiplicity(self):
-        #test cases for 3-layer ONIOM model
+        # test cases for 3-layer ONIOM model
         settings1 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
-            low_level_force_field='uff',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
         )
         assert (
-                settings1.charge_and_multiplicity_string
-                == "0 1 0 1 0 1 0 1 0 1 0 1"
+            settings1.charge_and_multiplicity_string
+            == "0 1 0 1 0 1 0 1 0 1 0 1"
         )
 
         settings2 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
-            low_level_force_field='uff',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
             int_med_charge=1,
             int_med_multiplicity=3,
         )
         assert (
-                settings2.charge_and_multiplicity_string
-                == "0 1 1 3 1 3 1 3 1 3 1 3"
+            settings2.charge_and_multiplicity_string
+            == "0 1 1 3 1 3 1 3 1 3 1 3"
         )
 
         settings3 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
-            low_level_force_field='uff',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
             int_med_charge=-1,
@@ -350,16 +372,16 @@ class TestGaussianQMMMJobSettings:
             int_low_multiplicity=1,
         )
         assert (
-                settings3.charge_and_multiplicity_string
-                == "0 1 -1 2 0 1 -1 2 -1 2 -1 2"
+            settings3.charge_and_multiplicity_string
+            == "0 1 -1 2 0 1 -1 2 -1 2 -1 2"
         )
 
         settings4 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
-            low_level_force_field='uff',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
             int_med_charge=0,
@@ -370,16 +392,16 @@ class TestGaussianQMMMJobSettings:
             model_high_multiplicity=2,
         )
         assert (
-                settings4.charge_and_multiplicity_string
-                == "0 1 0 3 0 1 1 2 1 2 1 2"
+            settings4.charge_and_multiplicity_string
+            == "0 1 0 3 0 1 1 2 1 2 1 2"
         )
 
         settings5 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
-            low_level_force_field='uff',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
             int_med_charge=1,
@@ -392,16 +414,16 @@ class TestGaussianQMMMJobSettings:
             model_med_multiplicity=2,
         )
         assert (
-                settings5.charge_and_multiplicity_string
-                == "0 1 1 3 0 1 1 2 1 2 1 2"
+            settings5.charge_and_multiplicity_string
+            == "0 1 1 3 0 1 1 2 1 2 1 2"
         )
 
         settings6 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
-            low_level_force_field='uff',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
             int_med_charge=-1,
@@ -416,36 +438,36 @@ class TestGaussianQMMMJobSettings:
             model_low_multiplicity=2,
         )
         assert (
-                settings6.charge_and_multiplicity_string
-                == "0 1 -1 2 0 1 1 2 1 2 1 2"
+            settings6.charge_and_multiplicity_string
+            == "0 1 -1 2 0 1 1 2 1 2 1 2"
         )
-        #test cases for 2-layer ONIOM model
-        settings7= GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            low_level_force_field='uff',
+        # test cases for 2-layer ONIOM model
+        settings7 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="uff",
             real_low_charge=0,
             real_low_multiplicity=1,
         )
-        assert (settings7.charge_and_multiplicity_string == "0 1 0 1 0 1")
+        assert settings7.charge_and_multiplicity_string == "0 1 0 1 0 1"
 
-        settings8= GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
+        settings8 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
             real_low_charge=0,
             real_low_multiplicity=1,
             model_high_charge=-1,
             model_high_multiplicity=2,
         )
-        assert (settings8.charge_and_multiplicity_string == "0 1 -1 2 -1 2")
+        assert settings8.charge_and_multiplicity_string == "0 1 -1 2 -1 2"
 
         settings9 = GaussianQMMMJobSettings(
-            high_level_functional='mn15',
-            high_level_basis='def2svp',
-            medium_level_functional='b3lyp',
-            medium_level_basis='6-31g(d)',
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
             real_low_charge=0,
             real_low_multiplicity=1,
             model_high_charge=-1,
@@ -453,8 +475,7 @@ class TestGaussianQMMMJobSettings:
             model_low_charge=0,
             model_low_multiplicity=1,
         )
-        assert (settings9.charge_and_multiplicity_string == "0 1 -1 2 0 1")
-
+        assert settings9.charge_and_multiplicity_string == "0 1 -1 2 0 1"
 
 
 class TestGaussianRoute:

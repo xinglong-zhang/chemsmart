@@ -107,7 +107,6 @@ logger = logging.getLogger(__name__)
     type=int,
     help="Spin multiplicity of intermediate layer at low level-of-theory.",
 )
-
 @click.option(
     "-mhc",
     "--model-high-charge",
@@ -162,8 +161,6 @@ logger = logging.getLogger(__name__)
     type=str,
     help="Atom indices for low level.",
 )
-
-
 @click.option(
     "-b",
     "--bonded-atoms",
