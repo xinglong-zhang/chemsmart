@@ -22,6 +22,7 @@ class Thermochemistry:
         filename: str. Filepath to the file from which thermochemistry data is extracted.
         temperature: float. Temperature of the system, in K.
         pressure: float. Pressure of the system, in atm.
+        weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
     """
 
     def __init__(
@@ -29,11 +30,13 @@ class Thermochemistry:
         filename,
         temperature,
         pressure,
+        weighted_atomic_mass=True,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
+        self.weighted_atomic_mass = weighted_atomic_mass
         self.m = (
             self.mass
             * units._amu  # converts mass from g/mol to kg/molecule
@@ -76,6 +79,8 @@ class Thermochemistry:
     @property
     def mass(self):
         """Obtain the molecular mass."""
+        if self.weighted_atomic_mass:
+            return self.molecule.mass
         return self.file_object.mass
 
     @property
@@ -474,12 +479,12 @@ class qRRHOThermochemistry(Thermochemistry):
         alpha=None,
         s_freq_cutoff=None,
         h_freq_cutoff=None,
-        bav_conf=False,
     ):
-        super().__init__(filename, temperature, pressure=1.0)
+        super().__init__(
+            filename, temperature, pressure=1.0, weighted_atomic_mass=True
+        )
         self.concentration = concentration
         self.alpha = alpha
-        self.bav_conf = bav_conf
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
             if s_freq_cutoff is not None
@@ -527,12 +532,9 @@ class qRRHOThermochemistry(Thermochemistry):
         where:
             u'_K = u_K * B_av / (u_K + B_av)
             u_K = h / (8 * pi^2 * v_K)
-            B_av = average molecular moment of inertia (kg m^2), 10^-44 is used for the global treatment
+            B_av = average molecular moment of inertia (kg m^2)
         """
-        if self.bav_conf:
-            bav = self.Bav
-        else:
-            bav = 1.00e-44
+        bav = self.Bav
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
         entropy = [
