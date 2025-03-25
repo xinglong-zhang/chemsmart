@@ -11,6 +11,7 @@ from chemsmart.io.gaussian.output import (
     Gaussian16Output,
 )
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.constants import cal_to_joules
@@ -752,7 +753,7 @@ class TestThermochemistryCO2:
             1 + (100 / vibrational_frequencies) ** 4
         )
         assert np.allclose(
-            qrrho_thermochem1.entropy_dumping_function,
+            qrrho_thermochem1.entropy_damping_function,
             expected_entropy_damping_function,
         )
 
@@ -1056,7 +1057,7 @@ class TestThermochemistryCO2:
             1 + (100 / vibrational_frequencies) ** 4
         )
         assert np.allclose(
-            qrrho_thermochem1.enthalpy_dumping_function,
+            qrrho_thermochem1.enthalpy_damping_function,
             expected_enthalpy_damping_function,
         )
 
@@ -1179,11 +1180,11 @@ class TestThermochemistryCO2:
             1 + (1000 / vibrational_frequencies) ** 4
         )
         assert np.allclose(
-            qrrho_thermochem3.entropy_dumping_function,
+            qrrho_thermochem3.entropy_damping_function,
             expected_damping_function,
         )
         assert np.allclose(
-            qrrho_thermochem3.enthalpy_dumping_function,
+            qrrho_thermochem3.enthalpy_damping_function,
             expected_damping_function,
         )
         assert np.isclose(qrrho_thermochem3.energies, -188.444680, atol=1e-6)
@@ -1665,6 +1666,40 @@ class TestThermochemistryH2O:
             -76.325227,
             atol=1e-6,
         )
+
+    def test_thermochemistry_water_orca_output(self, water_output_gas_path):
+        assert os.path.exists(water_output_gas_path)
+        orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.normal_termination
+        assert orca_out.natoms == 3
+        mol = orca_out.molecule
+        assert np.allclose(
+            orca_out.moments_of_inertia, [0.63813595, 1.14979418, 1.78793007]
+        )
+        assert mol.empirical_formula == "H2O"
+        assert np.isclose(orca_out.mass, 18.02)
+        assert orca_out.multiplicity == 1
+        assert np.isclose(orca_out.energies[-1], -76.323311011349)
+        assert orca_out.rotational_symmetry_number == 2
+        assert orca_out.rotational_constants_in_MHz == [
+            791961.336970,
+            439538.666271,
+            282661.493198,
+        ]
+        assert orca_out.vibrational_frequencies == [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1625.35,
+            3875.61,
+            3971.90,
+        ]
+        assert not mol.is_monoatomic
+        assert not mol.is_linear
+        assert orca_out.num_vibration_modes == 3
 
     def test_thermochemistry_water_qrrho(self, gaussian_mp2_outputfile):
         """Values from Goodvibes, as a reference:

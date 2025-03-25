@@ -115,6 +115,11 @@ class Thermochemistry:
         return self.file_object.energies[-1]
 
     @property
+    def multiplicity(self):
+        """Obtain the multiplicity of the molecule."""
+        return self.file_object.multiplicity
+
+    @property
     def translational_partition_function(self):
         """Obtain the translational partition function.
         Formula:
@@ -169,7 +174,7 @@ class Thermochemistry:
             ω_0 = degeneracy of the ground state,
             which is simply the electronic spin multiplicity of the molecule.
         """
-        return self.file_object.multiplicity
+        return self.multiplicity
 
     @property
     def electronic_entropy(self):
@@ -489,7 +494,7 @@ class qRRHOThermochemistry(Thermochemistry):
             self.concentration * 1000 * units._Nav
         )  # convert the unit of concentration from mol/L to Particle/m^3
 
-    def _calculate_dumping_function(self, freq_cutoff):
+    def _calculate_damping_function(self, freq_cutoff):
         """Calculate the damping function of Head-Gordon, which interpolates between the RRHO and the free rotor entropy.
         Formula:
             w(v_K) = 1 / (1 + (v_0 / v_K)^α)
@@ -507,12 +512,12 @@ class qRRHOThermochemistry(Thermochemistry):
         return damp
 
     @property
-    def entropy_dumping_function(self):
-        return self._calculate_dumping_function(self.s_freq_cutoff)
+    def entropy_damping_function(self):
+        return self._calculate_damping_function(self.s_freq_cutoff)
 
     @property
-    def enthalpy_dumping_function(self):
-        return self._calculate_dumping_function(self.h_freq_cutoff)
+    def enthalpy_damping_function(self):
+        return self._calculate_damping_function(self.h_freq_cutoff)
 
     @property
     def freerot_entropy(self):
@@ -575,8 +580,8 @@ class qRRHOThermochemistry(Thermochemistry):
         vib_entropy = []
         for j in range(0, len(self.v)):
             vib_entropy.append(
-                self.entropy_dumping_function[j] * self.rrho_entropy[j]
-                + (1 - self.entropy_dumping_function[j])
+                self.entropy_damping_function[j] * self.rrho_entropy[j]
+                + (1 - self.entropy_damping_function[j])
                 * self.freerot_entropy[j]
             )
         return sum(vib_entropy)
@@ -602,9 +607,9 @@ class qRRHOThermochemistry(Thermochemistry):
         vib_energy = []
         for j in range(0, len(self.v)):
             vib_energy.append(
-                self.enthalpy_dumping_function[j]
+                self.enthalpy_damping_function[j]
                 * self.rrho_internal_energy[j]
-                + (1 - self.enthalpy_dumping_function[j]) * 1 / 2 * R * self.T
+                + (1 - self.enthalpy_damping_function[j]) * 1 / 2 * R * self.T
             )
         return sum(vib_energy)
 
