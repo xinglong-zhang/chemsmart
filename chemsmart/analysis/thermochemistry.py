@@ -296,7 +296,7 @@ class Thermochemistry:
             return 3 / 2 * R
 
     @property
-    def vibrational_partition_function_by_mode_BOT(self):
+    def vibrational_partition_function_by_mode_bot(self):
         """
         Obtain the partition function for each vibrational mode.
         The zero reference point is the bottom of the well (BOT).
@@ -314,7 +314,7 @@ class Thermochemistry:
         ]
 
     @property
-    def vibrational_partition_function_BOT(self):
+    def vibrational_partition_function_bot(self):
         """Obtain the overall vibrational partition function with BOT.
         Formula:
             q_v = q_1 * q_2 * ... * q_vDOF
@@ -326,10 +326,10 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        return np.prod(self.vibrational_partition_function_by_mode_BOT)
+        return np.prod(self.vibrational_partition_function_by_mode_bot)
 
     @property
-    def vibrational_partition_function_by_mode_V0(self):
+    def vibrational_partition_function_by_mode_v0(self):
         """
         Obtain the partition function for each vibrational mode.
         The zero reference point is the first vibrational energy level (V=0).
@@ -341,11 +341,11 @@ class Thermochemistry:
         return [1 / (1 - math.exp(-t / self.T)) for t in self.theta]
 
     @property
-    def vibrational_partition_function_V0(self):
+    def vibrational_partition_function_v0(self):
         """Obtain the overall vibrational partition function with V=0."""
         if self.molecule.is_monoatomic:
             return 1
-        return np.prod(self.vibrational_partition_function_by_mode_V0)
+        return np.prod(self.vibrational_partition_function_by_mode_v0)
 
     @property
     def vibrational_entropy(self):
@@ -409,7 +409,7 @@ class Thermochemistry:
             self.translational_partition_function
             * self.rotational_partition_function
             * self.electronic_partition_function
-            * self.vibrational_partition_function_V0
+            * self.vibrational_partition_function_v0
         )
 
     @property
@@ -466,6 +466,7 @@ class qRRHOThermochemistry(Thermochemistry):
         filename: str. Filepath to the file from which thermochemistry data is extracted.
         temperature: float. Temperature of the system, in K.
         concentration: float. Concentration of the system, in mol/L.
+        weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
         alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
         s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
         h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
@@ -476,12 +477,16 @@ class qRRHOThermochemistry(Thermochemistry):
         filename,
         temperature,
         concentration,
+        weighted_atomic_mass=True,
         alpha=None,
         s_freq_cutoff=None,
         h_freq_cutoff=None,
     ):
         super().__init__(
-            filename, temperature, pressure=1.0, weighted_atomic_mass=True
+            filename,
+            temperature,
+            1.0,
+            weighted_atomic_mass,
         )
         self.concentration = concentration
         self.alpha = alpha
