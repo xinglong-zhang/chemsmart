@@ -1351,7 +1351,10 @@ class ORCAOutput(ORCAFileMixin):
                         break
                     # if 'Rotational constants in MHz :' in line_j:
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) != 0:
+                    if (
+                        len(line_j_elements) != 0
+                        and float(line_j_elements[1]) != 0
+                    ):
                         vibrational_frequencies.append(
                             float(line_j_elements[1])
                         )

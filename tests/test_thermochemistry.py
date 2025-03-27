@@ -4,6 +4,7 @@ import numpy as np
 
 from chemsmart.analysis.thermochemistry import (
     GaussianThermochemistry,
+    OrcaThermochemistry,
     Thermochemistry,
     qRRHOThermochemistry,
 )
@@ -220,35 +221,20 @@ class TestThermochemistryCO2:
     ):
         """Values from Gaussian output
         Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
-        Zero-point vibrational energy      30919.1 (Joules/Mol)
-                                           7.38984 (Kcal/Mol)
-        Vibrational temperatures:    940.59   940.59  1998.50  3557.76
-               (Kelvin)
-
-        Zero-point correction=                           0.011776 (Hartree/Particle)
-        Thermal correction to Energy=                    0.014410
-        Thermal correction to Enthalpy=                  0.015354
-        Thermal correction to Gibbs Free Energy=        -0.008927
-        Sum of electronic and zero-point Energies=           -188.432903
-        Sum of electronic and thermal Energies=              -188.430269
-        Sum of electronic and thermal Enthalpies=            -188.429325
-        Sum of electronic and thermal Free Energies=         -188.453606
-
-                            E (Thermal)             CV                S
-                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
-        Total                    9.043              6.920             51.103
-        Electronic               0.000              0.000              0.000
-        Translational            0.889              2.981             37.270
-        Rotational               0.592              1.987             13.083
-        Vibrational              7.561              1.952              0.751
-                              Q            Log10(Q)             Ln(Q)
-        Total Bot       0.127619D+05          4.105917          9.454223
-        Total V=0       0.333203D+10          9.522709         21.926848
-        Vib (Bot)       0.418410D-05         -5.378398        -12.384219
-        Vib (V=0)       0.109243D+01          0.038394          0.088406
-        Electronic      0.100000D+01          0.000000          0.000000
-        Translational   0.114679D+08          7.059482         16.255059
-        Rotational      0.265970D+03          2.424833          5.583383
+        Atom     1 has atomic number  8 and mass  15.99491
+        Atom     2 has atomic number  8 and mass  15.99491
+        Atom     3 has atomic number  6 and mass  12.00000
+        Molecular mass:    43.98983 amu.
+        Principal axes and moments of inertia in atomic units:
+                                  1         2         3
+            Eigenvalues --     0.00000 154.53094 154.53094
+                  X           -0.00000   1.00000  -0.00000
+                  Y            0.00000   0.00000   1.00000
+                  Z            1.00000   0.00000  -0.00000
+        This molecule is a prolate symmetric top.
+        Rotational symmetry number  2.
+        Rotational temperature (Kelvin)      0.56050
+        Rotational constant (GHZ):          11.678834
         """
         assert os.path.exists(gaussian_co2_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
@@ -278,7 +264,6 @@ class TestThermochemistryCO2:
         assert np.allclose(
             mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
         )
-        assert np.isclose(g16_output.moments_of_inertia[-1], 43.27307045)
         assert np.allclose(
             mol.moments_of_inertia_principal_axes[0],
             g16_output.moments_of_inertia_principal_axes[0],
@@ -295,14 +280,17 @@ class TestThermochemistryCO2:
         )
 
         assert mol.empirical_formula == "CO2"
+        assert g16_output.multiplicity == 1
+        assert np.isclose(g16_output.energies[-1], -188.444679593)
         assert np.isclose(mol.mass, 44.009)  # weighted_atomic_mass=True
         assert np.isclose(
             g16_output.mass, 43.98983
         )  # weighted_atomic_mass=False
-        assert g16_output.multiplicity == 1
-        assert np.isclose(g16_output.energies[-1], -188.444679593)
-        assert g16_output.rotational_temperatures == [0.56050]
+        assert np.isclose(
+            g16_output.moments_of_inertia[-1], 43.27307045
+        )  # in amu Å^2
         assert g16_output.rotational_symmetry_number == 2
+        assert g16_output.rotational_temperatures == [0.56050]
         assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
         assert g16_output.vibrational_frequencies == [
             653.7393,
@@ -603,6 +591,23 @@ class TestThermochemistryCO2:
             pressure=1,  # in atm
             weighted_atomic_mass=False,  # use single isotope masses
         )
+        """Values from Gaussian output
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.043              6.920             51.103
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             37.270
+        Rotational               0.592              1.987             13.083
+        Vibrational              7.561              1.952              0.751
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.127619D+05          4.105917          9.454223
+        Total V=0       0.333203D+10          9.522709         21.926848
+        Vib (Bot)       0.418410D-05         -5.378398        -12.384219
+        Vib (V=0)       0.109243D+01          0.038394          0.088406
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.114679D+08          7.059482         16.255059
+        Rotational      0.265970D+03          2.424833          5.583383
+        """
         assert np.isclose(
             thermochem1.translational_partition_function,
             0.114679e08,
@@ -685,7 +690,21 @@ class TestThermochemistryCO2:
         assert np.isclose(
             thermochem1.total_heat_capacity, 6.920 * cal_to_joules, atol=1e-2
         )
+        """Values from Gaussian output
+        Zero-point vibrational energy      30919.1 (Joules/Mol)
+                                           7.38984 (Kcal/Mol)
+        Vibrational temperatures:    940.59   940.59  1998.50  3557.76
+               (Kelvin)
 
+        Zero-point correction=                           0.011776 (Hartree/Particle)
+        Thermal correction to Energy=                    0.014410
+        Thermal correction to Enthalpy=                  0.015354
+        Thermal correction to Gibbs Free Energy=        -0.008927
+        Sum of electronic and zero-point Energies=           -188.432903
+        Sum of electronic and thermal Energies=              -188.430269
+        Sum of electronic and thermal Enthalpies=            -188.429325
+        Sum of electronic and thermal Free Energies=         -188.453606
+        """
         assert np.isclose(
             thermochem1.zero_point_vibrational_energy,
             30919.1,
@@ -1182,35 +1201,8 @@ class TestThermochemistryHe:
     def test_thermochemistry_he_gaussian_output(self, gaussian_he_opt_outfile):
         """Values from Gaussian output
         Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
-        Zero-point vibrational energy          0.0 (Joules/Mol)
-                                           0.00000 (Kcal/Mol)
-        Vibrational temperatures:
-                 (Kelvin)
-
-        Zero-point correction=                           0.000000 (Hartree/Particle)
-        Thermal correction to Energy=                    0.001416
-        Thermal correction to Enthalpy=                  0.002360
-        Thermal correction to Gibbs Free Energy=        -0.011953
-        Sum of electronic and zero-point Energies=             -2.915130
-        Sum of electronic and thermal Energies=                -2.913713
-        Sum of electronic and thermal Enthalpies=              -2.912769
-        Sum of electronic and thermal Free Energies=           -2.927083
-
-                            E (Thermal)             CV                S
-                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
-        Total                    0.889              2.981             30.125
-        Electronic               0.000              0.000              0.000
-        Translational            0.889              2.981             30.125
-        Rotational               0.000              0.000              0.000
-        Vibrational              0.000              0.000              0.000
-                              Q            Log10(Q)             Ln(Q)
-        Total Bot       0.314751D+06          5.497968         12.659538
-        Total V=0       0.314751D+06          5.497968         12.659538
-        Vib (Bot)       0.100000D+01          0.000000          0.000000
-        Vib (V=0)       0.100000D+01          0.000000          0.000000
-        Electronic      0.100000D+01          0.000000          0.000000
-        Translational   0.314751D+06          5.497968         12.659538
-        Rotational      0.100000D+01          0.000000          0.000000
+        Atom     1 has atomic number  2 and mass   4.00260
+        Molecular mass:     4.00260 amu
         """
         assert os.path.exists(gaussian_he_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_he_opt_outfile)
@@ -1229,6 +1221,23 @@ class TestThermochemistryHe:
             pressure=1,
             weighted_atomic_mass=False,
         )
+        """Values from Gaussian output
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    0.889              2.981             30.125
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             30.125
+        Rotational               0.000              0.000              0.000
+        Vibrational              0.000              0.000              0.000
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.314751D+06          5.497968         12.659538
+        Total V=0       0.314751D+06          5.497968         12.659538
+        Vib (Bot)       0.100000D+01          0.000000          0.000000
+        Vib (V=0)       0.100000D+01          0.000000          0.000000
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.314751D+06          5.497968         12.659538
+        Rotational      0.100000D+01          0.000000          0.000000        
+        """
         assert np.isclose(
             thermochem2.translational_partition_function, 0.314751e06
         )
@@ -1310,7 +1319,21 @@ class TestThermochemistryHe:
         assert np.isclose(
             thermochem2.total_heat_capacity, 2.981 * cal_to_joules, atol=1e-2
         )
+        """Values from Gaussian output
+        Zero-point vibrational energy          0.0 (Joules/Mol)
+                                           0.00000 (Kcal/Mol)
+        Vibrational temperatures:
+                 (Kelvin)
 
+        Zero-point correction=                           0.000000 (Hartree/Particle)
+        Thermal correction to Energy=                    0.001416
+        Thermal correction to Enthalpy=                  0.002360
+        Thermal correction to Gibbs Free Energy=        -0.011953
+        Sum of electronic and zero-point Energies=             -2.915130
+        Sum of electronic and thermal Energies=                -2.913713
+        Sum of electronic and thermal Enthalpies=              -2.912769
+        Sum of electronic and thermal Free Energies=           -2.927083
+        """
         assert np.isclose(
             thermochem2.zero_point_vibrational_energy,
             0.00000,
@@ -1407,54 +1430,39 @@ class TestThermochemistryH2O:
     ):
         """Values from Gaussian output
         Temperature   298.150 Kelvin.  Pressure   1.00000 Atm.
-        Zero-point vibrational energy      56211.1 (Joules/Mol)
-                                           13.43478 (Kcal/Mol)
-        Vibrational temperatures:   2342.81  5498.69  5679.79
-                 (Kelvin)
-
-        Zero-point correction=                           0.021410 (Hartree/Particle)
-        Thermal correction to Energy=                    0.024245
-        Thermal correction to Enthalpy=                  0.025189
-        Thermal correction to Gibbs Free Energy=         0.003766
-        Sum of electronic and zero-point Energies=            -76.307583
-        Sum of electronic and thermal Energies=               -76.304747
-        Sum of electronic and thermal Enthalpies=             -76.303803
-        Sum of electronic and thermal Free Energies=          -76.325227
-
-                            E (Thermal)             CV                S
-                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
-        Total                   15.214              6.009             45.090
-        Electronic               0.000              0.000              0.000
-        Translational            0.889              2.981             34.608
-        Rotational               0.889              2.981             10.475
-        Vibrational             13.437              0.047              0.007
-                              Q            Log10(Q)             Ln(Q)
-        Total Bot       0.185336D-01         -1.732040         -3.988170
-        Total V=0       0.130534D+09          8.115722         18.687141
-        Vib (Bot)       0.142038D-09         -9.847595        -22.674925
-        Vib (V=0)       0.100039D+01          0.000168          0.000387
-        Electronic      0.100000D+01          0.000000          0.000000
-        Translational   0.300431D+07          6.477745         14.915559
-        Rotational      0.434320D+02          1.637809          3.771196
+        Atom     1 has atomic number  8 and mass  15.99491
+        Atom     2 has atomic number  1 and mass   1.00783
+        Atom     3 has atomic number  1 and mass   1.00783
+        Molecular mass:    18.01056 amu.
+        Principal axes and moments of inertia in atomic units:
+                                  1         2         3
+            Eigenvalues --     2.23367   4.13757   6.37124
+                  X           -0.00000   0.00000   1.00000
+                  Y            1.00000   0.00000   0.00000
+                  Z           -0.00000   1.00000   0.00000
+        This molecule is an asymmetric top.
+        Rotational symmetry number  2.
+        Rotational temperatures (Kelvin)     38.77653    20.93353    13.59452
+        Rotational constants (GHZ):         807.97175   436.18400   283.26385
         """
         assert os.path.exists(gaussian_mp2_outputfile)
         g16_output = Gaussian16Output(filename=gaussian_mp2_outputfile)
         assert g16_output.normal_termination
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
-        assert np.allclose(
-            g16_output.moments_of_inertia, [0.62549131, 1.15863761, 1.78412891]
-        )
         assert mol.empirical_formula == "H2O"
-        assert np.isclose(g16_output.mass, 18.01056)
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -76.328992324258)
+        assert np.isclose(g16_output.mass, 18.01056)
+        assert np.allclose(
+            g16_output.moments_of_inertia, [0.62549131, 1.15863761, 1.78412891]
+        )  # in amu Å^2
+        assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_temperatures == [
             38.77653,
             20.93353,
             13.59452,
         ]
-        assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_constants_in_Hz == [
             807.97175 * 1e9,
             436.18400 * 1e9,
@@ -1477,6 +1485,23 @@ class TestThermochemistryH2O:
             pressure=1,
             weighted_atomic_mass=False,
         )
+        """Values from Gaussian output
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                   15.214              6.009             45.090
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             34.608
+        Rotational               0.889              2.981             10.475
+        Vibrational             13.437              0.047              0.007
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.185336D-01         -1.732040         -3.988170
+        Total V=0       0.130534D+09          8.115722         18.687141
+        Vib (Bot)       0.142038D-09         -9.847595        -22.674925
+        Vib (V=0)       0.100039D+01          0.000168          0.000387
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.300431D+07          6.477745         14.915559
+        Rotational      0.434320D+02          1.637809          3.771196
+        """
         assert np.isclose(
             thermochem3.translational_partition_function, 0.300431e07
         )
@@ -1558,7 +1583,21 @@ class TestThermochemistryH2O:
         assert np.isclose(
             thermochem3.total_heat_capacity, 6.009 * cal_to_joules, atol=1e-2
         )
-
+        """Values from Gaussian output
+        Zero-point vibrational energy      56211.1 (Joules/Mol)
+                                           13.43478 (Kcal/Mol)
+        Vibrational temperatures:   2342.81  5498.69  5679.79
+                 (Kelvin)
+        
+        Zero-point correction=                           0.021410 (Hartree/Particle)
+        Thermal correction to Energy=                    0.024245
+        Thermal correction to Enthalpy=                  0.025189
+        Thermal correction to Gibbs Free Energy=         0.003766
+        Sum of electronic and zero-point Energies=            -76.307583
+        Sum of electronic and thermal Energies=               -76.304747
+        Sum of electronic and thermal Enthalpies=             -76.303803
+        Sum of electronic and thermal Free Energies=          -76.325227
+        """
         assert np.isclose(
             thermochem3.zero_point_vibrational_energy,
             56211.1,
@@ -1700,6 +1739,22 @@ class TestThermochemistryH2O:
         )
 
     def test_thermochemistry_water_orca_output(self, water_output_gas_path):
+        """Values from ORCA output
+        --------------------------
+        THERMOCHEMISTRY AT 298.15K
+        --------------------------
+
+        Temperature         ... 298.15 K
+        Pressure            ... 1.00 atm
+        Total Mass          ... 18.02 AMU
+        ...
+        freq.    1625.35  E(vib)   ...       0.00
+        freq.    3875.61  E(vib)   ...       0.00
+        freq.    3971.90  E(vib)   ...       0.00
+        ...
+        Point Group:  C2v, Symmetry Number:   2
+        Rotational constants in cm-1:    26.416987    14.661432     9.428573
+        """
         assert os.path.exists(water_output_gas_path)
         orca_out = ORCAOutput(filename=water_output_gas_path)
         assert orca_out.normal_termination
@@ -1712,23 +1767,170 @@ class TestThermochemistryH2O:
         assert np.isclose(orca_out.mass, 18.02)
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -76.323311011349)
-        assert orca_out.rotational_symmetry_number == 2
-        assert orca_out.rotational_constants_in_MHz == [
-            791961.336970,
-            439538.666271,
-            282661.493198,
-        ]
         assert orca_out.vibrational_frequencies == [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
             1625.35,
             3875.61,
             3971.90,
         ]
+        assert orca_out.rotational_symmetry_number == 2
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            26.416987,
+            14.661432,
+            9.428573,
+        ]
         assert not mol.is_monoatomic
         assert not mol.is_linear
         assert orca_out.num_vibration_modes == 3
+
+        orca_thermochem_water = OrcaThermochemistry(
+            filename=water_output_gas_path,
+            temperature=298.15,
+            pressure=1,
+        )
+        """Values from ORCA output
+        ------------
+        INNER ENERGY
+        ------------
+        ...
+        Summary of contributions to the inner energy U:
+        Electronic energy                ...    -76.32331101 Eh
+        Zero point energy                ...      0.02158076 Eh      13.54 kcal/mol
+        Thermal vibrational correction   ...      0.00000291 Eh       0.00 kcal/mol
+        Thermal rotational correction    ...      0.00141627 Eh       0.89 kcal/mol
+        Thermal translational correction ...      0.00141627 Eh       0.89 kcal/mol
+        -----------------------------------------------------------------------
+        Total thermal energy                    -76.29889480 Eh
+
+
+        Summary of corrections to the electronic energy:
+        (perhaps to be used in another calculation)
+        Total thermal correction                  0.00283545 Eh       1.78 kcal/mol
+        Non-thermal (ZPE) correction              0.02158076 Eh      13.54 kcal/mol
+        -----------------------------------------------------------------------
+        Total correction                          0.02441621 Eh      15.32 kcal/mol"""
+        assert np.isclose(
+            orca_thermochem_water.electronic_energy, -76.32331101, atol=1e-8
+        )
+        assert np.isclose(
+            orca_thermochem_water.zero_point_vibrational_energy,
+            0.02158076,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.thermal_vibrational_correction,
+            0.00000291,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.thermal_rotational_correction,
+            0.00141627,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.thermal_translational_correction,
+            0.00141627,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.total_thermal_energy, -76.29889480, atol=1e-8
+        )
+        assert np.isclose(
+            orca_thermochem_water.total_thermal_correction,
+            0.00283545,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.non_thermal_correction, 0.02158076, atol=1e-8
+        )
+        assert np.isclose(
+            orca_thermochem_water.total_correction, 0.02441621, atol=1e-8
+        )
+        """Values from ORCA output
+        --------
+        ENTHALPY
+        --------
+
+        The enthalpy is H = U + kB*T
+                        kB is Boltzmann's constant
+        Total free energy                 ...    -76.29889480 Eh
+        Thermal Enthalpy correction       ...      0.00094421 Eh       0.59 kcal/mol
+        -----------------------------------------------------------------------
+        Total Enthalpy                    ...    -76.29795059 Eh
+        """
+        assert np.isclose(
+            orca_thermochem_water.total_free_energy, -76.29889480, atol=1e-8
+        )
+        assert np.isclose(
+            orca_thermochem_water.thermal_enthalpy_correction,
+            0.00094421,
+            atol=1e-7,
+        )
+        assert np.isclose(
+            orca_thermochem_water.total_enthalpy, -76.29795059, atol=1e-8
+        )
+        """Values from ORCA output
+        -------
+        ENTROPY
+        -------
+        ...
+        Electronic entropy                ...      0.00000000 Eh      0.00 kcal/mol
+        Vibrational entropy               ...      0.00000328 Eh      0.00 kcal/mol
+        Rotational entropy                ...      0.00498381 Eh      3.13 kcal/mol
+        Translational entropy             ...      0.01644380 Eh     10.32 kcal/mol
+        -----------------------------------------------------------------------
+        Final entropy term                ...      0.02143089 Eh     13.45 kcal/mol
+        """
+        assert np.isclose(
+            orca_thermochem_water.electronic_entropy_in_hartree,
+            0.00000000,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.vibrational_entropy_in_hartree,
+            0.00000328,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.rotational_entropy_in_hartree,
+            0.00498381,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.translational_entropy_in_hartree,
+            0.01644380,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.final_entropy_term, 0.02143089, atol=1e-8
+        )
+        """Values from ORCA output
+        -------------------
+        GIBBS FREE ENERGY
+        -------------------
+
+        The Gibbs free energy is G = H - T*S
+
+        Total enthalpy                    ...    -76.29795059 Eh 
+        Total entropy correction          ...     -0.02143089 Eh    -13.45 kcal/mol
+        -----------------------------------------------------------------------
+        Final Gibbs free energy         ...    -76.31938148 Eh
+
+        For completeness - the Gibbs free energy minus the electronic energy
+        G-E(el)                           ...      0.00392953 Eh      2.47 kcal/mol
+        """
+        assert np.isclose(
+            orca_thermochem_water.total_enthalpy, -76.29795059, atol=1e-8
+        )
+        assert np.isclose(
+            orca_thermochem_water.final_entropy_term, 0.02143089, atol=1e-8
+        )
+        assert np.isclose(
+            orca_thermochem_water.final_gibbs_free_energy,
+            -76.31938148,
+            atol=1e-8,
+        )
+        assert np.isclose(
+            orca_thermochem_water.thermal_correction_free_energy,
+            0.00392953,
+            atol=1e-7,
+        )
