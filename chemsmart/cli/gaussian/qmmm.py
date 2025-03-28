@@ -72,76 +72,41 @@ logger = logging.getLogger(__name__)
     help="Low level layer force field.",
 )
 @click.option(
-    "-rlc",
-    "--real-low-charge",
+    "-rc",
+    "--real-charge",
     type=int,
-    help="Charge of real system at low level-of-theory.",
+    help="Charge of real system.",
 )
 @click.option(
-    "-rlm",
-    "--real-low-multiplicity",
+    "-rm",
+    "--real-multiplicity",
     type=int,
-    help="Spin multiplicity of real system at low level-of-theory.",
+    help="Spin multiplicity of real system.",
 )
 @click.option(
-    "-imc",
-    "--int-med-charge",
+    "-ic",
+    "--int-charge",
     type=int,
-    help="Charge of intermediate layer at medium level-of-theory.",
+    help="Charge of intermediate system.",
 )
 @click.option(
     "-imm",
-    "--int-med-multiplicity",
+    "--int-multiplicity",
     type=int,
-    help="Spin multiplicity of intermediate layer at medium level-of-theory.",
+    help="Spin multiplicity of intermediate system.",
+)
+
+@click.option(
+    "-mc",
+    "--model-charge",
+    type=int,
+    help="Charge of model system.",
 )
 @click.option(
-    "-ilc",
-    "--int-low-charge",
+    "-mm",
+    "--model-multiplicity",
     type=int,
-    help="Charge of intermediate layer at low level-of-theory.",
-)
-@click.option(
-    "-ilm",
-    "--int-low-multiplicity",
-    type=int,
-    help="Spin multiplicity of intermediate layer at low level-of-theory.",
-)
-@click.option(
-    "-mhc",
-    "--model-high-charge",
-    type=int,
-    help="Charge of model system at medium level-of-theory.",
-)
-@click.option(
-    "-mhm",
-    "--model-high-multiplicity",
-    type=int,
-    help="Spin multiplicity of model system at high level-of-theory.",
-)
-@click.option(
-    "-mmc",
-    "--model-med-charge",
-    type=int,
-    help="Charge of model system at medium level-of-theory.",
-)
-@click.option(
-    "-mmm",
-    "--model-med-multiplicity",
-    type=int,
-    help="Spin multiplicity of model system at medium level-of-theory.",
-)
-@click.option(
-    "-mlc",
-    "--model-low-charge",
-    type=int,
-    help="Charge of model system at low level-of-theory.",
-)
-@click.option(
-    "-mlm",
-    "--model-low-multiplicity",
-    type=int,
-    help="Spin multiplicity of model system at low level-of-theory.",
+    help="Spin multiplicity of model system.",
 )
 @click.option(
     "-ha",
@@ -185,18 +150,12 @@ def qmmm(
     low_level_functional,
     low_level_basis,
     low_level_force_field,
-    real_low_charge,
-    real_low_multiplicity,
-    int_med_charge,
-    int_med_multiplicity,
-    int_low_charge,
-    int_low_multiplicity,
-    model_high_charge,
-    model_high_multiplicity,
-    model_med_charge,
-    model_med_multiplicity,
-    model_low_charge,
-    model_low_multiplicity,
+    real_charge,
+    real_multiplicity,
+    int_charge,
+    int_multiplicity,
+    model_charge,
+    model_multiplicity,
     high_level_atoms,
     medium_level_atoms,
     low_level_atoms,
@@ -235,18 +194,13 @@ def qmmm(
     qmmm_settings.low_level_functional = low_level_functional
     qmmm_settings.low_level_basis = low_level_basis
     qmmm_settings.low_level_force_field = low_level_force_field
-    qmmm_settings.real_low_charge = real_low_charge
-    qmmm_settings.real_low_multiplicity = real_low_multiplicity
-    qmmm_settings.int_med_charge = int_med_charge
-    qmmm_settings.int_med_multiplicity = int_med_multiplicity
-    qmmm_settings.int_low_charge = int_low_charge
-    qmmm_settings.int_low_multiplicity = int_low_multiplicity
-    qmmm_settings.model_high_charge = model_high_charge
-    qmmm_settings.model_high_multiplicity = model_high_multiplicity
-    qmmm_settings.model_med_charge = model_med_charge
-    qmmm_settings.model_med_multiplicity = model_med_multiplicity
-    qmmm_settings.model_low_charge = model_low_charge
-    qmmm_settings.model_low_multiplicity = model_low_multiplicity
+    qmmm_settings.real_charge = real_charge
+    qmmm_settings.real_multiplicity = real_multiplicity
+    qmmm_settings.int_charge = int_charge
+    qmmm_settings.int_multiplicity = int_multiplicity
+    qmmm_settings.model_charge = model_charge
+    qmmm_settings.model_multiplicity = model_multiplicity
+
 
     # get molecule
     molecules = ctx.obj["molecules"]
