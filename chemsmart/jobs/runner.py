@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 from abc import abstractmethod
+from contextlib import suppress
 from functools import lru_cache
 
 from chemsmart.settings.server import Server
@@ -223,3 +224,15 @@ class JobRunner(RegistryMixin):
             f"Runners in registry: {runners}. \n "
             f"Fake: {fake}"
         )
+
+    def _remove_err_files(self, job):
+        # also remove .err and .pbs* and .slurm* files if job is complete
+        err_file = f"{job.folder}/{job.label}.err"
+        pbs_err_file = f"{job.folder}/{job.label}.pbserr"
+        slurm_err_file = f"{job.folder}/{job.label}.slurmerr"
+
+        files_to_be_removed = [err_file, pbs_err_file, slurm_err_file]
+        for file in files_to_be_removed:
+            with suppress(FileNotFoundError):
+                logger.info(f"Removing file {file}.")
+                os.remove(file)

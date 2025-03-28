@@ -211,6 +211,10 @@ class TestThermochemistry:
                 temperature=298.15,  # in Kelvin
                 pressure=1,  # in atm
             )
+            assert np.isclose(
+                thermochem1.translational_partition_function, 1.15e7, rtol=1e5
+            )
+
 
 class TestThermochemistryCO2:
     """CO2 is used as an example to test the thermochemical properties of linear molecules."""

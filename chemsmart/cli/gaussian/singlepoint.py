@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_gaussian_solvent_options
 @click.pass_context
-def sp(ctx, remove_solvent, solvent_model, solvent_id, **kwargs):
+def sp(
+    ctx, remove_solvent, solvent_model, solvent_id, solvent_options, **kwargs
+):
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -63,6 +65,9 @@ def sp(ctx, remove_solvent, solvent_model, solvent_id, **kwargs):
             if sp_settings.custom_solvent is None
             else f"{label}_custom_solvent"
         )
+
+    if solvent_options is not None:
+        sp_settings.additional_solvent_options = solvent_options
 
     logger.info(
         f"Single point job settings from project: {sp_settings.__dict__}"

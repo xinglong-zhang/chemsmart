@@ -1,14 +1,14 @@
 import logging
 
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.mixins import FolderMixin
+from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class ORCAInpFolder(FolderMixin):
+class ORCAInpFolder(BaseFolder):
     """Input folder containing all ORCA input files for postprocessing."""
 
     def __init__(self, folder):
@@ -28,7 +28,7 @@ class ORCAInpFolder(FolderMixin):
         return self.get_all_files_in_current_folder(filetype="inp")
 
 
-class ORCAOutFolder(FolderMixin):
+class ORCAOutFolder(BaseFolder):
     """Log folder containing all Gaussian log files for postprocessing."""
 
     def __init__(self, folder):

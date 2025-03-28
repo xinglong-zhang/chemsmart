@@ -4,12 +4,14 @@ import os
 from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.molecules.structure import SDFFile
 from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.io.xyz.folder import XYZFolder
 from chemsmart.utils.logger import create_logger
+from chemsmart.utils.mixins import BaseFolder
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -71,6 +73,13 @@ class FileConverter:
         elif type == "xyz":
             xyz_folder = XYZFolder(folder=directory)
             all_files = xyz_folder.all_xyzfiles
+        elif type == "sdf":
+            sdf_folder = BaseFolder(folder=directory)
+            all_files = (
+                sdf_folder.get_all_files_in_current_folder_and_subfolders(
+                    filetype="sdf"
+                )
+            )
         else:
             raise ValueError(f"File type {type} is not supported.")
 
@@ -88,6 +97,8 @@ class FileConverter:
                 outfile = ORCAInput(filename=file)
             elif type == "xyz":
                 outfile = XYZFile(filename=file)
+            elif type == "sdf":
+                outfile = SDFFile(filename=file)
             mol = (
                 outfile.molecule
             )  # for xyz file with multiple mols, only converts the last one
@@ -110,6 +121,8 @@ class FileConverter:
             outfile = ORCAInput(filename=filename)
         elif self.type == "xyz":
             outfile = XYZFile(filename=filename)
+        elif self.type == "sdf":
+            outfile = SDFFile(filename=filename)
         else:
             raise ValueError(f"File type {self.type} is not supported.")
         mol = outfile.molecule
