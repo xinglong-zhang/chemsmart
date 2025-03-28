@@ -179,14 +179,21 @@ def click_gaussian_solvent_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="solvent model to be used for single point.",
+        help="Solvent model to be used for single point.",
     )
     @click.option(
         "-si",
         "--solvent-id",
         type=str,
         default=None,
-        help="solvent ID to be used for single point.",
+        help="Solvent ID to be used for single point.",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help="Additional solvent options in scrf=() route.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -375,6 +382,7 @@ def gaussian(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
+        logger.debug(f"Using molecule with index: {index}")
         try:
             # try to get molecule using python style string indexing,
             # but in 1-based

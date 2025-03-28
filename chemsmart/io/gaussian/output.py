@@ -33,11 +33,19 @@ class Gaussian16Output(GaussianFileMixin):
         use_frozen (bool): To include frozen coordinates in the Molecule.
         Defaults to False, since we do not want the frozen coordinates
         data be passed if .log file is used to create a molecule for run.
+        include_intermediate (bool): To include intermediate steps in the Molecule.
+        by default include_intermediate=False, we ignore those pre-optimization points
+        such that the pointns obtained will be the same as points visualized in Gaussview.
+        For data collection, one may set include_intermediate=True to get all datapoints,
+        including those pre-optimization points. This feature allows user to use the index
+        to select a geometry on a scan.log Gaussian output file as input for a fresh calculation
+        of (any) other job.
     """
 
-    def __init__(self, filename, use_frozen=False):
+    def __init__(self, filename, use_frozen=False, include_intermediate=False):
         self.filename = filename
         self.use_frozen = use_frozen
+        self.include_intermediate = include_intermediate
 
     @property
     def normal_termination(self):
@@ -158,7 +166,11 @@ class Gaussian16Output(GaussianFileMixin):
         """
 
         def create_molecule_list(
-            orientations, orientations_pbc, num_structures=None
+            orientations,
+            orientations_pbc,
+            energies,
+            forces,
+            num_structures=None,
         ):
             """Helper function to create Molecule objects."""
             num_structures = num_structures or len(orientations)
@@ -166,6 +178,11 @@ class Gaussian16Output(GaussianFileMixin):
                 frozen_atoms = self.frozen_atoms_masks
             else:
                 frozen_atoms = None
+
+            logger.debug(f"Creating {num_structures} Molecule objects.")
+            logger.debug(f"Number of structures: {len(orientations)}")
+            logger.debug(f"Number of energies: {len(energies)}")
+            logger.debug(f"Number of forces: {len(forces)}")
             return [
                 Molecule(
                     symbols=self.symbols,
@@ -175,74 +192,83 @@ class Gaussian16Output(GaussianFileMixin):
                     multiplicity=self.multiplicity,
                     frozen_atoms=frozen_atoms,
                     pbc_conditions=self.list_of_pbc_conditions,
-                    energy=self.energies_in_eV[i],
-                    forces=self.forces_in_eV_per_angstrom[i],
+                    energy=energies[i],
+                    forces=forces[i],
                 )
                 for i in range(num_structures)
             ]
 
-        # If the job terminated normally
+        def clean_duplicate_structure(orientations):
+            """Remove the last structure if it's a duplicate of the previous one."""
+            if orientations and len(orientations) > 1:
+                if np.allclose(orientations[-1], orientations[-2], rtol=1e-5):
+                    orientations.pop(-1)
+
+        # Determine orientations and their periodic boundary conditions (PBC)
+        orientations, orientations_pbc = None, None
+        if self.standard_orientations:
+            orientations, orientations_pbc = (
+                self.standard_orientations,
+                self.standard_orientations_pbc,
+            )
+        elif self.input_orientations:
+            orientations, orientations_pbc = (
+                self.input_orientations,
+                self.input_orientations_pbc,
+            )
+
+        if not orientations:
+            return []  # No structures found
+
+        # Clean duplicate structures at the end
+        clean_duplicate_structure(orientations)
+
+        # Remove the first structure and energy if it's a link job
+        if self.job_type == "link" and len(orientations) > 1:
+            logger.debug("Removing the first structure and energy.")
+            logger.debug(f"Job type: {self.job_type}")
+            orientations = orientations[1:]
+            orientations_pbc = orientations_pbc[1:]
+            self.energies_in_eV = self.energies_in_eV[1:]
+
+        # Handle normal termination
         if self.normal_termination:
-            # Use Standard orientations if available, otherwise Input orientations
-            if self.standard_orientations:
-                # log file has "Standard orientation:"
-                # and standard_orientations is not None
-                try:
-                    if np.allclose(
-                        self.standard_orientations[-1],
-                        self.standard_orientations[-2],
-                        rtol=1e-5,
-                    ):
-                        self.standard_orientations.pop(-1)
-                except IndexError:
-                    # for single point jobs, there will be only one structure
-                    pass
-                orientations = self.standard_orientations
-                orientations_pbc = self.standard_orientations_pbc
-            else:
-                if self.input_orientations is not None:
-                    # if the log file has "Input orientation:"
-                    try:
-                        if np.allclose(
-                            self.input_orientations[-1],
-                            self.input_orientations[-2],
-                            rtol=1e-5,
-                        ):
-                            self.input_orientations.pop(-1)
-                    except IndexError:
-                        # for single point jobs, there will be only one structure
-                        pass
-                orientations = self.input_orientations
-                orientations_pbc = self.input_orientations_pbc
-            return create_molecule_list(orientations, orientations_pbc)
-
-        # If the job did not terminate normally, the last structure is ignored
-        num_structures_to_use = len(self.energies)
-        if self.standard_orientations:
-            num_structures_to_use = min(
-                len(self.standard_orientations),
-                len(self.energies),
-                len(self.forces),
+            return create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies_in_eV,
+                self.forces_in_eV_per_angstrom,
             )
-        if self.input_orientations:
-            num_structures_to_use = min(
-                len(self.input_orientations),
-                len(self.energies),
-                len(self.forces),
-            )
-        # Use Standard orientations if available, otherwise Input orientations
-        if self.standard_orientations:
-            orientations = self.standard_orientations
-            orientations_pbc = self.standard_orientations_pbc
-        else:
-            orientations = self.input_orientations
-            orientations_pbc = self.input_orientations_pbc
 
-        return create_molecule_list(
+        # Handle abnormal termination by limiting the number of structures used
+        num_structures_to_use = min(
+            len(orientations),
+            len(self.energies_in_eV),
+            len(self.forces_in_eV_per_angstrom),
+        )
+        all_structures = create_molecule_list(
             orientations,
             orientations_pbc,
+            self.energies_in_eV,
+            self.forces_in_eV_per_angstrom,
             num_structures=num_structures_to_use,
         )
+
+        if self.optimized_steps_indices and not self.include_intermediate:
+            # if not including intermediate steps
+            logger.info(
+                "Ignoring intermediate geometry optimimzation for each constrained opt."
+            )
+            logger.debug(
+                f"Optimized steps indices: {self.optimized_steps_indices}"
+            )
+            all_structures = [
+                all_structures[i] for i in self.optimized_steps_indices
+            ]
+        logger.info(
+            f"Total number of structures located: {len(all_structures)}"
+        )
+        return all_structures
 
     @cached_property
     def optimized_structure(self):

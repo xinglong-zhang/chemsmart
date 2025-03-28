@@ -3,6 +3,7 @@ import logging
 import os
 
 import click
+from ase import units
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
@@ -40,33 +41,15 @@ def entry_point(filename, unit):
     lumo_energy = outputfile.lumo_energy
     fmo_gap = outputfile.fmo_gap
     energy_unit = "eV"
+    print(units.Hartree * units.kcal)
     if unit.lower() == "kcal/mol":
         homo_energy *= 23.06054195
         lumo_energy *= 23.06054195
         fmo_gap *= 23.06054195
         energy_unit = "kcal/mol"
-
-    # obtain chemical potential, μ = 1/2 * (lumo_energy + homo_energy)
-    #        Chemical hardness, n = 1/2 * (lumo_energy - homo_energy)
-    #        Electrophilicity index = ω = μ^2/2η
-
-    chemical_potential = 1 / 2 * (lumo_energy + homo_energy)
-    chemical_hardness = 1 / 2 * (lumo_energy - homo_energy)
-    electrophilicity_index = chemical_potential**2 / (2 * chemical_hardness)
-
-    # print the results
     logger.info(f"HOMO energy: {homo_energy:.4f} {energy_unit}")
     logger.info(f"LUMO energy: {lumo_energy:.4f} {energy_unit}")
     logger.info(f"HOMO-LUMO gap: {fmo_gap:.4f} {energy_unit}")
-    logger.info(
-        f"Chemical potential, mu: {chemical_potential:.4} {energy_unit}"
-    )
-    logger.info(
-        f"Chemical hardness, eta: {chemical_hardness:.4} {energy_unit}"
-    )
-    logger.info(
-        f"Electrophilicity Index, omega: {electrophilicity_index:.4} {energy_unit}"
-    )
 
 
 if __name__ == "__main__":

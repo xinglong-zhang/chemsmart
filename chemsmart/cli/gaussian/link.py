@@ -81,11 +81,17 @@ def link(
 
     # get label for the job
     label = ctx.obj["label"]
+
     if jobtype is None:
         label = label
     else:
-        label = f"{label[:-5]}_{jobtype}_link"
+        label = f"{label}_{jobtype}_link"
+
     logger.debug(f"Label for job: {label}")
+
+    # automatically use unrestricted dft if link job
+    if not link_settings.functional.lower().startswith("u"):
+        link_settings.functional = "u" + link_settings.functional
 
     logger.info(
         f"Link job {jobtype} settings from project: {link_settings.__dict__}"

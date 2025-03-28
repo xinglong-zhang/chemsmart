@@ -25,7 +25,7 @@ GAUSSIAN:
         module load craype-x86-rome
         module load libfabric/1.11.0.4.125
     SCRIPTS: |
-        source GAUSS_DIR=~/bin/g16
+        tcsh -c "source ~/programs/g16/bsd/g16.login"
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export GAUSS_EXEDIR=~/bin/g16
