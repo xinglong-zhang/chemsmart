@@ -1311,6 +1311,16 @@ class ORCAOutput(ORCAFileMixin):
         return all_rotational_constants_in_wavenumbers[-1]
 
     @property
+    def moments_of_inertia(self):
+        all_moments_of_inertia = [
+            units._hplanck
+            / (8 * np.pi**2 * units._c * 1e2 * B)
+            / (units._amu * (units.Ang / units.m) ** 2)
+            for B in self.rotational_constants_in_wavenumbers
+        ]
+        return all_moments_of_inertia
+
+    @property
     def rotational_constants_in_MHz(self):
         all_rotational_constants_in_MHz = []
         for i, line_i in enumerate(self.contents):
@@ -1341,7 +1351,10 @@ class ORCAOutput(ORCAFileMixin):
                         break
                     # if 'Rotational constants in MHz :' in line_j:
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) != 0:
+                    if (
+                        len(line_j_elements) != 0
+                        and float(line_j_elements[1]) != 0
+                    ):
                         vibrational_frequencies.append(
                             float(line_j_elements[1])
                         )
@@ -1498,6 +1511,10 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
+    def mass(self):
+        return self.total_mass_in_amu
+
+    @property
     def internal_energy(self):
         """The inner energy is: U= E(el) + E(ZPE) + E(vib) + E(rot) + E(trans).
 
@@ -1648,6 +1665,23 @@ class ORCAOutput(ORCAFileMixin):
                             thermal_enthalpy_correction_in_Hartree
                             * units.Hartree
                         )
+        return None
+
+    @property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number from the output file."""
+        for i, line_i in enumerate(self.optimized_output_lines):
+            if line_i == "ENTHALPY":
+                for line_j in self.optimized_output_lines[i:]:
+                    if (
+                        "Point Group:" in line_j
+                        and "Symmetry Number:" in line_j
+                    ):
+                        line_j_elements = line_j.split()
+                        rotational_symmetry_number = int(
+                            line_j_elements[-1].strip()
+                        )
+                        return rotational_symmetry_number
         return None
 
     @property
