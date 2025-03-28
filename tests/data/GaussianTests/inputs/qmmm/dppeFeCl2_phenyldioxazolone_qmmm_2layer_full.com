@@ -1,11 +1,11 @@
-%chk=dppeFeCl2_phenyldioxazolone_qmmm.chk
+%chk=dppeFeCl2_phenyldioxazolone_qmmm_2layer_full.chk
 %nprocshared=64
 %mem=400GB
 # opt=maxstep=3 freq scf=qc def2svp mn15
 
 Gaussian job with default settings
 
-0 3 0 3
+0 3 0 3 0 3
  P                0   -0.67871500    0.83115400    1.02051400 H
  P                0    2.31059000    0.09930700    0.39198400 H
  C                0    0.68414600    1.40930100    2.14903700 H
