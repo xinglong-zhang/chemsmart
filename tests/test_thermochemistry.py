@@ -1,6 +1,7 @@
 import os.path
 
 import numpy as np
+import pytest
 
 from chemsmart.analysis.thermochemistry import (
     GaussianThermochemistry,
@@ -202,16 +203,14 @@ class TestThermochemistry:
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
 
         # get thermochemistry for CO2 molecule
-        thermochem1 = Thermochemistry(
-            filename=tmp_log_path,
-            temperature=298.15,  # in Kelvin
-            pressure=1,  # in atm
-        )
-
-        assert np.isclose(
-            thermochem1.translational_partition_function, 1.15e7, rtol=1e5
-        )
-
+        # CO2_fake.log file has no thermochemistry data
+        # since it was run with fake gaussian
+        with pytest.raises(TypeError):
+            thermochem1 = Thermochemistry(
+                filename=tmp_log_path,
+                temperature=298.15,  # in Kelvin
+                pressure=1,  # in atm
+            )
 
 class TestThermochemistryCO2:
     """CO2 is used as an example to test the thermochemical properties of linear molecules."""
