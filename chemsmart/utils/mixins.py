@@ -561,3 +561,8 @@ class FolderMixin:
                 if file.endswith(filetype):
                     all_files.append(os.path.join(subdir, file))
         return all_files
+
+
+class BaseFolder(FolderMixin):
+    def __init__(self, folder_path):
+        self.folder_path = folder_path

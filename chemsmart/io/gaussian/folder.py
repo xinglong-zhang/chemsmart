@@ -1,14 +1,14 @@
 import logging
 
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.utils.mixins import FolderMixin
+from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class GaussianComFolder(FolderMixin):
+class GaussianComFolder(BaseFolder):
     def __init__(self, folder):
         self.folder = folder
 
@@ -23,7 +23,7 @@ class GaussianComFolder(FolderMixin):
         return self.get_all_files_in_current_folder(filetype="com")
 
 
-class GaussianLogFolder(FolderMixin):
+class GaussianLogFolder(BaseFolder):
     """Log folder containing all Gaussian log files for postprocessing."""
 
     def __init__(self, folder):
