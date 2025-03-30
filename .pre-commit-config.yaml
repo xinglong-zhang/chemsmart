@@ -1,0 +1,27 @@
+repos:
+  - repo: local
+    hooks:
+      - id: make-fmt
+        name: Run make fmt
+        entry: make fmt
+        language: system
+        files: \.py$
+        pass_filenames: false
+      - id: make-lint
+        name: Run make lint
+        entry: make lint
+        language: system
+        files: \.py$
+        pass_filenames: false
+      - id: make-test
+        name: Run make test
+        entry: make test
+        language: system
+        files: \.py$
+        pass_filenames: false
+      - id: make-clean
+        name: Run make clean
+        entry: make clean
+        language: system
+        files: ''
+        pass_filenames: false
