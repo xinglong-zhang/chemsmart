@@ -100,7 +100,7 @@ class TestStructures:
         xyz_file = XYZFile(filename=single_molecule_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        molecule = xyz_file.get_molecule(index="-1", return_list=False)
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
         assert molecule.is_chiral
@@ -125,7 +125,7 @@ class TestStructures:
         assert len(graph.nodes) == 71
         assert len(graph.edges) == 78  # CH4 should have 4 bonds
 
-        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
@@ -148,7 +148,7 @@ class TestStructures:
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        all_molecules = xyz_file.get_molecule(index=":", return_list=True)
+        all_molecules = xyz_file.get_molecules(index=":", return_list=True)
 
         # set correct charge and multiplicity for molecules as needed by pymatgen checks
         molecules = []
@@ -221,7 +221,7 @@ class TestStructures:
         assert first_py_structure.spin_multiplicity == 1
 
         # obtain the last structure as molecule
-        molecule = xyz_file.get_molecule(index="-1", return_list=False)
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
 
@@ -305,12 +305,12 @@ class TestStructures:
         )
 
         # obtain the last structure as a list
-        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
         # obtain the last 10 structures
-        molecules = xyz_file.get_molecule(index="-10:", return_list=True)
+        molecules = xyz_file.get_molecules(index="-10:", return_list=True)
         assert isinstance(molecules, list)
         assert len(molecules) == 10
 

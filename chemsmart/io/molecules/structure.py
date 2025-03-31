@@ -130,6 +130,14 @@ class Molecule:
         return type(self)(symbols=symbols, positions=positions)
 
     @property
+    def energy(self):
+        return self._energy
+
+    @energy.setter
+    def energy(self, value):
+        self._energy = value
+
+    @property
     def empirical_formula(self):
         return Symbols.fromsymbols(self.symbols).get_chemical_formula(
             mode="hill", empirical=True
@@ -206,7 +214,7 @@ class Molecule:
         molecule = cls._read_filepath(
             filepath, index=index, return_list=return_list, **kwargs
         )
-        if return_list and isinstance(molecule, Molecule):
+        if return_list and not isinstance(molecule, list):
             return [molecule]
         else:
             return molecule
@@ -216,6 +224,7 @@ class Molecule:
         basename = os.path.basename(filepath)
 
         if basename.endswith(".xyz"):
+            logger.debug(f"Reading xyz file: {filepath}")
             return cls._read_xyz_file(
                 filepath=filepath,
                 index=index,
@@ -251,7 +260,9 @@ class Molecule:
     @classmethod
     def _read_xyz_file(cls, filepath, index=":", return_list=False):
         xyz_file = XYZFile(filename=filepath)
-        molecules = xyz_file.get_molecule(index=index, return_list=return_list)
+        molecules = xyz_file.get_molecules(
+            index=index, return_list=return_list
+        )
         return molecules
 
     @staticmethod
@@ -557,10 +568,10 @@ class Molecule:
         pass
 
     def __repr__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
 
     def __str__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
 
     @cached_property
     def distance_matrix(self):
@@ -703,11 +714,11 @@ class Molecule:
                 cutoff = get_bond_cutoff(
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
-                print(type(cutoff))
+                logger.debug(f"type of cutoff: {type(cutoff)}")
                 bond_order = self.determine_bond_order_one_bond(
                     bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
                 )
-                print(f"bond order: {bond_order}")
+                logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
                     bond_type = {
                         1: Chem.BondType.SINGLE,
@@ -939,24 +950,25 @@ class Molecule:
 
     def to_X_data(self):
         """Convert molecule object to X_data for ML models."""
-        if self.energy is None:
-            logger.warning("Energy is not available in the molecule object.")
         if self.positions is None:
             raise ValueError(
                 "Positions are not available in the molecule object."
             )
 
-        if self.energy is not None and self.positions is not None:
-            X = np.hstack(
-                [
-                    self.energy.reshape(-1, 1),
-                    self.positions.reshape(len(self.num_atoms), -1),
-                ]
-            )
+        # Ensure energy is always included
+        energy_array = np.array(
+            [self.energy if self.energy is not None else 0.0]
+        )  # Ensures shape (1,)
+        positions_array = (
+            np.array(self.positions).flatten().reshape(1, -1)
+        )  # Ensures shape (1, num_atoms*3)
 
-            return X
+        # Concatenate energy and positions
+        X = np.hstack(
+            [energy_array.reshape(1, -1), positions_array]
+        )  # Ensures (1, num_features)
 
-        return np.array(self.positions).flatten()
+        return X
 
 
 class CoordinateBlock:
