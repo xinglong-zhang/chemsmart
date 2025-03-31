@@ -937,6 +937,27 @@ class Molecule:
 
         return AseAtomsAdaptor.get_molecule(atoms=self.to_ase())
 
+    def to_X_data(self):
+        """Convert molecule object to X_data for ML models."""
+        if self.energy is None:
+            logger.warning("Energy is not available in the molecule object.")
+        if self.positions is None:
+            raise ValueError(
+                "Positions are not available in the molecule object."
+            )
+
+        if self.energy is not None and self.positions is not None:
+            X = np.hstack(
+                [
+                    self.energy.reshape(-1, 1),
+                    self.positions.reshape(len(self.num_atoms), -1),
+                ]
+            )
+
+            return X
+
+        return np.array(self.positions).flatten()
+
 
 class CoordinateBlock:
     """Class to create coordinate block object to abstract the geometry."""
