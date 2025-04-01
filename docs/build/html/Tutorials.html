@@ -1,0 +1,354 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tutorials &mdash; chemsmart 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Installation" href="Installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chemsmart
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#to-run-gaussian-jobs">To run Gaussian jobs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#to-run-orca-jobs">To run ORCA jobs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#general-options-available-to-all-jobs">General options available to all jobs</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chemsmart</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Tutorials</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/Tutorials.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tutorials">
+<h1>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading"></a></h1>
+<p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+<section id="to-run-gaussian-jobs">
+<h2>To run Gaussian jobs<a class="headerlink" href="#to-run-gaussian-jobs" title="Link to this heading"></a></h2>
+<p>With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).</p>
+<ul>
+<li><p>To submit (and run) a geometry optimization job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; opt</span>
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">&lt;server_name&gt;</span></code> is the one of the servers specified in <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/server/*.yaml</span></code> files, without <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> extension; <code class="docutils literal notranslate"><span class="pre">&lt;project&gt;</span></code> is one of the project settings specified in <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/gaussian/*.yaml</span></code> files, without <code class="docutils literal notranslate"><span class="pre">.yaml</span></code> extension; and <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code> is an input file the user wishes to run job on. Note that this input file can be any format, such as <code class="docutils literal notranslate"><span class="pre">.xyz</span></code>, Gaussian <code class="docutils literal notranslate"><span class="pre">.com</span></code>, <code class="docutils literal notranslate"><span class="pre">.gjf</span></code> or <code class="docutils literal notranslate"><span class="pre">.log</span></code> file or ORCA <code class="docutils literal notranslate"><span class="pre">.inp</span></code> or <code class="docutils literal notranslate"><span class="pre">.out</span></code> file.</p>
+</li>
+<li><p>If one wants to submit geometry optimization with frozen atoms in the molecule (such as <a class="reference external" href="https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it">https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it</a>), one can do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; opt -f &lt;indices_of_atoms_to_freeze&gt;</span>
+</pre></div>
+</div>
+<p>or example, to submit the geometry optimization job with atoms numbered 1 to 10 frozen, one can do</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f input.com opt -f 1-10</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.</p>
+</div>
+<ul>
+<li><p>To submit transition state modredundant job (frozen coordinates optimization), do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; modred -c &lt;list_of_coords_to_constraint&gt;</span>
+</pre></div>
+</div>
+<p>For example, to submit a modredundant job with constraints on bond between atom 4 and atom 17 and on bond between atom 9 and atom 10, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17],[9,10]]</span>
+</pre></div>
+</div>
+</li>
+<li><p>To submit transition state search job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; ts</span>
+</pre></div>
+</div>
+</li>
+<li><p>To submit intrinsic reaction coordinate (IRC) job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; irc</span>
+</pre></div>
+</div>
+</li>
+<li><p>To submit relaxed potential energy surface (PES) scan, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; scan -c &lt;list_of_coords_to_constraint&gt; -s &lt;scan_step_size&gt; -n &lt;num_scan_steps&gt;</span>
+</pre></div>
+</div>
+</li>
+<li><p>For example, to submit the PES scan job with along bond between atom 4 and atom 17 for 10 steps with 0.1Å increment per step:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f input.com scan -c [[4,17]] -s 0.1 -n 10</span>
+</pre></div>
+</div>
+</li>
+<li><p>To submit single point job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; sp</span>
+</pre></div>
+</div>
+<p>For single-point job that user wants to test which uses different solvent model and id from that specified in <code class="docutils literal notranslate"><span class="pre">&lt;project&gt;</span></code>, one can do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; sp -sm &lt;user_solvent_model&gt; -si &lt;user_solvent_id&gt;</span>
+</pre></div>
+</div>
+<p>to specify a different solvent model <code class="docutils literal notranslate"><span class="pre">&lt;user_solvent_model&gt;</span></code> and solvent <code class="docutils literal notranslate"><span class="pre">&lt;user_solvent_id&gt;</span></code>.</p>
+</li>
+<li><p>To submit non-covalent interaction job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; nci</span>
+</pre></div>
+</div>
+</li>
+<li><p>To submit RESP charges fitting job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; resp</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This creates an input file with fix route for RESP job:
+<code class="docutils literal notranslate"><span class="pre">HF/6-31+G(d)</span> <span class="pre">SCF=Tight</span> <span class="pre">Pop=MK</span> <span class="pre">IOp(6/33=2,6/41=10,6/42=17,6/50=1)</span></code></p>
+</div>
+<ul>
+<li><p>To run opt or modred or ts conformers from crest run output, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; crest -j opt</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; crest -j modred -c [1,4]</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; crest -j ts</span>
+</pre></div>
+</div>
+<p>respectively</p>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This optimizes all the conformers available in the <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code>. Typically, the <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code> is a list of all conformers obtained by CREST program and named <code class="docutils literal notranslate"><span class="pre">crest_conformers.xyz</span></code>.</p>
+</div>
+<ul>
+<li><p>To optimize a fixed number of lowest energy conformers, <code class="docutils literal notranslate"><span class="pre">n_conformers_to_opt</span></code>, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; crest -j opt -n &lt;n_conformers_to_opt&gt;</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .xyz file. In fact, whenever .xyz file is used as input, the charge and multiplicity should be specified via <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">&lt;charge&gt;</span> <span class="pre">-m</span> <span class="pre">&lt;multiplicity</span></code> via CLI.</p>
+</div>
+<ul>
+<li><p>To optimize unique structure from an md trajectory file, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; saopt</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This optimizes all the unique structures available in the md trajectory <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code>. Typically, the <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code> is a list of all structures on an md trajectory obtained by ASE md run and named <code class="docutils literal notranslate"><span class="pre">md.traj</span></code>. <strong>(TODO: this method is not properly implemented in chemsmart yet.)</strong></p>
+</div>
+<ul>
+<li><p>To optimize a fixed number of lowest energy structures, <code class="docutils literal notranslate"><span class="pre">&lt;num_structures_to_opt&gt;</span></code>, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; saopt -n &lt;n_conformers_to_opt&gt;</span>
+</pre></div>
+</div>
+<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file.</p>
+<p>Two grouper types for determining/clustering unique structures are available from CLI option <code class="docutils literal notranslate"><span class="pre">-g</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Sequential grouper (default), selected by option value of seq, which sequentially checks for unique structures in a given list of md structures, and</p></li>
+<li><p>Self-consistent grouper, selected by option value of sc, which self-consistently checks for unique structures in a given list of md structures using the reverse Cuthill–McKee algorithm for structure clustering. By default, only the last 0.1 proportion of the structures of the md.traj file is considered. This can be changed via cli option <code class="docutils literal notranslate"><span class="pre">-x</span> <span class="pre">&lt;proportion_structures_to_use&gt;</span></code>.</p></li>
+</ol>
+<p>For example, to consider the last 20% of the structures in md.traj trajectory file, then uses Sequential grouper to group those structures into unique structures and run the 10 lowest energy structures from the list of unique structures found by the grouper:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f imd.traj saopt -x 0.2 -n 10 -g seq</span>
+</pre></div>
+</div>
+</li>
+<li><p>To run distortion-interaction/activation-strain (DI-AS) job, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;irc_output_file_for_dias&gt; dias -i &lt;indices_of_any_one_fragment&gt; -n &lt;number_of_every_n_step_along_irc_to_run&gt;</span>
+</pre></div>
+</div>
+<p>For example to run DI-AS job for fragment 1 with atoms numbered from 5-17 at every 10 steps along the irc.log file:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f irc.log dias -i 5-17 -n 10</span>
+</pre></div>
+</div>
+</li>
+<li><p>If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly using:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;any_project_settings&gt; -f &lt;input_file&gt; com</span>
+</pre></div>
+</div>
+</li>
+<li><p>Generally, if a user wants to run job that is currently not present in our package, one can run custom job using:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;any_project_settings&gt; -f &lt;input_file&gt; userjob -r &lt;user_defined_gaussian_route&gt; -a &lt;appending_information_as_string_at_the_end_of_input_file_after_coordinates_specification&gt;</span>
+</pre></div>
+</div>
+</li>
+<li><p>For example, to create an input file named <code class="docutils literal notranslate"><span class="pre">user_defined_job.com</span></code> with user-specified route <code class="docutils literal notranslate"><span class="pre">mnr</span> <span class="pre">functional/basis</span> <span class="pre">solvent</span></code> etc and <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">F\nA</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">3</span> <span class="pre">F</span></code> at the end of the input file after the specification of coordinates, run</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob -r &#39;mnr functional/basis solvent etc&#39; -a &#39;B 1 2 F\nA 1 2 3 F&#39;</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+<section id="to-run-orca-jobs">
+<h2>To run ORCA jobs<a class="headerlink" href="#to-run-orca-jobs" title="Link to this heading"></a></h2>
+<ul>
+<li><p>Similar commands exists for ORCA job submssions. One can run</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub orca --help</span>
+</pre></div>
+</div>
+<p>to find out more.</p>
+</li>
+</ul>
+</section>
+<section id="general-options-available-to-all-jobs">
+<h2>General options available to all jobs<a class="headerlink" href="#general-options-available-to-all-jobs" title="Link to this heading"></a></h2>
+<ul>
+<li><p>Users can specify the name of the file to be created for the job, without file extension, they want to run by using the option <code class="docutils literal notranslate"><span class="pre">-l</span></code>, e.g.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -l custom_job_name opt</span>
+</pre></div>
+</div>
+<p>will create input file named <code class="docutils literal notranslate"><span class="pre">custom_job_name.com</span></code> instead of the default <code class="docutils literal notranslate"><span class="pre">test_opt.com</span></code>.</p>
+</li>
+<li><p>Users can also simply append a string to the base name of the filename supplied, e.g.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -a append_string ts</span>
+</pre></div>
+</div>
+<p>will create input file named <code class="docutils literal notranslate"><span class="pre">test_append_string.com</span></code> instead of the default <code class="docutils literal notranslate"><span class="pre">test_ts.com</span></code>.</p>
+</li>
+<li><p>Users can also modify the charge and multiplicity from the CLI, e.g.:</p>
+<p>Modify the charge in <code class="docutils literal notranslate"><span class="pre">test.com</span></code> to charge of +1 in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_charge.com</span></code> via:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -c 1 -a charge opt</span>
+</pre></div>
+</div>
+<p>Modify the multiplicity in <code class="docutils literal notranslate"><span class="pre">test.com</span></code> to multiplicity of 3 in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_multiplicity.com</span></code> via:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -m 3 -a multiplicity opt</span>
+</pre></div>
+</div>
+<p>Modify the charge to +1 and multiplicity to 2 in the newly created input <code class="docutils literal notranslate"><span class="pre">file</span> <span class="pre">test_charge_multiplicity.com</span></code> via:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -c 1 -m 2 -l test_charge_multiplicity opt</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>This can be useful when, e.g., using optimized structure of a neutral closed-shell (charge 0, multiplicity 1) system to run a charged radical ion (e.g., charge +1 and multiplicity 2 in radical cation).</p>
+</div>
+<ul>
+<li><p>Users can also modify the functional and basis from the CLI to differ from those in project settings, e.g.:</p>
+<p>Modify the functional to <code class="docutils literal notranslate"><span class="pre">b3lyp</span></code> in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_functional.com</span></code> via:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -x b3lyp -a functional opt</span>
+</pre></div>
+</div>
+<p>Modify the basis to <code class="docutils literal notranslate"><span class="pre">6-31G*</span></code> in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_basis.com</span></code> via:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -b &quot;6-31G*&quot; -a basis opt</span>
+</pre></div>
+</div>
+</li>
+<li><p>Users can also specify additional optimization options for opt=() in the route, for example,</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -o maxstep=8,maxsize=12 -a opt_options opt</span>
+</pre></div>
+</div>
+<p>will create <code class="docutils literal notranslate"><span class="pre">opt=(maxstep=8,maxsize=12)</span></code> as part of the route in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_opt_options.com</span></code>.</p>
+</li>
+<li><p>Users can also add in additional parameters used in the route, e.g.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com --r nosymm -a route_params opt</span>
+</pre></div>
+</div>
+<p>will add in <code class="docutils literal notranslate"><span class="pre">nosymm</span></code> as part of the route in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_route_params.com</span></code>.</p>
+</li>
+<li><p>If one has more than one structure in the supplied file for input preparation, one can select the particular structure to perform job on by using the <code class="docutils literal notranslate"><span class="pre">-i/--index</span></code> option, e.g.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt</span>
+</pre></div>
+</div>
+<p>will take the 5th structure (1-indexed, as in chemsmart) from ase database file, <code class="docutils literal notranslate"><span class="pre">small.db</span></code>, to create the input file for geometry optimization.</p>
+</li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="Installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Xinglong Zhang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
