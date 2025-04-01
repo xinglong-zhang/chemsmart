@@ -34,8 +34,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Type of files to convert to, defaults to .xzy",
 )
 @click.option(
-    "-i/" "--include-intermediate-structures",
+    "-i/",
+    "--include-intermediate-structures/--no-include-intermediate-structures",
     is_flag=True,
+    type=bool,
     default=False,
     help="Include intermediate structures in the conversion.",
 )

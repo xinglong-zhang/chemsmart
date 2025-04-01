@@ -229,7 +229,7 @@ class Molecule:
             return cls._read_gaussian_inputfile(filepath)
 
         if basename.endswith(".log"):
-            return cls._read_gaussian_logfile(filepath, index)
+            return cls._read_gaussian_logfile(filepath, index, **kwargs)
 
         if basename.endswith(".inp"):
             return cls._read_orca_inputfile(filepath, **kwargs)
@@ -271,14 +271,15 @@ class Molecule:
             return g16_input.molecule
         except ValueError:
             g16_input = Gaussian16Input(filename=filepath)
+            return g16_input.molecule
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_logfile(filepath, index):
+    def _read_gaussian_logfile(filepath, index, **kwargs):
         """Returns a list of molecules."""
         from chemsmart.io.gaussian.output import Gaussian16Output
 
-        g16_output = Gaussian16Output(filename=filepath)
+        g16_output = Gaussian16Output(filename=filepath, **kwargs)
         return g16_output.get_molecule(index=index)
 
     @staticmethod
@@ -466,7 +467,7 @@ class Molecule:
 
     def write_xyz(self, filename, **kwargs):
         """Write the molecule to an XYZ file."""
-        with open(filename, "w") as f:
+        with open(filename, "a+") as f:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
                 # energy found in file, e.g., .out, .log
