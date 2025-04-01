@@ -152,4 +152,11 @@ class FileConverter:
         output_filepath = os.path.join(
             filedir, f"{file_basename}.{output_filetype}"
         )
-        mol.write(output_filepath, format=output_filetype)
+        if isinstance(mol, list):
+            for m in mol:
+                output_filepath = os.path.join(
+                    filedir, f"{file_basename}.{output_filetype}"
+                )
+                m.write(output_filepath, format=output_filetype)
+        else:
+            mol.write(output_filepath, format=output_filetype)

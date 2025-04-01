@@ -2,7 +2,8 @@ import numpy as np
 import pytest
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.utils import (
     cmp_with_ignore,
     content_blocks_by_paragraph,
@@ -245,3 +246,42 @@ class TestString2Index1Based:
         # Mixed invalid formats
         with pytest.raises(ValueError):
             string2index_1based("1:x:2")
+
+
+class TestIOUtilities:
+    def test_clean_duplicate_structure(self):
+        orientations = [
+            np.array([1, 2, 3]),
+            np.array([4, 5, 6]),
+            np.array([4, 5, 6]),
+        ]
+        clean_duplicate_structure(orientations)
+        assert len(orientations) == 2  # Should remove the duplicate
+
+    def test_create_molecule_list(self):
+        orientations = [np.array([[0, 0, 0]]), np.array([[1, 1, 1]])]
+        orientations_pbc = [None, None]
+        energies = [1.0, 2.0]
+        forces = [[np.array([0, 0, 0])], [np.array([0, 0, 0])]]
+        symbols = ["H"]
+        charge = 0
+        multiplicity = 1
+        frozen_atoms = None
+        pbc_conditions = [False]
+        molecules = create_molecule_list(
+            orientations,
+            orientations_pbc,
+            energies,
+            forces,
+            symbols,
+            charge,
+            multiplicity,
+            frozen_atoms,
+            pbc_conditions,
+        )
+
+        assert len(molecules) == 2
+        assert isinstance(molecules[0], Molecule)
+        assert isinstance(molecules[1], Molecule)
+        assert molecules[0].energy == 1.0
+        assert molecules[1].energy == 2.0
