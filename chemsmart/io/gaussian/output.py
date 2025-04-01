@@ -17,8 +17,9 @@ from chemsmart.utils.repattern import (
     mp2_energy_pattern,
     nm_pattern,
     normal_mode_pattern,
+    oniom_gridpoint_pattern,
     oniom_energy_pattern,
-    scf_energy_pattern,
+    scf_energy_pattern, oniom_gridpoint_pattern,
 )
 from chemsmart.utils.utils import string2index_1based
 
@@ -694,11 +695,15 @@ class Gaussian16Output(GaussianFileMixin):
     def oniom_energies(self):
         """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
         oniom_energies = []
+        layer_enegies=[]
         for line in self.contents:
-            match = re.match(oniom_energy_pattern, line)
-            if match:
-                oniom_energies.append(float(match[1]))
-        return oniom_energies
+            layer_match=re.match(oniom_gridpoint_pattern,line)
+            oniom_match = re.match(oniom_energy_pattern, line)
+            if layer_match:
+                layer_enegies.append(float(layer_match[1]))
+            elif oniom_match:
+                oniom_energies.append(float(oniom_match[1]))
+        return oniom_energies, layer_enegies
 
     @cached_property
     def energies(self):
@@ -1425,6 +1430,23 @@ class Gaussian16Output(GaussianFileMixin):
         # TODO: to be implemented
         pass
 
+    def oniom_partition(self):
+        """Obtain the atomic indices of each layer in the ONIOM calculation.
+        Returns:
+            indices of each layer as a dictionary"""
+        indices = {}
+        for i, line in enumerate(self.contents):
+            if "ONIOM: extrapolated energy" in line:
+                for j_line in self.contents[i + 1 :]:
+                    if "ONIOM: extrapolated energy" in j_line:
+                        break
+                    if "Layer" in j_line:
+                        layer = int(j_line.split()[1])
+                        indices[layer] = []
+                    if "Charge" in j_line:
+                        indices[layer].append(int(j_line.split()[1]))
+        return indices
+
     @cached_property
     def oniom_cutting_bonds(self):
         """Obtain the cutting bonds in the ONIOM calculation.
@@ -1464,21 +1486,6 @@ class Gaussian16Output(GaussianFileMixin):
                 )
         return charge_multiplicity
 
-    @cached_property
-    def oniom_getting_layer_energies(self):
-        """Obtain the energy of the high and low layer in the ONIOM calculation.
-        Returns:
-            energy of the high and low layer as a dictionary"""
-        # TODO: need to be combined with oniom_energies
-        energies = {}
-        for line in self.contents:
-            if "method:  low" in line and "model" in line:
-                energies["low-level, model system"] = float(line.split()[-1])
-            if "method:  high" in line and "model" in line:
-                energies["high-level, model system"] = float(line.split()[-1])
-            if "method:  low" in line and "real" in line:
-                energies["low-level, real system"] = float(line.split()[-1])
-        return energies
 
 
 class Gaussian16WBIOutput(Gaussian16Output):

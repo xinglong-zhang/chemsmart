@@ -94,6 +94,16 @@ class GaussianProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def qmmm_settings(self):
+        """Gaussian default settings for qmmm job."""
+        settings = self.main_settings().copy()
+        settings = GaussianQMMMJobSettings(
+            **settings.__dict__
+        )
+        settings.job_type = "qmmm"
+        settings.freq = False
+        return settings
+
     @classmethod
     def from_project(cls, project):
         """Get project settings based on project name."""

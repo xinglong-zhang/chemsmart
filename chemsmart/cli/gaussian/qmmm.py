@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
     help="Medium-level layer force field.",
 )
 @click.option(
-    "-lf",
+    "-lx",
     "--low-level-functional",
     type=str,
     help="Low level layer functional.",
@@ -90,7 +90,7 @@ logger = logging.getLogger(__name__)
     help="Charge of intermediate system.",
 )
 @click.option(
-    "-imm",
+    "-im",
     "--int-multiplicity",
     type=int,
     help="Spin multiplicity of intermediate system.",
@@ -164,10 +164,12 @@ def qmmm(
     **kwargs,
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+    print(high_level_atoms)
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
+    print("Project settings:", ctx.obj["project_settings"].__dict__)
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
