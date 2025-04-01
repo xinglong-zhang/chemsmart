@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-chemsmart User documentation
+Welcome to chemsmart’s documentation!
 =======================
 
 .. toctree::
@@ -11,7 +11,7 @@ chemsmart User documentation
 
    Introduction
    Installation
-   tutorials
+   Tutorials
 
 
 Indices and tables
