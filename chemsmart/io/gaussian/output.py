@@ -1434,18 +1434,47 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain the atomic indices of each layer in the ONIOM calculation.
         Returns:
             indices of each layer as a dictionary"""
-        indices = {}
+        high_level = []
+        medium_level=[]
+        low_level=[]
         for i, line in enumerate(self.contents):
-            if "ONIOM: extrapolated energy" in line:
-                for j_line in self.contents[i + 1 :]:
-                    if "ONIOM: extrapolated energy" in j_line:
-                        break
-                    if "Layer" in j_line:
-                        layer = int(j_line.split()[1])
-                        indices[layer] = []
-                    if "Charge" in j_line:
-                        indices[layer].append(int(j_line.split()[1]))
-        return indices
+            if "Symbolic Z-matrix:" in line:
+                if "Charge" not in self.contents[i+4]:
+                    for j_line in self.contents[i+4:]:
+                        if len(j_line) == 0:
+                            break
+                        if len(j_line) > 4:
+                            if j_line[1].isint():
+                                layer = str(j_line[5])
+                            else:
+                                layer = str(j_line[4])
+                            if layer == "H":
+                                high_level.append(layer)
+                            elif layer == "M":
+                                medium_level.append(layer)
+                            elif layer == "L":
+                                low_level.append(layer)
+                else:
+                    for j_line in self.contents[i + 7 :]:
+                        if len(j_line) == 0:
+                            break
+                        if len(j_line) > 4:
+                            if j_line[1].isint():
+                                layer = str(j_line[5])
+                            else:
+                                layer = str(j_line[4])
+                            if layer == "H":
+                                high_level.append(layer)
+                            elif layer == "M":
+                                medium_level.append(layer)
+                            elif layer == "L":
+                                low_level.append(layer)
+        partition = {}
+        for layers in [high_level,medium_level,low_level]:
+            if layers is not None:
+                partition[str(layers)]=layers
+        return partition
+
 
     @cached_property
     def oniom_cutting_bonds(self):
@@ -1474,12 +1503,27 @@ class Gaussian16Output(GaussianFileMixin):
                     int(line.split()[2]),
                     int(line.split()[5]),
                 )
+            if "Charge" in line and "med   level calculation on mid" in line:
+                charge_multiplicity["medium-level, mid system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "low   level calculation on mid" in line:
+                charge_multiplicity["low-level, mid system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
             if "Charge" in line and "high  level calculation on model" in line:
                 charge_multiplicity["high-level, model system"] = (
                     int(line.split()[2]),
                     int(line.split()[5]),
                 )
-            if "Charge" in line and "low   level calculation on model" in line:
+            if "Charge" in line and "med   level calculation on model" in line:
+                charge_multiplicity["medium-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "med   level calculation on model" in line:
                 charge_multiplicity["low-level, model system"] = (
                     int(line.split()[2]),
                     int(line.split()[5]),
