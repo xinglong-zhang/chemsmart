@@ -1364,15 +1364,46 @@ class TestGaussian16Output:
             (217, 218): (0.700189, 0.700189),
             (439, 438): (0.700189, 0.700189),
         }
+        assert g16_oniom.oniom_partition == {
+            "high level atoms": [
+                "183-193",
+                "214-222",
+                "310-319",
+                "332-340",
+                "351-358",
+                "424-427",
+                "441-445",
+                "497-500",
+                "508-512",
+                "520-523",
+                "554-571",
+                "573-608",
+            ],
+            "low level atoms": [
+                "134-182",
+                "194-213",
+                "223-309",
+                "320-331",
+                "341-350",
+                "359-423",
+                "428-440",
+                "446-496",
+                "501-507",
+                "513-519",
+                "524-553",
+                "572",
+                "609-616",
+            ],
+        }
         assert g16_oniom.oniom_get_charge_and_multiplicity == {
             "low-level, real system": (1, 2),
             "high-level, model system": (1, 1),
             "low-level, model system": (1, 1),
         }
         assert g16_oniom.oniom_getting_layer_energies == {
-            "high-level, model system": -5303.002072980664,
-            "low-level, model system": 6.767438788151,
-            "low-level, real system": 9.234384095059,
+            "method:  high, system:  model": -5303.002072980664,
+            "method:  low, system:  model": 6.767438788151,
+            "method:  low, system:  real": 9.234384095059,
         }
         assert g16_oniom.num_atoms == 483
         assert len(g16_oniom.oniom_energies) == 2

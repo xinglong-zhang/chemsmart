@@ -630,6 +630,7 @@ def search_file(filename):
         logger.error(f"Error occurred while searching for {filename}.")
         return None, None
 
+
 def get_range_from_list(list_of_indices):
     """Convert a list of indices to a string range.
     e.g., [1, 2, 3, 7,8,9] -> ['1-3','7-9']
@@ -643,5 +644,3 @@ def get_range_from_list(list_of_indices):
         else:
             ranges.append(str(group[0]))
     return ranges
-
-

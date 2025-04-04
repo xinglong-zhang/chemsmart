@@ -7,9 +7,10 @@ from chemsmart.utils.utils import (
     cmp_with_ignore,
     content_blocks_by_paragraph,
     get_list_from_string_range,
+    get_range_from_list,
     is_float,
     str_indices_range_to_list,
-    string2index_1based, get_range_from_list,
+    string2index_1based,
 )
 
 
@@ -113,8 +114,9 @@ class TestUtils:
 
     def test_get_range_from_list(self):
         s1 = [1, 2, 3, 5, 6, 7]
-        range=get_range_from_list(s1)
-        assert range == ["1-3","5-7"]
+        range = get_range_from_list(s1)
+        assert range == ["1-3", "5-7"]
+
 
 class TestGetListFromStringRange:
     def test_get_list_from_string_range(self):

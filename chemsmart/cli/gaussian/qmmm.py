@@ -95,7 +95,6 @@ logger = logging.getLogger(__name__)
     type=int,
     help="Spin multiplicity of intermediate system.",
 )
-
 @click.option(
     "-mc",
     "--model-charge",
@@ -164,6 +163,7 @@ def qmmm(
     **kwargs,
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
+
     print(high_level_atoms)
 
     # get settings from project
@@ -202,7 +202,6 @@ def qmmm(
     qmmm_settings.int_multiplicity = int_multiplicity
     qmmm_settings.model_charge = model_charge
     qmmm_settings.model_multiplicity = model_multiplicity
-
 
     # get molecule
     molecules = ctx.obj["molecules"]

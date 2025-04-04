@@ -896,21 +896,20 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         is one of: H, M and L for the High, Medium and Low levels).
         """
         assert (
-            self.real_charge is not None
-            and self.real_multiplicity is not None
+            self.real_charge is not None and self.real_multiplicity is not None
         ), "Charge and multiplicity for the real system must be specified!"
-        real_low_charge=self.real_charge
-        real_low_multiplicity=self.real_multiplicity
-        int_med_charge=self.int_charge
-        int_med_multiplicity=self.int_multiplicity
-        int_low_charge=self.int_charge
-        int_low_multiplicity=self.int_multiplicity
-        model_high_charge=self.model_charge
-        model_high_multiplicity=self.model_multiplicity
-        model_med_charge=self.model_charge
-        model_med_multiplicity=self.model_multiplicity
-        model_low_charge=self.model_charge
-        model_low_multiplicity=self.model_multiplicity
+        real_low_charge = self.real_charge
+        real_low_multiplicity = self.real_multiplicity
+        int_med_charge = self.int_charge
+        int_med_multiplicity = self.int_multiplicity
+        int_low_charge = self.int_charge
+        int_low_multiplicity = self.int_multiplicity
+        model_high_charge = self.model_charge
+        model_high_multiplicity = self.model_multiplicity
+        model_med_charge = self.model_charge
+        model_med_multiplicity = self.model_multiplicity
+        model_low_charge = self.model_charge
+        model_low_multiplicity = self.model_multiplicity
 
         # two-layer ONIOM model
         if (
@@ -940,9 +939,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             if all(var is None for var in charge_and_multiplicity_list[2:]):
                 for i in range(2, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = real_low_charge
-                    charge_and_multiplicity_list[i + 1] = (
-                        real_low_multiplicity
-                    )
+                    charge_and_multiplicity_list[i + 1] = real_low_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[4:]):
                 for i in range(4, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = model_high_charge
@@ -982,27 +979,21 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 # so the charge and multiplicity of other systems will be the same as the real system
                 for i in range(2, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = real_low_charge
-                    charge_and_multiplicity_list[i + 1] = (
-                        real_low_multiplicity
-                    )
+                    charge_and_multiplicity_list[i + 1] = real_low_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[4:]):
                 # only charge and multiplicity of real system and that of intermediate layer,
                 # medium level-of-theory are specified, the charge and multiplicity of other
                 # systems will be the same as the intermediate layer
                 for i in range(4, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = int_med_charge
-                    charge_and_multiplicity_list[i + 1] = (
-                        int_med_multiplicity
-                    )
+                    charge_and_multiplicity_list[i + 1] = int_med_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[6:]):
                 # only charge and multiplicity of real system, intermediate layer, medium level-of-theory
                 # and intermediate layer, medium level-of-theory are specified, the charge and multiplicity of other
                 # systems will be the same as intermediate layer, medium level-of-theory,...
                 for i in range(6, len(charge_and_multiplicity_list), 2):
                     charge_and_multiplicity_list[i] = int_med_charge
-                    charge_and_multiplicity_list[i + 1] = (
-                        int_med_multiplicity
-                    )
+                    charge_and_multiplicity_list[i + 1] = int_med_multiplicity
             elif all(var is None for var in charge_and_multiplicity_list[8:]):
                 # the rest systems will follow the model system, high level-of-theory
                 for i in range(8, len(charge_and_multiplicity_list), 2):

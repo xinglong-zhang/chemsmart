@@ -97,9 +97,7 @@ class GaussianProjectSettings(RegistryMixin):
     def qmmm_settings(self):
         """Gaussian default settings for qmmm job."""
         settings = self.main_settings().copy()
-        settings = GaussianQMMMJobSettings(
-            **settings.__dict__
-        )
+        settings = GaussianQMMMJobSettings(**settings.__dict__)
         settings.job_type = "qmmm"
         settings.freq = False
         return settings

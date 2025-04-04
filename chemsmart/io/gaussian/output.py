@@ -17,11 +17,11 @@ from chemsmart.utils.repattern import (
     mp2_energy_pattern,
     nm_pattern,
     normal_mode_pattern,
-    oniom_gridpoint_pattern,
     oniom_energy_pattern,
-    scf_energy_pattern, oniom_gridpoint_pattern,
+    oniom_gridpoint_pattern,
+    scf_energy_pattern,
 )
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.utils import get_range_from_list, string2index_1based
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
@@ -695,15 +695,25 @@ class Gaussian16Output(GaussianFileMixin):
     def oniom_energies(self):
         """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
         oniom_energies = []
-        layer_enegies=[]
         for line in self.contents:
-            layer_match=re.match(oniom_gridpoint_pattern,line)
             oniom_match = re.match(oniom_energy_pattern, line)
-            if layer_match:
-                layer_enegies.append(float(layer_match[1]))
-            elif oniom_match:
+            if oniom_match:
                 oniom_energies.append(float(oniom_match[1]))
-        return oniom_energies, layer_enegies
+        return oniom_energies
+
+    @cached_property
+    def oniom_getting_layer_energies(self):
+        """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
+        layer_energies = {}
+        for line in self.contents:
+            layer_match = re.match(oniom_gridpoint_pattern, line)
+            if layer_match:
+                formatted_layer = (
+                    f"{line.split()[3]}  {line.split()[4]}, "
+                    f"{line.split()[5]}  {line.split()[6]}"
+                )
+                layer_energies[formatted_layer] = float(line.split()[-1])
+        return layer_energies
 
     @cached_property
     def energies(self):
@@ -1430,39 +1440,44 @@ class Gaussian16Output(GaussianFileMixin):
         # TODO: to be implemented
         pass
 
+    @cached_property
     def oniom_partition(self):
         """Obtain the atomic indices of each layer in the ONIOM calculation.
         Returns:
             indices of each layer as a dictionary"""
         high_level = []
-        medium_level=[]
-        low_level=[]
+        medium_level = []
+        low_level = []
         for i, line in enumerate(self.contents):
             if "Symbolic Z-matrix:" in line:
-                if "Charge" not in self.contents[i+4]:
-                    for j_line in self.contents[i+4:]:
+                if "Charge" not in self.contents[i + 4]:
+                    for j_line in self.contents[i + 4 :]:
                         if len(j_line) == 0:
                             break
                         if len(j_line) > 4:
-                            if j_line[1].isint():
-                                layer = str(j_line[5])
+                            if (
+                                j_line.split()[1] == "-1"
+                                or j_line.split()[1] == "0"
+                            ):
+                                layer = str(j_line.split()[5])
                             else:
-                                layer = str(j_line[4])
+                                layer = str(j_line.split()[4])
                             if layer == "H":
-                                high_level.append(layer)
+                                high_level.append(i + 4)
                             elif layer == "M":
-                                medium_level.append(layer)
+                                medium_level.append(i + 4)
                             elif layer == "L":
-                                low_level.append(layer)
+                                low_level.append(i + 4)
+                            i += 1
                 else:
                     for j_line in self.contents[i + 7 :]:
                         if len(j_line) == 0:
                             break
                         if len(j_line) > 4:
-                            if j_line[1].isint():
-                                layer = str(j_line[5])
+                            if j_line.split()[1] == -1:
+                                layer = str(j_line.split()[5])
                             else:
-                                layer = str(j_line[4])
+                                layer = str(j_line.split()[4])
                             if layer == "H":
                                 high_level.append(layer)
                             elif layer == "M":
@@ -1470,11 +1485,14 @@ class Gaussian16Output(GaussianFileMixin):
                             elif layer == "L":
                                 low_level.append(layer)
         partition = {}
-        for layers in [high_level,medium_level,low_level]:
-            if layers is not None:
-                partition[str(layers)]=layers
+        for level_name, level_list in [
+            ("high level atoms", high_level),
+            ("medium level atoms", medium_level),
+            ("low level atoms", low_level),
+        ]:
+            if len(level_list) != 0:
+                partition[level_name] = get_range_from_list(level_list)
         return partition
-
 
     @cached_property
     def oniom_cutting_bonds(self):
@@ -1523,13 +1541,12 @@ class Gaussian16Output(GaussianFileMixin):
                     int(line.split()[2]),
                     int(line.split()[5]),
                 )
-            if "Charge" in line and "med   level calculation on model" in line:
+            if "Charge" in line and "low   level calculation on model" in line:
                 charge_multiplicity["low-level, model system"] = (
                     int(line.split()[2]),
                     int(line.split()[5]),
                 )
         return charge_multiplicity
-
 
 
 class Gaussian16WBIOutput(Gaussian16Output):
