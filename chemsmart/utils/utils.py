@@ -629,3 +629,19 @@ def search_file(filename):
     except subprocess.CalledProcessError:
         logger.error(f"Error occurred while searching for {filename}.")
         return None, None
+
+def get_range_from_list(list_of_indices):
+    """Convert a list of indices to a string range.
+    e.g., [1, 2, 3, 7,8,9] -> ['1-3','7-9']
+    """
+    list_of_indices = sorted(list_of_indices)
+    ranges = []
+    for k, g in groupby(enumerate(list_of_indices), lambda ix: ix[0] - ix[1]):
+        group = list(map(lambda x: x[1], g))
+        if len(group) > 1:
+            ranges.append(f"{group[0]}-{group[-1]}")
+        else:
+            ranges.append(str(group[0]))
+    return ranges
+
+
