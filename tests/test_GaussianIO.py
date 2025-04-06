@@ -239,6 +239,29 @@ class TestGaussian16Input:
         assert g16_frozen.additional_route_parameters is None
         assert g16_frozen.job_type == "opt"
 
+    def test_partition(self, gaussian_qmmm_inputfiles):
+        assert os.path.exists(gaussian_qmmm_inputfiles)
+        g16_oniom = Gaussian16Input(filename=gaussian_qmmm_inputfiles)
+        assert g16_oniom.molecule.symbols.formula == "CO2HCH3"
+        assert g16_oniom.partition == {
+            "high level atoms": ["2-3"],
+            "medium level atoms": ["6-9"],
+            "low level atoms": ["4-5"],
+        }
+
+    def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfiles):
+        g16_oniom = Gaussian16Input(filename=gaussian_qmmm_inputfiles)
+        assert g16_oniom.oniom_charge == {
+            "real_charge": "0",
+            "int_charge": "0",
+            "model_charge": "0",
+        }
+        assert g16_oniom.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "int_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
+
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
         g16_modred = Gaussian16Input(filename=gaussian_modred_inputfile)

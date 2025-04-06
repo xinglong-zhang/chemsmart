@@ -2,7 +2,10 @@ from functools import cached_property
 
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.mixins import GaussianFileMixin
-from chemsmart.utils.utils import content_blocks_by_paragraph
+from chemsmart.utils.utils import (
+    content_blocks_by_paragraph,
+    get_range_from_list,
+)
 
 
 class Gaussian16Input(GaussianFileMixin):
@@ -77,6 +80,16 @@ class Gaussian16Input(GaussianFileMixin):
         return multiplicity
 
     @property
+    def oniom_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return oniom_charge
+
+    @property
+    def oniom_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return oniom_multiplicity
+
+    @property
     def route_string(self):
         return self._get_route()
 
@@ -106,6 +119,19 @@ class Gaussian16Input(GaussianFileMixin):
             for i in range(self.num_atoms)
             if i not in self.frozen_coordinate_indices
         ]
+
+    @property
+    def partition(self):
+        """Get the partition string."""
+        partition = {}
+        for key, val in [
+            ("high level atoms", self.molecule.high_level_atoms),
+            ("medium level atoms", self.molecule.medium_level_atoms),
+            ("low level atoms", self.molecule.low_level_atoms),
+        ]:
+            if val is not None:
+                partition[key] = get_range_from_list(val)
+        return partition
 
     @property
     def gen_genecp_group(self):
@@ -207,6 +233,35 @@ class Gaussian16Input(GaussianFileMixin):
                 charge = int(line_elements[0])
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity
+
+    def _get_oniom_charge_and_multiplicity(self):
+        line = self.contents[5]
+        line_elements = line.split()
+        charge_multiplicity_list = [
+            "real_charge",
+            "real_multiplicity",
+            "int_charge",
+            "int_multiplicity",
+            "model_charge",
+            "model_multiplicity",
+        ]
+        oniom_charge = {}
+        oniom_multiplicity = {}
+        full_line = 12
+        if len(self.partition) == 2:
+            charge_multiplicity_list = charge_multiplicity_list[0:1, 4:5]
+            full_line = 6
+        for j in range(0, int(full_line) - len(line_elements)):
+            line_elements.append("Not specified, will use default value.")
+        for charge in range(0, len(charge_multiplicity_list), 2):
+            oniom_charge[charge_multiplicity_list[charge]] = line_elements[
+                charge
+            ]
+        for multiplicity in range(1, len(charge_multiplicity_list), 2):
+            oniom_multiplicity[charge_multiplicity_list[multiplicity]] = (
+                line_elements[multiplicity]
+            )
+        return oniom_charge, oniom_multiplicity
 
     def _get_gen_genecp_group(self):
         if "gen" not in self.basis:

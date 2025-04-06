@@ -131,13 +131,13 @@ class Molecule:
             raise ValueError(
                 "The number of symbols and positions should be the same!"
             )
-        # update partition levels if availabel
-        if self.high_level_atoms is not None:
-            (
-                self.high_level_atoms,
-                self.medium_level_atoms,
-                self.low_level_atoms,
-            ) = self._get_partition_levels()
+        # # update partition levels if available
+        # if self.high_level_atoms is not None:
+        #     (
+        #         self.high_level_atoms,
+        #         self.medium_level_atoms,
+        #         self.low_level_atoms,
+        #     ) = self._get_partition_levels()
 
     def __len__(self):
         return len(self.chemical_symbols)
@@ -1152,6 +1152,9 @@ class CoordinateBlock:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is
             # indicated at the end of the line
+            if line_elements[0].isdigit():
+                # skip the charge and multiplicity line of QM/MM coordinate block
+                continue
 
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
@@ -1190,6 +1193,9 @@ class CoordinateBlock:
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
                 continue
+            if line_elements[0].isdigit():
+                # skip the charge and multiplicity line of QM/MM coordinate block
+                continue
 
             try:
                 atomic_number = int(line_elements[0])
@@ -1203,7 +1209,7 @@ class CoordinateBlock:
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
-            if len(line_elements) > 4 and line[-1].isdigit():
+            if len(line_elements) > 4:
                 if np.isclose(atomic_number, second_value, atol=10e-6):
                     # happens in cube file, where the second value is the same as
                     # the atomic number but in float format

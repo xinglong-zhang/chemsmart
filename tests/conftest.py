@@ -121,6 +121,16 @@ def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     )
 
 
+@pytest.fixture()
+def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "qmmm")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfiles(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3COOH.com")
+
+
 # Gaussian output files
 @pytest.fixture()
 def gaussian_outputs_test_directory(gaussian_test_directory):
