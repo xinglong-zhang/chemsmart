@@ -1209,7 +1209,7 @@ class CoordinateBlock:
             x_coordinate = 0.0
             y_coordinate = 0.0
             z_coordinate = 0.0
-            if len(line_elements) > 4:
+            if len(line_elements) > 4 and line[-1].isdigit():
                 if np.isclose(atomic_number, second_value, atol=10e-6):
                     # happens in cube file, where the second value is the same as
                     # the atomic number but in float format
