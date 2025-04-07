@@ -131,6 +131,13 @@ class Molecule:
             raise ValueError(
                 "The number of symbols and positions should be the same!"
             )
+        # # update partition levels if available
+        # if self.high_level_atoms is not None:
+        #     (
+        #         self.high_level_atoms,
+        #         self.medium_level_atoms,
+        #         self.low_level_atoms,
+        #     ) = self._get_partition_levels()
 
     def __len__(self):
         return len(self.chemical_symbols)
@@ -1115,6 +1122,11 @@ class CoordinateBlock:
         and -1 means constrained."""
         return self._get_constraints()
 
+    @property
+    def partitions(self):
+        """Returns a list of partition levels for the atoms."""
+        return self._get_partitions()
+
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class."""
@@ -1124,6 +1136,9 @@ class CoordinateBlock:
             frozen_atoms=self.constrained_atoms,
             pbc_conditions=self.pbc_conditions,
             translation_vectors=self.translation_vectors,
+            high_level_atoms=self.partitions[1],
+            medium_level_atoms=self.partitions[2],
+            low_level_atoms=self.partitions[3],
         )
 
     def _get_symbols(self):
@@ -1137,6 +1152,9 @@ class CoordinateBlock:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is
             # indicated at the end of the line
+            if line_elements[0].isdigit():
+                # skip the charge and multiplicity line of QM/MM coordinate block
+                continue
 
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
@@ -1174,6 +1192,9 @@ class CoordinateBlock:
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
+                continue
+            if line_elements[0].isdigit():
+                # skip the charge and multiplicity line of QM/MM coordinate block
                 continue
 
             try:
@@ -1238,6 +1259,69 @@ class CoordinateBlock:
         if all(constraint == 0 for constraint in constraints):
             return None
         return constraints
+
+    def _get_partitions(self):
+        partitions = []
+        high_level_atoms = []
+        medium_level_atoms = []
+        low_level_atoms = []
+        i = 1
+        for line in self.coordinate_block:
+            if line.startswith(
+                "TV"
+            ):  # cases where PBC system occurs in Gaussian
+                continue
+
+            line_elements = line.strip().split()
+            if (
+                len(line_elements) < 4 or len(line_elements) == 0
+            ):  # skip lines that do not contain coordinates
+                continue
+            if len(line_elements) > 5 and all(
+                line_elements[i]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for i in range(2, 5)
+            ):
+                # happens in cube file and frozen atoms case
+                if line_elements[5] == "H":
+                    high_level_atoms.append(i)
+                    partitions.append("H")
+                elif line_elements[5] == "M":
+                    medium_level_atoms.append(i)
+                    partitions.append("M")
+                elif line_elements[5] == "L":
+                    low_level_atoms.append(i)
+                    partitions.append("L")
+                i += 1
+            elif len(line_elements) > 4 and all(
+                line_elements[i]
+                .strip()
+                .replace(".", "", 1)
+                .replace("-", "", 1)
+                .isdigit()
+                for i in range(1, 4)
+            ):
+                if line_elements[4].strip() == "H":
+                    high_level_atoms.append(i)
+                    partitions.append("H")
+                elif line_elements[4].strip() == "M":
+                    medium_level_atoms.append(i)
+                    partitions.append("M")
+                elif line_elements[4] == "L":
+                    low_level_atoms.append(i)
+                    partitions.append("L")
+                i += 1
+            # else:
+            #     raise ValueError(f"Partition level not found in the coordinate block: {self.coordinate_block}!")
+        return (
+            partitions,
+            high_level_atoms,
+            medium_level_atoms,
+            low_level_atoms,
+        )
 
     def _get_translation_vectors(self):
         tvs = []

@@ -8,6 +8,7 @@ frozen_coordinates_pattern = (
 )
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
+oniom_gridpoint_pattern = r"ONIOM:\s+gridpoint\s+(\d+)\s+method:\s+(\w+)\s+system:\s+(\w+)\s+energy:\s+([+-]?\d*\.\d+|\d+)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
 
 # standard coordinate pattern with (symbol x y z)

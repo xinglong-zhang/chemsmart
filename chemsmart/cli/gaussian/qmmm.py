@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
     help="Medium-level layer force field.",
 )
 @click.option(
-    "-lf",
+    "-lx",
     "--low-level-functional",
     type=str,
     help="Low level layer functional.",
@@ -72,40 +72,40 @@ logger = logging.getLogger(__name__)
     help="Low level layer force field.",
 )
 @click.option(
-    "-hc",
-    "--high-level-charge",
+    "-rc",
+    "--real-charge",
     type=int,
-    help="High level layer charge.",
+    help="Charge of real system.",
 )
 @click.option(
-    "-hm",
-    "--high-level-multiplicity",
+    "-rm",
+    "--real-multiplicity",
     type=int,
-    help="High level layer spin multiplicity.",
+    help="Spin multiplicity of real system.",
+)
+@click.option(
+    "-ic",
+    "--int-charge",
+    type=int,
+    help="Charge of intermediate system.",
+)
+@click.option(
+    "-im",
+    "--int-multiplicity",
+    type=int,
+    help="Spin multiplicity of intermediate system.",
 )
 @click.option(
     "-mc",
-    "--medium-level-charge",
+    "--model-charge",
     type=int,
-    help="Medium level layer charge.",
+    help="Charge of model system.",
 )
 @click.option(
     "-mm",
-    "--medium-level-multiplicity",
+    "--model-multiplicity",
     type=int,
-    help="Medium level layer spin multiplicity.",
-)
-@click.option(
-    "-lc",
-    "--low-level-charge",
-    type=int,
-    help="Low level layer charge.",
-)
-@click.option(
-    "-lm",
-    "--low-level-multiplicity",
-    type=int,
-    help="Low level layer spin multiplicity.",
+    help="Spin multiplicity of model system.",
 )
 @click.option(
     "-ha",
@@ -149,12 +149,12 @@ def qmmm(
     low_level_functional,
     low_level_basis,
     low_level_force_field,
-    high_level_charge,
-    high_level_multiplicity,
-    medium_level_charge,
-    medium_level_multiplicity,
-    low_level_charge,
-    low_level_multiplicity,
+    real_charge,
+    real_multiplicity,
+    int_charge,
+    int_multiplicity,
+    model_charge,
+    model_multiplicity,
     high_level_atoms,
     medium_level_atoms,
     low_level_atoms,
@@ -164,9 +164,12 @@ def qmmm(
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
+    print(high_level_atoms)
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
+    print("Project settings:", ctx.obj["project_settings"].__dict__)
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
@@ -193,12 +196,12 @@ def qmmm(
     qmmm_settings.low_level_functional = low_level_functional
     qmmm_settings.low_level_basis = low_level_basis
     qmmm_settings.low_level_force_field = low_level_force_field
-    qmmm_settings.high_level_charge = high_level_charge
-    qmmm_settings.high_level_multiplicity = high_level_multiplicity
-    qmmm_settings.medium_level_charge = medium_level_charge
-    qmmm_settings.medium_level_multiplicity = medium_level_multiplicity
-    qmmm_settings.low_level_charge = low_level_charge
-    qmmm_settings.low_level_multiplicity = low_level_multiplicity
+    qmmm_settings.real_charge = real_charge
+    qmmm_settings.real_multiplicity = real_multiplicity
+    qmmm_settings.int_charge = int_charge
+    qmmm_settings.int_multiplicity = int_multiplicity
+    qmmm_settings.model_charge = model_charge
+    qmmm_settings.model_multiplicity = model_multiplicity
 
     # get molecule
     molecules = ctx.obj["molecules"]
