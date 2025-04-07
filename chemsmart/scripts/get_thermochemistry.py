@@ -137,7 +137,7 @@ def get_thermo(
             f"   Enthalpy quasi-harmonic treatment: frequency cut-off value of {fh:.1f} wavenumbers will be applied."
         )
         logger.info(
-            "   QH = Head-Gordon: Using an RRHO treatement with an approximation term for vibrational energy."
+            "   QH = Head-Gordon: Using an RRHO treatment with an approximation term for vibrational energy."
         )
         logger.info(
             "   REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850"
