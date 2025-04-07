@@ -58,12 +58,12 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Interpolator exponent used in the quasi-RRHO approximation.",
 )
 @click.option(
-    "-w",
-    "--weight",
+    "-i",
+    "--isotope",
     is_flag=True,
-    default=True,
+    default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (True) or use single isotope masses (False).",
+    help="Use natural abundance weighted masses (False) or use single isotope masses (True).",
 )
 @click.option(
     "-q",
@@ -86,62 +86,112 @@ os.environ["OMP_NUM_THREADS"] = "1"
     show_default=True,
     help="Quasi-RRHO approximation for enthalpy.",
 )
+@click.option(
+    "-u",
+    "--unit",
+    default="Eh",
+    show_default=True,
+    type=click.Choice(
+        ["Eh", "hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
+    ),
+    help="Unit of energetic values.",
+)
 @click.argument("filenames", nargs=-1, type=click.Path(exists=True))
 def get_thermo(
-    f, fs, fh, concentration, temperature, alpha, weight, q, qs, qh, filenames
+    f,
+    fs,
+    fh,
+    concentration,
+    temperature,
+    alpha,
+    isotope,
+    q,
+    qs,
+    qh,
+    unit,
+    filenames,
 ):
     """Thermochemistry calculation script using quasi-RRHO approximation."""
     if f != 100.0:
         fs = f
         fh = f
 
+    if unit.lower() == "ev":
+        energy_unit = "eV"
+        unit_conversion = 27.211386024367243  # 1 Eh = 27.211386024367243 eV
+    elif unit.lower() == "kcal/mol":
+        energy_unit = "kcal/mol"
+        unit_conversion = (
+            627.5094738898777  # 1 Eh = 627.5094738898777 kcal/mol
+        )
+    elif unit.lower() == "kj/mol":
+        energy_unit = "kJ/mol"
+        unit_conversion = (
+            2625.4996387552483  # 1 Eh = 2625.4996387552483 kJ/mol
+        )
+    else:
+        energy_unit = "Hartree"
+        unit_conversion = 1.0
+
     files = []
     for filename in filenames:
         files.extend(glob.glob(filename))
-    if len(files) == 0:
+    for file in files:
+        if not file.endswith((".log", ".out")):
+            logger.info(
+                f"Unsupported file extension for '{file}'. Only .log or .out files are accepted."
+            )
+            logger.info("Try 'get_thermochemistry.py --help' for help.")
+            return
+    if not files:
         logger.info(
             "Please provide calculation output files on the command line."
         )
         logger.info("Try 'get_thermochemistry.py --help' for help.")
         return
 
+    logger.info("   " + "┌" + "─" * 106 + "┐")
     logger.info(
-        f"   Temperature = {temperature:.2f} Kelvin   Concentration = {concentration:.1f} mol/L"
+        "   " + "├" + " " * 41 + "Thermochemistry Summary" + " " * 42 + "┤"
     )
+    logger.info("   " + "└" + "─" * 106 + "┘")
+    logger.info("   " + f"Temperature                : {temperature:.2f} K")
     logger.info(
-        "   All energetic values below shown in Hartree unless otherwise specified."
+        "   " + f"Concentration              : {concentration:.1f} mol/L"
     )
+    if q or qs:
+        logger.info("   " + f"Entropy Frequency Cut-off  : {fs:.1f} cm-1")
+    if q or qh:
+        logger.info("   " + f"Enthalpy Frequency Cut-off : {fh:.1f} cm-1")
+    if q or qs or qh:
+        logger.info("   " + f"Damping Function Exponent  : {alpha}")
+    logger.info(
+        "   "
+        + f"Mass Weighted              : {'Single Isotope Masses' if isotope else 'Natural Abundance Weighted Masses'}"
+    )
+    logger.info("   " + f"Energy Unit                : {energy_unit}")
     logger.info("")
     if q or qs or qh:
+        logger.info("   " + "-" * 108)
         logger.info(
-            f"   Damping function: dimensionless interpolator exponent of {alpha} will be used in the quasi-RRHO scheme."
+            "   " + " " * 32 + "Quasi-Rigid-Rotor-Harmonic-Oscillator Scheme"
         )
+        logger.info("   " + "-" * 108)
+        logger.info("   - Damping function: Chai and Head-Gordon")
         logger.info(
-            "   Chai and Head-Gordon: Long-range corrected hybrid density functionals with damped atom–atom dispersion corrections."
-        )
-        logger.info(
-            "   REF: Chai, J.-D.; Head-Gordon, M. Phys. Chem. Chem. Phys. 2008, 10, 6615–6620"
+            "     REF: Chai, J.-D.; Head-Gordon, M. Phys. Chem. Chem. Phys. 2008, 10, 6615–6620"
         )
         logger.info("")
     if q or qs:
-        logger.info(
-            f"   Entropic quasi-harmonic treatment: frequency cut-off value of {fs:.1f} wavenumbers will be applied."
-        )
-        logger.info(
-            "   QS = Grimme: Using a mixture of RRHO and Free-rotor vibrational entropies."
-        )
-        logger.info("   REF: Grimme, S. Chem. Eur. J. 2012, 18, 9955-9964")
+        logger.info("   - Entropic quasi-harmonic treatment: Grimme")
+        logger.info("     REF: Grimme, S. Chem. Eur. J. 2012, 18, 9955-9964")
         logger.info("")
     if q or qh:
+        logger.info("   - Enthalpy quasi-harmonic treatment: Head-Gordon")
         logger.info(
-            f"   Enthalpy quasi-harmonic treatment: frequency cut-off value of {fh:.1f} wavenumbers will be applied."
+            "     REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850"
         )
-        logger.info(
-            "   QH = Head-Gordon: Using an RRHO treatment with an approximation term for vibrational energy."
-        )
-        logger.info(
-            "   REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850"
-        )
+        logger.info("")
         logger.info("")
 
     if q:
@@ -158,6 +208,7 @@ def get_thermo(
                 "qh-G(T)",
             )
         )
+        logger.info("   " + "=" * 142)
     elif qs:
         logger.info(
             "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}".format(
@@ -171,105 +222,125 @@ def get_thermo(
                 "qh-G(T)",
             )
         )
+        logger.info("   " + "=" * 128)
     elif qh:
         logger.info(
             "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}".format(
                 "Structure", "E", "ZPE", "H", "qh-H", "T.S", "G(T)", "qh-G(T)"
             )
         )
+        logger.info("   " + "=" * 131)
     else:
         logger.info(
             "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>13}".format(
                 "Structure", "E", "ZPE", "H", "T.S", "G(T)"
             )
         )
+        logger.info("   " + "=" * 103)
 
+    index = 1
     for file in files:
-        thermochemistry = qRRHOThermochemistry(
-            file,
-            temperature=temperature,
-            concentration=concentration,
-            weighted_atomic_mass=weight,
-            alpha=alpha,
-            s_freq_cutoff=fs,
-            h_freq_cutoff=fh,
-        )
-        structure = os.path.basename(file).split("/")[-1].split(".")[0]
-        energy = thermochemistry.energies
-        zero_point_energy = thermochemistry.zero_point_energy_hartree
-        enthalpy = thermochemistry.enthalpy
-        qrrho_enthalpy = thermochemistry.qrrho_enthalpy
-        entropy_times_temperature = thermochemistry.entropy_times_temperature
-        qrrho_entropy_times_temperature = (
-            thermochemistry.qrrho_entropy_times_temperature
-        )
-        gibbs_free_energy = thermochemistry.gibbs_free_energy
-        if q:
-            qrrho_gibbs_free_energy = thermochemistry.qrrho_gibbs_free_energy
-        elif qh:
-            qrrho_gibbs_free_energy = (
-                thermochemistry.qrrho_gibbs_free_energy_qh
+        try:
+            thermochemistry = qRRHOThermochemistry(
+                file,
+                temperature=temperature,
+                concentration=concentration,
+                weighted_atomic_mass=not isotope,
+                alpha=alpha,
+                s_freq_cutoff=fs,
+                h_freq_cutoff=fh,
             )
-        elif qs:
-            qrrho_gibbs_free_energy = (
-                thermochemistry.qrrho_gibbs_free_energy_qs
+            structure = os.path.splitext(os.path.basename(file))[0]
+            energy = thermochemistry.energies * unit_conversion
+            zero_point_energy = (
+                thermochemistry.zero_point_energy_hartree * unit_conversion
             )
+            enthalpy = thermochemistry.enthalpy * unit_conversion
+            qrrho_enthalpy = thermochemistry.qrrho_enthalpy * unit_conversion
+            entropy_times_temperature = (
+                thermochemistry.entropy_times_temperature * unit_conversion
+            )
+            qrrho_entropy_times_temperature = (
+                thermochemistry.qrrho_entropy_times_temperature
+                * unit_conversion
+            )
+            gibbs_free_energy = (
+                thermochemistry.gibbs_free_energy * unit_conversion
+            )
+            if q:
+                qrrho_gibbs_free_energy = (
+                    thermochemistry.qrrho_gibbs_free_energy * unit_conversion
+                )
+            elif qh:
+                qrrho_gibbs_free_energy = (
+                    thermochemistry.qrrho_gibbs_free_energy_qh
+                    * unit_conversion
+                )
+            elif qs:
+                qrrho_gibbs_free_energy = (
+                    thermochemistry.qrrho_gibbs_free_energy_qs
+                    * unit_conversion
+                )
 
-        if q:
-            logger.info(
-                "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
-                    "o",
-                    structure,
-                    energy,
-                    zero_point_energy,
-                    enthalpy,
-                    qrrho_enthalpy,
-                    entropy_times_temperature,
-                    qrrho_entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+            if q:
+                logger.info(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
+                        index,
+                        structure,
+                        energy,
+                        zero_point_energy,
+                        enthalpy,
+                        qrrho_enthalpy,
+                        entropy_times_temperature,
+                        qrrho_entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
                 )
-            )
-        elif qs:
-            logger.info(
-                "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
-                    "o",
-                    structure,
-                    energy,
-                    zero_point_energy,
-                    enthalpy,
-                    entropy_times_temperature,
-                    qrrho_entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+            elif qs:
+                logger.info(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
+                        index,
+                        structure,
+                        energy,
+                        zero_point_energy,
+                        enthalpy,
+                        entropy_times_temperature,
+                        qrrho_entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
                 )
-            )
-        elif qh:
-            logger.info(
-                "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}".format(
-                    "o",
-                    structure,
-                    energy,
-                    zero_point_energy,
-                    enthalpy,
-                    qrrho_enthalpy,
-                    entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+            elif qh:
+                logger.info(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}".format(
+                        index,
+                        structure,
+                        energy,
+                        zero_point_energy,
+                        enthalpy,
+                        qrrho_enthalpy,
+                        entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
                 )
-            )
-        else:
-            logger.info(
-                "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}".format(
-                    "o",
-                    structure,
-                    energy,
-                    zero_point_energy,
-                    enthalpy,
-                    entropy_times_temperature,
-                    gibbs_free_energy,
+            else:
+                logger.info(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}".format(
+                        index,
+                        structure,
+                        energy,
+                        zero_point_energy,
+                        enthalpy,
+                        entropy_times_temperature,
+                        gibbs_free_energy,
+                    )
                 )
-            )
+            index += 1
+        except (ValueError, TypeError, IndexError, AttributeError):
+            pass
+    logger.info("")
 
 
 if __name__ == "__main__":
