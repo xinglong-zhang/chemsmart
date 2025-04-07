@@ -486,9 +486,9 @@ class qRRHOThermochemistry(Thermochemistry):
         concentration=1.0,
         pressure=1.0,
         weighted_atomic_mass=True,
-        alpha=None,
-        s_freq_cutoff=None,
-        h_freq_cutoff=None,
+        alpha=4,
+        s_freq_cutoff=100.0,
+        h_freq_cutoff=100.0,
     ):
         super().__init__(
             filename,
@@ -500,13 +500,9 @@ class qRRHOThermochemistry(Thermochemistry):
         self.alpha = alpha
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
-            if s_freq_cutoff is not None
-            else None
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
         self.h_freq_cutoff = (
             h_freq_cutoff * units._c * 1e2
-            if h_freq_cutoff is not None
-            else None
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
         self.c = (
             self.concentration * 1000 * units._Nav
@@ -520,12 +516,6 @@ class qRRHOThermochemistry(Thermochemistry):
             v_0 = cutoff frquency (Hz), default is 100 cm^-1
             α = dimensionless interpolator exponent, default value is 4
         """
-        if self.alpha is None:
-            self.alpha = 4
-        if freq_cutoff is None:
-            freq_cutoff = (
-                100 * units._c * 1e2
-            )  # convert the unit of cutoff frequency from cm^-1 to Hz
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]
         return damp
 
@@ -761,6 +751,14 @@ class qRRHOThermochemistry(Thermochemistry):
             G^qrrho_qs = H - T * S^qrrho_tot
         """
         return self.enthalpy - self.qrrho_entropy_times_temperature
+
+    @property
+    def qrrho_gibbs_free_energy_qh(self):
+        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to enthalpy only.
+        Formula:
+            G^qrrho_qs = H^qrrho - T * S_tot,c
+        """
+        return self.qrrho_enthalpy - self.entropy_times_temperature
 
 
 class GaussianThermochemistry(Thermochemistry):
