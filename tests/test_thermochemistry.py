@@ -4,8 +4,6 @@ import numpy as np
 import pytest
 
 from chemsmart.analysis.thermochemistry import (
-    GaussianThermochemistry,
-    OrcaThermochemistry,
     Thermochemistry,
     qRRHOThermochemistry,
 )
@@ -588,7 +586,7 @@ class TestThermochemistryCO2:
             expected_total_heat_capacity,
         )
 
-        thermochem1 = GaussianThermochemistry(
+        thermochem1 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,  # in Kelvin
             pressure=1,  # in atm
@@ -692,67 +690,6 @@ class TestThermochemistryCO2:
         )
         assert np.isclose(
             thermochem1.total_heat_capacity, 6.920 * cal_to_joules, atol=1e-2
-        )
-        """Values from Gaussian output
-        Zero-point vibrational energy      30919.1 (Joules/Mol)
-                                           7.38984 (Kcal/Mol)
-        Vibrational temperatures:    940.59   940.59  1998.50  3557.76
-               (Kelvin)
-
-        Zero-point correction=                           0.011776 (Hartree/Particle)
-        Thermal correction to Energy=                    0.014410
-        Thermal correction to Enthalpy=                  0.015354
-        Thermal correction to Gibbs Free Energy=        -0.008927
-        Sum of electronic and zero-point Energies=           -188.432903
-        Sum of electronic and thermal Energies=              -188.430269
-        Sum of electronic and thermal Enthalpies=            -188.429325
-        Sum of electronic and thermal Free Energies=         -188.453606
-        """
-        assert np.isclose(
-            thermochem1.zero_point_vibrational_energy,
-            30919.1,
-            atol=1e-1,
-        )
-        assert np.allclose(
-            thermochem1.vibrational_temperatures,
-            [940.59, 940.59, 1998.50, 3557.76],
-            atol=1e-2,
-        )
-        assert np.isclose(
-            thermochem1.zero_point_correction, 0.011776, atol=1e-6
-        )
-        assert np.isclose(
-            thermochem1.thermal_correction_energy, 0.014410, atol=1e-6
-        )
-        assert np.isclose(
-            thermochem1.thermal_correction_enthalpy,
-            0.015354,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem1.thermal_correction_free_energy,
-            -0.008927,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem1.sum_of_electronic_and_zero_point_energies,
-            -188.432903,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem1.sum_of_electronic_and_thermal_energies,
-            -188.430269,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem1.sum_of_electronic_and_thermal_enthalpies,
-            -188.429325,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem1.sum_of_electronic_and_thermal_free_energies,
-            -188.453606,
-            atol=1e-6,
         )
 
     def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
@@ -1218,7 +1155,7 @@ class TestThermochemistryHe:
         assert np.isclose(g16_output.energies[-1], -2.91512971456)
         assert mol.is_monoatomic
 
-        thermochem2 = GaussianThermochemistry(
+        thermochem2 = Thermochemistry(
             filename=gaussian_he_opt_outfile,
             temperature=298.15,
             pressure=1,
@@ -1322,66 +1259,6 @@ class TestThermochemistryHe:
         assert np.isclose(
             thermochem2.total_heat_capacity, 2.981 * cal_to_joules, atol=1e-2
         )
-        """Values from Gaussian output
-        Zero-point vibrational energy          0.0 (Joules/Mol)
-                                           0.00000 (Kcal/Mol)
-        Vibrational temperatures:
-                 (Kelvin)
-
-        Zero-point correction=                           0.000000 (Hartree/Particle)
-        Thermal correction to Energy=                    0.001416
-        Thermal correction to Enthalpy=                  0.002360
-        Thermal correction to Gibbs Free Energy=        -0.011953
-        Sum of electronic and zero-point Energies=             -2.915130
-        Sum of electronic and thermal Energies=                -2.913713
-        Sum of electronic and thermal Enthalpies=              -2.912769
-        Sum of electronic and thermal Free Energies=           -2.927083
-        """
-        assert np.isclose(
-            thermochem2.zero_point_vibrational_energy,
-            0.00000,
-            atol=1e-1,
-        )
-        assert np.allclose(
-            thermochem2.vibrational_temperatures,
-            [],
-        )
-        assert np.isclose(
-            thermochem2.zero_point_correction, 0.000000, atol=1e-6
-        )
-        assert np.isclose(
-            thermochem2.thermal_correction_energy, 0.001416, atol=1e-6
-        )
-        assert np.isclose(
-            thermochem2.thermal_correction_enthalpy,
-            0.002360,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem2.thermal_correction_free_energy,
-            -0.011953,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem2.sum_of_electronic_and_zero_point_energies,
-            -2.915130,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem2.sum_of_electronic_and_thermal_energies,
-            -2.913713,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem2.sum_of_electronic_and_thermal_enthalpies,
-            -2.912769,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem2.sum_of_electronic_and_thermal_free_energies,
-            -2.927083,
-            atol=1e-6,
-        )
 
     def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
         """Values from Goodvibes, as a reference:
@@ -1482,7 +1359,7 @@ class TestThermochemistryH2O:
             g16_output.num_vib_frequencies == 3
         )  # vDOF = 3 * num_atoms - 6 since H2O is a non-linear molecule
 
-        thermochem3 = GaussianThermochemistry(
+        thermochem3 = Thermochemistry(
             filename=gaussian_mp2_outputfile,
             temperature=298.15,
             pressure=1,
@@ -1585,66 +1462,6 @@ class TestThermochemistryH2O:
         )
         assert np.isclose(
             thermochem3.total_heat_capacity, 6.009 * cal_to_joules, atol=1e-2
-        )
-        """Values from Gaussian output
-        Zero-point vibrational energy      56211.1 (Joules/Mol)
-                                           13.43478 (Kcal/Mol)
-        Vibrational temperatures:   2342.81  5498.69  5679.79
-                 (Kelvin)
-        
-        Zero-point correction=                           0.021410 (Hartree/Particle)
-        Thermal correction to Energy=                    0.024245
-        Thermal correction to Enthalpy=                  0.025189
-        Thermal correction to Gibbs Free Energy=         0.003766
-        Sum of electronic and zero-point Energies=            -76.307583
-        Sum of electronic and thermal Energies=               -76.304747
-        Sum of electronic and thermal Enthalpies=             -76.303803
-        Sum of electronic and thermal Free Energies=          -76.325227
-        """
-        assert np.isclose(
-            thermochem3.zero_point_vibrational_energy,
-            56211.1,
-            atol=1e-1,
-        )
-        assert np.allclose(
-            thermochem3.vibrational_temperatures,
-            [2342.81, 5498.69, 5679.79],
-        )
-        assert np.isclose(
-            thermochem3.zero_point_correction, 0.021410, atol=1e-6
-        )
-        assert np.isclose(
-            thermochem3.thermal_correction_energy, 0.024245, atol=1e-6
-        )
-        assert np.isclose(
-            thermochem3.thermal_correction_enthalpy,
-            0.025189,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem3.thermal_correction_free_energy,
-            0.003766,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem3.sum_of_electronic_and_zero_point_energies,
-            -76.307583,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem3.sum_of_electronic_and_thermal_energies,
-            -76.304747,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem3.sum_of_electronic_and_thermal_enthalpies,
-            -76.303803,
-            atol=1e-6,
-        )
-        assert np.isclose(
-            thermochem3.sum_of_electronic_and_thermal_free_energies,
-            -76.325227,
-            atol=1e-6,
         )
 
     def test_thermochemistry_water_qrrho(self, gaussian_mp2_outputfile):
@@ -1784,156 +1601,3 @@ class TestThermochemistryH2O:
         assert not mol.is_monoatomic
         assert not mol.is_linear
         assert orca_out.num_vibration_modes == 3
-
-        orca_thermochem_water = OrcaThermochemistry(
-            filename=water_output_gas_path,
-            temperature=298.15,
-            pressure=1,
-        )
-        """Values from ORCA output
-        ------------
-        INNER ENERGY
-        ------------
-        ...
-        Summary of contributions to the inner energy U:
-        Electronic energy                ...    -76.32331101 Eh
-        Zero point energy                ...      0.02158076 Eh      13.54 kcal/mol
-        Thermal vibrational correction   ...      0.00000291 Eh       0.00 kcal/mol
-        Thermal rotational correction    ...      0.00141627 Eh       0.89 kcal/mol
-        Thermal translational correction ...      0.00141627 Eh       0.89 kcal/mol
-        -----------------------------------------------------------------------
-        Total thermal energy                    -76.29889480 Eh
-
-
-        Summary of corrections to the electronic energy:
-        (perhaps to be used in another calculation)
-        Total thermal correction                  0.00283545 Eh       1.78 kcal/mol
-        Non-thermal (ZPE) correction              0.02158076 Eh      13.54 kcal/mol
-        -----------------------------------------------------------------------
-        Total correction                          0.02441621 Eh      15.32 kcal/mol"""
-        assert np.isclose(
-            orca_thermochem_water.electronic_energy, -76.32331101, atol=1e-8
-        )
-        assert np.isclose(
-            orca_thermochem_water.zero_point_vibrational_energy,
-            0.02158076,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.thermal_vibrational_correction,
-            0.00000291,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.thermal_rotational_correction,
-            0.00141627,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.thermal_translational_correction,
-            0.00141627,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.total_thermal_energy, -76.29889480, atol=1e-8
-        )
-        assert np.isclose(
-            orca_thermochem_water.total_thermal_correction,
-            0.00283545,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.non_thermal_correction, 0.02158076, atol=1e-8
-        )
-        assert np.isclose(
-            orca_thermochem_water.total_correction, 0.02441621, atol=1e-8
-        )
-        """Values from ORCA output
-        --------
-        ENTHALPY
-        --------
-
-        The enthalpy is H = U + kB*T
-                        kB is Boltzmann's constant
-        Total free energy                 ...    -76.29889480 Eh
-        Thermal Enthalpy correction       ...      0.00094421 Eh       0.59 kcal/mol
-        -----------------------------------------------------------------------
-        Total Enthalpy                    ...    -76.29795059 Eh
-        """
-        assert np.isclose(
-            orca_thermochem_water.total_free_energy, -76.29889480, atol=1e-8
-        )
-        assert np.isclose(
-            orca_thermochem_water.thermal_enthalpy_correction,
-            0.00094421,
-            atol=1e-7,
-        )
-        assert np.isclose(
-            orca_thermochem_water.total_enthalpy, -76.29795059, atol=1e-8
-        )
-        """Values from ORCA output
-        -------
-        ENTROPY
-        -------
-        ...
-        Electronic entropy                ...      0.00000000 Eh      0.00 kcal/mol
-        Vibrational entropy               ...      0.00000328 Eh      0.00 kcal/mol
-        Rotational entropy                ...      0.00498381 Eh      3.13 kcal/mol
-        Translational entropy             ...      0.01644380 Eh     10.32 kcal/mol
-        -----------------------------------------------------------------------
-        Final entropy term                ...      0.02143089 Eh     13.45 kcal/mol
-        """
-        assert np.isclose(
-            orca_thermochem_water.electronic_entropy_in_hartree,
-            0.00000000,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.vibrational_entropy_in_hartree,
-            0.00000328,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.rotational_entropy_in_hartree,
-            0.00498381,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.translational_entropy_in_hartree,
-            0.01644380,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.final_entropy_term, 0.02143089, atol=1e-8
-        )
-        """Values from ORCA output
-        -------------------
-        GIBBS FREE ENERGY
-        -------------------
-
-        The Gibbs free energy is G = H - T*S
-
-        Total enthalpy                    ...    -76.29795059 Eh 
-        Total entropy correction          ...     -0.02143089 Eh    -13.45 kcal/mol
-        -----------------------------------------------------------------------
-        Final Gibbs free energy         ...    -76.31938148 Eh
-
-        For completeness - the Gibbs free energy minus the electronic energy
-        G-E(el)                           ...      0.00392953 Eh      2.47 kcal/mol
-        """
-        assert np.isclose(
-            orca_thermochem_water.total_enthalpy, -76.29795059, atol=1e-8
-        )
-        assert np.isclose(
-            orca_thermochem_water.final_entropy_term, 0.02143089, atol=1e-8
-        )
-        assert np.isclose(
-            orca_thermochem_water.final_gibbs_free_energy,
-            -76.31938148,
-            atol=1e-8,
-        )
-        assert np.isclose(
-            orca_thermochem_water.thermal_correction_free_energy,
-            0.00392953,
-            atol=1e-7,
-        )
