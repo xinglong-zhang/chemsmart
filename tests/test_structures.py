@@ -343,6 +343,17 @@ class TestStructures:
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
+        # test first molecule is 1-indexed
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="1", return_list=False
+        )
+        assert np.allclose(
+            molecule.positions[0],
+            np.array([-1.0440166707, -2.3921211654, -1.1765767093]),
+            rtol=1e-5,
+        )
+        assert isinstance(molecule, Molecule)
+
 
 class TestMoleculeAdvanced:
     def test_molecule_to_rdkit_conversion(self):
