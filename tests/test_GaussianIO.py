@@ -249,8 +249,8 @@ class TestGaussian16Input:
             "low level atoms": ["4-5"],
         }
 
-    def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfiles):
-        g16_oniom = Gaussian16Input(filename=gaussian_qmmm_inputfiles)
+    def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfile_3layer):
+        g16_oniom = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
         assert g16_oniom.oniom_charge == {
             "real_charge": "0",
             "int_charge": "0",

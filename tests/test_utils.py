@@ -117,6 +117,73 @@ class TestUtils:
         range = get_range_from_list(s1)
         assert range == ["1-3", "5-7"]
 
+        s2 = [1, 34, 45, 46, 48, 50]
+        range = get_range_from_list(s2)
+        assert range == ["1", "34", "45-46", "48", "50"]
+
+        s3 = [28, 45, 60, 89]
+        range = get_range_from_list(s3)
+        assert range == ["28", "45", "60", "89"]
+
+        s4 = [
+            18,
+            19,
+            20,
+            21,
+            23,
+            25,
+            27,
+            29,
+            30,
+            31,
+            33,
+            35,
+            37,
+            39,
+            41,
+            43,
+            46,
+            47,
+            48,
+            49,
+            51,
+            53,
+            55,
+            57,
+            61,
+            62,
+            63,
+            64,
+            66,
+            68,
+            70,
+            72,
+        ]
+        range = get_range_from_list(s4)
+        assert range == [
+            "18-21",
+            "23",
+            "25",
+            "27",
+            "29-31",
+            "33",
+            "35",
+            "37",
+            "39",
+            "41",
+            "43",
+            "46-49",
+            "51",
+            "53",
+            "55",
+            "57",
+            "61-64",
+            "66",
+            "68",
+            "70",
+            "72",
+        ]
+
 
 class TestGetListFromStringRange:
     def test_get_list_from_string_range(self):
