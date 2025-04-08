@@ -1,4 +1,4 @@
-from chemsmart.jobs.pymol.job import PyMOLJob
+from chemsmart.jobs.mol.job import PyMOLJob
 
 
 class PyMOLVisualizationJob(PyMOLJob):

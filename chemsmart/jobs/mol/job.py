@@ -20,7 +20,7 @@ class PyMOLJob(Job):
 
     @property
     def inputfile(self):
-        inputfile = self.label + ".com"
+        inputfile = self.label + ".xyz"
         return os.path.join(self.folder, inputfile)
 
     @property

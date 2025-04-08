@@ -28,7 +28,7 @@ def visualize(ctx, freeze_atoms, skip_completed, **kwargs):
     # get label for the job
     label = ctx.obj["label"]
 
-    from chemsmart.jobs.pymol.visualize import PyMOLVisualizationJob
+    from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 
     return PyMOLVisualizationJob(
         molecule=molecule,
