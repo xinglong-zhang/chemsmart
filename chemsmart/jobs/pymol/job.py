@@ -1,9 +1,7 @@
 import logging
 import os
-from typing import Type
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.job import Job
 from chemsmart.utils.utils import string2index_1based
 
@@ -13,18 +11,12 @@ logger = logging.getLogger(__name__)
 class PyMOLJob(Job):
     PROGRAM = "PyMOL"
 
-    def __init__(self, molecule=None, settings=None, label=None, **kwargs):
+    def __init__(self, molecule=None, label=None, **kwargs):
         super().__init__(molecule=molecule, label=label, **kwargs)
         molecule = molecule.copy()
-        settings = settings.copy()
 
-        self.settings = settings
         self.molecule = molecule
         self.label = label
-
-    @classmethod
-    def settings_class(cls) -> Type[GaussianJobSettings]:
-        return GaussianJobSettings
 
     @property
     def inputfile(self):

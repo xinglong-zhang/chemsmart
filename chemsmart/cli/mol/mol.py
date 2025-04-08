@@ -12,10 +12,43 @@ logger = logging.getLogger(__name__)
 
 
 def click_pymol_options(f):
-    """Common click options for PyMOL jobs."""
+    """Common click options for PyMOL CLI."""
 
     @click.option(
-        "--project", "-p", type=str, default=None, help="Project settings."
+        "-f",
+        "--filename",
+        type=str,
+        default=None,
+        help="filename from which new Gaussian input is prepared.",
+    )
+    @click.option(
+        "-l",
+        "--label",
+        type=str,
+        default=None,
+        help="write user input filename for the job (without extension)",
+    )
+    @click.option(
+        "-a",
+        "--append-label",
+        type=str,
+        default=None,
+        help="name to be appended to file for the job",
+    )
+    @click.option(
+        "-i",
+        "--index",
+        type=str,
+        default=None,
+        help="Index of molecules to use; 1-based indices. "
+        "Default to the last molecule structure. 1-based index.",
+    )
+    @click.option(
+        "-P",
+        "--pubchem",
+        type=str,
+        default=None,
+        help="Queries structure from PubChem using name, smiles, cid and conformer information.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -26,97 +59,15 @@ def click_pymol_options(f):
 
 @click.group(cls=MyGroup)
 @click_pymol_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
-)
 @click.pass_context
 def mol(
     ctx,
-    project,
     filename,
     label,
     append_label,
-    title,
-    charge,
-    multiplicity,
-    functional,
-    basis,
     index,
-    additional_opt_options,
-    additional_route_parameters,
-    append_additional_info,
-    custom_solvent,
-    dieze_tag,
-    forces,
     pubchem,
 ):
-
-    from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-    from chemsmart.settings.gaussian import GaussianProjectSettings
-
-    # get project settings
-    project_settings = GaussianProjectSettings.from_project(project)
-
-    # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
-
-    if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
-        job_settings = GaussianJobSettings.default()
-        logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
-        )
-    elif filename.endswith((".com", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
-        job_settings = GaussianJobSettings.from_filepath(filename)
-    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
-    else:
-        job_settings = GaussianJobSettings.default()
-    # else:
-    #     raise ValueError(
-    #         f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
-    #     )
-
-    # Update keywords
-    keywords = (
-        "charge",
-        "multiplicity",
-    )  # default keywords to merge filename charge and multiplicity
-    if charge is not None:
-        job_settings.charge = charge
-    if multiplicity is not None:
-        job_settings.multiplicity = multiplicity
-    if functional is not None:
-        job_settings.functional = functional
-        keywords += ("functional",)  # update keywords
-    if basis is not None:
-        job_settings.basis = basis
-        keywords += ("basis",)
-    if additional_opt_options is not None:
-        job_settings.additional_opt_options_in_route = additional_opt_options
-        keywords += ("additional_opt_options_in_route",)
-    if additional_route_parameters is not None:
-        job_settings.additional_route_parameters = additional_route_parameters
-        keywords += ("additional_route_parameters",)
-    if append_additional_info is not None:
-        job_settings.append_additional_info = append_additional_info
-        keywords += ("append_additional_info",)
-    if custom_solvent is not None:
-        job_settings.custom_solvent = custom_solvent
-        keywords += ("custom_solvent",)
-    if title is not None:
-        job_settings.title = title
-        keywords += ("title",)
-    if dieze_tag is not None:
-        job_settings.dieze_tag = dieze_tag
-        keywords += ("dieze_tag",)
-    if forces:
-        job_settings.forces = forces
-        keywords += ("forces",)
-
     # obtain molecule structure
     if filename is None and pubchem is None:
         raise ValueError(
@@ -179,9 +130,6 @@ def mol(
     logger.debug(f"Obtained molecules: {molecules}")
 
     # store objects
-    ctx.obj["project_settings"] = project_settings
-    ctx.obj["job_settings"] = job_settings
-    ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
