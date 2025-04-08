@@ -625,6 +625,16 @@ def water_output_gas_path(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_he_output_freq(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "He_freq.out")
+
+
+@pytest.fixture()
+def orca_co2_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "CO2.out")
+
+
+@pytest.fixture()
 def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"

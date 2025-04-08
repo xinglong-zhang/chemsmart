@@ -98,8 +98,8 @@ class Thermochemistry:
         if self.molecule.is_monoatomic:
             return None
         if self.molecule.is_linear:
-            return self.file_object.moments_of_inertia[-1]
-        return self.file_object.moments_of_inertia
+            return self.molecule.moments_of_inertia[-1]
+        return self.molecule.moments_of_inertia
 
     @property
     def average_rotational_constant(self):

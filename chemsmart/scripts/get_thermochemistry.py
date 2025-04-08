@@ -8,6 +8,7 @@ import click
 from chemsmart.analysis.thermochemistry import qRRHOThermochemistry
 
 logger = logging.getLogger(__name__)
+
 os.environ["OMP_NUM_THREADS"] = "1"
 
 
@@ -112,6 +113,12 @@ def get_thermo(
     filenames,
 ):
     """Thermochemistry calculation script using quasi-RRHO approximation."""
+
+    def log(message, output="thermochemistry.dat"):
+        logger.info(message)
+        with open(output, 'a') as f:
+            f.write(message)
+
     if f != 100.0:
         fs = f
         fh = f
@@ -138,65 +145,68 @@ def get_thermo(
         files.extend(glob.glob(filename))
     for file in files:
         if not file.endswith((".log", ".out")):
-            logger.info(
+            logger.error(
                 f"Unsupported file extension for '{file}'. Only .log or .out files are accepted."
             )
-            logger.info("Try 'get_thermochemistry.py --help' for help.")
+            logger.error("Try 'get_thermochemistry.py --help' for help.")
             return
     if not files:
-        logger.info(
+        logger.error(
             "Please provide calculation output files on the command line."
         )
-        logger.info("Try 'get_thermochemistry.py --help' for help.")
+        logger.error("Try 'get_thermochemistry.py --help' for help.")
         return
 
-    logger.info("   " + "┌" + "─" * 106 + "┐")
-    logger.info(
-        "   " + "├" + " " * 41 + "Thermochemistry Summary" + " " * 42 + "┤"
+    log("\n")
+    log("   " + " " * 25 + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ \n")
+    log("   " + " " * 25 + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|\n")
+    log("   " + " " * 25 + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  \n")
+    log("   " + " " * 25 + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  \n")
+    log("   " + " " * 25 + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n\n")
+    log("   " + "┌" + "─" * 106 + "┐" + "\n")
+    log(
+        "   " + "├" + " " * 41 + "Thermochemistry Settings" + " " * 41 + "┤" + "\n"
     )
-    logger.info("   " + "└" + "─" * 106 + "┘")
-    logger.info("   " + f"Temperature                : {temperature:.2f} K")
-    logger.info(
-        "   " + f"Concentration              : {concentration:.1f} mol/L"
+    log("   " + "└" + "─" * 106 + "┘" + "\n")
+    log("   " + f"Temperature                : {temperature:.2f} K" + "\n")
+    log(
+        "   " + f"Concentration              : {concentration:.1f} mol/L" + "\n"
     )
     if q or qs:
-        logger.info("   " + f"Entropy Frequency Cut-off  : {fs:.1f} cm-1")
+        log("   " + f"Entropy Frequency Cut-off  : {fs:.1f} cm-1" + "\n")
     if q or qh:
-        logger.info("   " + f"Enthalpy Frequency Cut-off : {fh:.1f} cm-1")
+        log("   " + f"Enthalpy Frequency Cut-off : {fh:.1f} cm-1" + "\n")
     if q or qs or qh:
-        logger.info("   " + f"Damping Function Exponent  : {alpha}")
-    logger.info(
+        log("   " + f"Damping Function Exponent  : {alpha}" + "\n")
+    log(
         "   "
-        + f"Mass Weighted              : {'Single Isotope Masses' if isotope else 'Natural Abundance Weighted Masses'}"
+        + f"Mass Weighted              : {'Single Isotope Masses' if isotope else 'Natural Abundance Weighted Masses'}" + "\n"
     )
-    logger.info("   " + f"Energy Unit                : {energy_unit}")
-    logger.info("")
+    log("   " + f"Energy Unit                : {energy_unit}" + "\n\n")
     if q or qs or qh:
-        logger.info("   " + "-" * 108)
-        logger.info(
-            "   " + " " * 32 + "Quasi-Rigid-Rotor-Harmonic-Oscillator Scheme"
+        log("   " + "-" * 108 + "\n")
+        log(
+            "   " + " " * 32 + "Quasi-Rigid-Rotor-Harmonic-Oscillator Scheme" + "\n"
         )
-        logger.info("   " + "-" * 108)
-        logger.info("   - Damping function: Chai and Head-Gordon")
-        logger.info(
-            "     REF: Chai, J.-D.; Head-Gordon, M. Phys. Chem. Chem. Phys. 2008, 10, 6615–6620"
+        log("   " + "-" * 108 + "\n")
+        log("   - Damping function: Chai and Head-Gordon\n")
+        log(
+            "     REF: Chai, J.-D.; Head-Gordon, M. Phys. Chem. Chem. Phys. 2008, 10, 6615–6620\n\n"
         )
-        logger.info("")
     if q or qs:
-        logger.info("   - Entropic quasi-harmonic treatment: Grimme")
-        logger.info("     REF: Grimme, S. Chem. Eur. J. 2012, 18, 9955-9964")
-        logger.info("")
+        log("   - Entropic quasi-harmonic treatment: Grimme\n")
+        log("     REF: Grimme, S. Chem. Eur. J. 2012, 18, 9955-9964\n\n")
     if q or qh:
-        logger.info("   - Enthalpy quasi-harmonic treatment: Head-Gordon")
-        logger.info(
-            "     REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850"
+        log("   - Enthalpy quasi-harmonic treatment: Head-Gordon\n")
+        log(
+            "     REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850\n\n"
         )
-        logger.info("")
-        logger.info("")
+    log("\n")
 
+    log(f" * Thermochemistry Results (in {energy_unit}): \n\n")
     if q:
-        logger.info(
-            "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}".format(
+        log(
+            "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
                 "Structure",
                 "E",
                 "ZPE",
@@ -208,10 +218,10 @@ def get_thermo(
                 "qh-G(T)",
             )
         )
-        logger.info("   " + "=" * 142)
+        log("   " + "=" * 142 + "\n")
     elif qs:
-        logger.info(
-            "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}".format(
+        log(
+            "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
                 "Structure",
                 "E",
                 "ZPE",
@@ -222,21 +232,21 @@ def get_thermo(
                 "qh-G(T)",
             )
         )
-        logger.info("   " + "=" * 128)
+        log("   " + "=" * 128 + "\n")
     elif qh:
-        logger.info(
-            "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}".format(
+        log(
+            "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
                 "Structure", "E", "ZPE", "H", "qh-H", "T.S", "G(T)", "qh-G(T)"
             )
         )
-        logger.info("   " + "=" * 131)
+        log("   " + "=" * 131 + "\n")
     else:
-        logger.info(
-            "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>13}".format(
+        log(
+            "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>13}\n".format(
                 "Structure", "E", "ZPE", "H", "T.S", "G(T)"
             )
         )
-        logger.info("   " + "=" * 103)
+        log("   " + "=" * 103 + "\n")
 
     index = 1
     for file in files:
@@ -283,8 +293,8 @@ def get_thermo(
                 )
 
             if q:
-                logger.info(
-                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
+                log(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
                         index,
                         structure,
                         energy,
@@ -298,8 +308,8 @@ def get_thermo(
                     )
                 )
             elif qs:
-                logger.info(
-                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
+                log(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
                         index,
                         structure,
                         energy,
@@ -312,8 +322,8 @@ def get_thermo(
                     )
                 )
             elif qh:
-                logger.info(
-                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}".format(
+                log(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
                         index,
                         structure,
                         energy,
@@ -326,8 +336,8 @@ def get_thermo(
                     )
                 )
             else:
-                logger.info(
-                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}".format(
+                log(
+                    "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
                         index,
                         structure,
                         energy,
@@ -340,7 +350,8 @@ def get_thermo(
             index += 1
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
-    logger.info("")
+    log("\n")
+    logger.info(" * Done. Results saved to 'thermochemistry_output.dat'.")
 
 
 if __name__ == "__main__":

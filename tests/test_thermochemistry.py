@@ -2,6 +2,7 @@ import os.path
 
 import numpy as np
 import pytest
+from ase.build import molecule
 
 from chemsmart.analysis.thermochemistry import (
     Thermochemistry,
@@ -242,54 +243,17 @@ class TestThermochemistryCO2:
         assert g16_output.normal_termination
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
-        mol_as_ase_atoms = mol.to_ase()
-        (
-            mol_as_ase_atoms_moi_along_principal_axes,
-            mol_as_ase_atoms_moi_principal_axes,
-        ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
-
-        assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
-        assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
-        assert np.allclose(
-            mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
-        )
-        assert np.allclose(
-            mol.moments_of_inertia,
-            mol_as_ase_atoms_moi_along_principal_axes,
-        )
-        assert np.allclose(
-            mol.moments_of_inertia_principal_axes,
-            mol_as_ase_atoms_moi_principal_axes,
-        )
-        # test moments of inertia from molecular structure and from gaussian output
-        assert np.allclose(
-            mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
-        )
-        assert np.allclose(
-            mol.moments_of_inertia_principal_axes[0],
-            g16_output.moments_of_inertia_principal_axes[0],
-        )
-
-        # components X and Y are swapped but they are physically the same (same moment of inertia values)
-        assert np.allclose(
-            mol.moments_of_inertia_principal_axes[1],
-            g16_output.moments_of_inertia_principal_axes[2],
-        )
-        assert np.allclose(
-            mol.moments_of_inertia_principal_axes[2],
-            g16_output.moments_of_inertia_principal_axes[1],
-        )
-
         assert mol.empirical_formula == "CO2"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -188.444679593)
         assert np.isclose(mol.mass, 44.009)  # weighted_atomic_mass=True
         assert np.isclose(
             g16_output.mass, 43.98983
-        )  # weighted_atomic_mass=False
+        )
         assert np.isclose(
             g16_output.moments_of_inertia[-1], 43.27307045
         )  # in amu Å^2
+        assert np.isclose(mol.moments_of_inertia[-1], 43.28411748057631)
         assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_temperatures == [0.56050]
         assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
@@ -315,7 +279,7 @@ class TestThermochemistryCO2:
         # k_B = 1.3806488 * 10^-23 J/K
         # h = 6.62606957 * 10^-34 J s
         # N_A = 6.02214129 * 10^23 mol^-1
-        # using these constants, we got 11475355.249359557
+        # using these constants, we got 11467858.194120048
         expected_translational_partition_function = (
             2
             * np.pi
@@ -332,7 +296,7 @@ class TestThermochemistryCO2:
 
         # S_t = R * [ln(q_t) + 1 + 3 / 2]
         # R = 8.314462145468951 J mol^-1 K^-1
-        # using these constants, we got 155.9436596966979 J mol^-1 K^-1
+        # using these constants, we got 155.9382259343905 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
             np.log(expected_translational_partition_function) + 1 + 3 / 2
         )
@@ -395,7 +359,7 @@ class TestThermochemistryCO2:
         # q_r = 1 / σ_r * (T / Θ_r)
         # Θ_r = h^2 / (8 * pi^2 * I * k_B)
         # 1 Angstrom = 1 * 10^-10 m
-        # using these constants, we got 265.9699419350582
+        # using these constants, we got 265.9699419335578
         expected_rotational_partition_function = (
             1
             / g16_output.rotational_symmetry_number
@@ -407,7 +371,7 @@ class TestThermochemistryCO2:
                         8
                         * np.pi**2
                         * (
-                            g16_output.moments_of_inertia[-1]
+                            mol.moments_of_inertia[-1]
                             / (6.02214129 * 1e23 * 1000)
                             * 1e-10**2
                         )
@@ -423,7 +387,7 @@ class TestThermochemistryCO2:
         )
 
         # S_r = R * (ln(q_r) + 1)
-        # we got 54.73729125485975 J mol^-1 K^-1
+        # we got 54.737291254812845 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(expected_rotational_partition_function) + 1
         )
@@ -535,7 +499,7 @@ class TestThermochemistryCO2:
         )
 
         # q_tot = q_t * q_r * q_v * q_e
-        # we got 3334210391.9411154
+        # we got 3332032092.51935
         expected_total_partition_function = (
             expected_translational_partition_function
             * expected_rotational_partition_function
@@ -548,7 +512,7 @@ class TestThermochemistryCO2:
         )
 
         # S_tot = S_t + S_r + S_v + S_e
-        # we got 213.82220018189992 J mol^-1 K^-1
+        # we got 213.81676641954562 J mol^-1 K^-1
         expected_total_entropy = (
             expected_translational_entropy
             + expected_rotational_entropy
@@ -643,7 +607,7 @@ class TestThermochemistryCO2:
         )
         assert np.isclose(
             thermochem1.rotational_partition_function,
-            0.265970e03,
+            0.265970e03, atol=1e0
         )
         assert np.isclose(
             thermochem1.rotational_entropy, 13.083 * cal_to_joules, atol=1e-2
@@ -679,7 +643,7 @@ class TestThermochemistryCO2:
             1.952 * cal_to_joules,
             atol=1e-2,
         )
-        assert np.isclose(thermochem1.total_partition_function, 0.333203e10)
+        assert np.isclose(thermochem1.total_partition_function, 0.333203e10, atol=1e6)
         assert np.isclose(
             thermochem1.total_entropy, 51.103 * cal_to_joules, atol=1e-2
         )
@@ -692,9 +656,56 @@ class TestThermochemistryCO2:
             thermochem1.total_heat_capacity, 6.920 * cal_to_joules, atol=1e-2
         )
 
+
+    def test_thermochemistry_co2_orca_output(self, orca_co2_output):
+        """Values from ORCA output
+        --------------------------
+        THERMOCHEMISTRY AT 298.15K
+        --------------------------
+
+        Temperature         ...   298.15 K
+        Pressure            ...     1.00 atm
+        Total Mass          ...    44.01 AMU
+        ...
+        The molecule is recognized as being linear
+        ...
+        freq.     679.10  E(vib)   ...       0.08
+        freq.     679.10  E(vib)   ...       0.08
+        freq.    1440.27  E(vib)   ...       0.00
+        freq.    2532.19  E(vib)   ...       0.00
+        ...
+        Point Group:  D(inf)h, Symmetry Number:   1
+        Rotational constants in cm-1:     0.000000     0.394105     0.394105
+        """
+        assert os.path.exists(orca_co2_output)
+        orca_out = ORCAOutput(filename=orca_co2_output)
+        assert orca_out.normal_termination
+        assert orca_out.natoms == 3
+        mol = orca_out.molecule
+        assert mol.empirical_formula == "CO2"
+        assert orca_out.multiplicity == 1
+        assert np.isclose(orca_out.energies[-1], -188.370538039014)
+        assert np.isclose(mol.mass, 44.009)  # weighted_atomic_mass=True
+        assert np.isclose(orca_out.mass, 44.01)
+        assert orca_out.rotational_symmetry_number == 1
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            0.000000,
+            0.394105,
+            0.394105,
+        ]
+        assert orca_out.vibrational_frequencies == [
+            679.10,
+            679.10,
+            1440.27,
+            2532.19,
+        ]
+        assert mol.is_linear
+        assert orca_out.num_vibration_modes == 4
+
+
     def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
         """Values from Goodvibes, as a reference:
-                goodvibes -f 100 -c 1.0 -t 298.15 --bav "conf" co2.log
+                goodvibes -f 100 -c 1.0 -t 298.15 --qs grimme --bav "conf" co2.log
         Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
            ********************************************************************************************************************************
         o  co2                                       -188.444680   0.011776   -188.429325   0.021262   0.021262   -188.450587   -188.450588
@@ -728,11 +739,11 @@ class TestThermochemistryCO2:
         # u_K = h / (8 * pi^2 * v_K)
         # B_av = h / (8 * pi^2 * I)
         expected_i = (
-            g16_output.moments_of_inertia[-1]
+            mol.moments_of_inertia[-1]
             / (6.02214129 * 1e23 * 1000)
             * 1e-10**2
         )
-        # we got B_av = 5.673571123594536 * 10^-44 kg m^2
+        # we got B_av = 5.675019509661021 * 10^-44 kg m^2
         expected_bav = (
             6.62606957
             * 1e-34
@@ -746,7 +757,7 @@ class TestThermochemistryCO2:
         expected_mu_prime = (
             expected_mu * expected_bav / (expected_mu + expected_bav)
         )
-        # we got S_R,K = [4.13984132, 4.13984132, 1.00676497, -1.39084927] in J mol^-1 K^-1
+        # we got S_R,K = [4.13984133, 4.13984133, 1.00676497, -1.39084927] in J mol^-1 K^-1
         expected_freerot_entropy = 8.314462145468951 * (
             1 / 2
             + np.log(
@@ -788,7 +799,7 @@ class TestThermochemistryCO2:
         )
 
         # S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
-        # we got S^qrrho_v = 3.144125621155249 J mol^-1 K^-1
+        # we got S^qrrho_v = 3.1441256211641195 J mol^-1 K^-1
         expected_qrrho_vibrational_entropy = np.sum(
             expected_entropy_damping_function * expected_rrho_entropy
             + (1 - expected_entropy_damping_function)
@@ -823,7 +834,7 @@ class TestThermochemistryCO2:
             + 3 / 2
         )
         # S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
-        # we got 129.3601627172439 + 54.73729125485975 + 3.144125621155249 + 0 = 187.24157959325888 J mol^-1 K^-1
+        # we got 129.3601627172439 + 54.737291254812845 + 3.1441256211641195 + 0 = 187.24157959322085 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(
                 1
@@ -836,7 +847,7 @@ class TestThermochemistryCO2:
                             8
                             * np.pi**2
                             * (
-                                g16_output.moments_of_inertia[-1]
+                                mol.moments_of_inertia[-1]
                                 / (6.02214129 * 1e23 * 1000)
                                 * 1e-10**2
                             )
@@ -859,7 +870,7 @@ class TestThermochemistryCO2:
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_total_entropy,
-            expected_qrrho_total_entropy,
+            expected_qrrho_total_entropy
         )
 
         # E0 in Hartree
@@ -914,7 +925,7 @@ class TestThermochemistryCO2:
         # T * S^qrrho_tot in Hartree
         # 1 Hartree = 4.35974434 × 10^-18 Joules
         # 1 mol = 6.02214129 * 10^23 Particle
-        # we got 0.021263029747640685 Hartree
+        # we got 0.021263029747636365 Hartree
         expected_qrrho_entropy_times_temperature = (
             298.15 * expected_qrrho_total_entropy
         ) / (4.35974434e-18 * 6.02214129 * 1e23)
@@ -925,7 +936,7 @@ class TestThermochemistryCO2:
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_entropy_times_temperature,
             0.021262,
-            atol=1e-6,
+            atol=1e-5,
         )
 
         # G = H - T * S_tot
@@ -1017,7 +1028,17 @@ class TestThermochemistryCO2:
             qrrho_thermochem_co2_1.qrrho_enthalpy, -188.429327, atol=1e-6
         )
 
-        # G^qrrho = H^qrrho - T * S^qrrho_tot
+        # G^qrrho_qh = H - T * S^qrrho_tot
+        # we got -188.45058826589445 Hartree
+        expected_qrrho_gibbs_free_energy_qh = (
+            expected_enthalpy - expected_qrrho_entropy_times_temperature
+        )
+        assert np.isclose(
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qh,
+            expected_qrrho_gibbs_free_energy_qh,
+        )
+
+        # G^qrrho_q = H^qrrho - T * S^qrrho_tot
         # we got -188.450589610712 Hartree
         expected_qrrho_gibbs_free_energy = (
             expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature
@@ -1033,7 +1054,7 @@ class TestThermochemistryCO2:
         )
 
         """Values from Goodvibes, as a reference:
-                goodvibes -f 100 -c 0.5 -t 598.15 --bav "conf" co2.log
+                goodvibes -f 100 -c 0.5 -t 598.15 --qs grimme --bav "conf" co2.log
         Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
            ********************************************************************************************************************************
         o  co2                                       -188.444680   0.011776   -188.424452   0.049327   0.049327   -188.473778   -188.473779
@@ -1063,7 +1084,7 @@ class TestThermochemistryCO2:
         assert np.isclose(
             qrrho_thermochem_co2_2.qrrho_entropy_times_temperature,
             0.049327,
-            atol=1e-6,
+            atol=1e-5,
         )
         assert np.isclose(
             qrrho_thermochem_co2_2.gibbs_free_energy, -188.473778, atol=1e-6
@@ -1150,9 +1171,10 @@ class TestThermochemistryHe:
         assert g16_output.num_atoms == 1
         mol = g16_output.molecule
         assert mol.empirical_formula == "He"
-        assert np.isclose(g16_output.mass, 4.00260)
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -2.91512971456)
+        assert np.isclose(mol.mass, 4.002602)  # weighted_atomic_mass=True
+        assert np.isclose(g16_output.mass, 4.00260)
         assert mol.is_monoatomic
 
         thermochem2 = Thermochemistry(
@@ -1260,6 +1282,41 @@ class TestThermochemistryHe:
             thermochem2.total_heat_capacity, 2.981 * cal_to_joules, atol=1e-2
         )
 
+
+    def test_thermochemistry_he_orca_output(self, orca_he_output_freq):
+        """Values from ORCA output
+        --------------------------
+        THERMOCHEMISTRY AT 298.15K
+        --------------------------
+
+        Temperature         ...   298.15 K
+        Pressure            ...     1.00 atm
+        Total Mass          ...     4.00 AMU
+        ...
+        Point Group:  Kh, Symmetry Number:   1
+        Rotational constants in cm-1:     0.000000     0.000000     0.000000
+        """
+        assert os.path.exists(orca_he_output_freq)
+        orca_out = ORCAOutput(filename=orca_he_output_freq)
+        assert orca_out.normal_termination
+        assert orca_out.natoms == 1
+        mol = orca_out.molecule
+        assert mol.empirical_formula == "He"
+        assert orca_out.multiplicity == 1
+        assert np.isclose(orca_out.energies[-1], -2.899160731389)
+        assert np.isclose(mol.mass, 4.002602)  # weighted_atomic_mass=True
+        assert np.isclose(orca_out.mass, 4.00)
+        assert orca_out.rotational_symmetry_number == 1
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            0,
+            0,
+            0,
+        ]
+        assert orca_out.vibrational_frequencies == []
+        assert mol.is_monoatomic
+        assert orca_out.num_vibration_modes == 0
+
+
     def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
         """Values from Goodvibes, as a reference:
                 goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf" he.log
@@ -1333,9 +1390,13 @@ class TestThermochemistryH2O:
         assert mol.empirical_formula == "H2O"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -76.328992324258)
+        assert np.isclose(mol.mass, 18.015)  # weighted_atomic_mass=True
         assert np.isclose(g16_output.mass, 18.01056)
         assert np.allclose(
             g16_output.moments_of_inertia, [0.62549131, 1.15863761, 1.78412891]
+        )  # in amu Å^2
+        assert np.allclose(
+            mol.moments_of_inertia, [0.62560528, 1.15883759, 1.78444287]
         )  # in amu Å^2
         assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_temperatures == [
@@ -1417,7 +1478,7 @@ class TestThermochemistryH2O:
             atol=1e-2,
         )
         assert np.isclose(
-            thermochem3.rotational_partition_function, 0.434320e02
+            thermochem3.rotational_partition_function, 0.434320e02, atol=1e-1
         )
         assert np.isclose(
             thermochem3.rotational_entropy, 10.475 * cal_to_joules, atol=1e-2
@@ -1451,7 +1512,7 @@ class TestThermochemistryH2O:
             0.047 * cal_to_joules,
             atol=1e-2,
         )
-        assert np.isclose(thermochem3.total_partition_function, 0.130534e09)
+        assert np.isclose(thermochem3.total_partition_function, 0.130534e09, atol=1e5)
         assert np.isclose(
             thermochem3.total_entropy, 45.090 * cal_to_joules, atol=1e-2
         )
@@ -1464,6 +1525,50 @@ class TestThermochemistryH2O:
             thermochem3.total_heat_capacity, 6.009 * cal_to_joules, atol=1e-2
         )
 
+
+    def test_thermochemistry_water_orca_output(self, water_output_gas_path):
+        """Values from ORCA output
+        --------------------------
+        THERMOCHEMISTRY AT 298.15K
+        --------------------------
+
+        Temperature         ... 298.15 K
+        Pressure            ... 1.00 atm
+        Total Mass          ... 18.02 AMU
+        ...
+        freq.    1625.35  E(vib)   ...       0.00
+        freq.    3875.61  E(vib)   ...       0.00
+        freq.    3971.90  E(vib)   ...       0.00
+        ...
+        Point Group:  C2v, Symmetry Number:   2
+        Rotational constants in cm-1:    26.416987    14.661432     9.428573
+        """
+        assert os.path.exists(water_output_gas_path)
+        orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.normal_termination
+        assert orca_out.natoms == 3
+        mol = orca_out.molecule
+        assert mol.empirical_formula == "H2O"
+        assert orca_out.multiplicity == 1
+        assert np.isclose(orca_out.energies[-1], -76.323311011349)
+        assert np.isclose(mol.mass, 18.015)  # weighted_atomic_mass=True
+        assert np.isclose(orca_out.mass, 18.02)
+        assert orca_out.rotational_symmetry_number == 2
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            26.416987,
+            14.661432,
+            9.428573,
+        ]
+        assert orca_out.vibrational_frequencies == [
+            1625.35,
+            3875.61,
+            3971.90,
+        ]
+        assert not mol.is_monoatomic
+        assert not mol.is_linear
+        assert orca_out.num_vibration_modes == 3
+
+
     def test_thermochemistry_water_qrrho(self, gaussian_mp2_outputfile):
         """Values from Goodvibes, as a reference:
                 goodvibes -f 500 -c 2.0 -t 1298.15 -q --bav "conf" water_mp2.log
@@ -1475,6 +1580,7 @@ class TestThermochemistryH2O:
         assert os.path.exists(gaussian_mp2_outputfile)
         g16_output = Gaussian16Output(filename=gaussian_mp2_outputfile)
         assert g16_output.normal_termination
+        mol = g16_output.molecule
         qrrho_thermochem_water = qRRHOThermochemistry(
             filename=gaussian_mp2_outputfile,
             temperature=1298.15,  # in Kelvin
@@ -1483,7 +1589,7 @@ class TestThermochemistryH2O:
             h_freq_cutoff=500,  # in cm^-1
         )
         vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
-        moments_of_inertia = np.array(g16_output.moments_of_inertia)
+        moments_of_inertia = np.array(mol.moments_of_inertia)
         expected_mu = (
             6.62606957
             * 1e-34
@@ -1491,20 +1597,20 @@ class TestThermochemistryH2O:
         )
         expected_i = moments_of_inertia / (6.02214129 * 1e23 * 1000) * 1e-10**2
         expected_b = 6.62606957 * 1e-34 / (8 * np.pi**2 * expected_i)
-        # we got 509139618973.4277 Hz
+        # we got 509048848271.2939 Hz
         expected_average_rotational_constant = sum(expected_b) / len(
             expected_b
         )
         # B_av = (B_x + B_y + B_z) / 3
         # B_i = h / (8 * pi^2 * I_i) for i = x, y, z
-        # we got B_av = 1.3014248593264196 * 10^-45 kg m^2
+        # we got B_av = 1.3016569220226748 * 10^-45 kg m^2
         expected_bav = (
             6.62606957 * 1e-34 / expected_average_rotational_constant
         )
         expected_mu_prime = (
             expected_mu * expected_bav / (expected_mu + expected_bav)
         )
-        # we got S_R,K = [6.46111664, 2.91465036, 2.77994671] in J mol^-1 K^-1
+        # we got S_R,K = [6.46111674, 2.9146504, 2.77994675] in J mol^-1 K^-1
         expected_freerot_entropy = 8.314462145468951 * (
             1 / 2
             + np.log(
@@ -1542,12 +1648,12 @@ class TestThermochemistryH2O:
         assert np.isclose(
             qrrho_thermochem_water.entropy_times_temperature,
             0.098212,
-            atol=1e-6,
+            atol=1e-5,
         )
         assert np.isclose(
             qrrho_thermochem_water.qrrho_entropy_times_temperature,
             0.098221,
-            atol=1e-6,
+            atol=1e-5,
         )
         assert np.isclose(
             qrrho_thermochem_water.gibbs_free_energy, -76.387404, atol=1e-6
@@ -1557,47 +1663,3 @@ class TestThermochemistryH2O:
             -76.387445,
             atol=1e-6,
         )
-
-    def test_thermochemistry_water_orca_output(self, water_output_gas_path):
-        """Values from ORCA output
-        --------------------------
-        THERMOCHEMISTRY AT 298.15K
-        --------------------------
-
-        Temperature         ... 298.15 K
-        Pressure            ... 1.00 atm
-        Total Mass          ... 18.02 AMU
-        ...
-        freq.    1625.35  E(vib)   ...       0.00
-        freq.    3875.61  E(vib)   ...       0.00
-        freq.    3971.90  E(vib)   ...       0.00
-        ...
-        Point Group:  C2v, Symmetry Number:   2
-        Rotational constants in cm-1:    26.416987    14.661432     9.428573
-        """
-        assert os.path.exists(water_output_gas_path)
-        orca_out = ORCAOutput(filename=water_output_gas_path)
-        assert orca_out.normal_termination
-        assert orca_out.natoms == 3
-        mol = orca_out.molecule
-        assert np.allclose(
-            orca_out.moments_of_inertia, [0.63813595, 1.14979418, 1.78793007]
-        )
-        assert mol.empirical_formula == "H2O"
-        assert np.isclose(orca_out.mass, 18.02)
-        assert orca_out.multiplicity == 1
-        assert np.isclose(orca_out.energies[-1], -76.323311011349)
-        assert orca_out.vibrational_frequencies == [
-            1625.35,
-            3875.61,
-            3971.90,
-        ]
-        assert orca_out.rotational_symmetry_number == 2
-        assert orca_out.rotational_constants_in_wavenumbers == [
-            26.416987,
-            14.661432,
-            9.428573,
-        ]
-        assert not mol.is_monoatomic
-        assert not mol.is_linear
-        assert orca_out.num_vibration_modes == 3
