@@ -3,9 +3,8 @@ import os
 import shlex
 import shutil
 import subprocess
-from glob import glob
 from pathlib import Path
-from shutil import copy, rmtree
+from shutil import rmtree
 
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.periodictable import PeriodicTable
@@ -19,30 +18,9 @@ logger = logging.getLogger(__name__)
 class PyMOLJobRunner(JobRunner):
     # creates job runner process
     # combines information about server and program
-    JOBTYPES = [
-        "pymol_visualization",
-        "g16crestopt",
-        "g16crestts",
-        "g16job",
-        "g16dias",
-        "g16opt",
-        "g16irc",
-        "g16modred",
-        "g16nci",
-        "g16resp",
-        "g16saopt",
-        "g16scan",
-        "g16sp",
-        "g16td",
-        "g16ts",
-        "g16uvvis",
-        "g16wbi",
-        "g16",
-        "g16com",
-        "g16link",
-    ]
+    JOBTYPES = []
 
-    PROGRAM = "gaussian"
+    PROGRAM = "pymol"
 
     FAKE = False
     SCRATCH = False
@@ -78,6 +56,7 @@ class PyMOLJobRunner(JobRunner):
 
     def _prerun(self, job):
         self._generate_visualization_style_script()
+        self._assign_variables(job)
 
     def _generate_visualization_style_script(self):
         # Define the source and destination file paths
@@ -95,6 +74,18 @@ class PyMOLJobRunner(JobRunner):
             )
             shutil.copy(source_style_file, dest_style_file)
 
+    def _assign_variables(self, job):
+        """Sets proper file paths for job input, output, and error files."""
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        self.job_logfile = os.path.abspath(job.logfile)
+        self.job_outputfile = os.path.abspath(job.outputfile)
+        self.job_errfile = os.path.abspath(job.errfile)
+        self.job_pymol_script = job.pymol_script
+        self.job_quite_mode = job.quite_mode
+        self.job_command_line_only = job.command_line_only
+
     def _write_input(self, job):
         # write to .xyz file if the supplied file is not .xyz
         if not os.path.exists(job.inputfile):
@@ -103,21 +94,23 @@ class PyMOLJobRunner(JobRunner):
             mol.write(job.inputfile, format="xyz")
 
     def _get_command(self):
-        exe = self._get_executable()
-        command = f"{exe} {self.job_inputfile}"
-        return command
+        # subclass to implement
+        pass
+
+    def _update_os_environ(self, job):
+        # no envs to update for pymol
+        pass
 
     def _create_process(self, job, command, env):
         with (
-            open(self.job_outputfile, "w") as out,
             open(self.job_errfile, "w") as err,
+            open(self.job_outputfile, "w") as out,
         ):
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {self.job_outputfile}\n"
+                f"Writing output file to: {self.job_logfile}\n"
                 f"And err file to: {self.job_errfile}"
             )
-            logger.debug(f"Environments for running: {self.executable.env}")
             return subprocess.Popen(
                 shlex.split(command),
                 stdout=out,
@@ -126,22 +119,7 @@ class PyMOLJobRunner(JobRunner):
                 cwd=self.running_directory,
             )
 
-    def _get_executable(self):
-        """Get executable for Gaussian."""
-        exe = self.executable.get_executable()
-        logger.info(f"Gaussian executable: {exe}")
-        return exe
-
     def _postrun(self, job):
-        if self.scratch:
-            # if job was run in scratch, copy files to job folder except files starting with Gau-
-            for file in glob(f"{self.running_directory}/{job.label}*"):
-                if not file.startswith("Gau-"):
-                    logger.info(
-                        f"Copying file {file} from {self.running_directory} to {job.folder}"
-                    )
-                    copy(file, job.folder)
-
         if job.is_complete():
             # if job is completed, remove scratch directory and submit_script
             # and log.info and log.err files
@@ -152,3 +130,35 @@ class PyMOLJobRunner(JobRunner):
                 rmtree(self.running_directory)
 
             self._remove_err_files(job)
+
+
+class PyMOLVisualizationJobRunner(PyMOLJobRunner):
+    JOBTYPES = [
+        "pymol_visualization",
+    ]
+
+    def _get_command(self):
+        exe = self.executable
+        command = f"{exe} {self.job_inputfile}"
+        # get style file
+        if self.job_pymol_script is None:
+            if os.path.exists("zhang_group_pymol_style.py"):
+                job_pymol_script = os.path.abspath(
+                    "zhang_group_pymol_style.py"
+                )
+                if os.path.exists(job_pymol_script):
+                    command += f" -r {job_pymol_script}"
+            #     pass
+            else:
+                raise ValueError(
+                    "No PyMOL style file can be found!\n Please specify via -s flag."
+                )
+
+        if self.job_quite_mode:
+            command += " -q"
+        if self.job_command_line_only:
+            command += " -c"
+        # save pse file by default
+        command += f' -d "save {self.job_outputfile}; quit"'
+
+        return command

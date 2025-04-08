@@ -198,7 +198,7 @@ def cylview_style(arg1):
 cmd.extend("cylview_style", cylview_style)
 
 
-def Add_VDW(arg1):
+def add_vdw(arg1):
     cmd.copy(arg1 + "_vdw", arg1)
     cmd.alter(arg1 + "_vdw and elem H", "vdw=1.09")
     cmd.rebuild()
@@ -209,4 +209,4 @@ def Add_VDW(arg1):
     cmd.set("sphere_transparency", 0.7, arg1 + "_vdw")
 
 
-cmd.extend("Add_VDW", Add_VDW)
+cmd.extend("add_vdw", add_vdw)

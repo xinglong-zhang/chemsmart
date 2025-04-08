@@ -57,6 +57,37 @@ def click_pymol_options(f):
     return wrapper_common_options
 
 
+def click_pymol_visualization_options(f):
+    """Common click options for PyMOL visualization."""
+
+    @click.option(
+        "-s",
+        "--style-file",
+        type=str,
+        default=None,
+        help="PyMOL script or style file. If not specified, defaults to zhang_group_pymol_style.py.",
+    )
+    @click.option(
+        "-q",
+        "--quiet",
+        is_flag=True,
+        default=True,
+        help="Run PyMOL in quiet mode. Default to True.",
+    )
+    @click.option(
+        "-c",
+        "--command-line-only",
+        is_flag=True,
+        default=True,
+        help="Run PyMOL in command line only. Default to True.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_pymol_options
 @click.pass_context

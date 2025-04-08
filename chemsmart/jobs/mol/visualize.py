@@ -4,7 +4,22 @@ from chemsmart.jobs.mol.job import PyMOLJob
 class PyMOLVisualizationJob(PyMOLJob):
     TYPE = "pymol_visualization"
 
-    def __init__(self, molecule, settings, label, **kwargs):
+    def __init__(
+        self,
+        molecule,
+        settings,
+        label,
+        pymol_script=None,
+        quite_mode=True,
+        command_line_only=True,
+        **kwargs,
+    ):
         super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            pymol_script=pymol_script,
+            quite_mode=quite_mode,
+            command_line_only=command_line_only,
+            **kwargs,
         )

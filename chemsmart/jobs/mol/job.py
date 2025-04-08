@@ -11,8 +11,19 @@ logger = logging.getLogger(__name__)
 class PyMOLJob(Job):
     PROGRAM = "PyMOL"
 
-    def __init__(self, molecule=None, label=None, **kwargs):
+    def __init__(
+        self,
+        molecule=None,
+        label=None,
+        pymol_script=None,
+        quite_mode=True,
+        command_line_only=True,
+        **kwargs,
+    ):
         super().__init__(molecule=molecule, label=label, **kwargs)
+        self.pymol_script = pymol_script
+        self.quite_mode = quite_mode
+        self.command_line_only = command_line_only
         molecule = molecule.copy()
 
         self.molecule = molecule
@@ -24,14 +35,14 @@ class PyMOLJob(Job):
         return os.path.join(self.folder, inputfile)
 
     @property
-    def outputfile(self):
-        outputfile = self.label + ".log"
-        return os.path.join(self.folder, outputfile)
+    def logfile(self):
+        logfile = "log." + self.label
+        return os.path.join(self.folder, logfile)
 
     @property
-    def chkfile(self):
-        chkfile = self.label + ".chk"
-        return os.path.join(self.folder, chkfile)
+    def outputfile(self):
+        outputfile = self.label + ".pse"
+        return os.path.join(self.folder, outputfile)
 
     @property
     def errfile(self):
@@ -48,17 +59,10 @@ class PyMOLJob(Job):
     def _output(self):
         if not os.path.exists(self.outputfile):
             return None
+        return os.path.abspath(self.outputfile)
 
-        try:
-            from chemsmart.io.gaussian.output import Gaussian16Output
-
-            return Gaussian16Output(filename=self.outputfile)
-        except AttributeError:
-            return None
-        except ValueError:
-            from chemsmart.io.gaussian.output import Gaussian16OutputWithPBC
-
-            return Gaussian16OutputWithPBC(filename=self.outputfile)
+    def _job_is_complete(self):
+        return os.path.exists(self.outputfile)
 
     def _run(self, jobrunner):
         jobrunner.run(self)

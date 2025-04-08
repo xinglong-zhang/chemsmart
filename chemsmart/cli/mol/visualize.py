@@ -3,7 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.mol.mol import mol
+from chemsmart.cli.mol.mol import click_pymol_visualization_options, mol
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -11,14 +11,11 @@ logger = logging.getLogger(__name__)
 
 @mol.command("visualize", cls=MyCommand)
 @click_job_options
-@click.option(
-    "-f",
-    "--freeze-atoms",
-    type=str,
-    help="Indices of atoms to freeze for constrained optimization.",
-)
+@click_pymol_visualization_options
 @click.pass_context
-def visualize(ctx, freeze_atoms, skip_completed, **kwargs):
+def visualize(
+    ctx, style_file, quiet, command_line_only, skip_completed, **kwargs
+):
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -34,6 +31,9 @@ def visualize(ctx, freeze_atoms, skip_completed, **kwargs):
         molecule=molecule,
         settings=None,
         label=label,
+        pymol_script=style_file,
+        quite_mode=quiet,
+        command_line_only=command_line_only,
         skip_completed=skip_completed,
         **kwargs,
     )
