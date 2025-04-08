@@ -383,7 +383,7 @@ def get_thermo(
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
     log("\n")
-    logger.info(" * Done. Results saved to 'thermochemistry_output.dat'.")
+    logger.info(" * Done. Results saved to 'thermochemistry.dat'.")
 
 
 if __name__ == "__main__":
