@@ -1803,9 +1803,7 @@ class ORCAOutput(ORCAFileMixin):
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
         for i, line_i in enumerate(self.contents):
             if "rotational entropy values for sn=1,12 :" in line_i:
-                for line_j in self.contents[
-                    i + 2 :
-                ]:  # i+2 onwards
+                for line_j in self.contents[i + 2 :]:  # i+2 onwards
                     if "-------------------" in line_j:
                         break
                     new_line = line_j.replace("=", " ")
@@ -1832,7 +1830,7 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def gibbs_free_energy(self):
         """The Gibbs free energy is G = H - T*S."""
-        for i, line_i in enumerate(self.c   ):
+        for i, line_i in enumerate(self.c):
             if line_i == "GIBBS FREE ENERGY":
                 for line_j in self.contents[i:]:
                     if "Final Gibbs free energy" in line_j:

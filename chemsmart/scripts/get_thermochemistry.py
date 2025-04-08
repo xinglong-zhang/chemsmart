@@ -116,7 +116,7 @@ def get_thermo(
 
     def log(message, output="thermochemistry.dat"):
         logger.info(message)
-        with open(output, 'a') as f:
+        with open(output, "a") as f:
             f.write(message)
 
     if f != 100.0:
@@ -158,19 +158,47 @@ def get_thermo(
         return
 
     log("\n")
-    log("   " + " " * 25 + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ \n")
-    log("   " + " " * 25 + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|\n")
-    log("   " + " " * 25 + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  \n")
-    log("   " + " " * 25 + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  \n")
-    log("   " + " " * 25 + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n\n")
+    log(
+        "   "
+        + " " * 25
+        + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ \n"
+    )
+    log(
+        "   "
+        + " " * 25
+        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|\n"
+    )
+    log(
+        "   "
+        + " " * 25
+        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  \n"
+    )
+    log(
+        "   "
+        + " " * 25
+        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  \n"
+    )
+    log(
+        "   "
+        + " " * 25
+        + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n\n"
+    )
     log("   " + "┌" + "─" * 106 + "┐" + "\n")
     log(
-        "   " + "├" + " " * 41 + "Thermochemistry Settings" + " " * 41 + "┤" + "\n"
+        "   "
+        + "├"
+        + " " * 41
+        + "Thermochemistry Settings"
+        + " " * 41
+        + "┤"
+        + "\n"
     )
     log("   " + "└" + "─" * 106 + "┘" + "\n")
     log("   " + f"Temperature                : {temperature:.2f} K" + "\n")
     log(
-        "   " + f"Concentration              : {concentration:.1f} mol/L" + "\n"
+        "   "
+        + f"Concentration              : {concentration:.1f} mol/L"
+        + "\n"
     )
     if q or qs:
         log("   " + f"Entropy Frequency Cut-off  : {fs:.1f} cm-1" + "\n")
@@ -180,13 +208,17 @@ def get_thermo(
         log("   " + f"Damping Function Exponent  : {alpha}" + "\n")
     log(
         "   "
-        + f"Mass Weighted              : {'Single Isotope Masses' if isotope else 'Natural Abundance Weighted Masses'}" + "\n"
+        + f"Mass Weighted              : {'Single Isotope Masses' if isotope else 'Natural Abundance Weighted Masses'}"
+        + "\n"
     )
     log("   " + f"Energy Unit                : {energy_unit}" + "\n\n")
     if q or qs or qh:
         log("   " + "-" * 108 + "\n")
         log(
-            "   " + " " * 32 + "Quasi-Rigid-Rotor-Harmonic-Oscillator Scheme" + "\n"
+            "   "
+            + " " * 32
+            + "Quasi-Rigid-Rotor-Harmonic-Oscillator Scheme"
+            + "\n"
         )
         log("   " + "-" * 108 + "\n")
         log("   - Damping function: Chai and Head-Gordon\n")

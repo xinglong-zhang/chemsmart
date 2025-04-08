@@ -2,7 +2,6 @@ import os.path
 
 import numpy as np
 import pytest
-from ase.build import molecule
 
 from chemsmart.analysis.thermochemistry import (
     Thermochemistry,
@@ -247,9 +246,7 @@ class TestThermochemistryCO2:
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -188.444679593)
         assert np.isclose(mol.mass, 44.009)  # weighted_atomic_mass=True
-        assert np.isclose(
-            g16_output.mass, 43.98983
-        )
+        assert np.isclose(g16_output.mass, 43.98983)
         assert np.isclose(
             g16_output.moments_of_inertia[-1], 43.27307045
         )  # in amu Å^2
@@ -606,8 +603,7 @@ class TestThermochemistryCO2:
             thermochem1.electronic_heat_capacity, 0.000 * cal_to_joules
         )
         assert np.isclose(
-            thermochem1.rotational_partition_function,
-            0.265970e03, atol=1e0
+            thermochem1.rotational_partition_function, 0.265970e03, atol=1e0
         )
         assert np.isclose(
             thermochem1.rotational_entropy, 13.083 * cal_to_joules, atol=1e-2
@@ -643,7 +639,9 @@ class TestThermochemistryCO2:
             1.952 * cal_to_joules,
             atol=1e-2,
         )
-        assert np.isclose(thermochem1.total_partition_function, 0.333203e10, atol=1e6)
+        assert np.isclose(
+            thermochem1.total_partition_function, 0.333203e10, atol=1e6
+        )
         assert np.isclose(
             thermochem1.total_entropy, 51.103 * cal_to_joules, atol=1e-2
         )
@@ -655,7 +653,6 @@ class TestThermochemistryCO2:
         assert np.isclose(
             thermochem1.total_heat_capacity, 6.920 * cal_to_joules, atol=1e-2
         )
-
 
     def test_thermochemistry_co2_orca_output(self, orca_co2_output):
         """Values from ORCA output
@@ -702,7 +699,6 @@ class TestThermochemistryCO2:
         assert mol.is_linear
         assert orca_out.num_vibration_modes == 4
 
-
     def test_thermochemistry_co2_qrrho(self, gaussian_co2_opt_outfile):
         """Values from Goodvibes, as a reference:
                 goodvibes -f 100 -c 1.0 -t 298.15 --qs grimme --bav "conf" co2.log
@@ -739,9 +735,7 @@ class TestThermochemistryCO2:
         # u_K = h / (8 * pi^2 * v_K)
         # B_av = h / (8 * pi^2 * I)
         expected_i = (
-            mol.moments_of_inertia[-1]
-            / (6.02214129 * 1e23 * 1000)
-            * 1e-10**2
+            mol.moments_of_inertia[-1] / (6.02214129 * 1e23 * 1000) * 1e-10**2
         )
         # we got B_av = 5.675019509661021 * 10^-44 kg m^2
         expected_bav = (
@@ -870,7 +864,7 @@ class TestThermochemistryCO2:
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_total_entropy,
-            expected_qrrho_total_entropy
+            expected_qrrho_total_entropy,
         )
 
         # E0 in Hartree
@@ -1282,7 +1276,6 @@ class TestThermochemistryHe:
             thermochem2.total_heat_capacity, 2.981 * cal_to_joules, atol=1e-2
         )
 
-
     def test_thermochemistry_he_orca_output(self, orca_he_output_freq):
         """Values from ORCA output
         --------------------------
@@ -1315,7 +1308,6 @@ class TestThermochemistryHe:
         assert orca_out.vibrational_frequencies == []
         assert mol.is_monoatomic
         assert orca_out.num_vibration_modes == 0
-
 
     def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
         """Values from Goodvibes, as a reference:
@@ -1512,7 +1504,9 @@ class TestThermochemistryH2O:
             0.047 * cal_to_joules,
             atol=1e-2,
         )
-        assert np.isclose(thermochem3.total_partition_function, 0.130534e09, atol=1e5)
+        assert np.isclose(
+            thermochem3.total_partition_function, 0.130534e09, atol=1e5
+        )
         assert np.isclose(
             thermochem3.total_entropy, 45.090 * cal_to_joules, atol=1e-2
         )
@@ -1524,7 +1518,6 @@ class TestThermochemistryH2O:
         assert np.isclose(
             thermochem3.total_heat_capacity, 6.009 * cal_to_joules, atol=1e-2
         )
-
 
     def test_thermochemistry_water_orca_output(self, water_output_gas_path):
         """Values from ORCA output
@@ -1567,7 +1560,6 @@ class TestThermochemistryH2O:
         assert not mol.is_monoatomic
         assert not mol.is_linear
         assert orca_out.num_vibration_modes == 3
-
 
     def test_thermochemistry_water_qrrho(self, gaussian_mp2_outputfile):
         """Values from Goodvibes, as a reference:
