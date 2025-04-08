@@ -612,3 +612,122 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             else:  # all other keys with given values
                 f.write(f"  {key} {value}\n")
         f.write("end\n")
+
+class ORCAMultiscaleJobSettings(ORCAJobSettings):
+    """Settings for ORCA multiscale (QM/MM) job.
+    This includes five types of methods:
+    1. Additive QMMM.
+    2. Subtractive QM/QM2 (2-layered ONIOM).
+    3. Subtractive QM/QM2/MM (3-layered ONIOM).
+    4. MOL-CRYSTAL-QMMM for molecular crystals.
+    5. IONIC-CRYSTAL-QMMM for semiconductors and insulators."""
+
+    def __init__(
+        self,
+        jobtype=None, #corresponding to the 5 types of jobs mentioned above
+        qm_functional=None,
+        qm_basis=None,
+        qm2_functional=None,
+        qm2_basis=None,
+        qm2_method=None,
+        mm_method=None,, # level-of-theory for MM
+        qm_atoms=None,
+        qm2_atoms=None,
+        mm_atoms=None,
+        charge_total=None,
+        mult_total=None,
+        charge_medium=None,
+        mult_medium=None,
+        charge_qm=None,
+        mult_qm=None,
+        qm2_solvation=None,
+        active_atoms=None,
+        optregion_fixed_atoms=None,
+        qm_h_bond_length=None, #similar to scale factors in Gaussian ONIOM jobs
+        delete_la_double_counting=False,
+        delete_la_bond_double_counting_atoms=False,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.jobtype = jobtype
+        self.qm_functional = qm_functional
+        self.qm_basis = qm_basis
+        self.qm2_functional = qm2_functional
+        self.qm2_basis = qm2_basis
+        self.qm2_method = qm2_method
+        self.mm_method = mm_method
+        self.qm_atoms = qm_atoms
+        self.qm2_atoms = qm2_atoms
+        self.mm_atoms = mm_atoms
+        self.charge_total = charge_total
+        self.mult_total = mult_total
+        self.charge_medium = charge_medium
+        self.mult_medium = mult_medium
+        self.charge_qm = charge_qm
+        self.mult_qm = mult_qm
+        self.qm2_solvation = qm2_solvation
+        self.active_atoms = active_atoms
+        self.optregion_fixed_atoms = optregion_fixed_atoms
+        self.qm_h_bond_length = qm_h_bond_length
+        self.delete_la_double_counting = delete_la_double_counting
+        self.delete_la_bond_double_counting_atoms = (
+            delete_la_bond_double_counting_atoms
+        )
+
+    @property
+    def qmmm_block(self):
+        return self._write_qmmm_block()
+
+    def validate_and_assign_level(self, functional, basis, built_in_method, level_name):
+        """Validate and assign the level of theory for QM and QM2."""
+        qm2_built_in_list=['XTB','XTB0','XTB1','HF-3C','PBEH-3C','R2SCAN-3C','PM3', 'AM1']
+        level_of_theory=""
+        if functional and basis and built_in_method:
+            raise ValueError(
+                f"For {level_name} level of theory, one should specify only functional/basis or ORCA built-in method!"
+            )
+        if built_in_method:
+            assert functional is None and basis is None, (
+                f"ORCA built-in method is given for {level_name} level of theory, "
+                f"thus no functional and basis should be given!"
+            )
+            if level_name=="qm2" and built_in_method.upper() in qm2_built_in_list:
+                level_of_theory = built_in_method
+        elif functional and basis:
+            if level_name=="qm2":
+                level_of_theory="QM2"
+            else:
+                level_of_theory = f"{functional} {basis}"
+        else:
+            level_of_theory = None
+            logger.debug(
+                f"Obtained level of theory {level_of_theory} for {level_name} level."
+            )
+        return level_of_theory
+
+    def _get_level_of_theory_string(self):
+        """Get the level of theory string for QM and QM2.
+        e.g. '!QM/XTB' (without solvent), '!QM/XTB ALPB(Water)' (with solvent), '!QM/HF-3C/MM' (for QM/QM2/MM)
+        """
+        level_of_theory = "!QM"
+        self.qm_level_of_theory=self.validate_and_assign_level(self.qm_functional, self.qm_basis,
+                                                               None, level_name="qm")
+        self.qm2_level_of_theory=self.validate_and_assign_level(self.qm2_functional, self.qm2_basis,
+                                                                self.qm2_method, level_name="qm2")
+        self.mm_level_of_theory=self.validate_and_assign_level(None, None, self.mm_method,level_name="mm")
+        if self.qm2_level_of_theory is not None:
+            level_of_theory += f"/{self.qm2_level_of_theory}/{self.mm_level_of_theory}"
+        else:
+            level_of_theory += f"/{self.qm2_level_of_theory}"
+        return level_of_theory
+
+
+
+
+    def _write_qmmm_block(self):
+        """Writes the QMMM block options.
+
+        QMMM block input example below:
+        %qmmm
+            QM1"""
+        return None
