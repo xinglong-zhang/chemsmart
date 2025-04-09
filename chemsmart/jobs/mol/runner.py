@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 from shutil import rmtree
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import run_command
@@ -93,8 +94,23 @@ class PyMOLJobRunner(JobRunner):
         # write to .xyz file if the supplied file is not .xyz
         if not os.path.exists(job.inputfile):
             mol = job.molecule
-            logger.info(f"Writing Molecule to {job.inputfile}.")
-            mol.write(job.inputfile, format="xyz")
+            # if mol is a list of molecules, then write to .xyz for all molecules
+            if isinstance(mol, list):
+                if isinstance(mol[0], Molecule):
+                    logger.info(
+                        f"Writing list of molecules to {job.inputfile}"
+                    )
+                    for m in mol:
+                        m.write(job.inputfile, format="xyz")
+                else:
+                    raise ValueError(
+                        f"Object {mol[0]} is not of Molecule type!"
+                    )
+            elif isinstance(mol, Molecule):
+                logger.info(f"Writing Molecule to {job.inputfile}.")
+                mol.write(job.inputfile, format="xyz")
+            else:
+                raise ValueError(f"Object {mol} is not of Molecule type!")
 
     def _get_command(self):
         # subclass to implement

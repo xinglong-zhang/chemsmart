@@ -75,10 +75,13 @@ class PyMOLJob(Job):
     def from_filename(
         cls,
         filename,
-        settings=None,
+        pymol_script=None,
         index="-1",
         label=None,
-        keywords=("charge", "multiplicity"),
+        render_style=None,
+        vdw=None,
+        quite_mode=True,
+        command_line_only=True,
         **kwargs,
     ):
         # get all molecule in a file and give the result as a list
@@ -89,20 +92,23 @@ class PyMOLJob(Job):
         logger.info(f"Num of images read: {len(molecules)}.")
         molecules = molecules[string2index_1based(index)]
 
-        # only supply last molecule in some jobs; but require all molecule in others e.g., dias job
         return cls(
             molecule=molecules,
-            settings=settings,
             label=label,
+            pymol_script=pymol_script,
+            render_style=render_style,
+            vdw=vdw,
+            quite_mode=quite_mode,
+            command_line_only=command_line_only,
+            **kwargs,
             **kwargs,
         )
 
     @classmethod
-    def from_pubchem(cls, identifier, settings=None, label=None, **kwargs):
+    def from_pubchem(cls, identifier, label=None, **kwargs):
         molecules = Molecule.from_pubchem(identifier=identifier)
         return cls(
             molecule=molecules,
-            settings=settings,
             label=label,
             **kwargs,
         )

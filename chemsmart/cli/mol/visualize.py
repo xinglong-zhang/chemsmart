@@ -31,8 +31,7 @@ def visualize(
 
     # get molecule
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]  # last molecule of the list for visualization
-    logger.info(f"Visualizing molecule: {molecule}.")
+    logger.info(f"Visualizing molecule(s): {molecules}.")
 
     # get label for the job
     label = ctx.obj["label"]
@@ -40,7 +39,7 @@ def visualize(
     from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 
     return PyMOLVisualizationJob(
-        molecule=molecule,
+        molecule=molecules,
         settings=None,
         label=label,
         pymol_script=style_file,
