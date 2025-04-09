@@ -6,7 +6,6 @@ USE_CONDA ?= true  # Default to true if not explicitly set
 MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart/cli/chemsmart  # Relative to the Makefile directory
 
-
 .PHONY: help
 help:             ## Show the help menu.
 	@echo "Usage: make <target>"
@@ -29,12 +28,19 @@ env:  ## Create a Conda environment if USE_CONDA=true.
 	fi
 
 .PHONY: conda-env
-conda-env:  ## Create a Conda environment.
-	@echo "Creating Conda environment 'chemsmart'..."
-	@if ! conda env list | grep -q chemsmart; then \
-		conda create -n chemsmart python=3.10 -y; \
+conda-env:  ## Create or update the Conda environment using environment.yml.
+	@echo "Managing Conda environment 'chemsmart' with environment.yml..."
+	@if [ ! -f environment.yml ]; then \
+		echo "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
+		exit 1; \
 	fi
-	conda run -n chemsmart pip install -U pip
+	@if conda env list | grep -q chemsmart; then \
+		echo "Updating existing 'chemsmart' environment..."; \
+		conda env update -n chemsmart -f environment.yml --prune; \
+	else \
+		echo "Creating new 'chemsmart' environment..."; \
+		conda env create -f environment.yml; \
+	fi
 	@echo "Conda environment 'chemsmart' is ready. Activate it with 'conda activate chemsmart'."
 
 .PHONY: virtualenv
@@ -94,7 +100,6 @@ update-deps:          ## Automatically update new packages that are added in the
 	@echo "Reinstalling chemsmart package..."
 	$(ENV_PREFIX)pip install -e .[test]
 
-
 .PHONY: fmt
 fmt:              ## Format code using black and isort.
 	$(ENV_PREFIX)isort --skip pyproject.toml --gitignore .
@@ -121,4 +126,3 @@ clean: ## Remove temporary and unnecessary files.
 	@find ./ -name 'Thumbs.db' -exec rm -f {} + 2>/dev/null
 	@find ./ -name '*~' -exec rm -f {} + 2>/dev/null
 	@rm -rf .cache .pytest_cache build dist *.egg-info htmlcov .tox .coverage.* docs/_build 2>/dev/null
-
