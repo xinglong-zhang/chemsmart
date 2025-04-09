@@ -78,11 +78,14 @@ class PyMOLJobRunner(JobRunner):
         """Sets proper file paths for job input, output, and error files."""
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
+        self.job_basename = job.label
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_logfile = os.path.abspath(job.logfile)
         self.job_outputfile = os.path.abspath(job.outputfile)
         self.job_errfile = os.path.abspath(job.errfile)
         self.job_pymol_script = job.pymol_script
+        self.job_render_style = job.render_style
+        self.job_vdw = job.vdw
         self.job_quite_mode = job.quite_mode
         self.job_command_line_only = job.command_line_only
 
@@ -158,7 +161,27 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
             command += " -q"
         if self.job_command_line_only:
             command += " -c"
+        if self.job_render_style is None:
+            if os.path.exists("zhang_group_pymol_style.py"):
+                # defaults to using pymol_style if not specified
+                command += f' -d "pymol_style {self.job_basename}'
+            else:
+                # no render style and no style file present
+                command += ' -d "'
+        else:
+            if self.job_render_style.lower() == "pymol":
+                command += f' -d "pymol_style {self.job_basename}'
+            elif self.job_render_style.lower() == "cylview":
+                command += f' -d "cylview_style {self.job_basename}'
+            else:
+                raise ValueError(
+                    f"The style {self.job_render_style} is not available!"
+                )
+
+        if self.job_vdw:
+            command += f"; add_vdw {self.job_basename}"
+
         # save pse file by default
-        command += f' -d "save {self.job_outputfile}; quit"'
+        command += f'; zoom; save {self.job_outputfile}; quit"'
 
         return command

@@ -1,4 +1,4 @@
-# Zhang Group Settings for PyMOL
+# Xinglong Zhang Group PyMOL Style Settings
 # modified from Paton Group Settings for PyMOL
 # Add_VDW creates a copy of an object with full-sized, transparent spheres
 # Bondi VDW values added below to override default PyMOL settings

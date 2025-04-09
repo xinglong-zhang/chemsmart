@@ -68,6 +68,20 @@ def click_pymol_visualization_options(f):
         help="PyMOL script or style file. If not specified, defaults to zhang_group_pymol_style.py.",
     )
     @click.option(
+        "-r",
+        "--render-style",
+        type=click.Choice(["pymol", "cylview"], case_sensitive=False),
+        default=None,
+        help='PyMOL render style. Choices include "pymol" or "cylview", if using zhang_group_pymol_style.',
+    )
+    @click.option(
+        "-v",
+        "--vdw",
+        is_flag=True,
+        default=False,
+        help="Add Van der Waal surface. Default to False.",
+    )
+    @click.option(
         "-q",
         "--quiet",
         is_flag=True,
