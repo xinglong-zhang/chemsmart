@@ -59,9 +59,9 @@ class Thermochemistry:
             self.Bav = (
                 units._hplanck / self.average_rotational_constant
             )  # convert the unit of average moments of inertia from Hz to kg m^2
-        if self.vibrational_frequencies is not None:
+        if self.real_frequencies is not None:
             self.v = [
-                k * units._c * 1e2 for k in self.vibrational_frequencies
+                k * units._c * 1e2 for k in self.real_frequencies
             ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
             # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
@@ -119,6 +119,16 @@ class Thermochemistry:
     def vibrational_frequencies(self):
         """Obtain the vibrational frequencies of the molecule."""
         return self.file_object.vibrational_frequencies
+
+    @property
+    def real_frequencies(self):
+        """Obtain the real vibrational frequencies of the molecule."""
+        return [k for k in self.vibrational_frequencies if k > 0.0]
+
+    @property
+    def imaginary_frequencies(self):
+        """Obtain the imaginary vibrational frequencies of the molecule."""
+        return [k for k in self.vibrational_frequencies if k < 0.0]
 
     @property
     def energies(self):

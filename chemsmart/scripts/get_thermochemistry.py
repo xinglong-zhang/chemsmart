@@ -216,6 +216,7 @@ def get_thermo(
             index += 1
         return
 
+    # Output Thermochemistry analysis.
     log("   " + "┌" + "─" * 106 + "┐" + "\n")
     log(
         "   "
@@ -356,6 +357,13 @@ def get_thermo(
                     thermochemistry.qrrho_gibbs_free_energy_qs
                     * unit_conversion
                 )
+
+            # Warning for imaginary frequency.
+            if len(thermochemistry.imaginary_frequencies) > 0:
+                logger.warning(
+                    f"!! {len(thermochemistry.imaginary_frequencies)} imaginary frequency(s) ignored for {file}."
+                )
+
             if q:
                 log(
                     "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
@@ -414,7 +422,7 @@ def get_thermo(
             index += 1
         except (ValueError, TypeError, IndexError, AttributeError):
             logger.warning(
-                f"!! Frequency information not found, skipped {file}. \n"
+                f"!! Frequency information not found, skipped {file}."
             )
     log("\n")
     logger.info(" * Done. Results saved to 'thermochemistry.dat'.")
