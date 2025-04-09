@@ -88,7 +88,8 @@ jobs:
       - name: Test with pytest and calculate coverage
         shell: bash -l {0}
         run: |
-          pytest --cov-report "xml:coverage.xml"  --cov=.
+          pytest --cov-report "xml:coverage.xml" --cov=. --cov-branch
+          coverage combine || true  # Handle case where no prior data exists
       - name: Create Coverage
         if: ${{ github.event_name == 'pull_request' }}
         uses: orgoro/coverage@v3
@@ -177,4 +178,4 @@ jobs:
         run: pip install -e .[test]
       - name: run tests
         shell: bash -l {0}
-        run: pytest -s -vvvv -l --tb=long tests/
+        run: pytest -s -vvvv -l --tb=long --cov=chemsmart --cov-branch tests/
