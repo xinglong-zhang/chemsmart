@@ -56,16 +56,17 @@ class PyMOLJobRunner(JobRunner):
         return Path(__file__).resolve().parent / "templates"
 
     def _prerun(self, job):
-        self._generate_visualization_style_script()
+        self._generate_visualization_style_script(job)
         self._assign_variables(job)
 
-    def _generate_visualization_style_script(self):
+    def _generate_visualization_style_script(self, job):
         # Define the source and destination file paths
         source_style_file = (
             self.pymol_templates_path / "zhang_group_pymol_style.py"
         )
-        cwd = os.getcwd()
-        dest_style_file = os.path.join(cwd, "zhang_group_pymol_style.py")
+        dest_style_file = os.path.join(
+            job.folder, "zhang_group_pymol_style.py"
+        )
 
         # Check if the style file already exists in the current working directory
         if not os.path.exists(dest_style_file):
@@ -84,7 +85,9 @@ class PyMOLJobRunner(JobRunner):
         self.job_logfile = os.path.abspath(job.logfile)
         self.job_outputfile = os.path.abspath(job.outputfile)
         self.job_errfile = os.path.abspath(job.errfile)
-        self.job_pymol_script = job.pymol_script
+        self.job_pymol_script = os.path.join(
+            self.running_directory, job.pymol_script
+        )
         self.job_render_style = job.render_style
         self.job_vdw = job.vdw
         self.job_quite_mode = job.quite_mode
@@ -172,7 +175,6 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
                 )
                 if os.path.exists(job_pymol_script):
                     command += f" -r {job_pymol_script}"
-            #     pass
             else:
                 raise ValueError(
                     "No PyMOL style file can be found!\n Please specify via -s flag."

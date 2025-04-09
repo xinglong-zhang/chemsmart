@@ -7,7 +7,6 @@ class PyMOLVisualizationJob(PyMOLJob):
     def __init__(
         self,
         molecule,
-        settings,
         label,
         pymol_script=None,
         render_style=None,
@@ -18,7 +17,6 @@ class PyMOLVisualizationJob(PyMOLJob):
     ):
         super().__init__(
             molecule=molecule,
-            settings=settings,
             label=label,
             pymol_script=pymol_script,
             render_style=render_style,

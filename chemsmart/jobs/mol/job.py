@@ -89,6 +89,11 @@ class PyMOLJob(Job):
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
         )
+        if label is None:
+            # by default, if no label is given and the job is read in
+            # from a file, the label is set to the file basename
+            label = os.path.basename(filename).split(".")[0]
+
         logger.info(f"Num of images read: {len(molecules)}.")
         molecules = molecules[string2index_1based(index)]
 
