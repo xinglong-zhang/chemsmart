@@ -18,7 +18,7 @@ class PyMOLJob(Job):
         pymol_script=None,
         render_style=None,
         vdw=None,
-        quite_mode=True,
+        quiet_mode=True,
         command_line_only=True,
         **kwargs,
     ):
@@ -26,7 +26,7 @@ class PyMOLJob(Job):
         self.pymol_script = pymol_script
         self.render_style = render_style
         self.vdw = vdw
-        self.quite_mode = quite_mode
+        self.quiet_mode = quiet_mode
         self.command_line_only = command_line_only
         molecule = molecule.copy()
 
@@ -80,7 +80,7 @@ class PyMOLJob(Job):
         label=None,
         render_style=None,
         vdw=None,
-        quite_mode=True,
+        quiet_mode=True,
         command_line_only=True,
         **kwargs,
     ):
@@ -103,9 +103,8 @@ class PyMOLJob(Job):
             pymol_script=pymol_script,
             render_style=render_style,
             vdw=vdw,
-            quite_mode=quite_mode,
+            quiet_mode=quiet_mode,
             command_line_only=command_line_only,
-            **kwargs,
             **kwargs,
         )
 

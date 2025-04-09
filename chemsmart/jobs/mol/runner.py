@@ -180,7 +180,7 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
             ), f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
             command += f" -r {job.pymol_script}"
 
-        if job.quite_mode:
+        if job.quiet_mode:
             command += " -q"
         if job.command_line_only:
             command += " -c"

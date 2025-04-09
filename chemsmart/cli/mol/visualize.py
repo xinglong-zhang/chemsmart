@@ -40,13 +40,13 @@ def visualize(
 
     return PyMOLVisualizationJob(
         molecule=molecules,
-        settings=None,
         label=label,
         pymol_script=style_file,
         render_style=render_style,
         vdw=vdw,
-        quite_mode=quiet,
+        quiet_mode=quiet,
         command_line_only=command_line_only,
+        settings=None,
         skip_completed=skip_completed,
         **kwargs,
     )

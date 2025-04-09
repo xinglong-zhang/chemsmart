@@ -11,7 +11,7 @@ class PyMOLVisualizationJob(PyMOLJob):
         pymol_script=None,
         render_style=None,
         vdw=None,
-        quite_mode=True,
+        quiet_mode=True,
         command_line_only=True,
         **kwargs,
     ):
@@ -21,7 +21,7 @@ class PyMOLVisualizationJob(PyMOLJob):
             pymol_script=pymol_script,
             render_style=render_style,
             vdw=vdw,
-            quite_mode=quite_mode,
+            quiet_mode=quiet_mode,
             command_line_only=command_line_only,
             **kwargs,
         )
