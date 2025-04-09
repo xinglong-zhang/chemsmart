@@ -240,6 +240,7 @@ class TestThermochemistryCO2:
         assert os.path.exists(gaussian_co2_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.job_type == "opt"
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
         assert mol.empirical_formula == "CO2"
@@ -677,6 +678,7 @@ class TestThermochemistryCO2:
         assert os.path.exists(orca_co2_output)
         orca_out = ORCAOutput(filename=orca_co2_output)
         assert orca_out.normal_termination
+        assert orca_out.job_type == "opt"
         assert orca_out.natoms == 3
         mol = orca_out.molecule
         assert mol.empirical_formula == "CO2"
@@ -1162,6 +1164,7 @@ class TestThermochemistryHe:
         assert os.path.exists(gaussian_he_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_he_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.job_type == "opt"
         assert g16_output.num_atoms == 1
         mol = g16_output.molecule
         assert mol.empirical_formula == "He"
@@ -1292,6 +1295,7 @@ class TestThermochemistryHe:
         assert os.path.exists(orca_he_output_freq)
         orca_out = ORCAOutput(filename=orca_he_output_freq)
         assert orca_out.normal_termination
+        #        assert orca_out.job_type == "opt"
         assert orca_out.natoms == 1
         mol = orca_out.molecule
         assert mol.empirical_formula == "He"
@@ -1377,6 +1381,7 @@ class TestThermochemistryH2O:
         assert os.path.exists(gaussian_mp2_outputfile)
         g16_output = Gaussian16Output(filename=gaussian_mp2_outputfile)
         assert g16_output.normal_termination
+        assert g16_output.job_type == "opt"
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
         assert mol.empirical_formula == "H2O"
@@ -1539,6 +1544,7 @@ class TestThermochemistryH2O:
         assert os.path.exists(water_output_gas_path)
         orca_out = ORCAOutput(filename=water_output_gas_path)
         assert orca_out.normal_termination
+        assert orca_out.job_type == "opt"
         assert orca_out.natoms == 3
         mol = orca_out.molecule
         assert mol.empirical_formula == "H2O"

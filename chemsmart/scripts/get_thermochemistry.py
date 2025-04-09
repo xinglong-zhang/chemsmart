@@ -97,6 +97,13 @@ os.environ["OMP_NUM_THREADS"] = "1"
     ),
     help="Unit of energetic values.",
 )
+@click.option(
+    "--scf",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Only output SCF energy without thermochemical corrections.",
+)
 @click.argument("filenames", nargs=-1, type=click.Path(exists=True))
 def get_thermo(
     f,
@@ -110,14 +117,15 @@ def get_thermo(
     qs,
     qh,
     unit,
+    scf,
     filenames,
 ):
     """Thermochemistry calculation script using quasi-RRHO approximation."""
 
     def log(message, output="thermochemistry.dat"):
         logger.info(message)
-        with open(output, "a") as f:
-            f.write(message)
+        with open(output, "a") as out:
+            out.write(message)
 
     if f != 100.0:
         fs = f
@@ -183,6 +191,31 @@ def get_thermo(
         + " " * 25
         + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n\n"
     )
+
+    # Only output SCF energy without thermochemical corrections.
+    if scf:
+        log(" " * 19 + f" * SCF Energies (in {energy_unit}): \n\n")
+        log("   " + " " * 19 + "{:<50} {:>22}\n".format("Structure", "E"))
+        log("   " + " " * 19 + "=" * 73 + "\n")
+        index = 1
+        for file in files:
+            scf_energy = qRRHOThermochemistry(
+                file,
+                temperature=temperature,
+            )
+            structure = os.path.splitext(os.path.basename(file))[0]
+            energy = scf_energy.energies * unit_conversion
+            log(
+                " " * 19
+                + "{:2} {:50} {:22.6f}\n".format(
+                    index,
+                    structure,
+                    energy,
+                )
+            )
+            index += 1
+        return
+
     log("   " + "┌" + "─" * 106 + "┐" + "\n")
     log(
         "   "
@@ -323,7 +356,6 @@ def get_thermo(
                     thermochemistry.qrrho_gibbs_free_energy_qs
                     * unit_conversion
                 )
-
             if q:
                 log(
                     "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
@@ -381,7 +413,9 @@ def get_thermo(
                 )
             index += 1
         except (ValueError, TypeError, IndexError, AttributeError):
-            pass
+            logger.warning(
+                f"!! Frequency information not found, skipped {file}. \n"
+            )
     log("\n")
     logger.info(" * Done. Results saved to 'thermochemistry.dat'.")
 
