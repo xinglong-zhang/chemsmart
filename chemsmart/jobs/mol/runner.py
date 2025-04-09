@@ -56,8 +56,17 @@ class PyMOLJobRunner(JobRunner):
         return Path(__file__).resolve().parent / "templates"
 
     def _prerun(self, job):
-        self._generate_visualization_style_script(job)
         self._assign_variables(job)
+
+    def _assign_variables(self, job):
+        """Sets proper file paths for job input, output, and error files."""
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+        self.job_basename = job.label
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        self.job_logfile = os.path.abspath(job.logfile)
+        self.job_outputfile = os.path.abspath(job.outputfile)
+        self.job_errfile = os.path.abspath(job.errfile)
 
     def _generate_visualization_style_script(self, job):
         # Define the source and destination file paths
@@ -75,23 +84,7 @@ class PyMOLJobRunner(JobRunner):
                 f"Copying file from {source_style_file} to {dest_style_file}."
             )
             shutil.copy(source_style_file, dest_style_file)
-
-    def _assign_variables(self, job):
-        """Sets proper file paths for job input, output, and error files."""
-        self.running_directory = job.folder
-        logger.debug(f"Running directory: {self.running_directory}")
-        self.job_basename = job.label
-        self.job_inputfile = os.path.abspath(job.inputfile)
-        self.job_logfile = os.path.abspath(job.logfile)
-        self.job_outputfile = os.path.abspath(job.outputfile)
-        self.job_errfile = os.path.abspath(job.errfile)
-        self.job_pymol_script = os.path.join(
-            self.running_directory, job.pymol_script
-        )
-        self.job_render_style = job.render_style
-        self.job_vdw = job.vdw
-        self.job_quite_mode = job.quite_mode
-        self.job_command_line_only = job.command_line_only
+        return dest_style_file
 
     def _write_input(self, job):
         # write to .xyz file if the supplied file is not .xyz
@@ -119,10 +112,6 @@ class PyMOLJobRunner(JobRunner):
                 f"File {job.inputfile} already exists!\n"
                 f"Will procceed to visualize this file instead!"
             )
-
-    def _get_command(self):
-        # subclass to implement
-        pass
 
     def _update_os_environ(self, job):
         # no envs to update for pymol
@@ -164,27 +153,38 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         "pymol_visualization",
     ]
 
-    def _get_command(self):
+    def _get_command(self, job):
         exe = self.executable
-        command = f"{exe} {self.job_inputfile}"
+        command = f"{exe} {job.inputfile}"
         # get style file
-        if self.job_pymol_script is None:
-            if os.path.exists("zhang_group_pymol_style.py"):
-                job_pymol_script = os.path.abspath(
-                    "zhang_group_pymol_style.py"
+        if job.pymol_script is None:
+            if os.path.exists(
+                os.path.join(job.folder, "zhang_group_pymol_style.py")
+            ):
+                job_pymol_script = os.path.join(
+                    job.folder, "zhang_group_pymol_style.py"
                 )
-                if os.path.exists(job_pymol_script):
-                    command += f" -r {job_pymol_script}"
             else:
-                raise ValueError(
-                    "No PyMOL style file can be found!\n Please specify via -s flag."
+                logger.info(
+                    "Using default zhang_group_pymol_style for rendering."
                 )
+                job_pymol_script = self._generate_visualization_style_script(
+                    job
+                )
+            if os.path.exists(job_pymol_script):
+                command += f" -r {job_pymol_script}"
+        else:
+            # using user-defined style file
+            assert os.path.exists(
+                job.pymol_script
+            ), f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
+            command += f" -r {job.pymol_script}"
 
-        if self.job_quite_mode:
+        if job.quite_mode:
             command += " -q"
-        if self.job_command_line_only:
+        if job.command_line_only:
             command += " -c"
-        if self.job_render_style is None:
+        if job.render_style is None:
             if os.path.exists("zhang_group_pymol_style.py"):
                 # defaults to using pymol_style if not specified
                 command += f' -d "pymol_style {self.job_basename}'
@@ -192,19 +192,19 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
                 # no render style and no style file present
                 command += ' -d "'
         else:
-            if self.job_render_style.lower() == "pymol":
+            if job.render_style.lower() == "pymol":
                 command += f' -d "pymol_style {self.job_basename}'
-            elif self.job_render_style.lower() == "cylview":
+            elif job.render_style.lower() == "cylview":
                 command += f' -d "cylview_style {self.job_basename}'
             else:
                 raise ValueError(
-                    f"The style {self.job_render_style} is not available!"
+                    f"The style {job.render_style} is not available!"
                 )
 
-        if self.job_vdw:
+        if job.vdw:
             command += f"; add_vdw {self.job_basename}"
 
         # save pse file by default
-        command += f'; zoom; save {self.job_outputfile}; quit"'
+        command += f'; zoom; save {job.outputfile}; quit"'
 
         return command
