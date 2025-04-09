@@ -477,7 +477,7 @@ class ORCAOutput(ORCAFileMixin):
             symbols=self.symbols,
             charge=self.charge,
             multiplicity=self.multiplicity,
-            frozen_atoms=None,  # ORCA doesn’t typically specify frozen atoms in output (IS THIS CORRECT?)
+            frozen_atoms=None,  # TODO: ORCA can do frozen atoms, but parsing from output file need to be implemented
             pbc_conditions=(
                 self.list_of_pbc_conditions
                 if hasattr(self, "list_of_pbc_conditions")
