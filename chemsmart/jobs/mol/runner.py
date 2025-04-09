@@ -98,19 +98,24 @@ class PyMOLJobRunner(JobRunner):
             if isinstance(mol, list):
                 if isinstance(mol[0], Molecule):
                     logger.info(
-                        f"Writing list of molecules to {job.inputfile}"
+                        f"Writing list of molecules: {mol} to {job.inputfile}"
                     )
                     for m in mol:
-                        m.write(job.inputfile, format="xyz")
+                        m.write(job.inputfile, format="xyz", mode="a")
                 else:
                     raise ValueError(
                         f"Object {mol[0]} is not of Molecule type!"
                     )
             elif isinstance(mol, Molecule):
                 logger.info(f"Writing Molecule to {job.inputfile}.")
-                mol.write(job.inputfile, format="xyz")
+                mol.write(job.inputfile, format="xyz", mode="w")
             else:
                 raise ValueError(f"Object {mol} is not of Molecule type!")
+        else:
+            logger.warning(
+                f"File {job.inputfile} already exists!\n"
+                f"Will procceed to visualize this file instead!"
+            )
 
     def _get_command(self):
         # subclass to implement

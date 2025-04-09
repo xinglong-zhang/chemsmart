@@ -454,10 +454,10 @@ class Molecule:
                 f"Program {program} is not supported for writing coordinates."
             )
 
-    def write(self, filename, format="xyz", **kwargs):
+    def write(self, filename, format="xyz", mode="w", **kwargs):
         """Write the molecule to a file."""
         if format.lower() == "xyz":
-            self.write_xyz(filename, **kwargs)
+            self.write_xyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
         # elif format.lower() == "mol":
@@ -465,9 +465,9 @@ class Molecule:
         else:
             raise ValueError(f"Format {format} is not supported for writing.")
 
-    def write_xyz(self, filename, **kwargs):
+    def write_xyz(self, filename, mode, **kwargs):
         """Write the molecule to an XYZ file."""
-        with open(filename, "a+") as f:
+        with open(filename, mode) as f:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
                 # energy found in file, e.g., .out, .log
