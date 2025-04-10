@@ -8,13 +8,14 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
+#from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
     standard_coord_pattern,
+    orca_frozen_atoms_output_pattern,
 )
 from chemsmart.utils.utils import is_float, string2index_1based
 
@@ -160,6 +161,53 @@ class ORCAOutput(ORCAFileMixin):
         # Return CoordinateBlock instance
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
+
+    @cached_property
+    def get_frozen_atoms(self):
+        return self._get_constraints()["frozen_atoms"]
+
+    @cached_property
+    def get_constrained_bond_angles(self):
+        return self._get_constraints()["constrained_bond_angles"]
+
+    @cached_property
+    def get_constrained_bond_lengths(self):
+        return self._get_constraints()["constrained_bond_lengths"]
+
+    @cached_property
+    def get_constrained_dihedrals(self):
+        return self._get_constraints()["constrained_dihedrals"]
+
+    def _get_constraints(self):
+        """Get frozen atoms from the output file."""
+        constraints={}
+        frozen_atoms = []
+        constrained_bond_angles=[]
+        constrained_bond_lengths=[]
+        constrained_dihedrals=[]
+        constrained_bond_length_pattern= r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)\s+C\s*\}"
+        constrained_bond_angles_pattern= r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
+        constrained_dihedrals_pattern= r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
+        for line in self.contents:
+            frozen_match=re.match(orca_frozen_atoms_output_pattern, line)
+            if frozen_match:
+                if int(line.split()[3]) not in frozen_atoms:
+                    frozen_atoms.append(int(line.split()[3]))
+            elif re.match(constrained_bond_length_pattern,line):
+                #for constraints other than frozen atoms, will extract from the initial input block
+                constrained_bond_lengths.append(f"{line.split()[4]}-{line.split()[5]}")
+            elif re.match(constrained_bond_angles_pattern,line):
+                constrained_bond_angles.append(f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}")
+            elif re.match(constrained_dihedrals_pattern,line):
+                constrained_dihedrals.append(f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}")
+        for key,val in [
+            ("frozen_atoms", frozen_atoms),
+            ("constrained_bond_lengths", constrained_bond_lengths),
+            ("constrained_bond_angles", constrained_bond_angles),
+            ("constrained_dihedrals", constrained_dihedrals),
+        ]:
+                constraints[key] = val
+        return constraints
 
     @cached_property
     def optimized_output_lines(self):

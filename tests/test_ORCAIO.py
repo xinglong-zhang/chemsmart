@@ -10,6 +10,7 @@ from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
 from chemsmart.io.orca.route import ORCARoute
+from tests.conftest import orca_fixed_atoms
 
 
 class TestORCARoute:
@@ -1766,6 +1767,15 @@ class TestORCAOutput:
         assert orca_out.extrapolation_basis is None
         assert orca_out.natoms == 27
         assert orca_out.normal_termination is False
+
+    def test_get_constraints(self, orca_fixed_atoms, orca_fixed_dihedral, orca_fixed_bond):
+        fixed_atoms = ORCAOutput(filename=orca_fixed_atoms)
+        assert fixed_atoms.get_frozen_atoms== [2,11]
+        fixed_dihedral = ORCAOutput(filename=orca_fixed_dihedral)
+        assert fixed_dihedral.get_constrained_dihedrals == ['3-12-13-17']
+        fixed_bond=ORCAOutput(filename=orca_fixed_bond)
+        assert fixed_bond.get_constrained_bond_lengths ==['8-9']
+        assert fixed_bond.get_constrained_bond_angles == ['1-5-8']
 
 
 class TestORCAEngrad:
