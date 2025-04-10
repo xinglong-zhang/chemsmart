@@ -1,9 +1,19 @@
 import os.path
+import shutil
+
+import pytest
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 
 
+@pytest.fixture(scope="session")
+def skip_if_no_pymol():
+    if shutil.which("pymol") is None:
+        pytest.skip("PyMOL not installed")
+
+
+@pytest.mark.usefixtures("skip_if_no_pymol")
 class TestPyMOLJobs:
     def test_pymol_visualization_job_on_gaussian_com_file(
         self,
