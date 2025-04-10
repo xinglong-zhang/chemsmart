@@ -615,7 +615,7 @@ class ORCAIRCJobSettings(ORCAJobSettings):
 
 
 class ORCAMultiscaleJobSettings(ORCAJobSettings):
-    """Settings for ORCA multiscale (QM/MM) job.
+    """Settings for ORCA multiscale job.
     This includes five types of methods:
     1. Additive QMMM.
     2. Subtractive QM/QM2 (2-layered ONIOM).
@@ -634,7 +634,6 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
         mm_method=None,  # level-of-theory for MM
         qm_atoms=None,
         qm2_atoms=None,
-        mm_atoms=None,
         charge_total=None,
         mult_total=None,
         charge_medium=None,
@@ -647,8 +646,34 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
         qm_h_bond_length=None,  # similar to scale factors in Gaussian ONIOM jobs
         delete_la_double_counting=False,
         delete_la_bond_double_counting_atoms=False,
+        electronic_interaction=None,  # optional
         **kwargs,
     ):
+        """
+        Args:
+            jobtype: str, type of multiscale job (e.g. "QMMM", "QM/QM2", "QM/QM2/MM", "MOL-CRYSTAL-QMMM", "IONIC-CRYSTAL-QMMM")
+            qm_functional: str, functional for QM level of theory
+            qm_basis: str, basis set for QM level of theory
+            qm2_functional: str, functional for QM2 level of theory
+            qm2_basis: str, basis set for QM2 level of theory
+            qm2_method: str, method for QM2 level of theory (e.g. "XTB", "HF-3C", "PBEH-3C")
+            mm_method: str, method for MM level of theory (e.g. "MMFF", "AMBER", "CHARMM")
+            qm_atoms: list of int, indices of QM atoms
+            qm2_atoms: list of int, indices of QM2 atoms
+            charge_total: int, total charge of the system
+            mult_total: int, total multiplicity of the system
+            charge_medium: int, charge of the medium system (QM2) if available
+            mult_medium: int, multiplicity of the medium system (QM2) if available
+            charge_qm: int, charge of the QM system
+            mult_qm: int, multiplicity of the QM system
+            qm2_solvation: str, solvation model for QM2 level of theory (e.g. "CPCM", "SMD")
+            active_atoms: list of int, indices of active atoms in the system, default whole system
+            optregion_fixed_atoms: list of int, indices of fixed atoms in the optimization region
+            qm_h_bond_length: dictionary, where the key is atom types of two bonding atoms (in tuple), and values are customized bond length
+            delete_la_double_counting: bool, whether to neglect bends (QM2-QM1-MM1) and torsions (QM3-QM2-QM1-MM1), default true
+            delete_la_bond_double_counting_atoms: bool, whether to neglect bonds (QM1-MM1), default true
+            electronic_interaction: str, whether to use electronic (default)/mechanical embedding between QM and MM region
+        """
         super().__init__(**kwargs)
         self.jobtype = jobtype
         self.qm_functional = qm_functional
@@ -659,7 +684,6 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
         self.mm_method = mm_method
         self.qm_atoms = qm_atoms
         self.qm2_atoms = qm2_atoms
-        self.mm_atoms = mm_atoms
         self.charge_total = charge_total
         self.mult_total = mult_total
         self.charge_medium = charge_medium
@@ -674,6 +698,7 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
         self.delete_la_bond_double_counting_atoms = (
             delete_la_bond_double_counting_atoms
         )
+        self.electronic_interaction = electronic_interaction
 
     @property
     def qmmm_block(self):
@@ -745,12 +770,100 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
             level_of_theory += f"/{self.qm2_level_of_theory}"
         if self.solvent_model is not None:
             level_of_theory += f" {self.solvent_model}"
+        if self.qm2_method.lower() == "xtb" and self.qm2_solvation in [
+            "ALPB(Water)",
+            "DDCOSMO(Water)",
+            "CPCMX(Water)",
+        ]:
+            level_of_theory += f" {self.qm2_solvation}"
+        elif (
+            self.qm2_level_of_theory != "QM2"
+            and self.qm2_solvation == "CPCM(Water)"
+        ):
+            level_of_theory += f" {self.qm2_solvation}"
         return level_of_theory
 
     def _write_qmmm_block(self):
         """Writes the QMMM block options.
 
         QMMM block input example below:
+        !QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq
         %qmmm
-            QM1"""
-        return None
+        ORCAFFFilename "peptideChain.ORCAFF.prms"
+        QMAtoms {16:33 68:82} end
+        QM2Atoms {0:12 83:104} end
+        ActiveAtoms { 0:38 65:120} end
+        Charge_Medium 0
+        end
+        *pdbfile -1 1 peptideChain.pdb
+        """
+        qm_block = {}
+        full_qm_block = "%qmmm\n"
+        qm_block["qm_atoms"] = f"QMAtoms {''.join(self.qm_atoms)} end "
+        if self.qm2_atoms:
+            qm_block["qm2_atoms"] = f"QM2Atoms {''.join(self.qm2_atoms)} end "
+            qm_block["charge"] = f"Charge_Medium {self.charge_medium}"
+            qm_block["multiplicity"] = f"Mult_Medium {self.mult_medium}"
+        else:
+            qm_block["charge"] = f"Charge_Total {self.charge_total}"
+            qm_block["multiplicity"] = f"Mult_Total {self.mult_total}"
+        # note that in ORCA multiscale jobs the total/medium charge/multiplicity is specified in %qmmm block,
+        # and QM charge/multiplicity are specified in the coordination block
+        if self.qm2_solvation is not None:
+            qm_block["qm2_solvation"] = f"solv_scheme {self.qm2_solvation}"
+        if self.active_atoms is not None:
+            qm_block["active_atoms"] = (
+                f"ActiveAtoms {''.join(self.active_atoms)} end"
+            )
+        if self._get_level_of_theory() in ["!QM/QM2", "!QM/QM2/MM"]:
+            if self.qm2_method is not None:
+                # the case where QM2 method is provided in a file
+                qm_block["qm2_method"] = (
+                    f'QM2CustomFile "{self.qm2_method}" end'
+                )
+            else:
+                qm_block["qm2_funtional"] = (
+                    f'QM2CUSTOMMETHOD "{self.qm2_functional}" end'
+                )
+                qm_block["qm2_basis"] = (
+                    f'QM2CUSTOMBASIS "{self.qm2_basis}" end'
+                )
+
+        # todo:Use_Active_InfoFromPDB true
+        qm_block["fixed_atoms"] = (
+            f"OptRegion_FixedAtoms {''.join(self.optregion_fixed_atoms)} end"
+        )
+        if self.qm_h_bond_length is not None:
+            h_bond_length = ""
+            for atom_pair, bond_length in self.qm_h_bond_length.items():
+                h_bond_length += (
+                    f"Dist_{atom_pair[0]}_{atom_pair[1]} {bond_length}\n"
+                )
+            qm_block["h_bond_length"] = h_bond_length
+        if self.delete_la_double_counting is True:
+            qm_block["delete_la_double_counting"] = (
+                "Delete_LA_Double_Counting true"
+            )
+        if self.delete_la_bond_double_counting_atoms is True:
+            qm_block["delete_la_bond_double_counting_atoms"] = (
+                "DeleteLABondDoubleCounting true"
+            )
+        for key, val in qm_block:
+            full_qm_block += f"{val}\n"
+        full_qm_block += f"end\n"
+        # todo:crystal-QMMM
+        mm_block = "%mm\n"
+        if self.jobtype.upper() in [
+            "QM/MM",
+            "QM/QM2/MM",
+            "IONIC-CRYSTAL-QMMM",
+        ]:
+            assert (
+                self.mm_method is not None
+            ), f"Force field file is missing for {self.jobtype} job!"
+            mm_block += f'ORCAFFFilename "{self.mm_method}"'
+            mm_block += f"end\n"
+        if "end" in mm_block:
+            return full_qm_block, mm_block
+        else:
+            return full_qm_block
