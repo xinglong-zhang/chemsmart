@@ -7,7 +7,6 @@ import click
 import yaml
 
 from chemsmart.utils.logger import create_logger
-from chemsmart.utils.utils import run_command
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,7 @@ class Config:
     @property
     def conda_path(self):
         """Define the path for the conda environment."""
-        conda_path = run_command(["which", "conda"])
+        conda_path = shutil.which("conda")
         if not os.path.exists(conda_path):
             raise FileNotFoundError(
                 f"Conda not found: {conda_path}. Please install conda!"

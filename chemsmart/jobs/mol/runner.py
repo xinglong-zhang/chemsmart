@@ -9,7 +9,6 @@ from shutil import rmtree
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.utils import run_command
 
 pt = PeriodicTable()
 
@@ -43,7 +42,7 @@ class PyMOLJobRunner(JobRunner):
     @property
     def executable(self):
         """Define the path for the PyMOL executable."""
-        pymol_path = run_command(["which", "pymol"])
+        pymol_path = shutil.which("pymol")
         if not os.path.exists(pymol_path):
             raise FileNotFoundError(
                 f"PyMOL not found: {pymol_path}. Please install PyMOL!"
