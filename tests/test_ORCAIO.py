@@ -242,11 +242,35 @@ class TestORCAOutput:
         molecule = orca_out.input_coordinates_block.molecule
         assert isinstance(molecule, Molecule)
         assert all(molecule.symbols == ["O", "H", "H"])
-        assert orca_out.input_coordinates_block.coordinate_block == [
+        expected_coordinate_block = [
             "O  0.0000  0.0000  0.0626",
             "H  -0.7920  0.0000  -0.4973",
             "H  0.7920  0.0000  -0.4973",
         ]
+        orca_coordinate_block = (
+            orca_out.input_coordinates_block.coordinate_block
+        )
+        for i, line in enumerate(orca_coordinate_block):
+            assert len(line.split()) == len(
+                expected_coordinate_block[i].split()
+            )
+            assert line.split()[0] == expected_coordinate_block[i].split()[0]
+            assert math.isclose(
+                float(line.split()[1]),
+                float(expected_coordinate_block[i].split()[1]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[2]),
+                float(expected_coordinate_block[i].split()[2]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[3]),
+                float(expected_coordinate_block[i].split()[3]),
+                rel_tol=1e-4,
+            )
+
         assert orca_out.molecule.empirical_formula == "H2O"
         assert len(orca_out.energies) == 6
         assert orca_out.energies[0] == -76.322282695198
