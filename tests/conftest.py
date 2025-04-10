@@ -130,6 +130,7 @@ def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
 def gaussian_qmmm_inputfile_2layer(gaussian_qmmm_input_test_directory):
     return os.path.join(gaussian_qmmm_input_test_directory, "CH3CH3.com")
 
+
 @pytest.fixture()
 def gaussian_qmmm_inputfile_3layer(gaussian_qmmm_input_test_directory):
     return os.path.join(gaussian_qmmm_input_test_directory, "CH3COOH.com")
