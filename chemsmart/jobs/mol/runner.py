@@ -43,9 +43,9 @@ class PyMOLJobRunner(JobRunner):
     def executable(self):
         """Define the path for the PyMOL executable."""
         pymol_path = shutil.which("pymol")
-        if not os.path.exists(pymol_path):
+        if pymol_path is None or not os.path.exists(pymol_path):
             raise FileNotFoundError(
-                f"PyMOL not found: {pymol_path}. Please install PyMOL!"
+                "PyMOL executable not found in PATH. Please install PyMOL!"
             )
         return pymol_path
 
