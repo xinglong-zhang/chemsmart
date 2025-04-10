@@ -8,6 +8,7 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
@@ -102,7 +103,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def input_coordinates_block(self):
         """Obtain the coordinate block from the input that is printed in the outputfile."""
-        return self._get_input_structure_coordinates_block_in_output()
+        return self._get_first_structure_coordinates_block_in_output()
 
     def _get_input_structure_coordinates_block_in_output(self):
         """In ORCA output file, the input structure is rewritten and for single points,
@@ -114,6 +115,7 @@ class ORCAOutput(ORCAFileMixin):
         | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
         | 23>   H   0.75520524233942      0.00000000000000     -0.50967030177046
         | 24> *.
+        # this will not work if the input file is supplied separately as .xyz file
         """
         coordinates_block_lines_list = []
         pattern = re.compile(orca_input_coordinate_in_output)
@@ -128,6 +130,34 @@ class ORCAOutput(ORCAFileMixin):
                         coordinates_block_lines_list.append(coord_line)
                     if len(line) == 0:
                         break
+        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+        return cb
+
+    def _get_first_structure_coordinates_block_in_output(self):
+        """Obtain the first structure coordinates block in the output file."""
+        coordinates_block_lines_list = []
+        pattern = re.compile(standard_coord_pattern)
+        found_header = False
+
+        for line in self.contents:
+            # Start collecting after finding the header
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                found_header = True
+                continue  # Skip the header line itself
+
+            # If we've found the header, process lines
+            if found_header:
+                match = pattern.match(line)
+                if match:
+                    # Extract the last 4 elements (symbol, x, y, z) and join with double spaces
+                    coord_line = "  ".join(line.split()[-4:])
+                    coordinates_block_lines_list.append(coord_line)
+                elif (
+                    coordinates_block_lines_list
+                ):  # Stop if we hit a non-matching line after collecting coords
+                    break
+
+        # Return CoordinateBlock instance
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 
@@ -394,60 +424,112 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def all_structures(self):
-        """Obtain all structures in ORCA output file, including intermediate points."""
+        """Obtain all structures in ORCA output file, including intermediate points if present.
+        Include corresponding energies and forces where available."""
 
-        def create_molecule_list(orientations, num_structures):
-            """Helper function to create Molecule objects."""
-            if self.forces_in_eV_per_angstrom is not None:
-                forces = self.forces_in_eV_per_angstrom
-            else:
-                forces = [None] * num_structures
+        # Extract all raw structure data
+        orientations = self._get_all_orientations()
+        if not orientations:
+            return []  # No structures found
 
-            return [
-                Molecule(
-                    symbols=self.symbols,
-                    positions=orientations[i],
-                    charge=self.charge,
-                    multiplicity=self.multiplicity,
-                    energy=self.energies_in_eV[i],
-                    forces=forces[i],
-                )
-                for i in range(num_structures)
-            ]
+        # Clean duplicate structures (e.g., last structure might repeat in some cases)
+        clean_duplicate_structure(orientations)
 
-        all_structures = self._get_all_structures()
-        orientations = [m.positions for m in all_structures]
+        # Handle PBC (default to None if not present in ORCA output)
+        orientations_pbc = self._get_pbc_conditions() or [None] * len(
+            orientations
+        )
 
+        # Prepare energies and forces (adjust for length mismatches)
+        energies = (
+            self.energies_in_eV
+            if self.energies_in_eV is not None
+            else [None] * len(orientations)
+        )
+        forces = (
+            self.forces_in_eV_per_angstrom
+            if self.forces_in_eV_per_angstrom is not None
+            else [None] * len(orientations)
+        )
+
+        # Handle job termination
         if self.normal_termination:
-            if (
-                len(orientations) == 1
-            ):  # normal termination and has only one structure --> SP Job
-                return all_structures
-            num_structures_to_use = len(orientations) - 1
-            orientations = orientations[:-1]
-            molecules_list = create_molecule_list(
-                orientations=orientations,
-                num_structures=num_structures_to_use,
-            )
-            optimized_molecule = Molecule(
-                symbols=self.symbols,
-                positions=orientations[-1],
-                charge=self.charge,
-                multiplicity=self.multiplicity,
-                energy=self.energies_in_eV[-1],
-                forces=None,
-            )  # last gradient/forces calculation is not done, if the geometry is optimized
-            molecules_list.append(optimized_molecule)
-            return molecules_list
+            num_structures = len(orientations)
         else:
-            # remove last structure if the job did not terminate normally
-            num_structures_to_use = len(orientations) - 1
-        return create_molecule_list(
-            orientations,
+            # For abnormal termination, exclude the last structure (likely incomplete)
+            num_structures = max(0, len(orientations) - 1)
+            if num_structures == 0:
+                return []
+
+        # Truncate energies/forces to match number of structures
+        num_structures_to_use = min(num_structures, len(energies), len(forces))
+        orientations = orientations[:num_structures_to_use]
+        orientations_pbc = orientations_pbc[:num_structures_to_use]
+        energies = energies[:num_structures_to_use]
+        forces = forces[:num_structures_to_use]
+
+        # Create molecule list
+        all_structures = create_molecule_list(
+            orientations=orientations,
+            orientations_pbc=orientations_pbc,
+            energies=energies,
+            forces=forces,
+            symbols=self.symbols,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=None,  # TODO: ORCA can do frozen atoms, but parsing from output file need to be implemented
+            pbc_conditions=(
+                self.list_of_pbc_conditions
+                if hasattr(self, "list_of_pbc_conditions")
+                else None
+            ),
             num_structures=num_structures_to_use,
         )
 
+        # Filter optimized steps if requested (e.g., for geometry optimization)
+        if (
+            hasattr(self, "optimized_steps_indices")
+            and self.optimized_steps_indices
+            and not hasattr(self, "include_intermediate")
+        ):
+            all_structures = [
+                all_structures[i] for i in self.optimized_steps_indices
+            ]
+
+        logger.info(
+            f"Total number of structures located: {len(all_structures)}"
+        )
+        return all_structures
+
+    def _get_all_orientations(self):
+        """Extract all Cartesian coordinate blocks from the ORCA output."""
+        orientations = []
+        for i, line in enumerate(self.contents):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                coordinate_lines = []
+                for line_j in self.contents[i + 2 :]:  # Skip header lines
+                    if (
+                        not line_j.strip() or "----" in line_j
+                    ):  # End of coordinate block
+                        break
+                    pattern = re.compile(standard_coord_pattern)
+                    if pattern.match(line_j):
+                        coordinate_lines.append(
+                            [float(val) for val in line_j.split()[1:]]
+                        )
+                if coordinate_lines:
+                    orientations.append(np.array(coordinate_lines))
+        return orientations
+
+    def _get_pbc_conditions(self):
+        """Extract periodic boundary conditions if present (rare in ORCA outputs)."""
+        # ORCA rarely includes PBC in standard outputs; this is a placeholder
+        # If your ORCA output includes lattice vectors, implement parsing here
+        return None  # Default: no PBC unless explicitly parsed
+
     def _get_all_structures(self):
+        """Extract all Cartesian coordinate blocks from the ORCA output.
+        This does not however include energy and forces."""
         structures = []
         for i, line in enumerate(self.contents):
             if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
