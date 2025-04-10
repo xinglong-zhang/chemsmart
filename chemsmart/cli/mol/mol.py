@@ -142,7 +142,7 @@ def mol(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give Gaussian input filename or name to be be appended, but not both!"
+            "Only give Gaussian input filename or name to be appended, but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
