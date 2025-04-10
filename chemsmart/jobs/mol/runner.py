@@ -3,6 +3,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys  # Add this import for sys.platform
 from pathlib import Path
 from shutil import rmtree
 
@@ -41,11 +42,13 @@ class PyMOLJobRunner(JobRunner):
 
     @property
     def executable(self):
-        """Define the path for the PyMOL executable."""
-        pymol_path = shutil.which("pymol")
+        """Define the path for the PyMOL executable, handling Windows-specific naming."""
+        # Use pymol.exe on Windows, pymol on Unix-like systems
+        pymol_cmd = "pymol.exe" if sys.platform == "win32" else "pymol"
+        pymol_path = shutil.which(pymol_cmd)
         if pymol_path is None or not os.path.exists(pymol_path):
             raise FileNotFoundError(
-                "PyMOL executable not found in PATH. Please install PyMOL!"
+                f"PyMOL executable '{pymol_cmd}' not found in PATH. Please install PyMOL!"
             )
         return pymol_path
 
@@ -109,7 +112,7 @@ class PyMOLJobRunner(JobRunner):
         else:
             logger.warning(
                 f"File {job.inputfile} already exists!\n"
-                f"Will procceed to visualize this file instead!"
+                f"Will proceed to visualize this file instead!"
             )
 
     def _update_os_environ(self, job):
