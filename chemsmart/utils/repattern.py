@@ -42,4 +42,6 @@ sdf_pattern = (
     r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
     r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
 )
-orca_frozen_atoms_output_pattern=r"Will constrain atom (\d+) coordinate (\d+)"
+orca_frozen_atoms_output_pattern = (
+    r"Will constrain atom (\d+) coordinate (\d+)"
+)

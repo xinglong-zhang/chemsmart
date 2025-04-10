@@ -654,17 +654,23 @@ def hirshfeld_full_print(orca_outputs_directory):
 def water_engrad_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.engrad")
 
+
 @pytest.fixture()
 def orca_fixed_atoms(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "phenol_fixed_atoms.out")
 
+
 @pytest.fixture()
 def orca_fixed_dihedral(orca_outputs_directory):
-    return os.path.join(orca_outputs_directory, "phenylalanine_fixed_dihedral.out")
+    return os.path.join(
+        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+    )
+
 
 @pytest.fixture()
 def orca_fixed_bond(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "ethanol_fixed_bond.out")
+
 
 @pytest.fixture()
 def orca_errors_directory(orca_test_directory):

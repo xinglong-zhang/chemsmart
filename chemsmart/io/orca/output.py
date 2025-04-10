@@ -15,7 +15,6 @@ from chemsmart.utils.repattern import (
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
     standard_coord_pattern,
-    orca_frozen_atoms_output_pattern,
 )
 from chemsmart.utils.utils import is_float, string2index_1based
 
@@ -133,6 +132,65 @@ class ORCAOutput(ORCAFileMixin):
                         break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
+
+    @cached_property
+    def get_frozen_atoms(self):
+        return self._get_constraints()["frozen_atoms"]
+
+    @cached_property
+    def get_constrained_bond_angles(self):
+        return self._get_constraints()["constrained_bond_angles"]
+
+    @cached_property
+    def get_constrained_bond_lengths(self):
+        return self._get_constraints()["constrained_bond_lengths"]
+
+    @cached_property
+    def get_constrained_dihedrals(self):
+        return self._get_constraints()["constrained_dihedrals"]
+
+    def _get_constraints(self):
+        """Extract frozen atoms and constrained internal coordinates from ORCA output."""
+        constraints = {
+            "frozen_atoms": [],
+            "constrained_bond_lengths": [],
+            "constrained_bond_angles": [],
+            "constrained_dihedrals": [],
+        }
+
+        # Regex patterns
+        constrained_bond_length_pattern = (
+            r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)\s+C\s*\}"
+        )
+        constrained_bond_angles_pattern = (
+            r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
+        )
+        constrained_dihedrals_pattern = (
+            r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
+        )
+        orca_frozen_atoms_output_pattern = (
+            r"Will constrain atom \d+ coordinate \d"
+        )
+
+        for line in self.contents:
+            frozen_match = re.match(orca_frozen_atoms_output_pattern, line)
+            if frozen_match:
+                atom_index = int(line.split()[3])
+                if atom_index not in constraints["frozen_atoms"]:
+                    constraints["frozen_atoms"].append(atom_index)
+            elif re.match(constrained_bond_length_pattern, line):
+                constraints["constrained_bond_lengths"].append(
+                    f"{line.split()[4]}-{line.split()[5]}"
+                )
+            elif re.match(constrained_bond_angles_pattern, line):
+                constraints["constrained_bond_angles"].append(
+                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}"
+                )
+            elif re.match(constrained_dihedrals_pattern, line):
+                constraints["constrained_dihedrals"].append(
+                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}"
+                )
+        return constraints
 
     def _get_first_structure_coordinates_block_in_output(self):
         """Obtain the first structure coordinates block in the output file."""
