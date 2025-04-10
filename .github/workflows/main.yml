@@ -167,6 +167,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
+      - name: Verify PyMOL Installation
+        shell: cmd
+        run: |
+          call "%MINICONDA%\Scripts\activate.bat" chemsmart
+          where pymol || echo "PyMOL not found in PATH"
+          pymol -c || echo "PyMOL failed to run (expected if no GUI, checking availability)"
+
       - name: Install Pip
         shell: bash -l {0}
         run: pip install --user pip
