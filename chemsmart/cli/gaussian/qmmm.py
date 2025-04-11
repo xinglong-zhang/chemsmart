@@ -164,8 +164,6 @@ def qmmm(
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
-    print(high_level_atoms)
-
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()

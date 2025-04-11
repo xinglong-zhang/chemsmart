@@ -614,7 +614,7 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         f.write("end\n")
 
 
-class ORCAMultiscaleJobSettings(ORCAJobSettings):
+class ORCAQMMMJobSettings(ORCAJobSettings):
     """Settings for ORCA multiscale job.
     This includes five types of methods:
     1. Additive QMMM.
@@ -631,7 +631,7 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
         qm2_functional=None,
         qm2_basis=None,
         qm2_method=None,
-        mm_method=None,  # level-of-theory for MM
+        mm_force_field=None,  # level-of-theory for MM
         qm_atoms=None,
         qm2_atoms=None,
         charge_total=None,
@@ -657,7 +657,7 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
             qm2_functional: str, functional for QM2 level of theory
             qm2_basis: str, basis set for QM2 level of theory
             qm2_method: str, method for QM2 level of theory (e.g. "XTB", "HF-3C", "PBEH-3C")
-            mm_method: str, method for MM level of theory (e.g. "MMFF", "AMBER", "CHARMM")
+            mm_force_field: str, method for MM level of theory (e.g. "MMFF", "AMBER", "CHARMM")
             qm_atoms: list of int, indices of QM atoms
             qm2_atoms: list of int, indices of QM2 atoms
             charge_total: int, total charge of the system
@@ -681,7 +681,7 @@ class ORCAMultiscaleJobSettings(ORCAJobSettings):
         self.qm2_functional = qm2_functional
         self.qm2_basis = qm2_basis
         self.qm2_method = qm2_method
-        self.mm_method = mm_method
+        self.mm_method = mm_force_field
         self.qm_atoms = qm_atoms
         self.qm2_atoms = qm2_atoms
         self.charge_total = charge_total
