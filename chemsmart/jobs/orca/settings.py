@@ -700,6 +700,18 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         )
         self.electronic_interaction = electronic_interaction
 
+        # populate self.functional, self.basis, etc.
+        self.functional = self.qm_functional
+        self.basis = self.qm_basis
+        if self.charge_medium is not None and self.multiplicity is not None:
+            self.charge = self.charge_medium
+            self.multiplicity = self.mult_medium
+            # the charge/multiplicity of the medium system corresponds to the
+            # sum of the charge/multiplicity of the high level and low level regions
+        else:
+            self.charge = self.charge_qm
+            self.multiplicity = self.charge_qm
+
     @property
     def qmmm_block(self):
         return self._write_qmmm_block()
