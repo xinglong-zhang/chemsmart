@@ -29,12 +29,18 @@ class FileConverter:
     """
 
     def __init__(
-        self, directory=None, type=None, filename=None, output_filetype="xyz"
+        self,
+        directory=None,
+        type=None,
+        filename=None,
+        output_filetype="xyz",
+        include_intermediate_structures=False,
     ):
         self.directory = directory
         self.type = type
         self.filename = filename
         self.output_filetype = output_filetype
+        self.include_intermediate_structures = include_intermediate_structures
 
     def convert_files(self):
         if self.directory is not None:
@@ -99,15 +105,27 @@ class FileConverter:
                 outfile = XYZFile(filename=file)
             elif type == "sdf":
                 outfile = SDFFile(filename=file)
-            mol = (
-                outfile.molecule
-            )  # for xyz file with multiple mols, only converts the last one
+            else:
+                raise ValueError(f"File type {type} is not supported.")
+            if self.include_intermediate_structures:
+                mol = outfile.all_structures
+            else:
+                mol = (
+                    outfile.molecule
+                )  # for xyz file with multiple mols, only converts the last one
             filedir, filename = os.path.split(file)
             file_basename = os.path.splitext(filename)[0]
             output_filepath = os.path.join(
                 filedir, f"{file_basename}.{output_filetype}"
             )
-            mol.write(output_filepath, format=output_filetype)
+            if isinstance(mol, list):
+                for i, m in enumerate(mol):
+                    output_filepath = os.path.join(
+                        filedir, f"{file_basename}.{output_filetype}"
+                    )
+                    m.write(output_filepath, format=output_filetype)
+            else:
+                mol.write(output_filepath, format=output_filetype)
 
     def _convert_single_file(self, filename, output_filetype):
         """Convert single file to specified format."""
@@ -125,10 +143,20 @@ class FileConverter:
             outfile = SDFFile(filename=filename)
         else:
             raise ValueError(f"File type {self.type} is not supported.")
-        mol = outfile.molecule
+        if self.include_intermediate_structures:
+            mol = outfile.all_structures
+        else:
+            mol = outfile.molecule
         filedir, filename = os.path.split(filename)
         file_basename = os.path.splitext(filename)[0]
         output_filepath = os.path.join(
             filedir, f"{file_basename}.{output_filetype}"
         )
-        mol.write(output_filepath, format=output_filetype)
+        if isinstance(mol, list):
+            for m in mol:
+                output_filepath = os.path.join(
+                    filedir, f"{file_basename}.{output_filetype}"
+                )
+                m.write(output_filepath, format=output_filetype)
+        else:
+            mol.write(output_filepath, format=output_filetype)

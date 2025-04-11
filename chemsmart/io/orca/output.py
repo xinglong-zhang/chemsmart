@@ -133,6 +133,34 @@ class ORCAOutput(ORCAFileMixin):
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 
+    def _get_first_structure_coordinates_block_in_output(self):
+        """Obtain the first structure coordinates block in the output file."""
+        coordinates_block_lines_list = []
+        pattern = re.compile(standard_coord_pattern)
+        found_header = False
+
+        for line in self.contents:
+            # Start collecting after finding the header
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                found_header = True
+                continue  # Skip the header line itself
+
+            # If we've found the header, process lines
+            if found_header:
+                match = pattern.match(line)
+                if match:
+                    # Extract the last 4 elements (symbol, x, y, z) and join with double spaces
+                    coord_line = "  ".join(line.split()[-4:])
+                    coordinates_block_lines_list.append(coord_line)
+                elif (
+                    coordinates_block_lines_list
+                ):  # Stop if we hit a non-matching line after collecting coords
+                    break
+
+        # Return CoordinateBlock instance
+        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+        return cb
+
     @property
     def frozen_atoms(self):
         frozen_atoms, _, _, _ = self._get_constraints
