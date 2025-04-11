@@ -1795,12 +1795,12 @@ class TestORCAOutput:
         self, orca_fixed_atoms, orca_fixed_dihedral, orca_fixed_bond
     ):
         fixed_atoms = ORCAOutput(filename=orca_fixed_atoms)
-        assert fixed_atoms.get_frozen_atoms == [2, 11]
+        assert fixed_atoms.frozen_atoms == [2, 11]
         fixed_dihedral = ORCAOutput(filename=orca_fixed_dihedral)
-        assert fixed_dihedral.get_constrained_dihedrals == ["3-12-13-17"]
+        assert fixed_dihedral.constrained_dihedrals == ["3-12-13-17"]
         fixed_bond = ORCAOutput(filename=orca_fixed_bond)
-        assert fixed_bond.get_constrained_bond_lengths == ["8-9"]
-        assert fixed_bond.get_constrained_bond_angles == ["1-5-8"]
+        assert fixed_bond.constrained_bond_lengths == ["8-9"]
+        assert fixed_bond.constrained_bond_angles == ["1-5-8"]
 
 
 class TestORCAEngrad:

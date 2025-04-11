@@ -133,30 +133,37 @@ class ORCAOutput(ORCAFileMixin):
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
 
-    @cached_property
-    def get_frozen_atoms(self):
-        return self._get_constraints()["frozen_atoms"]
+    @property
+    def frozen_atoms(self):
+        frozen_atoms, _, _, _ = self._get_constraints
+        return frozen_atoms
+
+    @property
+    def constrained_bond_lengths(self):
+        _, constrained_bond_lengths, _, _ = self._get_constraints
+        return constrained_bond_lengths
+
+    @property
+    def constrained_bond_angles(self):
+        _, _,constrained_bond_angles, _ = self._get_constraints
+        return constrained_bond_angles
+
+    @property
+    def constrained_bond_angles(self):
+        _, _, _, constrained_dihedrals = self._get_constraints
+        return constrained_dihedrals
 
     @cached_property
-    def get_constrained_bond_angles(self):
-        return self._get_constraints()["constrained_bond_angles"]
-
-    @cached_property
-    def get_constrained_bond_lengths(self):
-        return self._get_constraints()["constrained_bond_lengths"]
-
-    @cached_property
-    def get_constrained_dihedrals(self):
+    def constrained_dihedrals(self):
         return self._get_constraints()["constrained_dihedrals"]
 
+    @cached_property
     def _get_constraints(self):
         """Extract frozen atoms and constrained internal coordinates from ORCA output."""
-        constraints = {
-            "frozen_atoms": [],
-            "constrained_bond_lengths": [],
-            "constrained_bond_angles": [],
-            "constrained_dihedrals": [],
-        }
+        frozen_atoms= []
+        constrained_bond_lengths = []
+        constrained_bond_angles = []
+        constrained_dihedrals = []
 
         # Regex patterns
         constrained_bond_length_pattern = (
@@ -176,21 +183,21 @@ class ORCAOutput(ORCAFileMixin):
             frozen_match = re.match(orca_frozen_atoms_output_pattern, line)
             if frozen_match:
                 atom_index = int(line.split()[3])
-                if atom_index not in constraints["frozen_atoms"]:
-                    constraints["frozen_atoms"].append(atom_index)
+                if atom_index not in frozen_atoms:
+                    frozen_atoms.append(atom_index)
             elif re.match(constrained_bond_length_pattern, line):
-                constraints["constrained_bond_lengths"].append(
+                constrained_bond_lengths.append(
                     f"{line.split()[4]}-{line.split()[5]}"
                 )
             elif re.match(constrained_bond_angles_pattern, line):
-                constraints["constrained_bond_angles"].append(
+                constrained_bond_angles.append(
                     f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}"
                 )
             elif re.match(constrained_dihedrals_pattern, line):
-                constraints["constrained_dihedrals"].append(
+                constrained_dihedrals.append(
                     f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}"
                 )
-        return constraints
+        return frozen_atoms, constrained_bond_lengths, constrained_bond_angles, constrained_dihedrals
 
     def _get_first_structure_coordinates_block_in_output(self):
         """Obtain the first structure coordinates block in the output file."""
