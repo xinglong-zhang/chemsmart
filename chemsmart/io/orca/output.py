@@ -1830,7 +1830,7 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def gibbs_free_energy(self):
         """The Gibbs free energy is G = H - T*S."""
-        for i, line_i in enumerate(self.c):
+        for i, line_i in enumerate(self.contents):
             if line_i == "GIBBS FREE ENERGY":
                 for line_j in self.contents[i:]:
                     if "Final Gibbs free energy" in line_j:
