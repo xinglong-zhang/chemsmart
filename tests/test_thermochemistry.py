@@ -5,7 +5,6 @@ import pytest
 
 from chemsmart.analysis.thermochemistry import (
     Thermochemistry,
-    qRRHOThermochemistry,
 )
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
@@ -714,7 +713,7 @@ class TestThermochemistryCO2:
         vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
         assert g16_output.normal_termination
         mol = g16_output.molecule
-        qrrho_thermochem_co2_1 = qRRHOThermochemistry(
+        qrrho_thermochem_co2_1 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,  # in Kelvin
             concentration=1.0,  # in mol/L
@@ -1056,7 +1055,7 @@ class TestThermochemistryCO2:
         o  co2                                       -188.444680   0.011776   -188.424452   0.049327   0.049327   -188.473778   -188.473779
            ********************************************************************************************************************************
         """
-        qrrho_thermochem_co2_2 = qRRHOThermochemistry(
+        qrrho_thermochem_co2_2 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
             temperature=598.15,  # in Kelvin
             concentration=0.5,  # in mol/L
@@ -1098,7 +1097,7 @@ class TestThermochemistryCO2:
         o  co2                                       -188.444680   0.011776   -188.429325   -188.431976   0.021262   0.021781   -188.450587   -188.453757
            **********************************************************************************************************************************************
         """
-        qrrho_thermochem_co2_3 = qRRHOThermochemistry(
+        qrrho_thermochem_co2_3 = Thermochemistry(
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,  # in Kelvin
             concentration=1.0,  # in mol/L
@@ -1324,7 +1323,7 @@ class TestThermochemistryHe:
         assert os.path.exists(gaussian_he_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_he_opt_outfile)
         assert g16_output.normal_termination
-        qrrho_thermochem_he = qRRHOThermochemistry(
+        qrrho_thermochem_he = Thermochemistry(
             filename=gaussian_he_opt_outfile,
             temperature=598.15,  # in Kelvin
             concentration=0.5,  # in mol/L
@@ -1579,7 +1578,7 @@ class TestThermochemistryH2O:
         g16_output = Gaussian16Output(filename=gaussian_mp2_outputfile)
         assert g16_output.normal_termination
         mol = g16_output.molecule
-        qrrho_thermochem_water = qRRHOThermochemistry(
+        qrrho_thermochem_water = Thermochemistry(
             filename=gaussian_mp2_outputfile,
             temperature=1298.15,  # in Kelvin
             concentration=2.0,  # in mol/L

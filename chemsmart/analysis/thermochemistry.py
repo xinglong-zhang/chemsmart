@@ -8,11 +8,8 @@ from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.constants import R, atm_to_pa, hartree_to_joules
-from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
-
-create_logger()
 
 
 class Thermochemistry:
@@ -21,16 +18,24 @@ class Thermochemistry:
     Args:
         filename: str. Filepath to the file from which thermochemistry data is extracted.
         temperature: float. Temperature of the system, in K.
+        concentration: float. Concentration of the system, in mol/L.
         pressure: float. Pressure of the system, in atm.
         weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
+        alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
+        s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
+        h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
     """
 
     def __init__(
         self,
         filename,
         temperature,
-        pressure,
+        concentration=1.0,
+        pressure=1.0,
         weighted_atomic_mass=True,
+        alpha=4,
+        s_freq_cutoff=100.0,
+        h_freq_cutoff=100.0,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
@@ -66,6 +71,17 @@ class Thermochemistry:
 
             # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
             self.theta = [units._hplanck * vk / units._k for vk in self.v]
+        self.concentration = concentration
+        self.alpha = alpha
+        self.s_freq_cutoff = (
+            s_freq_cutoff * units._c * 1e2
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.h_freq_cutoff = (
+            h_freq_cutoff * units._c * 1e2
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.c = (
+            self.concentration * 1000 * units._Nav
+        )  # convert the unit of concentration from mol/L to Particle/m^3
 
     @property
     def file_object(self):
@@ -471,52 +487,6 @@ class Thermochemistry:
     def zero_point_energy_hartree(self):
         """Obtain the ZPE in Hartree."""
         return self.zero_point_energy / (hartree_to_joules * units._Nav)
-
-    def get_thermochemistry(self):
-        pass
-
-
-class qRRHOThermochemistry(Thermochemistry):
-    """Subclass of thermochemistry analysis for quasi-rigid-rotor-harmonic-oscillator (qRRHO) approximation.
-    Args:
-        filename: str. Filepath to the file from which thermochemistry data is extracted.
-        temperature: float. Temperature of the system, in K.
-        concentration: float. Concentration of the system, in mol/L.
-        pressure: float. Pressure of the system, in atm.
-        weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
-        alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
-        s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
-        h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
-    """
-
-    def __init__(
-        self,
-        filename,
-        temperature,
-        concentration=1.0,
-        pressure=1.0,
-        weighted_atomic_mass=True,
-        alpha=4,
-        s_freq_cutoff=100.0,
-        h_freq_cutoff=100.0,
-    ):
-        super().__init__(
-            filename,
-            temperature,
-            pressure,
-            weighted_atomic_mass,
-        )
-        self.concentration = concentration
-        self.alpha = alpha
-        self.s_freq_cutoff = (
-            s_freq_cutoff * units._c * 1e2
-        )  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.h_freq_cutoff = (
-            h_freq_cutoff * units._c * 1e2
-        )  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.c = (
-            self.concentration * 1000 * units._Nav
-        )  # convert the unit of concentration from mol/L to Particle/m^3
 
     def _calculate_damping_function(self, freq_cutoff):
         """Calculate the damping function of Head-Gordon, which interpolates between the RRHO and the free rotor entropy.

@@ -5,9 +5,14 @@ import os
 
 import click
 
-from chemsmart.analysis.thermochemistry import qRRHOThermochemistry
+from chemsmart.analysis.thermochemistry import Thermochemistry
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)-7s - [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -131,6 +136,7 @@ def get_thermo(
         fs = f
         fh = f
 
+    # Energy Conversion
     if unit.lower() == "ev":
         energy_unit = "eV"
         unit_conversion = 27.211386024367243  # 1 Eh = 27.211386024367243 eV
@@ -151,6 +157,8 @@ def get_thermo(
     files = []
     for filename in filenames:
         files.extend(glob.glob(filename))
+
+    # Error Handling
     for file in files:
         if not file.endswith((".log", ".out")):
             logger.error(
@@ -165,6 +173,7 @@ def get_thermo(
         logger.error("Try 'get_thermochemistry.py --help' for help.")
         return
 
+    # ASCII Arts for CHEMSMART
     log("\n")
     log(
         "   "
@@ -199,7 +208,7 @@ def get_thermo(
         log("   " + " " * 19 + "=" * 73 + "\n")
         index = 1
         for file in files:
-            scf_energy = qRRHOThermochemistry(
+            scf_energy = Thermochemistry(
                 file,
                 temperature=temperature,
             )
@@ -317,7 +326,7 @@ def get_thermo(
     index = 1
     for file in files:
         try:
-            thermochemistry = qRRHOThermochemistry(
+            thermochemistry = Thermochemistry(
                 file,
                 temperature=temperature,
                 concentration=concentration,
@@ -361,7 +370,7 @@ def get_thermo(
             # Warning for imaginary frequency.
             if len(thermochemistry.imaginary_frequencies) > 0:
                 logger.warning(
-                    f"!! {len(thermochemistry.imaginary_frequencies)} imaginary frequency(s) ignored for {file}."
+                    f"!! {len(thermochemistry.imaginary_frequencies)} imaginary frequency(s) ignored for {file}.\n"
                 )
 
             if q:
@@ -422,7 +431,7 @@ def get_thermo(
             index += 1
         except (ValueError, TypeError, IndexError, AttributeError):
             logger.warning(
-                f"!! Frequency information not found, skipped {file}."
+                f"!! Frequency information not found, skipped {file}.\n"
             )
     log("\n")
     logger.info(" * Done. Results saved to 'thermochemistry.dat'.")
