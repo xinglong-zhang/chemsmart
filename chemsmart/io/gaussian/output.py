@@ -6,7 +6,8 @@ from itertools import islice
 import numpy as np
 from ase import units
 
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
@@ -165,48 +166,7 @@ class Gaussian16Output(GaussianFileMixin):
         Use Standard orientations to get the structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
-
-        def create_molecule_list(
-            orientations,
-            orientations_pbc,
-            energies,
-            forces,
-            num_structures=None,
-        ):
-            """Helper function to create Molecule objects."""
-            num_structures = num_structures or len(orientations)
-            if self.use_frozen:
-                frozen_atoms = self.frozen_atoms_masks
-            else:
-                frozen_atoms = None
-
-            logger.debug(f"Creating {num_structures} Molecule objects.")
-            logger.debug(f"Number of structures: {len(orientations)}")
-            logger.debug(f"Number of energies: {len(energies)}")
-            logger.debug(f"Number of forces: {len(forces)}")
-            return [
-                Molecule(
-                    symbols=self.symbols,
-                    positions=orientations[i],
-                    charge=self.charge,
-                    multiplicity=self.multiplicity,
-                    frozen_atoms=frozen_atoms,
-                    pbc_conditions=self.list_of_pbc_conditions,
-                    translation_vectors=orientations_pbc[i],
-                    energy=energies[i],
-                    forces=forces[i],
-                )
-                for i in range(num_structures)
-            ]
-
-        def clean_duplicate_structure(orientations):
-            """Remove the last structure if it's a duplicate of the previous one."""
-            if orientations and len(orientations) > 1:
-                if np.allclose(orientations[-1], orientations[-2], rtol=1e-5):
-                    orientations.pop(-1)
-
         # Determine orientations and their periodic boundary conditions (PBC)
-        orientations, orientations_pbc = None, None
         if self.standard_orientations:
             orientations, orientations_pbc = (
                 self.standard_orientations,
@@ -217,55 +177,64 @@ class Gaussian16Output(GaussianFileMixin):
                 self.input_orientations,
                 self.input_orientations_pbc,
             )
-
-        if not orientations:
+        else:
             return []  # No structures found
 
         # Clean duplicate structures at the end
         clean_duplicate_structure(orientations)
 
-        # Remove the first structure and energy if it's a link job
+        # Remove first structure if it's a link job
         if self.job_type == "link" and len(orientations) > 1:
-            logger.debug("Removing the first structure and energy.")
-            logger.debug(f"Job type: {self.job_type}")
-            orientations = orientations[1:]
-            orientations_pbc = orientations_pbc[1:]
+            orientations, orientations_pbc = (
+                orientations[1:],
+                orientations_pbc[1:],
+            )
             self.energies_in_eV = self.energies_in_eV[1:]
+
+        frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
         # Handle normal termination
         if self.normal_termination:
-            return create_molecule_list(
+            all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
                 self.energies_in_eV,
                 self.forces_in_eV_per_angstrom,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+            )
+        else:
+            # Handle abnormal termination
+            num_structures_to_use = min(
+                len(orientations),
+                len(self.energies_in_eV),
+                len(self.forces_in_eV_per_angstrom),
+            )
+            all_structures = create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies_in_eV,
+                self.forces_in_eV_per_angstrom,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+                num_structures=num_structures_to_use,
             )
 
-        # Handle abnormal termination by limiting the number of structures used
-        num_structures_to_use = min(
-            len(orientations),
-            len(self.energies_in_eV),
-            len(self.forces_in_eV_per_angstrom),
-        )
-        all_structures = create_molecule_list(
-            orientations,
-            orientations_pbc,
-            self.energies_in_eV,
-            self.forces_in_eV_per_angstrom,
-            num_structures=num_structures_to_use,
-        )
-
+        # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
-            # if not including intermediate steps
             logger.info(
-                "Ignoring intermediate geometry optimimzation for each constrained opt."
-            )
-            logger.debug(
-                f"Optimized steps indices: {self.optimized_steps_indices}"
+                "Ignoring intermediate geometry optimization for constrained opt."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+
         logger.info(
             f"Total number of structures located: {len(all_structures)}"
         )
@@ -317,6 +286,7 @@ class Gaussian16Output(GaussianFileMixin):
                 i_gaussian = i + 1  # gaussian uses 1-index
                 each_steps = [step for step in steps if step[-1] == i_gaussian]
                 optimized_steps.append(each_steps[-1])
+            print(f"Optimized steps: {optimized_steps}")
             return optimized_steps
         return None
 
