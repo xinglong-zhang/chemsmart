@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)-7s - [%(name)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -368,10 +368,24 @@ def get_thermo(
                 )
 
             # Warning for imaginary frequency.
-            if len(thermochemistry.imaginary_frequencies) > 0:
-                logger.warning(
-                    f"!! {len(thermochemistry.imaginary_frequencies)} imaginary frequency(s) ignored for {file}.\n"
-                )
+            if thermochemistry.imaginary_frequencies:
+                if (
+                    thermochemistry.job_type == "ts"
+                    and thermochemistry.vibrational_frequencies[0] < 0.0
+                ):
+                    if thermochemistry.num_replaced_frequencies > 0:
+                        logger.warning(
+                            f"!! Transition state detected: ignored 1 imaginary frequency and replaced "
+                            f"{thermochemistry.num_replaced_frequencies} other imaginary frequency(s) with the cutoff value for {file}.\n"
+                        )
+                    else:
+                        logger.warning(
+                            f"!! Transition state detected: ignored 1 imaginary frequency for {file}.\n"
+                        )
+                else:
+                    logger.warning(
+                        f"!! Replaced {thermochemistry.num_replaced_frequencies} imaginary frequency(s) with the cutoff value for {file}.\n"
+                    )
 
             if q:
                 log(

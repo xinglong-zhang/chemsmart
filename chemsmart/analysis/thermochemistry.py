@@ -51,6 +51,19 @@ class Thermochemistry:
         self.P = (
             self.pressure * atm_to_pa
         )  # convert the unit of pressure from atm to Pascal
+        self.concentration = concentration
+        self.alpha = alpha
+        self.s_freq_cutoff_wavenumber = s_freq_cutoff
+        self.h_freq_cutoff_wavenumber = h_freq_cutoff
+        self.s_freq_cutoff = (
+            s_freq_cutoff * units._c * 1e2
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.h_freq_cutoff = (
+            h_freq_cutoff * units._c * 1e2
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.c = (
+            self.concentration * 1000 * units._Nav
+        )  # convert the unit of concentration from mol/L to Particle/m^3
         if self.moments_of_inertia is not None:
             if self.molecule.is_linear:
                 self.I = self.moments_of_inertia * (
@@ -64,24 +77,13 @@ class Thermochemistry:
             self.Bav = (
                 units._hplanck / self.average_rotational_constant
             )  # convert the unit of average moments of inertia from Hz to kg m^2
-        if self.real_frequencies is not None:
+        if self.cleaned_frequencies is not None:
             self.v = [
-                k * units._c * 1e2 for k in self.real_frequencies
+                k * units._c * 1e2 for k in self.cleaned_frequencies
             ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
             # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
             self.theta = [units._hplanck * vk / units._k for vk in self.v]
-        self.concentration = concentration
-        self.alpha = alpha
-        self.s_freq_cutoff = (
-            s_freq_cutoff * units._c * 1e2
-        )  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.h_freq_cutoff = (
-            h_freq_cutoff * units._c * 1e2
-        )  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.c = (
-            self.concentration * 1000 * units._Nav
-        )  # convert the unit of concentration from mol/L to Particle/m^3
 
     @property
     def file_object(self):
@@ -97,6 +99,10 @@ class Thermochemistry:
             raise ValueError(
                 "Unsupported file format. Use .log or .out files."
             )
+
+    @property
+    def job_type(self):
+        return self.file_object.job_type
 
     @property
     def mass(self):
@@ -145,6 +151,29 @@ class Thermochemistry:
     def imaginary_frequencies(self):
         """Obtain the imaginary vibrational frequencies of the molecule."""
         return [k for k in self.vibrational_frequencies if k < 0.0]
+
+    @property
+    def cleaned_frequencies(self):
+        """Replace residue imaginary frequencies with the cutoff value.
+        For transition states (job_type == "ts"), the first imaginary frequency is assumed to
+        correspond to the reaction coordinate and is excluded from thermochemical calculation.
+        All other negative frequencies are replaced by the cutoff value.
+        """
+        cutoff = min(
+            self.s_freq_cutoff_wavenumber, self.h_freq_cutoff_wavenumber
+        )
+        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
+            return [
+                cutoff if k < 0.0 else k
+                for k in self.vibrational_frequencies[1:]
+            ]
+        return [cutoff if k < 0.0 else k for k in self.vibrational_frequencies]
+
+    @property
+    def num_replaced_frequencies(self):
+        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
+            return len(self.imaginary_frequencies) - 1
+        return len(self.imaginary_frequencies)
 
     @property
     def energies(self):
