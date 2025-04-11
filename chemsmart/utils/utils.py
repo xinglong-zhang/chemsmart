@@ -652,14 +652,16 @@ def convert_string_to_slices(index_str):
     e.g. '[1-3, 6-9, 7, 8, 10]' --> ['0:3', '5:9', 6, 7, 9]
     """
     # Remove brackets and split by comma
-    items = re.findall(r'\d+\s*-\s*\d+|\d+', index_str)
+    items = re.findall(r"\d+\s*-\s*\d+|\d+", index_str)
 
     result = []
     for item in items:
-        if '-' in item:
-            start_str, end_str = map(str.strip, item.split('-'))
+        if "-" in item:
+            start_str, end_str = map(str.strip, item.split("-"))
             start = int(start_str) - 1  # convert to 0-based
-            end = int(end_str)  # upper bound remains because Python slice is exclusive
+            end = int(
+                end_str
+            )  # upper bound remains because Python slice is exclusive
             result.append(f"{start}:{end}")
         else:
             result.append(int(item) - 1)
