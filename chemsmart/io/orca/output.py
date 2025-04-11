@@ -12,6 +12,10 @@ from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
+    constrained_bond_angles_pattern,
+    constrained_bond_length_pattern,
+    constrained_dihedrals_pattern,
+    orca_frozen_atoms_output_pattern,
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
     standard_coord_pattern,
@@ -173,39 +177,21 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def constrained_bond_angles(self):
-        _, _,constrained_bond_angles, _ = self._get_constraints
+        _, _, constrained_bond_angles, _ = self._get_constraints
         return constrained_bond_angles
 
     @property
-    def constrained_bond_angles(self):
+    def constrained_dihedrals(self):
         _, _, _, constrained_dihedrals = self._get_constraints
         return constrained_dihedrals
 
     @cached_property
-    def constrained_dihedrals(self):
-        return self._get_constraints()["constrained_dihedrals"]
-
-    @cached_property
     def _get_constraints(self):
         """Extract frozen atoms and constrained internal coordinates from ORCA output."""
-        frozen_atoms= []
+        frozen_atoms = []
         constrained_bond_lengths = []
         constrained_bond_angles = []
         constrained_dihedrals = []
-
-        # Regex patterns
-        constrained_bond_length_pattern = (
-            r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)\s+C\s*\}"
-        )
-        constrained_bond_angles_pattern = (
-            r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
-        )
-        constrained_dihedrals_pattern = (
-            r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
-        )
-        orca_frozen_atoms_output_pattern = (
-            r"Will constrain atom \d+ coordinate \d"
-        )
 
         for line in self.contents:
             frozen_match = re.match(orca_frozen_atoms_output_pattern, line)
@@ -225,7 +211,12 @@ class ORCAOutput(ORCAFileMixin):
                 constrained_dihedrals.append(
                     f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}"
                 )
-        return frozen_atoms, constrained_bond_lengths, constrained_bond_angles, constrained_dihedrals
+        return (
+            frozen_atoms,
+            constrained_bond_lengths,
+            constrained_bond_angles,
+            constrained_dihedrals,
+        )
 
     def _get_first_structure_coordinates_block_in_output(self):
         """Obtain the first structure coordinates block in the output file."""

@@ -122,6 +122,21 @@ def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     )
 
 
+@pytest.fixture()
+def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "qmmm")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfile_2layer(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3CH3.com")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfile_3layer(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3COOH.com")
+
+
 # Gaussian output files
 @pytest.fixture()
 def gaussian_outputs_test_directory(gaussian_test_directory):
@@ -495,6 +510,18 @@ def gaussian_written_opt_from_graphite_2d_pbc_log(
     )
 
 
+@pytest.fixture()
+def qmmm_written_xyz_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "qmmm_written.xyz")
+
+
+@pytest.fixture()
+def qmmm_written_xyz_only_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "qmmm_written_xyz_only.xyz"
+    )
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):
@@ -626,6 +653,23 @@ def hirshfeld_full_print(orca_outputs_directory):
 @pytest.fixture()
 def water_engrad_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.engrad")
+
+
+@pytest.fixture()
+def orca_fixed_atoms(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "phenol_fixed_atoms.out")
+
+
+@pytest.fixture()
+def orca_fixed_dihedral(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+    )
+
+
+@pytest.fixture()
+def orca_fixed_bond(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "ethanol_fixed_bond.out")
 
 
 @pytest.fixture()
