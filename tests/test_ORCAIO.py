@@ -241,11 +241,35 @@ class TestORCAOutput:
         molecule = orca_out.input_coordinates_block.molecule
         assert isinstance(molecule, Molecule)
         assert all(molecule.symbols == ["O", "H", "H"])
-        assert orca_out.input_coordinates_block.coordinate_block == [
+        expected_coordinate_block = [
             "O  0.0000  0.0000  0.0626",
             "H  -0.7920  0.0000  -0.4973",
             "H  0.7920  0.0000  -0.4973",
         ]
+        orca_coordinate_block = (
+            orca_out.input_coordinates_block.coordinate_block
+        )
+        for i, line in enumerate(orca_coordinate_block):
+            assert len(line.split()) == len(
+                expected_coordinate_block[i].split()
+            )
+            assert line.split()[0] == expected_coordinate_block[i].split()[0]
+            assert math.isclose(
+                float(line.split()[1]),
+                float(expected_coordinate_block[i].split()[1]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[2]),
+                float(expected_coordinate_block[i].split()[2]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[3]),
+                float(expected_coordinate_block[i].split()[3]),
+                rel_tol=1e-4,
+            )
+
         assert orca_out.molecule.empirical_formula == "H2O"
         assert len(orca_out.energies) == 6
         assert orca_out.energies[0] == -76.322282695198
@@ -1766,6 +1790,17 @@ class TestORCAOutput:
         assert orca_out.extrapolation_basis is None
         assert orca_out.natoms == 27
         assert orca_out.normal_termination is False
+
+    def test_get_constraints(
+        self, orca_fixed_atoms, orca_fixed_dihedral, orca_fixed_bond
+    ):
+        fixed_atoms = ORCAOutput(filename=orca_fixed_atoms)
+        assert fixed_atoms.get_frozen_atoms == [2, 11]
+        fixed_dihedral = ORCAOutput(filename=orca_fixed_dihedral)
+        assert fixed_dihedral.get_constrained_dihedrals == ["3-12-13-17"]
+        fixed_bond = ORCAOutput(filename=orca_fixed_bond)
+        assert fixed_bond.get_constrained_bond_lengths == ["8-9"]
+        assert fixed_bond.get_constrained_bond_angles == ["1-5-8"]
 
 
 class TestORCAEngrad:
