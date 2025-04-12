@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 def movie(
     ctx,
     file,
-    render_style,
+    render,
+    trace,
     vdw,
     quiet,
     command_line_only,
-    trace,
     skip_completed,
     **kwargs,
 ):
@@ -46,11 +46,11 @@ def movie(
         molecule=molecules,
         label=label,
         pymol_script=file,
-        render=render_style,
+        render=render,
+        trace=trace,
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
-        trace=trace,
         skip_completed=skip_completed,
         **kwargs,
     )

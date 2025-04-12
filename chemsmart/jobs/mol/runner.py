@@ -202,13 +202,17 @@ class PyMOLJobRunner(JobRunner):
             # Start PyMOL process
             process = subprocess.Popen(
                 shlex.split(command),
+                stdin=subprocess.DEVNULL,  # prevent hanging
                 stdout=out,
                 stderr=err,
                 env=env,
                 cwd=self.running_directory,
             )
             # Wait for process to complete
-            process.wait()
+            # process.wait()
+            returncode = process.wait()
+            logger.debug(f"PyMOL process exited with code {returncode}")
+
             if process.returncode != 0:
                 logger.error(
                     f"PyMOL process failed with return code {process.returncode}"

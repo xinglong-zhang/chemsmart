@@ -44,6 +44,7 @@ def visualize(
         label=label,
         pymol_script=file,
         render=render,
+        trace=trace,
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
