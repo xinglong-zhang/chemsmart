@@ -267,6 +267,16 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
             os.path.splitext(job.outputfile)[0] + ".mp4"
         )  # Avoid .pse conflict
 
+        # Check if mp4 already exists and include options for overwriting
+        if os.path.exists(output_mp4):
+            if not job.overwrite:
+                logger.warning(
+                    f"{output_mp4} already exists. Skipping movie creation."
+                )
+                return
+            else:
+                logger.info(f"{output_mp4} exists, but will be overwritten.")
+
         # Check for PNG files
         png_files = glob.glob(f"{frame_prefix}*.png")
         if not png_files:

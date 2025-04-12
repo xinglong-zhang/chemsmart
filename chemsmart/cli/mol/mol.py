@@ -109,6 +109,23 @@ def click_pymol_visualization_options(f):
     return wrapper_common_options
 
 
+def click_pymol_save_options(f):
+    """Common click options for PyMOL save options."""
+
+    @click.option(
+        "-o",
+        "--overwrite",
+        is_flag=True,
+        default=False,
+        help="Overwrite existing files. Default to False.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_pymol_options
 @click.pass_context

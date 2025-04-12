@@ -4,6 +4,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
+    click_pymol_save_options,
     click_pymol_visualization_options,
     mol,
 )
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 @mol.command("movie", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
+@click_pymol_save_options
 @click.pass_context
 def movie(
     ctx,
@@ -24,14 +26,17 @@ def movie(
     vdw,
     quiet,
     command_line_only,
+    overwrite,
     skip_completed,
     **kwargs,
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com movie -v
-    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_visualize.pse
-    with added Van der Waal's surface (-v) automatically."""
+    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_movie.pse
+    with added Van der Waal's surface (-v) automatically.
+    If the movie mp4 file exists, it will not be overwritten unless -o is specified.
+    """
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -51,6 +56,7 @@ def movie(
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
+        overwrite=overwrite,
         skip_completed=skip_completed,
         **kwargs,
     )

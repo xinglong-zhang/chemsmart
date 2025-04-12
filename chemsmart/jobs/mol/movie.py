@@ -14,6 +14,7 @@ class PyMOLMovieJob(PyMOLJob):
         quiet_mode=True,
         command_line_only=True,
         trace=True,
+        overwrite=False,
         **kwargs,
     ):
         super().__init__(
@@ -27,3 +28,4 @@ class PyMOLMovieJob(PyMOLJob):
             command_line_only=command_line_only,
             **kwargs,
         )
+        self.overwrite = overwrite
