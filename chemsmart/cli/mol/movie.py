@@ -29,7 +29,7 @@ def movie(
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
     Example usage:
-        chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
+        chemsmart run --debug mol -f phenyldioxazolone.com movie -v
     This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_visualize.pse
     with added Van der Waal's surface (-v) automatically."""
 

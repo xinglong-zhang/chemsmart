@@ -287,11 +287,12 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
             "yuv420p",  # ensures compatibility with most video players
             os.path.normpath(output_mp4),
         ]
-        logger.debug(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
+        logger.info(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
         try:
             subprocess.run(
                 ffmpeg_cmd,
                 check=True,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
