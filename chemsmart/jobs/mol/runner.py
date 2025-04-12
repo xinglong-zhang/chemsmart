@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 import shlex
@@ -5,11 +6,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from shutil import rmtree
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.utils import quote_path
 
 pt = PeriodicTable()
 
@@ -116,47 +117,7 @@ class PyMOLJobRunner(JobRunner):
         # no envs to update for pymol
         pass
 
-    def _create_process(self, job, command, env):
-        with (
-            open(self.job_errfile, "w") as err,
-            open(self.job_outputfile, "w") as out,
-        ):
-            logger.info(
-                f"Command executed: {command}\n"
-                f"Writing output file to: {self.job_logfile}\n"
-                f"And err file to: {self.job_errfile}"
-            )
-            return subprocess.Popen(
-                shlex.split(command),
-                stdout=out,
-                stderr=err,
-                env=env,
-                cwd=self.running_directory,
-            )
-
-    def _postrun(self, job):
-        if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
-            if self.scratch:
-                logger.info(
-                    f"Removing scratch directory: {self.running_directory}."
-                )
-                rmtree(self.running_directory)
-            self._remove_err_files(job)
-
-
-class PyMOLVisualizationJobRunner(PyMOLJobRunner):
-    JOBTYPES = ["pymol_visualization"]
-
-    def _get_command(self, job):
-        # Quote paths on Windows to handle spaces and backslashes
-        def quote_path(path):
-            if sys.platform == "win32":
-                # Double-quote paths on Windows to preserve spaces
-                return f'"{path}"'
-            return path
-
+    def _get_visualization_command(self, job):
         exe = quote_path(self.executable)
         input_file = quote_path(job.inputfile)
         command = f"{exe} {input_file}"
@@ -190,7 +151,7 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
             command += " -c"
 
         # Handle the -d argument (PyMOL commands)
-        if job.render_style is None:
+        if job.render is None:
             # defaults to using zhang_group_pymol_style if not specified
             if os.path.exists("zhang_group_pymol_style.py"):
                 command += f' -d "pymol_style {self.job_basename}'
@@ -198,19 +159,149 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
                 # no render style and no style file present
                 command += ' -d "'
         else:
-            if job.render_style.lower() == "pymol":
+            if job.render.lower() == "pymol":
                 command += f' -d "pymol_style {self.job_basename}'
-            elif job.render_style.lower() == "cylview":
+            elif job.render.lower() == "cylview":
                 command += f' -d "cylview_style {self.job_basename}'
             else:
-                raise ValueError(
-                    f"The style {job.render_style} is not available!"
-                )
+                raise ValueError(f"The style {job.render} is not available!")
 
         if job.vdw:
             command += f"; add_vdw {self.job_basename}"
 
-        # Append the final PyMOL commands, quoting the output file path
-        command += f'; zoom; save {quote_path(job.outputfile)}; quit"'
+        # zoom
+        command += "; zoom"
+
+        if job.trace:
+            command += "; ray"
 
         return command
+
+    def _save_pse_command(self, job, command):
+        # Append the final PyMOL commands, quoting the output file path
+        command += f"; save {quote_path(job.outputfile)}"
+
+        return command
+
+    def _quit_command(self, job, command):
+        # Append the quit command to the PyMOL command
+        command += '; quit"'
+        return command
+
+    def _create_process(self, job, command, env):
+        # Open files for stdout/stderr
+        with (
+            open(self.job_errfile, "w") as err,
+            open(self.job_outputfile, "w") as out,
+        ):
+            logger.info(
+                f"Command executed: {command}\n"
+                f"Writing output file to: {self.job_logfile}\n"
+                f"And err file to: {self.job_errfile}"
+            )
+            # Start PyMOL process
+            process = subprocess.Popen(
+                shlex.split(command),
+                stdout=out,
+                stderr=err,
+                env=env,
+                cwd=self.running_directory,
+            )
+            # Wait for process to complete
+            process.wait()
+            if process.returncode != 0:
+                logger.error(
+                    f"PyMOL process failed with return code {process.returncode}"
+                )
+                raise subprocess.CalledProcessError(
+                    process.returncode, command
+                )
+        return process
+
+
+class PyMOLVisualizationJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_visualization"]
+
+    def _get_command(self, job):
+        command = self._get_visualization_command(job)
+        command = self._save_pse_command(job, command)
+        command = self._quit_command(job, command)
+        return command
+
+
+class PyMOLMovieJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_movie"]
+
+    def _get_rotation_command(self, job, command):
+        # rotation commands
+        command += "; mset 1, 180"  # 360-degree rotation over 180 frames
+        command += "; util.mroll 1, 180, 1"  # rotate about the z-axis
+        if job.trace:
+            command += "; set ray_trace_frames, 1"
+        command += "; set cache_frames, 0"
+        return command
+
+    def _export_movie_command(self, job, command):
+        """Export movie frames (use a temporary prefix to avoid conflicts)"""
+        frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
+        command += f"; mpng {quote_path(frame_prefix)}"
+        return command
+
+    def _get_command(self, job):
+        command = self._get_visualization_command(job)
+        command = self._get_rotation_command(job, command)
+        command = self._export_movie_command(job, command)
+        command = self._save_pse_command(job, command)
+        command = self._quit_command(job, command)
+        return command
+
+    def _postrun(self, job, framerate=30):
+        """Convert to MP4 using ffmpeg."""
+        frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
+        frame_pattern = f"{frame_prefix}%04d.png"
+        output_mp4 = (
+            os.path.splitext(job.outputfile)[0] + ".mp4"
+        )  # Avoid .pse conflict
+
+        # Check for PNG files
+        png_files = glob.glob(f"{frame_prefix}*.png")
+        if not png_files:
+            raise FileNotFoundError(
+                f"No PNG frames found matching '{frame_prefix}*.png'."
+            )
+
+        # Run ffmpeg command
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-framerate",
+            str(framerate),
+            "-i",
+            os.path.normpath(frame_pattern),  # Use %04d for ffmpeg
+            "-c:v",
+            "libx264",  # Uses H.264 codec for compatibility.
+            "-pix_fmt",
+            "yuv420p",  # ensures compatibility with most video players
+            os.path.normpath(output_mp4),
+        ]
+        logger.debug(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
+        try:
+            subprocess.run(
+                ffmpeg_cmd,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            logger.info(f"Movie saved as {output_mp4}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg error: {e.stderr}")
+            raise
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                "FFmpeg not found. Ensure it’s installed in the environment."
+            )
+
+        # Clean up PNG files
+        for png_file in png_files:
+            os.remove(png_file)
+        logger.info("Cleaned up PNG frames.")

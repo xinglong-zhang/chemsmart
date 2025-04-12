@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
@@ -489,6 +490,14 @@ def run_command(command):
     except Exception as e:
         logger.error(f"Exception while running {command}: {e}")
         return None
+
+
+def quote_path(path):
+    """Quote paths on Windows to handle spaces and backslashes."""
+    if sys.platform == "win32":
+        # Double-quote paths on Windows to preserve spaces
+        return f'"{path}"'
+    return path
 
 
 def kabsch_align(

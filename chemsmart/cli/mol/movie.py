@@ -3,24 +3,27 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.mol.mol import click_pymol_visualization_options, mol
+from chemsmart.cli.mol.mol import (
+    click_pymol_visualization_options,
+    mol,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
 
 
-@mol.command("visualize", cls=MyCommand)
+@mol.command("movie", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
 @click.pass_context
-def visualize(
+def movie(
     ctx,
     file,
-    render,
-    trace,
+    render_style,
     vdw,
     quiet,
     command_line_only,
+    trace,
     skip_completed,
     **kwargs,
 ):
@@ -37,16 +40,17 @@ def visualize(
     # get label for the job
     label = ctx.obj["label"]
 
-    from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
+    from chemsmart.jobs.mol.movie import PyMOLMovieJob
 
-    return PyMOLVisualizationJob(
+    return PyMOLMovieJob(
         molecule=molecules,
         label=label,
         pymol_script=file,
-        render=render,
+        render=render_style,
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
+        trace=trace,
         skip_completed=skip_completed,
         **kwargs,
     )

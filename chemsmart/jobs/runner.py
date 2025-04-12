@@ -139,7 +139,7 @@ class JobRunner(RegistryMixin):
         process.communicate()
         return process.poll()
 
-    def _postrun(self, job):
+    def _postrun(self, job, **kwargs):
         # Subclasses can implement
         pass
 

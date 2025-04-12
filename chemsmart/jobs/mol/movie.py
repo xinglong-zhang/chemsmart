@@ -1,8 +1,8 @@
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
-class PyMOLVisualizationJob(PyMOLJob):
-    TYPE = "pymol_visualization"
+class PyMOLMovieJob(PyMOLJob):
+    TYPE = "pymol_movie"
 
     def __init__(
         self,
@@ -10,10 +10,10 @@ class PyMOLVisualizationJob(PyMOLJob):
         label,
         pymol_script=None,
         render=None,
-        trace=None,
         vdw=None,
         quiet_mode=True,
         command_line_only=True,
+        trace=True,
         **kwargs,
     ):
         super().__init__(

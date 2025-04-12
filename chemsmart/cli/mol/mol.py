@@ -61,18 +61,25 @@ def click_pymol_visualization_options(f):
     """Common click options for PyMOL visualization."""
 
     @click.option(
-        "-s",
-        "--style-file",
+        "-f",
+        "--file",
         type=str,
         default=None,
-        help="PyMOL script or style file. If not specified, defaults to zhang_group_pymol_style.py.",
+        help="PyMOL file script or style. If not specified, defaults to zhang_group_pymol_style.py.",
     )
     @click.option(
         "-r",
-        "--render-style",
+        "--render",
         type=click.Choice(["pymol", "cylview"], case_sensitive=False),
         default=None,
         help='PyMOL render style. Choices include "pymol" or "cylview", if using zhang_group_pymol_style.',
+    )
+    @click.option(
+        "-t/",
+        "--trace/--no-trace",
+        type=bool,
+        default=True,
+        help="PyMOL options to ray trace or not. Default to True.",
     )
     @click.option(
         "-v",
