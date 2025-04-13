@@ -68,7 +68,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   tests_linux:
-    needs: pre-commit  
+    needs: [pre-commit, build]  # Add build as a dependency
+    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
     strategy:
       fail-fast: false
       matrix:
@@ -94,7 +95,8 @@ jobs:
         uses: codecov/codecov-action@v5
 
   tests_mac:
-    needs: pre-commit
+    needs: [pre-commit, build]  # Add build as a dependency
+    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
     strategy:
       fail-fast: false
       matrix:
@@ -120,7 +122,8 @@ jobs:
         uses: codecov/codecov-action@v5
 
   tests_win:
-    needs: pre-commit
+    needs: [pre-commit, build]  # Add build as a dependency
+    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
     strategy:
       fail-fast: false
       matrix:
