@@ -67,6 +67,10 @@ jobs:
         with:
           path: ~/miniconda3/envs/chemsmart
           key: conda-${{ runner.os }}-python-3.10-${{ hashFiles('environment.yml') }}
+      - name: Install pre-commit
+        shell: bash -l {0}
+        run: |
+          pip install pre-commit
       - name: Run pre-commit
         shell: bash -l {0}
         run: |
