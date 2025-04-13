@@ -19,7 +19,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml') }}
+          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
           restore-keys: |
             conda-Linux-python-3.10-
       - name: Set up Conda
@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml') }}
+          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
       - name: Install dependencies
         shell: bash -l {0}
         run: |
@@ -67,7 +67,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml') }}
+          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
       - name: Run pre-commit
         shell: bash -l {0}
         run: |
@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml') }}
+          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
       - name: Set up Conda (fallback)
         if: steps.cache-conda.outputs.cache-hit != 'true'
         uses: conda-incubator/setup-miniconda@v3
@@ -129,7 +129,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/miniconda3/envs/chemsmart
-          key: conda-macOS-python-3.10-${{ hashFiles('environment.yml') }}
+          key: conda-macOS-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
       - name: Debug cache restore
         shell: bash -l {0}
         run: |
@@ -178,7 +178,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: '%USERPROFILE%\miniconda3\envs\chemsmart'
-          key: conda-Windows-python-3.10-${{ hashFiles('environment.yml') }}
+          key: conda-Windows-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
       - name: Debug cache restore
         shell: cmd
         run: |
