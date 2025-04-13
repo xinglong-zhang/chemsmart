@@ -186,13 +186,6 @@ jobs:
         with:
           path: '%USERPROFILE%\miniconda3\envs\chemsmart'
           key: conda-Windows-python-3.10-${{ hashFiles('environment.yml') }}
-      - name: Debug cache restore
-        shell: cmd
-        run: |
-          echo Cache hit: %CACHE_HIT%
-          dir "%USERPROFILE%\miniconda3\envs\chemsmart" || echo Environment directory not found
-        env:
-          CACHE_HIT: ${{ steps.cache-conda.outputs.cache-hit }}
       - name: Set up Conda (fallback)
         if: steps.cache-conda.outputs.cache-hit != 'true'
         uses: conda-incubator/setup-miniconda@v3
