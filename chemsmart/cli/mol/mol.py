@@ -96,11 +96,16 @@ def click_pymol_visualization_options(f):
         help="Run PyMOL in quiet mode. Default to True.",
     )
     @click.option(
-        "-c",
-        "--command-line-only",
+        "--command-line-only/--no-command-line-only",
         is_flag=True,
         default=True,
         help="Run PyMOL in command line only. Default to True.",
+    )
+    @click.option(
+        "-c",
+        "--coordinates",
+        default=None,
+        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

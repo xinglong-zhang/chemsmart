@@ -10,7 +10,10 @@ from pathlib import Path
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.utils import quote_path
+from chemsmart.utils.utils import (
+    get_prepend_string_list_from_modred_free_format,
+    quote_path,
+)
 
 pt = PeriodicTable()
 
@@ -169,9 +172,46 @@ class PyMOLJobRunner(JobRunner):
         if job.vdw:
             command += f"; add_vdw {self.job_basename}"
 
+        return command
+
+    def _add_coordinates_labels(self, job, command):
+        distances = []
+        angles = []
+        dihedrals = []
+        if job.coordinates:
+            prepend_string_list = (
+                get_prepend_string_list_from_modred_free_format(
+                    input_modred=job.coordinates, program="pymol"
+                )
+            )
+            for prepend_string in prepend_string_list:
+                if prepend_string.startswith("B"):
+                    distances.append(
+                        [int(i) for i in prepend_string.split()[1:]]
+                    )
+                elif prepend_string.startswith("A"):
+                    angles.append([int(i) for i in prepend_string.split()[1:]])
+                elif prepend_string.startswith("D"):
+                    dihedrals.append(
+                        [int(i) for i in prepend_string.split()[1:]]
+                    )
+
+            for i, distance in enumerate(distances):
+                command += (
+                    f"; distance d{i+1}, id {distance[0]}, id {distance[1]}"
+                )
+            for i, angle in enumerate(angles):
+                command += f"; angle a{i+1}, id {angle[0]}, id {angle[1]}, id {angle[2]}"
+            for i, dihedral in enumerate(dihedrals):
+                command += f"; dihedral di{i+1}, id {dihedral[0]}, id {dihedral[1]}, id {dihedral[2]}, id {dihedral[3]}"
+        return command
+
+    def _add_zoom_command(self, job, command):
         # zoom
         command += "; zoom"
+        return command
 
+    def _add_ray_command(self, job, command):
         if job.trace:
             command += "; ray"
 
@@ -228,6 +268,9 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 
     def _get_command(self, job):
         command = self._get_visualization_command(job)
+        command = self._add_coordinates_labels(job, command)
+        command = self._add_zoom_command(job, command)
+        command = self._add_ray_command(job, command)
         command = self._save_pse_command(job, command)
         command = self._quit_command(job, command)
         return command
@@ -253,6 +296,9 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
 
     def _get_command(self, job):
         command = self._get_visualization_command(job)
+        command = self._add_coordinates_labels(job, command)
+        command = self._add_zoom_command(job, command)
+        command = self._add_ray_command(job, command)
         command = self._get_rotation_command(job, command)
         command = self._export_movie_command(job, command)
         command = self._save_pse_command(job, command)
@@ -261,6 +307,9 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
 
     def _postrun(self, job, framerate=30):
         """Convert to MP4 using ffmpeg."""
+        self._create_movie(job=job, framerate=framerate)
+
+    def _create_movie(self, job, framerate=30):
         frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
         frame_pattern = f"{frame_prefix}%04d.png"
         output_mp4 = (
@@ -327,4 +376,4 @@ class PyMOLIRCMovieJobRunner(PyMOLMovieJobRunner):
 
     def _get_rotation_command(self, job, command):
         # no rotation commands for ircmovie
-        pass
+        return command

@@ -8,22 +8,10 @@ class PyMOLVisualizationJob(PyMOLJob):
         self,
         molecule,
         label,
-        pymol_script=None,
-        style=None,
-        trace=None,
-        vdw=None,
-        quiet_mode=True,
-        command_line_only=True,
         **kwargs,
     ):
         super().__init__(
             molecule=molecule,
             label=label,
-            pymol_script=pymol_script,
-            style=style,
-            trace=trace,
-            vdw=vdw,
-            quiet_mode=quiet_mode,
-            command_line_only=command_line_only,
             **kwargs,
         )

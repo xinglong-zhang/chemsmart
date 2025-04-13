@@ -42,6 +42,7 @@ def ircmovie(
     vdw,
     quiet,
     command_line_only,
+    coordinates,
     overwrite,
     skip_completed,
     **kwargs,
@@ -57,6 +58,10 @@ def ircmovie(
     # get label for the job
     label = ctx.obj["label"]
 
+    if coordinates is not None:
+        logger.debug(f"Coordinates for visualization: {coordinates}")
+        coordinates = eval(coordinates)
+
     from chemsmart.jobs.mol.ircmovie import PyMOLIRCMovieJob
 
     return PyMOLIRCMovieJob.from_files(
@@ -69,6 +74,7 @@ def ircmovie(
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
+        coordinates=coordinates,
         overwrite=overwrite,
         skip_completed=skip_completed,
         **kwargs,

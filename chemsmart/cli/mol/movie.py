@@ -26,6 +26,7 @@ def movie(
     vdw,
     quiet,
     command_line_only,
+    coordinates,
     overwrite,
     skip_completed,
     **kwargs,
@@ -42,6 +43,10 @@ def movie(
     molecules = ctx.obj["molecules"]
     logger.info(f"Visualizing molecule(s): {molecules}.")
 
+    if coordinates is not None:
+        logger.debug(f"Coordinates for visualization: {coordinates}")
+        coordinates = eval(coordinates)
+
     # get label for the job
     label = ctx.obj["label"]
 
@@ -56,6 +61,7 @@ def movie(
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
+        coordinates=coordinates,
         overwrite=overwrite,
         skip_completed=skip_completed,
         **kwargs,

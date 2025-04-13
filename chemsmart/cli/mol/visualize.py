@@ -21,6 +21,7 @@ def visualize(
     vdw,
     quiet,
     command_line_only,
+    coordinates,
     skip_completed,
     **kwargs,
 ):
@@ -28,7 +29,10 @@ def visualize(
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
     This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_visualize.pse
-    with added Van der Waal's surface (-v) automatically."""
+    with added Van der Waal's surface (-v) automatically.
+        chemsmart run --debug mol -f vhr_ox_modred_ts10.log visualize -c [[1,2],[3,4,5],[1,3,4,5],[4,5],[4,6,9]]
+    This visualizes vhr_ox_modred_ts10.log file and saves as vhr_ox_modred_ts10_visualize.pse and add in additional
+    coordinates (bonds, angles and dihedrals) for labelling."""
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -36,6 +40,9 @@ def visualize(
 
     # get label for the job
     label = ctx.obj["label"]
+    if coordinates is not None:
+        logger.debug(f"Coordinates for visualization: {coordinates}")
+        coordinates = eval(coordinates)
 
     from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 
@@ -48,6 +55,7 @@ def visualize(
         vdw=vdw,
         quiet_mode=quiet,
         command_line_only=command_line_only,
+        coordinates=coordinates,
         skip_completed=skip_completed,
         **kwargs,
     )

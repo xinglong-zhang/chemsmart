@@ -21,6 +21,7 @@ class PyMOLJob(Job):
         vdw=None,
         quiet_mode=True,
         command_line_only=True,
+        coordinates=None,
         **kwargs,
     ):
         super().__init__(molecule=molecule, label=label, **kwargs)
@@ -30,10 +31,7 @@ class PyMOLJob(Job):
         self.vdw = vdw
         self.quiet_mode = quiet_mode
         self.command_line_only = command_line_only
-        molecule = molecule.copy()
-
-        self.molecule = molecule
-        self.label = label
+        self.coordinates = coordinates  # coordinates for labelling
 
     @property
     def inputfile(self):
