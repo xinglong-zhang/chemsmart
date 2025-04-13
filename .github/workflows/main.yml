@@ -1,83 +1,75 @@
 name: CI
 
 # Controls when the workflow will run
-on:  
-  # Triggers workflow on push or PR events but only for the main branch
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Allows run workflow manually from the Actions tab
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
-  setup-conda:
+  pre-commit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Cache Conda environment
-        id: cache-conda
-        uses: actions/cache@v4
-        with:
-          path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
-          restore-keys: |
-            conda-Linux-python-3.10-
       - name: Set up Conda
-        if: steps.cache-conda.outputs.cache-hit != 'true'
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
           python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
-          channels: conda-forge,defaults
-      - name: Verify Conda environment
+      - name: Install pre-commit
         shell: bash -l {0}
         run: |
-          conda activate chemsmart
-          conda info
-          conda list
+          pip install pre-commit
+      - name: Run pre-commit
+        shell: bash -l {0}
+        run: pre-commit run --all-files
 
   build:
-    needs: setup-conda
     permissions:
       contents: read
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Restore Conda cache
-        uses: actions/cache@v4
+      - name: Clear existing cache
+        shell: bash -l {0}
+        run: |
+          rm -rf ~/.cache/pip
+          rm -rf ./.gradle/caches/
+          rm -rf ~/.m2/repository/
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
+          auto-update-conda: true
+          python-version: "3.10"
+          environment-file: environment.yml
+          activate-environment: chemsmart
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda activate chemsmart
           python -m pip install --upgrade pip
           make install
-
-  pre-commit:
-    needs: build  
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Restore Conda cache
-        uses: actions/cache@v4
-        with:
-          path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
-      - name: Run pre-commit
+      - name: Test with pytest and calculate coverage
         shell: bash -l {0}
         run: |
-          source ~/miniconda3/etc/profile.d/conda.sh
-          conda activate chemsmart
-          pre-commit run --all-files
+          make test
+      - name: Create Coverage
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: orgoro/coverage@v3
+        with:
+          coverageFile: coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   tests_linux:
-    needs: [build]  # No need for pre-commit dependency
-    if: ${{ success() && needs.build.result == 'success' }}
+    needs: [pre-commit, build]  # Add build as a dependency
+    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
     strategy:
       fail-fast: false
       matrix:
@@ -86,37 +78,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Restore Conda cache
-        id: cache-conda
-        uses: actions/cache@v4
-        with:
-          path: ~/miniconda3/envs/chemsmart
-          key: conda-Linux-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
-      - name: Set up Conda (fallback)
-        if: steps.cache-conda.outputs.cache-hit != 'true'
+      - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
-          channels: conda-forge,defaults
       - name: Install project
         shell: bash -l {0}
-        run: |
-          conda activate chemsmart
-          make install
+        run: make install
       - name: Run tests
         shell: bash -l {0}
-        run: |
-          conda activate chemsmart
-          make test
-      - name: Upload coverage to Codecov
+        run: make test
+      - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v5
 
   tests_mac:
-    needs: [build]
-    if: ${{ success() && needs.build.result == 'success' }}
+    needs: [pre-commit, build]  # Add build as a dependency
+    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
     strategy:
       fail-fast: false
       matrix:
@@ -125,47 +105,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Restore Conda cache
-        id: cache-conda
-        uses: actions/cache@v4
-        with:
-          path: ~/miniconda3/envs/chemsmart
-          key: conda-macOS-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
-      - name: Debug cache restore
-        shell: bash -l {0}
-        run: |
-          echo "Cache hit: ${{ steps.cache-conda.outputs.cache-hit }}"
-          ls -ld ~/miniconda3/envs/chemsmart || echo "Environment directory not found"
-      - name: Set up Conda (fallback)
-        if: steps.cache-conda.outputs.cache-hit != 'true'
+      - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
-          channels: conda-forge,defaults
-      - name: Debug Conda environment
-        shell: bash -l {0}
-        run: |
-          conda activate chemsmart
-          conda list
       - name: Install project
         shell: bash -l {0}
-        run: |
-          conda activate chemsmart
-          make install
+        run: make install
       - name: Run tests
         shell: bash -l {0}
-        run: |
-          conda activate chemsmart
-          make test
-      - name: Upload coverage to Codecov
+        run: make test
+      - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v5
 
   tests_win:
-    needs: [build]
-    if: ${{ success() && needs.build.result == 'success' }}
+    needs: [pre-commit, build]  # Add build as a dependency
+    if: ${{ success() && needs.build.result == 'success' }}  # Only run if build succeeds
     strategy:
       fail-fast: false
       matrix:
@@ -174,26 +132,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Restore Conda cache
-        id: cache-conda
-        uses: actions/cache@v4
-        with:
-          path: '%USERPROFILE%\miniconda3\envs\chemsmart'
-          key: conda-Windows-python-3.10-${{ hashFiles('environment.yml', 'pyproject.toml') }}
-      - name: Set up Conda (fallback)
-        if: steps.cache-conda.outputs.cache-hit != 'true'
+      - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           environment-file: environment.yml
           activate-environment: chemsmart
           channels: conda-forge,defaults
-      - name: Debug Conda environment
-        shell: cmd
-        run: |
-          call "%CONDA%\Scripts\activate.bat" chemsmart
-          conda list
       - name: Install make
         shell: cmd
         run: |
@@ -208,7 +154,5 @@ jobs:
         run: |
           call "%CONDA%\Scripts\activate.bat" chemsmart
           make test
-        env:
-          PYTHONIOENCODING: utf-8  # Ensure encoding for Windows
-      - name: Upload coverage to Codecov
+      - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v5
