@@ -39,6 +39,26 @@ jobs:
           conda info
           conda list
 
+  build:
+    needs: setup-conda
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Conda cache
+        uses: actions/cache@v4
+        with:
+          path: ~/miniconda3/envs/chemsmart
+          key: conda-${{ runner.os }}-python-3.10-${{ hashFiles('environment.yml') }}
+      - name: Install dependencies
+        shell: bash -l {0}
+        run: |
+          conda activate chemsmart
+          python -m pip install --upgrade pip
+          make install
+          
   pre-commit:
     needs: setup-conda
     runs-on: ubuntu-latest
@@ -59,32 +79,6 @@ jobs:
         run: |
           conda activate chemsmart
           pre-commit run --all-files
-
-  build:
-    needs: setup-conda
-    permissions:
-      contents: read
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Clear existing cache
-        shell: bash -l {0}
-        run: |
-          rm -rf ~/.cache/pip
-          rm -rf ./.gradle/caches/
-          rm -rf ~/.m2/repository/
-      - name: Restore Conda cache
-        uses: actions/cache@v4
-        with:
-          path: ~/miniconda3/envs/chemsmart
-          key: conda-${{ runner.os }}-python-3.10-${{ hashFiles('environment.yml') }}
-      - name: Install dependencies
-        shell: bash -l {0}
-        run: |
-          conda activate chemsmart
-          python -m pip install --upgrade pip
-          make install
 
   tests_linux:
     needs: [pre-commit, build, setup-conda]  # Add build as a dependency
@@ -169,18 +163,6 @@ jobs:
         run: |
           call "%CONDA%\Scripts\activate.bat" chemsmart
           make install
-      - name: Verify PyMOL Installation
-        shell: cmd
-        run: |
-          call "%CONDA%\Scripts\activate.bat" chemsmart
-          where pymol || echo "PyMOL not found in PATH"
-          pymol -c || echo "PyMOL failed to run (expected if no GUI, checking availability)"
-      - name: Debug Environment
-        shell: cmd
-        run: |
-          call "%CONDA%\Scripts\activate.bat" chemsmart
-          echo PATH=%PATH%
-          conda list | findstr pymol
       - name: Run tests
         shell: cmd
         run: |
