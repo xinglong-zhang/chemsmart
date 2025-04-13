@@ -22,21 +22,29 @@ logger = logging.getLogger(__name__)
     "-r",
     "--reactant",
     type=str,
-    required=True,
+    default=None,
     help="IRC file leading to the reactant side.",
 )
 @click.option(
     "-p",
     "--product",
     type=str,
-    required=True,
+    default=None,
     help="IRC file leading to the product side.",
+)
+@click.option(
+    "-a",
+    "--all",
+    type=str,
+    default=None,
+    help="File containing all structures in the IRC, from full IRC run.",
 )
 @click.pass_context
 def irc(
     ctx,
     reactant,
     product,
+    all,
     file,
     style,
     trace,
@@ -50,9 +58,11 @@ def irc(
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
     Example usage:
-        chemsmart run --debug mol irc -r vhr_ox_modred_ts10_ircr.log -p vhr_ox_modred_ts10_ircf.log -c [1,12] -o
+        chemsmart run mol irc -r vhr_ox_modred_ts10_ircr.log -p vhr_ox_modred_ts10_ircf.log -c [1,12] -o
     This makes an IRC movie from vhr_ox_modred_ts10_ircr.log and vhr_ox_modred_ts10_ircf.log, with coordinate labels.
     If the movie mp4 file exists, it will not be overwritten unless -o is specified.
+        chemsmart run mol irc -a vhr_ox_modred_ts10_irc.log -c [1,12]
+    for full irc run, with coordinate labels. This can also be used for any .log to obtain all structures as a movie.
     """
 
     # get label for the job
@@ -75,6 +85,7 @@ def irc(
     return PyMOLIRCMovieJob.from_files(
         reactant_file=reactant,
         product_file=product,
+        all_file=all,
         label=label,
         pymol_script=file,
         style=style,
