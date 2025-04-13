@@ -13,7 +13,7 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-@mol.command("ircmovie", cls=MyCommand)
+@mol.command("irc", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
 @click_pymol_save_options
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
     help="IRC file leading to the product side.",
 )
 @click.pass_context
-def ircmovie(
+def irc(
     ctx,
     reactant,
     product,
@@ -49,9 +49,8 @@ def ircmovie(
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
     Example usage:
-        chemsmart run --debug mol ircmovie -R -P
-    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_movie.pse
-    with added Van der Waal's surface (-v) automatically.
+        chemsmart run --debug mol irc -r vhr_ox_modred_ts10_ircr.log -p vhr_ox_modred_ts10_ircf.log -c [1,12] -o
+    This makes an IRC movie from vhr_ox_modred_ts10_ircr.log and vhr_ox_modred_ts10_ircf.log, with coordinate labels.
     If the movie mp4 file exists, it will not be overwritten unless -o is specified.
     """
 
@@ -62,7 +61,7 @@ def ircmovie(
         logger.debug(f"Coordinates for visualization: {coordinates}")
         coordinates = eval(coordinates)
 
-    from chemsmart.jobs.mol.ircmovie import PyMOLIRCMovieJob
+    from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob
 
     return PyMOLIRCMovieJob.from_files(
         reactant_file=reactant,

@@ -336,6 +336,7 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
         # Run ffmpeg command
         ffmpeg_cmd = [
             "ffmpeg",
+            "-y",  # Overwrite output file if it exists
             "-framerate",
             str(framerate),
             "-i",

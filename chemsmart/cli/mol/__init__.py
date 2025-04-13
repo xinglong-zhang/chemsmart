@@ -1,10 +1,10 @@
-from .ircmovie import ircmovie
+from .irc import irc
 from .mol import mol
 from .movie import movie
 from .visualize import visualize
 
 __all__ = [
-    "ircmovie",
+    "irc",
     "mol",
     "movie",
     "visualize",

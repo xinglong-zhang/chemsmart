@@ -1,4 +1,4 @@
-from .ircmovie import PyMOLIRCMovieJob
+from .irc import PyMOLIRCMovieJob
 from .job import PyMOLJob
 from .movie import PyMOLMovieJob
 from .runner import PyMOLJobRunner
