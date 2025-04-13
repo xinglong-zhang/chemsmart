@@ -64,12 +64,12 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Interpolator exponent used in the quasi-RRHO approximation.",
 )
 @click.option(
-    "-i",
-    "--isotope",
+    "-w",
+    "--weighted",
     is_flag=True,
     default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (False) or use most abundant masses (True).",
+    help="Use natural abundance weighted masses (True) or use most abundant masses (False).",
 )
 @click.option(
     "-q",
@@ -117,7 +117,7 @@ def get_thermo(
     concentration,
     temperature,
     alpha,
-    isotope,
+    weighted,
     q,
     qs,
     qh,
@@ -248,7 +248,7 @@ def get_thermo(
         log("   " + f"Damping Function Exponent  : {alpha}" + "\n")
     log(
         "   "
-        + f"Mass Weighted              : {'Most Abundant Masses' if isotope else 'Natural Abundance Weighted Masses'}"
+        + f"Mass Weighted              : {'Most Abundant Masses' if not weighted else 'Natural Abundance Weighted Masses'}"
         + "\n"
     )
     log("   " + f"Energy Unit                : {energy_unit}" + "\n\n")
@@ -327,7 +327,7 @@ def get_thermo(
                 file,
                 temperature=temperature,
                 concentration=concentration,
-                natural_abundance_weighted_mass=not isotope,
+                natural_abundance_weighted_mass=weighted,
                 alpha=alpha,
                 s_freq_cutoff=fs,
                 h_freq_cutoff=fh,

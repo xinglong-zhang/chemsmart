@@ -104,6 +104,7 @@ class TestThermochemistry:
             filename=gaussian_singlet_opt_outfile,
             temperature=298.15,
             pressure=1,
+            natural_abundance_weighted_mass=True,
         )
 
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
@@ -722,6 +723,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             concentration=1.0,
+            natural_abundance_weighted_mass=True,
         )
 
         # when arguments are not specified, the quasi-rrho calculation use
@@ -1064,6 +1066,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=598.15,
             concentration=0.5,
+            natural_abundance_weighted_mass=True,
         )
         assert np.isclose(
             qrrho_thermochem_co2_2.energies, -188.444680, atol=1e-6
@@ -1106,6 +1109,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             concentration=1.0,
+            natural_abundance_weighted_mass=True,
             s_freq_cutoff=1000,
             h_freq_cutoff=1000,
         )
@@ -1339,6 +1343,7 @@ class TestThermochemistryHe:
             filename=gaussian_he_opt_outfile,
             temperature=598.15,
             concentration=0.5,
+            natural_abundance_weighted_mass=True,
             s_freq_cutoff=1000,
             h_freq_cutoff=1000,
         )
@@ -1601,6 +1606,7 @@ class TestThermochemistryH2O:
             filename=gaussian_mp2_outputfile,
             temperature=1298.15,
             concentration=2.0,
+            natural_abundance_weighted_mass=True,
             s_freq_cutoff=500,
             h_freq_cutoff=500,
         )

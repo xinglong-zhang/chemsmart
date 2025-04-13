@@ -32,7 +32,7 @@ class Thermochemistry:
         temperature,
         concentration=1.0,
         pressure=1.0,
-        natural_abundance_weighted_mass=True,
+        natural_abundance_weighted_mass=False,
         alpha=4,
         s_freq_cutoff=100.0,
         h_freq_cutoff=100.0,
