@@ -1,13 +1,13 @@
 name: CI
 
-# Controls when the workflow will run
+# Controls when workflow will run
 on:  
-  # Triggers the workflow on push or pull request events but only for the main branch
+  # Triggers workflow on push or PR events but only for main branch
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Allows run workflow manually from the Actions tab
+  workflow_dispatch:  # Allows run workflow manually from Actions tab
 
 jobs:
   setup-conda:
