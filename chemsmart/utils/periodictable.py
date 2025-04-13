@@ -37,3 +37,8 @@ class PeriodicTable:
 
     def to_atomic_mass(self, symbol):
         return self.atomic_masses[self.to_atomic_number(symbol)]
+
+    def to_most_abundant_atomic_mass(self, symbol):
+        from chemsmart.utils.isotopes_data import isotopes
+
+        return isotopes[self.to_atomic_number(symbol)]["most_abundant"]["mass"]

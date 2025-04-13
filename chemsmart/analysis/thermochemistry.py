@@ -20,7 +20,7 @@ class Thermochemistry:
         temperature: float. Temperature of the system, in K.
         concentration: float. Concentration of the system, in mol/L.
         pressure: float. Pressure of the system, in atm.
-        weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
+        natural_abundance_weighted_mass: bool. If True, use natural abundance weighted masses; otherwise, use most abundant masses.
         alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
         s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
         h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
@@ -32,7 +32,7 @@ class Thermochemistry:
         temperature,
         concentration=1.0,
         pressure=1.0,
-        weighted_atomic_mass=True,
+        natural_abundance_weighted_mass=True,
         alpha=4,
         s_freq_cutoff=100.0,
         h_freq_cutoff=100.0,
@@ -41,7 +41,7 @@ class Thermochemistry:
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
-        self.weighted_atomic_mass = weighted_atomic_mass
+        self.natural_abundance_weighted_mass = natural_abundance_weighted_mass
         self.m = (
             self.mass
             * units._amu  # converts mass from g/mol to kg/molecule
@@ -53,8 +53,7 @@ class Thermochemistry:
         )  # convert the unit of pressure from atm to Pascal
         self.concentration = concentration
         self.alpha = alpha
-        self.s_freq_cutoff_wavenumber = s_freq_cutoff
-        self.h_freq_cutoff_wavenumber = h_freq_cutoff
+        self.cutoff = max(min(s_freq_cutoff, h_freq_cutoff, 100.0), 1e-6)
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
@@ -107,9 +106,9 @@ class Thermochemistry:
     @property
     def mass(self):
         """Obtain the molecular mass."""
-        if self.weighted_atomic_mass:
+        if self.natural_abundance_weighted_mass:
             return self.molecule.mass
-        return self.file_object.mass
+        return self.molecule.most_abundant_mass
 
     @property
     def moments_of_inertia(self):
@@ -159,15 +158,14 @@ class Thermochemistry:
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
         All other negative frequencies are replaced by the cutoff value.
         """
-        cutoff = min(
-            self.s_freq_cutoff_wavenumber, self.h_freq_cutoff_wavenumber
-        )
         if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
             return [
-                cutoff if k < 0.0 else k
+                self.cutoff if k < 0.0 else k
                 for k in self.vibrational_frequencies[1:]
             ]
-        return [cutoff if k < 0.0 else k for k in self.vibrational_frequencies]
+        return [
+            self.cutoff if k < 0.0 else k for k in self.vibrational_frequencies
+        ]
 
     @property
     def num_replaced_frequencies(self):

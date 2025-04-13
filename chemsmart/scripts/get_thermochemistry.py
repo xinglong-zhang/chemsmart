@@ -69,7 +69,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     is_flag=True,
     default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (False) or use single isotope masses (True).",
+    help="Use natural abundance weighted masses (False) or use most abundant masses (True).",
 )
 @click.option(
     "-q",
@@ -208,10 +208,7 @@ def get_thermo(
         log("   " + " " * 19 + "=" * 73 + "\n")
         index = 1
         for file in files:
-            scf_energy = Thermochemistry(
-                file,
-                temperature=temperature,
-            )
+            scf_energy = Thermochemistry(file, temperature=temperature)
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = scf_energy.energies * unit_conversion
             log(
@@ -251,7 +248,7 @@ def get_thermo(
         log("   " + f"Damping Function Exponent  : {alpha}" + "\n")
     log(
         "   "
-        + f"Mass Weighted              : {'Single Isotope Masses' if isotope else 'Natural Abundance Weighted Masses'}"
+        + f"Mass Weighted              : {'Most Abundant Masses' if isotope else 'Natural Abundance Weighted Masses'}"
         + "\n"
     )
     log("   " + f"Energy Unit                : {energy_unit}" + "\n\n")
@@ -330,7 +327,7 @@ def get_thermo(
                 file,
                 temperature=temperature,
                 concentration=concentration,
-                weighted_atomic_mass=not isotope,
+                natural_abundance_weighted_mass=not isotope,
                 alpha=alpha,
                 s_freq_cutoff=fs,
                 h_freq_cutoff=fh,
@@ -376,7 +373,7 @@ def get_thermo(
                     if thermochemistry.num_replaced_frequencies > 0:
                         logger.warning(
                             f"!! Transition state detected: ignored 1 imaginary frequency and replaced "
-                            f"{thermochemistry.num_replaced_frequencies} other imaginary frequency(s) with the cutoff value for {file}.\n"
+                            f"{thermochemistry.num_replaced_frequencies} other imaginary frequency(s) with the cutoff value ({thermochemistry.cutoff:.1f} cm-1) for {file}.\n"
                         )
                     else:
                         logger.warning(
@@ -384,7 +381,7 @@ def get_thermo(
                         )
                 else:
                     logger.warning(
-                        f"!! Replaced {thermochemistry.num_replaced_frequencies} imaginary frequency(s) with the cutoff value for {file}.\n"
+                        f"!! Replaced {thermochemistry.num_replaced_frequencies} imaginary frequency(s) with the cutoff value ({thermochemistry.cutoff:.1f} cm-1) for {file}.\n"
                     )
 
             if q:
