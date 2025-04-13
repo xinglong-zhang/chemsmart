@@ -344,12 +344,12 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
             "-framerate",
             str(framerate),
             "-i",
-            quote_path(os.path.normpath(frame_pattern)),  # Use %04d for ffmpeg
+            os.path.normpath(frame_pattern),  # Use %04d for ffmpeg
             "-c:v",
             "libx264",  # Uses H.264 codec for compatibility.
             "-pix_fmt",
             "yuv420p",  # ensures compatibility with most video players
-            quote_path(os.path.normpath(output_mp4)),
+            os.path.normpath(output_mp4),
         ]
         logger.info(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
         try:
