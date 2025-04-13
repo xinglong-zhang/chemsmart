@@ -1,3 +1,4 @@
+import ast
 import logging
 
 import click
@@ -45,8 +46,12 @@ def visualize(
         try:
             coordinates = ast.literal_eval(coordinates)
         except (ValueError, SyntaxError) as e:
-            logger.error(f"Invalid coordinates input: {coordinates}. Error: {e}")
-            raise ValueError("Invalid coordinates input. Please provide a valid Python literal.")
+            logger.error(
+                f"Invalid coordinates input: {coordinates}. Error: {e}"
+            )
+            raise ValueError(
+                "Invalid coordinates input. Please provide a valid Python literal."
+            )
     from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 
     return PyMOLVisualizationJob(
