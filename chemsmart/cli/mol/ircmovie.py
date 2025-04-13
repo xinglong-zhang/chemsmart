@@ -13,13 +13,29 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-@mol.command("movie", cls=MyCommand)
+@mol.command("ircmovie", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
 @click_pymol_save_options
+@click.option(
+    "-r",
+    "--reactant",
+    type=str,
+    required=True,
+    help="IRC file leading to the reactant side.",
+)
+@click.option(
+    "-p",
+    "--product",
+    type=str,
+    required=True,
+    help="IRC file leading to the product side.",
+)
 @click.pass_context
-def movie(
+def ircmovie(
     ctx,
+    reactant,
+    product,
     file,
     style,
     trace,
@@ -32,23 +48,20 @@ def movie(
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
     Example usage:
-        chemsmart run --debug mol -f phenyldioxazolone.com movie -v
+        chemsmart run --debug mol ircmovie -R -P
     This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_movie.pse
     with added Van der Waal's surface (-v) automatically.
     If the movie mp4 file exists, it will not be overwritten unless -o is specified.
     """
 
-    # get molecule
-    molecules = ctx.obj["molecules"]
-    logger.info(f"Visualizing molecule(s): {molecules}.")
-
     # get label for the job
     label = ctx.obj["label"]
 
-    from chemsmart.jobs.mol.movie import PyMOLMovieJob
+    from chemsmart.jobs.mol.ircmovie import PyMOLIRCMovieJob
 
-    return PyMOLMovieJob(
-        molecule=molecules,
+    return PyMOLIRCMovieJob.from_files(
+        reactant_file=reactant,
+        product_file=product,
         label=label,
         pymol_script=file,
         style=style,

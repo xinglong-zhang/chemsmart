@@ -151,7 +151,7 @@ class PyMOLJobRunner(JobRunner):
             command += " -c"
 
         # Handle the -d argument (PyMOL commands)
-        if job.render is None:
+        if job.style is None:
             # defaults to using zhang_group_pymol_style if not specified
             if os.path.exists("zhang_group_pymol_style.py"):
                 command += f' -d "pymol_style {self.job_basename}'
@@ -159,12 +159,12 @@ class PyMOLJobRunner(JobRunner):
                 # no render style and no style file present
                 command += ' -d "'
         else:
-            if job.render.lower() == "pymol":
+            if job.style.lower() == "pymol":
                 command += f' -d "pymol_style {self.job_basename}'
-            elif job.render.lower() == "cylview":
+            elif job.style.lower() == "cylview":
                 command += f' -d "cylview_style {self.job_basename}'
             else:
-                raise ValueError(f"The style {job.render} is not available!")
+                raise ValueError(f"The style {job.style} is not available!")
 
         if job.vdw:
             command += f"; add_vdw {self.job_basename}"
@@ -320,3 +320,11 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
         for png_file in png_files:
             os.remove(png_file)
         logger.info("Cleaned up PNG frames.")
+
+
+class PyMOLIRCMovieJobRunner(PyMOLMovieJobRunner):
+    JOBTYPES = ["pymol_ircmovie"]
+
+    def _get_rotation_command(self, job, command):
+        # no rotation commands for ircmovie
+        pass

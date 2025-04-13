@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def visualize(
     ctx,
     file,
-    render,
+    style,
     trace,
     vdw,
     quiet,
@@ -43,7 +43,7 @@ def visualize(
         molecule=molecules,
         label=label,
         pymol_script=file,
-        render=render,
+        style=style,
         trace=trace,
         vdw=vdw,
         quiet_mode=quiet,
