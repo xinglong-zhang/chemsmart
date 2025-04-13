@@ -6,7 +6,10 @@ from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
-from chemsmart.jobs.mol.runner import PyMOLVisualizationJobRunner
+from chemsmart.jobs.mol.runner import (
+    PyMOLMovieJobRunner,
+    PyMOLVisualizationJobRunner,
+)
 from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
@@ -712,6 +715,11 @@ def jobrunner_scratch(pbs_server):
 @pytest.fixture()
 def pymol_visualization_jobrunner(pbs_server):
     return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_movie_jobrunner(pbs_server):
+    return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing

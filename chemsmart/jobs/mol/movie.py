@@ -1,13 +1,14 @@
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
-class PyMOLVisualizationJob(PyMOLJob):
-    TYPE = "pymol_visualization"
+class PyMOLMovieJob(PyMOLJob):
+    TYPE = "pymol_movie"
 
     def __init__(
         self,
         molecule,
         label,
+        overwrite=False,
         **kwargs,
     ):
         super().__init__(
@@ -15,3 +16,4 @@ class PyMOLVisualizationJob(PyMOLJob):
             label=label,
             **kwargs,
         )
+        self.overwrite = overwrite

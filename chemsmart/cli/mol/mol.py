@@ -11,7 +11,7 @@ from chemsmart.utils.utils import get_list_from_string_range
 logger = logging.getLogger(__name__)
 
 
-def click_pymol_options(f):
+def click_file_options(f):
     """Common click options for PyMOL CLI."""
 
     @click.option(
@@ -61,18 +61,25 @@ def click_pymol_visualization_options(f):
     """Common click options for PyMOL visualization."""
 
     @click.option(
-        "-s",
-        "--style-file",
+        "-f",
+        "--file",
         type=str,
         default=None,
-        help="PyMOL script or style file. If not specified, defaults to zhang_group_pymol_style.py.",
+        help="PyMOL file script or style. If not specified, defaults to zhang_group_pymol_style.py.",
     )
     @click.option(
-        "-r",
-        "--render-style",
+        "-s",
+        "--style",
         type=click.Choice(["pymol", "cylview"], case_sensitive=False),
         default=None,
         help='PyMOL render style. Choices include "pymol" or "cylview", if using zhang_group_pymol_style.',
+    )
+    @click.option(
+        "-t/",
+        "--trace/--no-trace",
+        type=bool,
+        default=True,
+        help="PyMOL options to ray trace or not. Default to True.",
     )
     @click.option(
         "-v",
@@ -89,11 +96,33 @@ def click_pymol_visualization_options(f):
         help="Run PyMOL in quiet mode. Default to True.",
     )
     @click.option(
-        "-c",
-        "--command-line-only",
+        "--command-line-only/--no-command-line-only",
         is_flag=True,
         default=True,
         help="Run PyMOL in command line only. Default to True.",
+    )
+    @click.option(
+        "-c",
+        "--coordinates",
+        default=None,
+        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_save_options(f):
+    """Common click options for PyMOL save options."""
+
+    @click.option(
+        "-o",
+        "--overwrite",
+        is_flag=True,
+        default=False,
+        help="Overwrite existing files. Default to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -103,7 +132,7 @@ def click_pymol_visualization_options(f):
 
 
 @click.group(cls=MyGroup)
-@click_pymol_options
+@click_file_options
 @click.pass_context
 def mol(
     ctx,
@@ -115,14 +144,19 @@ def mol(
 ):
     # obtain molecule structure
     if filename is None and pubchem is None:
-        raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
-        )
+        # this is fine for PyMOL IRC Movie Job
+        logger.warning("[filename] or [pubchem] has not been specified!")
+        ctx.obj["molecules"] = None
+        ctx.obj["label"] = None
+        ctx.obj["filename"] = None
+        return
+    # if both filename and pubchem are specified, raise error
     if filename and pubchem:
         raise ValueError(
             "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
         )
 
+    # if filename is specified, read the file and obtain molecule
     if filename:
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
@@ -132,6 +166,7 @@ def mol(
         ), f"Could not obtain molecule from {filename}!"
         logger.debug(f"Obtained molecule {molecules} from {filename}")
 
+    # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
