@@ -291,11 +291,11 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
     def _export_movie_command(self, job, command):
         """Export movie frames (use a temporary prefix to avoid conflicts)"""
         frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
-        command = f"; mpng {frame_prefix}"
+        command += f"; mpng {frame_prefix}"
         # command += f"; mpng {quote_path(frame_prefix)}"
         #  Convert backslashes to forward slashes, which occurs in Windows
         # frame_prefix = frame_prefix.replace("\\", "/")  #
-        # command = f"; mpng {frame_prefix}"
+        # command += f"; mpng {frame_prefix}"
         return command
 
     def _get_command(self, job):
