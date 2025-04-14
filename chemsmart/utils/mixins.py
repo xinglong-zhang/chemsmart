@@ -3,6 +3,8 @@ import os
 import re
 from functools import cached_property
 
+from ase import units
+
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
 
@@ -37,6 +39,16 @@ class FileMixin:
             return f.read()
 
     @cached_property
+    def forces_in_eV_per_angstrom(self):
+        """Convert forces from Hartrees/Bohr to eV/Angstrom."""
+        if self.forces is None:
+            return [None] * len(self.energies)
+        forces_in_eV_per_A = []
+        for forces in self.forces:
+            forces_in_eV_per_A.append(forces * units.Hartree / units.Bohr)
+        return forces_in_eV_per_A
+
+    @cached_property
     def input_translation_vectors(self):
         """Obtain the translation vectors from the input that is printed in the outputfile."""
         tvs = []
@@ -53,6 +65,11 @@ class FileMixin:
     @cached_property
     def list_of_pbc_conditions(self):
         return self.input_coordinates_block.pbc_conditions
+
+    @cached_property
+    def energies_in_eV(self):
+        """Convert energies from Hartree to eV."""
+        return [energy * units.Hartree for energy in self.energies]
 
     @property
     def num_energies(self):

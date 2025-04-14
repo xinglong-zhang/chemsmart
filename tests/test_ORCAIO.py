@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import pytest
+from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
@@ -216,6 +217,25 @@ class TestORCAOutput:
         )
         assert np.allclose(
             orca_out.forces[-1], orca_out_last_forces, rtol=1e-6
+        )
+
+        orca_out_first_forces_in_eV_per_angstrom = np.array(
+            [
+                np.array([-0.000000001, 0.000000112, -0.002606324])
+                * units.Hartree
+                / units.Bohr,
+                np.array([-0.013427516, 0.000000001, 0.001404818])
+                * units.Hartree
+                / units.Bohr,
+                np.array([0.013427527, 0.000000001, 0.001404820])
+                * units.Hartree
+                / units.Bohr,
+            ]
+        )
+        assert np.allclose(
+            orca_out.forces_in_eV_per_angstrom[0],
+            orca_out_first_forces_in_eV_per_angstrom,
+            rtol=1e-6,
         )
 
         assert isinstance(orca_out.input_coordinates_block, CoordinateBlock)
