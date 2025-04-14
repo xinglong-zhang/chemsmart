@@ -28,7 +28,7 @@ def create_molecule_list(
             frozen_atoms=frozen_atoms,
             pbc_conditions=pbc_conditions,
             energy=energies[i],
-            forces=forces[i],
+            forces=forces[i] if forces is not None else None,
         )
         for i in range(num_structures)
     ]
