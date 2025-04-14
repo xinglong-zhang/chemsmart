@@ -114,9 +114,15 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "-a",
-    "--active-region",
+    "--active-atoms",
     type=str,
-    help="Indices of fixed atoms in the optimization region",
+    help="Indices of acitve atoms",
+)
+@click.option(
+    "-ua",
+    "--use-active-info-from-pbc",
+    type=str,
+    help="Get the definition of active atoms from the pdb file, default False",
 )
 @click.option(
     "-o",
@@ -144,10 +150,60 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "-e",
-    "--electronic-interaction",
+    "--embedding-type",
     type=str,
     help="whether to use electronic (default)/mechanical embedding between QM and MM region",
 )
+@click.option(
+    "-cc",
+    "--conv-charges",
+    type=bool,
+    help="Whether to use the converged charges",
+)
+@click.option(
+    "-xn",
+    "--conv-charges-max-n-cycles",
+    type=int,
+    help="Maximum number of cycles for charge convergence",
+)
+@click.option(
+    "-t",
+    "--conv-charges-conv-thresh",
+    type=float,
+    help="Convergence threshold for charge convergence",
+)
+@click.option(
+    "-sc",
+    "--scale-formal-charge-mm-atom",
+    type=float,
+    help="Scale the formal charge of MM atoms",
+)
+@click.option(
+    "-nc",
+    "--n-unit-cell-atoms",
+    type=int,
+    help="Number of atoms in the unit cell",
+)
+@click.option(
+    "-ecp",
+    "--ecp-layer-ecp",
+    type=str,
+    help="ECP layer for ECP atoms",
+)
+@click.option(
+    "-ecpn",
+    "--ecp-layer",
+    type=int,
+    help="number of cECP layers around the QM region",
+)
+@click.option(
+    "-sc2",
+    "--scale-formal-charge-ecp-atom",
+    type=float,
+    help="Scale the formal charge of ECP atoms",
+
+)
+
 @click.pass_context
 def qmmm(
     ctx,
@@ -167,12 +223,21 @@ def qmmm(
     charge_qm,
     mult_qm,
     qm2_solvation,
-    active_region,
+    active_atoms,
+    use_active_info_from_pbc,
     optregion_fixed_atoms,
     qm_h_bond_length,
     delete_la_double_counting,
     delete_la_bond_double_counting_atoms,
-    electronic_interaction,
+    embedding_type,
+    conv_charges,
+    conv_charges_max_n_cycles,
+    conv_charges_conv_thresh,
+    scale_formal_charge_mm_atom,
+    n_unit_cell_atoms,
+    ecp_layer_ecp,
+    ecp_layer,
+    scale_formal_charge_ecp_atom,
 ):
     """
     QM/MM calculation using ORCA.
@@ -213,14 +278,23 @@ def qmmm(
     qmmm_settings.charge_qm = charge_qm
     qmmm_settings.mult_qm = mult_qm
     qmmm_settings.qm2_solvation = qm2_solvation
-    qmmm_settings.active_region = active_region
+    qmmm_settings.active_atoms = active_atoms
+    qmmm_settings.use_active_info_from_pbc = use_active_info_from_pbc
     qmmm_settings.optregion_fixed_atoms = optregion_fixed_atoms
     qmmm_settings.qm_h_bond_length = qm_h_bond_length
     qmmm_settings.delete_la_double_counting = delete_la_double_counting
     qmmm_settings.delete_la_bond_double_counting_atoms = (
         delete_la_bond_double_counting_atoms
     )
-    qmmm_settings.electronic_interaction = electronic_interaction
+    qmmm_settings.embedding_type = embedding_type
+    qmmm_settings.conv_charges = conv_charges
+    qmmm_settings.conv_charges_max_n_cycles = conv_charges_max_n_cycles
+    qmmm_settings.conv_charges_conv_thresh = conv_charges_conv_thresh
+    qmmm_settings.scale_formal_charge_mm_atom = scale_formal_charge_mm_atom
+    qmmm_settings.n_unit_cell_atoms = n_unit_cell_atoms
+    qmmm_settings.ecp_layer_ecp = ecp_layer_ecp
+    qmmm_settings.ecp_layer = ecp_layer
+    qmmm_settings.scale_formal_charge_ecp_atom = scale_formal_charge_ecp_atom
     # get molecule
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]
