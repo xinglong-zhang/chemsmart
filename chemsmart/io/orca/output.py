@@ -398,8 +398,8 @@ class ORCAOutput(ORCAFileMixin):
 
         def create_molecule_list(orientations, num_structures):
             """Helper function to create Molecule objects."""
-            if self.forces_in_eV_per_angstrom is not None:
-                forces = self.forces_in_eV_per_angstrom
+            if self.forces is not None:
+                forces = self.forces
             else:
                 forces = [None] * num_structures
 
@@ -409,7 +409,7 @@ class ORCAOutput(ORCAFileMixin):
                     positions=orientations[i],
                     charge=self.charge,
                     multiplicity=self.multiplicity,
-                    energy=self.energies_in_eV[i],
+                    energy=self.energies[i],
                     forces=forces[i],
                 )
                 for i in range(num_structures)
@@ -434,7 +434,7 @@ class ORCAOutput(ORCAFileMixin):
                 positions=orientations[-1],
                 charge=self.charge,
                 multiplicity=self.multiplicity,
-                energy=self.energies_in_eV[-1],
+                energy=self.energies[-1],
                 forces=None,
             )  # last gradient/forces calculation is not done, if the geometry is optimized
             molecules_list.append(optimized_molecule)
@@ -637,13 +637,13 @@ class ORCAOutput(ORCAFileMixin):
                     if "Total Energy       :" in line_j:
                         line_j_elements = line_j.split()
                         energy_in_hartree = float(line_j_elements[-4])
-                        energy_in_eV = float(line_j_elements[-2])
+                        energy_in_ev = float(line_j_elements[-2])
                         assert math.isclose(
                             energy_in_hartree * units.Hartree,
-                            energy_in_eV,
+                            energy_in_ev,
                             rel_tol=1e-4,
                         )
-                        return energy_in_hartree * units.Hartree
+                        return energy_in_hartree
 
     @property
     def _get_sp_scf_energy(self):
@@ -652,13 +652,13 @@ class ORCAOutput(ORCAFileMixin):
                 if "Total Energy       :" in line:
                     line_elements = line.split()
                     energy_in_hartree = float(line_elements[-4])
-                    energy_in_eV = float(line_elements[-2])
+                    energy_in_ev = float(line_elements[-2])
                     assert math.isclose(
                         energy_in_hartree * units.Hartree,
-                        energy_in_eV,
+                        energy_in_ev,
                         rel_tol=1e-4,
                     )
-                    return energy_in_hartree * units.Hartree
+                    return energy_in_hartree
 
     @property
     def final_scf_energy(self):
@@ -677,80 +677,75 @@ class ORCAOutput(ORCAFileMixin):
         for line in self.contents:
             if "FINAL SINGLE POINT ENERGY" in line:
                 sp_energy_in_hartree = float(line.split()[-1])
-                # convert hartree to eV
-                return sp_energy_in_hartree * units.Hartree
+                return sp_energy_in_hartree
 
     @property
     def final_nuclear_repulsion(self):
         final_nuclear_repulsion_hartree = []
-        final_nuclear_repulsion_eV = []
+        final_nuclear_repulsion_ev = []
         for line in self.contents:
             if "Nuclear Repulsion  :" in line:
                 line_elements = line.split()
                 energy_in_hartree = float(line_elements[-4])
-                energy_in_eV = float(line_elements[-2])
+                energy_in_ev = float(line_elements[-2])
                 assert np.isclose(
                     energy_in_hartree * units.Hartree,
-                    energy_in_eV,
+                    energy_in_ev,
                     rtol=1e-4,
                 )
                 final_nuclear_repulsion_hartree.append(energy_in_hartree)
-                final_nuclear_repulsion_eV.append(energy_in_eV)
-        return final_nuclear_repulsion_eV[-1]
+                final_nuclear_repulsion_ev.append(energy_in_ev)
+        return final_nuclear_repulsion_hartree[-1]
 
     @property
     def final_electronic_energy(self):
         final_electronic_energy_hartree = []
-        final_electronic_energy_eV = []
+        final_electronic_energy_ev = []
         for line in self.contents:
             if "Electronic Energy  :" in line:
                 line_elements = line.split()
                 energy_in_hartree = float(line_elements[-4])
-                energy_in_eV = float(line_elements[-2])
+                energy_in_ev = float(line_elements[-2])
                 assert np.isclose(
                     energy_in_hartree * units.Hartree,
-                    energy_in_eV,
+                    energy_in_ev,
                     rtol=1e-4,
                 )
                 final_electronic_energy_hartree.append(energy_in_hartree)
-                final_electronic_energy_eV.append(energy_in_eV)
-        return final_electronic_energy_eV[-1]
+                final_electronic_energy_ev.append(energy_in_ev)
+        return final_electronic_energy_hartree[-1]
 
     @property
     def one_electron_energy(self):
         one_electron_energy_hartree = []
-        one_electron_energy_eV = []
         for line in self.contents:
             if "One Electron Energy:" in line:
                 line_elements = line.split()
                 energy_in_hartree = float(line_elements[-4])
-                energy_in_eV = float(line_elements[-2])
+                energy_in_ev = float(line_elements[-2])
                 assert np.isclose(
                     energy_in_hartree * units.Hartree,
-                    energy_in_eV,
+                    energy_in_ev,
                     rtol=1e-4,
                 )
                 one_electron_energy_hartree.append(energy_in_hartree)
-                one_electron_energy_eV.append(energy_in_eV)
-        return one_electron_energy_eV[-1]
+        return one_electron_energy_hartree[-1]
 
     @property
     def two_electron_energy(self):
         two_electron_energy_hartree = []
-        two_electron_energy_eV = []
         for line in self.contents:
             if "Two Electron Energy:" in line:
                 line_elements = line.split()
                 energy_in_hartree = float(line_elements[-4])
-                energy_in_eV = float(line_elements[-2])
+                energy_in_ev = float(line_elements[-2])
                 assert np.isclose(
                     energy_in_hartree * units.Hartree,
-                    energy_in_eV,
+                    energy_in_ev,
                     rtol=1e-4,
                 )
                 two_electron_energy_hartree.append(energy_in_hartree)
-                two_electron_energy_eV.append(energy_in_eV)
-        return two_electron_energy_eV[-1]
+        return two_electron_energy_hartree[-1]
 
     @property
     def max_cosx_asymmetry_energy(self):
@@ -760,11 +755,7 @@ class ORCAOutput(ORCAFileMixin):
                 energy_in_hartree = float(line.split()[-4])
                 max_cosx_asymmetry_energy_hartree.append(energy_in_hartree)
         if len(max_cosx_asymmetry_energy_hartree) != 0:
-            max_cosx_asymmetry_energy_eV = [
-                value * units.Hartree
-                for value in max_cosx_asymmetry_energy_hartree
-            ]
-            return max_cosx_asymmetry_energy_eV[-1]
+            return max_cosx_asymmetry_energy_hartree[-1]
 
     @property
     def potential_energy(self):
@@ -774,10 +765,7 @@ class ORCAOutput(ORCAFileMixin):
                 energy_in_hartree = float(line.split()[-4])
                 potential_energy_hartree.append(energy_in_hartree)
         if len(potential_energy_hartree) != 0:
-            potential_energy_eV = [
-                value * units.Hartree for value in potential_energy_hartree
-            ]
-            return potential_energy_eV[-1]
+            return potential_energy_hartree[-1]
 
     @property
     def kinetic_energy(self):
@@ -786,11 +774,8 @@ class ORCAOutput(ORCAFileMixin):
             if "Kinetic Energy     :" in line:
                 energy_in_hartree = float(line.split()[-4])
                 kinetic_energy_hartree.append(energy_in_hartree)
-        kinetic_energy_eV = [
-            value * units.Hartree for value in kinetic_energy_hartree
-        ]
-        if len(kinetic_energy_eV) != 0:
-            return kinetic_energy_eV[-1]
+        if len(kinetic_energy_hartree) != 0:
+            return kinetic_energy_hartree[-1]
 
     @property
     def virial_ratio(self):
@@ -808,10 +793,7 @@ class ORCAOutput(ORCAFileMixin):
             if "E(XC)              :" in line:
                 xc_energy_hartree.append(float(line.split()[-2]))
         if len(xc_energy_hartree) != 0:
-            xc_energy_eV = [
-                value * units.Hartree for value in xc_energy_hartree
-            ]
-            return xc_energy_eV[-1]
+            return xc_energy_hartree[-1]
 
     @property
     def dfet_embed_energy(self):
@@ -820,10 +802,7 @@ class ORCAOutput(ORCAFileMixin):
             if "DFET-embed. en.    :" in line:
                 dfet_embed_energy_hartree.append(float(line.split()[-2]))
         if len(dfet_embed_energy_hartree) != 0:
-            dfet_embed_energy_eV = [
-                value * units.Hartree for value in dfet_embed_energy_hartree
-            ]
-            return dfet_embed_energy_eV[-1]
+            return dfet_embed_energy_hartree[-1]
 
     @property
     def orbital_occupancy(self):
@@ -1922,8 +1901,7 @@ class ORCAEngradFile(ORCAFileMixin):
                 for content in self.contents[i + 1 : i + 4]:
                     try:
                         energy_in_hartree = float(content.split()[0])
-                        # convert to eV
-                        return energy_in_hartree * units.Hartree
+                        return energy_in_hartree
                     except ValueError:
                         pass
         return None
@@ -1938,10 +1916,7 @@ class ORCAEngradFile(ORCAFileMixin):
                         grad_value = float(
                             content.split()[0]
                         )  # in Hartree/Bohr
-                        # convert to eV/Angstrom
-                        grad_data.append(
-                            grad_value * units.Hartree / units.Bohr
-                        )
+                        grad_data.append(grad_value)
                     except ValueError:
                         pass
                 return np.array(grad_data).reshape(self.natoms, 3)

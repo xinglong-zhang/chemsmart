@@ -646,14 +646,6 @@ class TestGaussian16Output:
             g16_genecp.forces[-1][-1],
             [-0.000000478, 0.000001912, -0.000001255],
         )
-        assert np.allclose(
-            g16_genecp.forces_in_eV_per_angstrom[0][0],
-            [
-                -0.002864142 * units.Hartree / units.Bohr,
-                0.002344278 * units.Hartree / units.Bohr,
-                -0.003585424 * units.Hartree / units.Bohr,
-            ],
-        )
         assert len(g16_genecp.input_orientations) == 12
         assert np.allclose(
             g16_genecp.input_orientations[0],
@@ -1007,10 +999,7 @@ class TestGaussian16Output:
             0,
             0,
         ]
-        assert (
-            g16_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_frozen.optimized_structure.energy == -804.614710796
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
         assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
         assert np.allclose(
@@ -1112,10 +1101,7 @@ class TestGaussian16Output:
         # since use_frozen is False, this is not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
-        assert (
-            g16_hide_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_hide_frozen.optimized_structure.energy == -804.614710796
         assert (
             g16_hide_frozen.num_vib_modes
             == g16_hide_frozen.num_vib_frequencies
@@ -1369,9 +1355,6 @@ class TestGaussian16Output:
         assert g16_oniom.oniom_energies[0] == -5278.927903743607
         assert g16_oniom.oniom_energies[1] == -5300.535127673756
         assert g16_oniom.scf_energies[0] == -5303.01662026
-        assert (
-            g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
-        )
 
 
 class TestGaussianWBIOutput:
@@ -1489,7 +1472,6 @@ class TestGaussianPBCOutputFile:
         )
         assert len(g16_pbc_2d.energies) == 5
         assert g16_pbc_2d.energies[0] == -76.1487231466
-        assert g16_pbc_2d.energies_in_eV[0] == -76.1487231466 * units.Hartree
         assert np.allclose(
             g16_pbc_2d.forces[-1],
             np.array(
@@ -1501,18 +1483,6 @@ class TestGaussianPBCOutputFile:
         )
 
         assert np.allclose(
-            g16_pbc_2d.forces_in_eV_per_angstrom[-1],
-            np.array(
-                [
-                    [1.5884e-05, 6.7630e-06, 0.0000e00],
-                    [-1.5884e-05, -6.7630e-06, -0.0000e00],
-                ]
-            )
-            * units.Hartree
-            / units.Bohr,
-        )
-
-        assert np.allclose(
             g16_pbc_2d.last_structure.positions,
             np.array(
                 [[-0.001724, -0.714621, -0.0], [0.001724, 0.714621, 0.0]]
@@ -1521,7 +1491,7 @@ class TestGaussianPBCOutputFile:
 
         assert np.isclose(
             g16_pbc_2d.last_structure.energy,
-            -76.1490641879 * units.Hartree,
+            -76.1490641879,
             rtol=1e-5,
         )
         assert np.allclose(
@@ -1531,9 +1501,7 @@ class TestGaussianPBCOutputFile:
                     [0.000015884, 0.000006763, 0.000000000],
                     [-0.000015884, -0.000006763, -0.000000000],
                 ]
-            )
-            * units.Hartree
-            / units.Bohr,
+            ),
             rtol=1e-5,
         )
 
