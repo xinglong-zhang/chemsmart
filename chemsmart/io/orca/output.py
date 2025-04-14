@@ -12,6 +12,10 @@ from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
+    constrained_bond_angles_pattern,
+    constrained_bond_length_pattern,
+    constrained_dihedrals_pattern,
+    orca_frozen_atoms_output_pattern,
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
     standard_coord_pattern,
@@ -132,6 +136,87 @@ class ORCAOutput(ORCAFileMixin):
                         break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
+
+    def _get_first_structure_coordinates_block_in_output(self):
+        """Obtain the first structure coordinates block in the output file."""
+        coordinates_block_lines_list = []
+        pattern = re.compile(standard_coord_pattern)
+        found_header = False
+
+        for line in self.contents:
+            # Start collecting after finding the header
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                found_header = True
+                continue  # Skip the header line itself
+
+            # If we've found the header, process lines
+            if found_header:
+                match = pattern.match(line)
+                if match:
+                    # Extract the last 4 elements (symbol, x, y, z) and join with double spaces
+                    coord_line = "  ".join(line.split()[-4:])
+                    coordinates_block_lines_list.append(coord_line)
+                elif (
+                    coordinates_block_lines_list
+                ):  # Stop if we hit a non-matching line after collecting coords
+                    break
+
+        # Return CoordinateBlock instance
+        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+        return cb
+
+    @property
+    def frozen_atoms(self):
+        frozen_atoms, _, _, _ = self._get_constraints
+        return frozen_atoms
+
+    @property
+    def constrained_bond_lengths(self):
+        _, constrained_bond_lengths, _, _ = self._get_constraints
+        return constrained_bond_lengths
+
+    @property
+    def constrained_bond_angles(self):
+        _, _, constrained_bond_angles, _ = self._get_constraints
+        return constrained_bond_angles
+
+    @property
+    def constrained_dihedrals(self):
+        _, _, _, constrained_dihedrals = self._get_constraints
+        return constrained_dihedrals
+
+    @cached_property
+    def _get_constraints(self):
+        """Extract frozen atoms and constrained internal coordinates from ORCA output."""
+        frozen_atoms = []
+        constrained_bond_lengths = []
+        constrained_bond_angles = []
+        constrained_dihedrals = []
+
+        for line in self.contents:
+            frozen_match = re.match(orca_frozen_atoms_output_pattern, line)
+            if frozen_match:
+                atom_index = int(line.split()[3])
+                if atom_index not in frozen_atoms:
+                    frozen_atoms.append(atom_index)
+            elif re.match(constrained_bond_length_pattern, line):
+                constrained_bond_lengths.append(
+                    f"{line.split()[4]}-{line.split()[5]}"
+                )
+            elif re.match(constrained_bond_angles_pattern, line):
+                constrained_bond_angles.append(
+                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}"
+                )
+            elif re.match(constrained_dihedrals_pattern, line):
+                constrained_dihedrals.append(
+                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}"
+                )
+        return (
+            frozen_atoms,
+            constrained_bond_lengths,
+            constrained_bond_angles,
+            constrained_dihedrals,
+        )
 
     def _get_first_structure_coordinates_block_in_output(self):
         """Obtain the first structure coordinates block in the output file."""

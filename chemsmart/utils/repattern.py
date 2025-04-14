@@ -41,3 +41,20 @@ sdf_pattern = (
     r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
     r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
 )
+# Examples of ORCA constraints patterns:
+# Constraining bond distances : { B N1 N2 value C }
+# Constraining bond angles : { A N1 N2 N1 value C }
+# Constraining dihedral angles : { D N1 N2 N3 N4 value C }
+# Constraining cartesian coordinates : { C N1 C }
+# where the value is optional, by default it is the present value in the structure
+constrained_bond_length_pattern = (
+    r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+)
+
+constrained_bond_angles_pattern = (
+    r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+)
+
+constrained_dihedrals_pattern = r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+
+orca_frozen_atoms_output_pattern = r"Will constrain atom \d+ coordinate \d"
