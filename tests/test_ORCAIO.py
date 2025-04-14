@@ -282,9 +282,9 @@ class TestORCAOutput:
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
-            "B(H1,O0)": 0.9627,
-            "B(H2,O0)": 0.9627,
-            "A(H1,O0,H2)": 103.35,
+            "B(H2,O1)": 0.9627,
+            "B(H3,O1)": 0.9627,
+            "A(H2,O1,H3)": 103.35,
         }
         molecule = orca_out.final_structure
         assert isinstance(molecule, Molecule)
@@ -1791,16 +1791,31 @@ class TestORCAOutput:
         assert orca_out.natoms == 27
         assert orca_out.normal_termination is False
 
-    def test_get_constraints(
-        self, orca_fixed_atoms, orca_fixed_dihedral, orca_fixed_bond
+    def test_get_constrained_atoms(
+        self,
+        orca_fixed_atoms,
+        orca_fixed_bonds_and_angles,
+        orca_fixed_dihedral,
     ):
         fixed_atoms = ORCAOutput(filename=orca_fixed_atoms)
-        assert fixed_atoms.frozen_atoms == [2, 11]
+        assert fixed_atoms.frozen_atoms == [3, 12]  # atoms 3 and 12 are frozen
+
+    def test_get_constrained_bond_lengths_and_angles(
+        self, orca_fixed_bonds_and_angles
+    ):
+        fixed_bond = ORCAOutput(filename=orca_fixed_bonds_and_angles)
+        assert fixed_bond.constrained_bond_lengths == {
+            "B(H10,H9)": 2.4714,
+        }
+        assert fixed_bond.constrained_bond_angles == {
+            "A(C2,C6,H9)": 69.0631,
+        }
+
+    def test_get_constrained_dihedral_angles(self, orca_fixed_dihedral):
         fixed_dihedral = ORCAOutput(filename=orca_fixed_dihedral)
-        assert fixed_dihedral.constrained_dihedrals == ["3-12-13-17"]
-        fixed_bond = ORCAOutput(filename=orca_fixed_bond)
-        assert fixed_bond.constrained_bond_lengths == ["8-9"]
-        assert fixed_bond.constrained_bond_angles == ["1-5-8"]
+        assert fixed_dihedral.constrained_dihedral_angles == {
+            "D(O18,H14,C13,C4)": -125.9028,
+        }
 
 
 class TestORCAEngrad:

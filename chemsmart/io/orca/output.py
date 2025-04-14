@@ -8,13 +8,15 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
+from chemsmart.utils.io import (
+    clean_duplicate_structure,
+    create_molecule_list,
+    increment_numbers,
+)
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
-    constrained_bond_angles_pattern,
-    constrained_bond_length_pattern,
-    constrained_dihedrals_pattern,
+    orca_constrained_coordinates_pattern,
     orca_frozen_atoms_output_pattern,
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
@@ -167,84 +169,87 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def frozen_atoms(self):
-        frozen_atoms, _, _, _ = self._get_constraints
+        """Get frozen atoms from the ORCA output file."""
+        frozen_atoms = []
+        for line in self.contents:
+            if re.match(orca_frozen_atoms_output_pattern, line):
+                atom_index = int(line.split()[3])
+                atom_index += 1  # Convert to 1-based index
+                if atom_index not in frozen_atoms:
+                    frozen_atoms.append(atom_index)
         return frozen_atoms
 
     @property
     def constrained_bond_lengths(self):
-        _, constrained_bond_lengths, _, _ = self._get_constraints
+        constrained_bond_lengths, _, _ = self._get_constraints
         return constrained_bond_lengths
 
     @property
     def constrained_bond_angles(self):
-        _, _, constrained_bond_angles, _ = self._get_constraints
+        _, constrained_bond_angles, _ = self._get_constraints
         return constrained_bond_angles
 
     @property
-    def constrained_dihedrals(self):
-        _, _, _, constrained_dihedrals = self._get_constraints
-        return constrained_dihedrals
+    def constrained_dihedral_angles(self):
+        _, _, constrained_dihedral_angles = self._get_constraints
+        return constrained_dihedral_angles
 
     @cached_property
     def _get_constraints(self):
-        """Extract frozen atoms and constrained internal coordinates from ORCA output."""
-        frozen_atoms = []
-        constrained_bond_lengths = []
-        constrained_bond_angles = []
-        constrained_dihedrals = []
+        """Extract constrained internal coordinates from ORCA output.
+        Reads from Redundant Internal Coordinates block where, if DOF is constrained,
+        there is a "C" at the end of the line.
+        Returns:
+             a dict similar to optimized parameters, specifying the constraints and
+             the associated values, e.g.,
+                optimized_geometry == {
+                    "B(H1,O0)": 0.9627,
+                    "B(H2,O0)": 0.9627,
+                    "A(H1,O0,H2)": 103.35,
+                }
+        """
+        constrained_bond_lengths = {}
+        constrained_bond_angles = {}
+        constrained_dihedral_angles = {}
 
-        for line in self.contents:
-            frozen_match = re.match(orca_frozen_atoms_output_pattern, line)
-            if frozen_match:
-                atom_index = int(line.split()[3])
-                if atom_index not in frozen_atoms:
-                    frozen_atoms.append(atom_index)
-            elif re.match(constrained_bond_length_pattern, line):
-                constrained_bond_lengths.append(
-                    f"{line.split()[4]}-{line.split()[5]}"
+        for i, line in enumerate(self.contents):
+            if "Redundant Internal Coordinates" in line:
+                for j, line_j in enumerate(self.contents[i + 5 :]):
+                    if "------------------------------------" in line_j:
+                        continue
+                    if len(line_j) == 0:
+                        break
+                    if re.match(orca_constrained_coordinates_pattern, line_j):
+                        line_elements = line_j.split()
+                        if line_elements[1].lower().startswith("b"):  # bond
+                            parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}"
+                            parameter = increment_numbers(parameter, 1)
+                            constrained_bond_lengths[parameter] = float(
+                                line_elements[-3]
+                            )
+                        elif line_elements[1].lower().startswith("a"):  # angle
+                            parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
+                            parameter = increment_numbers(parameter, 1)
+                            constrained_bond_angles[parameter] = float(
+                                line_elements[-3]
+                            )
+                        elif (
+                            line_elements[1].lower().startswith("d")
+                        ):  # dihedral
+                            parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}{line_elements[5]}"
+                            parameter = increment_numbers(parameter, 1)
+                            constrained_dihedral_angles[parameter] = float(
+                                line_elements[-3]
+                            )
+                        else:
+                            raise ValueError(
+                                f"Unknown parameter type in line: {line_j}"
+                            )
+                return (
+                    constrained_bond_lengths,
+                    constrained_bond_angles,
+                    constrained_dihedral_angles,
                 )
-            elif re.match(constrained_bond_angles_pattern, line):
-                constrained_bond_angles.append(
-                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}"
-                )
-            elif re.match(constrained_dihedrals_pattern, line):
-                constrained_dihedrals.append(
-                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}"
-                )
-        return (
-            frozen_atoms,
-            constrained_bond_lengths,
-            constrained_bond_angles,
-            constrained_dihedrals,
-        )
-
-    def _get_first_structure_coordinates_block_in_output(self):
-        """Obtain the first structure coordinates block in the output file."""
-        coordinates_block_lines_list = []
-        pattern = re.compile(standard_coord_pattern)
-        found_header = False
-
-        for line in self.contents:
-            # Start collecting after finding the header
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
-                found_header = True
-                continue  # Skip the header line itself
-
-            # If we've found the header, process lines
-            if found_header:
-                match = pattern.match(line)
-                if match:
-                    # Extract the last 4 elements (symbol, x, y, z) and join with double spaces
-                    coord_line = "  ".join(line.split()[-4:])
-                    coordinates_block_lines_list.append(coord_line)
-                elif (
-                    coordinates_block_lines_list
-                ):  # Stop if we hit a non-matching line after collecting coords
-                    break
-
-        # Return CoordinateBlock instance
-        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
-        return cb
 
     @cached_property
     def optimized_output_lines(self):
@@ -562,7 +567,7 @@ class ORCAOutput(ORCAFileMixin):
             symbols=self.symbols,
             charge=self.charge,
             multiplicity=self.multiplicity,
-            frozen_atoms=None,  # TODO: ORCA can do frozen atoms, but parsing from output file need to be implemented
+            frozen_atoms=self.frozen_atoms,
             pbc_conditions=(
                 self.list_of_pbc_conditions
                 if hasattr(self, "list_of_pbc_conditions")
@@ -646,11 +651,13 @@ class ORCAOutput(ORCAFileMixin):
          2. B(H   2,O   0)                0.9627 -0.000014  0.0000    0.9627
          3. A(H   1,O   0,H   2)          103.34 -0.000009    0.00    103.35
         ----------------------------------------------------------------------------
+        #TODO: need to convert to 1-indexing
         """
         optimized_geometry = {}
         for i, line_i in enumerate(self.optimized_output_lines):
             if "--- Optimized Parameters ---" in line_i:
                 for line_j in self.optimized_output_lines[i + 5 :]:
+                    parameter = None
                     if "---------------" in line_j:
                         break
                     line_elements = line_j.split()
@@ -663,6 +670,9 @@ class ORCAOutput(ORCAFileMixin):
                             f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
                             f"{line_elements[5]}"
                         )
+                    if parameter is not None:
+                        # Convert to 1-indexing
+                        parameter = increment_numbers(parameter, 1)
                     optimized_geometry[parameter] = float(line_elements[-1])
         ## the above result will return a dictionary storing the optimized parameters:
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }

@@ -41,20 +41,35 @@ sdf_pattern = (
     r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
     r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
 )
+
+# regex pattern for constrained coordinates in orca input
 # Examples of ORCA constraints patterns:
 # Constraining bond distances : { B N1 N2 value C }
 # Constraining bond angles : { A N1 N2 N1 value C }
 # Constraining dihedral angles : { D N1 N2 N3 N4 value C }
 # Constraining cartesian coordinates : { C N1 C }
 # where the value is optional, by default it is the present value in the structure
-constrained_bond_length_pattern = (
+constrained_bond_length_pattern_in_input = (
     r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
 )
 
-constrained_bond_angles_pattern = (
+constrained_bond_angles_pattern_in_input = (
     r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
 )
 
-constrained_dihedrals_pattern = r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+constrained_dihedrals_pattern_in_input = r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
 
+# in orca output:
+# Will constrain atom 2 coordinate 1
+# Will constrain atom 2 coordinate 2
+# Will constrain atom 2 coordinate 3
+# etc.
 orca_frozen_atoms_output_pattern = r"Will constrain atom \d+ coordinate \d"
+
+# regex pattern for constrained coordinates in orca
+# \s+[BAD] : B, A, or D with whitespace.
+# example lines for match:
+# 10. B(H   9,H   8)                  2.4714         0.000431 C
+# 30. A(C   1,C   5,H   8)           69.0631         0.105398 C
+# 49. D(H   9,C   4,C   3,C   2)   -180.0000         0.024745 C
+orca_constrained_coordinates_pattern = r"^\d+\.\s+[BAD]\([A-Z][a-z]?\s+\d+,[A-Z][a-z]?\s+\d+(?:,[A-Z][a-z]?\s+\d+)?(?:,[A-Z][a-z]?\s+\d+)?\)\s+-?\d+\.\d{4}\s+\d+\.\d{6}\s+C$"

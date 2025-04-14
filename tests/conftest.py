@@ -664,15 +664,17 @@ def orca_fixed_atoms(orca_outputs_directory):
 
 
 @pytest.fixture()
-def orca_fixed_dihedral(orca_outputs_directory):
+def orca_fixed_bonds_and_angles(orca_outputs_directory):
     return os.path.join(
-        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+        orca_outputs_directory, "phenol_fixed_bond_and_angles.out"
     )
 
 
 @pytest.fixture()
-def orca_fixed_bond(orca_outputs_directory):
-    return os.path.join(orca_outputs_directory, "ethanol_fixed_bond.out")
+def orca_fixed_dihedral(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+    )
 
 
 @pytest.fixture()

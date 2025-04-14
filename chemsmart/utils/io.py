@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
@@ -39,3 +41,8 @@ def clean_duplicate_structure(orientations):
     if orientations and len(orientations) > 1:
         if np.allclose(orientations[-1], orientations[-2], rtol=1e-5):
             orientations.pop(-1)
+
+
+def increment_numbers(s, increment=1):
+    # Use re.sub with a lambda to increment each number
+    return re.sub(r"\d+", lambda m: str(int(m.group()) + increment), s)
