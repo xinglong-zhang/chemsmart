@@ -1365,6 +1365,12 @@ class TestGaussian16Output:
             g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
         )
 
+    def test_link_outputfile(self, gaussian_link_outputfile):
+        for file in gaussian_link_outputfile:
+            assert os.path.exists(file)
+            g16_link = Gaussian16Output(filename=file)
+            if not g16_link.normal_termination:
+                print(f" {file} was abnormally terminated")
 
 class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(
@@ -1562,3 +1568,4 @@ class TestGaussianPBCOutputFile:
         # has only "Input orientation:" but no "Standard orientation:"
         assert g16_pbc_2d.standard_orientations is None
         assert g16_pbc_2d.standard_orientations_pbc is None
+

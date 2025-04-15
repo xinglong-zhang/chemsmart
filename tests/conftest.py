@@ -266,6 +266,14 @@ def gaussian_oniom_outputfile(gaussian_outputs_test_directory):
     )
     return gaussian_oniom_outfile
 
+@pytest.fixture()
+def gaussian_link_outputfile(gaussian_outputs_test_directory):
+    alllogfiles_in_gaussian_outputs_test_directory = []
+    for root, dirs, files in os.walk(gaussian_outputs_test_directory):
+        for file in files:
+            if file.endswith(".log"):
+                alllogfiles_in_gaussian_outputs_test_directory.append(os.path.join(root, file))
+    return alllogfiles_in_gaussian_outputs_test_directory
 
 # Gaussian pbc input files
 @pytest.fixture()
