@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/../conflow/.idea/conflow.iml" beforeDir="false" afterPath="$PROJECT_DIR$/../conflow/.idea/conflow.iml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="FlaskConsoleOptions" custom-start-script="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))">
+    <envs>
+      <env key="FLASK_APP" value="app" />
+    </envs>
+    <option name="myCustomStartScript" value="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))" />
+    <option name="myEnvs">
+      <map>
+        <entry key="FLASK_APP" value="app" />
+      </map>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7
+}</component>
+  <component name="ProjectId" id="2skEbvjJhHkSQkAKOnaT2kgHkNZ" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+    <option name="showMembers" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python tests.Python tests for test_Descriptors.TestDescriptors.test_2d_steric_descriptors.executor": "Run",
+    "Python tests.Python tests for test_GaussianIO.TestGaussian16Output.test_co2_outputfile.executor": "Run",
+    "Python tests.Python tests for test_GaussianIO.TestGaussian16Output.test_singlet_opt_output.executor": "Run",
+    "Python tests.Python tests for test_XTBIO.TestXTBOutput.test_opt_gbsa_output.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_com_foler_to_xyz.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_log_foler.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_log_foler_to_com.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_single_comfile_to_xyz.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_single_logfile.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_single_logfile_to_com.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_xyz_folder_to_com.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_connectivity_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rdkit_isomorphism_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rdkit_isomorphism_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_crest_conformers_ignore_Hs.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_similarity_grouper.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_similarity_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_coordinate_block.executor": "Run",
+    "Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_gaussian_cb_with_tv.executor": "Run",
+    "Python tests.Python tests for test_structures.TestStructures.test_molecular_geometry.executor": "Run",
+    "Python tests.Python tests for test_structures.TestStructures.test_read_molecule_from_single_molecule_xyz_file.executor": "Run",
+    "Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output.executor": "Run",
+    "Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_from_gaussian_output.executor": "Run",
+    "Python tests.Python tests in test_GaussianWriter.py.executor": "Run",
+    "Python tests.Python tests in test_XTBIO.py.executor": "Run",
+    "Python tests.Python tests in test_converter.py.executor": "Run",
+    "Python tests.Python tests in test_groupers.py.executor": "Run",
+    "Python tests.Python tests in test_thermochemistry.py.executor": "Run",
+    "Python tests.pytest for tests.test_GaussianWriter.TestGaussianInputWriter.test_write_sp_input_with_solvation_from_logfile.executor": "Run",
+    "Python tests.pytest for tests.test_groupers.TestGrouper.test_connectivity_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.pytest for tests.test_groupers.TestGrouper.test_rdkit_isomorphism_grouper.executor": "Run",
+    "Python tests.pytest in test_XTB.py.executor": "Run",
+    "Python tests.pytest in test_groupers.py.executor": "Run",
+    "Python.__init__.executor": "Run",
+    "Python.test_groupers.executor": "Run",
+    "Python.units.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "xtb",
+    "last_opened_file_path": "/Users/xinglongzhang/bin/chemsmart",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/chemsmart/scripts" />
+      <recent name="$PROJECT_DIR$/chemsmart/io/xyz" />
+      <recent name="$PROJECT_DIR$/tests" />
+      <recent name="$PROJECT_DIR$/chemsmart/io/orca" />
+      <recent name="$PROJECT_DIR$/chemsmart/io/gaussian" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/tests/data/GaussianTests/inputs" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python tests.Python tests in test_XTBIO.py">
+    <configuration default="true" type="PythonConfigurationType" factoryName="Python">
+      <module name="conflow" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="SDK_NAME" value="Python 3.9 (pyatoms-dev)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="chemsmart" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests in test_GaussianWriter.py" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="chemsmart" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/test_GaussianWriter.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests in test_XTBIO.py" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="chemsmart" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/test_XTBIO.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest for tests.test_GaussianWriter.TestGaussianInputWriter.test_write_sp_input_with_solvation_from_logfile" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="chemsmart" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="$USER_HOME$/miniconda3/envs/chemsmart/bin/python" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.test_GaussianWriter.TestGaussianInputWriter.test_write_sp_input_with_solvation_from_logfile&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest in test_XTB.py" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="conflow" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../conflow/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/../conflow/tests/test_XTB.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output" />
+      <item itemvalue="Python tests.Python tests in test_XTBIO.py" />
+      <item itemvalue="Python tests.pytest for tests.test_GaussianWriter.TestGaussianInputWriter.test_write_sp_input_with_solvation_from_logfile" />
+      <item itemvalue="Python tests.pytest in test_XTB.py" />
+      <item itemvalue="Python tests.Python tests in test_GaussianWriter.py" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python tests.Python tests in test_XTBIO.py" />
+        <item itemvalue="Python tests.pytest in test_XTB.py" />
+        <item itemvalue="Python tests.Python tests in test_GaussianWriter.py" />
+        <item itemvalue="Python tests.pytest for tests.test_GaussianWriter.TestGaussianInputWriter.test_write_sp_input_with_solvation_from_logfile" />
+        <item itemvalue="Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-5c90d61e3bab-JavaScript-PY-242.23339.19" />
+        <option value="bundled-python-sdk-0029f7779945-399fe30bd8c1-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-242.23339.19" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="" />
+      <created>1738991248051</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1738991248051</updated>
+      <workItem from="1738991249099" duration="346000" />
+      <workItem from="1738992348942" duration="1626000" />
+      <workItem from="1739148881462" duration="46467000" />
+      <workItem from="1739250172005" duration="54377000" />
+      <workItem from="1739758292927" duration="41000" />
+      <workItem from="1739758374865" duration="16000" />
+      <workItem from="1740018731849" duration="32162000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_groupers_TestGrouper_test_rdkit_isomorphism_grouper.coverage" NAME="pytest for tests.test_groupers.TestGrouper.test_rdkit_isomorphism_grouper Coverage Results" MODIFIED="1739197317074" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$test_groupers.coverage" NAME="test_groupers Coverage Results" MODIFIED="1739148897131" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$.coverage" NAME=" Coverage Results" MODIFIED="1740062446850" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_GaussianIO_TestGaussian16Output_test_normal_termination_with_forces_and_frequencies.coverage" NAME="pytest for tests.test_GaussianIO.TestGaussian16Output.test_normal_termination_with_forces_and_frequencies Coverage Results" MODIFIED="1737461619836" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_groupers_TestGrouper_test_connectivity_grouper_for_large_number_of_mols.coverage" NAME="pytest for tests.test_groupers.TestGrouper.test_connectivity_grouper_for_large_number_of_mols Coverage Results" MODIFIED="1739196242714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_WriterTest_TestGaussianInputWriter_test_write_ts_with_custom_basis_from_logfile.coverage" NAME="pytest for tests.WriterTest.TestGaussianInputWriter.test_write_ts_with_custom_basis_from_logfile Coverage Results" MODIFIED="1737131167337" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$units.coverage" NAME="units Coverage Results" MODIFIED="1739549410404" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/chemsmart/utils" />
+    <SUITE FILE_PATH="coverage/chemsmart$ReaderTest.coverage" NAME="ReaderTest Coverage Results" MODIFIED="1736763685369" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../pychemreader/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_GaussianWriter_TestGaussianInputWriter_test_write_ts_with_custom_basis_using_api.coverage" NAME="pytest for tests.test_GaussianWriter.TestGaussianInputWriter.test_write_ts_with_custom_basis_using_api Coverage Results" MODIFIED="1737544583645" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_in_test_groupers_py.coverage" NAME="pytest in test_groupers.py Coverage Results" MODIFIED="1739148999680" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_in_test_XTB_py.coverage" NAME="pytest in test_XTB.py Coverage Results" MODIFIED="1740062431273" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_ORCAIOTest_TestORCAOutput_test_read_hirshfelf_full_print_output.coverage" NAME="pytest for tests.ORCAIOTest.TestORCAOutput.test_read_hirshfelf_full_print_output Coverage Results" MODIFIED="1736391013914" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_GaussianWriter_TestGaussianInputWriter_test_write_sp_input_with_solvation_from_logfile.coverage" NAME="pytest for tests.test_GaussianWriter.TestGaussianInputWriter.test_write_sp_input_with_solvation_from_logfile Coverage Results" MODIFIED="1740061697675" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$__init__.coverage" NAME="__init__ Coverage Results" MODIFIED="1739161139517" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/chemsmart" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_ORCAIOTest_TestORCAInput.coverage" NAME="pytest for tests.ORCAIOTest.TestORCAInput Coverage Results" MODIFIED="1720406665535" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_ServerTest_TestServer_test_gaussian_executable.coverage" NAME="pytest for tests.ServerTest.TestServer.test_gaussian_executable Coverage Results" MODIFIED="1737447896214" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+  </component>
+</project>
