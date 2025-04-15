@@ -241,6 +241,43 @@ class TestThermochemistryCO2:
         assert g16_output.job_type == "opt"
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
+        mol_as_ase_atoms = mol.to_ase()
+        (
+            mol_as_ase_atoms_moi_along_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
+
+        assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
+        assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
+        assert np.allclose(
+            mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
+        )
+        assert np.allclose(
+            mol.moments_of_inertia,
+            mol_as_ase_atoms_moi_along_principal_axes,
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        )
+        # test moments of inertia from molecular structure and from gaussian output
+        assert np.allclose(
+            mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[0],
+            g16_output.moments_of_inertia_principal_axes[0],
+        )
+
+        # components X and Y are swapped but they are physically the same (same moment of inertia values)
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[1],
+            g16_output.moments_of_inertia_principal_axes[2],
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[2],
+            g16_output.moments_of_inertia_principal_axes[1],
+        )
         assert mol.empirical_formula == "CO2"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -188.444679593)
