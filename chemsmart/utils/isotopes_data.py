@@ -37,6 +37,7 @@ isotopes = {
             "mass": 1.00782503223,
             "abundance": 0.999885,
         },
+        "weighted_atomic_mass": 1.0079407540557772,
     },
     2: {
         3: {"mass": 3.0160293201, "abundance": 1.34e-06},
@@ -46,6 +47,7 @@ isotopes = {
             "mass": 4.00260325413,
             "abundance": 0.99999866,
         },
+        "weighted_atomic_mass": 4.002601932120929,
     },
     3: {
         6: {"mass": 6.0151228874, "abundance": 0.0759},
@@ -55,6 +57,7 @@ isotopes = {
             "mass": 7.0160034366,
             "abundance": 0.9241,
         },
+        "weighted_atomic_mass": 6.94003660291572,
     },
     4: {
         9: {"mass": 9.012183065, "abundance": 1.0},
@@ -63,6 +66,7 @@ isotopes = {
             "mass": 9.012183065,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 9.012183065,
     },
     5: {
         10: {"mass": 10.01293695, "abundance": 0.199},
@@ -72,6 +76,7 @@ isotopes = {
             "mass": 11.00930536,
             "abundance": 0.801,
         },
+        "weighted_atomic_mass": 10.811028046410001,
     },
     6: {
         12: {"mass": 12.0, "abundance": 0.9893},
@@ -82,6 +87,7 @@ isotopes = {
             "mass": 12.0,
             "abundance": 0.9893,
         },
+        "weighted_atomic_mass": 12.010735896735248,
     },
     7: {
         14: {"mass": 14.00307400443, "abundance": 0.99636},
@@ -91,6 +97,7 @@ isotopes = {
             "mass": 14.00307400443,
             "abundance": 0.99636,
         },
+        "weighted_atomic_mass": 14.006703211445798,
     },
     8: {
         16: {"mass": 15.99491461957, "abundance": 0.99757},
@@ -101,6 +108,7 @@ isotopes = {
             "mass": 15.99491461957,
             "abundance": 0.99757,
         },
+        "weighted_atomic_mass": 15.999404924318277,
     },
     9: {
         19: {"mass": 18.99840316273, "abundance": 1.0},
@@ -109,6 +117,7 @@ isotopes = {
             "mass": 18.99840316273,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 18.99840316273,
     },
     10: {
         20: {"mass": 19.9924401762, "abundance": 0.9048},
@@ -119,6 +128,7 @@ isotopes = {
             "mass": 19.9924401762,
             "abundance": 0.9048,
         },
+        "weighted_atomic_mass": 20.18004638052026,
     },
     11: {
         23: {"mass": 22.989769282, "abundance": 1.0},
@@ -127,6 +137,7 @@ isotopes = {
             "mass": 22.989769282,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 22.989769282,
     },
     12: {
         24: {"mass": 23.985041697, "abundance": 0.7899},
@@ -137,6 +148,7 @@ isotopes = {
             "mass": 23.985041697,
             "abundance": 0.7899,
         },
+        "weighted_atomic_mass": 24.3050516198371,
     },
     13: {
         27: {"mass": 26.98153853, "abundance": 1.0},
@@ -145,6 +157,7 @@ isotopes = {
             "mass": 26.98153853,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 26.98153853,
     },
     14: {
         28: {"mass": 27.97692653465, "abundance": 0.92223},
@@ -155,6 +168,7 @@ isotopes = {
             "mass": 27.97692653465,
             "abundance": 0.92223,
         },
+        "weighted_atomic_mass": 28.08549870570596,
     },
     15: {
         31: {"mass": 30.97376199842, "abundance": 1.0},
@@ -163,6 +177,7 @@ isotopes = {
             "mass": 30.97376199842,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 30.97376199842,
     },
     16: {
         32: {"mass": 31.9720711744, "abundance": 0.9499},
@@ -174,6 +189,7 @@ isotopes = {
             "mass": 31.9720711744,
             "abundance": 0.9499,
         },
+        "weighted_atomic_mass": 32.06478740612707,
     },
     17: {
         35: {"mass": 34.968852682, "abundance": 0.7576},
@@ -183,6 +199,7 @@ isotopes = {
             "mass": 34.968852682,
             "abundance": 0.7576,
         },
+        "weighted_atomic_mass": 35.452937582608,
     },
     18: {
         36: {"mass": 35.967545105, "abundance": 0.003336},
@@ -193,6 +210,7 @@ isotopes = {
             "mass": 39.9623831237,
             "abundance": 0.996035,
         },
+        "weighted_atomic_mass": 39.947798563582005,
     },
     19: {
         39: {"mass": 38.9637064864, "abundance": 0.932581},
@@ -203,6 +221,7 @@ isotopes = {
             "mass": 38.9637064864,
             "abundance": 0.932581,
         },
+        "weighted_atomic_mass": 39.098300910086,
     },
     20: {
         40: {"mass": 39.962590863, "abundance": 0.96941},
@@ -216,6 +235,7 @@ isotopes = {
             "mass": 39.962590863,
             "abundance": 0.96941,
         },
+        "weighted_atomic_mass": 40.078022511017735,
     },
     21: {
         45: {"mass": 44.95590828, "abundance": 1.0},
@@ -224,6 +244,7 @@ isotopes = {
             "mass": 44.95590828,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 44.95590828,
     },
     22: {
         46: {"mass": 45.95262772, "abundance": 0.0825},
@@ -236,6 +257,7 @@ isotopes = {
             "mass": 47.94794198,
             "abundance": 0.7372,
         },
+        "weighted_atomic_mass": 47.866744962722,
     },
     23: {
         50: {"mass": 49.94715601, "abundance": 0.0025},
@@ -245,6 +267,7 @@ isotopes = {
             "mass": 50.94395704,
             "abundance": 0.9975,
         },
+        "weighted_atomic_mass": 50.941465037425004,
     },
     24: {
         50: {"mass": 49.94604183, "abundance": 0.04345},
@@ -256,6 +279,7 @@ isotopes = {
             "mass": 51.94050623,
             "abundance": 0.83789,
         },
+        "weighted_atomic_mass": 51.9961317554337,
     },
     25: {
         55: {"mass": 54.93804391, "abundance": 1.0},
@@ -264,6 +288,7 @@ isotopes = {
             "mass": 54.93804391,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 54.93804391,
     },
     26: {
         54: {"mass": 53.93960899, "abundance": 0.05845},
@@ -275,6 +300,7 @@ isotopes = {
             "mass": 55.93493633,
             "abundance": 0.91754,
         },
+        "weighted_atomic_mass": 55.845144433865904,
     },
     27: {
         59: {"mass": 58.93319429, "abundance": 1.0},
@@ -283,6 +309,7 @@ isotopes = {
             "mass": 58.93319429,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 58.93319429,
     },
     28: {
         58: {"mass": 57.93534241, "abundance": 0.68077},
@@ -295,6 +322,7 @@ isotopes = {
             "mass": 57.93534241,
             "abundance": 0.68077,
         },
+        "weighted_atomic_mass": 58.69334710994765,
     },
     29: {
         63: {"mass": 62.92959772, "abundance": 0.6915},
@@ -304,6 +332,7 @@ isotopes = {
             "mass": 62.92959772,
             "abundance": 0.6915,
         },
+        "weighted_atomic_mass": 63.54603994583,
     },
     30: {
         64: {"mass": 63.92914201, "abundance": 0.4917},
@@ -316,6 +345,7 @@ isotopes = {
             "mass": 63.92914201,
             "abundance": 0.4917,
         },
+        "weighted_atomic_mass": 65.37778252952499,
     },
     31: {
         69: {"mass": 68.9255735, "abundance": 0.60108},
@@ -325,6 +355,7 @@ isotopes = {
             "mass": 68.9255735,
             "abundance": 0.60108,
         },
+        "weighted_atomic_mass": 69.7230660725936,
     },
     32: {
         70: {"mass": 69.92424875, "abundance": 0.2057},
@@ -337,6 +368,7 @@ isotopes = {
             "mass": 73.921177761,
             "abundance": 0.365,
         },
+        "weighted_atomic_mass": 72.6275501646868,
     },
     33: {
         75: {"mass": 74.92159457, "abundance": 1.0},
@@ -345,6 +377,7 @@ isotopes = {
             "mass": 74.92159457,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 74.92159457,
     },
     34: {
         74: {"mass": 73.922475934, "abundance": 0.0089},
@@ -358,6 +391,7 @@ isotopes = {
             "mass": 79.9165218,
             "abundance": 0.4961,
         },
+        "weighted_atomic_mass": 78.95938855701361,
     },
     35: {
         79: {"mass": 78.9183376, "abundance": 0.5069},
@@ -367,6 +401,7 @@ isotopes = {
             "mass": 78.9183376,
             "abundance": 0.5069,
         },
+        "weighted_atomic_mass": 79.90352778050999,
     },
     36: {
         78: {"mass": 77.92036494, "abundance": 0.00355},
@@ -380,6 +415,7 @@ isotopes = {
             "mass": 83.9114977282,
             "abundance": 0.56987,
         },
+        "weighted_atomic_mass": 83.7979999953261,
     },
     37: {
         85: {"mass": 84.9117897379, "abundance": 0.7217},
@@ -389,6 +425,7 @@ isotopes = {
             "mass": 84.9117897379,
             "abundance": 0.7217,
         },
+        "weighted_atomic_mass": 85.46766359561973,
     },
     38: {
         84: {"mass": 83.9134191, "abundance": 0.0056},
@@ -400,6 +437,7 @@ isotopes = {
             "mass": 87.9056125,
             "abundance": 0.8258,
         },
+        "weighted_atomic_mass": 87.61664446962,
     },
     39: {
         89: {"mass": 88.9058403, "abundance": 1.0},
@@ -408,6 +446,7 @@ isotopes = {
             "mass": 88.9058403,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 88.9058403,
     },
     40: {
         90: {"mass": 89.9046977, "abundance": 0.5145},
@@ -420,6 +459,7 @@ isotopes = {
             "mass": 89.9046977,
             "abundance": 0.5145,
         },
+        "weighted_atomic_mass": 91.22364159706,
     },
     41: {
         93: {"mass": 92.906373, "abundance": 1.0},
@@ -428,6 +468,7 @@ isotopes = {
             "mass": 92.906373,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 92.906373,
     },
     42: {
         92: {"mass": 91.90680796, "abundance": 0.1453},
@@ -442,16 +483,18 @@ isotopes = {
             "mass": 97.90540482,
             "abundance": 0.2439,
         },
+        "weighted_atomic_mass": 95.95978854118802,
     },
     43: {
         97: {"mass": 96.9063667, "abundance": 0.0},
         98: {"mass": 97.9072124, "abundance": 0.0},
         99: {"mass": 98.9062508, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 97,
-            "mass": 96.9063667,
+            "mass_number": 98,
+            "mass": 97.9072124,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 97.9072124,
     },
     44: {
         96: {"mass": 95.90759025, "abundance": 0.0554},
@@ -466,6 +509,7 @@ isotopes = {
             "mass": 101.9043441,
             "abundance": 0.3155,
         },
+        "weighted_atomic_mass": 101.06494013916,
     },
     45: {
         103: {"mass": 102.905498, "abundance": 1.0},
@@ -474,6 +518,7 @@ isotopes = {
             "mass": 102.905498,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 102.905498,
     },
     46: {
         102: {"mass": 101.9056022, "abundance": 0.0102},
@@ -487,6 +532,7 @@ isotopes = {
             "mass": 105.9034804,
             "abundance": 0.2733,
         },
+        "weighted_atomic_mass": 106.41532750734,
     },
     47: {
         107: {"mass": 106.9050916, "abundance": 0.51839},
@@ -496,6 +542,7 @@ isotopes = {
             "mass": 106.9050916,
             "abundance": 0.51839,
         },
+        "weighted_atomic_mass": 107.868149634557,
     },
     48: {
         106: {"mass": 105.9064599, "abundance": 0.0125},
@@ -511,6 +558,7 @@ isotopes = {
             "mass": 113.90336509,
             "abundance": 0.2873,
         },
+        "weighted_atomic_mass": 112.41155781826801,
     },
     49: {
         113: {"mass": 112.90406184, "abundance": 0.0429},
@@ -520,6 +568,7 @@ isotopes = {
             "mass": 114.903878776,
             "abundance": 0.9571,
         },
+        "weighted_atomic_mass": 114.81808662944559,
     },
     50: {
         112: {"mass": 111.90482387, "abundance": 0.0097},
@@ -537,6 +586,7 @@ isotopes = {
             "mass": 119.90220163,
             "abundance": 0.3258,
         },
+        "weighted_atomic_mass": 118.7101125930106,
     },
     51: {
         121: {"mass": 120.903812, "abundance": 0.5721},
@@ -546,6 +596,7 @@ isotopes = {
             "mass": 120.903812,
             "abundance": 0.5721,
         },
+        "weighted_atomic_mass": 121.75978367348,
     },
     52: {
         120: {"mass": 119.9040593, "abundance": 0.0009},
@@ -561,6 +612,7 @@ isotopes = {
             "mass": 129.906222748,
             "abundance": 0.3408,
         },
+        "weighted_atomic_mass": 127.6031264846604,
     },
     53: {
         127: {"mass": 126.9044719, "abundance": 1.0},
@@ -569,6 +621,7 @@ isotopes = {
             "mass": 126.9044719,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 126.9044719,
     },
     54: {
         124: {"mass": 123.905892, "abundance": 0.000952},
@@ -585,6 +638,7 @@ isotopes = {
             "mass": 131.9041550856,
             "abundance": 0.269086,
         },
+        "weighted_atomic_mass": 131.29276144779053,
     },
     55: {
         133: {"mass": 132.905451961, "abundance": 1.0},
@@ -593,6 +647,7 @@ isotopes = {
             "mass": 132.905451961,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 132.905451961,
     },
     56: {
         130: {"mass": 129.9063207, "abundance": 0.00106},
@@ -607,6 +662,7 @@ isotopes = {
             "mass": 137.905247,
             "abundance": 0.71698,
         },
+        "weighted_atomic_mass": 137.3268916286322,
     },
     57: {
         138: {"mass": 137.9071149, "abundance": 0.0008881},
@@ -616,6 +672,7 @@ isotopes = {
             "mass": 138.9063563,
             "abundance": 0.9991119,
         },
+        "weighted_atomic_mass": 138.90546887371266,
     },
     58: {
         136: {"mass": 135.90712921, "abundance": 0.00185},
@@ -627,6 +684,7 @@ isotopes = {
             "mass": 139.9054431,
             "abundance": 0.8845,
         },
+        "weighted_atomic_mass": 140.1157307378545,
     },
     59: {
         141: {"mass": 140.9076576, "abundance": 1.0},
@@ -635,6 +693,7 @@ isotopes = {
             "mass": 140.9076576,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 140.9076576,
     },
     60: {
         142: {"mass": 141.907729, "abundance": 0.27152},
@@ -649,6 +708,7 @@ isotopes = {
             "mass": 141.907729,
             "abundance": 0.27152,
         },
+        "weighted_atomic_mass": 144.24159603182702,
     },
     61: {
         145: {"mass": 144.9127559, "abundance": 0.0},
@@ -658,6 +718,7 @@ isotopes = {
             "mass": 144.9127559,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 144.9127559,
     },
     62: {
         144: {"mass": 143.9120065, "abundance": 0.0307},
@@ -672,6 +733,7 @@ isotopes = {
             "mass": 151.9197397,
             "abundance": 0.2675,
         },
+        "weighted_atomic_mass": 150.36635571193,
     },
     63: {
         151: {"mass": 150.9198578, "abundance": 0.4781},
@@ -681,6 +743,7 @@ isotopes = {
             "mass": 152.921238,
             "abundance": 0.5219,
         },
+        "weighted_atomic_mass": 151.96437812637998,
     },
     64: {
         152: {"mass": 151.9197995, "abundance": 0.002},
@@ -695,6 +758,7 @@ isotopes = {
             "mass": 157.9241123,
             "abundance": 0.2484,
         },
+        "weighted_atomic_mass": 157.25213064687998,
     },
     65: {
         159: {"mass": 158.9253547, "abundance": 1.0},
@@ -703,6 +767,7 @@ isotopes = {
             "mass": 158.9253547,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 158.9253547,
     },
     66: {
         156: {"mass": 155.9242847, "abundance": 0.00056},
@@ -717,6 +782,7 @@ isotopes = {
             "mass": 163.9291819,
             "abundance": 0.2826,
         },
+        "weighted_atomic_mass": 162.499472819424,
     },
     67: {
         165: {"mass": 164.9303288, "abundance": 1.0},
@@ -725,6 +791,7 @@ isotopes = {
             "mass": 164.9303288,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 164.9303288,
     },
     68: {
         162: {"mass": 161.9287884, "abundance": 0.00139},
@@ -738,6 +805,7 @@ isotopes = {
             "mass": 165.9302995,
             "abundance": 0.33503,
         },
+        "weighted_atomic_mass": 167.259082649669,
     },
     69: {
         169: {"mass": 168.9342179, "abundance": 1.0},
@@ -746,6 +814,7 @@ isotopes = {
             "mass": 168.9342179,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 168.9342179,
     },
     70: {
         168: {"mass": 167.9338896, "abundance": 0.00123},
@@ -760,6 +829,7 @@ isotopes = {
             "mass": 173.9388664,
             "abundance": 0.32026,
         },
+        "weighted_atomic_mass": 173.05415016631704,
     },
     71: {
         175: {"mass": 174.9407752, "abundance": 0.97401},
@@ -769,6 +839,7 @@ isotopes = {
             "mass": 174.9407752,
             "abundance": 0.97401,
         },
+        "weighted_atomic_mass": 174.96681495785498,
     },
     72: {
         174: {"mass": 173.9400461, "abundance": 0.0016},
@@ -782,6 +853,7 @@ isotopes = {
             "mass": 179.946557,
             "abundance": 0.3508,
         },
+        "weighted_atomic_mass": 178.4849787234,
     },
     73: {
         180: {"mass": 179.9474648, "abundance": 0.0001201},
@@ -791,6 +863,7 @@ isotopes = {
             "mass": 180.9479958,
             "abundance": 0.9998799,
         },
+        "weighted_atomic_mass": 180.9478756362269,
     },
     74: {
         180: {"mass": 179.9467108, "abundance": 0.0012},
@@ -803,6 +876,7 @@ isotopes = {
             "mass": 183.95093092,
             "abundance": 0.3064,
         },
+        "weighted_atomic_mass": 183.841777550513,
     },
     75: {
         185: {"mass": 184.9529545, "abundance": 0.374},
@@ -812,6 +886,7 @@ isotopes = {
             "mass": 186.9557501,
             "abundance": 0.626,
         },
+        "weighted_atomic_mass": 186.20670454560002,
     },
     76: {
         184: {"mass": 183.9524885, "abundance": 0.0002},
@@ -826,6 +901,7 @@ isotopes = {
             "mass": 191.961477,
             "abundance": 0.4078,
         },
+        "weighted_atomic_mass": 190.22485962823998,
     },
     77: {
         191: {"mass": 190.9605893, "abundance": 0.373},
@@ -835,6 +911,7 @@ isotopes = {
             "mass": 192.9629216,
             "abundance": 0.627,
         },
+        "weighted_atomic_mass": 192.2160516521,
     },
     78: {
         190: {"mass": 189.9599297, "abundance": 0.00012},
@@ -848,6 +925,7 @@ isotopes = {
             "mass": 194.9647917,
             "abundance": 0.3378,
         },
+        "weighted_atomic_mass": 195.08445686493104,
     },
     79: {
         197: {"mass": 196.96656879, "abundance": 1.0},
@@ -856,6 +934,7 @@ isotopes = {
             "mass": 196.96656879,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 196.96656879,
     },
     80: {
         196: {"mass": 195.9658326, "abundance": 0.0015},
@@ -870,6 +949,7 @@ isotopes = {
             "mass": 201.9706434,
             "abundance": 0.2986,
         },
+        "weighted_atomic_mass": 200.59916703455602,
     },
     81: {
         203: {"mass": 202.9723446, "abundance": 0.2952},
@@ -879,6 +959,7 @@ isotopes = {
             "mass": 204.9744278,
             "abundance": 0.7048,
         },
+        "weighted_atomic_mass": 204.38341283936,
     },
     82: {
         204: {"mass": 203.973044, "abundance": 0.014},
@@ -890,6 +971,7 @@ isotopes = {
             "mass": 207.9766525,
             "abundance": 0.524,
         },
+        "weighted_atomic_mass": 207.216908063,
     },
     83: {
         209: {"mass": 208.9803991, "abundance": 1.0},
@@ -898,6 +980,7 @@ isotopes = {
             "mass": 208.9803991,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 208.9803991,
     },
     84: {
         209: {"mass": 208.9824308, "abundance": 0.0},
@@ -907,6 +990,7 @@ isotopes = {
             "mass": 208.9824308,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 208.9824308,
     },
     85: {
         210: {"mass": 209.9871479, "abundance": 0.0},
@@ -916,16 +1000,18 @@ isotopes = {
             "mass": 209.9871479,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 209.9871479,
     },
     86: {
         211: {"mass": 210.9906011, "abundance": 0.0},
         220: {"mass": 220.0113941, "abundance": 0.0},
         222: {"mass": 222.0175782, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 211,
-            "mass": 210.9906011,
+            "mass_number": 222,
+            "mass": 222.0175782,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 222.0175782,
     },
     87: {
         223: {"mass": 223.019736, "abundance": 0.0},
@@ -934,6 +1020,7 @@ isotopes = {
             "mass": 223.019736,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 223.019736,
     },
     88: {
         223: {"mass": 223.0185023, "abundance": 0.0},
@@ -941,10 +1028,11 @@ isotopes = {
         226: {"mass": 226.0254103, "abundance": 0.0},
         228: {"mass": 228.0310707, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 223,
-            "mass": 223.0185023,
+            "mass_number": 226,
+            "mass": 226.0254103,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 226.0254103,
     },
     89: {
         227: {"mass": 227.0277523, "abundance": 0.0},
@@ -953,6 +1041,7 @@ isotopes = {
             "mass": 227.0277523,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 227.0277523,
     },
     90: {
         230: {"mass": 230.0331341, "abundance": 0.0},
@@ -962,6 +1051,7 @@ isotopes = {
             "mass": 232.0380558,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 232.0380558,
     },
     91: {
         231: {"mass": 231.0358842, "abundance": 1.0},
@@ -970,6 +1060,7 @@ isotopes = {
             "mass": 231.0358842,
             "abundance": 1.0,
         },
+        "weighted_atomic_mass": 231.0358842,
     },
     92: {
         233: {"mass": 233.0396355, "abundance": 0.0},
@@ -982,15 +1073,17 @@ isotopes = {
             "mass": 238.0507884,
             "abundance": 0.992742,
         },
+        "weighted_atomic_mass": 238.0289104616574,
     },
     93: {
         236: {"mass": 236.04657, "abundance": 0.0},
         237: {"mass": 237.0481736, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 236,
-            "mass": 236.04657,
+            "mass_number": 237,
+            "mass": 237.0481736,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 237.0481736,
     },
     94: {
         238: {"mass": 238.0495601, "abundance": 0.0},
@@ -1000,19 +1093,21 @@ isotopes = {
         242: {"mass": 242.0587428, "abundance": 0.0},
         244: {"mass": 244.0642053, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 238,
-            "mass": 238.0495601,
+            "mass_number": 244,
+            "mass": 244.0642053,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 244.0642053,
     },
     95: {
         241: {"mass": 241.0568293, "abundance": 0.0},
         243: {"mass": 243.0613813, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 241,
-            "mass": 241.0568293,
+            "mass_number": 243,
+            "mass": 243.0613813,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 243.0613813,
     },
     96: {
         243: {"mass": 243.0613893, "abundance": 0.0},
@@ -1022,10 +1117,11 @@ isotopes = {
         247: {"mass": 247.0703541, "abundance": 0.0},
         248: {"mass": 248.0723499, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 243,
-            "mass": 243.0613893,
+            "mass_number": 247,
+            "mass": 247.0703541,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 247.0703541,
     },
     97: {
         247: {"mass": 247.0703073, "abundance": 0.0},
@@ -1035,6 +1131,7 @@ isotopes = {
             "mass": 247.0703073,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 247.0703073,
     },
     98: {
         249: {"mass": 249.0748539, "abundance": 0.0},
@@ -1042,10 +1139,11 @@ isotopes = {
         251: {"mass": 251.0795886, "abundance": 0.0},
         252: {"mass": 252.0816272, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 249,
-            "mass": 249.0748539,
+            "mass_number": 251,
+            "mass": 251.0795886,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 251.0795886,
     },
     99: {
         252: {"mass": 252.08298, "abundance": 0.0},
@@ -1054,6 +1152,7 @@ isotopes = {
             "mass": 252.08298,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 252.08298,
     },
     100: {
         257: {"mass": 257.0951061, "abundance": 0.0},
@@ -1062,6 +1161,7 @@ isotopes = {
             "mass": 257.0951061,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 257.0951061,
     },
     101: {
         258: {"mass": 258.0984315, "abundance": 0.0},
@@ -1071,6 +1171,7 @@ isotopes = {
             "mass": 258.0984315,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 258.0984315,
     },
     102: {
         259: {"mass": 259.10103, "abundance": 0.0},
@@ -1079,6 +1180,7 @@ isotopes = {
             "mass": 259.10103,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 259.10103,
     },
     103: {
         262: {"mass": 262.10961, "abundance": 0.0},
@@ -1087,6 +1189,7 @@ isotopes = {
             "mass": 262.10961,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 262.10961,
     },
     104: {
         267: {"mass": 267.12179, "abundance": 0.0},
@@ -1095,6 +1198,7 @@ isotopes = {
             "mass": 267.12179,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 267.12179,
     },
     105: {
         268: {"mass": 268.12567, "abundance": 0.0},
@@ -1103,6 +1207,7 @@ isotopes = {
             "mass": 268.12567,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 268.12567,
     },
     106: {
         271: {"mass": 271.13393, "abundance": 0.0},
@@ -1111,30 +1216,37 @@ isotopes = {
             "mass": 271.13393,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 271.13393,
     },
     107: {
+        270: {"mass": 270.13336, "abundance": 0.0},
         272: {"mass": 272.13826, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 272,
-            "mass": 272.13826,
+            "mass_number": 270,
+            "mass": 270.13336,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 270.13336,
     },
     108: {
+        269: {"mass": 269.13375, "abundance": 0.0},
         270: {"mass": 270.13429, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 270,
-            "mass": 270.13429,
+            "mass_number": 269,
+            "mass": 269.13375,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 269.13375,
     },
     109: {
         276: {"mass": 276.15159, "abundance": 0.0},
+        278: {"mass": 278.15631, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 276,
-            "mass": 276.15159,
+            "mass_number": 278,
+            "mass": 278.15631,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 278.15631,
     },
     110: {
         281: {"mass": 281.16451, "abundance": 0.0},
@@ -1143,14 +1255,17 @@ isotopes = {
             "mass": 281.16451,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 281.16451,
     },
     111: {
         280: {"mass": 280.16514, "abundance": 0.0},
+        281: {"mass": 281.16636, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 280,
-            "mass": 280.16514,
+            "mass_number": 281,
+            "mass": 281.16636,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 281.16636,
     },
     112: {
         285: {"mass": 285.17712, "abundance": 0.0},
@@ -1159,14 +1274,17 @@ isotopes = {
             "mass": 285.17712,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 285.17712,
     },
     113: {
         284: {"mass": 284.17873, "abundance": 0.0},
+        286: {"mass": 286.18221, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 284,
-            "mass": 284.17873,
+            "mass_number": 286,
+            "mass": 286.18221,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 286.18221,
     },
     114: {
         289: {"mass": 289.19042, "abundance": 0.0},
@@ -1175,14 +1293,17 @@ isotopes = {
             "mass": 289.19042,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 289.19042,
     },
     115: {
         288: {"mass": 288.19274, "abundance": 0.0},
+        289: {"mass": 289.19363, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 288,
-            "mass": 288.19274,
+            "mass_number": 289,
+            "mass": 289.19363,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 289.19363,
     },
     116: {
         293: {"mass": 293.20449, "abundance": 0.0},
@@ -1191,14 +1312,17 @@ isotopes = {
             "mass": 293.20449,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 293.20449,
     },
     117: {
         292: {"mass": 292.20746, "abundance": 0.0},
+        293: {"mass": 293.20824, "abundance": 0.0},
         "most_abundant": {
-            "mass_number": 292,
-            "mass": 292.20746,
+            "mass_number": 293,
+            "mass": 293.20824,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 293.20824,
     },
     118: {
         294: {"mass": 294.21392, "abundance": 0.0},
@@ -1207,5 +1331,6 @@ isotopes = {
             "mass": 294.21392,
             "abundance": 0.0,
         },
+        "weighted_atomic_mass": 294.21392,
     },
 }
