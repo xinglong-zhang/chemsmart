@@ -26,6 +26,7 @@ class Job(RegistryMixin):
     def __init__(
         self, molecule, label, local=False, skip_completed=True, **kwargs
     ):
+        self._folder = self._determine_folder()  # Private backing attribute
         self.molecule = molecule
         self.label = label
         self.local = local
@@ -33,7 +34,11 @@ class Job(RegistryMixin):
 
     @property
     def folder(self):
-        return self._determine_folder()
+        return self._folder
+
+    @folder.setter
+    def folder(self, folder):
+        self._folder = folder
 
     def _determine_folder(self):
         """
