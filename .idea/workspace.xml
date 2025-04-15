@@ -5,6 +5,39 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/chemsmart.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/chemsmart.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/chemsmart.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../conflow/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../conflow/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../conflow/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../conflow/.idea/workspace.xml" afterDir="false" />
     </list>
@@ -47,125 +80,125 @@
     <option name="showLibraryContents" value="true" />
     <option name="showMembers" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_charge_multiplicity_append_name.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_dieze_tag.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_modify_settings.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_run.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_sub.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_freeze_atoms_job.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_job_from_genecp.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_job_from_premature_termination_with_opt_points.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_add_solvent_from_project_no_solvent.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_custom_solvent_settings.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_modify_one_param_from_project_solvent.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_modify_solvent_from_project_solvent.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_solvent_settings.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_turn_off_solvent.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_output_command_string_with_space_in_args.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_CLI.TestGaussianCLI.test_qmmm_job.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_Descriptors.TestDescriptors.test_2d_steric_descriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianIO.TestGaussian16Output.test_read_scan_outputfile.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianIO.TestGaussian16Output.test_singlet_opt_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianIO.TestRouteString.test_solvent_in_route.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.test_qmmm_settings.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.test_qmmm_settings_for_atoms.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.test_qmmm_settings_for_charge_and_multiplicity.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_XTBIO.TestXTBOutput.test_hess_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_XTBIO.TestXTBOutput.test_opt_gbsa_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_XTBIO.TestXTBOutput.test_opt_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_XTBIO.TestXTBOutput.test_sp_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_com_foler_to_xyz.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_log_foler.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_log_foler_to_com.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_single_comfile_to_xyz.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_single_logfile.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_single_logfile_to_com.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_converter.TestConverter.test_convert_xyz_folder_to_com.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_connectivity_grouper_for_crest_conformers.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_rdkit_isomorphism_grouper_for_crest_conformers.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_rdkit_isomorphism_grouper_for_large_number_of_mols.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_crest_conformers.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_crest_conformers_ignore_Hs.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_large_number_of_mols.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_grouper_for_crest_conformers.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_similarity_grouper.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_similarity_grouper_for_large_number_of_mols.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_mixins.TestMixins.test_get_subclasses.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_organizer.TestOrganizer.test_file_organizer.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestChemicalFeatures.test_resonance_handling.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_coordinate_block.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_gaussian_cb_frozen_atoms.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_gaussian_cb_with_tv.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestCoordinateBlockAdvanced.test_cube_file_format.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestMoleculeAdvanced.test_molecule_graph_generation.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestMoleculeAdvanced.test_molecule_to_rdkit_conversion.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestMoleculeAdvanced.test_qmmm_atoms_handling.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestQMMMMolecule.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestQMMMinMolecule.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestQMMMinMolecule.test_atoms_in_levels_default_low_level.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestQMMMinMolecule.test_atoms_in_leves.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestQMMMinMolecule.test_qmmm_atoms_handling.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestStructures.test_molecular_geometry.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_structures.TestStructures.test_read_molecule_from_single_molecule_xyz_file.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_from_gaussian_output.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_units.TestUnits.test_units.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_get_list_from_string_range.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_iterative_compare.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_dicts.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_elements.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_lists.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_string.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_tuples.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_GaussianIO.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_GaussianJobs.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_GaussianSettings.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_GaussianWriter.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_ORCAIO.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_XTBIO.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_converter.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_groupers.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_structures.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_data_reader.TestDataReader.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_data_reader.TestDataReader.test_read_data.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_2d_steric_descriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_3d_steric_descriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_calculate_2d_descriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_find_different_2d_steric_decriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_find_different_steric_decriptors.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_simple.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for test_descriptors.TestDescriptors.test_xyz_to_sdf.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for tests.test_groupers.TestGrouper.test_connectivity_grouper_for_large_number_of_mols.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest for tests.test_groupers.TestGrouper.test_rdkit_isomorphism_grouper.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest in test_Descriptors.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest in test_descriptors.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest in test_groupers.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.pytest in test_thermochemistry.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python.__init__.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_groupers.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_thermochemistry.executor&quot;: &quot;Run&quot;,
-    &quot;Python.units.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/xinglongzhang/bin/chemsmart&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_charge_multiplicity_append_name.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_dieze_tag.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_modify_settings.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_run.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_cli_sub.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_freeze_atoms_job.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_job_from_genecp.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_job_from_premature_termination_with_opt_points.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_add_solvent_from_project_no_solvent.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_custom_solvent_settings.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_modify_one_param_from_project_solvent.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_modify_solvent_from_project_solvent.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_solvent_settings.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_gaussian_sp_job_turn_off_solvent.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_output_command_string_with_space_in_args.executor": "Run",
+    "Python tests.Python tests for test_CLI.TestGaussianCLI.test_qmmm_job.executor": "Run",
+    "Python tests.Python tests for test_Descriptors.TestDescriptors.test_2d_steric_descriptors.executor": "Run",
+    "Python tests.Python tests for test_GaussianIO.TestGaussian16Output.test_read_scan_outputfile.executor": "Run",
+    "Python tests.Python tests for test_GaussianIO.TestGaussian16Output.test_singlet_opt_output.executor": "Run",
+    "Python tests.Python tests for test_GaussianIO.TestRouteString.test_solvent_in_route.executor": "Run",
+    "Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.executor": "Run",
+    "Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.test_qmmm_settings.executor": "Run",
+    "Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.test_qmmm_settings_for_atoms.executor": "Run",
+    "Python tests.Python tests for test_GaussianSettings.TestGaussianQMMMJobSettings.test_qmmm_settings_for_charge_and_multiplicity.executor": "Run",
+    "Python tests.Python tests for test_XTBIO.TestXTBOutput.test_hess_output.executor": "Run",
+    "Python tests.Python tests for test_XTBIO.TestXTBOutput.test_opt_gbsa_output.executor": "Run",
+    "Python tests.Python tests for test_XTBIO.TestXTBOutput.test_opt_output.executor": "Run",
+    "Python tests.Python tests for test_XTBIO.TestXTBOutput.test_sp_output.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_com_foler_to_xyz.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_log_foler.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_log_foler_to_com.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_single_comfile_to_xyz.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_single_logfile.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_single_logfile_to_com.executor": "Run",
+    "Python tests.Python tests for test_converter.TestConverter.test_convert_xyz_folder_to_com.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_connectivity_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rdkit_isomorphism_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rdkit_isomorphism_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_crest_conformers_ignore_Hs.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_rmsd_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_grouper_for_crest_conformers.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_similarity_grouper.executor": "Run",
+    "Python tests.Python tests for test_groupers.TestGrouper.test_tanimoto_similarity_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.Python tests for test_mixins.TestMixins.test_get_subclasses.executor": "Run",
+    "Python tests.Python tests for test_organizer.TestOrganizer.test_file_organizer.executor": "Run",
+    "Python tests.Python tests for test_structures.TestChemicalFeatures.test_resonance_handling.executor": "Run",
+    "Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_coordinate_block.executor": "Run",
+    "Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_gaussian_cb_frozen_atoms.executor": "Run",
+    "Python tests.Python tests for test_structures.TestCoordinateBlock.test_read_gaussian_cb_with_tv.executor": "Run",
+    "Python tests.Python tests for test_structures.TestCoordinateBlockAdvanced.test_cube_file_format.executor": "Run",
+    "Python tests.Python tests for test_structures.TestMoleculeAdvanced.test_molecule_graph_generation.executor": "Run",
+    "Python tests.Python tests for test_structures.TestMoleculeAdvanced.test_molecule_to_rdkit_conversion.executor": "Run",
+    "Python tests.Python tests for test_structures.TestMoleculeAdvanced.test_qmmm_atoms_handling.executor": "Run",
+    "Python tests.Python tests for test_structures.TestQMMMMolecule.executor": "Run",
+    "Python tests.Python tests for test_structures.TestQMMMinMolecule.executor": "Run",
+    "Python tests.Python tests for test_structures.TestQMMMinMolecule.test_atoms_in_levels_default_low_level.executor": "Run",
+    "Python tests.Python tests for test_structures.TestQMMMinMolecule.test_atoms_in_leves.executor": "Run",
+    "Python tests.Python tests for test_structures.TestQMMMinMolecule.test_qmmm_atoms_handling.executor": "Run",
+    "Python tests.Python tests for test_structures.TestStructures.test_molecular_geometry.executor": "Run",
+    "Python tests.Python tests for test_structures.TestStructures.test_read_molecule_from_single_molecule_xyz_file.executor": "Run",
+    "Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2.executor": "Run",
+    "Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2_gaussian_output.executor": "Run",
+    "Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_from_gaussian_output.executor": "Run",
+    "Python tests.Python tests for test_units.TestUnits.test_units.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_get_list_from_string_range.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_iterative_compare.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_dicts.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_elements.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_lists.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_string.executor": "Run",
+    "Python tests.Python tests for test_utils.TestUtils.test_iterative_compare_list_of_tuples.executor": "Run",
+    "Python tests.Python tests in test_GaussianIO.py.executor": "Run",
+    "Python tests.Python tests in test_GaussianJobs.py.executor": "Run",
+    "Python tests.Python tests in test_GaussianSettings.py.executor": "Run",
+    "Python tests.Python tests in test_GaussianWriter.py.executor": "Run",
+    "Python tests.Python tests in test_ORCAIO.py.executor": "Run",
+    "Python tests.Python tests in test_XTBIO.py.executor": "Run",
+    "Python tests.Python tests in test_converter.py.executor": "Run",
+    "Python tests.Python tests in test_groupers.py.executor": "Run",
+    "Python tests.Python tests in test_structures.py.executor": "Run",
+    "Python tests.pytest for test_data_reader.TestDataReader.executor": "Run",
+    "Python tests.pytest for test_data_reader.TestDataReader.test_read_data.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_2d_steric_descriptors.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_3d_steric_descriptors.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_calculate_2d_descriptors.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_find_different_2d_steric_decriptors.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_find_different_steric_decriptors.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_simple.executor": "Run",
+    "Python tests.pytest for test_descriptors.TestDescriptors.test_xyz_to_sdf.executor": "Run",
+    "Python tests.pytest for tests.test_groupers.TestGrouper.test_connectivity_grouper_for_large_number_of_mols.executor": "Run",
+    "Python tests.pytest for tests.test_groupers.TestGrouper.test_rdkit_isomorphism_grouper.executor": "Run",
+    "Python tests.pytest in test_Descriptors.py.executor": "Run",
+    "Python tests.pytest in test_descriptors.py.executor": "Run",
+    "Python tests.pytest in test_groupers.py.executor": "Run",
+    "Python tests.pytest in test_thermochemistry.py.executor": "Run",
+    "Python.__init__.executor": "Run",
+    "Python.test_groupers.executor": "Run",
+    "Python.test_thermochemistry.executor": "Run",
+    "Python.units.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "thermo",
+    "last_opened_file_path": "/Users/xinglongzhang/bin/chemsmart",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/tests" />
@@ -363,6 +396,7 @@
       <workItem from="1744688604202" duration="8000" />
       <workItem from="1744688633626" duration="3000" />
       <workItem from="1744688751053" duration="3000" />
+      <workItem from="1744688797926" duration="302000" />
     </task>
     <servers />
   </component>
