@@ -33,7 +33,17 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default="xyz",
     help="Type of files to convert to, defaults to .xzy",
 )
-def entry_point(directory, type, filename, output_filetype):
+@click.option(
+    "-i/",
+    "--include-intermediate-structures/--no-include-intermediate-structures",
+    is_flag=True,
+    type=bool,
+    default=False,
+    help="Include intermediate structures in the conversion.",
+)
+def entry_point(
+    directory, type, filename, output_filetype, include_intermediate_structures
+):
     """Script for converting structures in different formats."""
     create_logger()
     if directory is not None:
@@ -46,6 +56,7 @@ def entry_point(directory, type, filename, output_filetype):
             directory=directory,
             type=type,
             output_filetype=output_filetype,
+            include_intermediate_structures=include_intermediate_structures,
         )
         converter.convert_files()
     else:
@@ -56,6 +67,7 @@ def entry_point(directory, type, filename, output_filetype):
         converter = FileConverter(
             filename=filename,
             output_filetype=output_filetype,
+            include_intermediate_structures=include_intermediate_structures,
         )
         converter.convert_files()
 

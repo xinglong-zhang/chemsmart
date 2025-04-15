@@ -7,15 +7,18 @@ repos:
         language: system
         files: \.py$
         pass_filenames: false
+        always_run: true  # Run even if no files are staged
       - id: make-lint
         name: Run make lint
         entry: make lint
         language: system
         files: \.py$
         pass_filenames: false
+        always_run: true  
       - id: make-clean
         name: Run make clean
         entry: make clean
         language: system
         files: ''
         pass_filenames: false
+        always_run: true 

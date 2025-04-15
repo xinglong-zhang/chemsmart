@@ -6,6 +6,10 @@ from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.mol.runner import (
+    PyMOLMovieJobRunner,
+    PyMOLVisualizationJobRunner,
+)
 from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
@@ -119,6 +123,21 @@ def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(
         gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
     )
+
+
+@pytest.fixture()
+def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "qmmm")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfile_2layer(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3CH3.com")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfile_3layer(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3COOH.com")
 
 
 # Gaussian output files
@@ -510,6 +529,18 @@ def gaussian_written_opt_from_graphite_2d_pbc_log(
     )
 
 
+@pytest.fixture()
+def qmmm_written_xyz_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "qmmm_written.xyz")
+
+
+@pytest.fixture()
+def qmmm_written_xyz_only_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "qmmm_written_xyz_only.xyz"
+    )
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):
@@ -644,6 +675,25 @@ def water_engrad_path(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_fixed_atoms(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "phenol_fixed_atoms.out")
+
+
+@pytest.fixture()
+def orca_fixed_bonds_and_angles(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenol_fixed_bond_and_angles.out"
+    )
+
+
+@pytest.fixture()
+def orca_fixed_dihedral(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+    )
+
+
+@pytest.fixture()
 def orca_errors_directory(orca_test_directory):
     orca_errors_directory = os.path.join(orca_test_directory, "error_files")
     return os.path.abspath(orca_errors_directory)
@@ -722,6 +772,16 @@ def jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def jobrunner_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+
+
+@pytest.fixture()
+def pymol_visualization_jobrunner(pbs_server):
+    return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_movie_jobrunner(pbs_server):
+    return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing
