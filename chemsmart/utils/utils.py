@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
@@ -362,7 +363,7 @@ def get_prepend_string_list_from_modred_free_format(
         num_list = len(input_modred)
         for i in range(num_list):
             prepend_string = get_prepend_string_for_modred(input_modred[i])
-            if program == "gaussian":
+            if program == "gaussian" or program == "pymol":
                 modred_string = convert_modred_list_to_string(input_modred[i])
             elif program == "orca":
                 modred_string = convert_modred_list_to_string(
@@ -377,7 +378,7 @@ def get_prepend_string_list_from_modred_free_format(
     elif isinstance(input_modred[0], int):
         # for a single list; e.g.: [2,3]
         prepend_string = get_prepend_string_for_modred(input_modred)
-        if program == "gaussian":
+        if program == "gaussian" or program == "pymol":
             modred_string = convert_modred_list_to_string(input_modred)
         elif program == "orca":
             modred_string = convert_modred_list_to_string(
@@ -489,6 +490,14 @@ def run_command(command):
     except Exception as e:
         logger.error(f"Exception while running {command}: {e}")
         return None
+
+
+def quote_path(path):
+    """Quote paths on Windows to handle spaces and backslashes."""
+    if sys.platform == "win32":
+        # Double-quote paths on Windows to preserve spaces
+        return f'"{path}"'
+    return path
 
 
 def kabsch_align(

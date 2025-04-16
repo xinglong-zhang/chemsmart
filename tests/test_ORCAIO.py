@@ -242,11 +242,35 @@ class TestORCAOutput:
         molecule = orca_out.input_coordinates_block.molecule
         assert isinstance(molecule, Molecule)
         assert all(molecule.symbols == ["O", "H", "H"])
-        assert orca_out.input_coordinates_block.coordinate_block == [
+        expected_coordinate_block = [
             "O  0.0000  0.0000  0.0626",
             "H  -0.7920  0.0000  -0.4973",
             "H  0.7920  0.0000  -0.4973",
         ]
+        orca_coordinate_block = (
+            orca_out.input_coordinates_block.coordinate_block
+        )
+        for i, line in enumerate(orca_coordinate_block):
+            assert len(line.split()) == len(
+                expected_coordinate_block[i].split()
+            )
+            assert line.split()[0] == expected_coordinate_block[i].split()[0]
+            assert math.isclose(
+                float(line.split()[1]),
+                float(expected_coordinate_block[i].split()[1]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[2]),
+                float(expected_coordinate_block[i].split()[2]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[3]),
+                float(expected_coordinate_block[i].split()[3]),
+                rel_tol=1e-4,
+            )
+
         assert orca_out.molecule.empirical_formula == "H2O"
         assert len(orca_out.energies) == 6
         assert orca_out.energies[0] == -76.322282695198
@@ -259,9 +283,9 @@ class TestORCAOutput:
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
-            "B(H1,O0)": 0.9627,
-            "B(H2,O0)": 0.9627,
-            "A(H1,O0,H2)": 103.35,
+            "B(H2,O1)": 0.9627,
+            "B(H3,O1)": 0.9627,
+            "A(H2,O1,H3)": 103.35,
         }
         molecule = orca_out.final_structure
         assert isinstance(molecule, Molecule)
@@ -1717,6 +1741,32 @@ class TestORCAOutput:
         assert orca_out.extrapolation_basis is None
         assert orca_out.natoms == 27
         assert orca_out.normal_termination is False
+
+    def test_get_constrained_atoms(
+        self,
+        orca_fixed_atoms,
+        orca_fixed_bonds_and_angles,
+        orca_fixed_dihedral,
+    ):
+        fixed_atoms = ORCAOutput(filename=orca_fixed_atoms)
+        assert fixed_atoms.frozen_atoms == [3, 12]  # atoms 3 and 12 are frozen
+
+    def test_get_constrained_bond_lengths_and_angles(
+        self, orca_fixed_bonds_and_angles
+    ):
+        fixed_bond = ORCAOutput(filename=orca_fixed_bonds_and_angles)
+        assert fixed_bond.constrained_bond_lengths == {
+            "B(H10,H9)": 2.4714,
+        }
+        assert fixed_bond.constrained_bond_angles == {
+            "A(C2,C6,H9)": 69.0631,
+        }
+
+    def test_get_constrained_dihedral_angles(self, orca_fixed_dihedral):
+        fixed_dihedral = ORCAOutput(filename=orca_fixed_dihedral)
+        assert fixed_dihedral.constrained_dihedral_angles == {
+            "D(O18,H14,C13,C4)": -125.9028,
+        }
 
 
 class TestORCAEngrad:

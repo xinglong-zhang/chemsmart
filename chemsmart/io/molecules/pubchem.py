@@ -1,16 +1,23 @@
-"""Functions for querying pubchem for structures, adapted from ASE's pubchem.py module."""
+"""Functions for querying PubChem for structures, adapted from ASE's pubchem.py module."""
 
 import logging
 import os
-import urllib.request
 import warnings
 from contextlib import suppress
 from functools import lru_cache
 from io import StringIO
 from tempfile import TemporaryDirectory
-from urllib.error import HTTPError, URLError
 
+import requests
 from ase.data.pubchem import analyze_input, base_url
+from requests.exceptions import HTTPError as RequestsHTTPError
+from requests.exceptions import RequestException, Timeout
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from chemsmart.io.molecules.structure import Molecule
 
@@ -24,13 +31,27 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def search_pubchem_raw(search, field, suffix: str = "3d"):
-    """Search pubchem for structure.
+def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
+    """Search PubChem for structure.
 
     Changelog:
     1. Added suffix attribute.
     2. Added silent flag to print statements in except blocks.
     3. Changed default len of conformer_id to 1.
+
+    Args:
+        search (str): The search term (e.g., CID, SMILES, name).
+        field (str): The field to search (e.g., 'cid', 'smiles', 'name', 'conformers').
+        suffix (str): The suffix for the request (e.g., '3d', '2d'). Default is '3d'.
+        timeout (int): Request timeout in seconds. Default is 10.
+
+    Returns:
+        str: The raw SDF or JSON response decoded as UTF-8.
+
+    Raises:
+        requests.exceptions.Timeout: If the request times out.
+        requests.exceptions.HTTPError: For HTTP-related errors (e.g., 404, 400).
+        requests.exceptions.RequestException: For other network issues.
     """
     suffix = "sdf?record_type=" + suffix
 
@@ -40,67 +61,106 @@ def search_pubchem_raw(search, field, suffix: str = "3d"):
     else:
         url = f"{base_url}/compound/{field}/{search}/{suffix}"
 
-    r = urllib.request.urlopen(url)
+    # Use requests with timeout
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()  # Raises HTTPError for 400, 404, etc.
 
-    # Check if there are confomers and warn them if there are
+    # Check if there are conformers and warn them if there are
     if field != "conformers":
-        # Set default conformer_ids to len==1, as there are pubchem structures with no conformer information
+        # Set default conformer_ids to len==1, as there are PubChem structures with no conformer information
         # which would return "HTTPError:PUGREST.NotFound"
         conformer_ids = ["conformer information not found."]
 
-        with suppress(HTTPError, URLError):
+        with suppress(RequestsHTTPError, RequestException):
             # Test if there is any conformer information of the structure
-            conformer_ids = search_pubchem_raw(
-                search, field, suffix="conformers/JSON"
+            conformer_json = search_pubchem_raw(
+                search, field, suffix="conformers/JSON", timeout=timeout
             )
+            # Parse JSON to check for conformers (assuming a list or dict response)
+            import json
+
+            conformer_data = json.loads(conformer_json)
+            conformer_ids = conformer_data.get("Conformers", conformer_ids)
 
         if len(conformer_ids) > 1:
             warnings.warn(
                 f'The structure "{search}" has more than one '
                 "conformer in PubChem. By default, the "
-                "first conformer is returned, please ensure"
-                " you are using the structure you intend to"
-                " or use the "
-                "`ase.data.pubchem.pubchem_conformer_search`"
-                " function",
+                "first conformer is returned, please ensure "
+                "you are using the structure you intend to "
+                "or use the "
+                "`ase.data.pubchem.pubchem_conformer_search` "
+                "function",
                 stacklevel=2,
             )
 
-    return r.read().decode("utf-8")
+    return response.text  # Already UTF-8 decoded by requests
 
 
 @lru_cache(maxsize=128)
+@retry(
+    stop=stop_after_attempt(3),  # Retry up to 3 times
+    wait=wait_exponential(
+        multiplier=1, min=2, max=10
+    ),  # Wait 2, 4, then 8 seconds
+    retry=retry_if_exception_type(Timeout),  # Retry on timeout
+    before_sleep=lambda retry_state: logger.debug(
+        f"Retrying PubChem search (attempt {retry_state.attempt_number}) after {retry_state.idle_for}s..."
+    ),
+)
 def pubchem_search(*args, fail_silently=True, **kwargs):
-    """Search pubchem for structure.
+    """Search PubChem for structure.
 
     Changelog:
     1. Try suffix =='3d' and '2d'.
     2. Reads 2d sdf files by rdkit to create more accurate structures.
     3. Simplify parse_pubchem_raw() to read atom structure.
+
+    Args:
+        *args: Variable positional arguments for search.
+        fail_silently (bool): If True, return None on failure instead of raising an error.
+        **kwargs: Keyword arguments for search (e.g., cid, smiles, name).
+
+    Returns:
+        Molecule or None: The molecule object or None if retrieval fails and fail_silently=True.
+
+    Raises:
+        ValueError: If structure cannot be retrieved and fail_silently=False.
     """
 
     def _pubchem_search():
         search, field = analyze_input(*args, **kwargs)
 
         try:
-            raw_pubchem = search_pubchem_raw(search, field, suffix="3d")
-        except (HTTPError, URLError) as e:
-            error_substrings = ["HTTP Error 400", "HTTP Error 404"]
+            raw_pubchem = search_pubchem_raw(
+                search, field, suffix="3d", timeout=10
+            )
+        except RequestsHTTPError as e:
+            error_substrings = ["400", "404"]  # Match status codes as strings
             if not any(substring in str(e) for substring in error_substrings):
-                raise e
+                logger.warning(
+                    f"Unexpected HTTP error fetching 3D {field} for {search}: {str(e)}"
+                )
+                raise  # Retry on unexpected HTTP errors via outer handler
             logger.info(
-                f"Error getting 3D {field} structure from pubchem for {search}, trying 2D"
+                f"Error getting 3D {field} structure from PubChem for {search}, trying 2D"
             )
 
             try:
-                raw_pubchem = search_pubchem_raw(search, field, suffix="2d")
-            except (HTTPError, URLError) as e:
+                raw_pubchem = search_pubchem_raw(
+                    search, field, suffix="2d", timeout=10
+                )
+                raw_pubchem = _pubchem_2d_to_3d(raw_pubchem)
+                logger.info(
+                    f"Successfully got 2D {field} structure for {search}"
+                )
+            except RequestsHTTPError as e:
+                logger.error(
+                    f"Failed to get 2D {field} structure for {search}: {str(e)}"
+                )
                 raise ValueError(
-                    "Error getting structure from pubchem!"
+                    "Error getting structure from PubChem!"
                 ) from e
-
-            raw_pubchem = _pubchem_2d_to_3d(raw_pubchem)
-            logger.info(f"Successfully got 2D {field} structure for {search}")
 
         f_like = StringIO(raw_pubchem)
 
@@ -116,10 +176,20 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
     except ValueError as e:
         if fail_silently:
             logger.info(
-                "Error getting structure from pubchem. Returning None as fail_silently=True"
+                "Error getting structure from PubChem. Returning None as fail_silently=True"
             )
             return None
         raise e
+    except Timeout as e:
+        logger.warning(
+            f"Timeout fetching structure for {kwargs.get('search', args)}: {str(e)}"
+        )
+        raise  # Trigger retry
+    except RequestException as e:
+        logger.warning(
+            f"Network error fetching structure for {kwargs.get('search', args)}: {str(e)}"
+        )
+        raise  # Trigger retry
 
 
 def _pubchem_2d_to_3d(data):
