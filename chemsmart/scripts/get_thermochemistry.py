@@ -371,7 +371,9 @@ def get_thermo(
                     and thermochemistry.vibrational_frequencies[0] < 0.0
                 ):
                     if thermochemistry.num_replaced_frequencies > 0:
-                        logger.error(f"!! Detected multiple imaginary frequencies in transition state for {file} — aborting.\n")
+                        logger.error(
+                            f"!! Detected multiple imaginary frequencies in transition state for {file} — aborting.\n"
+                        )
                         raise ValueError(
                             f"Error: Detected multiple imaginary frequencies in TS calculation for {file}. "
                             f"Only one imaginary frequency is allowed for a valid TS. "
