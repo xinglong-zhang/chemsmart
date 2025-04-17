@@ -648,13 +648,13 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         delete_la_double_counting=False,
         delete_la_bond_double_counting_atoms=False,
         embedding_type=None,  # optional
-        #the followings are crystal QM/MM parameters
+        # the followings are crystal QM/MM parameters
         conv_charges=True,
         conv_charges_max_n_cycles=None,
         conv_charges_conv_thresh=None,
         scale_formal_charge_mm_atom=None,
-        n_unit_cell_atoms=None, # for MOL-CRYSTAL-QMMM jobs
-        #the followings are for INONIC-CRYSTAL-QMMM jobs
+        n_unit_cell_atoms=None,  # for MOL-CRYSTAL-QMMM jobs
+        # the followings are for INONIC-CRYSTAL-QMMM jobs
         ecp_layer_ecp=None,
         ecp_layer=None,
         scale_formal_charge_ecp_atom=None,
@@ -726,20 +726,20 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self.scale_formal_charge_mm_atom = scale_formal_charge_mm_atom
         self.n_unit_cell_atoms = n_unit_cell_atoms
         self.ecp_layer_ecp = ecp_layer_ecp
-        self.ecp_layer= ecp_layer
+        self.ecp_layer = ecp_layer
         self.scale_formal_charge_ecp_atom = scale_formal_charge_ecp_atom
 
         # populate self.functional, self.basis, etc.
         self.functional = self.qm_functional
         self.basis = self.qm_basis
-        if self.charge_medium is not None and self.multiplicity is not None:
+        if self.charge_medium is not None and self.mult_medium is not None:
             self.charge = self.charge_medium
             self.multiplicity = self.mult_medium
             # the charge/multiplicity of the medium system corresponds to the
             # sum of the charge/multiplicity of the high level and low level regions
         else:
             self.charge = self.charge_qm
-            self.multiplicity = self.charge_qm
+            self.multiplicity = self.mult_qm
 
     @property
     def qmmm_block(self):
@@ -787,30 +787,39 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return level_of_theory
 
     def check_crystal_qmmm(self):
-        job_type=self.job_type.upper()
-        if job_type in ["IONIC-CRYSTAL-QMMM","MOL-CRYSTAL-QMMM"]:
+        job_type = self.job_type.upper()
+        if job_type in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
+            assert (
+                self.mult_qm is None
+                and self.mult_medium is None
+                and self.mult_total is None
+            ), f"Multiplicity should not be specified for {job_type} job!"
+            self.multiplicity = 0  # avoid conflicts from parent class
             if self.conv_charges is False:
-                assert self.mm_method is not None, (
-                    "Force field file containing convergence charges is not provided!"
-                )
+                assert (
+                    self.mm_method is not None
+                ), "Force field file containing convergence charges is not provided!"
             if job_type == "MOL-CRYSTAL-QMMM":
-                assert self.n_unit_cell_atoms, (
-                    f"The number of atoms per molecular subunit for {job_type} job is not provided!"
-                )
+                assert (
+                    self.n_unit_cell_atoms
+                ), f"The number of atoms per molecular subunit for {job_type} job is not provided!"
             else:
-                assert self.ecp_layer_ecp, (
-                    f"cECPs used for the boundary region for {job_type} job must be specified! "
-                )
-                assert self.n_unit_cell_atoms is None, (
-                    f"The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
-                )
+                assert (
+                    self.ecp_layer_ecp
+                ), f"cECPs used for the boundary region for {job_type} job must be specified! "
+                assert (
+                    self.n_unit_cell_atoms is None
+                ), f"The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
 
     def _get_level_of_theory_string(self):
         """Get the level of theory string for QM and QM2.
         e.g. '!QM/XTB' (without solvent), '!QM/XTB ALPB(Water)' (with solvent), '!QM/HF-3C/MM' (for QM/QM2/MM)
         """
-        #todo: move to crystalqmmm class
-        if self.job_type.upper()=="IONIC-CRYSTAL-QMMM" or self.job_type.upper()=="MOL-CRYSTAL-QMMM":
+        # todo: move to crystalqmmm class
+        if (
+            self.job_type.upper() == "IONIC-CRYSTAL-QMMM"
+            or self.job_type.upper() == "MOL-CRYSTAL-QMMM"
+        ):
             level_of_theory = f"! {self.job_type.upper()}"
         else:
             level_of_theory = "!QM"
@@ -827,13 +836,11 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 None, None, self.mm_method, level_name="mm"
             )
             if self.qm2_level_of_theory is not None:
-                level_of_theory += (
-                    f"/{self.qm2_level_of_theory}"
-                )
+                level_of_theory += f"/{self.qm2_level_of_theory}"
             if self.mm_level_of_theory is not None:
                 if self.job_type.upper() == "QMMM":
-                    #only "!QMMM" will be used for additive QMMM
-                    level_of_theory ="!QMMM"
+                    # only "!QMMM" will be used for additive QMMM
+                    level_of_theory = "!QMMM"
                 else:
                     level_of_theory += f"/{self.mm_level_of_theory}"
             if self.solvent_model is not None:
@@ -900,7 +907,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             charge = f"Charge_Total {self.charge_total}"
             mult = f"Mult_Total {self.mult_total}"
         return charge, mult
-
 
     def _write_qmmm_block(self):
         """Writes the QMMM block options.
@@ -978,18 +984,24 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return full_qm_block
 
     def _write_crystal_qmmm_subblock(self):
-        crystal_qmmm_subblock= " "
+        crystal_qmmm_subblock = " "
         if self.conv_charges is False:
             crystal_qmmm_subblock += "Conv_Charges False \n"
             crystal_qmmm_subblock += f'ORCAFFFilename "{self.mm_method}" \n'
         if self.conv_charges_max_n_cycles is not None:
-            crystal_qmmm_subblock += f"Conv_Charges_MaxNCycles {self.conv_charges_max_n_cycles} \n"
+            crystal_qmmm_subblock += (
+                f"Conv_Charges_MaxNCycles {self.conv_charges_max_n_cycles} \n"
+            )
         if self.conv_charges_conv_thresh is not None:
-            crystal_qmmm_subblock += f"Conv_Charges_ConvThresh {self.conv_charges_conv_thresh} \n"
+            crystal_qmmm_subblock += (
+                f"Conv_Charges_ConvThresh {self.conv_charges_conv_thresh} \n"
+            )
         if self.scale_formal_charge_mm_atom is not None:
             crystal_qmmm_subblock += f"Scale_FormalCharge_MMAtom {self.scale_formal_charge_mm_atom} \n"
         if self.n_unit_cell_atoms is not None:
-            crystal_qmmm_subblock += f"NumUnitCellAtoms {self.n_unit_cell_atoms} \n"
+            crystal_qmmm_subblock += (
+                f"NumUnitCellAtoms {self.n_unit_cell_atoms} \n"
+            )
         if self.ecp_layer_ecp is not None:
             crystal_qmmm_subblock += f"cECPs {self.ecp_layer_ecp} \n"
         if self.ecp_layer is not None:
@@ -997,4 +1009,3 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if self.scale_formal_charge_ecp_atom is not None:
             crystal_qmmm_subblock += f"Scale_FormalCharge_ECPAtom {self.scale_formal_charge_ecp_atom} \n"
         return crystal_qmmm_subblock
-

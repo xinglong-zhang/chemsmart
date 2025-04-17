@@ -201,9 +201,7 @@ logger = logging.getLogger(__name__)
     "--scale-formal-charge-ecp-atom",
     type=float,
     help="Scale the formal charge of ECP atoms",
-
 )
-
 @click.pass_context
 def qmmm(
     ctx,
