@@ -408,7 +408,7 @@ class Molecule:
         from chemsmart.io.orca.output import ORCAOutput
 
         orca_output = ORCAOutput(filename=filepath)
-        return orca_output.get_molecule(index=index)
+        return orca_output.molecule
 
     # @staticmethod
     # @file_cache()
@@ -564,10 +564,11 @@ class Molecule:
                 f"Program {program} is not supported for writing coordinates."
             )
 
-    def write(self, filename, format="xyz", mode="w", **kwargs):
-        """Write the molecule to a file."""
+    def write(self, filename, format="xyz", **kwargs):
+        """Write the molecule to a file. Support for file format conversion.
+        For Gaussian com file, default route string is used."""
         if format.lower() == "xyz":
-            self.write_xyz(filename, mode=mode, **kwargs)
+            self.write_xyz(filename, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
         # elif format.lower() == "mol":
@@ -575,9 +576,16 @@ class Molecule:
         else:
             raise ValueError(f"Format {format} is not supported for writing.")
 
-    def write_xyz(self, filename, mode, **kwargs):
-        """Write the molecule to an XYZ file."""
-        with open(filename, mode) as f:
+    def write_xyz(self, filename, xyz_only=True, **kwargs):
+        """Write the molecule to an XYZ file.
+        Args:
+            filename (str): The name of the file to write to.
+            xyz_only (bool): If True, only write the XYZ coordinates; else
+                             write the XYZ coordinates and additional information
+                             such as frozen atoms and high/medium/low level atoms.
+        """
+
+        with open(filename, "w") as f:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
                 # energy found in file, e.g., .out, .log
@@ -592,7 +600,10 @@ class Molecule:
             logger.info(f"Writing outputfile to {filename}")
             f.write(f"{self.num_atoms}\n")
             f.write(f"{xyz_info}\n")
-            self._write_orca_coordinates(f)
+            if xyz_only:
+                self._write_orca_coordinates(f)
+            else:
+                self._write_gaussian_coordinates(f)
 
     def write_com(
         self,
@@ -620,6 +631,7 @@ class Molecule:
             f.write("\n")
 
     def _write_gaussian_coordinates(self, f):
+
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
@@ -1148,57 +1160,19 @@ class CoordinateBlock:
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
-                logger.debug(f"Line {line} has less than 4 line elements!")
                 continue
 
             if (
                 line_elements[0].upper() == "TV"
             ):  # cases where PBC system occurs in Gaussian
-                logger.debug(f"Skipping line {line} with TV!")
                 continue
 
             try:
-                logger.debug(
-                    f"Converting atomic number {line_elements[0]} to symbol."
-                )
-                atomic_number = int(
-                    line_elements[0]
-                )  # Could raise ValueError if not an integer
-                chemical_symbol = p.to_symbol(
-                    atomic_number=atomic_number
-                )  # Could raise KeyError or similar
-                logger.debug(
-                    f"Successfully converted {line_elements[0]} to {chemical_symbol}."
-                )
+                atomic_number = int(line_elements[0])
+                chemical_symbol = p.to_symbol(atomic_number=atomic_number)
                 symbols.append(chemical_symbol)
             except ValueError:
-                # Handle case where line_elements[0] isn’t a valid integer
-                logger.debug(
-                    f"{line_elements[0]} is not a valid atomic number; treating as symbol."
-                )
-                try:
-                    symbols.append(
-                        p.to_element(element_str=str(line_elements[0]))
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to convert {line_elements[0]} to element: {str(e)}"
-                    )
-            except Exception as e:
-                # Catch any other unexpected errors
-                logger.error(
-                    f"Unexpected error processing {line_elements[0]}: {str(e)}"
-                )
-                try:
-                    # Fallback attempt
-                    symbols.append(
-                        p.to_element(element_str=str(line_elements[0]))
-                    )
-                except Exception as fallback_e:
-                    logger.error(
-                        f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
-                    )
-
+                symbols.append(p.to_element(element_str=str(line_elements[0])))
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
