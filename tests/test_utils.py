@@ -21,6 +21,7 @@ class TestUtils:
         assert is_float("-0.1")
         assert not is_float("-1")
         assert not is_float("1")
+        assert not is_float("abc")
 
     def test_content_blocking(self, gaussian_opt_inputfile):
         g16_input = Gaussian16Input(filename=gaussian_opt_inputfile)
