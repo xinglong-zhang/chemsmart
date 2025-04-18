@@ -715,7 +715,6 @@ class Molecule:
                 cutoff = get_bond_cutoff(
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
-                logger.debug(f"type of cutoff: {type(cutoff)}")
                 bond_order = self.determine_bond_order_one_bond(
                     bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
                 )
