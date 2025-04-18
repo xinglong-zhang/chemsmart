@@ -1,10 +1,12 @@
 import logging
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 
 import click
 import tomlkit
+import yaml
 
 from chemsmart.utils.logger import create_logger
 
@@ -67,6 +69,15 @@ class Updater:
         return tmp_path
 
     def _get_existing_dependencies(self):
+        """Extract dependencies from pyproject.toml and environment.yml."""
+        dependencies = set()
+        dependencies.update(self._get_existing_dependencies_from_pyproject())
+        dependencies.update(
+            self._get_existing_dependencies_from_environment_yml()
+        )
+        return dependencies
+
+    def _get_existing_dependencies_from_pyproject(self):
         """Extract dependencies from pyproject.toml."""
         if not self.pyproject_path.exists():
             logger.error("pyproject.toml not found.")
@@ -75,39 +86,78 @@ class Updater:
         with self.pyproject_path.open("r") as f:
             pyproject_toml = tomlkit.parse(f.read())
 
-        return set(pyproject_toml["project"]["dependencies"])
+        # Safely handle missing 'project' or 'dependencies' keys
+        return set(pyproject_toml.get("project", {}).get("dependencies", []))
+
+    def _get_existing_dependencies_from_environment_yml(self):
+        """Extract dependencies from environment.yml."""
+        env_yml_path = Path("environment.yml")
+        if not env_yml_path.exists():
+            logger.info(
+                "environment.yml not found, skipping Conda dependencies."
+            )
+            return set()
+
+        with env_yml_path.open("r") as f:
+            env_data = yaml.safe_load(f)
+
+        dependencies = set()
+        conda_deps = env_data.get("dependencies", [])
+        for dep in conda_deps:
+            if isinstance(dep, str):
+                dependencies.add(dep)
+            elif isinstance(dep, dict) and "pip" in dep:
+                dependencies.update(dep["pip"])
+
+        return dependencies
 
     def _get_missing_dependencies(self, requirements_path):
-        """Identify dependencies missing from pyproject.toml, ignoring version numbers.
-        Only considers dependencies found in the codebase, not the entire environment.
-        """
+        """Identify dependencies missing from pyproject.toml, preserving versions."""
         if not requirements_path.exists():
             logger.error("Generated requirements file not found.")
             return set()
 
-        # Read detected dependencies from pipreqs output
+        # Read detected dependencies from pipreqs output (with versions)
         with requirements_path.open("r") as f:
             detected_deps = {line.strip() for line in f if line.strip()}
 
-        # Extract existing dependencies from pyproject.toml
+        # Extract existing dependencies
         existing_deps = self._get_existing_dependencies()
 
-        # Function to extract only package names
-        def extract_pkg_name(dep):
-            # return re.split(r"[=<>~!]", dep, maxsplit=1)[0].strip()  # ignore version
-            return dep
+        # Package name normalization mapping (for comparison)
+        package_mapping = {
+            "pymol-open-source": "pymol",  # Treat pymol-open-source as pymol for matching
+        }
+        reverse_mapping = {
+            v: k for k, v in package_mapping.items()
+        }  # For display
 
-        # Convert dependencies to package names only
+        # Function to extract package name (for comparison)
+        def extract_pkg_name(dep):
+            pkg_name = re.split(r"[=<>~!]", dep, maxsplit=1)[0].lower().strip()
+            return package_mapping.get(pkg_name, pkg_name)
+
+        # Normalize package names for comparison
         detected_pkgs = {extract_pkg_name(dep) for dep in detected_deps}
-        logger.debug(f"Detected packages: {detected_pkgs}")
         existing_pkgs = {extract_pkg_name(dep) for dep in existing_deps}
 
-        # Identify missing packages (only from code, not the entire environment)
-        missing_packages = detected_pkgs - existing_pkgs
-        return missing_packages
+        # Create display version of detected_pkgs with reverse mapping
+        detected_pkgs_display = {
+            reverse_mapping.get(pkg, pkg) for pkg in detected_pkgs
+        }
+        logger.debug(f"Detected packages: {detected_pkgs_display}")
+        logger.debug(f"Existing packages: {existing_pkgs}")
+
+        # Identify missing dependencies with their full strings
+        missing_dependencies = {
+            dep
+            for dep in detected_deps
+            if extract_pkg_name(dep) not in existing_pkgs
+        }
+        return missing_dependencies
 
     def _update_toml(self, requirements_path):
-        """Update pyproject.toml with missing dependencies."""
+        """Update pyproject.toml with missing dependencies, including versions, in lowercase."""
         missing_dependencies = self._get_missing_dependencies(
             requirements_path
         )
@@ -118,15 +168,25 @@ class Updater:
         with self.pyproject_path.open("r") as f:
             pyproject_toml = tomlkit.parse(f.read())
 
-        for dep in missing_dependencies:
+        # Function to normalize package name to lowercase while preserving version
+        def normalize_dep(dep):
+            pkg_name, *version = re.split(r"([=<>~!])", dep, maxsplit=1)
+            if version:  # If there's a version specifier
+                return pkg_name.lower() + "".join(version)
+            return pkg_name.lower()  # No version, just lowercase the name
+
+        # Adjust and normalize dependencies
+        adjusted_deps = {
+            normalize_dep(dep).replace("==", ">=")
+            for dep in missing_dependencies
+        }
+        for dep in adjusted_deps:
             pyproject_toml["project"]["dependencies"].append(dep)
 
         with self.pyproject_path.open("w") as f:
             f.write(tomlkit.dumps(pyproject_toml))
 
-        logger.info(
-            f"Added missing dependencies: {', '.join(missing_dependencies)}"
-        )
+        logger.info(f"Added missing dependencies: {', '.join(adjusted_deps)}")
 
 
 @click.group(name="update")
