@@ -203,7 +203,7 @@ class Molecule:
         )
 
     @classmethod
-    def from_filepath(cls, filepath, index="-1", return_list=False, **kwargs):
+    def from_filepath(cls, filepath, index="-1", return_list=True, **kwargs):
         filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"{filepath} could not be found!")
