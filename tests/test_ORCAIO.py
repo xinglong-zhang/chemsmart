@@ -91,6 +91,39 @@ class TestORCARoute:
         assert r6.extrapolation_basis is None
         assert r6.auxiliary_basis is None
 
+        #two-layer ONIOM
+        s7 = "!QM/XTB BP86 def2-TZVP def2/J"
+        r7 = ORCARoute(route_string=s7)
+        assert r7.route_keywords == ['qm/xtb', 'bp86', 'def2-tzvp', 'def2/j']
+        assert r7.qm_functional == 'bp86'
+        assert r7.qm_basis == 'def2-tzvp'
+        assert r7.auxiliary_basis == 'def2/j'
+        assert r7.qm2_method == 'xtb'
+        assert r7.qmmm_jobtype == "qm/xtb"
+
+        #three-layer ONIOM
+        s8 = "!QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq CPCM(water)"
+        r8=ORCARoute(route_string=s8)
+        assert r8.route_keywords == ['qm/hf-3c/mm', 'opt', 'b3lyp', 'def2-tzvp', 'def2/j', 'numfreq', 'cpcm(water)']
+        assert r8.qm_functional == 'b3lyp'
+        assert r8.qm_basis == 'def2-tzvp'
+        assert r8.auxiliary_basis == 'def2/j'
+        assert r8.qm2_method == 'hf-3c'
+        assert r8.qmmm_jobtype == "qm/hf-3c/mm"
+
+        #MOL-CRYSTAL-QMMM route
+        s9 = '! MOL-CRYSTAL-QMMM PBE def2-SVP Opt NumFreq'
+        r9=ORCARoute(route_string=s9)
+        assert r9.route_keywords == ['mol-crystal-qmmm', 'pbe', 'def2-svp', 'opt', 'numfreq']
+        assert r9.qm_functional == 'pbe'
+        assert r9.qm_basis == 'def2-svp'
+        assert r9.qmmm_jobtype == 'mol-crystal-qmmm'
+
+        # IONIC-CRYSTAL-QMMM route
+        s10 = '! IONIC-CRYSTAL-QMMM'
+        r10 = ORCARoute(route_string=s10)
+        assert r10.qmmm_jobtype == 'ionic-crystal-qmmm'
+
 
 class TestORCABasis:
     def test_orca_all_auxiliary_basis_sets(self):
