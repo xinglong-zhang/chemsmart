@@ -58,7 +58,9 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
-        molecules = Molecule.from_filepath(xyz_file, index=":")
+        molecules = Molecule.from_filepath(
+            xyz_file, index=":", return_list=True
+        )
         assert (
             len(molecules) == 1
         ), f"Expected 1 molecule, but got {len(molecules)}."
@@ -160,7 +162,9 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
-        molecules = Molecule.from_filepath(xyz_file, index=":")
+        molecules = Molecule.from_filepath(
+            xyz_file, index=":", return_list=True
+        )
         assert (
             len(molecules) == 10
         ), f"Expected 1 molecule, but got {len(molecules)}."
