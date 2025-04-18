@@ -167,10 +167,9 @@ class Gaussian16Output(GaussianFileMixin):
         """
         # Determine orientations and their periodic boundary conditions (PBC)
         if self.standard_orientations:
-            num_structures_to_use = min(
-                len(self.standard_orientations),
-                len(self.energies),
-                len(self.forces),
+            orientations, orientations_pbc = (
+                self.standard_orientations,
+                self.standard_orientations_pbc,
             )
         elif self.input_orientations:
             orientations, orientations_pbc = (
@@ -225,13 +224,6 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
-        # Use Standard orientations if available, otherwise Input orientations
-        if self.standard_orientations:
-            orientations = self.standard_orientations
-            orientations_pbc = self.standard_orientations_pbc
-        else:
-            orientations = self.input_orientations
-            orientations_pbc = self.input_orientations_pbc
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
