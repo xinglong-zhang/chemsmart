@@ -6,7 +6,8 @@ from itertools import islice
 import numpy as np
 from ase import units
 
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
@@ -164,79 +165,65 @@ class Gaussian16Output(GaussianFileMixin):
         Use Standard orientations to get the structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
-
-        def create_molecule_list(
-            orientations, orientations_pbc, num_structures=None
-        ):
-            """Helper function to create Molecule objects."""
-            num_structures = num_structures or len(orientations)
-            if self.use_frozen:
-                frozen_atoms = self.frozen_atoms_masks
-            else:
-                frozen_atoms = None
-            return [
-                Molecule(
-                    symbols=self.symbols,
-                    positions=orientations[i],
-                    translation_vectors=orientations_pbc[i],
-                    charge=self.charge,
-                    multiplicity=self.multiplicity,
-                    frozen_atoms=frozen_atoms,
-                    pbc_conditions=self.list_of_pbc_conditions,
-                    energy=self.energies_in_eV[i],
-                    forces=self.forces_in_eV_per_angstrom[i],
-                )
-                for i in range(num_structures)
-            ]
-
-        # If the job terminated normally
-        if self.normal_termination:
-            # Use Standard orientations if available, otherwise Input orientations
-            if self.standard_orientations:
-                # log file has "Standard orientation:"
-                # and standard_orientations is not None
-                try:
-                    if np.allclose(
-                        self.standard_orientations[-1],
-                        self.standard_orientations[-2],
-                        rtol=1e-5,
-                    ):
-                        self.standard_orientations.pop(-1)
-                except IndexError:
-                    # for single point jobs, there will be only one structure
-                    pass
-                orientations = self.standard_orientations
-                orientations_pbc = self.standard_orientations_pbc
-            else:
-                if self.input_orientations is not None:
-                    # if the log file has "Input orientation:"
-                    try:
-                        if np.allclose(
-                            self.input_orientations[-1],
-                            self.input_orientations[-2],
-                            rtol=1e-5,
-                        ):
-                            self.input_orientations.pop(-1)
-                    except IndexError:
-                        # for single point jobs, there will be only one structure
-                        pass
-                orientations = self.input_orientations
-                orientations_pbc = self.input_orientations_pbc
-            return create_molecule_list(orientations, orientations_pbc)
-
-        # If the job did not terminate normally, the last structure is ignored
-        num_structures_to_use = len(self.energies)
+        # Determine orientations and their periodic boundary conditions (PBC)
         if self.standard_orientations:
             num_structures_to_use = min(
                 len(self.standard_orientations),
                 len(self.energies),
                 len(self.forces),
             )
-        if self.input_orientations:
+        elif self.input_orientations:
+            orientations, orientations_pbc = (
+                self.input_orientations,
+                self.input_orientations_pbc,
+            )
+        else:
+            return []  # No structures found
+
+        # Clean duplicate structures at the end
+        clean_duplicate_structure(orientations)
+
+        # Remove first structure if it's a link job
+        if self.job_type == "link" and len(orientations) > 1:
+            orientations, orientations_pbc = (
+                orientations[1:],
+                orientations_pbc[1:],
+            )
+            self.energies_in_eV = self.energies_in_eV[1:]
+
+        frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
+
+        # Handle normal termination
+        if self.normal_termination:
+            all_structures = create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies_in_eV,
+                self.forces_in_eV_per_angstrom,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+            )
+        else:
+            # Handle abnormal termination
             num_structures_to_use = min(
-                len(self.input_orientations),
-                len(self.energies),
-                len(self.forces),
+                len(orientations),
+                len(self.energies_in_eV),
+                len(self.forces_in_eV_per_angstrom),
+            )
+            all_structures = create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies_in_eV,
+                self.forces_in_eV_per_angstrom,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+                num_structures=num_structures_to_use,
             )
         # Use Standard orientations if available, otherwise Input orientations
         if self.standard_orientations:
@@ -246,29 +233,15 @@ class Gaussian16Output(GaussianFileMixin):
             orientations = self.input_orientations
             orientations_pbc = self.input_orientations_pbc
 
-        # Handle abnormal termination by limiting the number of structures used
-        num_structures_to_use = min(
-            len(orientations),
-            len(self.energies_in_eV),
-            len(self.forces_in_eV_per_angstrom),
-        )
-        all_structures = create_molecule_list(
-            orientations,
-            orientations_pbc,
-            num_structures=num_structures_to_use,
-        )
-
+        # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
-            # if not including intermediate steps
             logger.info(
-                "Ignoring intermediate geometry optimimzation for each constrained opt."
-            )
-            logger.debug(
-                f"Optimized steps indices: {self.optimized_steps_indices}"
+                "Ignoring intermediate geometry optimization for constrained opt."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+
         logger.info(
             f"Total number of structures located: {len(all_structures)}"
         )
@@ -320,6 +293,7 @@ class Gaussian16Output(GaussianFileMixin):
                 i_gaussian = i + 1  # gaussian uses 1-index
                 each_steps = [step for step in steps if step[-1] == i_gaussian]
                 optimized_steps.append(each_steps[-1])
+            print(f"Optimized steps: {optimized_steps}")
             return optimized_steps
         return None
 
