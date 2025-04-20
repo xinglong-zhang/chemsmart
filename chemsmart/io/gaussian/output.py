@@ -57,10 +57,10 @@ class Gaussian16Output(GaussianFileMixin):
 
         last_line = contents[-1]
         if "Normal termination of Gaussian" in last_line:
-            logger.info(f"File {self.filename} terminated normally.")
+            logger.debug(f"File {self.filename} terminated normally.")
             return True
 
-        logger.info(f"File {self.filename} has error termination.")
+        logger.debug(f"File {self.filename} has error termination.")
         return False
 
     @property
@@ -227,14 +227,14 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
-            logger.info(
+            logger.debug(
                 "Ignoring intermediate geometry optimization for constrained opt."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.info(
+        logger.debug(
             f"Total number of structures located: {len(all_structures)}"
         )
         return all_structures
@@ -285,7 +285,7 @@ class Gaussian16Output(GaussianFileMixin):
                 i_gaussian = i + 1  # gaussian uses 1-index
                 each_steps = [step for step in steps if step[-1] == i_gaussian]
                 optimized_steps.append(each_steps[-1])
-            print(f"Optimized steps: {optimized_steps}")
+            logger.debug(f"Optimized steps: {optimized_steps}")
             return optimized_steps
         return None
 

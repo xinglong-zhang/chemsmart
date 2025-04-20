@@ -8,11 +8,8 @@ from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.constants import R, atm_to_pa, hartree_to_joules
-from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
-
-create_logger()
 
 
 class Thermochemistry:
@@ -21,22 +18,30 @@ class Thermochemistry:
     Args:
         filename: str. Filepath to the file from which thermochemistry data is extracted.
         temperature: float. Temperature of the system, in K.
+        concentration: float. Concentration of the system, in mol/L.
         pressure: float. Pressure of the system, in atm.
-        weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
+        natural_abundance_weighted_mass: bool. If True, use natural abundance weighted masses; otherwise, use most abundant masses.
+        alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
+        s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
+        h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
     """
 
     def __init__(
         self,
         filename,
         temperature,
-        pressure,
-        weighted_atomic_mass=True,
+        concentration=1.0,
+        pressure=1.0,
+        natural_abundance_weighted_mass=False,
+        alpha=4,
+        s_freq_cutoff=100.0,
+        h_freq_cutoff=100.0,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
-        self.weighted_atomic_mass = weighted_atomic_mass
+        self.natural_abundance_weighted_mass = natural_abundance_weighted_mass
         self.m = (
             self.mass
             * units._amu  # converts mass from g/mol to kg/molecule
@@ -46,6 +51,18 @@ class Thermochemistry:
         self.P = (
             self.pressure * atm_to_pa
         )  # convert the unit of pressure from atm to Pascal
+        self.concentration = concentration
+        self.alpha = alpha
+        self.cutoff = max(min(s_freq_cutoff, h_freq_cutoff, 100.0), 1e-6)
+        self.s_freq_cutoff = (
+            s_freq_cutoff * units._c * 1e2
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.h_freq_cutoff = (
+            h_freq_cutoff * units._c * 1e2
+        )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.c = (
+            self.concentration * 1000 * units._Nav
+        )  # convert the unit of concentration from mol/L to Particle/m^3
         if self.moments_of_inertia is not None:
             if self.molecule.is_linear:
                 self.I = self.moments_of_inertia * (
@@ -59,9 +76,9 @@ class Thermochemistry:
             self.Bav = (
                 units._hplanck / self.average_rotational_constant
             )  # convert the unit of average moments of inertia from Hz to kg m^2
-        if self.vibrational_frequencies is not None:
+        if self.cleaned_frequencies is not None:
             self.v = [
-                k * units._c * 1e2 for k in self.vibrational_frequencies
+                k * units._c * 1e2 for k in self.cleaned_frequencies
             ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
             # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
@@ -83,11 +100,15 @@ class Thermochemistry:
             )
 
     @property
+    def job_type(self):
+        return self.file_object.job_type
+
+    @property
     def mass(self):
         """Obtain the molecular mass."""
-        if self.weighted_atomic_mass:
+        if self.natural_abundance_weighted_mass:
             return self.molecule.mass
-        return self.file_object.mass
+        return self.molecule.most_abundant_mass
 
     @property
     def moments_of_inertia(self):
@@ -98,8 +119,8 @@ class Thermochemistry:
         if self.molecule.is_monoatomic:
             return None
         if self.molecule.is_linear:
-            return self.file_object.moments_of_inertia[-1]
-        return self.file_object.moments_of_inertia
+            return self.molecule.moments_of_inertia[-1]
+        return self.molecule.moments_of_inertia
 
     @property
     def average_rotational_constant(self):
@@ -119,6 +140,38 @@ class Thermochemistry:
     def vibrational_frequencies(self):
         """Obtain the vibrational frequencies of the molecule."""
         return self.file_object.vibrational_frequencies
+
+    @property
+    def real_frequencies(self):
+        """Obtain the real vibrational frequencies of the molecule."""
+        return [k for k in self.vibrational_frequencies if k > 0.0]
+
+    @property
+    def imaginary_frequencies(self):
+        """Obtain the imaginary vibrational frequencies of the molecule."""
+        return [k for k in self.vibrational_frequencies if k < 0.0]
+
+    @property
+    def cleaned_frequencies(self):
+        """Replace residue imaginary frequencies with the cutoff value.
+        For transition states (job_type == "ts"), the first imaginary frequency is assumed to
+        correspond to the reaction coordinate and is excluded from thermochemical calculation.
+        All other negative frequencies are replaced by the cutoff value.
+        """
+        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
+            return [
+                self.cutoff if k < 0.0 else k
+                for k in self.vibrational_frequencies[1:]
+            ]
+        return [
+            self.cutoff if k < 0.0 else k for k in self.vibrational_frequencies
+        ]
+
+    @property
+    def num_replaced_frequencies(self):
+        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
+            return len(self.imaginary_frequencies) - 1
+        return len(self.imaginary_frequencies)
 
     @property
     def energies(self):
@@ -462,56 +515,6 @@ class Thermochemistry:
         """Obtain the ZPE in Hartree."""
         return self.zero_point_energy / (hartree_to_joules * units._Nav)
 
-    def get_thermochemistry(self):
-        pass
-
-
-class qRRHOThermochemistry(Thermochemistry):
-    """Subclass of thermochemistry analysis for quasi-rigid-rotor-harmonic-oscillator (qRRHO) approximation.
-    Args:
-        filename: str. Filepath to the file from which thermochemistry data is extracted.
-        temperature: float. Temperature of the system, in K.
-        concentration: float. Concentration of the system, in mol/L.
-        pressure: float. Pressure of the system, in atm.
-        weighted_atomic_mass: bool. If True, use natural abundance weighted masses; otherwise, use single isotope masses.
-        alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
-        s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
-        h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
-    """
-
-    def __init__(
-        self,
-        filename,
-        temperature,
-        concentration=1.0,
-        pressure=1.0,
-        weighted_atomic_mass=True,
-        alpha=None,
-        s_freq_cutoff=None,
-        h_freq_cutoff=None,
-    ):
-        super().__init__(
-            filename,
-            temperature,
-            pressure,
-            weighted_atomic_mass,
-        )
-        self.concentration = concentration
-        self.alpha = alpha
-        self.s_freq_cutoff = (
-            s_freq_cutoff * units._c * 1e2
-            if s_freq_cutoff is not None
-            else None
-        )  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.h_freq_cutoff = (
-            h_freq_cutoff * units._c * 1e2
-            if h_freq_cutoff is not None
-            else None
-        )  # convert the unit of cutoff frequency from cm^-1 to Hz
-        self.c = (
-            self.concentration * 1000 * units._Nav
-        )  # convert the unit of concentration from mol/L to Particle/m^3
-
     def _calculate_damping_function(self, freq_cutoff):
         """Calculate the damping function of Head-Gordon, which interpolates between the RRHO and the free rotor entropy.
         Formula:
@@ -520,12 +523,6 @@ class qRRHOThermochemistry(Thermochemistry):
             v_0 = cutoff frquency (Hz), default is 100 cm^-1
             α = dimensionless interpolator exponent, default value is 4
         """
-        if self.alpha is None:
-            self.alpha = 4
-        if freq_cutoff is None:
-            freq_cutoff = (
-                100 * units._c * 1e2
-            )  # convert the unit of cutoff frequency from cm^-1 to Hz
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]
         return damp
 
@@ -750,7 +747,7 @@ class qRRHOThermochemistry(Thermochemistry):
     def qrrho_gibbs_free_energy(self):
         """Obtain the Gibbs free energy in Hartree, by quasi-RRHO corrections to both entropy and enthalpy.
         Formula:
-            G^qrrho = H^qrrho - T * S^qrrho_tot
+            G^qrrho_q = H^qrrho - T * S^qrrho_tot
         """
         return self.qrrho_enthalpy - self.qrrho_entropy_times_temperature
 
@@ -762,333 +759,10 @@ class qRRHOThermochemistry(Thermochemistry):
         """
         return self.enthalpy - self.qrrho_entropy_times_temperature
 
-
-class GaussianThermochemistry(Thermochemistry):
-    """Class for thermochemistry analysis of Gaussian output files."""
-
     @property
-    def zero_point_vibrational_energy(self):
-        """Obtain the zero-point vibrational energy in J mol^-1.
-        The ZPE is calculated using only the non-imaginary frequencies.
-        Example in Gaussian output:
-        Zero-point vibrational energy     204885.0 (Joules/Mol)
-        """
-        return self.zero_point_energy
-
-    @property
-    def vibrational_temperatures(self):
-        """Obtain the vibrational temperatures in K.
-        Example in Gaussian output:
-        Vibrational temperatures:    602.31 1607.07 1607.45 1683.83 1978.85
-                (Kelvin)             1978.87 2303.03 2389.95 2389.96 2404.55
-                                     2417.29 2417.30 4202.52 4227.44 4244.32
-                                     4244.93 4291.74 4292.31
-        """
-        return self.theta
-
-    @property
-    def zero_point_correction(self):
-        """Obtain the ZPE in Hartree.
-        Example in Gaussian output:
-        Zero-point correction=                           0.078037 (Hartree/Particle)
-        """
-        return self.zero_point_energy_hartree
-
-    @property
-    def thermal_correction_energy(self):
-        """Obtain the correction to the internal thermal energy in Hartree.
-        Example in Gaussian output:
-        Thermal correction to Energy=                    0.081258
-        """
-        return self.total_internal_energy / (hartree_to_joules * units._Nav)
-
-    @property
-    def thermal_correction_enthalpy(self):
-        """Obtain the thermal correction to the enthalpy in Hartree.
+    def qrrho_gibbs_free_energy_qh(self):
+        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to enthalpy only.
         Formula:
-            H_corr = E_tot + k_B * T
-        Example in Gaussian output:
-        Thermal correction to Enthalpy=                  0.082202
+            G^qrrho_qh = H^qrrho - T * S_tot,c
         """
-        return (
-            self.thermal_correction_energy
-            + units._k * self.T / hartree_to_joules
-        )
-
-    @property
-    def thermal_correction_free_energy(self):
-        """Obtain the thermal correction to the Gibbs free energy in Hartree.
-        Formula:
-            G_corr = H_corr - T * S_tot
-        Example in Gaussian output:
-        Thermal correction to Gibbs Free Energy=         0.055064
-        """
-        return (
-            self.thermal_correction_enthalpy
-            - self.T * self.total_entropy / (hartree_to_joules * units._Nav)
-        )
-
-    @property
-    def sum_of_electronic_and_zero_point_energies(self):
-        """Obtain the sum of electronic and zero-point energies in Hartree.
-        Formula:
-            E0 + E_ZPE
-        where:
-            E0 = the total electronic energy (Hartree)
-        Example in Gaussian output:
-        Sum of electronic and zero-point Energies=           -79.140431
-        """
-        return self.energies + self.zero_point_correction
-
-    @property
-    def sum_of_electronic_and_thermal_energies(self):
-        """Obtain the sum of electronic and thermal energies in Hartree.
-        Formula:
-            E0 + E_tot
-        Example in Gaussian output:
-        Sum of electronic and thermal Energies=              -79.137210
-        """
-        return self.energies + self.thermal_correction_energy
-
-    @property
-    def sum_of_electronic_and_thermal_enthalpies(self):
-        """Obtain the sum of electronic and thermal enthalpies in Hartree.
-        Formula:
-            E0 + H_corr
-        Example in Gaussian output:
-        Sum of electronic and thermal Enthalpies=            -79.136266
-        """
-        return self.energies + self.thermal_correction_enthalpy
-
-    @property
-    def sum_of_electronic_and_thermal_free_energies(self):
-        """Obtain the sum of electronic and thermal free energies in Hartree.
-        Formula:
-            E0 + G_corr
-        Example in Gaussian output:
-        Sum of electronic and thermal Free Energies=         -79.163404
-        """
-        return self.energies + self.thermal_correction_free_energy
-
-    def get_thermochemistry(self):
-        pass
-
-
-class OrcaThermochemistry(qRRHOThermochemistry):
-    """Class for thermochemistry analysis of ORCA output files."""
-
-    @property
-    def electronic_energy(self):
-        """Obtain the electronic energy (E0) in Eh.
-        Example in ORCA output:
-        Electronic energy                ...    -76.32331101 Eh
-        """
-        return self.energies
-
-    @property
-    def zero_point_vibrational_energy(self):
-        """Obtain the zero-point energy (E_ZPE) in Eh.
-        Example in ORCA output:
-        Zero point energy                ...      0.02158076 Eh      13.54 kcal/mol
-        """
-        return self.zero_point_energy_hartree
-
-    @property
-    def thermal_vibrational_correction(self):
-        """Obtain the thermal vibrational correction in Eh.
-        Formula:
-            E_v - E_ZPE
-        Example in ORCA output:
-        Thermal vibrational correction   ...      0.00000291 Eh       0.00 kcal/mol
-        """
-        return (
-            self.vibrational_internal_energy / (hartree_to_joules * units._Nav)
-            - self.zero_point_energy_hartree
-        )
-
-    @property
-    def thermal_rotational_correction(self):
-        """Obtain the thermal rotational correction (E_r) in Eh.
-        Example in ORCA output:
-        Thermal rotational correction    ...      0.00141627 Eh       0.89 kcal/mol
-        """
-        return self.rotational_internal_energy / (
-            hartree_to_joules * units._Nav
-        )
-
-    @property
-    def thermal_translational_correction(self):
-        """Obtain the thermal translational correction (E_t) in Eh.
-        Example in ORCA output:
-        Thermal translational correction ...      0.00141627 Eh       0.89 kcal/mol
-        """
-        return self.translational_internal_energy / (
-            hartree_to_joules * units._Nav
-        )
-
-    @property
-    def total_thermal_energy(self):
-        """Obtain the total thermal energy (U) in Eh.
-        Formula:
-            U = E0 + E_tot = E0 + (E_t + E_r + E_v + E_e)
-        Example in ORCA output:
-        Total thermal energy                    -76.29889480 Eh
-        """
-        return self.energies + self.total_internal_energy / (
-            hartree_to_joules * units._Nav
-        )
-
-    @property
-    def total_thermal_correction(self):
-        """Obtain the total thermal correction in Eh.
-        Formula:
-            E_tot - E_ZPE
-        Example in ORCA output:
-        Total thermal correction                  0.00283545 Eh       1.78 kcal/mol
-        """
-        return (
-            self.total_internal_energy / (hartree_to_joules * units._Nav)
-            - self.zero_point_energy_hartree
-        )
-
-    @property
-    def non_thermal_correction(self):
-        """Obtain the non-thermal (ZPE) correction in Eh.
-        Formula:
-            E_ZPE
-        Example in ORCA output:
-        Non-thermal (ZPE) correction              0.02158076 Eh      13.54 kcal/mol
-        """
-        return self.zero_point_energy_hartree
-
-    @property
-    def total_correction(self):
-        """Obtain the total correction (E_tot) in Eh.
-        Example in ORCA output:
-        Total correction                          0.02441621 Eh      15.32 kcal/mol
-        """
-        return self.total_internal_energy / (hartree_to_joules * units._Nav)
-
-    @property
-    def total_free_energy(self):
-        """Obtain the total free energy (U) in Eh.
-        Example in ORCA output:
-        Total free energy                 ...    -76.29889480 Eh
-        """
-        return self.total_thermal_energy
-
-    @property
-    def thermal_enthalpy_correction(self):
-        """Obtain the thermal enthalpy correction in Eh.
-        Formula:
-            k_B * T
-        Example in ORCA output:
-        Thermal Enthalpy correction       ...      0.00094421 Eh       0.59 kcal/mol
-        """
-        return units._k * self.T / hartree_to_joules
-
-    @property
-    def total_enthalpy(self):
-        """Obtain the total enthalpy (H) in Eh.
-        Formula:
-            H = U + k_B * T
-        Example in ORCA output:
-        Total Enthalpy                    ...    -76.29795059 Eh
-        """
-        return (
-            self.total_thermal_energy + units._k * self.T / hartree_to_joules
-        )
-
-    @property
-    def electronic_entropy_in_hartree(self):
-        """Obtain the electronic entropy in Eh.
-        The entropy will be multiplied by the temperature to get units of energy.
-        Formula:
-            T * S_e
-        Example in ORCA output:
-        Electronic entropy                ...      0.00000000 Eh      0.00 kcal/mol
-        """
-        return (
-            self.electronic_entropy * self.T / (hartree_to_joules * units._Nav)
-        )
-
-    @property
-    def vibrational_entropy_in_hartree(self):
-        """Obtain the vibrational entropy in Eh.
-        Formula:
-            T * S^qrrho_v
-        Example in ORCA output:
-        Vibrational entropy               ...      0.00000328 Eh      0.00 kcal/mol
-        """
-        return (
-            self.qrrho_vibrational_entropy
-            * self.T
-            / (hartree_to_joules * units._Nav)
-        )
-
-    @property
-    def rotational_entropy_in_hartree(self):
-        """Obtain the rotational entropy in Eh.
-        Formula:
-            T * S_r
-        Example in ORCA output:
-        Rotational entropy                ...      0.00498381 Eh      3.13 kcal/mol
-        """
-        return (
-            self.rotational_entropy * self.T / (hartree_to_joules * units._Nav)
-        )
-
-    @property
-    def translational_entropy_in_hartree(self):
-        """Obtain the translational entropy in Eh.
-        Formula:
-            T * S_t
-        Example in ORCA output:
-        Translational entropy             ...      0.01644380 Eh     10.32 kcal/mol
-        """
-        return (
-            self.translational_entropy
-            * self.T
-            / (hartree_to_joules * units._Nav)
-        )
-
-    @property
-    def final_entropy_term(self):
-        """Obtain the final entropy term in Eh, also known as total entropy correction
-        Formula:
-            T * S_tot = T * (S_t + S_r + S^qrrho_v + S_e)
-        Example in ORCA output:
-        Final entropy term                ...      0.02143089 Eh     13.45 kcal/mol
-        or
-        Total entropy correction          ...     -0.02143089 Eh    -13.45 kcal/mol
-        """
-        total_entropy = (
-            self.electronic_entropy
-            + self.rotational_entropy
-            + self.qrrho_vibrational_entropy
-            + self.translational_entropy
-        )
-        return total_entropy * self.T / (hartree_to_joules * units._Nav)
-
-    @property
-    def final_gibbs_free_energy(self):
-        """Obtain the final Gibbs free energy (G) in Eh.
-        Formula:
-            G = H - T * S_tot
-        Example in ORCA output:
-        Final Gibbs free energy         ...    -76.31938148 Eh
-        """
-        return self.total_enthalpy - self.final_entropy_term
-
-    @property
-    def thermal_correction_free_energy(self):
-        """Obtain the the Gibbs free energy minus the electronic energy in Eh.
-        Formula:
-            G - E0
-        Example in ORCA output:
-        G-E(el)                           ...      0.00392953 Eh      2.47 kcal/mol
-        """
-        return self.final_gibbs_free_energy - self.electronic_energy
-
-    def get_thermochemistry(self):
-        pass
+        return self.qrrho_enthalpy - self.entropy_times_temperature

@@ -141,6 +141,12 @@ class Molecule:
         return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
 
     @property
+    def most_abundant_mass(self):
+        return sum(
+            p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols
+        )
+
+    @property
     def masses(self):
         """Numpy array of atomic masses of the molecule."""
         return np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
