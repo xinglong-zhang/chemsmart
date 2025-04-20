@@ -69,7 +69,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
     is_flag=True,
     default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (True) or use most abundant masses (False).",
+    help="Use natural abundance weighted masses (True) or use most abundant masses (False).\n"
+    "Default to False, i.e., use single isotopic mass.",
 )
 @click.option(
     "-q",
@@ -327,7 +328,7 @@ def get_thermo(
                 file,
                 temperature=temperature,
                 concentration=concentration,
-                natural_abundance_weighted_mass=weighted,
+                use_weighted_mass=weighted,
                 alpha=alpha,
                 s_freq_cutoff=fs,
                 h_freq_cutoff=fh,

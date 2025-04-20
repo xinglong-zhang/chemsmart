@@ -104,7 +104,7 @@ class TestThermochemistry:
             filename=gaussian_singlet_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
         )
 
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
@@ -281,12 +281,10 @@ class TestThermochemistryCO2:
         assert mol.empirical_formula == "CO2"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -188.444679593)
-        assert np.isclose(
-            mol.mass, 44.009
-        )  # natural_abundance_weighted_mass=True
+        assert np.isclose(mol.mass, 44.009)  # use_weighted_mass=True
         assert np.isclose(
             mol.most_abundant_mass, 43.98982923914
-        )  # natural_abundance_weighted_mass=False
+        )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 43.98983)
         assert np.isclose(
             g16_output.moments_of_inertia[-1], 43.27307045
@@ -310,7 +308,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
         )
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
         # here T = 298.15 K, P = 1 atm = 101325 Pa
@@ -592,7 +590,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=False,
+            use_weighted_mass=False,
         )
         """Values from Gaussian output
                             E (Thermal)             CV                S
@@ -724,9 +722,7 @@ class TestThermochemistryCO2:
         assert mol.empirical_formula == "CO2"
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -188.370538039014)
-        assert np.isclose(
-            mol.mass, 44.009
-        )  # natural_abundance_weighted_mass=True
+        assert np.isclose(mol.mass, 44.009)  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 44.01)
         assert orca_out.rotational_symmetry_number == 1
         assert orca_out.rotational_constants_in_wavenumbers == [
@@ -760,7 +756,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             concentration=1.0,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
         )
 
         # when arguments are not specified, the quasi-rrho calculation use
@@ -1103,7 +1099,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=598.15,
             concentration=0.5,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
         )
         assert np.isclose(
             qrrho_thermochem_co2_2.energies, -188.444680, atol=1e-6
@@ -1146,7 +1142,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             concentration=1.0,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
             s_freq_cutoff=1000,
             h_freq_cutoff=1000,
         )
@@ -1215,12 +1211,10 @@ class TestThermochemistryHe:
         assert mol.empirical_formula == "He"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -2.91512971456)
-        assert np.isclose(
-            mol.mass, 4.002602
-        )  # natural_abundance_weighted_mass=True
+        assert np.isclose(mol.mass, 4.002602)  # use_weighted_mass=True
         assert np.isclose(
             mol.most_abundant_mass, 4.00260325413
-        )  # natural_abundance_weighted_mass=False
+        )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 4.00260)
         assert mol.is_monoatomic
 
@@ -1228,7 +1222,7 @@ class TestThermochemistryHe:
             filename=gaussian_he_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=False,
+            use_weighted_mass=False,
         )
         """Values from Gaussian output
                             E (Thermal)             CV                S
@@ -1351,9 +1345,7 @@ class TestThermochemistryHe:
         assert mol.empirical_formula == "He"
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -2.899160731389)
-        assert np.isclose(
-            mol.mass, 4.002602
-        )  # natural_abundance_weighted_mass=True
+        assert np.isclose(mol.mass, 4.002602)  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 4.00)
         assert orca_out.rotational_symmetry_number == 1
         assert orca_out.rotational_constants_in_wavenumbers == [
@@ -1380,7 +1372,7 @@ class TestThermochemistryHe:
             filename=gaussian_he_opt_outfile,
             temperature=598.15,
             concentration=0.5,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
             s_freq_cutoff=1000,
             h_freq_cutoff=1000,
         )
@@ -1440,12 +1432,10 @@ class TestThermochemistryH2O:
         assert mol.empirical_formula == "H2O"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -76.328992324258)
-        assert np.isclose(
-            mol.mass, 18.015
-        )  # natural_abundance_weighted_mass=True
+        assert np.isclose(mol.mass, 18.015)  # use_weighted_mass=True
         assert np.isclose(
             mol.most_abundant_mass, 18.010564684029998
-        )  # natural_abundance_weighted_mass=False
+        )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 18.01056)
         assert np.allclose(
             g16_output.moments_of_inertia, [0.62549131, 1.15863761, 1.78412891]
@@ -1479,7 +1469,7 @@ class TestThermochemistryH2O:
             filename=gaussian_mp2_outputfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=False,
+            use_weighted_mass=False,
         )
         """Values from Gaussian output
                             E (Thermal)             CV                S
@@ -1608,9 +1598,7 @@ class TestThermochemistryH2O:
         assert mol.empirical_formula == "H2O"
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -76.323311011349)
-        assert np.isclose(
-            mol.mass, 18.015
-        )  # natural_abundance_weighted_mass=True
+        assert np.isclose(mol.mass, 18.015)  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 18.02)
         assert orca_out.rotational_symmetry_number == 2
         assert orca_out.rotational_constants_in_wavenumbers == [
@@ -1643,7 +1631,7 @@ class TestThermochemistryH2O:
             filename=gaussian_mp2_outputfile,
             temperature=1298.15,
             concentration=2.0,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
             s_freq_cutoff=500,
             h_freq_cutoff=500,
         )

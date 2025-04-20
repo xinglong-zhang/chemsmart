@@ -20,7 +20,7 @@ class Thermochemistry:
         temperature: float. Temperature of the system, in K.
         concentration: float. Concentration of the system, in mol/L.
         pressure: float. Pressure of the system, in atm.
-        natural_abundance_weighted_mass: bool. If True, use natural abundance weighted masses; otherwise, use most abundant masses.
+        use_weighted_mass: bool. If True, use natural abundance weighted masses; otherwise, use most abundant masses.
         alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
         s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
         h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
@@ -32,7 +32,7 @@ class Thermochemistry:
         temperature,
         concentration=1.0,
         pressure=1.0,
-        natural_abundance_weighted_mass=False,
+        use_weighted_mass=False,
         alpha=4,
         s_freq_cutoff=100.0,
         h_freq_cutoff=100.0,
@@ -41,7 +41,7 @@ class Thermochemistry:
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
-        self.natural_abundance_weighted_mass = natural_abundance_weighted_mass
+        self.use_weighted_mass = use_weighted_mass
         self.m = (
             self.mass
             * units._amu  # converts mass from g/mol to kg/molecule
@@ -106,7 +106,7 @@ class Thermochemistry:
     @property
     def mass(self):
         """Obtain the molecular mass."""
-        if self.natural_abundance_weighted_mass:
+        if self.use_weighted_mass:
             return self.molecule.mass
         return self.molecule.most_abundant_mass
 

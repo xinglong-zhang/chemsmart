@@ -5,18 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/io/gaussian/folder.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/io/gaussian/folder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/io/molecules/structure.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/io/molecules/structure.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/io/xyz/file.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/io/xyz/file.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/jobs/mol/job.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/jobs/mol/job.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/utils/periodictable.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/utils/periodictable.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/utils/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/utils/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_GaussianIO.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_GaussianIO.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_PyMOLJobs.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_PyMOLJobs.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_groupers.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_groupers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_structures.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_structures.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chemsmart/analysis/thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/analysis/thermochemistry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chemsmart/scripts/get_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/scripts/get_thermochemistry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_thermochemistry.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -165,7 +157,7 @@
     "Python.test_thermochemistry.executor": "Run",
     "Python.units.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "Merging thermo",
+    "git-widget-placeholder": "thermo",
     "last_opened_file_path": "/Users/xinglongzhang/bin/chemsmart",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
