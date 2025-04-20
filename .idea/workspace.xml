@@ -5,41 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/chemsmart.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.idea0/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/chemsmart.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/chemsmart.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/chemsmart.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../conflow/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../conflow/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../conflow/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../conflow/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/chemsmart/utils/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chemsmart/scripts/generate_isotope_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/utils/generate_isotope_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/isotopes.txt" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/utils/isotopes.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -208,6 +177,7 @@
       <recent name="$PROJECT_DIR$/chemsmart/jobs/xtb" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/chemsmart/utils" />
       <recent name="$PROJECT_DIR$/tests/data/GaussianTests/inputs/qmmm" />
       <recent name="$PROJECT_DIR$/tests/data/GaussianTests/inputs" />
     </key>
@@ -425,6 +395,8 @@
     <SUITE FILE_PATH="coverage/chemsmart$ReaderTest.coverage" NAME="ReaderTest Coverage Results" MODIFIED="1736763685369" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../pychemreader/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$pytest_in_test_groupers_py.coverage" NAME="pytest in test_groupers.py Coverage Results" MODIFIED="1739148999680" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors_test_find_different_2d_steric_decriptors.coverage" NAME="pytest for test_descriptors.TestDescriptors.test_find_different_2d_steric_decriptors Coverage Results" MODIFIED="1741576854921" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
+    <SUITE FILE_PATH="coverage/xtb_py$pytest_in_test_models_py.coverage" NAME="pytest in test_models.py Coverage Results" MODIFIED="1744773909844" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
+    <SUITE FILE_PATH="coverage/xtb_py$pytest_for_tests_test_PyMOLJobs_TestPyMOLJobs_test_pymol_visualization_job_on_gaussian_log_file.coverage" NAME="pytest for tests.test_PyMOLJobs.TestPyMOLJobs.test_pymol_visualization_job_on_gaussian_log_file Coverage Results" MODIFIED="1744964038582" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$test_thermochemistry.coverage" NAME="test_thermochemistry Coverage Results" MODIFIED="1739760198890" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors_test_3d_steric_descriptors.coverage" NAME="pytest for test_descriptors.TestDescriptors.test_3d_steric_descriptors Coverage Results" MODIFIED="1741573011299" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_ORCAIOTest_TestORCAOutput_test_read_hirshfelf_full_print_output.coverage" NAME="pytest for tests.ORCAIOTest.TestORCAOutput.test_read_hirshfelf_full_print_output Coverage Results" MODIFIED="1736391013914" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
@@ -443,6 +415,6 @@
     <SUITE FILE_PATH="coverage/chemsmart$__init__.coverage" NAME="__init__ Coverage Results" MODIFIED="1739161139517" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/chemsmart" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors_test_calculate_2d_descriptors.coverage" NAME="pytest for test_descriptors.TestDescriptors.test_calculate_2d_descriptors Coverage Results" MODIFIED="1741573118868" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors.coverage" NAME="pytest for test_descriptors.TestDescriptors Coverage Results" MODIFIED="1741572739832" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
-    <SUITE FILE_PATH="coverage/xtb_py$.coverage" NAME=" Coverage Results" MODIFIED="1743144080920" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/xtb_py$.coverage" NAME=" Coverage Results" MODIFIED="1744965792224" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
   </component>
 </project>
