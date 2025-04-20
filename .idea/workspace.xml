@@ -5,10 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/chemsmart/scripts/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/analysis/thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/analysis/thermochemistry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/scripts/get_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/scripts/get_thermochemistry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_thermochemistry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chemsmart/utils/generate_isotope_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/scripts/generate_isotope_data.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -177,6 +176,7 @@
       <recent name="$PROJECT_DIR$/chemsmart/jobs/xtb" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/chemsmart/scripts" />
       <recent name="$PROJECT_DIR$/chemsmart/utils" />
       <recent name="$PROJECT_DIR$/tests/data/GaussianTests/inputs/qmmm" />
       <recent name="$PROJECT_DIR$/tests/data/GaussianTests/inputs" />

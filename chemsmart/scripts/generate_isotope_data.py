@@ -109,8 +109,8 @@ def parse_isotope_file(filename):
 
 
 if __name__ == "__main__":
-    input_file = Path(__file__).parent / "./isotopes.txt"
-    output_file = Path(__file__).parent / "./isotopes_data.py"
+    input_file = Path(__file__).parent / "../utils/isotopes.txt"
+    output_file = Path(__file__).parent / "../utils/isotopes_data.py"
 
     isotopes = parse_isotope_file(input_file)
 
