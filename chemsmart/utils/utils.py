@@ -15,6 +15,31 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+class OrderedSet:
+    def __init__(self, iterable=None):
+        self.items = []
+        if iterable:
+            for item in iterable:
+                self.add(item)
+
+    def add(self, item):
+        if item not in self.items:
+            self.items.append(item)
+
+    def remove(self, item):
+        if item in self.items:
+            self.items.remove(item)
+
+    def __contains__(self, item):
+        return item in self.items
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self):
+        return len(self.items)
+
+
 def file_cache(copy_result=True, maxsize=64):
     """
     Caches results of functions that take files as input.
@@ -636,3 +661,23 @@ def search_file(filename):
     except subprocess.CalledProcessError:
         logger.error(f"Error occurred while searching for {filename}.")
         return None, None
+
+
+def iterative_compare(input_list):
+    """Compare an input list and return a list of unique elements.
+    The input list can be a list of lists or a list of strings or
+    a list of dictionaries.
+    """
+    if not input_list:
+        return []
+    if isinstance(input_list[0], list):
+        return [list(x) for x in OrderedSet(tuple(x) for x in input_list)]
+    elif isinstance(input_list[0], tuple):
+        return [tuple(x) for x in OrderedSet(input_list)]
+    elif isinstance(input_list[0], dict):
+        return [
+            dict(x)
+            for x in OrderedSet(frozenset(x.items()) for x in input_list)
+        ]
+    else:
+        return list(OrderedSet(input_list))

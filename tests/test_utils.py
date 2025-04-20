@@ -9,6 +9,7 @@ from chemsmart.utils.utils import (
     content_blocks_by_paragraph,
     get_list_from_string_range,
     is_float,
+    iterative_compare,
     str_indices_range_to_list,
     string2index_1based,
 )
@@ -21,6 +22,7 @@ class TestUtils:
         assert is_float("-0.1")
         assert not is_float("-1")
         assert not is_float("1")
+        assert not is_float("abc")
 
     def test_content_blocking(self, gaussian_opt_inputfile):
         g16_input = Gaussian16Input(filename=gaussian_opt_inputfile)
@@ -111,6 +113,145 @@ class TestUtils:
             40,
             41,
         ]
+
+    def test_iterative_compare_list_of_elements(self):
+        list1 = [1, 2, 3, 4, 5]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_lists(self):
+        list1 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+        ]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+        ]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_tuples(self):
+        list1 = [(1, 2, 3), (4, 5, 6), (7, 8, 9)]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = [
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+        ]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+        ]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_string(self):
+        list1 = ["a", "b", "c", "d", "e"]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = ["a", "b", "c", "d", "e", "a", "b", "c", "d", "e"]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+        ]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_dicts(self):
+        dict1 = {"a": 1, "b": 2, "c": 3}
+        dict2 = {"d": 4, "e": 5, "f": 6}
+        dict3 = {"g": 7, "h": 8, "i": 9}
+        list1 = [dict1, dict2, dict3]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        dict4 = {"a": 1, "b": 2, "c": 3}
+        dict5 = {"d": 4, "e": 5, "f": 6}
+        dict6 = {"g": 7, "h": 8, "i": 9}
+        list2 = [dict4, dict5, dict6, dict1, dict2, dict3]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        dict7 = {"a": 1, "b": 2, "c": 3}
+        dict8 = {"d": 4, "e": 5, "f": 6}
+        dict9 = {"g": 7, "h": 8, "i": 9}
+        list3 = [dict7, dict8, dict9, dict1, dict2, dict3, dict4, dict5, dict6]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+        dict11 = {"a": 11, "b": 12, "c": 13}
+        dict12 = {"d": 14, "e": 15, "f": 16}
+        dict13 = {"g": 17, "h": 18, "i": 19}
+        list4 = [dict11, dict12, dict13, dict1, dict2, dict3]
+        unique_list4 = iterative_compare(list4)
+        assert len(unique_list4) == 6
+
+        list5 = [dict1, dict11]
+        unique_list5 = iterative_compare(list5)
+        assert len(unique_list5) == 2
+
+        list6 = [dict1, dict11, dict1]
+        unique_list6 = iterative_compare(list6)
+        assert len(unique_list6) == 2
 
 
 class TestGetListFromStringRange:

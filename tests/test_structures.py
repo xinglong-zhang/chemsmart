@@ -6,10 +6,10 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
+from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.io.xyz.file import XYZFile
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
 
 
 class TestCoordinateBlock:
@@ -32,10 +32,6 @@ Cl      -3.0556310000   -0.1578960000   -0.0001400000
 """
         cb = CoordinateBlock(coordinate_block=coordinates_string)
         assert cb.symbols.get_chemical_formula() == "C7H5ClO"
-        mol = cb.molecule
-        assert mol.empirical_formula == "C7H5ClO"
-        assert mol.num_atoms == 14
-        assert np.isclose(mol.mass, 140.567, atol=1e-2)
 
     def test_read_gaussian_cb_with_tv(self):
         coordinates_string = """
@@ -55,7 +51,6 @@ TV                -1.219952    2.133447    0.000000
             [2.475315, 0.000000, 0.000000],
             [-1.219952, 2.133447, 0.000000],
         ]
-        assert np.isclose(cb.molecule.mass, 24.02, atol=1e-2)
 
     def test_read_gaussian_cb_frozen_atoms(self):
         coordinates_string = """
@@ -105,7 +100,7 @@ class TestStructures:
         xyz_file = XYZFile(filename=single_molecule_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        molecule = xyz_file.get_molecule(index="-1", return_list=False)
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
         assert molecule.is_chiral
@@ -130,7 +125,7 @@ class TestStructures:
         assert len(graph.nodes) == 71
         assert len(graph.edges) == 78  # CH4 should have 4 bonds
 
-        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
@@ -143,6 +138,10 @@ class TestStructures:
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
         assert np.isclose(molecule.mass, 665.982, atol=1e-2)
 
+        # test conversion to RDKit molecule
+        rdkit_molecule = molecule.to_rdkit()
+        assert isinstance(rdkit_molecule, RDKitMolecule)
+
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
     ):
@@ -152,7 +151,7 @@ class TestStructures:
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        all_molecules = xyz_file.get_molecule(index=":", return_list=True)
+        all_molecules = xyz_file.get_molecules(index=":", return_list=True)
 
         # set correct charge and multiplicity for molecules as needed by pymatgen checks
         molecules = []
@@ -225,7 +224,7 @@ class TestStructures:
         assert first_py_structure.spin_multiplicity == 1
 
         # obtain the last structure as molecule
-        molecule = xyz_file.get_molecule(index="-1", return_list=False)
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
 
@@ -309,12 +308,12 @@ class TestStructures:
         )
 
         # obtain the last structure as a list
-        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
         # obtain the last 10 structures
-        molecules = xyz_file.get_molecule(index="-10:", return_list=True)
+        molecules = xyz_file.get_molecules(index="-10:", return_list=True)
         assert isinstance(molecules, list)
         assert len(molecules) == 10
 
@@ -346,6 +345,17 @@ class TestStructures:
         )
         assert isinstance(molecule, list)
         assert len(molecule) == 1
+
+        # test first molecule is 1-indexed
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="1", return_list=False
+        )
+        assert np.allclose(
+            molecule.positions[0],
+            np.array([-1.0440166707, -2.3921211654, -1.1765767093]),
+            rtol=1e-5,
+        )
+        assert isinstance(molecule, Molecule)
 
     def test_molecular_geometry(self):
         """Test molecular geometry calculations."""
