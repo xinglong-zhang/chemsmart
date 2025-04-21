@@ -183,8 +183,8 @@ class Thermochemistry:
 
     @property
     def energies(self):
-        """Obtain the total electronic energy in Hartree."""
-        return self.file_object.energies[-1]
+        """Obtain the total electronic energy in J mol^-1."""
+        return self.file_object.energies[-1] * hartree_to_joules * units._Nav
 
     @property
     def multiplicity(self):
@@ -690,15 +690,13 @@ class Thermochemistry:
 
     @property
     def enthalpy(self):
-        """Obtain the enthalpy in Hartree.
+        """Obtain the enthalpy in J mol^-1.
         Formula:
             H = E0 + E_tot + R * T
         where:
-            E0 = the total electronic energy (Hartree)
+            E0 = the total electronic energy (J mol^-1)
         """
-        return self.energies + (self.total_internal_energy + R * self.T) / (
-            hartree_to_joules * units._Nav
-        )
+        return self.energies + self.total_internal_energy + R * self.T
 
     @property
     def translational_partition_function_concentration(self):
@@ -733,6 +731,11 @@ class Thermochemistry:
         Formula:
             S_tot,c = S_t,c + S_r + S_v + S_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_entropy_concentration
+                + self.electronic_entropy
+            )
         return (
             self.translational_entropy_concentration
             + self.rotational_entropy
@@ -760,25 +763,19 @@ class Thermochemistry:
 
     @property
     def entropy_times_temperature(self):
-        """Obtain the total entropy times temperature in Hartree.
+        """Obtain the total entropy times temperature in J mol^-1.
         Formula:
             T * S_tot,c
         """
-        return (
-            self.T
-            * self.total_entropy_concentration
-            / (hartree_to_joules * units._Nav)
-        )
+        return self.T * self.total_entropy_concentration
 
     @property
     def qrrho_entropy_times_temperature(self):
-        """Obtain the quasi-RRHO entropy times temperature in Hartree.
+        """Obtain the quasi-RRHO entropy times temperature in J mol^-1.
         Formula:
             T * S^qrrho_tot
         """
-        return (self.qrrho_total_entropy * self.T) / (
-            hartree_to_joules * units._Nav
-        )
+        return self.qrrho_total_entropy * self.T
 
     @property
     def gibbs_free_energy(self):
@@ -808,20 +805,18 @@ class Thermochemistry:
 
     @property
     def qrrho_enthalpy(self):
-        """Obtain the quasi-RRHO enthalpy in Hartree.
+        """Obtain the quasi-RRHO enthalpy in J mol^-1.
         Formula:
             H^qrrho = E0 + H^qrrho_corr
                     = E0 + E^qrrho_tot + R * T
         where:
-            E0 = the total electronic energy (Hartree)
+            E0 = the total electronic energy (J mol^-1)
         """
-        return self.energies + (
-            self.qrrho_total_internal_energy + R * self.T
-        ) / (hartree_to_joules * units._Nav)
+        return self.energies + self.qrrho_total_internal_energy + R * self.T
 
     @property
     def qrrho_gibbs_free_energy(self):
-        """Obtain the Gibbs free energy in Hartree, by quasi-RRHO corrections to both entropy and enthalpy.
+        """Obtain the Gibbs free energy in J mol^-1, by quasi-RRHO corrections to both entropy and enthalpy.
         Formula:
             G^qrrho_q = H^qrrho - T * S^qrrho_tot
         """
@@ -829,7 +824,7 @@ class Thermochemistry:
 
     @property
     def qrrho_gibbs_free_energy_qs(self):
-        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to entropy only.
+        """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to entropy only.
         Formula:
             G^qrrho_qs = H - T * S^qrrho_tot
         """
@@ -837,7 +832,7 @@ class Thermochemistry:
 
     @property
     def qrrho_gibbs_free_energy_qh(self):
-        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to enthalpy only.
+        """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to enthalpy only.
         Formula:
             G^qrrho_qh = H^qrrho - T * S_tot,c
         """
