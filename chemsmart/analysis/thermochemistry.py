@@ -63,26 +63,32 @@ class Thermochemistry:
         self.c = (
             self.concentration * 1000 * units._Nav
         )  # convert the unit of concentration from mol/L to Particle/m^3
-        if self.moments_of_inertia is not None:
-            if self.molecule.is_linear:
-                self.I = self.moments_of_inertia * (
-                    units._amu * (units.Ang / units.m) ** 2
-                )  # convert the unit of moments of inertia from amu Å^2 to kg m^2
-            else:
-                self.I = [
-                    i * (units._amu * (units.Ang / units.m) ** 2)
-                    for i in self.moments_of_inertia
-                ]
-            self.Bav = (
-                units._hplanck / self.average_rotational_constant
-            )  # convert the unit of average moments of inertia from Hz to kg m^2
-        if self.cleaned_frequencies is not None:
-            self.v = [
-                k * units._c * 1e2 for k in self.cleaned_frequencies
-            ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
-            # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
-            self.theta = [units._hplanck * vk / units._k for vk in self.v]
+        self.I = [
+            i * (units._amu * (units.Ang / units.m) ** 2)
+            for i in self.moments_of_inertia
+        ]
+
+        # convert the unit of moments of inertia from amu Ang^2 to kg m^2
+        self.Bav = (
+            (units._hplanck / self.average_rotational_constant)
+            if self.average_rotational_constant
+            else None
+        )
+
+        # convert the unit of vibrational frequencies from cm^-1 to Hz
+        self.v = (
+            [k * units._c * 1e2 for k in self.cleaned_frequencies]
+            if self.cleaned_frequencies
+            else None
+        )
+
+        # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
+        self.theta = (
+            [units._hplanck * vk / units._k for vk in self.v]
+            if self.v
+            else None
+        )
 
     @property
     def file_object(self):
@@ -116,20 +122,22 @@ class Thermochemistry:
         Direct calculation from molecular structure, since sometimes Gaussian
         output does not print it properly (prints as ***** if values too large)
         """
-        if self.molecule.is_monoatomic:
-            return None
-        if self.molecule.is_linear:
-            return self.molecule.moments_of_inertia[-1]
         return self.molecule.moments_of_inertia
 
     @property
     def average_rotational_constant(self):
+        if self.molecule.is_monoatomic:
+            return None
         if self.molecule.is_linear:
-            return units._hplanck / (8 * np.pi**2 * self.I)
-        rotational_constant = [
+            return units._hplanck / (8 * np.pi**2 * self.I[-1])
+
+        assert (
+            len(self.I) == 3
+        ), "Number of moments of inertia should be 3 for nonlinear molecules."
+        rotational_constants = [
             units._hplanck / (8 * np.pi**2 * i) for i in self.I
         ]
-        return sum(rotational_constant) / len(rotational_constant)
+        return sum(rotational_constants) / len(rotational_constants)
 
     @property
     def rotational_symmetry_number(self):
@@ -270,7 +278,7 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
-        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I * units._k)
+        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[-1] * units._k)
         return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
@@ -516,11 +524,12 @@ class Thermochemistry:
         return self.zero_point_energy / (hartree_to_joules * units._Nav)
 
     def _calculate_damping_function(self, freq_cutoff):
-        """Calculate the damping function of Head-Gordon, which interpolates between the RRHO and the free rotor entropy.
+        """Calculate the damping function of Head-Gordon, which interpolates
+        between the RRHO and the free rotor entropy.
         Formula:
             w(v_K) = 1 / (1 + (v_0 / v_K)^α)
         where:
-            v_0 = cutoff frquency (Hz), default is 100 cm^-1
+            v_0 = cutoff frequency in Hz, default is 100 cm^-1 (already converted to Hz)
             α = dimensionless interpolator exponent, default value is 4
         """
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]

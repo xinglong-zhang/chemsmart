@@ -1,7 +1,6 @@
 import os.path
 
 import numpy as np
-import pytest
 
 from chemsmart.analysis.thermochemistry import (
     Thermochemistry,
@@ -100,6 +99,7 @@ class TestThermochemistry:
             g16_output.zero_point_energy, expected_ZPE, rtol=10e-6
         )
 
+        # Thermochemsitry using weighted mass
         thermochem1 = Thermochemistry(
             filename=gaussian_singlet_opt_outfile,
             temperature=298.15,
@@ -128,37 +128,57 @@ class TestThermochemistry:
             thermochem1.translational_partition_function,
             expected_translational_partition_function,
         )
-        # print(expected_translational_partition_function)
-        # print(thermochem1.translational_partition_function)
-        # # assert np.isclose(thermochem1.translational_internal_energy()
 
-        assert g16_output.freq
+        # Thermochemsitry not using weighted mass
+        thermochem1 = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+            use_weighted_mass=False,
+        )
 
+        # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
+        expected_translational_partition_function = (
+            (
+                2
+                * np.pi
+                * (mol.most_abundant_mass / (6.0221408 * 1e23 * 1000))
+                * 1.380649
+                * 1e-23
+                * 298.15
+                / (6.62606957 * 1e-34 * 6.62606957 * 1e-34)
+            )
+        ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
+        assert np.isclose(
+            thermochem1.translational_partition_function,
+            expected_translational_partition_function,
+        )
+        assert not np.isclose(mol.mass, mol.most_abundant_mass)
+
+        # Thermochemsitry not using weighted mass at different temperature
         thermochem2 = Thermochemistry(
             filename=gaussian_singlet_opt_outfile,
             temperature=598.15,
             pressure=1.2,
+            use_weighted_mass=False,
         )
 
         expected_translational_partition_function2 = (
             (
                 2
                 * np.pi
-                * (mol.mass / (6.0221408 * 1e23 * 1000))
+                * (mol.most_abundant_mass / (6.0221408 * 1e23 * 1000))
                 * 1.380649
                 * 1e-23
                 * 598.15
                 / (6.62606957 * 1e-34 * 6.62606957 * 1e-34)
             )
-        ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / (1.2 * 101325))
+        ) ** (3 / 2) * (1.380649 * 1e-23 * 598.15 / (1.2 * 101325))
 
         assert np.isclose(
             thermochem2.translational_partition_function,
             expected_translational_partition_function2,
-            rtol=1e5,
         )
-
-        # tests on thermochem2
 
     def test_thermochemistry_co2(
         self,
@@ -167,7 +187,7 @@ class TestThermochemistry:
         jobrunner_scratch,
     ):
         mol = Molecule.from_pubchem("280")
-        tmp_path = tmpdir.join("co2.com")
+        tmp_path = os.path.join(tmpdir, "CO2.com")
 
         os.chdir(tmpdir)
         mol.write_com(tmp_path)
@@ -203,13 +223,15 @@ class TestThermochemistry:
         # get thermochemistry for CO2 molecule
         # CO2_fake.log file has no thermochemistry data
         # since it was run with fake gaussian
-        with pytest.raises(TypeError):
-            thermochem1 = Thermochemistry(
-                filename=tmp_log_path, temperature=298.15, pressure=1
-            )
-            assert np.isclose(
-                thermochem1.translational_partition_function, 1.15e7, rtol=1e5
-            )
+        thermochem1 = Thermochemistry(
+            filename=tmp_log_path, temperature=298.15, pressure=1
+        )
+        assert np.isclose(
+            thermochem1.translational_partition_function, 1.15e7, rtol=1e5
+        )
+        assert len(thermochem1.vibrational_frequencies) == 0
+        print(thermochem1.vibrational_entropy)
+        print(thermochem1.theta)
 
 
 class TestThermochemistryCO2:

@@ -244,7 +244,8 @@ class Molecule:
 
     @property
     def moments_of_inertia(self):
-        """Obtain moments of inertia from molecular structure along principal axes as a list."""
+        """Obtain moments of inertia from molecular structure
+        along principal axes as a list."""
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
