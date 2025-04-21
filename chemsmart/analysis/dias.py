@@ -76,6 +76,7 @@ class DIASOutputFolder:
     @cached_property
     def fragment1_energies_list(self):
         fragment1_files_list = self._get_all_files_fragment1()
+        logger.info(f"Fragment 1 files: {fragment1_files_list}")
         return self._get_all_energies(list_of_files=fragment1_files_list)
 
     @cached_property
@@ -184,17 +185,17 @@ class DIASOutputFolder:
         for file in list_of_filenames:
             if file.endswith(".log"):
                 gout = Gaussian16Output(filename=file)
-                atoms = gout.molecule
+                molecule = gout.molecule
             elif file.endswith(".out"):
                 oout = ORCAOutput(filename=file)
-                atoms = oout.molecule
+                molecule = oout.molecule
             else:
                 raise ValueError(
                     f"File {file} has unknown format. Acceptable formats are Gaussian .log or ORCA .out."
                 )
 
-            coordinates = atoms.positions
-            symbols = atoms.get_chemical_symbols()
+            coordinates = molecule.positions
+            symbols = molecule.chemical_symbols
             logger.info(
                 f"Getting distance between atoms {symbols[atom1]}{self.atom1} and {symbols[atom2]}{self.atom2}"
             )
@@ -429,7 +430,9 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         all_energies = []
         for file in list_of_files:
             gout = Gaussian16Output(filename=file)
-            energy = gout.energies
+            energy = gout.molecule.energy
+            # convert energy from Hartree (Gaussian .log) to kcal/mol
+            energy = energy * units.Hartree
             energy /= (
                 units.kcal / units.mol
             )  # convert energy from Hartree (Gaussian .log) to kcal/mol
@@ -554,7 +557,7 @@ class ORCADIASOutFolder(DIASOutputFolder):
         all_energies = []
         for file in list_of_files:
             oout = ORCAOutput(filename=file)
-            energy = oout.final_energy
+            energy = oout.molecule.final_energy
             # convert energy from eV (ase units) to kcal/mol
             energy /= units.kcal / units.mol
             all_energies.append(energy)
