@@ -7,8 +7,6 @@
     <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/chemsmart/analysis/thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/analysis/thermochemistry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chemsmart/io/molecules/structure.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/io/molecules/structure.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_thermochemistry.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -184,7 +182,7 @@
       <recent name="$PROJECT_DIR$/tests/data/GaussianTests/inputs" />
     </key>
   </component>
-  <component name="RunManager" selected="Python tests.Python tests for test_thermochemistry.TestThermochemistry.test_thermochemistry_co2">
+  <component name="RunManager" selected="Python tests.pytest in test_thermochemistry.py">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
       <module name="conflow" />
       <option name="ENV_FILES" value="" />
@@ -406,7 +404,7 @@
     <SUITE FILE_PATH="coverage/chemsmart$pytest_in_test_descriptors_py.coverage" NAME="pytest in test_descriptors.py Coverage Results" MODIFIED="1740472133676" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_ServerTest_TestServer_test_gaussian_executable.coverage" NAME="pytest for tests.ServerTest.TestServer.test_gaussian_executable Coverage Results" MODIFIED="1737447896214" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_groupers_TestGrouper_test_rdkit_isomorphism_grouper.coverage" NAME="pytest for tests.test_groupers.TestGrouper.test_rdkit_isomorphism_grouper Coverage Results" MODIFIED="1739197317074" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
-    <SUITE FILE_PATH="coverage/xtb_py$pytest_in_test_thermochemistry_py.coverage" NAME="pytest in test_thermochemistry.py Coverage Results" MODIFIED="1745206046290" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/xtb_py$pytest_in_test_thermochemistry_py.coverage" NAME="pytest in test_thermochemistry.py Coverage Results" MODIFIED="1745208948934" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/chemsmart$test_groupers.coverage" NAME="test_groupers Coverage Results" MODIFIED="1739148897131" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors_test_2d_steric_descriptors.coverage" NAME="pytest for test_descriptors.TestDescriptors.test_2d_steric_descriptors Coverage Results" MODIFIED="1741572997929" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_groupers_TestGrouper_test_connectivity_grouper_for_large_number_of_mols.coverage" NAME="pytest for tests.test_groupers.TestGrouper.test_connectivity_grouper_for_large_number_of_mols Coverage Results" MODIFIED="1739196242714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

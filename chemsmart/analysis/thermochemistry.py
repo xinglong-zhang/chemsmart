@@ -422,11 +422,15 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        s = [
-            (t / self.T) / (math.exp(t / self.T) - 1)
-            - np.log(1 - math.exp(-t / self.T))
-            for t in self.theta
-        ]
+        s = (
+            [
+                (t / self.T) / (math.exp(t / self.T) - 1)
+                - np.log(1 - math.exp(-t / self.T))
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return R * sum(s)
 
     @property
@@ -437,7 +441,7 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        u = [1 / 2 * t for t in self.theta]
+        u = [1 / 2 * t for t in self.theta] if self.theta else []
         return R * sum(u)
 
     @property
@@ -448,7 +452,11 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        u = [t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
+        u = (
+            [t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
+            if self.theta
+            else []
+        )
         return R * sum(u)
 
     @property
@@ -459,11 +467,15 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        c = [
-            math.exp(-t / self.T)
-            * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
-            for t in self.theta
-        ]
+        c = (
+            [
+                math.exp(-t / self.T)
+                * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return R * sum(c)
 
     @property
@@ -599,13 +611,14 @@ class Thermochemistry:
             S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
         """
         vib_entropy = []
-        for j in range(0, len(self.v)):
-            vib_entropy.append(
-                self.entropy_damping_function[j] * self.rrho_entropy[j]
-                + (1 - self.entropy_damping_function[j])
-                * self.freerot_entropy[j]
-            )
-        return sum(vib_entropy)
+        if self.v:
+            for j in range(0, len(self.v)):
+                vib_entropy.append(
+                    self.entropy_damping_function[j] * self.rrho_entropy[j]
+                    + (1 - self.entropy_damping_function[j])
+                    * self.freerot_entropy[j]
+                )
+            return sum(vib_entropy)
 
     @property
     def rrho_internal_energy(self):
@@ -613,10 +626,14 @@ class Thermochemistry:
         Formula:
             E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
         """
-        energy = [
-            R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
-            for t in self.theta
-        ]
+        energy = (
+            [
+                R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return energy
 
     @property
@@ -626,13 +643,18 @@ class Thermochemistry:
             E^qrrho_v = Σ(w(v_K) * E^rrho_v,K + (1 - w(v_K)) * 1/2 * R * T)
         """
         vib_energy = []
-        for j in range(0, len(self.v)):
-            vib_energy.append(
-                self.enthalpy_damping_function[j]
-                * self.rrho_internal_energy[j]
-                + (1 - self.enthalpy_damping_function[j]) * 1 / 2 * R * self.T
-            )
-        return sum(vib_energy)
+        if self.v:
+            for j in range(0, len(self.v)):
+                vib_energy.append(
+                    self.enthalpy_damping_function[j]
+                    * self.rrho_internal_energy[j]
+                    + (1 - self.enthalpy_damping_function[j])
+                    * 1
+                    / 2
+                    * R
+                    * self.T
+                )
+            return sum(vib_energy)
 
     @property
     def enthalpy(self):
@@ -689,6 +711,11 @@ class Thermochemistry:
         Formula:
             S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_entropy_concentration
+                + self.electronic_entropy
+            )
         return (
             self.translational_entropy_concentration
             + self.rotational_entropy
@@ -732,6 +759,11 @@ class Thermochemistry:
         Formula:
             E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_internal_energy
+                + self.electronic_internal_energy
+            )
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
