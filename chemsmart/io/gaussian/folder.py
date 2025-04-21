@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class GaussianComFolder(BaseFolder):
     def __init__(self, folder):
-        self.folder = folder
+        super().__init__(folder=folder)
 
     @property
     def all_comfiles(self):
@@ -27,8 +27,7 @@ class GaussianLogFolder(BaseFolder):
     """Log folder containing all Gaussian log files for postprocessing."""
 
     def __init__(self, folder):
-        """:param folder: Parent folder for all log files; type of str"""
-        self.folder = folder
+        super().__init__(folder=folder)
 
     @property
     def all_logfiles(self):

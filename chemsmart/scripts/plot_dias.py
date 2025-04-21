@@ -2,6 +2,7 @@
 import click
 
 from chemsmart.analysis.dias import GaussianDIASLogFolder, ORCADIASOutFolder
+from chemsmart.utils.logger import create_logger
 
 
 @click.command()
@@ -71,6 +72,7 @@ def entry_point(
     ref_file,
 ):
     """Example usage: plot_dias.py -p orca -z  -a 5 -b 7 -r."""
+    create_logger(debug=True, stream=True)
     if program.lower() == "gaussian":
         dias_folder = GaussianDIASLogFolder(
             folder=folder,
