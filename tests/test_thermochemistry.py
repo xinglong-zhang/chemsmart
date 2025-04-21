@@ -831,7 +831,7 @@ class TestThermochemistryCO2:
             )
         )
         assert np.allclose(
-            qrrho_thermochem_co2_1.freerot_entropy,
+            qrrho_thermochem_co2_1.free_rotor_entropy,
             expected_freerot_entropy,
         )
 
@@ -1696,7 +1696,7 @@ class TestThermochemistryH2O:
             )
         )
         assert np.allclose(
-            qrrho_thermochem_water.freerot_entropy,
+            qrrho_thermochem_water.free_rotor_entropy,
             expected_freerot_entropy,
         )
 

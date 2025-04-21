@@ -152,7 +152,7 @@ class Thermochemistry:
     @property
     def real_frequencies(self):
         """Obtain the real vibrational frequencies of the molecule."""
-        return [k for k in self.vibrational_frequencies if k > 0.0]
+        return [k for k in self.vibrational_frequencies if k >= 0.0]
 
     @property
     def imaginary_frequencies(self):
@@ -375,10 +375,14 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        return [
-            math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T))
-            for t in self.theta
-        ]
+        return (
+            [
+                math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T))
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
 
     @property
     def vibrational_partition_function_bot(self):
@@ -405,7 +409,11 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        return [1 / (1 - math.exp(-t / self.T)) for t in self.theta]
+        return (
+            [1 / (1 - math.exp(-t / self.T)) for t in self.theta]
+            if self.theta
+            else []
+        )
 
     @property
     def vibrational_partition_function_v0(self):
@@ -484,6 +492,11 @@ class Thermochemistry:
         Formula:
             q_tot = q_t * q_r * q_v * q_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_partition_function
+                * self.electronic_partition_function
+            )
         return (
             self.translational_partition_function
             * self.rotational_partition_function
@@ -497,6 +510,8 @@ class Thermochemistry:
         Formula:
             S_tot = S_t + S_r + S_v + S_e
         """
+        if self.molecule.is_monoatomic:
+            return self.translational_entropy + self.electronic_entropy
         return (
             self.translational_entropy
             + self.rotational_entropy
@@ -510,6 +525,11 @@ class Thermochemistry:
         Formula:
             E_tot = E_t + E_r + E_v + E_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_internal_energy
+                + self.electronic_internal_energy
+            )
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
@@ -523,6 +543,11 @@ class Thermochemistry:
         Formula:
             C_tot = C_t + C_r + C_v + C_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_heat_capacity
+                + self.electronic_heat_capacity
+            )
         return (
             self.translational_heat_capacity
             + self.rotational_heat_capacity
@@ -556,8 +581,9 @@ class Thermochemistry:
         return self._calculate_damping_function(self.h_freq_cutoff)
 
     @property
-    def freerot_entropy(self):
-        """Obtain the free rotor entropy in J mol^-1 K^-1, which is used to treat low frequency modes below cutoff.
+    def free_rotor_entropy(self):
+        """Obtain the free rotor entropy in J mol^-1 K^-1, which is used to treat
+        low frequency modes below cutoff.
         Formula:
             S_R,K = R * (1/2 + ln((8 * pi^3 * u'_K * k_B * T / h^2)^(1/2)))
         where:
@@ -590,18 +616,23 @@ class Thermochemistry:
 
     @property
     def rrho_entropy(self):
-        """Obtain the RRHO vibrational entropy in J mol^-1 K^-1.
+        """Obtain the Harmonic Oscillator (within RRHO approximation)
+        vibrational entropy in J mol^-1 K^-1.
         Formula:
             S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
         """
-        entropy = [
-            R
-            * (
-                (t / self.T) / (math.exp(t / self.T) - 1)
-                - np.log(1 - math.exp(-t / self.T))
-            )
-            for t in self.theta
-        ]
+        entropy = (
+            [
+                R
+                * (
+                    (t / self.T) / (math.exp(t / self.T) - 1)
+                    - np.log(1 - math.exp(-t / self.T))
+                )
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return entropy
 
     @property
@@ -616,13 +647,14 @@ class Thermochemistry:
                 vib_entropy.append(
                     self.entropy_damping_function[j] * self.rrho_entropy[j]
                     + (1 - self.entropy_damping_function[j])
-                    * self.freerot_entropy[j]
+                    * self.free_rotor_entropy[j]
                 )
             return sum(vib_entropy)
 
     @property
     def rrho_internal_energy(self):
-        """Obtain the RRHO vibrational internal energy in J mol^-1.
+        """Obtain the Harmonic Oscillator (within RRHO approximation)
+         vibrational internal energy in J mol^-1.
         Formula:
             E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
         """
@@ -670,7 +702,8 @@ class Thermochemistry:
 
     @property
     def translational_partition_function_concentration(self):
-        """Obtain the translational partition function. Uses concentration instead of pressure.
+        """Obtain the translational partition function.
+        Uses concentration instead of pressure.
         Formula:
             q_t,c = (2 * pi * m * k_B * T / h^2)^(3/2) * (1 / c)
         where:
@@ -682,7 +715,8 @@ class Thermochemistry:
 
     @property
     def translational_entropy_concentration(self):
-        """Obtain the translational entropy in J mol^-1 K^-1. Uses concentration instead of pressure.
+        """Obtain the translational entropy in J mol^-1 K^-1.
+        Uses concentration instead of pressure.
         Formula:
             S_t,c = R * [ln(q_t) + 1 + 3/2]
         """
@@ -694,7 +728,8 @@ class Thermochemistry:
 
     @property
     def total_entropy_concentration(self):
-        """Obtain the total entropy in J mol^-1 K^-1. Uses concentration instead of pressure.
+        """Obtain the total entropy in J mol^-1 K^-1.
+        Uses concentration instead of pressure.
         Formula:
             S_tot,c = S_t,c + S_r + S_v + S_e
         """
