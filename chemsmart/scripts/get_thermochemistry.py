@@ -204,20 +204,24 @@ def get_thermo(
 
     # Only output SCF energy without thermochemical corrections.
     if scf:
-        log(" " * 19 + f" * SCF Energies (in {energy_unit}): \n\n")
-        log("   " + " " * 19 + "{:<50} {:>22}\n".format("Structure", "E"))
-        log("   " + " " * 19 + "=" * 73 + "\n")
+        log(f" * SCF Energies (in {energy_unit}): \n\n")
+        log(
+            "   "
+            + "{:<60} {:>22} {:>22}\n".format("Structure", "E", "Job Type")
+        )
+        log("   " + "=" * 106 + "\n")
         index = 1
         for file in files:
             scf_energy = Thermochemistry(file, temperature=temperature)
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = scf_energy.energies * unit_conversion
+            job_type = scf_energy.job_type
             log(
-                " " * 19
-                + "{:2} {:50} {:22.6f}\n".format(
+                "{:2} {:60} {:22.6f} {:>22}\n".format(
                     index,
                     structure,
                     energy,
+                    job_type,
                 )
             )
             index += 1

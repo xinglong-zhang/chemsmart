@@ -158,6 +158,8 @@ class Thermochemistry:
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
         All other negative frequencies are replaced by the cutoff value.
         """
+        if not self.vibrational_frequencies:
+            return None
         if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
             return [
                 self.cutoff if k < 0.0 else k
