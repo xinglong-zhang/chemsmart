@@ -11,6 +11,12 @@ from matplotlib import pyplot as plt
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.mixins import BaseFolder
+from chemsmart.utils.repattern import (
+    orca_dias_filename_point_with_fragment1,
+    orca_dias_filename_point_with_fragment2,
+    orca_dias_filename_point_without_fragment,
+    orca_dias_filename_with_reactant,
+)
 from chemsmart.utils.utils import naturally_sorted
 
 logger = logging.getLogger(__name__)
@@ -59,7 +65,7 @@ class DIASOutputFolder(BaseFolder):
             == len(self.fragment2_energies_list)
         ), (
             f"Number of points along the IRC for full molecule {len(self.full_molecule_energies_list)} "
-            f"should be the same as number of points for their corresponding fragments, f1,  "
+            f"should be the same as number of points for their corresponding fragments, f1, "
             f"{len(self.fragment1_energies_list)} and f2, {len(self.fragment2_energies_list)}"
         )
         return len(self.full_molecule_energies_list)
@@ -432,7 +438,7 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         for file in list_of_files:
             gout = Gaussian16Output(filename=file)
             energy = gout.molecule.energy
-            # convert energy from Hartree (Gaussian .log) to kcal/mol
+            # convert energy from eV to kcal/mol
             energy = energy * units.Hartree
             energy /= (
                 units.kcal / units.mol
@@ -473,7 +479,9 @@ class ORCADIASOutFolder(DIASOutputFolder):
         all_files_full_molecule = []
         all_files_full_molecule_indices = []
         # find all files for full molecule
-        full_molecule_pattern = re.compile(r".*_p(\d+)_(?!f)(.+)\.out")
+        full_molecule_pattern = re.compile(
+            orca_dias_filename_point_without_fragment
+        )
 
         # file all the files that match
         for filename in glob(f"{self.folder}/*.out"):
@@ -495,7 +503,7 @@ class ORCADIASOutFolder(DIASOutputFolder):
         all_files_fragment1 = []
         all_files_fragment1_indices = []
 
-        fragment1_pattern = re.compile(r".*_p(\d+)_(f1)(.+)\.out")
+        fragment1_pattern = re.compile(orca_dias_filename_point_with_fragment1)
 
         for filename in glob(f"{self.folder}/*.out"):
             match = fragment1_pattern.match(filename)
@@ -516,7 +524,7 @@ class ORCADIASOutFolder(DIASOutputFolder):
         all_files_fragment2 = []
         all_files_fragment2_indices = []
 
-        fragment2_pattern = re.compile(r".*_p(\d+)_(f2)(.+)\.out")
+        fragment2_pattern = re.compile(orca_dias_filename_point_with_fragment2)
 
         for filename in glob(f"{self.folder}/*.out"):
             match = fragment2_pattern.match(filename)
@@ -537,7 +545,7 @@ class ORCADIASOutFolder(DIASOutputFolder):
         all_files_reactants = []
         all_files_reactants_indices = []
 
-        reactants_pattern = re.compile(r".*_r([12])_.*")
+        reactants_pattern = re.compile(orca_dias_filename_with_reactant)
 
         for filename in glob(f"{self.folder}/*.out"):
             match = reactants_pattern.match(filename)
