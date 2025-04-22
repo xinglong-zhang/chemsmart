@@ -1,7 +1,9 @@
 import os
+import tempfile
 
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
+import yaml
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
@@ -875,3 +877,52 @@ def io_test_directory(test_data_directory):
 @pytest.fixture()
 def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
+
+
+## fixtures for mixins
+@pytest.fixture
+def temp_text_file():
+    with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
+        tmp.write("Line1\nLine2\n")
+        tmp_name = tmp.name
+    yield tmp_name
+    os.remove(tmp_name)
+
+
+@pytest.fixture
+def dummy_yaml_file():
+    class DummyYAMLFile:
+        def __init__(self):
+            self.filename = "dummy.yaml"
+            self.content_lines_string = yaml.dump(
+                {"key1": "value1", "key2": "value2"}
+            )
+
+        @property
+        def yaml_contents_dict(self):
+            return yaml.safe_load(self.content_lines_string)
+
+        @property
+        def yaml_contents_keys(self):
+            return self.yaml_contents_dict.keys()
+
+        @property
+        def yaml_contents_values(self):
+            return self.yaml_contents_dict.values()
+
+        def yaml_contents_by_key(self, key):
+            return self.yaml_contents_dict.get(key)
+
+    return DummyYAMLFile()
+
+
+@pytest.fixture
+def temp_folder_with_files():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file1 = os.path.join(tmpdir, "test1.txt")
+        file2 = os.path.join(tmpdir, "test2.log")
+        with open(file1, "w") as f:
+            f.write("Test file 1")
+        with open(file2, "w") as f:
+            f.write("Test file 2")
+        yield tmpdir, file1, file2
