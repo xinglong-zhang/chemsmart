@@ -10,12 +10,13 @@ from matplotlib import pyplot as plt
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.utils import naturally_sorted
 
 logger = logging.getLogger(__name__)
 
 
-class DIASOutputFolder:
+class DIASOutputFolder(BaseFolder):
     """Analyse DI-AS model output folder.
 
     atom1: atom number 1 for plotting bond distance
@@ -33,7 +34,7 @@ class DIASOutputFolder:
         ref_file=None,
         outputname="dias",
     ):
-        self.folder = folder
+        super().__init__(folder=folder)
         self.atom1 = atom1
         self.atom2 = atom2
         self.zero = zero  # zero the data with respect to relative total energy
@@ -57,9 +58,9 @@ class DIASOutputFolder:
             == len(self.fragment1_energies_list)
             == len(self.fragment2_energies_list)
         ), (
-            f"Number of points along the IRC for full molecule {len(self.full_molecule_energies_list)} should be the "
-            f"same as number of points for their corresponding fragments, f1,  {len(self.fragment1_energies_list)} and "
-            f"f2, {len(self.fragment2_energies_list)}"
+            f"Number of points along the IRC for full molecule {len(self.full_molecule_energies_list)} "
+            f"should be the same as number of points for their corresponding fragments, f1,  "
+            f"{len(self.fragment1_energies_list)} and f2, {len(self.fragment2_energies_list)}"
         )
         return len(self.full_molecule_energies_list)
 

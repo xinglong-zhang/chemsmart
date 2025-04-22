@@ -81,10 +81,8 @@ class FileConverter:
             all_files = xyz_folder.all_xyzfiles
         elif type == "sdf":
             sdf_folder = BaseFolder(folder=directory)
-            all_files = (
-                sdf_folder.get_all_files_in_current_folder_and_subfolders(
-                    filetype="sdf"
-                )
+            all_files = sdf_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype="sdf"
             )
         else:
             raise ValueError(f"File type {type} is not supported.")

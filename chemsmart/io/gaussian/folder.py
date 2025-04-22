@@ -14,13 +14,13 @@ class GaussianComFolder(BaseFolder):
 
     @property
     def all_comfiles(self):
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="com"
         )
 
     @property
     def all_comfiles_in_current_folder(self):
-        return self.get_all_files_in_current_folder(filetype="com")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="com")
 
 
 class GaussianLogFolder(BaseFolder):
@@ -32,14 +32,14 @@ class GaussianLogFolder(BaseFolder):
     @property
     def all_logfiles(self):
         """Get all log files in the folder, including subfolders."""
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="log"
         )
 
     @property
     def all_logfiles_in_current_folder(self):
         """Get all log files in the folder."""
-        return self.get_all_files_in_current_folder(filetype="log")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="log")
 
     @property
     def all_molecules(self):
