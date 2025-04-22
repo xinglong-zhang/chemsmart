@@ -1,4 +1,4 @@
-! QM/XTB OPT 
+! QM/QM2 OPT
 %pal nprocs 64 end
 # Memory per core
 %maxcore 3600
@@ -10,10 +10,18 @@ exchange hyb_mgga_x_mn15
 correlation mgga_c_mn15
 end
 %QMMM 
-QMATOMS {54 124:133 209 210 259:263 271 272 326:340 424:476 488:516}
+QMATOMS {54 124:133 209 210 259:263 271 272 326:340 424:476 488:516} end
+ActiveAtoms {0:5 16 21:30} end
+QM2CUSTOMMETHOD "B3LYP"
+QM2CUSTOMBASIS "def2-SVP def2/J"
+Dist_C_HLA 1.09 # d0_C-H
+Dist_O_HLA 0.98 # d0_O-H
+Dist_N_HLA 0.99
+DeleteLADoubleCounting true
+DeleteLABondDoubleCounting false
 END 
 END
-*xyz 2 1
+* xyz 2 1
   O      25.562493     15.718725      7.922165
   C      26.195883     14.691892      8.663803
   C      25.516280     14.530544     10.027395

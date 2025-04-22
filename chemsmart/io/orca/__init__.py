@@ -634,20 +634,24 @@ class ORCARefs:
 
     ORCA_DISPERSION_CORRECTIONS = ["d2", "d3zero", "d3bj", "d4"]
 
-    ORCA_QMMM_JOBTYPE = ["QMMM", "QM/QM2",
-                         "QM/QM2/MM", "MOL-CRYSTAL-QMMM",
-                         "IONIC-CRYSTAL-QMMM"]
+    ORCA_QMMM_JOBTYPE = [
+        "QMMM",
+        "QM/QM2",
+        "QM/QM2/MM",
+        "MOL-CRYSTAL-QMMM",
+        "IONIC-CRYSTAL-QMMM",
+    ]
 
     ORCA_QM2_BUILT_IN_METHODS = [
-            "XTB",
-            "XTB0",
-            "XTB1",
-            "HF-3C",
-            "PBEH-3C",
-            "R2SCAN-3C",
-            "PM3",
-            "AM1",
-        ]
+        "XTB",
+        "XTB0",
+        "XTB1",
+        "HF-3C",
+        "PBEH-3C",
+        "R2SCAN-3C",
+        "PM3",
+        "AM1",
+    ]
 
     @property
     def orca_blocks(self):

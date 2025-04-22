@@ -8,8 +8,10 @@ from chemsmart.io.orca import (
     ORCA_ALL_EXTRAPOLATION_BASIS_SETS,
     ORCA_ALL_FUNCTIONALS,
     ORCA_ALL_JOB_TYPES,
+    ORCA_ALL_QM2_BUILT_IN_METHODS,
+    ORCA_ALL_QMMM_JOBTYPE,
     ORCA_ALL_SCF_ALGORITHMS,
-    ORCA_SCF_CONVERGENCE, ORCA_ALL_QM2_BUILT_IN_METHODS, ORCA_ALL_QMMM_JOBTYPE,
+    ORCA_SCF_CONVERGENCE,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,7 +124,6 @@ class ORCARoute:
             if "qm/" in route_keyword or "qmmm" in route_keyword:
                 return route_keyword
 
-
     @property
     def qm_functional(self):
         return self.functional
@@ -133,10 +134,10 @@ class ORCARoute:
 
     @property
     def qm2_method(self):
-        #only available when QM2 methods are ORCA built-in methods
+        # only available when QM2 methods are ORCA built-in methods
         for route_keyword in self.route_keywords:
             if "qm" in route_keyword:
-                qmmm_methods =route_keyword.split("/")
+                qmmm_methods = route_keyword.split("/")
                 for method in qmmm_methods:
                     if method in ORCA_ALL_QM2_BUILT_IN_METHODS:
                         return method

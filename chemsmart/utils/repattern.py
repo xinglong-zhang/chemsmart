@@ -45,3 +45,6 @@ sdf_pattern = (
 orca_frozen_atoms_output_pattern = (
     r"Will constrain atom (\d+) coordinate (\d+)"
 )
+orca_qm_h_bond_length_pattern = (
+    r"Dist_[A-Z][a-zA-Z0-9]*_[A-Z][a-zA-Z0-9]*\s+[-+]?\d*\.\d+"
+)

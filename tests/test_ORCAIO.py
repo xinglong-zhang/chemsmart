@@ -91,38 +91,52 @@ class TestORCARoute:
         assert r6.extrapolation_basis is None
         assert r6.auxiliary_basis is None
 
-        #two-layer ONIOM
+        # two-layer ONIOM
         s7 = "!QM/XTB BP86 def2-TZVP def2/J"
         r7 = ORCARoute(route_string=s7)
-        assert r7.route_keywords == ['qm/xtb', 'bp86', 'def2-tzvp', 'def2/j']
-        assert r7.qm_functional == 'bp86'
-        assert r7.qm_basis == 'def2-tzvp'
-        assert r7.auxiliary_basis == 'def2/j'
-        assert r7.qm2_method == 'xtb'
+        assert r7.route_keywords == ["qm/xtb", "bp86", "def2-tzvp", "def2/j"]
+        assert r7.qm_functional == "bp86"
+        assert r7.qm_basis == "def2-tzvp"
+        assert r7.auxiliary_basis == "def2/j"
+        assert r7.qm2_method == "xtb"
         assert r7.qmmm_jobtype == "qm/xtb"
 
-        #three-layer ONIOM
+        # three-layer ONIOM
         s8 = "!QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq CPCM(water)"
-        r8=ORCARoute(route_string=s8)
-        assert r8.route_keywords == ['qm/hf-3c/mm', 'opt', 'b3lyp', 'def2-tzvp', 'def2/j', 'numfreq', 'cpcm(water)']
-        assert r8.qm_functional == 'b3lyp'
-        assert r8.qm_basis == 'def2-tzvp'
-        assert r8.auxiliary_basis == 'def2/j'
-        assert r8.qm2_method == 'hf-3c'
+        r8 = ORCARoute(route_string=s8)
+        assert r8.route_keywords == [
+            "qm/hf-3c/mm",
+            "opt",
+            "b3lyp",
+            "def2-tzvp",
+            "def2/j",
+            "numfreq",
+            "cpcm(water)",
+        ]
+        assert r8.qm_functional == "b3lyp"
+        assert r8.qm_basis == "def2-tzvp"
+        assert r8.auxiliary_basis == "def2/j"
+        assert r8.qm2_method == "hf-3c"
         assert r8.qmmm_jobtype == "qm/hf-3c/mm"
 
-        #MOL-CRYSTAL-QMMM route
-        s9 = '! MOL-CRYSTAL-QMMM PBE def2-SVP Opt NumFreq'
-        r9=ORCARoute(route_string=s9)
-        assert r9.route_keywords == ['mol-crystal-qmmm', 'pbe', 'def2-svp', 'opt', 'numfreq']
-        assert r9.qm_functional == 'pbe'
-        assert r9.qm_basis == 'def2-svp'
-        assert r9.qmmm_jobtype == 'mol-crystal-qmmm'
+        # MOL-CRYSTAL-QMMM route
+        s9 = "! MOL-CRYSTAL-QMMM PBE def2-SVP Opt NumFreq"
+        r9 = ORCARoute(route_string=s9)
+        assert r9.route_keywords == [
+            "mol-crystal-qmmm",
+            "pbe",
+            "def2-svp",
+            "opt",
+            "numfreq",
+        ]
+        assert r9.qm_functional == "pbe"
+        assert r9.qm_basis == "def2-svp"
+        assert r9.qmmm_jobtype == "mol-crystal-qmmm"
 
         # IONIC-CRYSTAL-QMMM route
-        s10 = '! IONIC-CRYSTAL-QMMM'
+        s10 = "! IONIC-CRYSTAL-QMMM"
         r10 = ORCARoute(route_string=s10)
-        assert r10.qmmm_jobtype == 'ionic-crystal-qmmm'
+        assert r10.qmmm_jobtype == "ionic-crystal-qmmm"
 
 
 class TestORCABasis:
@@ -189,6 +203,38 @@ class TestORCAInput:
             "thus, your input file is not valid to run for ORCA!",
         ):
             orca_inp.solvent_id  # noqa: B018
+
+    def test_orca_qmmm_input(self, orca_qmmm_input_file):
+        orca_inp = ORCAInput(filename=orca_qmmm_input_file)
+        assert orca_inp.charge == 2
+        assert orca_inp.multiplicity == 1
+        assert orca_inp.qm_atoms == [
+            "54",
+            "124:133",
+            "209",
+            "210",
+            "259:263",
+            "271",
+            "272",
+            "326:340",
+            "424:476",
+            "488:516",
+        ]
+        assert orca_inp.qm_active_atoms == ["0:5", "16", "21:30"]
+        # assert orca_inp.qm_force_field
+        assert orca_inp.qm_h_bond_length == [
+            ("c", "hla", "1.09"),
+            ("o", "hla", "0.98"),
+            ("n", "hla", "0.99"),
+        ]
+        assert orca_inp.qm_boundary_treatment == (
+            "Will neglect bends at QM2-QM1-MM1 and torsions at QM3-QM2-QM1-MM1 boundary.\n"
+            "Will include bonds at QM1-MM1 boundary.\n"
+        )
+        assert orca_inp.qm_embedding_type == "electrostatic"
+        assert orca_inp.qm2_functional == "b3lyp"
+        assert orca_inp.qm2_basis == "def2-svp def2/j"
+        print(orca_inp.qm2_functional, orca_inp.qm2_basis)
 
 
 class TestORCAOutput:

@@ -979,7 +979,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             qm_block["embedding_type"] = self._get_embedding_type()
         for key, val in qm_block:
             full_qm_block += f"{val}\n"
-        full_qm_block += self._write_crystal_qmmm_subblock()
+        if self._write_crystal_qmmm_subblock() is not None:
+            full_qm_block += self._write_crystal_qmmm_subblock()
         full_qm_block += f"end\n"
         return full_qm_block
 

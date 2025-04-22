@@ -614,6 +614,11 @@ def orca_faulty_solv(orca_inputs_directory):
 
 
 @pytest.fixture()
+def orca_qmmm_input_file(orca_inputs_directory):
+    return os.path.join(orca_inputs_directory, "dna_qmmm.inp")
+
+
+@pytest.fixture()
 def orca_outputs_directory(orca_test_directory):
     orca_outputs_directory = os.path.join(orca_test_directory, "outputs")
     return os.path.abspath(orca_outputs_directory)
