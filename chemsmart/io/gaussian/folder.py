@@ -13,14 +13,24 @@ class GaussianComFolder(BaseFolder):
         super().__init__(folder=folder)
 
     @property
-    def all_comfiles(self):
+    def all_com_files(self):
         return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="com"
         )
 
     @property
-    def all_comfiles_in_current_folder(self):
+    def all_com_files_in_current_folder(self):
         return self.get_all_files_in_current_folder_by_suffix(filetype="com")
+
+    @property
+    def all_gjf_files(self):
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
+            filetype="gjf"
+        )
+
+    @property
+    def all_gjf_files_in_current_folder(self):
+        return self.get_all_files_in_current_folder_by_suffix(filetype="gjf")
 
 
 class GaussianLogFolder(BaseFolder):
