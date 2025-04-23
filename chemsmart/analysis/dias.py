@@ -438,11 +438,13 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         for file in list_of_files:
             gout = Gaussian16Output(filename=file)
             energy = gout.molecule.energy
-            # convert energy from eV to kcal/mol
-            energy = energy * units.Hartree
+            # convert energy to kcal/mol
+            energy *= (
+                units.Hartree
+            )  # convert energy from Hartree (Gaussian .log) to eV (ase units)
             energy /= (
                 units.kcal / units.mol
-            )  # convert energy from Hartree (Gaussian .log) to kcal/mol
+            )  # convert energy from eV (ase units) to kcal/mol
             all_energies.append(energy)
         return all_energies
 
