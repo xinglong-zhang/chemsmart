@@ -156,19 +156,31 @@ class GaussianDIASJob(GaussianJob):
 
     @property
     def all_molecules_jobs(self):
-        images = self._sample_images(self.all_molecules)
-        jobs = []
-        for i, molecule in enumerate(images):
-            label = f"{self.label}_p{i}"
-            jobs += [
+        if self.mode.lower() == "irc":
+            images = self._sample_images(self.all_molecules)
+            jobs = []
+            for i, molecule in enumerate(images):
+                label = f"{self.label}_p{i}"
+                jobs += [
+                    GaussianGeneralJob(
+                        molecule=molecule,
+                        settings=self.settings,
+                        label=label,
+                        skip_completed=self.skip_completed,
+                    )
+                ]
+            return jobs
+        elif self.mode.lower() == "ts":
+            image = self.all_molecules[-1]
+            label = f"{self.label}_p1"
+            return [
                 GaussianGeneralJob(
-                    molecule=molecule,
+                    molecule=image,
                     settings=self.settings,
                     label=label,
                     skip_completed=self.skip_completed,
                 )
             ]
-        return jobs
 
     def _run_all_molecules_jobs(self, jobrunner):
         for job in self.all_molecules_jobs:
