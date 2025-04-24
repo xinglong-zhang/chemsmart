@@ -10,13 +10,23 @@ class XYZFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
+    def __repr__(self):
+        return f"XYZFile({self.filename})"
+
+    def __str__(self):
+        return f"XYZFile object with filename: {self.filename}"
+
     @cached_property
     def num_atoms(self):
         return int(self.contents[0])
 
     @cached_property
     def molecule(self):
-        return self.get_molecule(index="-1")
+        return self.get_molecules(index="-1")
+
+    @cached_property
+    def comments(self):
+        return self.get_comments(index="-1")
 
     def _get_molecules_and_comments(self, index=":", return_list=False):
         """Return a molecule object or a list of molecule objects from an xyz file.
@@ -47,12 +57,35 @@ class XYZFile(FileMixin):
 
         molecules = all_molecules[string2index_1based(index)]
         comments = comments[string2index_1based(index)]
-        if return_list and isinstance(molecules, Molecule):
+        if return_list and not isinstance(molecules, list):
             return [molecules], [comments]
-        return molecules, comments
+        else:
+            return molecules, comments
 
-    def get_molecule(self, index=":", return_list=False):
-        molecules, _ = self._get_molecules_and_comments(
+    def get_molecules(self, index=":", return_list=False):
+        # Ensure that when return_list=False, molecules is always treated as a list before iteration:
+        molecules, comments = self._get_molecules_and_comments(
+            index=index, return_list=True
+        )
+
+        # Ensures energy is assigned before returning a single molecule:
+        if len(comments) != 0:
+            try:
+                for i, comment in enumerate(comments):
+                    energy = float(comment)
+                    molecules[i].energy = energy  # Assign energy
+            except ValueError:
+                pass  # Ignore if comment isn't a valid float
+
+        if return_list:
+            return molecules
+        else:
+            return (
+                molecules[0] if molecules else None
+            )  # Return a single molecule if list has one item
+
+    def get_comments(self, index=":", return_list=False):
+        _, comments = self._get_molecules_and_comments(
             index=index, return_list=return_list
         )
-        return molecules
+        return comments
