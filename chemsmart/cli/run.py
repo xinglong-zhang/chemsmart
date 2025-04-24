@@ -17,7 +17,7 @@ system_type = platform.system()
 
 if system_type in ("Darwin", "Windows"):
     with contextlib.suppress(RuntimeError):
-        set_start_method("fork")
+        set_start_method("spawn")
 
 logger = logging.getLogger(__name__)
 
