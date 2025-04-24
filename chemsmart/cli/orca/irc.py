@@ -1,3 +1,4 @@
+import ast
 import logging
 
 import click
@@ -226,7 +227,7 @@ def irc(
     if tolmaxg is not None:
         irc_settings.tolmaxg = tolmaxg
     if internal_modred is not None:
-        modred_info = eval(internal_modred)
+        modred_info = ast.literal_eval(internal_modred)
         irc_settings.internal_modred = modred_info
 
     check_charge_and_multiplicity(irc_settings)

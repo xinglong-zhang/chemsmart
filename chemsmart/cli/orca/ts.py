@@ -1,3 +1,4 @@
+import ast
 import logging
 
 import click
@@ -133,7 +134,7 @@ def ts(
         check_scan_coordinates_orca(
             coordinates, dist_start, dist_end, num_steps
         )
-        coordinates = eval(coordinates)
+        coordinates = ast.literal_eval(coordinates)
         scan_info = {
             "coordinates": coordinates,
             "dist_start": dist_start,

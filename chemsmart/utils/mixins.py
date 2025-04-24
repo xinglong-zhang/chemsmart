@@ -564,5 +564,5 @@ class FolderMixin:
 
 
 class BaseFolder(FolderMixin):
-    def __init__(self, folder_path):
-        self.folder_path = folder_path
+    def __init__(self, folder):
+        self.folder = folder

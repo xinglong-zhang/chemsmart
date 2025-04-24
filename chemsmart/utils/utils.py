@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
@@ -12,6 +13,31 @@ from typing import Tuple, Union
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+class OrderedSet:
+    def __init__(self, iterable=None):
+        self.items = []
+        if iterable:
+            for item in iterable:
+                self.add(item)
+
+    def add(self, item):
+        if item not in self.items:
+            self.items.append(item)
+
+    def remove(self, item):
+        if item in self.items:
+            self.items.remove(item)
+
+    def __contains__(self, item):
+        return item in self.items
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self):
+        return len(self.items)
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -362,7 +388,7 @@ def get_prepend_string_list_from_modred_free_format(
         num_list = len(input_modred)
         for i in range(num_list):
             prepend_string = get_prepend_string_for_modred(input_modred[i])
-            if program == "gaussian":
+            if program == "gaussian" or program == "pymol":
                 modred_string = convert_modred_list_to_string(input_modred[i])
             elif program == "orca":
                 modred_string = convert_modred_list_to_string(
@@ -377,7 +403,7 @@ def get_prepend_string_list_from_modred_free_format(
     elif isinstance(input_modred[0], int):
         # for a single list; e.g.: [2,3]
         prepend_string = get_prepend_string_for_modred(input_modred)
-        if program == "gaussian":
+        if program == "gaussian" or program == "pymol":
             modred_string = convert_modred_list_to_string(input_modred)
         elif program == "orca":
             modred_string = convert_modred_list_to_string(
@@ -489,6 +515,14 @@ def run_command(command):
     except Exception as e:
         logger.error(f"Exception while running {command}: {e}")
         return None
+
+
+def quote_path(path):
+    """Quote paths on Windows to handle spaces and backslashes."""
+    if sys.platform == "win32":
+        # Double-quote paths on Windows to preserve spaces
+        return f'"{path}"'
+    return path
 
 
 def kabsch_align(
@@ -627,3 +661,23 @@ def search_file(filename):
     except subprocess.CalledProcessError:
         logger.error(f"Error occurred while searching for {filename}.")
         return None, None
+
+
+def iterative_compare(input_list):
+    """Compare an input list and return a list of unique elements.
+    The input list can be a list of lists or a list of strings or
+    a list of dictionaries.
+    """
+    if not input_list:
+        return []
+    if isinstance(input_list[0], list):
+        return [list(x) for x in OrderedSet(tuple(x) for x in input_list)]
+    elif isinstance(input_list[0], tuple):
+        return [tuple(x) for x in OrderedSet(input_list)]
+    elif isinstance(input_list[0], dict):
+        return [
+            dict(x)
+            for x in OrderedSet(frozenset(x.items()) for x in input_list)
+        ]
+    else:
+        return list(OrderedSet(input_list))

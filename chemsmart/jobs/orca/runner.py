@@ -116,7 +116,7 @@ class ORCAJobRunner(JobRunner):
         input_writer = ORCAInputWriter(job=job, jobrunner=self)
         input_writer.write(target_directory=self.running_directory)
 
-    def _get_command(self):
+    def _get_command(self, job):
         exe = self._get_executable()
         command = f"{exe} {self.job_inputfile}"
         return command

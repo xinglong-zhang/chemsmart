@@ -21,7 +21,16 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default="-1",
     help="Index of structure to be written to file.",
 )
-def entry_point(filename, index):
+@click.option(
+    "-s/",
+    "--single-file/--no-single-files",
+    type=bool,
+    is_flag=True,
+    default=True,
+    help="To write all structures to a single .xzy file, if more than one structure is present.\n"
+    "Default is to write all structures to a single file.",
+)
+def entry_point(filename, index, single_file):
     """Script for writing structure to .xyz format.
     The script can write a single structure to a file or a list of structures,
     based on 1-indexing. The default is to write the last structure in the file.
@@ -42,7 +51,10 @@ def entry_point(filename, index):
         molecules[0].write_xyz(file_basename + "_single.xyz")
     else:
         for i, molecule in enumerate(molecules):
-            molecule.write_xyz(file_basename + f"_{i+1}.xyz")
+            if single_file:
+                molecule.write_xyz(file_basename + "_all.xyz", mode="a")
+            else:
+                molecule.write_xyz(file_basename + f"_{i+1}.xyz")
 
 
 if __name__ == "__main__":
