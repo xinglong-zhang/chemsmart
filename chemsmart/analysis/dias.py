@@ -12,12 +12,15 @@ from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.repattern import (
+    gaussian_dias_filename_point_with_fragment1,
+    gaussian_dias_filename_point_with_fragment2,
+    gaussian_dias_filename_point_without_fragment,
+    gaussian_dias_filename_with_reactant,
     orca_dias_filename_point_with_fragment1,
     orca_dias_filename_point_with_fragment2,
     orca_dias_filename_point_without_fragment,
     orca_dias_filename_with_reactant,
 )
-from chemsmart.utils.utils import naturally_sorted
 
 logger = logging.getLogger(__name__)
 
@@ -413,25 +416,95 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         return full_molecule_a1.split("_p")[0]
 
     def _get_all_files_full_molecule(self):
-        return naturally_sorted(
-            glob(f"{self.folder}/*_p?.log")
-            + glob(f"{self.folder}/*_p??.log")
-            + glob(f"{self.folder}/*_p???.log")
+        all_files_full_molecule = []
+        all_files_full_molecule_indices = []
+        # find all files for full molecule
+        full_molecule_pattern = re.compile(
+            gaussian_dias_filename_point_without_fragment
+        )
+
+        # file all the files that match
+        for filename in glob(f"{self.folder}/*.log"):
+            match = full_molecule_pattern.match(filename)
+            if match:
+                number_after_p = int(match.group(1))
+                all_files_full_molecule.append(filename)
+                all_files_full_molecule_indices.append(number_after_p)
+
+        # Sort filenames based on indices
+        return sorted(
+            all_files_full_molecule,
+            key=lambda x: all_files_full_molecule_indices[
+                all_files_full_molecule.index(x)
+            ],
         )
 
     def _get_all_files_fragment1(self):
-        return naturally_sorted(glob(f"{self.folder}/*_p*_f1.log"))
+        all_files_fragment1 = []
+        all_files_fragment1_indices = []
+
+        fragment1_pattern = re.compile(
+            gaussian_dias_filename_point_with_fragment1
+        )
+
+        for filename in glob(f"{self.folder}/*.log"):
+            match = fragment1_pattern.match(filename)
+            if match:
+                number_after_p = int(match.group(1))
+                all_files_fragment1.append(filename)
+                all_files_fragment1_indices.append(number_after_p)
+
+        # Sort filenames based on indices
+        return sorted(
+            all_files_fragment1,
+            key=lambda x: all_files_fragment1_indices[
+                all_files_fragment1.index(x)
+            ],
+        )
 
     def _get_all_files_fragment2(self):
-        return naturally_sorted(glob(f"{self.folder}/*_p*_f2.log"))
+        all_files_fragment2 = []
+        all_files_fragment2_indices = []
+
+        fragment2_pattern = re.compile(
+            gaussian_dias_filename_point_with_fragment2
+        )
+
+        for filename in glob(f"{self.folder}/*.log"):
+            match = fragment2_pattern.match(filename)
+            if match:
+                number_after_p = int(match.group(1))
+                all_files_fragment2.append(filename)
+                all_files_fragment2_indices.append(number_after_p)
+
+        # Sort filenames based on indices
+        return sorted(
+            all_files_fragment2,
+            key=lambda x: all_files_fragment2_indices[
+                all_files_fragment2.index(x)
+            ],
+        )
 
     def _get_all_files_reactants(self):
-        all_files_reactants = glob(
-            f"{self.folder}/*r?.log"
-        )  # Reactant files required naming ends with 'r?.log'
-        all_files_reactants.sort()
-        assert all_files_reactants, "Reactant/Fragments needed!"
-        return all_files_reactants
+        all_files_reactants = []
+        all_files_reactants_indices = []
+
+        reactants_pattern = re.compile(gaussian_dias_filename_with_reactant)
+
+        for filename in glob(f"{self.folder}/*.log"):
+            match = reactants_pattern.match(filename)
+            if match:
+                number_after_r = int(match.group(1))
+                all_files_reactants.append(filename)
+                all_files_reactants_indices.append(number_after_r)
+
+        # Sort filenames based on indices
+        return sorted(
+            all_files_reactants,
+            key=lambda x: all_files_reactants_indices[
+                all_files_reactants.index(x)
+            ],
+        )
 
     def _get_all_energies(self, list_of_files):
         all_energies = []
