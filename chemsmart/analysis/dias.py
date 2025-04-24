@@ -416,11 +416,6 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         return full_molecule_a1.split("_p")[0]
 
     def _get_all_files_full_molecule(self):
-        # return naturally_sorted(
-        #     glob(f"{self.folder}/*_p?.log")
-        #     + glob(f"{self.folder}/*_p??.log")
-        #     + glob(f"{self.folder}/*_p???.log")
-        # )
         all_files_full_molecule = []
         all_files_full_molecule_indices = []
         # find all files for full molecule
@@ -445,7 +440,6 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         )
 
     def _get_all_files_fragment1(self):
-        # return naturally_sorted(glob(f"{self.folder}/*_p*_f1.log"))
         all_files_fragment1 = []
         all_files_fragment1_indices = []
 
@@ -454,10 +448,8 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         )
 
         for filename in glob(f"{self.folder}/*.log"):
-            print(filename)
             match = fragment1_pattern.match(filename)
             if match:
-                print(f"match: {match}")
                 number_after_p = int(match.group(1))
                 all_files_fragment1.append(filename)
                 all_files_fragment1_indices.append(number_after_p)
@@ -471,7 +463,6 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         )
 
     def _get_all_files_fragment2(self):
-        # return naturally_sorted(glob(f"{self.folder}/*_p*_f2.log"))
         all_files_fragment2 = []
         all_files_fragment2_indices = []
 
@@ -495,13 +486,6 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         )
 
     def _get_all_files_reactants(self):
-        # all_files_reactants = glob(
-        #     f"{self.folder}/*r?.log"
-        # )  # Reactant files required naming ends with 'r?.log'
-        # all_files_reactants.sort()
-        # assert all_files_reactants, "Reactant/Fragments needed!"
-        # return all_files_reactants
-
         all_files_reactants = []
         all_files_reactants_indices = []
 
