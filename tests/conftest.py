@@ -236,6 +236,22 @@ def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_co2_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "co2.log"
+    )
+    return gaussian_co2_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_he_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "he.log"
+    )
+    return gaussian_he_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_acetone_opt_outfile(gaussian_outputs_test_directory):
     gaussian_acetone_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "acetone.log"
@@ -639,6 +655,16 @@ def water_sp_solv_path(orca_outputs_directory):
 @pytest.fixture()
 def water_output_gas_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.out")
+
+
+@pytest.fixture()
+def orca_he_output_freq(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "He_freq.out")
+
+
+@pytest.fixture()
+def orca_co2_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "CO2.out")
 
 
 @pytest.fixture()

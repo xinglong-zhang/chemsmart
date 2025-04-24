@@ -457,6 +457,14 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert np.allclose(
+            g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
+        )
+        assert np.allclose(
+            g16_output.rotational_constants_in_Hz,
+            [0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9],
+        )
+        assert g16_output.rotational_symmetry_number == 1
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
@@ -999,10 +1007,7 @@ class TestGaussian16Output:
             0,
             0,
         ]
-        assert (
-            g16_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_frozen.optimized_structure.energy == -804.614710796
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
         assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
         assert np.allclose(
@@ -1104,10 +1109,7 @@ class TestGaussian16Output:
         # since use_frozen is False, this is not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
-        assert (
-            g16_hide_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_hide_frozen.optimized_structure.energy == -804.614710796
         assert (
             g16_hide_frozen.num_vib_modes
             == g16_hide_frozen.num_vib_frequencies
@@ -1514,7 +1516,7 @@ class TestGaussianPBCOutputFile:
 
         assert np.isclose(
             g16_pbc_2d.last_structure.energy,
-            -76.1490641879 * units.Hartree,
+            -76.1490641879,
             rtol=1e-5,
         )
         assert np.allclose(
@@ -1524,9 +1526,7 @@ class TestGaussianPBCOutputFile:
                     [0.000015884, 0.000006763, 0.000000000],
                     [-0.000015884, -0.000006763, -0.000000000],
                 ]
-            )
-            * units.Hartree
-            / units.Bohr,
+            ),
             rtol=1e-5,
         )
 

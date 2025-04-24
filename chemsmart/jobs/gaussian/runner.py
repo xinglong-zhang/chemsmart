@@ -265,6 +265,10 @@ class FakeGaussian:
         return self.input_object.contents
 
     @property
+    def input_blocks(self):
+        return self.input_object.content_groups
+
+    @property
     def molecule(self):
         return self.input_object.molecule
 
@@ -303,10 +307,6 @@ class FakeGaussian:
         return self.molecule.get_chemical_formula(empirical=True)
 
     def run(self):
-        # get input lines
-        with open(self.input_filepath) as f:
-            lines = f.readlines()
-
         with open(self.output_filepath, "w") as g:
             g.write(" Entering Gaussian System, FakeGaussianRunner\n")
             g.write(f" Input={self.input_filepath}\n")
@@ -315,20 +315,37 @@ class FakeGaussian:
             g.write(" Fake Gaussian Executable\n")
             g.write(" ******************************************\n")
             # write mem/nproc/chk information (%...)
-            for line in lines:
+            for line in self.input_contents:
                 if line.startswith("%"):
-                    g.write(f" {line}")
+                    g.write(f" {line}\n")
             # write route information
-            for line in lines:
+            for line in self.input_contents:
                 if line.startswith("#"):
                     line_len = len(line)
                     g.write(" " + "-" * line_len + "\n")
-                    g.write(f" {line}")
+                    g.write(f" {line}\n")
                     g.write(" " + "-" * line_len + "\n")
+
+            # missing Z-matrix
+            # write title
+            g.write(" " + "-" * line_len + "\n")
+            g.write(f" {self.input_blocks[1][0]}\n")
+            g.write(" " + "-" * line_len + "\n")
+
+            g.write(" Symbolic Z-matrix:\n")
+
             # write charge and multiplicity
             g.write(
                 f" Charge =  {self.charge} Multiplicity = {self.multiplicity}\n"
             )
+            for line in self.input_blocks[2][1:]:
+                g.write(f" {line}\n")
+            g.write("\n")
+
+            if self.input_blocks[3:]:
+                for line in self.input_blocks[3:]:
+                    g.write(f"{line}\n")
+
             # missing Z-matrix
 
             # write input orientation

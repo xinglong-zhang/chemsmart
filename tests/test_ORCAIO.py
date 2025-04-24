@@ -218,6 +218,7 @@ class TestORCAOutput:
         assert np.allclose(
             orca_out.forces[-1], orca_out_last_forces, rtol=1e-6
         )
+
         orca_out_first_forces_in_eV_per_angstrom = np.array(
             [
                 np.array([-0.000000001, 0.000000112, -0.002606324])
@@ -301,28 +302,28 @@ class TestORCAOutput:
             ),
             rtol=1e-03,
         )
-        assert math.isclose(orca_out.final_energy, -2076.86288, rel_tol=1e-4)
+        assert math.isclose(orca_out.final_energy, -76.32331101, rel_tol=1e-4)
         assert math.isclose(
-            orca_out.final_nuclear_repulsion, 248.85900, rel_tol=1e-4
+            orca_out.final_nuclear_repulsion, 9.14540060, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.final_electronic_energy, -2325.72188, rel_tol=1e-4
+            orca_out.final_electronic_energy, -85.46871161, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.one_electron_energy, -3346.95900, rel_tol=1e-4
+            orca_out.one_electron_energy, -122.99848749, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.two_electron_energy, 1021.23712, rel_tol=1e-4
+            orca_out.two_electron_energy, 37.52977588, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.max_cosx_asymmetry_energy, 0.00023, rel_tol=1e-2
+            orca_out.max_cosx_asymmetry_energy, 0.00000841, rel_tol=1e-2
         )
         assert math.isclose(
-            orca_out.potential_energy, -4140.24210, rel_tol=1e-4
+            orca_out.potential_energy, -152.15110671, rel_tol=1e-4
         )
-        assert math.isclose(orca_out.kinetic_energy, 2063.37922, rel_tol=1e-4)
+        assert math.isclose(orca_out.kinetic_energy, 75.82779570, rel_tol=1e-4)
         assert math.isclose(orca_out.virial_ratio, 2.00653475, rel_tol=1e-4)
-        assert math.isclose(orca_out.xc_energy, -121.97818321, rel_tol=1e-4)
+        assert math.isclose(orca_out.xc_energy, -4.482615927956, rel_tol=1e-4)
         assert orca_out.dfet_embed_energy == 0.0
         assert orca_out.orbital_occupancy == [
             2,
@@ -465,46 +466,22 @@ class TestORCAOutput:
             282661.493198,
         ]
         assert orca_out.vibrational_frequencies == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             1625.35,
             3875.61,
             3971.9,
         ]
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.012719,
             0.002968,
             0.009899,
         ]
         assert orca_out.integrated_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             64.27,
             15.0,
             50.03,
         ]
         assert orca_out.transition_dipole_deriv_norm == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.002442,
             0.000239,
             0.000778,
@@ -644,46 +621,22 @@ class TestORCAOutput:
             282661.493198,
         ]
         assert orca_out.vibrational_frequencies == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             1625.35,
             3875.61,
             3971.9,
         ]
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.012719,
             0.002968,
             0.009899,
         ]
         assert orca_out.integrated_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             64.27,
             15.0,
             50.03,
         ]
         assert orca_out.transition_dipole_deriv_norm == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.002442,
             0.000239,
             0.000778,
@@ -901,8 +854,9 @@ class TestORCAOutput:
         assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
         assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)
         assert np.isclose(
-            orca_out.final_energy, -82108.762658054809435, rtol=1e-4
+            orca_out.final_energy, -3017.439958087227, rtol=1e-4
         )
+        assert np.isclose(orca_out.final_energy, -3017.44162461, rtol=1e-4)
         assert orca_out.mulliken_atomic_charges == {
             "O0": -0.544377,
             "O1": -0.409137,
@@ -1823,13 +1777,13 @@ class TestORCAEngrad:
         orca_engrad = ORCAEngradFile(filename=water_engrad_path)
         assert orca_engrad.natoms == 3
         assert math.isclose(
-            orca_engrad.energy, -2076.86288, rel_tol=1e-4
-        )  # energy in eV
+            orca_engrad.energy, -76.323311011349, rel_tol=1e-4
+        )  # energy in Hartree
         gradient = np.array(
             [
-                [3.15988602e-07, -2.28910474e-06, -2.40955630e-04],
-                [7.40004117e-04, 7.35335559e-08, 4.97007134e-04],
-                [-7.38385711e-04, 6.79285506e-08, 4.96422516e-04],
+                [0.000000006145, -0.000000044516, -0.000004685841],
+                [0.000014390789, 0.000000001430, 0.000009665250],
+                [-0.000014359316, 0.000000001321, 0.000009653881],
             ]
         )
         assert np.allclose(orca_engrad.gradient, gradient, rtol=1e-6)

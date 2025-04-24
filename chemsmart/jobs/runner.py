@@ -34,6 +34,7 @@ class JobRunner(RegistryMixin):
         self,
         server,
         scratch=None,
+        scratch_dir=None,  # Explicit scratch directory
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -53,6 +54,8 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = scratch
+        self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
+
         if self.scratch:
             self._set_scratch()
 
@@ -76,12 +79,29 @@ class JobRunner(RegistryMixin):
         self.kwargs = kwargs
 
     @property
-    @lru_cache(maxsize=12)
     def scratch_dir(self):
-        return self._set_scratch()
+        """Return the scratch directory, setting it if necessary."""
+        if self._scratch_dir is None:
+            self._scratch_dir = self._set_scratch()
+        return self._scratch_dir
+
+    @scratch_dir.setter
+    def scratch_dir(self, value):
+        """Allow explicit setting of scratch_dir."""
+        if value is not None:
+            value = os.path.expanduser(value)  # Expand '~' to absolute path
+            if not os.path.exists(value):
+                raise FileNotFoundError(
+                    f"Specified scratch dir does not exist: {value}"
+                )
+        self._scratch_dir = value
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
+        """Determine the scratch directory, considering multiple sources."""
+        if self._scratch_dir is not None:
+            return self._scratch_dir  # Use explicitly set directory
+
         scratch_dir = None
         if self.executable is not None:
             logger.info(f"Setting scratch dir for {self} from executable.")
