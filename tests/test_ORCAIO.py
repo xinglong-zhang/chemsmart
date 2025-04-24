@@ -853,6 +853,9 @@ class TestORCAOutput:
         assert np.isclose(orca_out.homo_energy, -9.382, rtol=1e-4)
         assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
         assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)
+        assert np.isclose(
+            orca_out.final_energy, -3017.439958087227, rtol=1e-4
+        )
         assert np.isclose(orca_out.final_energy, -3017.44162461, rtol=1e-4)
         assert orca_out.mulliken_atomic_charges == {
             "O0": -0.544377,
