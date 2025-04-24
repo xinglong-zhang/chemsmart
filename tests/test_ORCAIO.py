@@ -466,22 +466,46 @@ class TestORCAOutput:
             282661.493198,
         ]
         assert orca_out.vibrational_frequencies == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             1625.35,
             3875.61,
             3971.9,
         ]
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             0.012719,
             0.002968,
             0.009899,
         ]
         assert orca_out.integrated_absorption_coefficients == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             64.27,
             15.0,
             50.03,
         ]
         assert orca_out.transition_dipole_deriv_norm == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             0.002442,
             0.000239,
             0.000778,
@@ -621,22 +645,46 @@ class TestORCAOutput:
             282661.493198,
         ]
         assert orca_out.vibrational_frequencies == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             1625.35,
             3875.61,
             3971.9,
         ]
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             0.012719,
             0.002968,
             0.009899,
         ]
         assert orca_out.integrated_absorption_coefficients == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             64.27,
             15.0,
             50.03,
         ]
         assert orca_out.transition_dipole_deriv_norm == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             0.002442,
             0.000239,
             0.000778,
@@ -853,9 +901,7 @@ class TestORCAOutput:
         assert np.isclose(orca_out.homo_energy, -9.382, rtol=1e-4)
         assert np.isclose(orca_out.lumo_energy, 1.3054, rtol=1e-4)
         assert np.isclose(orca_out.fmo_gap, 10.6874, rtol=1e-4)
-        assert np.isclose(
-            orca_out.final_energy, -3017.439958087227, rtol=1e-4
-        )
+        assert np.isclose(orca_out.final_energy, -3017.439958087227, rtol=1e-4)
         assert np.isclose(orca_out.final_energy, -3017.44162461, rtol=1e-4)
         assert orca_out.mulliken_atomic_charges == {
             "O0": -0.544377,

@@ -808,6 +808,7 @@ class ORCAOutput(ORCAFileMixin):
         return self.molecule.positions
 
     def _get_optimized_scf_energy(self):
+        """Get the final SCF energy in Hartree."""
         for i, line_i in enumerate(self.optimized_output_lines):
             if "TOTAL SCF ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -820,7 +821,7 @@ class ORCAOutput(ORCAFileMixin):
                             energy_in_eV,
                             rel_tol=1e-4,
                         )
-                        return energy_in_hartree * units.Hartree
+                        return energy_in_hartree
 
     @property
     def _get_sp_scf_energy(self):
@@ -855,10 +856,28 @@ class ORCAOutput(ORCAFileMixin):
             if "FINAL SINGLE POINT ENERGY" in line:
                 sp_energy_in_hartree = float(line.split()[-1])
                 # convert hartree to eV
-                return sp_energy_in_hartree * units.Hartree
+                return sp_energy_in_hartree
+
+    @property
+    def single_point_energy_eV(self):
+        """Get the single point energy in eV."""
+        return self.single_point_energy * units.Hartree
 
     @property
     def final_nuclear_repulsion(self):
+        """Get the final nuclear repulsion energy in Hartree."""
+        final_nuclear_repulsion_hartree, _ = (
+            self._get_final_nuclear_repulsion()
+        )
+        return final_nuclear_repulsion_hartree
+
+    @property
+    def final_nuclear_repulsion_eV(self):
+        """Get the final nuclear repulsion energy in eV."""
+        _, final_nuclear_repulsion_eV = self._get_final_nuclear_repulsion()
+        return final_nuclear_repulsion_eV
+
+    def _get_final_nuclear_repulsion(self):
         final_nuclear_repulsion_hartree = []
         final_nuclear_repulsion_eV = []
         for line in self.contents:
@@ -873,10 +892,26 @@ class ORCAOutput(ORCAFileMixin):
                 )
                 final_nuclear_repulsion_hartree.append(energy_in_hartree)
                 final_nuclear_repulsion_eV.append(energy_in_eV)
-        return final_nuclear_repulsion_eV[-1]
+        return (
+            final_nuclear_repulsion_hartree[-1],
+            final_nuclear_repulsion_eV[-1],
+        )
 
     @property
     def final_electronic_energy(self):
+        """Get the final electronic energy in Hartree."""
+        final_electronic_energy_hartree, _ = (
+            self._get_final_electronic_energy()
+        )
+        return final_electronic_energy_hartree
+
+    @property
+    def final_electronic_energy_eV(self):
+        """Get the final electronic energy in eV."""
+        _, final_electronic_energy_eV = self._get_final_electronic_energy()
+        return final_electronic_energy_eV * units.Hartree
+
+    def _get_final_electronic_energy(self):
         final_electronic_energy_hartree = []
         final_electronic_energy_eV = []
         for line in self.contents:
@@ -891,10 +926,24 @@ class ORCAOutput(ORCAFileMixin):
                 )
                 final_electronic_energy_hartree.append(energy_in_hartree)
                 final_electronic_energy_eV.append(energy_in_eV)
-        return final_electronic_energy_eV[-1]
+        return (
+            final_electronic_energy_hartree[-1],
+            final_electronic_energy_eV[-1],
+        )
 
     @property
     def one_electron_energy(self):
+        """Get the one-electron energy in Hartree."""
+        one_electron_energy_hartree, _ = self._get_one_electron_energy()
+        return one_electron_energy_hartree
+
+    @property
+    def one_electron_energy_eV(self):
+        """Get the one-electron energy in eV."""
+        _, one_electron_energy_eV = self._get_one_electron_energy()
+        return one_electron_energy_eV * units.Hartree
+
+    def _get_one_electron_energy(self):
         one_electron_energy_hartree = []
         one_electron_energy_eV = []
         for line in self.contents:
@@ -909,10 +958,21 @@ class ORCAOutput(ORCAFileMixin):
                 )
                 one_electron_energy_hartree.append(energy_in_hartree)
                 one_electron_energy_eV.append(energy_in_eV)
-        return one_electron_energy_eV[-1]
+        return one_electron_energy_hartree[-1], one_electron_energy_eV[-1]
 
     @property
     def two_electron_energy(self):
+        """Get the two-electron energy in Hartree."""
+        two_electron_energy_hartree, _ = self._get_two_electron_energy()
+        return two_electron_energy_hartree
+
+    @property
+    def two_electron_energy_eV(self):
+        """Get the two-electron energy in eV."""
+        _, two_electron_energy_eV = self._get_two_electron_energy()
+        return two_electron_energy_eV * units.Hartree
+
+    def _get_two_electron_energy(self):
         two_electron_energy_hartree = []
         two_electron_energy_eV = []
         for line in self.contents:
@@ -927,47 +987,105 @@ class ORCAOutput(ORCAFileMixin):
                 )
                 two_electron_energy_hartree.append(energy_in_hartree)
                 two_electron_energy_eV.append(energy_in_eV)
-        return two_electron_energy_eV[-1]
+        return two_electron_energy_hartree[-1], two_electron_energy_eV[-1]
 
     @property
     def max_cosx_asymmetry_energy(self):
+        """Get the max COSX asymmetry energy in Hartree."""
+        max_cosx_asymmetry_energy_hartree = (
+            self._get_max_cosx_asymmetry_energy()
+        )
+        if max_cosx_asymmetry_energy_hartree is not None:
+            return max_cosx_asymmetry_energy_hartree[-1]
+
+    @property
+    def max_cosx_asymmetry_energy_eV(self):
+        """Get the max COSX asymmetry energy in eV."""
+        max_cosx_asymmetry_energy_eV = self._get_max_cosx_asymmetry_energy_eV()
+        if max_cosx_asymmetry_energy_eV is not None:
+            return max_cosx_asymmetry_energy_eV[-1]
+
+    def _get_max_cosx_asymmetry_energy(self):
         max_cosx_asymmetry_energy_hartree = []
         for line in self.contents:
             if "Max COSX asymmetry :" in line:
                 energy_in_hartree = float(line.split()[-4])
                 max_cosx_asymmetry_energy_hartree.append(energy_in_hartree)
         if len(max_cosx_asymmetry_energy_hartree) != 0:
+            return max_cosx_asymmetry_energy_hartree
+
+    def _get_max_cosx_asymmetry_energy_eV(self):
+        max_cosx_asymmetry_energy_hartree = (
+            self._get_max_cosx_asymmetry_energy()
+        )
+        if len(max_cosx_asymmetry_energy_hartree) != 0:
             max_cosx_asymmetry_energy_eV = [
                 value * units.Hartree
                 for value in max_cosx_asymmetry_energy_hartree
             ]
-            return max_cosx_asymmetry_energy_eV[-1]
+            return max_cosx_asymmetry_energy_eV
 
     @property
     def potential_energy(self):
+        """Get the potential energy in Hartree."""
+        potential_energy_hartree = self._get_potential_energy_hartree()
+        if potential_energy_hartree is not None:
+            return potential_energy_hartree[-1]
+
+    @property
+    def potential_energy_eV(self):
+        """Get the potential energy in eV."""
+        potential_energy_eV = self._get_potential_energy_eV()
+        if potential_energy_eV is not None:
+            return potential_energy_eV[-1]
+
+    def _get_potential_energy_hartree(self):
         potential_energy_hartree = []
         for line in self.contents:
             if "Potential Energy   :" in line:
                 energy_in_hartree = float(line.split()[-4])
                 potential_energy_hartree.append(energy_in_hartree)
         if len(potential_energy_hartree) != 0:
+            return potential_energy_hartree
+
+    def _get_potential_energy_eV(self):
+        potential_energy_hartree = self._get_potential_energy_hartree()
+        if len(potential_energy_hartree) != 0:
             potential_energy_eV = [
                 value * units.Hartree for value in potential_energy_hartree
             ]
-            return potential_energy_eV[-1]
+            return potential_energy_eV
 
     @property
     def kinetic_energy(self):
+        """Get the kinetic energy in Hartree."""
+        kinetic_energy_in_hartree = self._get_kinetic_energy_hartree()
+        if kinetic_energy_in_hartree is not None:
+            return kinetic_energy_in_hartree[-1]
+
+    @property
+    def kinetic_energy_eV(self):
+        """Get the kinetic energy in eV."""
+        kinetic_energy_eV = self._get_kinetic_energy_eV()
+        if kinetic_energy_eV is not None:
+            return kinetic_energy_eV[-1]
+
+    def _get_kinetic_energy_hartree(self):
         kinetic_energy_hartree = []
         for line in self.contents:
             if "Kinetic Energy     :" in line:
                 energy_in_hartree = float(line.split()[-4])
                 kinetic_energy_hartree.append(energy_in_hartree)
+        if len(kinetic_energy_hartree) != 0:
+            return kinetic_energy_hartree
+
+    def _get_kinetic_energy_eV(self):
         kinetic_energy_eV = [
-            value * units.Hartree for value in kinetic_energy_hartree
+            value * units.Hartree
+            for value in self._get_kinetic_energy_hartree()
         ]
         if len(kinetic_energy_eV) != 0:
-            return kinetic_energy_eV[-1]
+            return kinetic_energy_eV
 
     @property
     def virial_ratio(self):
@@ -980,27 +1098,65 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def xc_energy(self):
+        """Get the XC energy in Hartree."""
+        xc_energy_hartree = self._get_xc_energy_hartree()
+        if xc_energy_hartree is not None:
+            return xc_energy_hartree[-1]
+
+    @property
+    def xc_energy_eV(self):
+        """Get the XC energy in eV."""
+        xc_energy_eV = self._get_xc_energy_eV()
+        if xc_energy_eV is not None:
+            return xc_energy_eV[-1]
+
+    def _get_xc_energy_hartree(self):
         xc_energy_hartree = []
         for line in self.contents:
             if "E(XC)              :" in line:
                 xc_energy_hartree.append(float(line.split()[-2]))
-        if len(xc_energy_hartree) != 0:
+
+        return xc_energy_hartree
+
+    def _get_xc_energy_eV(self):
+        xc_energy_hartree = self._get_xc_energy_hartree()
+        if xc_energy_hartree is not None:
             xc_energy_eV = [
                 value * units.Hartree for value in xc_energy_hartree
             ]
-            return xc_energy_eV[-1]
+            return xc_energy_eV
 
     @property
     def dfet_embed_energy(self):
+        """Get the DFET-embed energy in Hartree."""
+        dfet_embed_energy_hartree = self._get_dfet_embed_energy()
+        if dfet_embed_energy_hartree is not None:
+            print(dfet_embed_energy_hartree)
+            return dfet_embed_energy_hartree[-1]
+
+    @property
+    def dfet_embed_energy_eV(self):
+        """Get the DFET-embed energy in eV."""
+        dfet_embed_energy_eV = self._get_dfet_embed_energy_eV()
+        if dfet_embed_energy_eV is not None:
+            return dfet_embed_energy_eV[-1]
+
+    def _get_dfet_embed_energy(self):
+        """Get the DFET-embed energy in Hartree."""
         dfet_embed_energy_hartree = []
         for line in self.contents:
             if "DFET-embed. en.    :" in line:
                 dfet_embed_energy_hartree.append(float(line.split()[-2]))
         if len(dfet_embed_energy_hartree) != 0:
+            return dfet_embed_energy_hartree
+
+    def _get_dfet_embed_energy_eV(self):
+        dfet_embed_energy_hartree = self._get_dfet_embed_energy()
+        if len(dfet_embed_energy_hartree) != 0:
             dfet_embed_energy_eV = [
                 value * units.Hartree for value in dfet_embed_energy_hartree
             ]
-            return dfet_embed_energy_eV[-1]
+            return dfet_embed_energy_eV
 
     @property
     def orbital_occupancy(self):
@@ -1013,6 +1169,8 @@ class ORCAOutput(ORCAFileMixin):
         return orbital_energies
 
     def _get_orbital_energies_and_occupancy(self):
+        """Get the orbital energies and occupancy from the ORCA output file.
+        Orbital energies are in eV."""
         orbital_occupancy = []
         orbital_energies = []
         for line in self._get_last_orbital_energies_section()[2:]:
@@ -2059,6 +2217,7 @@ class ORCAEngradFile(ORCAFileMixin):
         return None
 
     def _get_energy(self):
+        """Get the total energy from the ORCA output file, in Hartree."""
         for i, line in enumerate(self.contents):
             if (
                 "current total energy" in line
@@ -2067,13 +2226,13 @@ class ORCAEngradFile(ORCAFileMixin):
                 for content in self.contents[i + 1 : i + 4]:
                     try:
                         energy_in_hartree = float(content.split()[0])
-                        # convert to eV
-                        return energy_in_hartree * units.Hartree
+                        return energy_in_hartree
                     except ValueError:
                         pass
         return None
 
     def _get_gradient(self):
+        """Get the gradient from the ORCA output file, in Hartree/Bohr."""
         for i, line in enumerate(self.contents):
             if "current gradient" in line:
                 # check 3N + 3 lines following the match, where N is number of atoms
@@ -2083,10 +2242,10 @@ class ORCAEngradFile(ORCAFileMixin):
                         grad_value = float(
                             content.split()[0]
                         )  # in Hartree/Bohr
+                        grad_data.append(grad_value)
                         # convert to eV/Angstrom
-                        grad_data.append(
-                            grad_value * units.Hartree / units.Bohr
-                        )
+                        # grad_value * units.Hartree / units.Bohr
+
                     except ValueError:
                         pass
                 return np.array(grad_data).reshape(self.natoms, 3)

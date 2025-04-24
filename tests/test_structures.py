@@ -350,7 +350,7 @@ class TestStructures:
         )
         assert isinstance(molecule, list)
         assert len(molecule) == 1
-        
+
         # test first molecule is 1-indexed
         molecule = Molecule.from_filepath(
             filepath=multiple_molecules_xyz_file, index="1", return_list=False
