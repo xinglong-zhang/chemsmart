@@ -408,7 +408,7 @@ class GaussianDIASLogFolder(DIASOutputFolder):
 
     @property
     def job_basename(self):
-        full_molecule_a = glob(f"{self.folder}/*_p?_f1.log")
+        full_molecule_a = glob(f"{self.folder}/*_p?_f1*.log")
         assert (
             full_molecule_a
         ), f"No files named *_p?_f1.log in folder {self.folder}."
