@@ -93,7 +93,7 @@ orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
 # filename matches with point pxx but not with fragment fx
 gaussian_dias_filename_point_without_fragment = (
-    r".*_p(\d+)(?:_(?!f)(.+))?\.log"
+    r".*_p(\d+)(?:_(?!f\d)(.+))?\.log"
 )
 
 # filename matches with point pxx and fragment f1

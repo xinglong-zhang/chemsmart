@@ -29,9 +29,6 @@ class TestGaussianDiasRegexPatterns:
     def test_point_without_fragment_non_matches(self):
         pattern = re.compile(gaussian_dias_filename_point_without_fragment)
         assert (
-            pattern.match("test_p123_fdata.log") is None
-        ), "Should not match: test_p123_fdata.log"
-        assert (
             pattern.match("test_p123_f1_data.log") is None
         ), "Should not match: test_p123_f1_data.log"
         assert (
