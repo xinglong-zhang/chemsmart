@@ -73,3 +73,34 @@ orca_frozen_atoms_output_pattern = r"Will constrain atom \d+ coordinate \d"
 # 30. A(C   1,C   5,H   8)           69.0631         0.105398 C
 # 49. D(H   9,C   4,C   3,C   2)   -180.0000         0.024745 C
 orca_constrained_coordinates_pattern = r"^\d+\.\s+[BAD]\([A-Z][a-z]?\s+\d+,[A-Z][a-z]?\s+\d+(?:,[A-Z][a-z]?\s+\d+)?(?:,[A-Z][a-z]?\s+\d+)?\)\s+-?\d+\.\d{4}\s+\d+\.\d{6}\s+C$"
+
+# filename pattern for orca output files
+
+# filename matches with point pxx but not with fragment fx
+orca_dias_filename_point_without_fragment = r".*_p(\d+)(?:_(?!f)(.+))?\.out"
+
+# filename matches with point pxx and fragment f1
+orca_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.out"
+
+# filename matches with point pxx and fragment f2
+orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
+
+# filename matches with reactant r1 or r2
+orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
+
+
+# filename pattern for gaussian output files
+
+# filename matches with point pxx but not with fragment fx
+gaussian_dias_filename_point_without_fragment = (
+    r".*_p(\d+)(?:_(?!f\d)(.+))?\.log"
+)
+
+# filename matches with point pxx and fragment f1
+gaussian_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.log"
+
+# filename matches with point pxx and fragment f2
+gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
+
+# filename matches with reactant r1 or r2
+gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"

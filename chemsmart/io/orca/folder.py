@@ -18,14 +18,14 @@ class ORCAInpFolder(BaseFolder):
     @property
     def all_inpfiles(self):
         """Get all input files in the folder."""
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="inp"
         )
 
     @property
     def all_inpfiles_in_current_folder(self):
         """Get all input files in the folder."""
-        return self.get_all_files_in_current_folder(filetype="inp")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="inp")
 
 
 class ORCAOutFolder(BaseFolder):
@@ -38,14 +38,14 @@ class ORCAOutFolder(BaseFolder):
     @property
     def all_outfiles(self):
         """Get all log files in the folder, including subfolders."""
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="out"
         )
 
     @property
     def all_logfiles_in_current_folder(self):
         """Get all log files in the folder."""
-        return self.get_all_files_in_current_folder(filetype="out")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="out")
 
     @property
     def total_service_units(self):

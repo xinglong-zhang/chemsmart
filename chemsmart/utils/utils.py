@@ -681,3 +681,55 @@ def iterative_compare(input_list):
         ]
     else:
         return list(OrderedSet(input_list))
+
+
+def naturally_sorted(lst):
+    """Sort a list of strings in natural order, treating numbers numerically.
+
+    Unlike standard alphabetical sorting, it ensures that numerical parts are compared as numbers,
+    not as strings."""
+
+    def key_func(key):
+        return [
+            int(c) if c.isdigit() else c.lower()
+            for c in re.split("([0-9]+)", key)
+        ]
+
+    return sorted(lst, key=key_func)
+
+
+def spline_data(x, y, new_length=1000, k=3):
+    """Interpolate data points using a univariate spline and return evenly spaced points.
+
+    Args:
+        x (list or array-like): X-coordinates of the input data points.
+        y (list or array-like): Y-coordinates of the input data points.
+        new_length (int, optional): Number of points in the interpolated output. Defaults to 1000.
+        k (int, optional): Degree of the spline. Must be 1 <= k <= 5. Defaults to 3 (cubic spline).
+
+    Returns:
+        tuple: Two arrays (`new_x`, `new_y`) containing the interpolated x and y coordinates.
+
+    Notes:
+        - Input points are sorted by x-values to ensure proper spline interpolation.
+        - Uses `scipy.interpolate.UnivariateSpline` for interpolation.
+        - The output `new_x` is evenly spaced between the minimum and maximum of input x-values.
+
+    Raises:
+        ValueError: If input lists `x` and `y` have different lengths or are empty.
+        scipy.interpolate.InterpolationError:
+            If spline interpolation fails (e.g., invalid `k` or insufficient points).
+    """
+    from scipy.interpolate import UnivariateSpline
+
+    # Combine lists into list of tuples
+    points = zip(x, y, strict=False)
+
+    # Sort list of tuples by x-value
+    points = sorted(points, key=lambda point: point[0])
+
+    # Split list of tuples into two list of x values any y values
+    x1, y1 = zip(*points, strict=False)
+    new_x = np.linspace(min(x1), max(x1), new_length)
+    new_y = UnivariateSpline(x1, y1, k=k)(new_x)
+    return new_x, new_y

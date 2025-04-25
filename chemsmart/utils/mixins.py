@@ -539,7 +539,7 @@ class RegistryMixin(metaclass=RegistryMeta):
 class FolderMixin:
     """Mixin class for folders."""
 
-    def get_all_files_in_current_folder(self, filetype):
+    def get_all_files_in_current_folder_by_suffix(self, filetype):
         """Obtain a list of files of specified type in the folder."""
 
         all_files = []
@@ -552,7 +552,9 @@ class FolderMixin:
                 all_files.append(os.path.join(self.folder, file))
         return all_files
 
-    def get_all_files_in_current_folder_and_subfolders(self, filetype):
+    def get_all_files_in_current_folder_and_subfolders_by_suffix(
+        self, filetype
+    ):
         """Obtain a list of files of specified type in the folder and subfolders."""
         all_files = []
         for subdir, _dirs, files in os.walk(self.folder):
@@ -560,6 +562,30 @@ class FolderMixin:
             for file in files:
                 if file.endswith(filetype):
                     all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_matching_regex(
+        self, regex
+    ):
+        """Obtain a list of files matching the regex in the folder and subfolders."""
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if re.match(regex, file):
+                    all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_matching_regex(self, regex):
+        """Obtain a list of files matching the regex in the folder."""
+        all_files = []
+        for file in os.listdir(self.folder):
+            # check that the file is not empty:
+            if os.stat(os.path.join(self.folder, file)).st_size == 0:
+                continue
+            # collect files of specified type
+            if re.match(regex, file):
+                all_files.append(os.path.join(self.folder, file))
         return all_files
 
 
