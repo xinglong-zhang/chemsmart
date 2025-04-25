@@ -117,6 +117,11 @@ def dias(
         label=label,
         fragment_indices=fragment_indices,
         every_n_points=every_n_points,
+        mode=mode,
+        charge_of_fragment1=charge_of_fragment1,
+        multiplicity_of_fragment1=multiplicity_of_fragment1,
+        charge_of_fragment2=charge_of_fragment2,
+        multiplicity_of_fragment2=multiplicity_of_fragment2,
         skip_completed=skip_completed,
         **kwargs,
     )
