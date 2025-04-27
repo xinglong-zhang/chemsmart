@@ -33,7 +33,7 @@ def nci(
     skip_completed,
     **kwargs,
 ):
-    """CLI for running automatic PyMOL visualization and saving as pse file.
+    """CLI for generating automatic PyMOL NCI plot and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
     This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_visualize.pse

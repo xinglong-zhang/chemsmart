@@ -152,7 +152,9 @@ class PyMOLJobRunner(JobRunner):
             command += " -q"
         if job.command_line_only:
             command += " -c"
+        return command
 
+    def _setup_style(self, job, command):
         # Handle the -d argument (PyMOL commands)
         if job.style is None:
             # defaults to using zhang_group_pymol_style if not specified
@@ -169,6 +171,13 @@ class PyMOLJobRunner(JobRunner):
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
+        return command
+
+    def _setup_viewport(self, command):
+        command += "; viewport 800,600"
+        return command
+
+    def _add_vdw(self, job, command):
         if job.vdw:
             command += f"; add_vdw {self.job_basename}"
 
@@ -268,6 +277,9 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 
     def _get_command(self, job):
         command = self._get_visualization_command(job)
+        command = self._setup_style(job, command)
+        command = self._setup_viewport(command)
+        command = self._add_vdw(job, command)
         command = self._add_coordinates_labels(job, command)
         command = self._add_zoom_command(job, command)
         command = self._add_ray_command(job, command)
@@ -279,13 +291,24 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 class PyMOLMovieJobRunner(PyMOLJobRunner):
     JOBTYPES = ["pymol_movie"]
 
+    def _setup_style(self, job, command):
+        if os.path.exists("zhang_group_pymol_style.py"):
+            command += f' -d "movie_style {self.job_basename}'
+        else:
+            # no render style and no style file present
+            command += ' -d "'
+        return command
+
     def _get_rotation_command(self, job, command):
         # rotation commands
         command += "; mset 1, 180"  # 360-degree rotation over 180 frames
         command += "; util.mroll 1, 180, 1"  # rotate about the z-axis
-        if job.trace:
-            command += "; set ray_trace_frames, 1"
         command += "; set cache_frames, 0"
+        return command
+
+    def _set_ray_trace_frames(self, job, command):
+        if job.trace:
+            command += "; set ray_trace_frames, 1; set ray_trace_mode, 1"
         return command
 
     def _export_movie_command(self, job, command):
@@ -296,10 +319,12 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
 
     def _get_command(self, job):
         command = self._get_visualization_command(job)
+        command = self._setup_style(job, command)
+        command = self._setup_viewport(command)
         command = self._add_coordinates_labels(job, command)
         command = self._add_zoom_command(job, command)
-        command = self._add_ray_command(job, command)
         command = self._get_rotation_command(job, command)
+        command = self._set_ray_trace_frames(job, command)
         command = self._export_movie_command(job, command)
         command = self._save_pse_command(job, command)
         command = self._quit_command(job, command)
@@ -309,7 +334,7 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
         """Convert to MP4 using ffmpeg."""
         self._create_movie(job=job, framerate=framerate)
 
-    def _create_movie(self, job, framerate=30):
+    def _create_movie(self, job, framerate=30, constant_rate_factor=18):
         frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
         frame_pattern = f"{frame_prefix}%04d.png"
         output_mp4 = (
@@ -345,6 +370,10 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
             "libx264",  # Uses H.264 codec for compatibility.
             "-pix_fmt",
             "yuv420p",  # ensures compatibility with most video players
+            "-crf",
+            str(
+                constant_rate_factor
+            ),  # High quality, adjust as needed (0-51, lower = better)
             os.path.normpath(output_mp4),
         ]
         logger.info(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
@@ -385,6 +414,8 @@ class PyMOLNCIJobRunner(PyMOLJobRunner):
 
     def _get_command(self, job):
         command = self._get_visualization_command(job)
+        command = self._setup_style(job, command)
+        command = self._setup_viewport(command)
         command = self._add_coordinates_labels(job, command)
         command = self._add_zoom_command(job, command)
         command = self._load_cube_files(job, command)

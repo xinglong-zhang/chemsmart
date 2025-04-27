@@ -39,7 +39,7 @@ def click_file_options(f):
         "-i",
         "--index",
         type=str,
-        default=None,
+        default="-1",
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
     )

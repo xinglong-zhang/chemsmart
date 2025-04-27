@@ -136,6 +136,26 @@ def default_render():
 cmd.extend("default_render", default_render)
 
 
+def movie_render():
+    """Set rendering settings for PyMOL movie."""
+    cmd.bg_color("white")
+    cmd.set("ray_opaque_background", "off")
+    cmd.set("specular", 0.25)
+    cmd.set("spec_power", 300)
+    cmd.set("spec_reflect", 0.5)
+    cmd.util.ray_shadows("light")
+
+    cmd.set("antialias", 1)
+    cmd.set("orthoscopic", 0)
+    cmd.set("field_of_view", 45)
+    cmd.set("transparency", 0)
+    cmd.set("ray_trace_mode", 1)
+    cmd.set("ray_trace_frame", 1)
+
+
+cmd.extend("movie_render", movie_render)
+
+
 def enhance_visuals():
     # Set background color to white
     cmd.bg_color("white")
@@ -195,6 +215,14 @@ def cylview_style(arg1):
 
 
 cmd.extend("cylview_style", cylview_style)
+
+
+def movie_style(arg1):
+    movie_render()
+    ballnstick(arg1)
+
+
+cmd.extend("movie_style", movie_style)
 
 
 def add_vdw(arg1):
