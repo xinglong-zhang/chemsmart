@@ -215,6 +215,10 @@ class PyMOLJobRunner(JobRunner):
                 command += f"; dihedral di{i+1}, id {dihedral[0]}, id {dihedral[1]}, id {dihedral[2]}, id {dihedral[3]}"
         return command
 
+    def _offset_labels(self, job, command, x=-1.2):
+        command += f"; set label_position, ({x},0,0)"
+        return command
+
     def _add_zoom_command(self, job, command):
         # zoom
         command += "; zoom"
@@ -279,16 +283,22 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         command = self._get_visualization_command(job)
         command = self._setup_style(job, command)
         command = self._setup_viewport(command)
-        command = self._add_vdw(job, command)
         command = self._add_coordinates_labels(job, command)
+        command = self._offset_labels(job, command)
+        command = self._add_vdw(job, command)
         command = self._add_zoom_command(job, command)
-        command = self._add_ray_command(job, command)
+        command = self._job_specific_commands(job, command)
         command = self._save_pse_command(job, command)
         command = self._quit_command(job, command)
         return command
 
+    def _job_specific_commands(self, job, command):
+        """Job specific commands."""
+        command = self._add_ray_command(job, command)
+        return command
 
-class PyMOLMovieJobRunner(PyMOLJobRunner):
+
+class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     JOBTYPES = ["pymol_movie"]
 
     def _setup_style(self, job, command):
@@ -297,6 +307,13 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
         else:
             # no render style and no style file present
             command += ' -d "'
+        return command
+
+    def _job_specific_commands(self, job, command):
+        """Job specific commands."""
+        command = self._get_rotation_command(job, command)
+        command = self._set_ray_trace_frames(job, command)
+        command = self._export_movie_command(job, command)
         return command
 
     def _get_rotation_command(self, job, command):
@@ -315,19 +332,6 @@ class PyMOLMovieJobRunner(PyMOLJobRunner):
         """Export movie frames (use a temporary prefix to avoid conflicts)"""
         frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
         command += f"; mpng {frame_prefix}"
-        return command
-
-    def _get_command(self, job):
-        command = self._get_visualization_command(job)
-        command = self._setup_style(job, command)
-        command = self._setup_viewport(command)
-        command = self._add_coordinates_labels(job, command)
-        command = self._add_zoom_command(job, command)
-        command = self._get_rotation_command(job, command)
-        command = self._set_ray_trace_frames(job, command)
-        command = self._export_movie_command(job, command)
-        command = self._save_pse_command(job, command)
-        command = self._quit_command(job, command)
         return command
 
     def _postrun(self, job, framerate=30):
@@ -409,20 +413,20 @@ class PyMOLIRCMovieJobRunner(PyMOLMovieJobRunner):
         return command
 
 
-class PyMOLNCIJobRunner(PyMOLJobRunner):
+class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
     JOBTYPES = ["pymol_nci"]
 
-    def _get_command(self, job):
-        command = self._get_visualization_command(job)
-        command = self._setup_style(job, command)
-        command = self._setup_viewport(command)
-        command = self._add_coordinates_labels(job, command)
-        command = self._add_zoom_command(job, command)
+    def _job_specific_commands(self, job, command):
+        """Job specific commands."""
+        command = self._hide_labels(job, command)
         command = self._load_cube_files(job, command)
         command = self._run_nci_command(job, command)
         command = self._add_ray_command(job, command)
-        command = self._save_pse_command(job, command)
-        command = self._quit_command(job, command)
+        return command
+
+    def _hide_labels(self, job, command):
+        """Hide labels for NCI analysis."""
+        command += "; hide labels"
         return command
 
     def _load_cube_files(self, job, command):

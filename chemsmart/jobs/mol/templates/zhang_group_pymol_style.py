@@ -143,7 +143,7 @@ def movie_render():
     cmd.set("specular", 0.25)
     cmd.set("spec_power", 300)
     cmd.set("spec_reflect", 0.5)
-    cmd.util.ray_shadows("light")
+    cmd.util.ray_shadows("none")
 
     cmd.set("antialias", 1)
     cmd.set("orthoscopic", 0)

@@ -92,7 +92,7 @@ def click_pymol_visualization_options(f):
         "-q",
         "--quiet",
         is_flag=True,
-        default=True,
+        default=False,
         help="Run PyMOL in quiet mode. Default to True.",
     )
     @click.option(
