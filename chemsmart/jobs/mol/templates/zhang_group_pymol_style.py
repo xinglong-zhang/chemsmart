@@ -1,5 +1,4 @@
 # Xinglong Zhang Group PyMOL Style Settings
-# modified from Paton Group Settings for PyMOL
 # Add_VDW creates a copy of an object with full-sized, transparent spheres
 # Bondi VDW values added below to override default PyMOL settings
 
@@ -210,3 +209,31 @@ def add_vdw(arg1):
 
 
 cmd.extend("add_vdw", add_vdw)
+
+
+def nci(arg1, isosurface=0.5, range=1.0):
+    dens_file = arg1 + "-dens"
+    grad_file = arg1 + "-grad"
+    cmd.isosurface("grad", grad_file, isosurface)
+    cmd.ramp_new("ramp", dens_file, [-range, range], "rainbow")
+    cmd.set("surface_color", "ramp", "grad")
+    cmd.set("two_sided_lighting", value=1)
+    cmd.set("transparency", 0.5)
+    cmd.set("surface_quality", 1)
+
+
+cmd.extend("nci", nci)
+
+
+def nci_binary(arg1, isosurface=0.5, range=1.0):
+    dens_file = arg1 + "-dens"
+    grad_file = arg1 + "-grad"
+    cmd.isosurface("grad", grad_file, isosurface)
+    cmd.ramp_new("ramp", dens_file, [-range, 0, range], "[blue,white,red]")
+    cmd.set("surface_color", "ramp", "grad")
+    cmd.set("two_sided_lighting", value=1)
+    cmd.set("transparency", 0.5)
+    cmd.set("surface_quality", 1)
+
+
+cmd.extend("nci_binary", nci_binary)

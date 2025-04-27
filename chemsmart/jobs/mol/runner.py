@@ -378,3 +378,42 @@ class PyMOLIRCMovieJobRunner(PyMOLMovieJobRunner):
     def _get_rotation_command(self, job, command):
         # no rotation commands for ircmovie
         return command
+
+
+class PyMOLNCIJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_nci"]
+
+    def _get_command(self, job):
+        command = self._get_visualization_command(job)
+        command = self._add_coordinates_labels(job, command)
+        command = self._add_zoom_command(job, command)
+        command = self._load_cube_files(job, command)
+        command = self._run_nci_command(job, command)
+        command = self._add_ray_command(job, command)
+        command = self._save_pse_command(job, command)
+        command = self._quit_command(job, command)
+        return command
+
+    def _load_cube_files(self, job, command):
+        """Load cube files for NCI analysis."""
+        dens_file = os.path.join(job.folder, f"{self.job_basename}-dens.cube")
+        grad_file = os.path.join(job.folder, f"{self.job_basename}-grad.cube")
+        assert os.path.exists(
+            dens_file
+        ), f"Density cube file {dens_file} not found!"
+        assert os.path.exists(
+            grad_file
+        ), f"Gradient cube file {grad_file} not found!"
+
+        command += f"; load {quote_path(dens_file)}"
+        command += f"; load {quote_path(grad_file)}"
+
+        return command
+
+    def _run_nci_command(self, job, command):
+        """Run the nci command"""
+        if job.binary:
+            command += f"; nci_binary {self.job_basename}"
+        else:
+            command += f"; nci {self.job_basename}"
+        return command

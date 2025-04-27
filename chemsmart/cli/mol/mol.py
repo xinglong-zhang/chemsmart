@@ -105,7 +105,38 @@ def click_pymol_visualization_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates (bonds, angles and dihedrals) for labelling. 1-indexed.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_nci_options(f):
+    """Common click options for PyMOL NCI options."""
+
+    @click.option(
+        "-i",
+        "--isosurface",
+        type=float,
+        default=0.5,
+        help="Isosurface value for NCI plot. Default=0.5",
+    )
+    @click.option(
+        "-r",
+        "--range",
+        type=float,
+        default=1.0,
+        help="Ramp range for NCI plot. Default=1.0",
+    )
+    @click.option(
+        "-b",
+        "--binary",
+        is_flag=True,
+        default=False,
+        help="Plot NCI plots with two colors only. Default to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -184,7 +215,6 @@ def mol(
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{ctx.invoked_subcommand}"
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 
