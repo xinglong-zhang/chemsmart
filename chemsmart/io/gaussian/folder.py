@@ -10,37 +10,46 @@ logger = logging.getLogger(__name__)
 
 class GaussianComFolder(BaseFolder):
     def __init__(self, folder):
-        self.folder = folder
+        super().__init__(folder=folder)
 
     @property
-    def all_comfiles(self):
-        return self.get_all_files_in_current_folder_and_subfolders(
+    def all_com_files(self):
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="com"
         )
 
     @property
-    def all_comfiles_in_current_folder(self):
-        return self.get_all_files_in_current_folder(filetype="com")
+    def all_com_files_in_current_folder(self):
+        return self.get_all_files_in_current_folder_by_suffix(filetype="com")
+
+    @property
+    def all_gjf_files(self):
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
+            filetype="gjf"
+        )
+
+    @property
+    def all_gjf_files_in_current_folder(self):
+        return self.get_all_files_in_current_folder_by_suffix(filetype="gjf")
 
 
 class GaussianLogFolder(BaseFolder):
     """Log folder containing all Gaussian log files for postprocessing."""
 
     def __init__(self, folder):
-        """:param folder: Parent folder for all log files; type of str"""
-        self.folder = folder
+        super().__init__(folder=folder)
 
     @property
     def all_logfiles(self):
         """Get all log files in the folder, including subfolders."""
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="log"
         )
 
     @property
     def all_logfiles_in_current_folder(self):
         """Get all log files in the folder."""
-        return self.get_all_files_in_current_folder(filetype="log")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="log")
 
     @property
     def all_molecules(self):

@@ -10,6 +10,7 @@ from chemsmart.utils.utils import (
     get_list_from_string_range,
     is_float,
     iterative_compare,
+    naturally_sorted,
     str_indices_range_to_list,
     string2index_1based,
 )
@@ -426,3 +427,61 @@ class TestIOUtilities:
         assert isinstance(molecules[1], Molecule)
         assert molecules[0].energy == 1.0
         assert molecules[1].energy == 2.0
+
+
+class TestNaturallySorted:
+    def test_empty_list(self):
+        """Test sorting an empty list."""
+        assert naturally_sorted([]) == []
+
+    def test_single_item(self):
+        """Test sorting a list with one item."""
+        assert naturally_sorted(["item1"]) == ["item1"]
+
+    def test_numeric_order(self):
+        """Test sorting strings with numbers in natural order."""
+        input_list = ["z10", "z2", "z1"]
+        expected = ["z1", "z2", "z10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_mixed_case(self):
+        """Test sorting with mixed case letters."""
+        input_list = ["Z1", "z2", "Z10", "z1"]
+        expected = ["Z1", "z1", "z2", "Z10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_alphanumeric(self):
+        """Test sorting alphanumeric strings."""
+        input_list = ["a11", "a1", "b2", "b10"]
+        expected = ["a1", "a11", "b2", "b10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_file_names(self):
+        """Test sorting typical file names."""
+        input_list = ["file10.txt", "file2.txt", "file1.txt"]
+        expected = ["file1.txt", "file2.txt", "file10.txt"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_special_characters(self):
+        """Test sorting with special characters."""
+        input_list = ["item-2", "item_10", "item_1"]
+        expected = ["item-2", "item_1", "item_10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_mixed_types(self):
+        """Test sorting with mixed formats (numbers, letters, and empty strings)."""
+        input_list = ["100", "2", "abc", "", "Z", "z1"]
+        expected = ["", "2", "100", "abc", "Z", "z1"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_large_numbers(self):
+        """Test sorting with large numbers."""
+        input_list = ["item1000", "item999", "item10000"]
+        expected = ["item999", "item1000", "item10000"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_no_numbers(self):
+        """Test sorting strings without numbers."""
+        input_list = ["zebra", "Apple", "banana"]
+        expected = ["Apple", "banana", "zebra"]
+        assert naturally_sorted(input_list) == expected

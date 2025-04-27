@@ -67,9 +67,12 @@ class FileConverter:
         if type == "log":
             g16_folder = GaussianLogFolder(folder=directory)
             all_files = g16_folder.all_logfiles
-        elif type == ("com" or "gjf"):
+        elif type == "com":
             g16_folder = GaussianComFolder(folder=directory)
-            all_files = g16_folder.all_comfiles
+            all_files = g16_folder.all_com_files
+        elif type == "gjf":
+            g16_folder = GaussianComFolder(folder=directory)
+            all_files = g16_folder.all_gjf_files
         elif type == "out":
             orca_folder = ORCAOutFolder(folder=directory)
             all_files = orca_folder.all_outfiles
@@ -81,10 +84,8 @@ class FileConverter:
             all_files = xyz_folder.all_xyzfiles
         elif type == "sdf":
             sdf_folder = BaseFolder(folder=directory)
-            all_files = (
-                sdf_folder.get_all_files_in_current_folder_and_subfolders(
-                    filetype="sdf"
-                )
+            all_files = sdf_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype="sdf"
             )
         else:
             raise ValueError(f"File type {type} is not supported.")
@@ -129,9 +130,10 @@ class FileConverter:
 
     def _convert_single_file(self, filename, output_filetype):
         """Convert single file to specified format."""
+        logger.info(f"Converting file type: {self.type}")
         if self.type == "log":
             outfile = Gaussian16Output(filename=filename)
-        elif self.type == ("com" or "gjf"):
+        elif self.type == "com" or self.type == "gjf":
             outfile = Gaussian16Input(filename=filename)
         elif self.type == "out":
             outfile = ORCAOutput(filename=filename)
