@@ -9,10 +9,12 @@ from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
     quote_path,
+    run_command,
 )
 
 pt = PeriodicTable()
@@ -292,6 +294,11 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         command = self._quit_command(job, command)
         return command
 
+    def _hide_labels(self, job, command):
+        """Hide labels for NCI analysis."""
+        command += "; hide labels"
+        return command
+
     def _job_specific_commands(self, job, command):
         """Job specific commands."""
         command = self._add_ray_command(job, command)
@@ -424,11 +431,6 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
         command = self._add_ray_command(job, command)
         return command
 
-    def _hide_labels(self, job, command):
-        """Hide labels for NCI analysis."""
-        command += "; hide labels"
-        return command
-
     def _load_cube_files(self, job, command):
         """Load cube files for NCI analysis."""
         dens_file = os.path.join(job.folder, f"{self.job_basename}-dens.cube")
@@ -451,4 +453,104 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             command += f"; nci_binary {self.job_basename}"
         else:
             command += f"; nci {self.job_basename}"
+        return command
+
+
+class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
+    JOBTYPES = ["pymol_mo"]
+
+    def _get_gaussian_executable(self, job):
+        return GaussianExecutable.from_servername(job.server)
+
+    def _prerun(self, job):
+        self._assign_variables(job)
+        self._generate_fchk_file(job)
+        self._generate_mo_cube_file(job)
+        self._write_molecular_orbital_pml(job)
+
+    def _generate_fchk_file(self, job):
+        """Generate the fchk file from the chk file."""
+        assert os.path.exists(
+            os.path.join(job.folder, f"{self.job_basename}.chk")
+        ), ".chk file is required but not found!"
+
+        gaussian_exe = self._get_gaussian_executable(job)
+        if os.path.exists(
+            os.path.join(job.folder, f"{self.job_basename}.fchk")
+        ):
+            pass
+        else:
+            # generate .fchk file from .chk file
+            logger.info(f"Generating .fchk file from {self.job_basename}.chk")
+            fchk_command = f"{gaussian_exe}/formchk {job.job_basename}.chk"
+            run_command(fchk_command)
+
+    def _write_molecular_orbital_pml(
+        self, job, isosurface=0.05, transparency=0.2
+    ):
+        pml_file = os.path.join(job.folder, f"{job.job_basename}.pml")
+        if not os.path.exists(pml_file):
+            with open(pml_file, "w") as f:
+                f.write(f"load {job.job_basename}.cube\n")
+                f.write(
+                    f"isosurface pos_iso, {job.job_basename}, {isosurface}\n"
+                )
+                f.write(
+                    f"isosurface neg_iso, {job.job_basename}, {-isosurface}\n"
+                )
+                f.write("print(pos_iso)\n")
+                f.write("print(neg_iso)\n")
+                f.write("set surface_color, blue, pos_iso\n")
+                f.write("set surface_color, red, neg_iso\n")
+                f.write(f"set transparency, {transparency}\n")
+            logger.info(f"Wrote PML file: {pml_file}")
+
+    def _generate_mo_cube_file(self, job):
+        """Generate the MO cube file."""
+        gaussian_exe = self._get_gaussian_executable(job)
+        if [job.number, job.homo, job.lumo].count(None) < 1:
+            raise ValueError(
+                "Cannot specify more than two of MO number, HOMO, and LUMO together."
+            )
+
+        if job.number:
+            if os.path.exists(f"{job.job_basename}_MO{job.number}.cube"):
+                logger.info(
+                    f"cube file {job.job_basename}_MO{job.number}.cube already exists."
+                )
+                pass
+            else:
+                cubegen_command = f"{gaussian_exe}/cubegen 0 MO={job.number} {job.job_basename}.fchk {job.job_basename}_MO{job.number}.cube 0 h"
+                run_command(cubegen_command)
+
+        if job.homo:
+            if os.path.exists(f"{job.job_basename}_HOMO.cube"):
+                logger.info(
+                    f"cube file {job.job_basename}_HOMO.cube already exists."
+                )
+                pass
+            else:
+                cubegen_command = f"{gaussian_exe}/cubegen 0 MO=HOMO {job.job_basename}.fchk {job.job_basename}_HOMO.cube 0 h"
+                run_command(cubegen_command)
+        if job.lumo:
+            if os.path.exists(f"{job.job_basename}_LUMO.cube"):
+                logger.info(
+                    f"cube file {job.job_basename}_LUMO.cube already exists."
+                )
+                pass
+            else:
+                cubegen_command = f"{gaussian_exe}/cubegen 0 MO=LUMO {job.job_basename}.fchk {job.job_basename}_LUMO.cube 0 h"
+                run_command(cubegen_command)
+
+    def _job_specific_commands(self, job, command):
+        """Job specific commands."""
+        command = self._hide_labels(job, command)
+        command = self._call_pml(job, command)
+        command = self._add_ray_command(job, command)
+        return command
+
+    def _call_pml(self, job, command):
+        """Call the PML file for visualization."""
+        pml_file = os.path.join(job.folder, f"{job.job_basename}.pml")
+        command += f"; load {quote_path(pml_file)}"
         return command

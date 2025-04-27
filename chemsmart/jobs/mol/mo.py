@@ -1,16 +1,16 @@
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
-class PyMOLNCIJob(PyMOLJob):
-    TYPE = "pymol_nci"
+class PyMOLMOJob(PyMOLJob):
+    TYPE = "pymol_mo"
 
     def __init__(
         self,
         molecule,
         label,
-        isosurface=0.5,
-        color_range=1.0,
-        binary=False,
+        number=None,
+        homo=None,
+        lumo=None,
         **kwargs,
     ):
         super().__init__(
@@ -18,6 +18,6 @@ class PyMOLNCIJob(PyMOLJob):
             label=label,
             **kwargs,
         )
-        self.isosurface = isosurface
-        self.color_range = color_range
-        self.binary = binary
+        self.number = number
+        self.homo = homo
+        self.lumo = lumo

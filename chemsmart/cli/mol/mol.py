@@ -126,7 +126,7 @@ def click_pymol_nci_options(f):
     )
     @click.option(
         "-r",
-        "--range",
+        "--color-range",
         type=float,
         default=1.0,
         help="Ramp range for NCI plot. Default=1.0",
@@ -137,6 +137,37 @@ def click_pymol_nci_options(f):
         is_flag=True,
         default=False,
         help="Plot NCI plots with two colors only. Default to False.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_mo_options(f):
+    """Common click options for PyMOL molecular orbitals options."""
+
+    @click.option(
+        "-n",
+        "--number",
+        type=int,
+        default=None,
+        help="Number of Molecular Orbital to be visualized. Default to None.",
+    )
+    @click.option(
+        "-h",
+        "--homo",
+        is_flag=True,
+        default=False,
+        help="Plot the highest occupied molecular orbital (HOMO). Default to False.",
+    )
+    @click.option(
+        "-l",
+        "--lumo",
+        is_flag=True,
+        default=False,
+        help="Plot the lowest unoccuplied molecular orbitals (LUMO). Default to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
