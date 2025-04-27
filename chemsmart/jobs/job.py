@@ -8,6 +8,7 @@ from abc import abstractmethod
 from contextlib import suppress
 from typing import Optional
 
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
@@ -15,22 +16,38 @@ logger = logging.getLogger(__name__)
 
 class Job(RegistryMixin):
     """Class that encapsulates and runs a task.
-
     Args:
+        molecule: The molecule object associated with the job.
+        label (str): A label for the job.
+        jobrunner (JobRunner): The JobRunner instance to execute the job.
+        local (bool): If True, run the job locally. Defaults to False.
         skip_completed (bool): If True, completed jobs will not be rerun. Defaults to True.
+        **kwargs: Additional keyword arguments.
     """
 
     TYPE: Optional[str] = None
     PROGRAM: Optional[str] = None
 
     def __init__(
-        self, molecule, label, local=False, skip_completed=True, **kwargs
+        self,
+        molecule,
+        label,
+        jobrunner,
+        local=False,
+        skip_completed=True,
+        **kwargs,
     ):
+        if not isinstance(jobrunner, JobRunner):
+            raise ValueError(
+                f"jobrunner must be an instance of JobRunner. Instead was: {jobrunner}!"
+            )
         self._folder = self._determine_folder()  # Private backing attribute
         self.molecule = molecule
         self.label = label
+        self.jobrunner = jobrunner
         self.local = local
         self.skip_completed = skip_completed
+        self.kwargs = kwargs
 
     @property
     def folder(self):
@@ -42,7 +59,8 @@ class Job(RegistryMixin):
 
     def _determine_folder(self):
         """
-        Determine the folder based on the current working directory where the job is submitted.
+        Determine the folder based on the current working directory
+        where the job is submitted.
         """
         # Get the current working directory at runtime
         cwd = os.getcwd()
@@ -55,7 +73,10 @@ class Job(RegistryMixin):
         return os.path.basename(os.path.abspath(self.folder))
 
     def __repr__(self):
-        return f"{self.__class__.__qualname__}<folder={self.folder}, label={self.label}>"
+        return (
+            f"{self.__class__.__qualname__}<folder={self.folder}, "
+            f"label={self.label}, jobrunner={self.jobrunner}>"
+        )
 
     @property
     def joblog(self):
@@ -69,7 +90,12 @@ class Job(RegistryMixin):
 
     @abstractmethod
     def _run(self, **kwargs):
-        raise NotImplementedError
+        """
+        Run the job using the assigned jobrunner.
+        Subclasses can override this method for custom behavior.
+        """
+        logger.info(f"Running job {self} with jobrunner {self.jobrunner}")
+        self.jobrunner.run(self, **kwargs)
 
     def set_folder(self, folder):
         self.folder = folder
@@ -107,7 +133,7 @@ class Job(RegistryMixin):
 
         if remove:
             shutil.move(src=file, dst=newfilepath)
-        else:  # noqa: PLR5501
+        else:
             if os.path.isdir(file):
                 if os.path.exists(newfilepath):
                     os.rename(newfilepath, newfilepath + f"_{time.time()}")
@@ -146,3 +172,32 @@ class Job(RegistryMixin):
 
     def is_complete(self):
         return self._job_is_complete()
+
+    @classmethod
+    def from_molecule(
+        cls, molecule, label, server=None, scratch=None, fake=False, **kwargs
+    ):
+        """
+        Create a Job instance with a JobRunner initialized from the job's TYPE.
+
+        Args:
+            molecule: The molecule object associated with the job.
+            label (str): A label for the job.
+            server: The server to run the job on (optional, defaults to current server).
+            scratch (bool): Whether to use a scratch directory (optional).
+            fake (bool): Whether to use a fake job runner (optional).
+            **kwargs: Additional keyword arguments for Job or JobRunner.
+
+        Returns:
+            Job: A new Job instance with an appropriate JobRunner.
+        """
+        jobrunner = JobRunner.from_job(
+            cls(molecule=molecule, label=label, jobrunner=None, **kwargs),
+            server=server,
+            scratch=scratch,
+            fake=fake,
+            **kwargs,
+        )
+        return cls(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )
