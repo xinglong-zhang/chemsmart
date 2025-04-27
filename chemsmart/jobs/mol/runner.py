@@ -460,6 +460,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     JOBTYPES = ["pymol_mo"]
 
     def _get_gaussian_executable(self, job):
+        """Get the Gaussian executable for the job."""
         return GaussianExecutable.from_servername(job.server)
 
     def _prerun(self, job):
