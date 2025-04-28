@@ -23,7 +23,7 @@ class TestGaussianInputWriter:
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_opt_file,
     ):
         # get project settings
@@ -37,7 +37,7 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_opt",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
 
         assert isinstance(job, GaussianOptJob)
@@ -60,7 +60,7 @@ class TestGaussianInputWriter:
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_opt_file_with_route,
     ):
         # get project settings
@@ -76,7 +76,7 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_opt",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianOptJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -94,7 +94,7 @@ class TestGaussianInputWriter:
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_modred_file,
     ):
         # get project settings
@@ -109,7 +109,7 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_modred",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianModredJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -125,7 +125,7 @@ class TestGaussianInputWriter:
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_scan_file,
     ):
         # get project settings
@@ -144,7 +144,7 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_scan",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianScanJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -160,7 +160,7 @@ class TestGaussianInputWriter:
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_ts_file,
     ):
         # get project settings
@@ -174,7 +174,7 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_ts",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -190,7 +190,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_singlet_opt_outfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_ts_from_nhc_singlet_log_file,
     ):
         """Taking the Gaussian nhc_neutral_singlet.log output
@@ -210,7 +210,7 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=ts_settings,
             label="gaussian_ts_from_log",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -229,7 +229,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_singlet_opt_outfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_sp_from_nhc_singlet_log_with_solvent_file,
     ):
         """Test writing simple .com input file using settings from .log file,
@@ -247,7 +247,7 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=sp_settings,
             label="gaussian_sp_from_log_with_solvent",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianSinglePointJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -268,7 +268,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_singlet_opt_outfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         smd_TBME_solvent_parameters_text_file,
         gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file,
     ):
@@ -295,7 +295,7 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=sp_settings,
             label="gaussian_sp_from_log_with_custom_solvent",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianSinglePointJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -316,7 +316,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_singlet_opt_outfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         Ni_def2tzvp_PCHOSi_svp_text_file,
         gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
     ):
@@ -337,7 +337,7 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=ts_settings,
             label="gaussian_sp_from_log_with_custom_basis",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -358,7 +358,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_ts_genecp_outfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
     ):
         project_settings = GaussianProjectSettings.from_project(
@@ -381,7 +381,7 @@ class TestGaussianInputWriter:
             molecule=molecule,
             settings=ts_settings,
             label="gaussian_sp_from_log_with_custom_basis_from_api",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -404,7 +404,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         modred_genecp_inputfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_modred_with_custom_basis_for_all_atoms_from_api,
     ):
         project_settings = GaussianProjectSettings.from_project(
@@ -439,7 +439,7 @@ class TestGaussianInputWriter:
             molecule=molecule,
             settings=modred_settings,
             label="gaussian_modred_with_custom_basis_for_all_atoms_from_api",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianModredJob)
         g16_writer = GaussianInputWriter(job=job)
@@ -465,7 +465,7 @@ class TestGaussianInputWriter:
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_pbc_2d_outputfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_opt_from_graphite_2d_pbc_log,
     ):
         project_settings = GaussianProjectSettings.from_project(
@@ -489,7 +489,7 @@ class TestGaussianInputWriter:
             molecule=molecule,
             settings=opt_settings,
             label="graphite_2d_opt_from_log",
-            jobrunner=jobrunner_no_scratch,
+            jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianSinglePointJob)
 
