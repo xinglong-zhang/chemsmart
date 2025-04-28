@@ -6,6 +6,7 @@ import pytest
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol import PyMOLMovieJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
+from chemsmart.utils.cluster import is_pubchem_network_available
 
 
 @pytest.fixture(scope="session")
@@ -23,12 +24,13 @@ class TestPyMOLJobs:
         pymol_visualization_jobrunner,
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(gaussian_opt_inputfile)
+        job = PyMOLVisualizationJob.from_filename(
+            gaussian_opt_inputfile, jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "model_opt_input.xyz")
@@ -44,12 +46,14 @@ class TestPyMOLJobs:
         pymol_visualization_jobrunner,
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(gaussian_singlet_opt_outfile)
+        job = PyMOLVisualizationJob.from_filename(
+            gaussian_singlet_opt_outfile,
+            jobrunner=pymol_visualization_jobrunner,
+        )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "nhc_neutral_singlet.xyz")
@@ -58,7 +62,9 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
-        molecules = Molecule.from_filepath(xyz_file, index=":")
+        molecules = Molecule.from_filepath(
+            xyz_file, index=":", return_list=True
+        )
         assert (
             len(molecules) == 1
         ), f"Expected 1 molecule, but got {len(molecules)}."
@@ -67,12 +73,13 @@ class TestPyMOLJobs:
         self, tmpdir, water_opt_input_path, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(water_opt_input_path)
+        job = PyMOLVisualizationJob.from_filename(
+            water_opt_input_path, jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "water_opt.xyz")
@@ -85,12 +92,13 @@ class TestPyMOLJobs:
         self, tmpdir, water_output_gas_path, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(water_output_gas_path)
+        job = PyMOLVisualizationJob.from_filename(
+            water_output_gas_path, jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "water_opt.xyz")
@@ -99,16 +107,21 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_pymol_visualization_job_on_pubchem_id(
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_pubchem("8028", label="thf")
+        job = PyMOLVisualizationJob.from_pubchem(
+            "8028", label="thf", jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "thf.xyz")
@@ -117,18 +130,23 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_pymol_visualization_job_on_smiles(
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
         job = PyMOLVisualizationJob.from_pubchem(
-            "C1=CC=C(C=C1)C2=NOC(=O)O2", label="3-Phenyl-1,4,2-dioxazol-5-one"
+            "C1=CC=C(C=C1)C2=NOC(=O)O2",
+            label="3-Phenyl-1,4,2-dioxazol-5-one",
+            jobrunner=pymol_visualization_jobrunner,
         )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "3-Phenyl-1,4,2-dioxazol-5-one.xyz")
@@ -145,13 +163,14 @@ class TestPyMOLJobs:
     ):
         # set up jobs
         job = PyMOLVisualizationJob.from_filename(
-            gaussian_singlet_opt_outfile, index=":"
+            gaussian_singlet_opt_outfile,
+            index=":",
+            jobrunner=pymol_visualization_jobrunner,
         )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "nhc_neutral_singlet.xyz")
@@ -160,7 +179,9 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
-        molecules = Molecule.from_filepath(xyz_file, index=":")
+        molecules = Molecule.from_filepath(
+            xyz_file, index=":", return_list=True
+        )
         assert (
             len(molecules) == 10
         ), f"Expected 1 molecule, but got {len(molecules)}."
@@ -172,12 +193,13 @@ class TestPyMOLJobs:
         pymol_movie_jobrunner,
     ):
         # set up jobs
-        job = PyMOLMovieJob.from_filename(gaussian_opt_inputfile)
+        job = PyMOLMovieJob.from_filename(
+            gaussian_opt_inputfile, jobrunner=pymol_movie_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.runner = pymol_movie_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_movie_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "model_opt_input.xyz")

@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 @click_gaussian_jobtype_options
 @click.pass_context
 def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
+    """CLI for running Gaussian scan jobs."""
+
+    # get jobrunner for running Gaussian scan jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     if jobtype is None:
         jobtype = "scan"
 
@@ -52,5 +57,9 @@ def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     from chemsmart.jobs.gaussian.scan import GaussianScanJob
 
     return GaussianScanJob(
-        molecule=molecule, settings=scan_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=scan_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

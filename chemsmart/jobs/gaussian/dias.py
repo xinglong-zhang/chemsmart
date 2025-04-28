@@ -10,20 +10,48 @@ class GaussianDIASJob(GaussianJob):
         molecules,
         settings,
         label,
+        jobrunner,
         fragment_indices,
         every_n_points,
+        mode,
+        charge_of_fragment1=None,
+        multiplicity_of_fragment1=None,
+        charge_of_fragment2=None,
+        multiplicity_of_fragment2=None,
         **kwargs,
     ):
         super().__init__(
             molecule=molecules,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
         self.all_molecules = molecules  # alone IRC coordinate
         self.fragment_indices = fragment_indices
         self.every_n_points = every_n_points
         self.settings.freq = False  # turn off freq calc for DI-AS
+        self.mode = mode
+        self.charge_of_fragment1 = charge_of_fragment1
+        self.multiplicity_of_fragment1 = multiplicity_of_fragment1
+        self.charge_of_fragment2 = charge_of_fragment2
+        self.multiplicity_of_fragment2 = multiplicity_of_fragment2
+
+        fragment1_settings = self.settings.copy()
+        fragment2_settings = self.settings.copy()
+
+        if self.charge_of_fragment1 is not None:
+            fragment1_settings.charge = self.charge_of_fragment1
+        if self.multiplicity_of_fragment1 is not None:
+            fragment1_settings.multiplicity = self.multiplicity_of_fragment1
+
+        if self.charge_of_fragment2 is not None:
+            fragment2_settings.charge = self.charge_of_fragment2
+        if self.multiplicity_of_fragment2 is not None:
+            fragment2_settings.multiplicity = self.multiplicity_of_fragment2
+
+        self.fragment1_settings = fragment1_settings
+        self.fragment2_settings = fragment2_settings
 
     @property
     def num_images(self):
@@ -64,68 +92,120 @@ class GaussianDIASJob(GaussianJob):
 
     @property
     def fragment1_jobs(self):
-        images = self._sample_images(self.fragment1_atoms)
-        jobs = []
-        for i, molecule in enumerate(images):
-            label = f"{self.label}_p{i}_f1"
-            jobs += [
+        if self.mode.lower() == "irc":
+            # using IRC log file
+            images = self._sample_images(self.fragment1_atoms)
+            jobs = []
+            for i, molecule in enumerate(images):
+                label = f"{self.label}_p{i}_f1"
+                jobs += [
+                    GaussianGeneralJob(
+                        molecule=molecule,
+                        settings=self.fragment1_settings,
+                        label=label,
+                        jobrunner=self.jobrunner,
+                        skip_completed=self.skip_completed,
+                    )
+                ]
+            return jobs
+        elif self.mode.lower() == "ts":
+            # using TS log file
+            image = self.fragment1_atoms[-1]
+            label = f"{self.label}_p1_f1"
+            return [
                 GaussianGeneralJob(
-                    molecule=molecule,
-                    settings=self.settings,
+                    molecule=image,
+                    settings=self.fragment1_settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]
-        return jobs
+        else:
+            raise ValueError(
+                f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'."
+            )
 
     @property
     def fragment2_jobs(self):
-        images = self._sample_images(self.fragment2_atoms)
-        jobs = []
-        for i, molecule in enumerate(images):
-            label = f"{self.label}_p{i}_f2"
-            jobs += [
+        if self.mode.lower() == "irc":
+            images = self._sample_images(self.fragment2_atoms)
+            jobs = []
+            for i, molecule in enumerate(images):
+                label = f"{self.label}_p{i}_f2"
+                jobs += [
+                    GaussianGeneralJob(
+                        molecule=molecule,
+                        settings=self.fragment2_settings,
+                        label=label,
+                        jobrunner=self.jobrunner,
+                        skip_completed=self.skip_completed,
+                    )
+                ]
+            return jobs
+        elif self.mode.lower() == "ts":
+            image = self.fragment2_atoms[-1]
+            label = f"{self.label}_p1_f2"
+            return [
                 GaussianGeneralJob(
-                    molecule=molecule,
-                    settings=self.settings,
+                    molecule=image,
+                    settings=self.fragment2_settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]
-        return jobs
+        else:
+            raise ValueError(
+                f"Invalid mode: {self.mode}. Must be 'irc' or 'ts'."
+            )
 
     @property
     def all_molecules_jobs(self):
-        images = self._sample_images(self.all_molecules)
-        jobs = []
-        for i, molecule in enumerate(images):
-            label = f"{self.label}_p{i}"
-            jobs += [
+        if self.mode.lower() == "irc":
+            images = self._sample_images(self.all_molecules)
+            jobs = []
+            for i, molecule in enumerate(images):
+                label = f"{self.label}_p{i}"
+                jobs += [
+                    GaussianGeneralJob(
+                        molecule=molecule,
+                        settings=self.settings,
+                        label=label,
+                        jobrunner=self.jobrunner,
+                        skip_completed=self.skip_completed,
+                    )
+                ]
+            return jobs
+        elif self.mode.lower() == "ts":
+            image = self.all_molecules[-1]
+            label = f"{self.label}_p1"
+            return [
                 GaussianGeneralJob(
-                    molecule=molecule,
+                    molecule=image,
                     settings=self.settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]
-        return jobs
 
-    def _run_all_molecules_jobs(self, jobrunner):
+    def _run_all_molecules_jobs(self):
         for job in self.all_molecules_jobs:
-            job.run(jobrunner=jobrunner)
+            job.run()
 
-    def _run_fragment1_jobs(self, jobrunner):
+    def _run_fragment1_jobs(self):
         for job in self.fragment1_jobs:
-            job.run(jobrunner=jobrunner)
+            job.run()
 
-    def _run_fragment2_jobs(self, jobrunner):
+    def _run_fragment2_jobs(self):
         for job in self.fragment2_jobs:
-            job.run(jobrunner=jobrunner)
+            job.run()
 
     def _run(self, jobrunner, **kwargs):
-        self._run_all_molecules_jobs(jobrunner=jobrunner)
-        self._run_fragment1_jobs(jobrunner=jobrunner)
-        self._run_fragment2_jobs(jobrunner=jobrunner)
+        self._run_all_molecules_jobs()
+        self._run_fragment1_jobs()
+        self._run_fragment2_jobs()
 
     def is_complete(self):
         return (
