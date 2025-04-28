@@ -37,10 +37,6 @@ class Job(RegistryMixin):
         skip_completed=True,
         **kwargs,
     ):
-        if not isinstance(jobrunner, JobRunner):
-            raise ValueError(
-                f"jobrunner must be an instance of JobRunner. Instead was: {jobrunner}!"
-            )
         self._folder = self._determine_folder()  # Private backing attribute
         self.molecule = molecule
         self.label = label

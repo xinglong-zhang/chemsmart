@@ -25,10 +25,10 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLVisualizationJob.from_filename(gaussian_opt_inputfile)
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "model_opt_input.xyz")
@@ -46,10 +46,10 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLVisualizationJob.from_filename(gaussian_singlet_opt_outfile)
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "nhc_neutral_singlet.xyz")
@@ -71,10 +71,10 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLVisualizationJob.from_filename(water_opt_input_path)
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "water_opt.xyz")
@@ -89,10 +89,10 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLVisualizationJob.from_filename(water_output_gas_path)
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "water_opt.xyz")
@@ -107,10 +107,10 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLVisualizationJob.from_pubchem("8028", label="thf")
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "thf.xyz")
@@ -127,10 +127,10 @@ class TestPyMOLJobs:
             "C1=CC=C(C=C1)C2=NOC(=O)O2", label="3-Phenyl-1,4,2-dioxazol-5-one"
         )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "3-Phenyl-1,4,2-dioxazol-5-one.xyz")
@@ -150,10 +150,10 @@ class TestPyMOLJobs:
             gaussian_singlet_opt_outfile, index=":"
         )
         job.set_folder(tmpdir)
-        job.runner = pymol_visualization_jobrunner
+        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_visualization_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "nhc_neutral_singlet.xyz")
@@ -178,10 +178,10 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLMovieJob.from_filename(gaussian_opt_inputfile)
         job.set_folder(tmpdir)
-        job.runner = pymol_movie_jobrunner
+        job.jobrunner = pymol_movie_jobrunner
 
         # run job
-        job.run(jobrunner=pymol_movie_jobrunner)
+        job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         xyz_file = os.path.join(tmpdir, "model_opt_input.xyz")
