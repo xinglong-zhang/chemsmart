@@ -765,6 +765,13 @@ def orca_written_sp_from_nhc_singlet_log_with_solvent_file(
     )
 
 
+@pytest.fixture()
+def orca_written_he_monoatomic_opt_file(orca_written_files_directory):
+    return os.path.join(
+        orca_written_files_directory, "orca_he_monoatomic_opt.inp"
+    )
+
+
 # orca yaml files
 @pytest.fixture()
 def orca_yaml_settings_directory(orca_test_directory):

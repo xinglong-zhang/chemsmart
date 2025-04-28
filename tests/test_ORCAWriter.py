@@ -1,6 +1,7 @@
 import os
 from filecmp import cmp
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.orca import (
     ORCAModredJob,
     ORCAOptJob,
@@ -251,3 +252,34 @@ class TestORCAInputWriter:
         assert cmp(
             orca_file, orca_written_sp_from_nhc_singlet_log_with_solvent_file
         )
+
+    def test_write_opt_input_on_monoatomic_species(
+        self,
+        tmpdir,
+        orca_yaml_settings_gas_solv_project_name,
+        orca_jobrunner_no_scratch,
+        orca_written_he_monoatomic_opt_file,
+    ):
+
+        helium = Molecule(
+            symbols=["He"],
+            positions=[(0.0, 0.0, 0.0)],
+        )
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_gas_solv_project_name
+        )
+        opt_settings = project_settings.opt_settings()
+        opt_settings.charge = 0
+        opt_settings.multiplicity = 1
+        job = ORCAOptJob.from_molecule(
+            molecule=helium,
+            settings=opt_settings,
+            label="orca_he_monoatomic_opt",
+        )
+        assert isinstance(job, ORCAOptJob)
+        orca_writer = ORCAInputWriter(job=job)
+        # write input file
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_he_monoatomic_opt.inp")
+        assert os.path.isfile(orca_file)
+        assert cmp(orca_file, orca_written_he_monoatomic_opt_file)
