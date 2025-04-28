@@ -33,7 +33,7 @@ class GaussianJobRunner(JobRunner):
         "g16modred",
         "g16nci",
         "g16resp",
-        "g16saopt",
+        "g16traj",
         "g16scan",
         "g16sp",
         "g16td",
@@ -132,7 +132,7 @@ class GaussianJobRunner(JobRunner):
     def _write_input(self, job):
         from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 
-        input_writer = GaussianInputWriter(job=job, jobrunner=self)
+        input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):

@@ -11,11 +11,14 @@ logger = logging.getLogger(__name__)
 class GaussianIRCJob(GaussianJob):
     TYPE = "g16irc"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
         super().__init__(
             molecule=molecule,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
         self.settings = settings
@@ -39,6 +42,7 @@ class GaussianIRCJob(GaussianJob):
             molecule=self.molecule,
             settings=ircf_settings,
             label=label,
+            jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
 
@@ -55,24 +59,25 @@ class GaussianIRCJob(GaussianJob):
             molecule=self.molecule,
             settings=ircr_settings,
             label=label,
+            jobrunner=self.jobrunner,
             skip_completed=self.skip_completed,
         )
 
-    def _run_forward(self, jobrunner):
+    def _run_forward(self):
         logger.debug(
             f"Running forward IRC job: {self._ircf_job().settings.job_type}"
         )
-        self._ircf_job().run(jobrunner=jobrunner)
+        self._ircf_job().run()
 
-    def _run_reverse(self, jobrunner):
+    def _run_reverse(self):
         logger.debug(
             f"Running reverse IRC job: {self._ircr_job().settings.job_type}"
         )
-        self._ircr_job().run(jobrunner=jobrunner)
+        self._ircr_job().run()
 
     def _run(self, jobrunner, **kwargs):
-        self._run_forward(jobrunner=jobrunner)
-        self._run_reverse(jobrunner=jobrunner)
+        self._run_forward()
+        self._run_reverse()
 
     def _job_is_complete(self):
         """private method for checking that the IRC job is complete.

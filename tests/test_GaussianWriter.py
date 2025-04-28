@@ -37,11 +37,11 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_opt",
+            jobrunner=jobrunner_no_scratch,
         )
+
         assert isinstance(job, GaussianOptJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
@@ -76,11 +76,10 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_opt",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianOptJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
@@ -110,11 +109,10 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_modred",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianModredJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
@@ -146,11 +144,10 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_scan",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianScanJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
@@ -177,11 +174,10 @@ class TestGaussianInputWriter:
             filename=single_molecule_xyz_file,
             settings=settings,
             label="gaussian_ts",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
@@ -214,11 +210,10 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=ts_settings,
             label="gaussian_ts_from_log",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
         # write input file
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_ts_from_log.com")
@@ -252,11 +247,10 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=sp_settings,
             label="gaussian_sp_from_log_with_solvent",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianSinglePointJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
         # write input file
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(
@@ -301,11 +295,10 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=sp_settings,
             label="gaussian_sp_from_log_with_custom_solvent",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianSinglePointJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
         # write input file
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(
@@ -344,11 +337,10 @@ class TestGaussianInputWriter:
             filename=gaussian_singlet_opt_outfile,
             settings=ts_settings,
             label="gaussian_sp_from_log_with_custom_basis",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
         # write input file
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(
@@ -390,11 +382,10 @@ class TestGaussianInputWriter:
             molecule=molecule,
             settings=ts_settings,
             label="gaussian_sp_from_log_with_custom_basis_from_api",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianTSJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
         # write input file
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(
@@ -449,11 +440,10 @@ class TestGaussianInputWriter:
             molecule=molecule,
             settings=modred_settings,
             label="gaussian_modred_with_custom_basis_for_all_atoms_from_api",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianModredJob)
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
@@ -500,12 +490,11 @@ class TestGaussianInputWriter:
             molecule=molecule,
             settings=opt_settings,
             label="graphite_2d_opt_from_log",
+            jobrunner=jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianSinglePointJob)
 
-        g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
-        )
+        g16_writer = GaussianInputWriter(job=job)
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "graphite_2d_opt_from_log.com")
         assert os.path.isfile(g16_file)

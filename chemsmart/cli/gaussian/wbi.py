@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def wbi(ctx, **kwargs):
+    """CLI for running Gaussian WBI jobs."""
+
+    # get jobrunner for running Gaussian WBI jobs
+    jobrunner = ctx.obj["jobrunner"]
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -43,5 +47,9 @@ def wbi(ctx, **kwargs):
     from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
 
     return GaussianWBIJob(
-        molecule=molecule, settings=wbi_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=wbi_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

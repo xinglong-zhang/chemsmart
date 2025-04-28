@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, skip_completed, **kwargs):
+    """CLI for optimization calculation for Gaussian."""
+
+    # get jobrunner for optimization
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -64,6 +69,7 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
         molecule=molecule,
         settings=opt_settings,
         label=label,
+        jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
     )
