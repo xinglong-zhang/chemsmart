@@ -18,6 +18,7 @@ from .tddft import GaussianTDDFTJob
 from .ts import GaussianTSJob
 from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
+from .qmmm import GaussianQMMMJob
 
 jobs = GaussianJob.subclasses()
 
@@ -44,6 +45,7 @@ __all__ = [
     "GaussianTSJob",
     "GaussianUVVISJob",
     "GaussianWBIJob",
+    "GaussianQMMMJob",
     "jobs",
 ]
 

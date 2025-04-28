@@ -237,13 +237,13 @@ class ORCAInput(ORCAFileMixin):
     @property
     def qm_total_charge(self):
         total_charge, _, qm2_layer = self._get_qmmm_charge_and_multiplicity()
-        assert qm2_layer == False, (f"Only charge of QM and QM2 region will be specified!")
+        assert qm2_layer == False, (f"Only charge of QM and medium region will be specified!")
         return total_charge
 
-    @@property
+    @property
     def qm_total_multiplicity(self):
         _, total_multiplicity, qm2_layer = self._get_qmmm_charge_and_multiplicity()
-        assert qm2_layer == False, (f"Only charge of QM and QM2 region will be specified!")
+        assert qm2_layer == False, (f"Only multiplicity of QM and medium region will be specified!")
         return total_multiplicity
 
 

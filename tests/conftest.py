@@ -428,9 +428,12 @@ def gaussian_written_scan_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
-def gaussian_written_ts_file(gaussian_written_files_directory):
+def gaussian_yaml_settings_gas_solv_project_name(gaussian_written_files_directory):
     return os.path.join(gaussian_written_files_directory, "gaussian_ts.com")
 
+@pytest.fixture()
+def gaussian_yaml_settings_qmmm_project_name(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "gaussian_qmmm.com")
 
 @pytest.fixture()
 def gaussian_written_ts_from_nhc_singlet_log_file(
