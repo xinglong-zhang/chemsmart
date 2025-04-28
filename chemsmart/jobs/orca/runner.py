@@ -114,7 +114,7 @@ class ORCAJobRunner(JobRunner):
     def _write_input(self, job):
         from chemsmart.jobs.orca.writer import ORCAInputWriter
 
-        input_writer = ORCAInputWriter(job=job, jobrunner=self)
+        input_writer = ORCAInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):

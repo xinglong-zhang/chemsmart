@@ -132,7 +132,7 @@ class GaussianJobRunner(JobRunner):
     def _write_input(self, job):
         from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 
-        input_writer = GaussianInputWriter(job=job, jobrunner=self)
+        input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):
