@@ -1,12 +1,17 @@
 import os
+import tempfile
 
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
+import yaml
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
-from chemsmart.jobs.mol.runner import PyMOLVisualizationJobRunner
+from chemsmart.jobs.mol.runner import (
+    PyMOLMovieJobRunner,
+    PyMOLVisualizationJobRunner,
+)
 from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
@@ -428,12 +433,9 @@ def gaussian_written_scan_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
-def gaussian_yaml_settings_gas_solv_project_name(gaussian_written_files_directory):
+def gaussian_written_ts_file(gaussian_written_files_directory):
     return os.path.join(gaussian_written_files_directory, "gaussian_ts.com")
 
-@pytest.fixture()
-def gaussian_yaml_settings_qmmm_project_name(gaussian_written_files_directory):
-    return os.path.join(gaussian_written_files_directory, "gaussian_qmmm.com")
 
 @pytest.fixture()
 def gaussian_written_ts_from_nhc_singlet_log_file(
@@ -669,15 +671,17 @@ def orca_fixed_atoms(orca_outputs_directory):
 
 
 @pytest.fixture()
-def orca_fixed_dihedral(orca_outputs_directory):
+def orca_fixed_bonds_and_angles(orca_outputs_directory):
     return os.path.join(
-        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+        orca_outputs_directory, "phenol_fixed_bond_and_angles.out"
     )
 
 
 @pytest.fixture()
-def orca_fixed_bond(orca_outputs_directory):
-    return os.path.join(orca_outputs_directory, "ethanol_fixed_bond.out")
+def orca_fixed_dihedral(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+    )
 
 
 @pytest.fixture()
@@ -766,6 +770,11 @@ def pymol_visualization_jobrunner(pbs_server):
     return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
 
 
+@pytest.fixture()
+def pymol_movie_jobrunner(pbs_server):
+    return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
+
+
 ## conformers for testing
 @pytest.fixture()
 def methanol_molecules():
@@ -847,3 +856,52 @@ def io_test_directory(test_data_directory):
 @pytest.fixture()
 def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
+
+
+## fixtures for mixins
+@pytest.fixture
+def temp_text_file():
+    with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
+        tmp.write("Line1\nLine2\n")
+        tmp_name = tmp.name
+    yield tmp_name
+    os.remove(tmp_name)
+
+
+@pytest.fixture
+def dummy_yaml_file():
+    class DummyYAMLFile:
+        def __init__(self):
+            self.filename = "dummy.yaml"
+            self.content_lines_string = yaml.dump(
+                {"key1": "value1", "key2": "value2"}
+            )
+
+        @property
+        def yaml_contents_dict(self):
+            return yaml.safe_load(self.content_lines_string)
+
+        @property
+        def yaml_contents_keys(self):
+            return self.yaml_contents_dict.keys()
+
+        @property
+        def yaml_contents_values(self):
+            return self.yaml_contents_dict.values()
+
+        def yaml_contents_by_key(self, key):
+            return self.yaml_contents_dict.get(key)
+
+    return DummyYAMLFile()
+
+
+@pytest.fixture
+def temp_folder_with_files():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file1 = os.path.join(tmpdir, "test1.txt")
+        file2 = os.path.join(tmpdir, "test2.log")
+        with open(file1, "w") as f:
+            f.write("Test file 1")
+        with open(file2, "w") as f:
+            f.write("Test file 2")
+        yield tmpdir, file1, file2

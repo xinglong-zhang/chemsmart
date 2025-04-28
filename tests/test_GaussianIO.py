@@ -1194,6 +1194,7 @@ class TestGaussian16Output:
             "num_steps": 10,
             "step_size": -0.1,
         }
+        assert g16_scan.num_steps == 11
         assert len(g16_scan.all_structures) == 1
 
         g16_scan_all_int = Gaussian16Output(

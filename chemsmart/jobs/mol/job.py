@@ -16,22 +16,22 @@ class PyMOLJob(Job):
         molecule=None,
         label=None,
         pymol_script=None,
-        render_style=None,
+        style=None,
+        trace=None,
         vdw=None,
         quiet_mode=True,
         command_line_only=True,
+        coordinates=None,
         **kwargs,
     ):
         super().__init__(molecule=molecule, label=label, **kwargs)
         self.pymol_script = pymol_script
-        self.render_style = render_style
+        self.style = style
+        self.trace = trace
         self.vdw = vdw
         self.quiet_mode = quiet_mode
         self.command_line_only = command_line_only
-        molecule = molecule.copy()
-
-        self.molecule = molecule
-        self.label = label
+        self.coordinates = coordinates  # coordinates for labelling
 
     @property
     def inputfile(self):
@@ -78,7 +78,7 @@ class PyMOLJob(Job):
         pymol_script=None,
         index="-1",
         label=None,
-        render_style=None,
+        style=None,
         vdw=None,
         quiet_mode=True,
         command_line_only=True,
@@ -87,21 +87,22 @@ class PyMOLJob(Job):
         # get all molecule in a file and give the result as a list
         logger.info(f"Reading images from file: {filename}.")
         molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
+            filepath=filename, index=":", return_list=True, **kwargs
         )
         if label is None:
             # by default, if no label is given and the job is read in
             # from a file, the label is set to the file basename
             label = os.path.basename(filename).split(".")[0]
 
-        logger.info(f"Num of images read: {len(molecules)}.")
+        logger.info(f"Num of molecules read: {len(molecules)}.")
         molecules = molecules[string2index_1based(index)]
+        logger.info(f"Num of molecules to use: {len(molecules)}.")
 
         return cls(
             molecule=molecules,
             label=label,
             pymol_script=pymol_script,
-            render_style=render_style,
+            style=style,
             vdw=vdw,
             quiet_mode=quiet_mode,
             command_line_only=command_line_only,

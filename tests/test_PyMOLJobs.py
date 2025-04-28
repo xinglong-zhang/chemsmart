@@ -4,6 +4,7 @@ import shutil
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.mol import PyMOLMovieJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 
 
@@ -57,7 +58,9 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
-        molecules = Molecule.from_filepath(xyz_file, index=":")
+        molecules = Molecule.from_filepath(
+            xyz_file, index=":", return_list=True
+        )
         assert (
             len(molecules) == 1
         ), f"Expected 1 molecule, but got {len(molecules)}."
@@ -159,7 +162,32 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
-        molecules = Molecule.from_filepath(xyz_file, index=":")
+        molecules = Molecule.from_filepath(
+            xyz_file, index=":", return_list=True
+        )
         assert (
             len(molecules) == 10
         ), f"Expected 1 molecule, but got {len(molecules)}."
+
+    def test_pymol_movie_job_on_gaussian_com_file(
+        self,
+        tmpdir,
+        gaussian_opt_inputfile,
+        pymol_movie_jobrunner,
+    ):
+        # set up jobs
+        job = PyMOLMovieJob.from_filename(gaussian_opt_inputfile)
+        job.set_folder(tmpdir)
+        job.runner = pymol_movie_jobrunner
+
+        # run job
+        job.run(jobrunner=pymol_movie_jobrunner)
+        assert job.is_complete()
+        style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
+        xyz_file = os.path.join(tmpdir, "model_opt_input.xyz")
+        pse_file = os.path.join(tmpdir, "model_opt_input.pse")
+        movie_file = os.path.join(tmpdir, "model_opt_input.mp4")
+        assert os.path.exists(style_file)
+        assert os.path.exists(xyz_file)
+        assert os.path.exists(pse_file)
+        assert os.path.exists(movie_file)
