@@ -416,4 +416,5 @@ def gaussian(
 def gaussian_process_pipeline(ctx, *args, **kwargs):
     kwargs.update({"subcommand": ctx.invoked_subcommand})
     ctx.obj[ctx.info_name] = kwargs
+    print(f"Gaussian job settings: {ctx.obj[ctx.info_name]}")
     return args[0]
