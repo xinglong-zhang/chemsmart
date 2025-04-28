@@ -23,9 +23,10 @@ class TestPyMOLJobs:
         pymol_visualization_jobrunner,
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(gaussian_opt_inputfile)
+        job = PyMOLVisualizationJob.from_filename(
+            gaussian_opt_inputfile, jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -44,9 +45,11 @@ class TestPyMOLJobs:
         pymol_visualization_jobrunner,
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(gaussian_singlet_opt_outfile)
+        job = PyMOLVisualizationJob.from_filename(
+            gaussian_singlet_opt_outfile,
+            jobrunner=pymol_visualization_jobrunner,
+        )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -69,9 +72,10 @@ class TestPyMOLJobs:
         self, tmpdir, water_opt_input_path, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(water_opt_input_path)
+        job = PyMOLVisualizationJob.from_filename(
+            water_opt_input_path, jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -87,9 +91,10 @@ class TestPyMOLJobs:
         self, tmpdir, water_output_gas_path, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_filename(water_output_gas_path)
+        job = PyMOLVisualizationJob.from_filename(
+            water_output_gas_path, jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -105,9 +110,10 @@ class TestPyMOLJobs:
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_pubchem("8028", label="thf")
+        job = PyMOLVisualizationJob.from_pubchem(
+            "8028", label="thf", jobrunner=pymol_visualization_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -124,10 +130,11 @@ class TestPyMOLJobs:
     ):
         # set up jobs
         job = PyMOLVisualizationJob.from_pubchem(
-            "C1=CC=C(C=C1)C2=NOC(=O)O2", label="3-Phenyl-1,4,2-dioxazol-5-one"
+            "C1=CC=C(C=C1)C2=NOC(=O)O2",
+            label="3-Phenyl-1,4,2-dioxazol-5-one",
+            jobrunner=pymol_visualization_jobrunner,
         )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -147,10 +154,11 @@ class TestPyMOLJobs:
     ):
         # set up jobs
         job = PyMOLVisualizationJob.from_filename(
-            gaussian_singlet_opt_outfile, index=":"
+            gaussian_singlet_opt_outfile,
+            index=":",
+            jobrunner=pymol_visualization_jobrunner,
         )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_visualization_jobrunner
 
         # run job
         job.run()
@@ -176,9 +184,10 @@ class TestPyMOLJobs:
         pymol_movie_jobrunner,
     ):
         # set up jobs
-        job = PyMOLMovieJob.from_filename(gaussian_opt_inputfile)
+        job = PyMOLMovieJob.from_filename(
+            gaussian_opt_inputfile, jobrunner=pymol_movie_jobrunner
+        )
         job.set_folder(tmpdir)
-        job.jobrunner = pymol_movie_jobrunner
 
         # run job
         job.run()
