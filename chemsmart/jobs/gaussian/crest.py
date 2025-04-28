@@ -11,6 +11,7 @@ class GaussianCrestJob(GaussianJob):
         molecules,
         settings=None,
         label=None,
+        jobrunner=None,
         num_confs_to_run=None,
         **kwargs,
     ):
@@ -21,6 +22,7 @@ class GaussianCrestJob(GaussianJob):
             molecule=molecules[0],
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
 
@@ -67,6 +69,7 @@ class GaussianCrestJob(GaussianJob):
                     molecule=self.all_conformers[i],
                     settings=self.settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]

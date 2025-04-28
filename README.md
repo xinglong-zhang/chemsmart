@@ -349,14 +349,14 @@ If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps 
 To optimize unique structure from an md trajectory file, do:
 
 ```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt 
+chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> set 
 ```
 This optimizes all the unique structures available in the md trajectory `<input_file>`. Typically, the `<input_file>` is a list of all structures on an md trajectory obtained by ASE md run and named `md.traj`. (TODO: this method is not properly implemented in chemsmart yet.)
 
 To optimize a fixed number of lowest energy structures, `<num_structures_to_opt>`, do:
 
 ```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt -n <n_conformers_to_opt>
+chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> set -n <n_conformers_to_opt>
 ```
 If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
 
@@ -369,7 +369,7 @@ Two grouper types for determining/clustering unique structures are available fro
 For example, to consider the last 20% of the structures in md.traj trajectory file, then uses Sequential grouper to group those structures into unique structures and run the 10 lowest energy structures from the list of unique structures found by the grouper:
 
 ```bash
-chemsmart sub -s shared gaussian -p test -f imd.traj saopt -x 0.2 -n 10 -g seq
+chemsmart sub -s shared gaussian -p test -f imd.traj set -x 0.2 -n 10 -g seq
 ```
 
 ---

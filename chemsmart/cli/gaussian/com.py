@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def com(ctx, skip_completed, **kwargs):
+    """CLI for running Gaussian input file as is."""
+
+    # get jobrunner for running Gaussian input files
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -46,6 +51,7 @@ def com(ctx, skip_completed, **kwargs):
         molecule=molecule,
         settings=opt_settings,
         label=label,
+        jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
     )

@@ -33,7 +33,7 @@ class GaussianJobRunner(JobRunner):
         "g16modred",
         "g16nci",
         "g16resp",
-        "g16saopt",
+        "g16set",
         "g16scan",
         "g16sp",
         "g16td",
