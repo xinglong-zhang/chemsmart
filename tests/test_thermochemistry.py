@@ -220,7 +220,7 @@ class TestThermochemistry:
         assert job.is_complete()
 
         # check that the job finished
-        tmp_log_path = tmpdir.join("CO2_fake.log")
+        tmp_log_path = tmpdir.join("CO2.log")
         assert os.path.exists(tmp_log_path)
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
 

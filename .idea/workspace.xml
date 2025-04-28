@@ -6,7 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_ORCAIO.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_ORCAIO.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_thermochemistry.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -382,8 +382,8 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_data_reader_TestDataReader.coverage" NAME="pytest for test_data_reader.TestDataReader Coverage Results" MODIFIED="1741572154761" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
-    <SUITE FILE_PATH="coverage/chemsmart$pytest_in_test_thermochemistry_py.coverage" NAME="pytest in test_thermochemistry.py Coverage Results" MODIFIED="1745765083004" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/chemsmart$.coverage" NAME=" Coverage Results" MODIFIED="1745764721220" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
+    <SUITE FILE_PATH="coverage/chemsmart$pytest_in_test_thermochemistry_py.coverage" NAME="pytest in test_thermochemistry.py Coverage Results" MODIFIED="1745821548868" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/chemsmart$.coverage" NAME=" Coverage Results" MODIFIED="1745814985853" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/chemsmart$pytest_for_tests_test_GaussianIO_TestGaussian16Output_test_normal_termination_with_forces_and_frequencies.coverage" NAME="pytest for tests.test_GaussianIO.TestGaussian16Output.test_normal_termination_with_forces_and_frequencies Coverage Results" MODIFIED="1737461619836" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors_test_xyz_to_sdf.coverage" NAME="pytest for test_descriptors.TestDescriptors.test_xyz_to_sdf Coverage Results" MODIFIED="1741572589263" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
     <SUITE FILE_PATH="coverage/xtb_py$pytest_for_test_descriptors_TestDescriptors_test_simple.coverage" NAME="pytest for test_descriptors.TestDescriptors.test_simple Coverage Results" MODIFIED="1741575001344" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../conflow/tests" />
