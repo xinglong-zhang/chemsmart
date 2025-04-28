@@ -216,7 +216,7 @@ class ORCAInputWriter(InputWriter):
     def _write_modred_if_dict(f, modred):
         f.write("  Scan\n")
         # append for scanning job
-        coords_list = modred["coordinates"]
+        coords_list = modred["coords"]
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
             input_modred=coords_list, program="orca"
         )
