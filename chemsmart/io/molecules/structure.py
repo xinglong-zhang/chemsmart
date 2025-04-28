@@ -149,6 +149,13 @@ class Molecule:
         return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
 
     @property
+    def natural_abundance_weighted_mass(self):
+        return sum(
+            p.to_weighted_atomic_mass_by_abundance(symbol)
+            for symbol in self.symbols
+        )
+
+    @property
     def most_abundant_mass(self):
         return sum(
             p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols
@@ -158,6 +165,21 @@ class Molecule:
     def masses(self):
         """Numpy array of atomic masses of the molecule."""
         return np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
+
+    @property
+    def natural_abundance_weighted_masses(self):
+        return np.array(
+            [
+                p.to_weighted_atomic_mass_by_abundance(symbol)
+                for symbol in self.symbols
+            ]
+        )
+
+    @property
+    def most_abundant_masses(self):
+        return np.array(
+            [p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols]
+        )
 
     @property
     def center_of_mass(self):
@@ -253,6 +275,22 @@ class Molecule:
             return eigenvalues
 
     @property
+    def moments_of_inertia_weighted_mass(self):
+        if self.is_monoatomic:
+            return [0.0, 0.0, 0.0]
+        else:
+            _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            return eigenvalues
+
+    @property
+    def moments_of_inertia_most_abundant_mass(self):
+        if self.is_monoatomic:
+            return [0.0, 0.0, 0.0]
+        else:
+            _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            return eigenvalues
+
+    @property
     def moments_of_inertia_principal_axes(self):
         """Obtain moments of inertia along principal axes from molecular structure."""
         _, _, eigenvectors = self._get_moments_of_inertia
@@ -268,6 +306,32 @@ class Molecule:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
             return calculate_moments_of_inertia(self.masses, self.positions)
+
+    @cached_property
+    def _get_moments_of_inertia_weighted_mass(self):
+        """Calculate the moments of inertia of the molecule. Use natural abundance weighted masses.
+        Units of amu Å^2."""
+        if self.num_atoms == 1:
+            return np.zeros(3)
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+
+            return calculate_moments_of_inertia(
+                self.natural_abundance_weighted_masses, self.positions
+            )
+
+    @cached_property
+    def _get_moments_of_inertia_most_abundant_mass(self):
+        """Calculate the moments of inertia of the molecule. Use most abundant masses.
+        Units of amu Å^2."""
+        if self.num_atoms == 1:
+            return np.zeros(3)
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+
+            return calculate_moments_of_inertia(
+                self.most_abundant_masses, self.positions
+            )
 
     @cached_property
     def rotational_temperatures(self):

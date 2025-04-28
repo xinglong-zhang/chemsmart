@@ -140,20 +140,22 @@ def get_thermo(
     # Energy Conversion
     if unit.lower() == "ev":
         energy_unit = "eV"
-        unit_conversion = 27.211386024367243  # 1 Eh = 27.211386024367243 eV
+        unit_conversion = (
+            1.0364269574711572e-05  # 1 J/mol = 1.0364269574711572e-05 eV
+        )
     elif unit.lower() == "kcal/mol":
         energy_unit = "kcal/mol"
         unit_conversion = (
-            627.5094738898777  # 1 Eh = 627.5094738898777 kcal/mol
+            0.0002390057361376673  # 1 J/mol = 0.0002390057361376673 kcal/mol
         )
     elif unit.lower() == "kj/mol":
         energy_unit = "kJ/mol"
-        unit_conversion = (
-            2625.4996387552483  # 1 Eh = 2625.4996387552483 kJ/mol
-        )
+        unit_conversion = 0.001  # 1 J/mol = 0.001 kJ/mol
     else:
         energy_unit = "Hartree"
-        unit_conversion = 1.0
+        unit_conversion = (
+            3.8087991196914175e-07  # 1 J/mol = 3.8087991196914175e-07 Eh
+        )
 
     files = []
     for filename in filenames:
@@ -179,45 +181,49 @@ def get_thermo(
     log(
         "   "
         + " " * 25
-        + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ "
+        + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ \n"
     )
     log(
         "   "
         + " " * 25
-        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
+        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|\n"
     )
     log(
         "   "
         + " " * 25
-        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  "
+        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  \n"
     )
     log(
         "   "
         + " " * 25
-        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  "
+        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  \n"
     )
     log(
         "   "
         + " " * 25
-        + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n"
+        + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n\n"
     )
 
     # Only output SCF energy without thermochemical corrections.
     if scf:
-        log(" " * 19 + f" * SCF Energies (in {energy_unit}): \n\n")
-        log("   " + " " * 19 + "{:<50} {:>22}\n".format("Structure", "E"))
-        log("   " + " " * 19 + "=" * 73 + "\n")
+        log(f" * SCF Energies (in {energy_unit}): \n\n")
+        log(
+            "   "
+            + "{:<60} {:>22} {:>22}\n".format("Structure", "E", "Job Type")
+        )
+        log("   " + "=" * 106 + "\n")
         index = 1
         for file in files:
             scf_energy = Thermochemistry(file, temperature=temperature)
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = scf_energy.energies * unit_conversion
+            job_type = scf_energy.job_type
             log(
-                " " * 19
-                + "{:2} {:50} {:22.6f}\n".format(
+                "{:2} {:60} {:22.6f} {:>22}\n".format(
                     index,
                     structure,
                     energy,
+                    job_type,
                 )
             )
             index += 1
@@ -336,7 +342,7 @@ def get_thermo(
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = thermochemistry.energies * unit_conversion
             zero_point_energy = (
-                thermochemistry.zero_point_energy_hartree * unit_conversion
+                thermochemistry.zero_point_energy * unit_conversion
             )
             enthalpy = thermochemistry.enthalpy * unit_conversion
             qrrho_enthalpy = thermochemistry.qrrho_enthalpy * unit_conversion

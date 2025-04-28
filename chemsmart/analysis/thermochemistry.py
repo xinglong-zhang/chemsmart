@@ -113,7 +113,7 @@ class Thermochemistry:
     def mass(self):
         """Obtain the molecular mass."""
         if self.use_weighted_mass:
-            return self.molecule.mass
+            return self.molecule.natural_abundance_weighted_mass
         return self.molecule.most_abundant_mass
 
     @property
@@ -122,7 +122,9 @@ class Thermochemistry:
         Direct calculation from molecular structure, since sometimes Gaussian
         output does not print it properly (prints as ***** if values too large)
         """
-        return self.molecule.moments_of_inertia
+        if self.use_weighted_mass:
+            return self.molecule.moments_of_inertia_weighted_mass
+        return self.molecule.moments_of_inertia_most_abundant_mass
 
     @property
     def average_rotational_constant(self):
@@ -166,6 +168,8 @@ class Thermochemistry:
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
         All other negative frequencies are replaced by the cutoff value.
         """
+        if not self.vibrational_frequencies:
+            return None
         if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
             return [
                 self.cutoff if k < 0.0 else k
@@ -554,11 +558,6 @@ class Thermochemistry:
             + self.electronic_heat_capacity
             + self.vibrational_heat_capacity
         )
-
-    @property
-    def zero_point_energy_hartree(self):
-        """Obtain the ZPE in Hartree."""
-        return self.zero_point_energy / (hartree_to_joules * units._Nav)
 
     def _calculate_damping_function(self, freq_cutoff):
         """Calculate the damping function of Head-Gordon, which interpolates

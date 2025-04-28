@@ -33,9 +33,54 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Turn on/off solvent for DI-AS job calculations.",
 )
+@click.option(
+    "-m",
+    "--mode",
+    type=click.Choice(["irc", "ts"], case_sensitive=False),
+    default="irc",
+    help="Mode of DI-AS analysis. Default is IRC.",
+)
+@click.option(
+    "-c1",
+    "--charge-of-fragment1",
+    type=int,
+    default=None,
+    help="Charge of fragment 1.",
+)
+@click.option(
+    "-m1",
+    "--multiplicity-of-fragment1",
+    type=int,
+    default=None,
+    help="Multiplicity of fragment 1.",
+)
+@click.option(
+    "-c2",
+    "--charge-of-fragment2",
+    type=int,
+    default=None,
+    help="Charge of fragment 2.",
+)
+@click.option(
+    "-m2",
+    "--multiplicity-of-fragment2",
+    type=int,
+    default=None,
+    help="Multiplicity of fragment 2.",
+)
 @click.pass_context
 def dias(
-    ctx, fragment_indices, every_n_points, skip_completed, solv=False, **kwargs
+    ctx,
+    fragment_indices,
+    every_n_points,
+    skip_completed,
+    solv=False,
+    mode="irc",
+    charge_of_fragment1=None,
+    multiplicity_of_fragment1=None,
+    charge_of_fragment2=None,
+    multiplicity_of_fragment2=None,
+    **kwargs,
 ):
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -72,6 +117,11 @@ def dias(
         label=label,
         fragment_indices=fragment_indices,
         every_n_points=every_n_points,
+        mode=mode,
+        charge_of_fragment1=charge_of_fragment1,
+        multiplicity_of_fragment1=multiplicity_of_fragment1,
+        charge_of_fragment2=charge_of_fragment2,
+        multiplicity_of_fragment2=multiplicity_of_fragment2,
         skip_completed=skip_completed,
         **kwargs,
     )
