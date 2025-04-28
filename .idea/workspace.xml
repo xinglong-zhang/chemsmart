@@ -4,7 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="" />
+    <list default="true" id="2281b141-d2c7-4cc5-ae96-767232f53861" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chemsmart/utils/cluster.py" beforeDir="false" afterPath="$PROJECT_DIR$/chemsmart/utils/cluster.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_GaussianWriter.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_GaussianWriter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_PyMOLJobs.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_PyMOLJobs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_structures.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_structures.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_thermochemistry.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_thermochemistry.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

@@ -375,7 +375,6 @@ class TestGaussianInputWriter:
         ts_settings.heavy_elements_basis = "def2-TZVPPD"
         ts_settings.light_elements_basis = "def2-SVP"
 
-        # get molecule from pubchem
         molecule = Molecule.from_filepath(gaussian_ts_genecp_outfile)
 
         job = GaussianTSJob(

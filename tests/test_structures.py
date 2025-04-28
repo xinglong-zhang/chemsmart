@@ -10,6 +10,7 @@ from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.utils.cluster import is_pubchem_network_available
 
 
 class TestCoordinateBlock:
@@ -556,6 +557,10 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_stereochemistry_handling(self):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = Molecule.from_pubchem("11507")
