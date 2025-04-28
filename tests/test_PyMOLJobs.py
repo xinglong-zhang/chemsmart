@@ -6,6 +6,7 @@ import pytest
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol import PyMOLMovieJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
+from chemsmart.utils.cluster import is_pubchem_network_available
 
 
 @pytest.fixture(scope="session")
@@ -106,6 +107,10 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_pymol_visualization_job_on_pubchem_id(
         self, tmpdir, pymol_visualization_jobrunner
     ):
@@ -125,6 +130,10 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
 
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_pymol_visualization_job_on_smiles(
         self, tmpdir, pymol_visualization_jobrunner
     ):

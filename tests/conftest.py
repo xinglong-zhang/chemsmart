@@ -236,6 +236,22 @@ def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_co2_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "co2.log"
+    )
+    return gaussian_co2_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_he_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "he.log"
+    )
+    return gaussian_he_opt_outfile
+
+
+@pytest.fixture()
 def gaussian_acetone_opt_outfile(gaussian_outputs_test_directory):
     gaussian_acetone_opt_outfile = os.path.join(
         gaussian_outputs_test_directory, "acetone.log"
@@ -642,6 +658,16 @@ def water_output_gas_path(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_he_output_freq(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "He_freq.out")
+
+
+@pytest.fixture()
+def orca_co2_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "CO2.out")
+
+
+@pytest.fixture()
 def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"
@@ -756,8 +782,10 @@ def jobrunner_no_scratch(pbs_server):
 
 
 @pytest.fixture()
-def jobrunner_scratch(pbs_server):
-    return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+def jobrunner_scratch(tmpdir, pbs_server):
+    return FakeGaussianJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
 
 
 @pytest.fixture()

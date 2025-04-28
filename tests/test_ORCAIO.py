@@ -465,46 +465,22 @@ class TestORCAOutput:
             282661.493198,
         ]
         assert orca_out.vibrational_frequencies == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             1625.35,
             3875.61,
             3971.9,
         ]
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.012719,
             0.002968,
             0.009899,
         ]
         assert orca_out.integrated_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             64.27,
             15.0,
             50.03,
         ]
         assert orca_out.transition_dipole_deriv_norm == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.002442,
             0.000239,
             0.000778,
@@ -644,46 +620,22 @@ class TestORCAOutput:
             282661.493198,
         ]
         assert orca_out.vibrational_frequencies == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             1625.35,
             3875.61,
             3971.9,
         ]
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.012719,
             0.002968,
             0.009899,
         ]
         assert orca_out.integrated_absorption_coefficients == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             64.27,
             15.0,
             50.03,
         ]
         assert orca_out.transition_dipole_deriv_norm == [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
             0.002442,
             0.000239,
             0.000778,
