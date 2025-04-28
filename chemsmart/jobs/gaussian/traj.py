@@ -10,7 +10,7 @@ from chemsmart.utils.grouper import StructureGrouperFactory
 logger = logging.getLogger(__name__)
 
 
-class GaussianStructureSetJob(GaussianJob):
+class GaussianTrajJob(GaussianJob):
     """Gaussian job for running a set of structures.
     Args:
         molecules (list): List of Molecule objects to process.
@@ -25,7 +25,7 @@ class GaussianStructureSetJob(GaussianJob):
         **kwargs: Additional keyword arguments for GaussianJob.
     """
 
-    TYPE = "g16set"
+    TYPE = "g16traj"
 
     def __init__(
         self,

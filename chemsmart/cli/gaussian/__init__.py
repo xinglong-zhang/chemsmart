@@ -11,9 +11,9 @@ from .nci import nci
 from .opt import opt
 from .resp import resp
 from .scan import scan
-from .set import set
 from .singlepoint import sp
 from .tddft import td
+from .traj import traj
 from .ts import ts
 from .wbi import wbi
 
@@ -31,7 +31,7 @@ __all__ = [
     "opt",
     "resp",
     "scan",
-    "set",
+    "traj",
     "sp",
     "td",
     "ts",

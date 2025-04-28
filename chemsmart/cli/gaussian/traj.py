@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
-from chemsmart.jobs.gaussian import GaussianStructureSetJob
+from chemsmart.jobs.gaussian import GaussianTrajJob
 from chemsmart.utils.cli import (
     MyCommand,
     get_setting_from_jobtype_for_gaussian,
@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
     "Values ranges from 0.0 < x <=1.0. Defaults to 0.1 (last 10% of structures).",
 )
 @click.pass_context
-def set(
+def traj(
     ctx,
     skip_completed,
     jobtype,
@@ -118,7 +118,7 @@ def set(
         f"Simulated annealing {type} settings from project: {structure_set_settings.__dict__}"
     )
 
-    return GaussianStructureSetJob(
+    return GaussianTrajJob(
         molecules=molecules,
         settings=structure_set_settings,
         label=label,
