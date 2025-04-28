@@ -782,8 +782,10 @@ def jobrunner_no_scratch(pbs_server):
 
 
 @pytest.fixture()
-def jobrunner_scratch(pbs_server):
-    return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+def jobrunner_scratch(tmpdir, pbs_server):
+    return FakeGaussianJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
 
 
 @pytest.fixture()

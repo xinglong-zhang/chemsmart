@@ -196,6 +196,9 @@ class TestThermochemistry:
         gaussian_yaml_settings_gas_solv_project_name,
         jobrunner_scratch,
     ):
+        # set scratch
+        jobrunner_scratch.scratch_dir = tmpdir
+
         mol = Molecule.from_pubchem("280")
         tmp_path = os.path.join(tmpdir, "CO2.com")
 
@@ -213,20 +216,16 @@ class TestThermochemistry:
         # create gaussian job
 
         job = GaussianOptJob.from_filename(
-            filename=tmp_path,
-            settings=settings,
+            filename=tmp_path, settings=settings, jobrunner=jobrunner_scratch
         )
         assert isinstance(job, GaussianOptJob)
 
-        # set scratch
-        jobrunner_scratch.scratch_dir = tmpdir
-
         # run the job
-        job.run(jobrunner=jobrunner_scratch)
+        job.run()
         assert job.is_complete()
 
         # check that the job finished
-        tmp_log_path = tmpdir.join("CO2.log")
+        tmp_log_path = tmpdir.join("CO2_fake.log")
         assert os.path.exists(tmp_log_path)
         assert np.isclose(mol.mass, 44.01, rtol=1e-2)
 
