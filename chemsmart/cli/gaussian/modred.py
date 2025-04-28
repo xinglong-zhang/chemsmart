@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 @click_gaussian_jobtype_options
 @click.pass_context
 def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
+    """CLI for running Gaussian modred jobs."""
+
+    # get jobrunner for running Gaussian modred jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     if jobtype is None:
         jobtype = "modred"
 
@@ -52,5 +57,9 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     from chemsmart.jobs.gaussian.modred import GaussianModredJob
 
     return GaussianModredJob(
-        molecule=molecule, settings=modred_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=modred_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

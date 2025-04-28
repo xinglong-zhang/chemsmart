@@ -82,6 +82,11 @@ def dias(
     multiplicity_of_fragment2=None,
     **kwargs,
 ):
+    """CLI for running Gaussian DI-AS jobs."""
+
+    # get jobrunner for running Gaussian DI-AS jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     sp_settings = project_settings.sp_settings()
@@ -115,6 +120,7 @@ def dias(
         molecules=molecules,
         settings=sp_settings,
         label=label,
+        jobrunner=jobrunner,
         fragment_indices=fragment_indices,
         every_n_points=every_n_points,
         mode=mode,

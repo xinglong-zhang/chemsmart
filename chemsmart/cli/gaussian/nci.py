@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def nci(ctx, **kwargs):
+    """CLI for running Gaussian NCI jobs."""
+
+    # get jobrunner for running Gaussian NCI jobs
+    jobrunner = ctx.obj["jobrunner"]
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -41,5 +45,9 @@ def nci(ctx, **kwargs):
     from chemsmart.jobs.gaussian.nci import GaussianNCIJob
 
     return GaussianNCIJob(
-        molecule=molecule, settings=nci_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=nci_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )
