@@ -109,17 +109,17 @@ configure:        ## Run chemsmart configuration interactively.
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
 	if [ -n "$$gaussian_folder" ]; then \
-		echo "Configuring Gaussian with folder: $$gaussian_folder"; \
+		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
 	else \
-		echo "Skipping Gaussian configuration."; \
+		$(ECHO) "Skipping Gaussian configuration."; \
 	fi; \
 	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
 	if [ -n "$$orca_folder" ]; then \
-		echo "Configuring ORCA with folder: $$orca_folder"; \
+		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
-		echo "Skipping ORCA configuration."; \
+		$(ECHO) "Skipping ORCA configuration."; \
 	fi
 
 .PHONY: show
