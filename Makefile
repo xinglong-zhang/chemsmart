@@ -50,23 +50,23 @@ env:  ## Create a Conda environment if USE_CONDA=true.
 conda-env:  ## Create or update the Conda environment using environment.yml.
 	@echo Managing Conda environment 'chemsmart' with environment.yml...
 	@if [ ! -f environment.yml ]; then \
-		echo "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
+		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
 		exit 1; \
 	fi
 	@if [ "$(OS)" = "Windows" ]; then \
-		conda env list | findstr chemsmart >nul && ( \
-			echo "Updating existing 'chemsmart' environment..."; \
+		conda env list | findstr chemsmart >$(NULL) && ( \
+			$(ECHO) "Updating existing 'chemsmart' environment..."; \
 			conda env update -n chemsmart -f environment.yml --prune \
 		) || ( \
-			echo "Creating new 'chemsmart' environment..."; \
+			$(ECHO) "Creating new 'chemsmart' environment..."; \
 			conda env create -f environment.yml \
 		); \
 	else \
 		if conda env list | grep -q chemsmart; then \
-			echo "Updating existing 'chemsmart' environment..."; \
+			$(ECHO) "Updating existing 'chemsmart' environment..."; \
 			conda env update -n chemsmart -f environment.yml --prune; \
 		else \
-			echo "Creating new 'chemsmart' environment..."; \
+			$(ECHO) "Creating new 'chemsmart' environment..."; \
 			conda env create -f environment.yml; \
 		fi; \
 	fi
