@@ -64,6 +64,7 @@ def run(
 @run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
+    """Process the job returned by subcommands."""
     # will give the following error if without **kwargs:
     # TypeError: process_pipeline() got an unexpected keyword argument 'stream'
 
@@ -89,8 +90,11 @@ def process_pipeline(ctx, *args, **kwargs):
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
         )
+        job.jobrunner = jobrunner
         # Run the job with the jobrunner
-        job.run(jobrunner=jobrunner)
+        print(f"Running job: {job}")
+        print(f"Jobrunner: {jobrunner}")
+        job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 

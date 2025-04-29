@@ -2,6 +2,7 @@
 
 import os
 import shlex
+import socket
 import subprocess
 
 
@@ -111,3 +112,11 @@ class ClusterHelper:
                 )[-1]
                 running_job_names.append(job_name)
         return running_job_ids, running_job_names
+
+
+def is_pubchem_network_available():
+    try:
+        socket.create_connection(("pubchem.ncbi.nlm.nih.gov", 443), timeout=5)
+        return True
+    except OSError:
+        return False

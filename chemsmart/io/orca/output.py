@@ -1488,6 +1488,16 @@ class ORCAOutput(ORCAFileMixin):
         return all_rotational_constants_in_wavenumbers[-1]
 
     @property
+    def moments_of_inertia(self):
+        all_moments_of_inertia = [
+            units._hplanck
+            / (8 * np.pi**2 * units._c * 1e2 * B)
+            / (units._amu * (units.Ang / units.m) ** 2)
+            for B in self.rotational_constants_in_wavenumbers
+        ]
+        return all_moments_of_inertia
+
+    @property
     def rotational_constants_in_MHz(self):
         all_rotational_constants_in_MHz = []
         for i, line_i in enumerate(self.contents):
@@ -1511,14 +1521,17 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def vibrational_frequencies(self):
         vibrational_frequencies = []
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "VIBRATIONAL FREQUENCIES":
-                for line_j in self.optimized_output_lines[i + 5 :]:
+                for line_j in self.contents[i + 5 :]:
                     if "----------" in line_j:
                         break
                     # if 'Rotational constants in MHz :' in line_j:
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) != 0:
+                    if (
+                        len(line_j_elements) != 0
+                        and float(line_j_elements[1]) != 0
+                    ):
                         vibrational_frequencies.append(
                             float(line_j_elements[1])
                         )
@@ -1527,9 +1540,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def vib_freq_scale_factor(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "VIBRATIONAL FREQUENCIES":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Scaling factor for frequencies =" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-3])
@@ -1617,9 +1630,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_translation_and_rotation_modes(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if (
                         "The first frequency considered to be a vibration is"
                         in line_j
@@ -1630,9 +1643,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_vibration_modes(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if (
                         "The total number of vibrations considered is"
                         in line_j
@@ -1646,9 +1659,9 @@ class ORCAOutput(ORCAFileMixin):
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def temperature_in_K(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Temperature" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
@@ -1656,9 +1669,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def pressure_in_atm(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Pressure" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
@@ -1666,13 +1679,17 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def total_mass_in_amu(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Total Mass" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
         return None
+
+    @property
+    def mass(self):
+        return self.total_mass_in_amu
 
     @property
     def internal_energy(self):
@@ -1685,9 +1702,9 @@ class ORCAOutput(ORCAFileMixin):
         E(rot)  - is the rotational thermal energy
         E(trans)- is the translational thermal energy.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Total thermal energy" in line_j:
                         line_j_elements = line_j.split()
                         internal_energy_in_Hartree = float(line_j_elements[-2])
@@ -1700,9 +1717,9 @@ class ORCAOutput(ORCAFileMixin):
 
         Total energy from the electronic structure calculation.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Electronic energy" in line_j:
                         line_j_elements = line_j.split()
                         electronic_energy_in_Hartree = float(
@@ -1714,9 +1731,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def zero_point_energy(self):
         """E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Zero point energy" in line_j:
                         line_j_elements = line_j.split()
                         zpe_in_Hartree = float(line_j_elements[-4])
@@ -1726,9 +1743,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def thermal_vibration_correction(self):
         """E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal vibrational correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_vibration_correction_in_Hartree = float(
@@ -1743,9 +1760,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def thermal_rotation_correction(self):
         """E(rot)  - is the rotational thermal energy."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal rotational correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_rotation_correction_energy_in_Hartree = float(
@@ -1760,9 +1777,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def thermal_translation_correction(self):
         """E(trans)- is the translational thermal energy."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "INNER ENERGY" in line_i:
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal translational correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_translation_correction_in_Hartree = float(
@@ -1798,9 +1815,9 @@ class ORCAOutput(ORCAFileMixin):
 
         kB is Boltzmann's constant.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Total Enthalpy" in line_j:
                         line_j_elements = line_j.split()
                         enthalpy_in_Hartree = float(line_j_elements[-2])
@@ -1813,9 +1830,9 @@ class ORCAOutput(ORCAFileMixin):
 
         kB is Boltzmann's constant.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Thermal Enthalpy correction" in line_j:
                         line_j_elements = line_j.split()
                         thermal_enthalpy_correction_in_Hartree = float(
@@ -1828,11 +1845,28 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number from the output file."""
+        for i, line_i in enumerate(self.contents):
+            if line_i == "ENTHALPY":
+                for line_j in self.contents[i:]:
+                    if (
+                        "Point Group:" in line_j
+                        and "Symmetry Number:" in line_j
+                    ):
+                        line_j_elements = line_j.split()
+                        rotational_symmetry_number = int(
+                            line_j_elements[-1].strip()
+                        )
+                        return rotational_symmetry_number
+        return None
+
+    @property
     def electronic_entropy_no_temperature_in_SI(self):
         """Return electronic entropy in J/mol/K."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Electronic entropy" in line_j:
                         line_j_elements = line_j.split()
                         electronic_entropy_hartree = float(line_j_elements[-4])
@@ -1851,9 +1885,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def vibrational_entropy_no_temperature_in_SI(self):
         """Return vibrational entropy in J/mol/K."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Vibrational entropy" in line_j:
                         line_j_elements = line_j.split()
                         vibrational_entropy_hartree = float(
@@ -1874,9 +1908,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def rotational_entropy_no_temperature_in_SI(self):
         """Return rotational entropy in J/mol/K."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Rotational entropy" in line_j:
                         line_j_elements = line_j.split()
                         rotational_entropy_hartree = float(line_j_elements[-4])
@@ -1895,9 +1929,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def translational_entropy_no_temperature_in_SI(self):
         """Return translational entropy in J/mol/K."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Translational entropy" in line_j:
                         line_j_elements = line_j.split()
                         translational_entropy_hartree = float(
@@ -1931,9 +1965,9 @@ class ORCAOutput(ORCAFileMixin):
         ALREADY MULTIPLIED BY TEMPERATURE.
         The entropies will be listed as multiplied by the temperature to get units of energy.
         """
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "ENTROPY":
-                for line_j in self.optimized_output_lines[i + 10 :]:
+                for line_j in self.contents[i + 10 :]:
                     if "Final entropy term" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-4])
@@ -1944,11 +1978,9 @@ class ORCAOutput(ORCAFileMixin):
     def rotational_entropy_symmetry_correction_J_per_mol_per_K(self):
         """Return rotational entropy in J/mol/K for different symmetry numbers sn=1-12."""
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "rotational entropy values for sn=1,12 :" in line_i:
-                for line_j in self.optimized_output_lines[
-                    i + 2 :
-                ]:  # i+2 onwards
+                for line_j in self.contents[i + 2 :]:  # i+2 onwards
                     if "-------------------" in line_j:
                         break
                     new_line = line_j.replace("=", " ")
@@ -1975,9 +2007,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def gibbs_free_energy(self):
         """The Gibbs free energy is G = H - T*S."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "GIBBS FREE ENERGY":
-                for line_j in self.optimized_output_lines[i:]:
+                for line_j in self.contents[i:]:
                     if "Final Gibbs free energy" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-2])

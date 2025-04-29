@@ -10,6 +10,7 @@ class GaussianDIASJob(GaussianJob):
         molecules,
         settings,
         label,
+        jobrunner,
         fragment_indices,
         every_n_points,
         mode,
@@ -23,6 +24,7 @@ class GaussianDIASJob(GaussianJob):
             molecule=molecules,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
         self.all_molecules = molecules  # alone IRC coordinate
@@ -101,6 +103,7 @@ class GaussianDIASJob(GaussianJob):
                         molecule=molecule,
                         settings=self.fragment1_settings,
                         label=label,
+                        jobrunner=self.jobrunner,
                         skip_completed=self.skip_completed,
                     )
                 ]
@@ -114,6 +117,7 @@ class GaussianDIASJob(GaussianJob):
                     molecule=image,
                     settings=self.fragment1_settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]
@@ -134,6 +138,7 @@ class GaussianDIASJob(GaussianJob):
                         molecule=molecule,
                         settings=self.fragment2_settings,
                         label=label,
+                        jobrunner=self.jobrunner,
                         skip_completed=self.skip_completed,
                     )
                 ]
@@ -146,6 +151,7 @@ class GaussianDIASJob(GaussianJob):
                     molecule=image,
                     settings=self.fragment2_settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]
@@ -166,6 +172,7 @@ class GaussianDIASJob(GaussianJob):
                         molecule=molecule,
                         settings=self.settings,
                         label=label,
+                        jobrunner=self.jobrunner,
                         skip_completed=self.skip_completed,
                     )
                 ]
@@ -178,26 +185,27 @@ class GaussianDIASJob(GaussianJob):
                     molecule=image,
                     settings=self.settings,
                     label=label,
+                    jobrunner=self.jobrunner,
                     skip_completed=self.skip_completed,
                 )
             ]
 
-    def _run_all_molecules_jobs(self, jobrunner):
+    def _run_all_molecules_jobs(self):
         for job in self.all_molecules_jobs:
-            job.run(jobrunner=jobrunner)
+            job.run()
 
-    def _run_fragment1_jobs(self, jobrunner):
+    def _run_fragment1_jobs(self):
         for job in self.fragment1_jobs:
-            job.run(jobrunner=jobrunner)
+            job.run()
 
-    def _run_fragment2_jobs(self, jobrunner):
+    def _run_fragment2_jobs(self):
         for job in self.fragment2_jobs:
-            job.run(jobrunner=jobrunner)
+            job.run()
 
     def _run(self, jobrunner, **kwargs):
-        self._run_all_molecules_jobs(jobrunner=jobrunner)
-        self._run_fragment1_jobs(jobrunner=jobrunner)
-        self._run_fragment2_jobs(jobrunner=jobrunner)
+        self._run_all_molecules_jobs()
+        self._run_fragment1_jobs()
+        self._run_fragment2_jobs()
 
     def is_complete(self):
         return (

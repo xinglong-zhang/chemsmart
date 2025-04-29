@@ -3,7 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 .idea/
+.idea/*
 *.idea/
+*.idea/*
+
 
 # C extensions
 *.so
@@ -134,3 +137,4 @@ dmypy.json
 
 #macos
 .DS_Store
+.idea/

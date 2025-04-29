@@ -46,3 +46,9 @@ def clean_duplicate_structure(orientations):
 def increment_numbers(s, increment=1):
     # Use re.sub with a lambda to increment each number
     return re.sub(r"\d+", lambda m: str(int(m.group()) + increment), s)
+
+
+def remove_keyword(text, keyword):
+    return re.sub(
+        r"\b" + re.escape(keyword) + r"\b", "", text, flags=re.IGNORECASE
+    )
