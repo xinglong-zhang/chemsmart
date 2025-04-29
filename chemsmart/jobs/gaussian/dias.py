@@ -202,7 +202,7 @@ class GaussianDIASJob(GaussianJob):
         for job in self.fragment2_jobs:
             job.run()
 
-    def _run(self, jobrunner, **kwargs):
+    def _run(self, **kwargs):
         self._run_all_molecules_jobs()
         self._run_fragment1_jobs()
         self._run_fragment2_jobs()
