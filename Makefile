@@ -75,8 +75,8 @@ conda-env:  ## Create or update the Conda environment using environment.yml.
 .PHONY: virtualenv
 virtualenv:  ## Create a virtual environment using virtualenv.
 	@if [ "$(OS)" = "Windows" ]; then \
-		where python3 >nul 2>&1 || ( \
-			echo "Python 3 is required but not installed. Exiting."; \
+		where python3 >$(NULL) 2>&1 || ( \
+			$(ECHO) "Python 3 is required but not installed. Exiting."; \
 			exit 1 \
 		); \
 		if [ ! -d "venv" ]; then \
@@ -84,8 +84,8 @@ virtualenv:  ## Create a virtual environment using virtualenv.
 		fi; \
 		call venv\Scripts\activate.bat && pip install -U pip; \
 	else \
-		if ! command -v python3 >/dev/null; then \
-			echo "Python 3 is required but not installed. Exiting."; \
+		if ! command -v python3 >$(NULL); then \
+			$(ECHO) "Python 3 is required but not installed. Exiting."; \
 			exit 1; \
 		fi; \
 		if [ ! -d "venv" ]; then \
