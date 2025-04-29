@@ -21,7 +21,7 @@ class GaussianDIASJob(GaussianJob):
         **kwargs,
     ):
         super().__init__(
-            molecule=molecules,
+            molecule=molecules[0],  # Use the first molecule as a placeholder
             settings=settings,
             label=label,
             jobrunner=jobrunner,
