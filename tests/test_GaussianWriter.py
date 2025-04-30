@@ -15,6 +15,7 @@ from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.utils import cmp_with_ignore
+from tests.conftest import gaussian_yaml_settings_qmmm_project_name
 
 
 class TestGaussianInputWriter:
@@ -194,20 +195,21 @@ class TestGaussianInputWriter:
                            single_molecule_xyz_file,
                            gaussian_yaml_settings_qmmm_project_name,
                            jobrunner_no_scratch,
-                           # gaussian_written_qmmm_file,
+                            gaussian_written_qmmm_file,
                             ):
         project_settings = GaussianProjectSettings.from_project(gaussian_yaml_settings_qmmm_project_name)
         qmmm_settings = project_settings.qmmm_settings()
         qmmm_settings.charge = 0
         qmmm_settings.multiplicity = 1
+        qmmm_settings.real_charge = 0
+        qmmm_settings.real_multiplicity = 1
         job= GaussianQMMMJob.from_filename(filename=single_molecule_xyz_file, settings=qmmm_settings, label= "gaussian_qmmm")
         assert isinstance(job, GaussianQMMMJob)
         g16_writer = GaussianInputWriter(job=job, jobrunner=jobrunner_no_scratch)
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_qmmm.com")
         assert os.path.isfile(g16_file)
-        print(g16_writer)
-        # assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
+        assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
 
 
     def test_write_opt_input_from_logfile(
