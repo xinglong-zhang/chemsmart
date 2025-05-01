@@ -506,7 +506,10 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
                 )
                 pass
             else:
-                cubegen_command = f"{gaussian_exe}/cubegen 0 MO={job.number} {self.job_basename}.fchk {self.job_basename}_MO{job.number}.cube 0 h"
+                cubegen_command = (
+                    f"{gaussian_exe}/cubegen 0 MO={job.number} {self.job_basename}.fchk "
+                    f"{self.job_basename}_MO{job.number}.cube 0 h"
+                )
                 run_command(cubegen_command)
 
         if job.homo:
@@ -516,7 +519,10 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
                 )
                 pass
             else:
-                cubegen_command = f"{gaussian_exe}/cubegen 0 MO=HOMO {self.job_basename}.fchk {self.job_basename}_HOMO.cube 0 h"
+                cubegen_command = (
+                    f"{gaussian_exe}/cubegen 0 MO=HOMO {self.job_basename}.fchk "
+                    f"{self.job_basename}_HOMO.cube 0 h"
+                )
                 run_command(cubegen_command)
         if job.lumo:
             if os.path.exists(f"{self.job_basename}_LUMO.cube"):
@@ -525,21 +531,26 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
                 )
                 pass
             else:
-                cubegen_command = f"{gaussian_exe}/cubegen 0 MO=LUMO {self.job_basename}.fchk {self.job_basename}_LUMO.cube 0 h"
+                cubegen_command = (
+                    f"{gaussian_exe}/cubegen 0 MO=LUMO {self.job_basename}.fchk "
+                    f"{self.job_basename}_LUMO.cube 0 h"
+                )
                 run_command(cubegen_command)
 
     def _write_molecular_orbital_pml(
         self, job, isosurface=0.05, transparency=0.2
     ):
-        pml_file = os.path.join(job.folder, f"{self.job_basename}.pml")
+        """Write the .pml file based on the .cube file"""
+
+        pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
         if not os.path.exists(pml_file):
             with open(pml_file, "w") as f:
-                f.write(f"load {self.job_basename}.cube\n")
+                f.write(f"load {job.mo_basename}.cube\n")
                 f.write(
-                    f"isosurface pos_iso, {self.job_basename}, {isosurface}\n"
+                    f"isosurface pos_iso, {job.mo_basename}, {isosurface}\n"
                 )
                 f.write(
-                    f"isosurface neg_iso, {self.job_basename}, {-isosurface}\n"
+                    f"isosurface neg_iso, {job.mo_basename}, {-isosurface}\n"
                 )
                 f.write("print(pos_iso)\n")
                 f.write("print(neg_iso)\n")
@@ -557,6 +568,6 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 
     def _call_pml(self, job, command):
         """Call the PML file for visualization."""
-        pml_file = os.path.join(job.folder, f"{self.job_basename}.pml")
+        pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
         command += f"; load {quote_path(pml_file)}"
         return command
