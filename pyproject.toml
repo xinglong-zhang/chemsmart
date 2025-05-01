@@ -40,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pytest-mock",
     "coverage",
     "flake8",
     "ruff",

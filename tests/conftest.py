@@ -900,3 +900,17 @@ def temp_folder_with_files():
         with open(file2, "w") as f:
             f.write("Test file 2")
         yield tmpdir, file1, file2
+
+
+# pytest fixtures for Popen
+@pytest.fixture
+def mock_popen(mocker):
+    """Fixture to mock subprocess.Popen."""
+    return mocker.patch("subprocess.Popen")
+
+
+@pytest.fixture
+def capture_log(caplog):
+    """Fixture to capture log messages."""
+    caplog.set_level("INFO")
+    return caplog
