@@ -85,7 +85,7 @@ class ORCAInputWriter(InputWriter):
     def _write_memory(self, f):
         logger.debug("Writing memory.")
         f.write("# Memory per core\n")
-        mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
+        mpc = self.jobrunner.mem_gb * 1000 / self.jobrunner.num_cores
         f.write(f"%maxcore {round(mpc)}\n")
 
     def _write_scf_block(self, f):
