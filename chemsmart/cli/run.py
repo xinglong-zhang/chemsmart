@@ -90,10 +90,9 @@ def process_pipeline(ctx, *args, **kwargs):
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
         )
+
+        # Attach jobrunner to job and run the job with the jobrunner
         job.jobrunner = jobrunner
-        # Run the job with the jobrunner
-        print(f"Running job: {job}")
-        print(f"Jobrunner: {jobrunner}")
         job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")

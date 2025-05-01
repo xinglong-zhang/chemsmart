@@ -21,7 +21,7 @@ class GaussianDIASJob(GaussianJob):
         **kwargs,
     ):
         super().__init__(
-            molecule=molecules,
+            molecule=molecules[0],  # Use the first molecule as a placeholder
             settings=settings,
             label=label,
             jobrunner=jobrunner,
@@ -54,7 +54,7 @@ class GaussianDIASJob(GaussianJob):
         self.fragment2_settings = fragment2_settings
 
     @property
-    def num_images(self):
+    def num_molecules(self):
         return len(self.all_molecules)
 
     def _fragment_structure(self, molecule):
@@ -83,20 +83,20 @@ class GaussianDIASJob(GaussianJob):
             for molecule in self.all_molecules
         ]
 
-    def _sample_images(self, images):
-        """Samples provided images every self.every_n_points."""
-        filtered_images = images[0 :: self.every_n_points]
-        if (self.num_images - 1) / self.every_n_points != 0:
-            filtered_images.append(images[-1])
-        return filtered_images
+    def _sample_molecules(self, molecules):
+        """Samples provided molecules every self.every_n_points."""
+        filtered_molecules = molecules[0 :: self.every_n_points]
+        if (self.num_molecules - 1) / self.every_n_points != 0:
+            filtered_molecules.append(molecules[-1])
+        return filtered_molecules
 
     @property
     def fragment1_jobs(self):
         if self.mode.lower() == "irc":
             # using IRC log file
-            images = self._sample_images(self.fragment1_atoms)
+            molecules = self._sample_molecules(self.fragment1_atoms)
             jobs = []
-            for i, molecule in enumerate(images):
+            for i, molecule in enumerate(molecules):
                 label = f"{self.label}_p{i}_f1"
                 jobs += [
                     GaussianGeneralJob(
@@ -110,11 +110,11 @@ class GaussianDIASJob(GaussianJob):
             return jobs
         elif self.mode.lower() == "ts":
             # using TS log file
-            image = self.fragment1_atoms[-1]
+            molecule = self.fragment1_atoms[-1]
             label = f"{self.label}_p1_f1"
             return [
                 GaussianGeneralJob(
-                    molecule=image,
+                    molecule=molecule,
                     settings=self.fragment1_settings,
                     label=label,
                     jobrunner=self.jobrunner,
@@ -129,9 +129,9 @@ class GaussianDIASJob(GaussianJob):
     @property
     def fragment2_jobs(self):
         if self.mode.lower() == "irc":
-            images = self._sample_images(self.fragment2_atoms)
+            molecules = self._sample_molecules(self.fragment2_atoms)
             jobs = []
-            for i, molecule in enumerate(images):
+            for i, molecule in enumerate(molecules):
                 label = f"{self.label}_p{i}_f2"
                 jobs += [
                     GaussianGeneralJob(
@@ -144,11 +144,11 @@ class GaussianDIASJob(GaussianJob):
                 ]
             return jobs
         elif self.mode.lower() == "ts":
-            image = self.fragment2_atoms[-1]
+            molecule = self.fragment2_atoms[-1]
             label = f"{self.label}_p1_f2"
             return [
                 GaussianGeneralJob(
-                    molecule=image,
+                    molecule=molecule,
                     settings=self.fragment2_settings,
                     label=label,
                     jobrunner=self.jobrunner,
@@ -163,9 +163,9 @@ class GaussianDIASJob(GaussianJob):
     @property
     def all_molecules_jobs(self):
         if self.mode.lower() == "irc":
-            images = self._sample_images(self.all_molecules)
+            molecules = self._sample_molecules(self.all_molecules)
             jobs = []
-            for i, molecule in enumerate(images):
+            for i, molecule in enumerate(molecules):
                 label = f"{self.label}_p{i}"
                 jobs += [
                     GaussianGeneralJob(
@@ -178,11 +178,11 @@ class GaussianDIASJob(GaussianJob):
                 ]
             return jobs
         elif self.mode.lower() == "ts":
-            image = self.all_molecules[-1]
+            molecule = self.all_molecules[-1]
             label = f"{self.label}_p1"
             return [
                 GaussianGeneralJob(
-                    molecule=image,
+                    molecule=molecule,
                     settings=self.settings,
                     label=label,
                     jobrunner=self.jobrunner,
@@ -202,7 +202,7 @@ class GaussianDIASJob(GaussianJob):
         for job in self.fragment2_jobs:
             job.run()
 
-    def _run(self, jobrunner, **kwargs):
+    def _run(self, **kwargs):
         self._run_all_molecules_jobs()
         self._run_fragment1_jobs()
         self._run_fragment2_jobs()

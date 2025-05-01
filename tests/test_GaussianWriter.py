@@ -52,7 +52,7 @@ class TestGaussianInputWriter:
         )  # writes input file as expected
 
         # job run will result in the job being run and the output file copied back to run folder
-        # job.run(jobrunner=jobrunner_no_scratch)
+        # job.run()
         # assert job.is_complete()
 
     def test_write_opt_job_with_route(
