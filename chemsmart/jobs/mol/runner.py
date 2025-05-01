@@ -571,3 +571,9 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
         command += f"; load {quote_path(pml_file)}"
         return command
+
+    def _save_pse_command(self, job, command):
+        # Append the final PyMOL commands, quoting the output file path
+        command += f"; save {quote_path(job.mo_basename)}.pse"
+
+        return command
