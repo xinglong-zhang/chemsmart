@@ -35,6 +35,8 @@ dependencies = [
     "openpyxl==3.1.5",
     "requests>=2.32.3",
     "tenacity>=9.1.2",
+    "matplotlib>=3.10.1",
+    "scikit-learn>=1.6.1",
 ]
 
 [project.optional-dependencies]

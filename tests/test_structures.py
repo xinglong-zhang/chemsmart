@@ -10,6 +10,7 @@ from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.utils.cluster import is_pubchem_network_available
 
 
 class TestCoordinateBlock:
@@ -134,6 +135,9 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+        assert len(molecule.chemical_symbols) == 71
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+        assert np.isclose(molecule.mass, 665.982, atol=1e-2)
 
         # test conversion to RDKit molecule
         rdkit_molecule = molecule.to_rdkit()
@@ -354,6 +358,19 @@ class TestStructures:
         )
         assert isinstance(molecule, Molecule)
 
+    def test_molecular_geometry(self):
+        """Test molecular geometry calculations."""
+        mol = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array([[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]),
+        )
+        assert np.isclose(mol.mass, 44.01, atol=1e-2)
+        assert np.isclose(mol.get_distance(1, 2), 1.16)
+        assert np.isclose(mol.get_distance(2, 3), 1.16)
+        assert np.isclose(mol.get_angle(1, 2, 3), 180)
+        assert np.isclose(mol.get_dihedral(0, 1, 2, 0), 0)
+        assert mol.is_linear
+
 
 class TestMoleculeAdvanced:
     def test_molecule_to_rdkit_conversion(self):
@@ -540,6 +557,10 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_stereochemistry_handling(self):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = Molecule.from_pubchem("11507")

@@ -48,9 +48,14 @@ def link(
     route,
     **kwargs,
 ):
-    from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+    """CLI for running Gaussian link jobs."""
+
+    # get jobrunner for running Gaussian link jobs
+    jobrunner = ctx.obj["jobrunner"]
 
     # get settings from project
+    from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+
     project_settings = ctx.obj["project_settings"]
     link_settings = get_setting_from_jobtype_for_gaussian(
         project_settings, jobtype, coordinates, step_size, num_steps
@@ -100,5 +105,9 @@ def link(
     from chemsmart.jobs.gaussian.link import GaussianLinkJob
 
     return GaussianLinkJob(
-        molecule=molecule, settings=link_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=link_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

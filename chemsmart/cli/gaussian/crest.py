@@ -37,6 +37,11 @@ def crest(
     skip_completed,
     **kwargs,
 ):
+    """CLI for running Gaussian CREST jobs."""
+
+    # get jobrunner for running Gaussian crest jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     crest_settings = get_setting_from_jobtype_for_gaussian(
@@ -72,6 +77,7 @@ def crest(
         molecules=molecules,
         settings=crest_settings,
         label=label,
+        jobrunner=jobrunner,
         num_confs_to_run=num_confs_to_run,
         skip_completed=skip_completed,
         **kwargs,

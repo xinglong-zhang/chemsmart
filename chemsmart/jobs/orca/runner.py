@@ -22,6 +22,7 @@ class ORCAJobRunner(JobRunner):
     # combines information about server and program
 
     JOBTYPES = [
+        "orcajob",
         "orcainp",
         "orcaopt",
         "orcamodred",
@@ -113,7 +114,7 @@ class ORCAJobRunner(JobRunner):
     def _write_input(self, job):
         from chemsmart.jobs.orca.writer import ORCAInputWriter
 
-        input_writer = ORCAInputWriter(job=job, jobrunner=self)
+        input_writer = ORCAInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):
@@ -172,15 +173,6 @@ class FakeORCAJobRunner(ORCAJobRunner):
     # creates job runner process
     # combines information about server and program
     FAKE = True
-    JOBTYPES = [
-        "orcainp",
-        "orcaopt",
-        "orcamodred",
-        "orcascan",
-        "orcats",
-        "orcasp",
-        "orcairc",
-    ]
 
     def __init__(self, server, scratch=None, fake=True, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
