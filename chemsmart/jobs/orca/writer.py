@@ -85,8 +85,11 @@ class ORCAInputWriter(InputWriter):
     def _write_memory(self, f):
         logger.debug("Writing memory.")
         f.write("# Memory per core\n")
-        mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
-        f.write(f"%maxcore {round(mpc)}\n")
+        mpc = (self.jobrunner.mem_gb * 1000) / self.jobrunner.num_cores * 0.75
+        # Safety Factor: Applies a 75% factor to the memory per core to
+        # reduce the risk of out-of-memory errors, as recommended for ORCA.
+        mpc = int(mpc)
+        f.write(f"%maxcore {mpc}\n")
 
     def _write_scf_block(self, f):
         logger.debug("Writing SCF black.")

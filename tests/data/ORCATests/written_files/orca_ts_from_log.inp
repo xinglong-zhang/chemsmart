@@ -2,7 +2,7 @@
 # Number of processors
 %pal nprocs 64 end
 # Memory per core
-%maxcore 6
+%maxcore 4687
 %geom
   Calc_Hess True  # calc initial Hessian
   NumHess False  # Request numerical Hessian (if analytical not available)
