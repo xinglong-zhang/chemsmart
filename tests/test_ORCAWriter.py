@@ -275,6 +275,7 @@ class TestORCAInputWriter:
             molecule=helium,
             settings=opt_settings,
             label="orca_he_monoatomic_opt",
+            jobrunner=orca_jobrunner_no_scratch,
         )
         assert isinstance(job, ORCAOptJob)
         orca_writer = ORCAInputWriter(job=job)
