@@ -153,7 +153,7 @@ def click_pymol_mo_options(f):
         "--number",
         type=int,
         default=None,
-        help="Number of Molecular Orbital to be visualized. Default to None.",
+        help="Molecular Orbital number to be visualized (e.g., 31 will visualize MO #31). Default to None.",
     )
     @click.option(
         "-h",

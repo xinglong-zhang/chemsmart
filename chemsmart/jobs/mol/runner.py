@@ -575,6 +575,10 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         command = self._add_ray_command(job, command)
         return command
 
+    def _offset_labels(self, job, command):
+        # not needed for MO visualization
+        pass
+
     def _call_pml(self, job, command):
         """Call the PML file for visualization."""
         pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
