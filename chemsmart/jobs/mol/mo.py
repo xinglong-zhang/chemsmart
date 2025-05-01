@@ -1,3 +1,5 @@
+import os.path
+
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
@@ -36,3 +38,7 @@ class PyMOLMOJob(PyMOLJob):
         )
 
         self.mo_basename = mo_basename
+
+    def _job_is_complete(self):
+        """PyMOL MO job is complete if the corresponding .pse file exists."""
+        return os.path.exists(f"{self.mo_basename}.pse")
