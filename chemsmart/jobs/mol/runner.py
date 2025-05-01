@@ -577,7 +577,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 
     def _offset_labels(self, job, command):
         # not needed for MO visualization
-        pass
+        return command
 
     def _call_pml(self, job, command):
         """Call the PML file for visualization."""
