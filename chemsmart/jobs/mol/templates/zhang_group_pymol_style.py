@@ -243,7 +243,7 @@ def nci(arg1, isosurface=0.5, range=1.0):
     dens_file = arg1 + "-dens"
     grad_file = arg1 + "-grad"
     cmd.isosurface("grad", grad_file, isosurface)
-    cmd.ramp_new("ramp", dens_file, [-range, range], "rainbow")
+    cmd.ramp_new("ramp", dens_file, [-range, 0, range], "rainbow")
     cmd.set("surface_color", "ramp", "grad")
     cmd.set("two_sided_lighting", value=1)
     cmd.set("transparency", 0.5)
