@@ -494,9 +494,18 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _generate_mo_cube_file(self, job):
         """Generate the MO cube file."""
         gaussian_exe = self._get_gaussian_executable(job)
-        if [job.number, job.homo, job.lumo].count(None) < 1:
+
+        selected = sum(
+            [
+                job.number is not None,
+                job.homo,
+                job.lumo,
+            ]
+        )
+
+        if selected != 1:
             raise ValueError(
-                "Cannot specify more than two of MO number, HOMO, and LUMO together."
+                "You must specify exactly one of --number, --homo, or --lumo."
             )
 
         if job.number:
