@@ -461,7 +461,12 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 
     def _get_gaussian_executable(self, job):
         """Get the Gaussian executable for the job."""
-        return GaussianExecutable.from_servername(job.server)
+        logger.info(
+            f"Obtaining Gaussian executable from server: {self.server}"
+        )
+        gaussian_exe = GaussianExecutable.from_servername(self.server)
+        gaussian_exe_path = gaussian_exe.executable_folder
+        return gaussian_exe_path
 
     def _prerun(self, job):
         self._assign_variables(job)
@@ -485,26 +490,6 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             logger.info(f"Generating .fchk file from {self.job_basename}.chk")
             fchk_command = f"{gaussian_exe}/formchk {job.job_basename}.chk"
             run_command(fchk_command)
-
-    def _write_molecular_orbital_pml(
-        self, job, isosurface=0.05, transparency=0.2
-    ):
-        pml_file = os.path.join(job.folder, f"{job.job_basename}.pml")
-        if not os.path.exists(pml_file):
-            with open(pml_file, "w") as f:
-                f.write(f"load {job.job_basename}.cube\n")
-                f.write(
-                    f"isosurface pos_iso, {job.job_basename}, {isosurface}\n"
-                )
-                f.write(
-                    f"isosurface neg_iso, {job.job_basename}, {-isosurface}\n"
-                )
-                f.write("print(pos_iso)\n")
-                f.write("print(neg_iso)\n")
-                f.write("set surface_color, blue, pos_iso\n")
-                f.write("set surface_color, red, neg_iso\n")
-                f.write(f"set transparency, {transparency}\n")
-            logger.info(f"Wrote PML file: {pml_file}")
 
     def _generate_mo_cube_file(self, job):
         """Generate the MO cube file."""
@@ -542,6 +527,26 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             else:
                 cubegen_command = f"{gaussian_exe}/cubegen 0 MO=LUMO {job.job_basename}.fchk {job.job_basename}_LUMO.cube 0 h"
                 run_command(cubegen_command)
+
+    def _write_molecular_orbital_pml(
+        self, job, isosurface=0.05, transparency=0.2
+    ):
+        pml_file = os.path.join(job.folder, f"{job.job_basename}.pml")
+        if not os.path.exists(pml_file):
+            with open(pml_file, "w") as f:
+                f.write(f"load {job.job_basename}.cube\n")
+                f.write(
+                    f"isosurface pos_iso, {job.job_basename}, {isosurface}\n"
+                )
+                f.write(
+                    f"isosurface neg_iso, {job.job_basename}, {-isosurface}\n"
+                )
+                f.write("print(pos_iso)\n")
+                f.write("print(neg_iso)\n")
+                f.write("set surface_color, blue, pos_iso\n")
+                f.write("set surface_color, red, neg_iso\n")
+                f.write(f"set transparency, {transparency}\n")
+            logger.info(f"Wrote PML file: {pml_file}")
 
     def _job_specific_commands(self, job, command):
         """Job specific commands."""
