@@ -8,7 +8,6 @@ from abc import abstractmethod
 from contextlib import suppress
 from typing import Optional
 
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
@@ -170,30 +169,20 @@ class Job(RegistryMixin):
         return self._job_is_complete()
 
     @classmethod
-    def from_molecule(
-        cls, molecule, label, server=None, scratch=None, fake=False, **kwargs
-    ):
+    def from_molecule(cls, molecule, label, jobrunner=None, **kwargs):
         """
         Create a Job instance with a JobRunner initialized from the job's TYPE.
 
         Args:
             molecule: The molecule object associated with the job.
             label (str): A label for the job.
-            server: The server to run the job on (optional, defaults to current server).
-            scratch (bool): Whether to use a scratch directory (optional).
-            fake (bool): Whether to use a fake job runner (optional).
+            jobrunner: The JobRunner instance to execute the job.
+            If None, it will be created based on the job's TYPE.
             **kwargs: Additional keyword arguments for Job or JobRunner.
 
         Returns:
             Job: A new Job instance with an appropriate JobRunner.
         """
-        jobrunner = JobRunner.from_job(
-            cls(molecule=molecule, label=label, jobrunner=None, **kwargs),
-            server=server,
-            scratch=scratch,
-            fake=fake,
-            **kwargs,
-        )
         return cls(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
