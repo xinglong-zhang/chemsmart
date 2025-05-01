@@ -7,25 +7,29 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian import (
     GaussianModredJob,
     GaussianOptJob,
+    GaussianQMMMJob,
     GaussianScanJob,
     GaussianSinglePointJob,
-    GaussianTSJob, GaussianQMMMJob
+    GaussianTSJob,
 )
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.utils import cmp_with_ignore
-from tests.conftest import gaussian_yaml_settings_qmmm_project_name
+from tests.conftest import (
+    gaussian_yaml_settings_qmmm_project_name,
+    jobrunner_no_scratch,
+)
 
 
 class TestGaussianInputWriter:
     def test_write_opt_job(
-            self,
-            tmpdir,
-            single_molecule_xyz_file,
-            gaussian_yaml_settings_gas_solv_project_name,
-            jobrunner_no_scratch,
-            gaussian_written_opt_file,
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_opt_file,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -57,12 +61,12 @@ class TestGaussianInputWriter:
         # assert job.is_complete()
 
     def test_write_opt_job_with_route(
-            self,
-            tmpdir,
-            single_molecule_xyz_file,
-            gaussian_yaml_settings_gas_solv_project_name,
-            jobrunner_no_scratch,
-            gaussian_written_opt_file_with_route,
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_opt_file_with_route,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -92,12 +96,12 @@ class TestGaussianInputWriter:
         )
 
     def test_write_modred_job(
-            self,
-            tmpdir,
-            single_molecule_xyz_file,
-            gaussian_yaml_settings_gas_solv_project_name,
-            jobrunner_no_scratch,
-            gaussian_written_modred_file,
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_modred_file,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -124,12 +128,12 @@ class TestGaussianInputWriter:
         assert cmp(g16_file, gaussian_written_modred_file, shallow=False)
 
     def test_write_scan_job(
-            self,
-            tmpdir,
-            single_molecule_xyz_file,
-            gaussian_yaml_settings_gas_solv_project_name,
-            jobrunner_no_scratch,
-            gaussian_written_scan_file,
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_scan_file,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -160,12 +164,12 @@ class TestGaussianInputWriter:
         assert cmp(g16_file, gaussian_written_scan_file, shallow=False)
 
     def test_write_ts_job(
-            self,
-            tmpdir,
-            single_molecule_xyz_file,
-            gaussian_yaml_settings_gas_solv_project_name,
-            jobrunner_no_scratch,
-            gaussian_written_ts_file,
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_ts_file,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -190,35 +194,87 @@ class TestGaussianInputWriter:
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_ts_file, shallow=False)
 
-    def test_write_qmmm_job(self,
-                           tmpdir,
-                           single_molecule_xyz_file,
-                           gaussian_yaml_settings_qmmm_project_name,
-                           jobrunner_no_scratch,
-                            gaussian_written_qmmm_file,
-                            ):
-        project_settings = GaussianProjectSettings.from_project(gaussian_yaml_settings_qmmm_project_name)
+    def test_write_qmmm_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_qmmm_project_name,
+        jobrunner_no_scratch,
+        gaussian_written_qmmm_file,
+    ):
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
         qmmm_settings = project_settings.qmmm_settings()
         qmmm_settings.charge = 0
         qmmm_settings.multiplicity = 1
         qmmm_settings.real_charge = 0
         qmmm_settings.real_multiplicity = 1
-        job= GaussianQMMMJob.from_filename(filename=single_molecule_xyz_file, settings=qmmm_settings, label= "gaussian_qmmm")
+        job = GaussianQMMMJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=qmmm_settings,
+            label="gaussian_qmmm",
+        )
         assert isinstance(job, GaussianQMMMJob)
-        g16_writer = GaussianInputWriter(job=job, jobrunner=jobrunner_no_scratch)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_qmmm.com")
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
 
+    def test_write_qmmm_input_from_logfile(
+        self,
+        tmpdir,
+        gaussian_yaml_settings_qmmm_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        gaussian_written_qmmm_log_file,
+    ):
+        """Taking the Gaussian nhc_neutral_singlet.log output and write qmmm .com"""
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_qmmm_project_name
+        )
+        qmmm_settings = project_settings.qmmm_settings()
+        qmmm_settings.charge = 0
+        qmmm_settings.multiplicity = 1
+        qmmm_settings.real_charge = 0
+        qmmm_settings.real_multiplicity = 1
+        qmmm_settings.high_level_atoms = [3, 12, 14, 7, 9]
+        qmmm_settings.medium_level_atoms = [8, 17, 19 - 25]
+        qmmm_settings.bonded_atoms = [(1, 3)]
+        job_settings = GaussianJobSettings.from_logfile(
+            gaussian_singlet_opt_outfile
+        )
+        keywords = ("charge", "multiplicity", "title")
+        qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
+        job = GaussianQMMMJob.from_filename(
+            filename=gaussian_singlet_opt_outfile,
+            settings=qmmm_settings,
+            label="gaussian_qmmm_from_log",
+        )
+        assert isinstance(job, GaussianQMMMJob)
+        g16_writer = GaussianInputWriter(
+            job=job, jobrunner=jobrunner_no_scratch
+        )
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_qmmm_from_log.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_qmmm_log_file,
+            shallow=False,
+        )
 
     def test_write_opt_input_from_logfile(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_singlet_opt_outfile,
-            jobrunner_no_scratch,
-            gaussian_written_ts_from_nhc_singlet_log_file,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        gaussian_written_ts_from_nhc_singlet_log_file,
     ):
         """Taking the Gaussian nhc_neutral_singlet.log output
         and write aldehyde_opt.com using the settings from the .log file."""
@@ -253,12 +309,12 @@ class TestGaussianInputWriter:
         )
 
     def test_write_sp_input_with_solvation_from_logfile(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_singlet_opt_outfile,
-            jobrunner_no_scratch,
-            gaussian_written_sp_from_nhc_singlet_log_with_solvent_file,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        gaussian_written_sp_from_nhc_singlet_log_with_solvent_file,
     ):
         """Test writing simple .com input file using settings from .log file,
         including solvation."""
@@ -293,13 +349,13 @@ class TestGaussianInputWriter:
         )
 
     def test_write_sp_with_custom_solvation_from_logfile(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_singlet_opt_outfile,
-            jobrunner_no_scratch,
-            smd_TBME_solvent_parameters_text_file,
-            gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        smd_TBME_solvent_parameters_text_file,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_solvent_file,
     ):
         """Test writing input file from log file.
         Simply taking the Gaussian nhc_neutral_singlet.log output and write
@@ -342,13 +398,13 @@ class TestGaussianInputWriter:
         )
 
     def test_write_ts_with_custom_basis_from_logfile(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_singlet_opt_outfile,
-            jobrunner_no_scratch,
-            Ni_def2tzvp_PCHOSi_svp_text_file,
-            gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_singlet_opt_outfile,
+        jobrunner_no_scratch,
+        Ni_def2tzvp_PCHOSi_svp_text_file,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_file,
     ):
         custom_basis_tmp_path = os.path.join(tmpdir, "custom_basis.txt")
         copy(Ni_def2tzvp_PCHOSi_svp_text_file, custom_basis_tmp_path)
@@ -385,12 +441,12 @@ class TestGaussianInputWriter:
         )
 
     def test_write_ts_with_custom_basis_using_api(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_ts_genecp_outfile,
-            jobrunner_no_scratch,
-            gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_ts_genecp_outfile,
+        jobrunner_no_scratch,
+        gaussian_written_sp_from_nhc_singlet_log_with_custom_basis_from_api_file,
     ):
         project_settings = GaussianProjectSettings.from_project(
             gaussian_yaml_settings_gas_solv_project_name
@@ -433,12 +489,12 @@ class TestGaussianInputWriter:
         )
 
     def test_write_modred_with_custom_basis_for_all_elements_in_structure_using_api(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            modred_genecp_inputfile,
-            jobrunner_no_scratch,
-            gaussian_modred_with_custom_basis_for_all_atoms_from_api,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        modred_genecp_inputfile,
+        jobrunner_no_scratch,
+        gaussian_modred_with_custom_basis_for_all_atoms_from_api,
     ):
         project_settings = GaussianProjectSettings.from_project(
             gaussian_yaml_settings_gas_solv_project_name
@@ -495,12 +551,12 @@ class TestGaussianInputWriter:
         )
 
     def test_write_gaussian_input_from_pbc_logfile(
-            self,
-            tmpdir,
-            gaussian_yaml_settings_gas_solv_project_name,
-            gaussian_pbc_2d_outputfile,
-            jobrunner_no_scratch,
-            gaussian_written_opt_from_graphite_2d_pbc_log,
+        self,
+        tmpdir,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_pbc_2d_outputfile,
+        jobrunner_no_scratch,
+        gaussian_written_opt_from_graphite_2d_pbc_log,
     ):
         project_settings = GaussianProjectSettings.from_project(
             gaussian_yaml_settings_gas_solv_project_name

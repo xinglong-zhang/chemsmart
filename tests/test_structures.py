@@ -11,7 +11,6 @@ from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.utils import cmp_with_ignore
 

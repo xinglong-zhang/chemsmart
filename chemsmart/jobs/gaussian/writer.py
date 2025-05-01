@@ -130,6 +130,16 @@ class GaussianInputWriter(InputWriter):
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
+        # populate QM/MM partition to molecule object
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self.job.molecule.high_level_atoms = self.settings.high_level_atoms
+            if self.settings.medium_level_atoms is not None:
+                self.job.molecule.medium_level_atoms = (
+                    self.settings.medium_level_atoms
+                )
+            self.job.molecule.low_level_atoms = self.settings.low_level_atoms
+            self.job.molecule.bonded_atoms = self.settings.bonded_atoms
+
         self.job.molecule.write_coordinates(f, program="gaussian")
         f.write("\n")
 
