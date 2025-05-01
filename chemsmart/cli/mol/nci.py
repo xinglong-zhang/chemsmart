@@ -30,6 +30,8 @@ def nci(
     coordinates,
     isosurface,
     color_range,
+    binary,
+    intermediate,
     skip_completed,
     **kwargs,
 ):
@@ -66,6 +68,8 @@ def nci(
         label=label,
         isosurface=isosurface,
         color_range=color_range,
+        binary=binary,
+        intermediate=intermediate,
         pymol_script=file,
         style=style,
         trace=trace,

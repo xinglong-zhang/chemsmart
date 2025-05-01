@@ -13,6 +13,7 @@ class PyMOLNCIJob(PyMOLJob):
         isosurface=0.5,
         color_range=1.0,
         binary=False,
+        intermediate=False,
         nci_basename=None,
         **kwargs,
     ):
@@ -24,12 +25,15 @@ class PyMOLNCIJob(PyMOLJob):
         self.isosurface = isosurface
         self.color_range = color_range
         self.binary = binary
+        self.intermediate = intermediate
 
         if nci_basename is None:
             nci_basename = self.label
 
         if self.binary:
             nci_basename += "_binary"
+        if self.intermediate:
+            nci_basename += "_intermediate"
 
         self.nci_basename = nci_basename
 

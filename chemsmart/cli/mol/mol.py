@@ -138,6 +138,12 @@ def click_pymol_nci_options(f):
         default=False,
         help="Plot NCI plots with two colors only. Default to False.",
     )
+    @click.option(
+        "--intermediate",
+        is_flag=True,
+        default=False,
+        help="Plot NCI plots with intermediate range colors. Default to False.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)

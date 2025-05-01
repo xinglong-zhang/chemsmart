@@ -232,6 +232,11 @@ class PyMOLJobRunner(JobRunner):
 
         return command
 
+    def _add_refresh_command(self, job, command):
+        """Ensure that the previous PyMOL command is finished."""
+        command += "; refresh"
+        return command
+
     def _save_pse_command(self, job, command):
         # Append the final PyMOL commands, quoting the output file path
         command += f"; save {quote_path(job.outputfile)}"
@@ -320,6 +325,7 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
         """Job specific commands."""
         command = self._get_rotation_command(job, command)
         command = self._set_ray_trace_frames(job, command)
+        command = self._add_refresh_command(job, command)
         command = self._export_movie_command(job, command)
         return command
 
@@ -427,6 +433,7 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
         """Job specific commands."""
         command = self._hide_labels(job, command)
         command = self._load_cube_files(job, command)
+        command = self._add_refresh_command(job, command)  # adding sync fails
         command = self._run_nci_command(job, command)
         command = self._add_ray_command(job, command)
         return command
@@ -451,6 +458,8 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
         """Run the nci command"""
         if job.binary:
             command += f"; nci_binary {self.job_basename}"
+        elif job.intermediate:
+            command += f"; nci_intermediate {self.job_basename}"
         else:
             command += f"; nci {self.job_basename}"
         return command
