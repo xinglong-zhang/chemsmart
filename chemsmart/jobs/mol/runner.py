@@ -455,6 +455,12 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             command += f"; nci {self.job_basename}"
         return command
 
+    def _save_pse_command(self, job, command):
+        # Append the final PyMOL commands, quoting the output file path
+        command += f"; save {quote_path(job.nci_basename)}.pse"
+
+        return command
+
 
 class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     JOBTYPES = ["pymol_mo"]
