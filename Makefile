@@ -50,23 +50,23 @@ env:  ## Create a Conda environment if USE_CONDA=true.
 conda-env:  ## Create or update the Conda environment using environment.yml.
 	@echo Managing Conda environment 'chemsmart' with environment.yml...
 	@if [ ! -f environment.yml ]; then \
-		echo "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
+		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
 		exit 1; \
 	fi
 	@if [ "$(OS)" = "Windows" ]; then \
-		conda env list | findstr chemsmart >nul && ( \
-			echo "Updating existing 'chemsmart' environment..."; \
+		conda env list | findstr chemsmart >$(NULL) && ( \
+			$(ECHO) "Updating existing 'chemsmart' environment..."; \
 			conda env update -n chemsmart -f environment.yml --prune \
 		) || ( \
-			echo "Creating new 'chemsmart' environment..."; \
+			$(ECHO) "Creating new 'chemsmart' environment..."; \
 			conda env create -f environment.yml \
 		); \
 	else \
 		if conda env list | grep -q chemsmart; then \
-			echo "Updating existing 'chemsmart' environment..."; \
+			$(ECHO) "Updating existing 'chemsmart' environment..."; \
 			conda env update -n chemsmart -f environment.yml --prune; \
 		else \
-			echo "Creating new 'chemsmart' environment..."; \
+			$(ECHO) "Creating new 'chemsmart' environment..."; \
 			conda env create -f environment.yml; \
 		fi; \
 	fi
@@ -75,8 +75,8 @@ conda-env:  ## Create or update the Conda environment using environment.yml.
 .PHONY: virtualenv
 virtualenv:  ## Create a virtual environment using virtualenv.
 	@if [ "$(OS)" = "Windows" ]; then \
-		where python3 >nul 2>&1 || ( \
-			echo "Python 3 is required but not installed. Exiting."; \
+		where python3 >$(NULL) 2>&1 || ( \
+			$(ECHO) "Python 3 is required but not installed. Exiting."; \
 			exit 1 \
 		); \
 		if [ ! -d "venv" ]; then \
@@ -84,8 +84,8 @@ virtualenv:  ## Create a virtual environment using virtualenv.
 		fi; \
 		call venv\Scripts\activate.bat && pip install -U pip; \
 	else \
-		if ! command -v python3 >/dev/null; then \
-			echo "Python 3 is required but not installed. Exiting."; \
+		if ! command -v python3 >$(NULL); then \
+			$(ECHO) "Python 3 is required but not installed. Exiting."; \
 			exit 1; \
 		fi; \
 		if [ ! -d "venv" ]; then \
@@ -109,17 +109,17 @@ configure:        ## Run chemsmart configuration interactively.
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
 	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
 	if [ -n "$$gaussian_folder" ]; then \
-		echo "Configuring Gaussian with folder: $$gaussian_folder"; \
+		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
 	else \
-		echo "Skipping Gaussian configuration."; \
+		$(ECHO) "Skipping Gaussian configuration."; \
 	fi; \
 	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
 	if [ -n "$$orca_folder" ]; then \
-		echo "Configuring ORCA with folder: $$orca_folder"; \
+		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
-		echo "Skipping ORCA configuration."; \
+		$(ECHO) "Skipping ORCA configuration."; \
 	fi
 
 .PHONY: show
