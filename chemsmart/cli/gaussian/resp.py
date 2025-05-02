@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def resp(ctx, **kwargs):
+    """CLI for running Gaussian RESP jobs."""
+
+    # get jobrunner for running Gaussian RESP jobs
+    jobrunner = ctx.obj["jobrunner"]
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -46,5 +50,9 @@ def resp(ctx, **kwargs):
     from chemsmart.jobs.gaussian.resp import GaussianRESPJob
 
     return GaussianRESPJob(
-        molecule=molecule, settings=resp_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=resp_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

@@ -76,6 +76,11 @@ def irc(
     skip_completed,
     **kwargs,
 ):
+    """CLI for running Gaussian IRC jobs."""
+
+    # get jobrunner for running Gaussian IRC jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     irc_project_settings = project_settings.irc_settings()
@@ -127,6 +132,7 @@ def irc(
         molecule=molecule,
         settings=irc_settings,
         label=label,
+        jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
     )

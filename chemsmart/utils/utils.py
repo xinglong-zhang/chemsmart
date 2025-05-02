@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -502,8 +503,26 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
 
 
 def run_command(command):
-    """Runs a shell command using subprocess.Popen and captures its output."""
+    """Runs a shell command using subprocess.Popen and captures its output.
+
+    Args:
+        command: A string (e.g., 'ls -l') or a list (e.g., ['ls', '-l']) representing the command.
+
+    Returns:
+        The command's stdout as a string, or None if an error occurs.
+    """
     try:
+        # If command is a string, split it into a list using shlex.split
+        if isinstance(command, str):
+            command = shlex.split(command)
+
+        # Ensure command is a list at this point
+        if not isinstance(command, list):
+            logger.error(
+                f"Invalid command type: {type(command)}. Expected str or list."
+            )
+            return None
+
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )

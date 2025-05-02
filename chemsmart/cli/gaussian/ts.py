@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def ts(ctx, freeze_atoms, skip_completed, **kwargs):
+    """CLI for transition state calculation for Gaussian."""
+
+    # get jobrunner for transition state calculation
+    jobrunner = ctx.obj["jobrunner"]
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     ts_settings = project_settings.ts_settings()
@@ -68,6 +72,7 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
         molecule=molecule,
         settings=ts_settings,
         label=label,
+        jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
     )

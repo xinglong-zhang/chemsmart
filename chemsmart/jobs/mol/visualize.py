@@ -8,10 +8,12 @@ class PyMOLVisualizationJob(PyMOLJob):
         self,
         molecule,
         label,
+        jobrunner=None,
         **kwargs,
     ):
         super().__init__(
             molecule=molecule,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )

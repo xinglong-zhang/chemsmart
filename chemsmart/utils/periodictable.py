@@ -2,9 +2,17 @@ from ase.data import chemical_symbols as elements
 from ase.data import covalent_radii
 from ase.data.vdw import vdw_radii
 
+from chemsmart.utils.isotopes_data import isotopes
+
 
 class PeriodicTable:
     PERIODIC_TABLE = [str(element) for element in elements]
+
+    @property
+    def atomic_masses(self):
+        from ase.data import atomic_masses_iupac2016 as atomic_masses
+
+        return atomic_masses
 
     def to_element(self, element_str):
         """Function to convert lower case element to element with proper caps in periodic table."""
@@ -30,6 +38,15 @@ class PeriodicTable:
     def to_symbol(self, atomic_number):
         element_str = self.PERIODIC_TABLE[atomic_number]
         return self.to_element(element_str)
+
+    def to_atomic_mass(self, symbol):
+        return self.atomic_masses[self.to_atomic_number(symbol)]
+
+    def to_weighted_atomic_mass_by_abundance(self, symbol):
+        return isotopes[self.to_atomic_number(symbol)]["weighted_atomic_mass"]
+
+    def to_most_abundant_atomic_mass(self, symbol):
+        return isotopes[self.to_atomic_number(symbol)]["most_abundant"]["mass"]
 
     def vdw_radius(self, symbol):
         # obtain the van der waals radius of the element

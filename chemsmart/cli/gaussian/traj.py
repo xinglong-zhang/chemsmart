@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
-from chemsmart.jobs.gaussian import GaussianSAOptJob
+from chemsmart.jobs.gaussian import GaussianTrajJob
 from chemsmart.utils.cli import (
     MyCommand,
     get_setting_from_jobtype_for_gaussian,
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_gaussian_jobtype_options
 @click.option(
-    "-n",
+    "-N",  # avoid conflict with num_steps if scan
     "--num-structures-to-run",
     type=int,
     default=None,
@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
     "Values ranges from 0.0 < x <=1.0. Defaults to 0.1 (last 10% of structures).",
 )
 @click.pass_context
-def saopt(
+def traj(
     ctx,
     skip_completed,
     jobtype,
@@ -82,9 +82,14 @@ def saopt(
     proportion_structures_to_use,
     **kwargs,
 ):
+    """CLI for running Gaussian set jobs."""
+
+    # get jobrunner for running Gaussian set jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    saopt_settings = get_setting_from_jobtype_for_gaussian(
+    structure_set_settings = get_setting_from_jobtype_for_gaussian(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
@@ -93,9 +98,11 @@ def saopt(
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    saopt_settings = saopt_settings.merge(job_settings, keywords=keywords)
+    structure_set_settings = structure_set_settings.merge(
+        job_settings, keywords=keywords
+    )
 
-    check_charge_and_multiplicity(saopt_settings)
+    check_charge_and_multiplicity(structure_set_settings)
 
     # get molecule
     molecules = ctx.obj[
@@ -108,13 +115,14 @@ def saopt(
     logger.debug(f"Label for job: {label}")
 
     logger.info(
-        f"Simulated annealing {type} settings from project: {saopt_settings.__dict__}"
+        f"Simulated annealing {type} settings from project: {structure_set_settings.__dict__}"
     )
 
-    return GaussianSAOptJob(
+    return GaussianTrajJob(
         molecules=molecules,
-        settings=saopt_settings,
+        settings=structure_set_settings,
         label=label,
+        jobrunner=jobrunner,
         grouping_strategy=grouping_strategy,
         num_procs=num_procs,
         proportion_structures_to_use=proportion_structures_to_use,
