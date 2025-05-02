@@ -39,7 +39,7 @@ def click_file_options(f):
         "-i",
         "--index",
         type=str,
-        default=None,
+        default="-1",
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
     )
@@ -92,7 +92,7 @@ def click_pymol_visualization_options(f):
         "-q",
         "--quiet",
         is_flag=True,
-        default=True,
+        default=False,
         help="Run PyMOL in quiet mode. Default to True.",
     )
     @click.option(
@@ -105,7 +105,75 @@ def click_pymol_visualization_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates (bonds, angles and dihedrals) for labelling. 1-indexed.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_nci_options(f):
+    """Common click options for PyMOL NCI options."""
+
+    @click.option(
+        "-i",
+        "--isosurface",
+        type=float,
+        default=0.5,
+        help="Isosurface value for NCI plot. Default=0.5",
+    )
+    @click.option(
+        "-r",
+        "--color-range",
+        type=float,
+        default=1.0,
+        help="Ramp range for NCI plot. Default=1.0",
+    )
+    @click.option(
+        "-b",
+        "--binary",
+        is_flag=True,
+        default=False,
+        help="Plot NCI plots with two colors only. Default to False.",
+    )
+    @click.option(
+        "--intermediate",
+        is_flag=True,
+        default=False,
+        help="Plot NCI plots with intermediate range colors. Default to False.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_mo_options(f):
+    """Common click options for PyMOL molecular orbitals options."""
+
+    @click.option(
+        "-n",
+        "--number",
+        type=int,
+        default=None,
+        help="Molecular Orbital number to be visualized (e.g., 31 will visualize MO #31). Default to None.",
+    )
+    @click.option(
+        "-h",
+        "--homo",
+        is_flag=True,
+        default=False,
+        help="Plot the highest occupied molecular orbital (HOMO). Default to False.",
+    )
+    @click.option(
+        "-l",
+        "--lumo",
+        is_flag=True,
+        default=False,
+        help="Plot the lowest unoccuplied molecular orbitals (LUMO). Default to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -184,7 +252,6 @@ def mol(
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{ctx.invoked_subcommand}"
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 

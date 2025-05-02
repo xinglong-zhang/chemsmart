@@ -5,7 +5,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
-    click_pymol_save_options,
+    click_pymol_mo_options,
     click_pymol_visualization_options,
     mol,
 )
@@ -14,12 +14,12 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-@mol.command("movie", cls=MyCommand)
+@mol.command("mo", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
-@click_pymol_save_options
+@click_pymol_mo_options
 @click.pass_context
-def movie(
+def mo(
     ctx,
     file,
     style,
@@ -28,16 +28,17 @@ def movie(
     quiet,
     command_line_only,
     coordinates,
-    overwrite,
+    number,
+    homo,
+    lumo,
     skip_completed,
     **kwargs,
 ):
-    """CLI for generating automatic PyMOL movie for rotating molecule and saving as pse file.
+    """CLI for generating molecular orbitals (MOs) and saving as pse file.
     Example usage:
-        chemsmart run --debug mol -f phenyldioxazolone.com movie -v
-    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_movie.pse
+        chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
+    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_visualize.pse
     with added van der Waal's surface (-v) automatically.
-    If the movie mp4 file exists, it will not be overwritten unless -o is specified.
         chemsmart run --debug mol -f vhr_ox_modred_ts10.log visualize -c [[1,2],[3,4,5],[1,3,4,5],[4,5],[4,6,9]]
     This visualizes vhr_ox_modred_ts10.log file and saves as vhr_ox_modred_ts10_visualize.pse and add in additional
     coordinates (bonds, angles and dihedrals) for labelling."""
@@ -46,6 +47,8 @@ def movie(
     molecules = ctx.obj["molecules"]
     logger.info(f"Visualizing molecule(s): {molecules}.")
 
+    # get label for the job
+    label = ctx.obj["label"]
     if coordinates is not None:
         logger.debug(f"Coordinates for visualization: {coordinates}")
         try:
@@ -57,13 +60,9 @@ def movie(
             raise ValueError(
                 "Invalid coordinates input. Please provide a valid Python literal."
             )
+    from chemsmart.jobs.mol.mo import PyMOLMOJob
 
-    # get label for the job
-    label = ctx.obj["label"]
-
-    from chemsmart.jobs.mol.movie import PyMOLMovieJob
-
-    return PyMOLMovieJob(
+    return PyMOLMOJob(
         molecule=molecules,
         label=label,
         pymol_script=file,
@@ -73,7 +72,9 @@ def movie(
         quiet_mode=quiet,
         command_line_only=command_line_only,
         coordinates=coordinates,
-        overwrite=overwrite,
+        number=number,
+        homo=homo,
+        lumo=lumo,
         skip_completed=skip_completed,
         **kwargs,
     )

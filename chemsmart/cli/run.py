@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import platform
 from multiprocessing import set_start_method
@@ -13,13 +12,23 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
+logger = logging.getLogger(__name__)
+
+
 system_type = platform.system()
 
-if system_type in ("Darwin", "Windows"):
-    with contextlib.suppress(RuntimeError):
+if system_type == "Darwin":
+    try:
+        set_start_method("fork")
+    except RuntimeError as e:
+        logger.error(f"Failed to set start method to 'fork' on Darwin: {e}")
+elif system_type == "Windows":
+    try:
         set_start_method("spawn")
-
-logger = logging.getLogger(__name__)
+    except RuntimeError as e:
+        logger.error(f"Failed to set start method to 'spawn' on Windows: {e}")
+else:
+    pass
 
 
 @click.group(name="run")
