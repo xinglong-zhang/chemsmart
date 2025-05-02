@@ -115,26 +115,46 @@ Make Configuration
 
         make clean
 
-Installation for Windows
+Installation for Windows Using Ubuntu
 -------------------------------
 
-Windows users are recommended to use Git Bash or other bash shells to install chemsmart.
+Windows users are recommended to use Ubuntu (Windows Subsystem for Linux) to set up chemsmart.
 
-Install Applications
+*   Ubuntu can be accessed and downloaded from https://ubuntu.com, and is also available directly on the Microsoft Store.
+
+*   Once Ubuntu is installed, one can proceed to install either Anaconda3 or Miniconda3 *for Linux* via https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
+
+*   Next, the ``git`` and ``make`` can be installed in Ubuntu via:
+
+    .. code-block:: console
+
+        sudo apt install git
+
+    and
+
+    .. code-block:: console
+
+        sudo apt install make
+
+As Ubuntu is fundamentally based on the Linux kernel, one can follow the instructions in **Installation - Installation for Linux and macOS** to complete the following setup of chemsmart.
+
+Installation for Windows Using Git Bash
+-------------------------------
+
+Alternatively, Windows users may install chemsmart via Bash shell-based terminal applications, such as Git Bash.
+
+Create Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-*   Conda is also recommended on Windows to manage the packages required by this software toolkit. Either Anaconda3 or Miniconda3 may be installed. See more information on conda installation process at https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
+*   Conda is also recommended on Windows to manage the packages required by this software toolkit. Either Anaconda3 or Miniconda3 *for Windows* may be installed. See more information on conda installation process at https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
 
-*   Git is essential for installation. Users can visit https://git-scm.com/downloads to install it (Git Bash will also be installed at the same time).
+*   Git is essential for installation. Users can visit https://git-scm.com/downloads to install it (Git Bash will be installed at the same time).
 
 *   To support ``make`` in windows, chocolatey is required to be installed from https://chocolatey.org/install#generic in advance.
 
 .. note::
 
     Please make sure the environmental variables for Git and Conda are added correctly.
-
-Create Environment
-^^^^^^^^^^^^^^^^^^^^^^^^
 
 *   Once three apps are installed successfully, one can open Git Bash to install ``make`` via:
 
@@ -168,9 +188,9 @@ Create Environment
 
     For windows system users, the ``conda init`` command may need to be run first.
 
+
 Make Installation
 ^^^^^^^^^^^^^^^^^^^^^^^^
-
 *   One can install the packages and dependencies required for ``chemsmart`` package via：
 
     .. code-block:: console
@@ -238,13 +258,17 @@ Make Configuration
 
         make clean
 
+
+
 Installation for HPC Cluster
 -------------------------------
 As a powerful toolkit, chemsmart can work on any High Performance Computing (HPC) cluster, using same commands as on the local machine to accomplish the same tasks. If you only need to use chemsmart on a HPC cluster, you can install chemsmart solely on the cluster.
 
 *   Before starting the installation, please consult the HPC cluster administrator to confirm the pre-installed software on cluster, the support for required software, and your installation permissions in the specified directory.
 
-*   Since most clusters are based on the Linux system, you can refer to **Installation - Installation for Linux and MacOS** to complete the installation and configuration of chemsmart on your cluster.
+*   Since most clusters are based on the Linux system, one can refer to **Installation - Installation for Linux and MacOS** to complete the installation and configuration of chemsmart on your cluster.
+
+
 
 Test Installation
 -------------------------------
