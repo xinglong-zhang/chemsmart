@@ -2,7 +2,7 @@
 # Number of processors
 %pal nprocs 64 end
 # Memory per core
-%maxcore 6
+%maxcore 4687
 * xyz 0 1
 C        0.9200700000    0.5470510000   -0.9928680000
 C        1.8779140000    1.0073640000    0.9953310000

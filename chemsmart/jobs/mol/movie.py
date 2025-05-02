@@ -19,3 +19,5 @@ class PyMOLMovieJob(PyMOLJob):
             **kwargs,
         )
         self.overwrite = overwrite
+
+        self.label = f"{label}_movie"

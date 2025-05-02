@@ -1,5 +1,4 @@
 # Xinglong Zhang Group PyMOL Style Settings
-# modified from Paton Group Settings for PyMOL
 # Add_VDW creates a copy of an object with full-sized, transparent spheres
 # Bondi VDW values added below to override default PyMOL settings
 
@@ -137,6 +136,26 @@ def default_render():
 cmd.extend("default_render", default_render)
 
 
+def movie_render():
+    """Set rendering settings for PyMOL movie."""
+    cmd.bg_color("white")
+    cmd.set("ray_opaque_background", "off")
+    cmd.set("specular", 0.25)
+    cmd.set("spec_power", 300)
+    cmd.set("spec_reflect", 0.5)
+    cmd.util.ray_shadows("none")
+
+    cmd.set("antialias", 1)
+    cmd.set("orthoscopic", 0)
+    cmd.set("field_of_view", 45)
+    cmd.set("transparency", 0)
+    cmd.set("ray_trace_mode", 1)
+    cmd.set("ray_trace_frame", 1)
+
+
+cmd.extend("movie_render", movie_render)
+
+
 def enhance_visuals():
     # Set background color to white
     cmd.bg_color("white")
@@ -198,6 +217,14 @@ def cylview_style(arg1):
 cmd.extend("cylview_style", cylview_style)
 
 
+def movie_style(arg1):
+    movie_render()
+    ballnstick(arg1)
+
+
+cmd.extend("movie_style", movie_style)
+
+
 def add_vdw(arg1):
     cmd.copy(arg1 + "_vdw", arg1)
     cmd.alter(arg1 + "_vdw and elem H", "vdw=1.09")
@@ -210,3 +237,47 @@ def add_vdw(arg1):
 
 
 cmd.extend("add_vdw", add_vdw)
+
+
+def nci(arg1, isosurface=0.5, range=1.0):
+    dens_file = arg1 + "-dens"
+    grad_file = arg1 + "-grad"
+    cmd.isosurface("grad", grad_file, isosurface)
+    cmd.ramp_new("ramp", dens_file, [-range, 0, range], "rainbow")
+    cmd.set("surface_color", "ramp", "grad")
+    cmd.set("two_sided_lighting", value=1)
+    cmd.set("transparency", 0.5)
+    cmd.set("surface_quality", 1)
+
+
+cmd.extend("nci", nci)
+
+
+def nci_intermediate(arg1, isosurface=0.5, range=1.0):
+    dens_file = arg1 + "-dens"
+    grad_file = arg1 + "-grad"
+    cmd.isosurface("grad", grad_file, isosurface)
+    cmd.ramp_new(
+        "ramp", dens_file, [-range, 0, range], "[blue,cyan,green,yellow,red]"
+    )
+    cmd.set("surface_color", "ramp", "grad")
+    cmd.set("two_sided_lighting", value=1)
+    cmd.set("transparency", 0.5)
+    cmd.set("surface_quality", 1)
+
+
+cmd.extend("nci_intermediate", nci_intermediate)
+
+
+def nci_binary(arg1, isosurface=0.5, range=1.0):
+    dens_file = arg1 + "-dens"
+    grad_file = arg1 + "-grad"
+    cmd.isosurface("grad", grad_file, isosurface)
+    cmd.ramp_new("ramp", dens_file, [-range, 0, range], "[blue,white,red]")
+    cmd.set("surface_color", "ramp", "grad")
+    cmd.set("two_sided_lighting", value=1)
+    cmd.set("transparency", 0.5)
+    cmd.set("surface_quality", 1)
+
+
+cmd.extend("nci_binary", nci_binary)

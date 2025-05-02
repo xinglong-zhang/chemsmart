@@ -2,7 +2,7 @@
 # Number of processors
 %pal nprocs 64 end
 # Memory per core
-%maxcore 6
+%maxcore 4687
 %geom
   Scan
   B 0 1 = 1.5, 3.5, 10  # Scanning bond distance from 1.5 Angstrom to 3.5 Angstrom in 10 steps. 
