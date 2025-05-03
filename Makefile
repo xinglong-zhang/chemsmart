@@ -30,7 +30,7 @@ help:             ## Show the help menu.
 	@if [ "$(OS)" = "Windows" ]; then \
 		type $(MAKEFILE_LIST) | findstr /R "^[a-zA-Z_-]*:.*## " | for /F "tokens=1,2 delims=##" %%a in ('more') do @echo %%a                    %%b; \
 	else \
-		grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'; \
+		grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf="\033[36m%-15s\033[0m %s\n", $$1, $$2}'; \
 	fi
 
 # === Environment Setup ===
@@ -100,6 +100,11 @@ virtualenv:  ## Create a virtual environment using virtualenv.
 install:          ## Install the project in development mode.
 	$(ENV_PREFIX)pip install -e .[test]
 	$(ENV_PREFIX)pip install types-PyYAML
+
+.PHONY: pre-commit
+pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
+	$(ENV_PREFIX)pre-commit install
+	@echo Pre-commit hooks installed. They will run automatically on each commit.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
