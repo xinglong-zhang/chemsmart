@@ -18,9 +18,7 @@
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Tutorials" href="Tutorials.html" />
-    <link rel="prev" title="Introduction" href="Introduction.html" /> 
+    <link rel="search" title="Search" href="search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -42,27 +40,29 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="Introduction.html">Introduction</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#installation-for-linux-and-macos">Installation for Linux and MacOS</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#create-environment">Create Environment</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#make-installation">Make Installation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#make-configuration">Make Configuration</a></li>
+              <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a></li>
 </ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#installation-for-windows-using-ubuntu">Installation for Windows Using Ubuntu</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#installation-for-windows-using-git-bash">Installation for Windows Using Git Bash</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#id1">Create Environment</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id2">Make Installation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id3">Make Configuration</a></li>
+<p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforLinuxandMacOS.html">Installation for Linux and MacOS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforWindowsUsingGitBash.html">Installation for Windows Using Git Bash</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforWindowsUsingUbuntu.html">Installation for Windows Using Ubuntu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforHPCCluster.html">Installation for HPC Cluster</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_testinstallation.html">Test Installation</a></li>
 </ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#installation-for-hpc-cluster">Installation for HPC Cluster</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#test-installation">Test Installation</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="Tutorials.html">Tutorials</a></li>
+<p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_setupserverconfigurationonthecluster.html">Set up the Server Configuration on the Cluster</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_setuptheprojectsettings.html">Set up the Project Settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_submitageometryoptimizationjobusinggaussian.html">Submit a Geometry Optimization Job Using Gaussian</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_SubmitaTransitionStateandReactionPathwayAnalysisJobUsingGaussian.html">Submit a Transition State and Reaction Pathway Analysis Job Using Gaussian</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_SubmitaEnergyandThermodynamicAnalysisJobUsingGaussian.html">Submit a Energy and Thermodynamic Analysis Job Using Gaussian</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_SubmitaElectronicStructureAnalysisJobUsingGaussian.html">Submit a Electronic Structure Analysis Job Using Gaussian</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_SubmitCustomJobSubmissionUsingGaussian.html">Submit Custom Job Submission Using Gaussian</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_UseGeneralCLIOptionsforAllJobs.html">Use General CLI Options for All Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_ORCA.html">Submit Jobs Using ORCA</a></li>
 </ul>
 
         </div>
@@ -81,7 +81,7 @@
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
       <li class="breadcrumb-item active">Installation</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="_sources/Installation.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/installation.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -187,27 +187,9 @@
 </ul>
 </section>
 </section>
-<section id="installation-for-windows-using-ubuntu">
-<h2>Installation for Windows Using Ubuntu<a class="headerlink" href="#installation-for-windows-using-ubuntu" title="Link to this heading"></a></h2>
-<p>Windows users are recommended to use Ubuntu (Windows Subsystem for Linux) to set up chemsmart.</p>
-<ul>
-<li><p>Ubuntu can be accessed and downloaded from <a class="reference external" href="https://ubuntu.com">https://ubuntu.com</a>, and is also available directly on the Microsoft Store.</p></li>
-<li><p>Once Ubuntu is installed, one can proceed to install either Anaconda3 or Miniconda3 <em>for Linux</em> via <a class="reference external" href="https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html">https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html</a>.</p></li>
-<li><p>Next, the <code class="docutils literal notranslate"><span class="pre">git</span></code> and <code class="docutils literal notranslate"><span class="pre">make</span></code> can be installed in Ubuntu via:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sudo apt install git</span>
-</pre></div>
-</div>
-<p>and</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sudo apt install make</span>
-</pre></div>
-</div>
-</li>
-</ul>
-<p>As Ubuntu is fundamentally based on the Linux kernel, one can follow the instructions in <strong>Installation - Installation for Linux and macOS</strong> to complete the following setup of chemsmart.</p>
-</section>
 <section id="installation-for-windows-using-git-bash">
 <h2>Installation for Windows Using Git Bash<a class="headerlink" href="#installation-for-windows-using-git-bash" title="Link to this heading"></a></h2>
-<p>Alternatively, Windows users may install chemsmart via Bash shell-based terminal applications, such as Git Bash.</p>
+<p>It is recommended that Windows users set up chemsmart using a Bash-based terminal application, such as Git Bash.</p>
 <section id="id1">
 <h3>Create Environment<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
 <ul class="simple">
@@ -308,6 +290,24 @@
 </ul>
 </section>
 </section>
+<section id="installation-for-windows-using-ubuntu">
+<h2>Installation for Windows Using Ubuntu<a class="headerlink" href="#installation-for-windows-using-ubuntu" title="Link to this heading"></a></h2>
+<p>Alternatively, Windows users may install chemsmart via Ubuntu (Windows Subsystem for Linux).</p>
+<ul>
+<li><p>Ubuntu can be accessed and downloaded from <a class="reference external" href="https://ubuntu.com">https://ubuntu.com</a>, and is also available directly on the Microsoft Store.</p></li>
+<li><p>Once Ubuntu is installed, one can proceed to install either Anaconda3 or Miniconda3 <em>for Linux</em> via <a class="reference external" href="https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html">https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html</a>.</p></li>
+<li><p>Next, the <code class="docutils literal notranslate"><span class="pre">git</span></code> and <code class="docutils literal notranslate"><span class="pre">make</span></code> can be installed in Ubuntu via:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sudo apt install git</span>
+</pre></div>
+</div>
+<p>and</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sudo apt install make</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<p>As Ubuntu is fundamentally based on the Linux kernel, one can follow the instructions in <strong>Installation - Installation for Linux and macOS</strong> to complete the following setup of chemsmart.</p>
+</section>
 <section id="installation-for-hpc-cluster">
 <h2>Installation for HPC Cluster<a class="headerlink" href="#installation-for-hpc-cluster" title="Link to this heading"></a></h2>
 <p>As a powerful toolkit, chemsmart can work on any High Performance Computing (HPC) cluster, using same commands as on the local machine to accomplish the same tasks. If you only need to use chemsmart on a HPC cluster, you can install chemsmart solely on the cluster.</p>
@@ -329,10 +329,7 @@
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="Introduction.html" class="btn btn-neutral float-left" title="Introduction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="Tutorials.html" class="btn btn-neutral float-right" title="Tutorials" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

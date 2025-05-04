@@ -1,5 +1,5 @@
 Introduction
-====================
+============
 
 .. image:: _static/logo1.png
    :width: 400

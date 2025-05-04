@@ -1,5 +1,5 @@
 Installation
-====================
+============
 
 Thank you for downloading and using chemsmart. Please confirm the operating system you are using and follow the corresponding installation steps.
 
@@ -115,33 +115,11 @@ Make Configuration
 
         make clean
 
-Installation for Windows Using Ubuntu
--------------------------------
-
-Windows users are recommended to use Ubuntu (Windows Subsystem for Linux) to set up chemsmart.
-
-*   Ubuntu can be accessed and downloaded from https://ubuntu.com, and is also available directly on the Microsoft Store.
-
-*   Once Ubuntu is installed, one can proceed to install either Anaconda3 or Miniconda3 *for Linux* via https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
-
-*   Next, the ``git`` and ``make`` can be installed in Ubuntu via:
-
-    .. code-block:: console
-
-        sudo apt install git
-
-    and
-
-    .. code-block:: console
-
-        sudo apt install make
-
-As Ubuntu is fundamentally based on the Linux kernel, one can follow the instructions in **Installation - Installation for Linux and macOS** to complete the following setup of chemsmart.
 
 Installation for Windows Using Git Bash
 -------------------------------
 
-Alternatively, Windows users may install chemsmart via Bash shell-based terminal applications, such as Git Bash.
+It is recommended that Windows users set up chemsmart using a Bash-based terminal application, such as Git Bash.
 
 Create Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -258,7 +236,28 @@ Make Configuration
 
         make clean
 
+Installation for Windows Using Ubuntu
+-------------------------------
 
+Alternatively, Windows users may install chemsmart via Ubuntu (Windows Subsystem for Linux).
+
+*   Ubuntu can be accessed and downloaded from https://ubuntu.com, and is also available directly on the Microsoft Store.
+
+*   Once Ubuntu is installed, one can proceed to install either Anaconda3 or Miniconda3 *for Linux* via https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
+
+*   Next, the ``git`` and ``make`` can be installed in Ubuntu via:
+
+    .. code-block:: console
+
+        sudo apt install git
+
+    and
+
+    .. code-block:: console
+
+        sudo apt install make
+
+As Ubuntu is fundamentally based on the Linux kernel, one can follow the instructions in **Installation - Installation for Linux and macOS** to complete the following setup of chemsmart.
 
 Installation for HPC Cluster
 -------------------------------
