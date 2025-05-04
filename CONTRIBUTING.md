@@ -1,154 +1,169 @@
-# How to develop on this project
+# Contributing to chemsmart
 
-chemsmart welcomes contributions from the community.
+Welcome to the **chemsmart** project! We appreciate contributions from the community to enhance this Chemistry Simulation and Modeling Automation Toolkit. This guide outlines the steps to contribute effectively.
 
-**You need PYTHON 3.10!**
+**Note**: This project requires **Python 3.10**. Instructions are tailored for Linux-based systems (Linux, macOS, BSD, etc.).
 
-This instructions are for linux base systems. (Linux, MacOS, BSD, etc.)
-## Setting up your own fork of this repo.
+## Getting Started
 
-- On github interface click on `Fork` button.
-- Clone your fork of this repo. `git clone git@github.com:YOUR_GIT_USERNAME/chemsmart.git`
-- Enter the directory `cd chemsmart`
-- Add upstream repo `git remote add upstream https://github.com/xinglong-zhang/chemsmart`
+### 1. Fork the Repository
+- Navigate to the [chemsmart GitHub repository](https://github.com/xinglong-zhang/chemsmart).
+- Click the **Fork** button to create a copy of the repository under your GitHub account.
+- Clone your fork to your local machine:
+  ```bash
+  git clone git@github.com:YOUR_GIT_USERNAME/chemsmart.git
+  ```
+- Enter the project directory:
+  ```bash
+  cd chemsmart
+  ```
+- Add the upstream repository to sync with the main project:
+  ```bash
+  git remote add upstream https://github.com/xinglong-zhang/chemsmart.git
+  ```
 
-## Setting up your own conda environment
+### 2. Set Up Your Development Environment
+We recommend using a Conda environment to manage dependencies.
 
-Follow the Installation Guide on README. Briefly, run
+- **Create a Conda environment** (named `chemsmart` by default):
+  ```bash
+  make env
+  ```
+  If you prefer not to use Conda, you can create a virtual environment:
+  ```bash
+  make virtualenv
+  ```
+  **Note**: Conda is strongly recommended for consistency.
+
+- **Activate the environment**:
+  ```bash
+  conda activate chemsmart
+  ```
+
+- **Install the project in development mode**:
+  ```bash
+  make install
+  ```
+
+- **Install pre-commit hooks** (required for developers to enforce code style and quality):
+  ```bash
+  make pre-commit
+  ```
+
+- **Verify the setup** by running tests:
+  ```bash
+  make test
+  ```
+  Ensure all tests pass before proceeding.
+
+### 3. Configure chemsmart
+- Run the configuration to set up user-specific settings (e.g., paths to Gaussian/ORCA, HPC server details):
+  ```bash
+  make configure
+  ```
+- Check the generated `~/.chemsmart` directory to ensure settings match your HPC environment (e.g., SLURM/Torque, scratch directories).
+- Source your shell configuration to apply changes:
+  ```bash
+  source ~/.bashrc
+  ```
+
+## Making Contributions
+
+### 4. Create a Branch
+- Create a new branch for your contribution:
+  ```bash
+  git checkout -b my-contribution-branch
+  ```
+  Use a descriptive branch name (e.g., `feature/add-new-job-type` or `fix/bug-in-parser`).
+
+### 5. Make Your Changes
+- Edit files using your preferred editor (PyCharm is recommended).
+- If your changes introduce new Python packages, update dependencies:
+  ```bash
+  make update-deps
+  ```
+
+### 6. Format and Lint Your Code
+- Code formatting (`black`, `isort`) and linting (`ruff`) are enforced automatically via `pre-commit` hooks when you commit changes, provided you have set up `pre-commit` (see [Set Up Your Development Environment](#2-set-up-your-development-environment)).
+- To manually run formatting and linting (optional, if not using `pre-commit`):
+  ```bash
+  make fmt
+  make lint
+  ```
+- The `pre-commit` hooks also run `make clean` to remove temporary files.
+
+### 7. Test Your Changes
+- Write tests for new functionality in the `tests/` directory.
+- Run tests to ensure everything works:
+  ```bash
+  make test
+  ```
+- Aim for **100% code coverage** in the coverage report. Add tests to your pull request (PR) if coverage is below 100%.
+
+### 8. Document Your Changes
+- Update documentation in `docs/` or relevant files if your changes affect usage or functionality.
+- Build and preview documentation locally (optional):
+  ```bash
+  make docs
+  ```
+
+### 9. Commit Your Changes
+- Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for clear commit messages. Examples:
+  ```bash
+  git commit -m "feat: add support for new Gaussian job type"
+  git commit -m "fix: resolve issue with ORCA input parsing 🎉"
+  ```
+- Emojis are welcome but optional.
+- If `pre-commit` is installed, hooks will automatically format, lint, and clean your code before committing.
+
+### 10. Push and Submit a Pull Request
+- Push your branch to your fork:
+  ```bash
+  git push origin my-contribution-branch
+  ```
+- On GitHub, create a pull request (PR) from your branch to the `main` branch of `xinglong-zhang/chemsmart`.
+- Provide a clear PR description, including the purpose of your changes and any relevant details.
+- Wait for CI checks to complete and address any feedback from maintainers.
+
+## Development Tools
+The project includes a `Makefile` with useful utilities. View available commands:
 ```bash
-make env
+make help
 ```
-to create a conda environment.
+Key commands:
+- `make env`: Create a Conda environment.
+- `make install`: Install the project in development mode.
+- `make pre-commit`: Install pre-commit hooks.
+- `make fmt`: Format code with `black` and `isort`.
+- `make lint`: Run `ruff` linter.
+- `make test`: Run tests and generate coverage report.
+- `make docs`: Build documentation.
+- `make clean`: Remove temporary files.
 
-## Install the project in develop mode
+## Code Style and Quality
+- **Formatting**: Use `black` (line length: 79) and `isort` (profile: black).
+- **Linting**: Use `ruff` with settings defined in `pyproject.toml`.
+- **Testing**: Use `pytest` with 100% coverage goal.
+- **Commits**: Follow Conventional Commits for consistency.
+- **Pre-commit Hooks**: Enforce style, linting, and cleanup automatically, installed via `make pre-commit`.
 
-Then run
-```bash
-make install
-```
-to install the project in develop mode.
+## Making a Release (Maintainers Only)
+Releases follow [Semantic Versioning](https://semver.org/) (e.g., `X.Y.Z`). To create a release:
+1. Ensure all changes are committed and tests pass (`make test`).
+2. Run:
+   ```bash
+   make release
+   ```
+3. Enter the version number (e.g., `0.1.1`) when prompted.
+4. The release process updates the changelog, creates a Git tag, and triggers a GitHub Actions workflow to publish to PyPI.
 
-## Run the tests to ensure everything is working
+**Note**: Requires a `PYPI_API_TOKEN` secret in the repository settings, generated from [PyPI](https://pypi.org/account/).
 
-Run 
-```bash
-make test
-```
-to run the tests.
+**Caution**: `make release` commits all unstaged changes and modifies the changelog.
 
-## Create a new branch to work on your contribution
+## Getting Help
+- For issues or feature requests, open an [issue](https://github.com/xinglong-zhang/chemsmart/issues).
+- For questions, contact the maintainers via GitHub or email (xinglong.zhang@cuhk.edu.hk).
+- Refer to the [README.md](README.md) for setup and usage details.
 
-Run
-```bash
-git checkout -b my_contribution_branch
-```
-
-## Make your changes
-
-Edit the files using your preferred editor (we recommend PyCharm IDE).
-
-## Add in additional python packages that are imported in your new codes
-
-Run
-```bash
-make update-deps
-```
-
-## Format the code
-
-Run
-```bash
-make fmt
-```
-to format the code. We use `isort` to sort the import statements alphabetically and `black` formatter.
-
-## Run the linter
-
-Run
-```bash
-make lint
-```
-to run the linter. We use `ruff` as linter to check for potential bugs, syntax errors, and stylistic issues.
-
-## Test your changes
-
-Please include relevant tests for the new functionalities that you are introducing. Then, run
-```bash
-make test
-```
-to run these tests and make sure that they pass.
-
-Ensure code coverage report shows `100%` coverage, add tests to your PR.
-
-## Build the docs locally (optional)
-
-Run 
-```bash
-make docs
-```
-to build the docs.
-
-Ensure your new changes are documented.
-
-## Commit your changes
-
-This project uses [conventional git commit messages](https://www.conventionalcommits.org/en/v1.0.0/).
-
-Example: `fix(package): update setup.py arguments 🎉` (emojis are fine too)
-
-## Push your changes to your fork
-
-Run 
-```bash
-git push origin my_contribution_branch
-```
-
-## Submit a pull request
-
-On github interface, click on `Pull Request` button.
-
-Wait CI to run and one of the developers will review your PR.
-
-## Makefile utilities
-
-This project comes with a `Makefile` that contains a number of useful utility.
-
-```bash 
-❯ make
-Usage: make <target>
-
-Targets:
-help            Show the help menu.
-env             Create a Conda environment if USE_CONDA=true.
-conda-env       Create a Conda environment.
-virtualenv      Create a virtual environment using virtualenv.
-install         Install the project in development mode.
-configure       Run chemsmart configuration interactively.
-show            Display the current environment information.
-update-deps     Automatically update new packages that are added in the codes
-fmt             Format code using black and isort.
-lint            Run linters (ruff).
-test            Run tests and generate coverage report.
-clean           Remove temporary and unnecessary files.
-```
-
-## Making a new release (TO BE IMPLEMENTED)
-
-This project uses [semantic versioning](https://semver.org/) and tags releases with `X.Y.Z`
-Every time a new tag is created and pushed to the remote repo, github actions will
-automatically create a new release on github and trigger a release on PyPI.
-
-For this to work you need to setup a secret called `PIPY_API_TOKEN` on the project settings>secrets, 
-this token can be generated on [pypi.org](https://pypi.org/account/).
-
-To trigger a new release all you need to do is:
-
-1. If you have changes to add to the repo
-    * Make your changes following the steps described above.
-    * Commit your changes following the [conventional git commit messages](https://www.conventionalcommits.org/en/v1.0.0/).
-2. Run the tests to ensure everything is working.
-4. Run `make release` to create a new tag and push it to the remote repo.
-
-the `make release` will ask you the version number to create the tag, ex: type `0.1.1` when you are asked.
-
-> **CAUTION**:  The make release will change local changelog files and commit all the unstaged changes you have.
+Thank you for contributing to chemsmart!
