@@ -1834,7 +1834,8 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
-    def total_mass_in_amu(self):
+    def mass(self):
+        """Total mass in amu."""
         for i, line_i in enumerate(self.optimized_output_lines):
             if "THERMOCHEMISTRY" in line_i:
                 for line_j in self.optimized_output_lines[i + 3 :]:
