@@ -825,6 +825,7 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def _get_sp_scf_energy(self):
+        """Get the final SCF energy in Hartree."""
         if self.optimized_output_lines is None:
             for line in self.contents:
                 if "Total Energy       :" in line:
@@ -836,7 +837,7 @@ class ORCAOutput(ORCAFileMixin):
                         energy_in_eV,
                         rel_tol=1e-4,
                     )
-                    return energy_in_hartree * units.Hartree
+                    return energy_in_hartree
 
     @property
     def final_scf_energy(self):
@@ -1842,6 +1843,7 @@ class ORCAOutput(ORCAFileMixin):
         E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states
         E(rot)  - is the rotational thermal energy
         E(trans)- is the translational thermal energy.
+        Default units are Hartree.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
@@ -1849,14 +1851,19 @@ class ORCAOutput(ORCAFileMixin):
                     if "Total thermal energy" in line_j:
                         line_j_elements = line_j.split()
                         internal_energy_in_Hartree = float(line_j_elements[-2])
-                        return internal_energy_in_Hartree * units.Hartree
+                        return internal_energy_in_Hartree
         return None
+
+    @property
+    def internal_energy_in_eV(self):
+        return self.internal_energy * units.Hartree
 
     @property
     def electronic_energy(self):
         """E(el) = E(kin-el) + E(nuc-el) + E(el-el) + E(nuc-nuc).
 
         Total energy from the electronic structure calculation.
+        Defaults to Hartree.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
@@ -1866,20 +1873,29 @@ class ORCAOutput(ORCAFileMixin):
                         electronic_energy_in_Hartree = float(
                             line_j_elements[-2]
                         )
-                        return electronic_energy_in_Hartree * units.Hartree
+                        return electronic_energy_in_Hartree
         return None
 
     @property
+    def electronic_energy_in_eV(self):
+        return self.electronic_energy * units.Hartree
+
+    @property
     def zero_point_energy(self):
-        """E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation."""
+        """E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation.
+        Default units are Hartree."""
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
                     if "Zero point energy" in line_j:
                         line_j_elements = line_j.split()
                         zpe_in_Hartree = float(line_j_elements[-4])
-                        return zpe_in_Hartree * units.Hartree
+                        return zpe_in_Hartree
         return None
+
+    @property
+    def zero_point_energy_in_eV(self):
+        return self.zero_point_energy * units.Hartree
 
     @property
     def thermal_vibration_correction(self):
@@ -1892,15 +1908,17 @@ class ORCAOutput(ORCAFileMixin):
                         thermal_vibration_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return (
-                            thermal_vibration_correction_in_Hartree
-                            * units.Hartree
-                        )
+                        return thermal_vibration_correction_in_Hartree
         return None
 
     @property
+    def thermal_vibration_correction_in_eV(self):
+        return self.thermal_vibration_correction * units.Hartree
+
+    @property
     def thermal_rotation_correction(self):
-        """E(rot)  - is the rotational thermal energy."""
+        """E(rot)  - is the rotational thermal energy.
+        Default units are Hartree."""
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -1909,11 +1927,12 @@ class ORCAOutput(ORCAFileMixin):
                         thermal_rotation_correction_energy_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return (
-                            thermal_rotation_correction_energy_in_Hartree
-                            * units.Hartree
-                        )
+                        return thermal_rotation_correction_energy_in_Hartree
         return None
+
+    @property
+    def thermal_rotation_correction_in_eV(self):
+        return self.thermal_rotation_correction * units.Hartree
 
     @property
     def thermal_translation_correction(self):
@@ -1926,11 +1945,12 @@ class ORCAOutput(ORCAFileMixin):
                         thermal_translation_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return (
-                            thermal_translation_correction_in_Hartree
-                            * units.Hartree
-                        )
+                        return thermal_translation_correction_in_Hartree
         return None
+
+    @property
+    def thermal_translation_correction_in_eV(self):
+        return self.thermal_translation_correction * units.Hartree
 
     @property
     def total_thermal_correction_due_to_trans_rot_vib(self):
@@ -1955,6 +1975,7 @@ class ORCAOutput(ORCAFileMixin):
         """The enthalpy is H = U + kB*T.
 
         kB is Boltzmann's constant.
+        Default units are Hartree.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTHALPY":
@@ -1962,14 +1983,19 @@ class ORCAOutput(ORCAFileMixin):
                     if "Total Enthalpy" in line_j:
                         line_j_elements = line_j.split()
                         enthalpy_in_Hartree = float(line_j_elements[-2])
-                        return enthalpy_in_Hartree * units.Hartree
+                        return enthalpy_in_Hartree
         return None
+
+    @property
+    def enthalpy_in_eV(self):
+        return self.enthalpy * units.Hartree
 
     @property
     def thermal_enthalpy_correction(self):
         """kB*T term in the enthalpy is H = U + kB*T.
 
         kB is Boltzmann's constant.
+        Default units are Hartree.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTHALPY":
@@ -1979,11 +2005,12 @@ class ORCAOutput(ORCAFileMixin):
                         thermal_enthalpy_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return (
-                            thermal_enthalpy_correction_in_Hartree
-                            * units.Hartree
-                        )
+                        return thermal_enthalpy_correction_in_Hartree
         return None
+
+    @property
+    def thermal_enthalpy_correction_in_eV(self):
+        return self.thermal_enthalpy_correction * units.Hartree
 
     @property
     def electronic_entropy_no_temperature_in_SI(self):
@@ -2139,8 +2166,12 @@ class ORCAOutput(ORCAFileMixin):
                     if "Final Gibbs free energy" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-2])
-                        return entropy_hartree * units.Hartree
+                        return entropy_hartree
         return None
+
+    @property
+    def gibbs_free_energy_in_eV(self):
+        return self.gibbs_free_energy * units.Hartree
 
     # Below gives computing time/resources used by ORCA
     @cached_property

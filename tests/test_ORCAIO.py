@@ -516,38 +516,32 @@ class TestORCAOutput:
         assert orca_out.pressure_in_atm == 1.0
         assert orca_out.total_mass_in_amu == 18.02
         assert math.isclose(
-            orca_out.internal_energy, -2076.198522987, rel_tol=1e-4
+            orca_out.internal_energy, -76.29889480, rel_tol=1e-4
+        )  # in Hartrees, default unit in ORCA output file
+        assert math.isclose(
+            orca_out.electronic_energy, -76.32331101, rel_tol=1e-4
         )
         assert math.isclose(
-            orca_out.electronic_energy, -2076.8629218525, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
+            orca_out.zero_point_energy, 0.02158076, rel_tol=1e-8
         )
         assert math.isclose(
             orca_out.thermal_vibration_correction,
-            7.91851273564e-5,
-            rel_tol=1e-6,
+            0.00000291,
+            rel_tol=1e-8,
         )
         assert math.isclose(
-            orca_out.thermal_rotation_correction, 0.038538666777, rel_tol=1e-4
+            orca_out.thermal_rotation_correction, 0.00141627, rel_tol=1e-8
         )
         assert math.isclose(
             orca_out.thermal_translation_correction,
-            0.038538666777,
-            rel_tol=1e-4,
+            0.00141627,
+            rel_tol=1e-8,
         )
-        assert math.isclose(
-            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
-        )
-        assert math.isclose(orca_out.enthalpy, -2076.1728297262, rel_tol=1e-4)
+        assert math.isclose(orca_out.enthalpy, -76.29795059, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.02569326085952,
-            rel_tol=1e-4,
+            0.00094421,
+            rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
         assert math.isclose(
@@ -694,57 +688,6 @@ class TestORCAOutput:
         assert orca_out.temperature_in_K == 298.15
         assert orca_out.pressure_in_atm == 1.0
         assert orca_out.total_mass_in_amu == 18.02
-        assert math.isclose(
-            orca_out.internal_energy, -2076.198522987, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.electronic_energy, -2076.8629218525, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.thermal_vibration_correction,
-            7.91851273564e-5,
-            rel_tol=1e-6,
-        )
-        assert math.isclose(
-            orca_out.thermal_rotation_correction, 0.038538666777, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.thermal_translation_correction,
-            0.038538666777,
-            rel_tol=1e-4,
-        )
-        assert math.isclose(
-            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
-        )
-        assert math.isclose(
-            orca_out.zero_point_energy, 0.587242346752, rel_tol=1e-4
-        )
-        assert math.isclose(orca_out.enthalpy, -2076.1728297262, rel_tol=1e-4)
-        assert math.isclose(
-            orca_out.thermal_enthalpy_correction,
-            0.02569326085952,
-            rel_tol=1e-4,
-        )
-        assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
-        assert math.isclose(
-            orca_out.vibrational_entropy_no_temperature_in_SI,
-            0.028883578,
-            rel_tol=1e-4,
-        )
-        assert math.isclose(
-            orca_out.rotational_entropy_no_temperature_in_SI,
-            43.887276051,
-            rel_tol=1e-4,
-        )
-        assert math.isclose(
-            orca_out.translational_entropy_no_temperature_in_SI,
-            144.8035920,
-            rel_tol=1e-4,
-        )
-        assert math.isclose(orca_out.entropy_TS, 0.5831641766362, rel_tol=1e-4)
 
         entropy_TS_in_J_per_mol = 56266.786841951627
         TS = orca_out.entropy_in_J_per_mol_per_K * 298.15  # 56266.794 J/mol
@@ -769,7 +712,7 @@ class TestORCAOutput:
         )
 
         assert math.isclose(
-            orca_out.gibbs_free_energy, -2076.7559939028233202, rel_tol=1e-6
+            orca_out.gibbs_free_energy, -76.31938148, rel_tol=1e-8
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
