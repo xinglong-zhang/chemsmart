@@ -1459,7 +1459,7 @@ class TestThermochemistryHe:
         assert np.isclose(
             mol.natural_abundance_weighted_mass, 4.002602
         )  # use_weighted_mass=True
-        assert np.isclose(orca_out.mass, 4.00)
+        assert orca_out.mass == 4.0
         assert orca_out.rotational_symmetry_number == 1
         assert orca_out.rotational_constants_in_wavenumbers == [
             0,

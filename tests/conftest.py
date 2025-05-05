@@ -1,9 +1,11 @@
+import logging
 import os
 import tempfile
 
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
@@ -1020,8 +1022,36 @@ def mock_popen(mocker):
     return mocker.patch("subprocess.Popen")
 
 
+@pytest.fixture(scope="session")
+def session_mocker(pytestconfig):
+    """Session-scoped mocker fixture for patching during the test session."""
+    from unittest.mock import MagicMock
+
+    mocker = MockerFixture(pytestconfig)
+    mock = MagicMock()
+    mocker.patch = mock.patch
+    mocker.patch.object = mock.patch.object
+    yield mocker
+    mocker.resetall()
+
+
+@pytest.fixture(scope="session")
+def tests_logger():
+    """Fixture to configure the root logger for tests."""
+    logger = logging.getLogger()  # Root logger
+    logger.setLevel(logging.INFO)
+    logger.handlers = []  # Clear handlers to avoid conflicts
+    logger.propagate = True
+    # Set environment variable to signal test mode
+    os.environ["TEST_MODE"] = "1"
+    yield logger
+    # Clean up
+    logger.handlers = []
+    os.environ.pop("TEST_MODE", None)
+
+
 @pytest.fixture
-def capture_log(caplog):
+def capture_log(caplog, tests_logger):
     """Fixture to capture log messages."""
-    caplog.set_level("INFO")
-    return caplog
+    caplog.set_level(logging.INFO, logger="")  # Capture root logger
+    yield caplog

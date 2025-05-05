@@ -1644,6 +1644,7 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def rotational_constants_in_wavenumbers(self):
+        """Rotational constants in wavenumbers."""
         all_rotational_constants_in_wavenumbers = []
         for i, line_i in enumerate(self.contents):
             rotational_constants_in_wavenumbers = []
@@ -1816,9 +1817,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_vibration_modes(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
+                for line_j in self.contents[i + 6 :]:
                     if (
                         "The total number of vibrations considered is"
                         in line_j
@@ -1853,9 +1854,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def total_mass_in_amu(self):
         """Total mass in amu."""
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Total Mass" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
@@ -1867,6 +1868,8 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def moments_of_inertia(self):
+        """Obtain moments of inertia from the output file of rotational
+        constants in wavenumbers and convert to SI units (kg * m^2)."""
         all_moments_of_inertia = [
             units._hplanck
             / (8 * np.pi**2 * units._c * 1e2 * B)
