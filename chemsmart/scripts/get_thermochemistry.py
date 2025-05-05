@@ -20,20 +20,37 @@ os.environ["OMP_NUM_THREADS"] = "1"
 @click.command()
 @click.option(
     "-f",
+    "--filenames",
+    type=str,
+    multiple=True,
+    default=None,
+    help="Gaussian or ORCA output files for parsing thermochemistry.",
+)
+@click.option(
+    "-ft",
+    "--filetype",
+    default=None,
+    help="Type of file to be converted, if direcotry is specified.",
+)
+@click.option(
+    "-c",
+    "--cutoff",
     default=100.0,
     type=float,
     show_default=True,
     help="Cutoff frequency for both entropy and enthalpy in wavenumbers",
 )
 @click.option(
-    "--fs",
+    "-cs",
+    "--entropy-cutoff",
     default=100.0,
     type=float,
     show_default=True,
     help="Cutoff frequency for entropy in wavenumbers",
 )
 @click.option(
-    "--fh",
+    "-ch",
+    "--enthalpy-cutoff",
     default=100.0,
     type=float,
     show_default=True,
@@ -74,34 +91,37 @@ os.environ["OMP_NUM_THREADS"] = "1"
 )
 @click.option(
     "-q",
+    "--quasi-rrho",
     is_flag=True,
     default=False,
     show_default=True,
     help="Quasi-RRHO approximation for both entropy and enthalpy.",
 )
 @click.option(
-    "--qs",
+    "-qs",
+    "--quasi-rrho-entropy",
     is_flag=True,
     default=False,
     show_default=True,
-    help="Quasi-RRHO approximation for entropy.",
+    help="Apply quasi-RRHO approximation for entropy.",
 )
 @click.option(
-    "--qh",
+    "-qh",
+    "--quasi-rrho-enthalpy",
     is_flag=True,
     default=False,
     show_default=True,
-    help="Quasi-RRHO approximation for enthalpy.",
+    help="Apply quasi-RRHO approximation for enthalpy.",
 )
 @click.option(
     "-u",
-    "--unit",
-    default="Eh",
+    "--units",
+    default="hartree",
     show_default=True,
     type=click.Choice(
-        ["Eh", "hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
+        ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
     ),
-    help="Unit of energetic values.",
+    help="Units of energetic values.",
 )
 @click.option(
     "--scf",
@@ -110,21 +130,21 @@ os.environ["OMP_NUM_THREADS"] = "1"
     show_default=True,
     help="Only output SCF energy without thermochemical corrections.",
 )
-@click.argument("filenames", nargs=-1, type=click.Path(exists=True))
-def get_thermo(
-    f,
-    fs,
-    fh,
+def entry_point(
+    filenames,
+    filetype,
+    cutoff,
+    entropy_cutoff,
+    enthalpy_cutoff,
     concentration,
     temperature,
     alpha,
     weighted,
-    q,
-    qs,
-    qh,
-    unit,
+    quasi_rrho,
+    quasi_rrho_entropy,
+    quasi_rrho_enthalpy,
+    units,
     scf,
-    filenames,
 ):
     """Thermochemistry calculation script using quasi-RRHO approximation."""
 
@@ -133,22 +153,22 @@ def get_thermo(
         with open(output, "a") as out:
             out.write(message)
 
-    if f != 100.0:
-        fs = f
-        fh = f
+    if cutoff != 100.0:
+        entropy_cutoff = cutoff
+        enthalpy_cutoff = cutoff
 
     # Energy Conversion
-    if unit.lower() == "ev":
+    if units.lower() == "ev":
         energy_unit = "eV"
         unit_conversion = (
             1.0364269574711572e-05  # 1 J/mol = 1.0364269574711572e-05 eV
         )
-    elif unit.lower() == "kcal/mol":
+    elif units.lower() == "kcal/mol":
         energy_unit = "kcal/mol"
         unit_conversion = (
             0.0002390057361376673  # 1 J/mol = 0.0002390057361376673 kcal/mol
         )
-    elif unit.lower() == "kj/mol":
+    elif units.lower() == "kj/mol":
         energy_unit = "kJ/mol"
         unit_conversion = 0.001  # 1 J/mol = 0.001 kJ/mol
     else:
@@ -157,51 +177,58 @@ def get_thermo(
             3.8087991196914175e-07  # 1 J/mol = 3.8087991196914175e-07 Eh
         )
 
-    files = []
-    for filename in filenames:
-        files.extend(glob.glob(filename))
+    if not filenames:
+        logger.info("No filenames provided.")
+        logger.info(
+            "Will use all files in the folder with suffixes .log or .out."
+        )
+        assert filetype, "Type of file to be converted must be specified."
+        if filetype == "log":
+            filenames = glob.glob("*.log")
+        elif filetype == "out":
+            filenames = glob.glob("*.out")
+        else:
+            logger.error(
+                "Please provide calculation output files on the command line."
+            )
+            logger.error("Try 'get_thermochemistry.py --help' for help.")
+            return
 
     # Error Handling
-    for file in files:
+    for file in filenames:
         if not file.endswith((".log", ".out")):
             logger.error(
                 f"Unsupported file extension for '{file}'. Only .log or .out files are accepted."
             )
             logger.error("Try 'get_thermochemistry.py --help' for help.")
             return
-    if not files:
-        logger.error(
-            "Please provide calculation output files on the command line."
-        )
-        logger.error("Try 'get_thermochemistry.py --help' for help.")
-        return
 
     # ASCII Arts for CHEMSMART
     log("\n")
     log(
         "   "
         + " " * 25
-        + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ \n"
+        + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ "
     )
     log(
         "   "
         + " " * 25
-        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|\n"
+        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
     )
     log(
         "   "
         + " " * 25
-        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || |  \n"
+        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || | "
     )
     log(
         "   "
         + " " * 25
-        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | |  \n"
+        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | | "
     )
     log(
         "   "
         + " " * 25
-        + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_|  \n\n"
+        + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_| \n"
     )
 
     # Only output SCF energy without thermochemical corrections.
@@ -213,11 +240,11 @@ def get_thermo(
         )
         log("   " + "=" * 106 + "\n")
         index = 1
-        for file in files:
-            scf_energy = Thermochemistry(file, temperature=temperature)
+        for file in filenames:
+            thermochemistry = Thermochemistry(file, temperature=temperature)
             structure = os.path.splitext(os.path.basename(file))[0]
-            energy = scf_energy.energies * unit_conversion
-            job_type = scf_energy.job_type
+            energy = thermochemistry.energies * unit_conversion
+            job_type = thermochemistry.job_type
             log(
                 "{:2} {:60} {:22.6f} {:>22}\n".format(
                     index,
@@ -247,11 +274,19 @@ def get_thermo(
         + f"Concentration              : {concentration:.1f} mol/L"
         + "\n"
     )
-    if q or qs:
-        log("   " + f"Entropy Frequency Cut-off  : {fs:.1f} cm-1" + "\n")
-    if q or qh:
-        log("   " + f"Enthalpy Frequency Cut-off : {fh:.1f} cm-1" + "\n")
-    if q or qs or qh:
+    if quasi_rrho or quasi_rrho_entropy:
+        log(
+            "   "
+            + f"Entropy Frequency Cut-off  : {entropy_cutoff:.1f} cm-1"
+            + "\n"
+        )
+    if quasi_rrho or quasi_rrho_enthalpy:
+        log(
+            "   "
+            + f"Enthalpy Frequency Cut-off : {enthalpy_cutoff:.1f} cm-1"
+            + "\n"
+        )
+    if quasi_rrho or quasi_rrho_entropy or quasi_rrho_enthalpy:
         log("   " + f"Damping Function Exponent  : {alpha}" + "\n")
     log(
         "   "
@@ -259,7 +294,7 @@ def get_thermo(
         + "\n"
     )
     log("   " + f"Energy Unit                : {energy_unit}" + "\n\n")
-    if q or qs or qh:
+    if quasi_rrho or quasi_rrho_entropy or quasi_rrho_enthalpy:
         log("   " + "-" * 108 + "\n")
         log(
             "   "
@@ -272,10 +307,10 @@ def get_thermo(
         log(
             "     REF: Chai, J.-D.; Head-Gordon, M. Phys. Chem. Chem. Phys. 2008, 10, 6615–6620\n\n"
         )
-    if q or qs:
+    if quasi_rrho or quasi_rrho_entropy:
         log("   - Entropic quasi-harmonic treatment: Grimme\n")
         log("     REF: Grimme, S. Chem. Eur. J. 2012, 18, 9955-9964\n\n")
-    if q or qh:
+    if quasi_rrho or quasi_rrho_enthalpy:
         log("   - Enthalpy quasi-harmonic treatment: Head-Gordon\n")
         log(
             "     REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850\n\n"
@@ -283,7 +318,7 @@ def get_thermo(
     log("\n")
 
     log(f" * Thermochemistry Results (in {energy_unit}): \n\n")
-    if q:
+    if quasi_rrho:
         log(
             "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
                 "Structure",
@@ -298,7 +333,7 @@ def get_thermo(
             )
         )
         log("   " + "=" * 142 + "\n")
-    elif qs:
+    elif quasi_rrho_entropy:
         log(
             "   {:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
                 "Structure",
@@ -312,7 +347,7 @@ def get_thermo(
             )
         )
         log("   " + "=" * 128 + "\n")
-    elif qh:
+    elif quasi_rrho_enthalpy:
         log(
             "   {:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
                 "Structure", "E", "ZPE", "H", "qh-H", "T.S", "G(T)", "qh-G(T)"
@@ -328,7 +363,7 @@ def get_thermo(
         log("   " + "=" * 103 + "\n")
 
     index = 1
-    for file in files:
+    for file in filenames:
         try:
             thermochemistry = Thermochemistry(
                 file,
@@ -336,8 +371,8 @@ def get_thermo(
                 concentration=concentration,
                 use_weighted_mass=weighted,
                 alpha=alpha,
-                s_freq_cutoff=fs,
-                h_freq_cutoff=fh,
+                s_freq_cutoff=entropy_cutoff,
+                h_freq_cutoff=enthalpy_cutoff,
             )
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = thermochemistry.energies * unit_conversion
@@ -356,16 +391,16 @@ def get_thermo(
             gibbs_free_energy = (
                 thermochemistry.gibbs_free_energy * unit_conversion
             )
-            if q:
+            if quasi_rrho:
                 qrrho_gibbs_free_energy = (
                     thermochemistry.qrrho_gibbs_free_energy * unit_conversion
                 )
-            elif qh:
+            elif quasi_rrho_enthalpy:
                 qrrho_gibbs_free_energy = (
                     thermochemistry.qrrho_gibbs_free_energy_qh
                     * unit_conversion
                 )
-            elif qs:
+            elif quasi_rrho_entropy:
                 qrrho_gibbs_free_energy = (
                     thermochemistry.qrrho_gibbs_free_energy_qs
                     * unit_conversion
@@ -395,7 +430,7 @@ def get_thermo(
                         f"!! Replaced {thermochemistry.num_replaced_frequencies} imaginary frequency(s) with the cutoff value ({thermochemistry.cutoff:.1f} cm-1) for {file}.\n"
                     )
 
-            if q:
+            if quasi_rrho:
                 log(
                     "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
                         index,
@@ -410,7 +445,7 @@ def get_thermo(
                         qrrho_gibbs_free_energy,
                     )
                 )
-            elif qs:
+            elif quasi_rrho_entropy:
                 log(
                     "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
                         index,
@@ -424,7 +459,7 @@ def get_thermo(
                         qrrho_gibbs_free_energy,
                     )
                 )
-            elif qh:
+            elif quasi_rrho_enthalpy:
                 log(
                     "{:2} {:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
                         index,
@@ -460,4 +495,4 @@ def get_thermo(
 
 
 if __name__ == "__main__":
-    get_thermo()
+    entry_point()
