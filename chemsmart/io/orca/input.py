@@ -144,6 +144,8 @@ class ORCAInput(ORCAFileMixin):
                 return line.split()[-1]
         return None
 
+class ORCAQMMMInput(ORCAInput):
+
     @property
     def qm_atoms(self):
         """Get QM atoms from the QMMM block."""
@@ -178,6 +180,11 @@ class ORCAInput(ORCAFileMixin):
         return self._get_active_atoms()
 
     @property
+    def qm2_atoms(self):
+        return self._get_qmmm_block()["qm2atoms"]
+
+
+    @property
     def qm2_level_of_theory(self):
         qm2_level_of_theory, _, _ = self._get_qm2_level_of_theory()
         if qm2_level_of_theory is not None:
@@ -205,14 +212,19 @@ class ORCAInput(ORCAFileMixin):
         return self._get_h_bond_length()
 
     @property
-    def qm_boundary_treatment(self):
-        boundary_interaction, _ = self._get_qm_boundary_interaction()
+    def qm_boundary_interaction(self):
+        boundary_interaction, _, _ = self._get_qm_boundary_interaction()
         return boundary_interaction
 
     @property
     def qm_embedding_type(self):
-        _, embedding_type = self._get_qm_boundary_interaction()
+        _, embedding_type,_ = self._get_qm_boundary_interaction()
         return embedding_type
+
+    @property
+    def qm_qm2_boundary_treatment(self):
+        _, _, boundary_treatment = self._get_qm_boundary_interaction()
+        return boundary_treatment
 
     @property
     def qm_charge(self):
@@ -284,6 +296,7 @@ class ORCAInput(ORCAFileMixin):
 
     def _get_qm_boundary_interaction(self):
         boundary_interaction = ""
+        boundary_treatment = "xtb"
         embedding = "electrostatic"  # default
         for line in self.contents:
             line = line.lower()
@@ -303,7 +316,9 @@ class ORCAInput(ORCAFileMixin):
                     )
             if "embedding" in line:
                 embedding = line.split()[-1]
-        return boundary_interaction, embedding
+            if 'autoff qm2 method' in line:
+                boundary_treatment = line.replace('autoff qm2 method', "").strip()
+        return boundary_interaction, embedding, boundary_treatment
 
     def _get_qm2_level_of_theory(self):
         """Get QM2 level of theory from the QMMM block."""
@@ -337,7 +352,7 @@ class ORCAInput(ORCAFileMixin):
                 qm2_layer = True
             if "mult_medium" in line:
                 multiplicity = line.split()[1]
-        return charge, multiplicity, qm2_layer
+        return int(charge), int(multiplicity), qm2_layer
 
     def _get_qmmm_block(self):
         # todo: need to refactor this
@@ -348,6 +363,9 @@ class ORCAInput(ORCAFileMixin):
             if "qmatoms" in line:
                 qm_atoms = re.search(r"\{(.+?)\}", line).group(1).split()
                 block["qmatoms"] = qm_atoms
+            if "qm2atoms" in line:
+                qm2_atoms = re.search(r"\{(.+?)\}", line).group(1).split()
+                block["qm2atoms"] = qm2_atoms
             if "optregion_fixedatoms" in line:
                 opt_region_fixed_atoms = (
                     re.search(r"\{(.+?)\}", line).group(1).split()

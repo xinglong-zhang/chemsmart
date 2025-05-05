@@ -7,7 +7,7 @@ from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.input import ORCAInput
+from chemsmart.io.orca.input import ORCAInput, ORCAQMMMInput
 from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
 from chemsmart.io.orca.route import ORCARoute
 
@@ -204,11 +204,13 @@ class TestORCAInput:
         ):
             orca_inp.solvent_id  # noqa: B018
 
-    def test_orca_qmmm_input(self, orca_qmmm_input_file):
-        orca_inp = ORCAInput(filename=orca_qmmm_input_file)
-        assert orca_inp.charge == 2
-        assert orca_inp.multiplicity == 1
-        assert orca_inp.qm_atoms == [
+    def test_orca_qmmm_input(self, orca_inputs_directory):
+        orca_inp1= os.path.join(orca_inputs_directory, "dna_qmmm1.inp")
+        orca_inp1 = ORCAQMMMInput(filename=orca_inp1)
+        #charge and multiplicity of QM region (instead of real system in regular input)
+        assert orca_inp1.qm_charge == 2
+        assert orca_inp1.qm_multiplicity == 1
+        assert orca_inp1.qm_atoms == [
             "54",
             "124:133",
             "209",
@@ -220,21 +222,31 @@ class TestORCAInput:
             "424:476",
             "488:516",
         ]
-        assert orca_inp.qm_active_atoms == ["0:5", "16", "21:30"]
+        assert orca_inp1.qm_active_atoms == ["0:5", "16", "21:30"]
         # assert orca_inp.qm_force_field
-        assert orca_inp.qm_h_bond_length == [
+        assert orca_inp1.qm_h_bond_length == [
             ("c", "hla", "1.09"),
             ("o", "hla", "0.98"),
             ("n", "hla", "0.99"),
         ]
-        assert orca_inp.qm_boundary_treatment == (
+        assert orca_inp1.qm_boundary_interaction == (
             "Will neglect bends at QM2-QM1-MM1 and torsions at QM3-QM2-QM1-MM1 boundary.\n"
             "Will include bonds at QM1-MM1 boundary.\n"
         )
-        assert orca_inp.qm_embedding_type == "electrostatic"
-        assert orca_inp.qm2_functional == "b3lyp"
-        assert orca_inp.qm2_basis == "def2-svp def2/j"
-        print(orca_inp.qm2_functional, orca_inp.qm2_basis)
+        assert orca_inp1.qm_embedding_type == "electrostatic"
+        assert orca_inp1.qm2_functional.strip('"')  == 'b3lyp'
+        assert orca_inp1.qm2_basis.strip('"')  == 'def2-svp def2/j'
+
+        orca_inp2 = os.path.join(orca_inputs_directory, "dna_qmmm2.inp")
+        orca_inp2 = ORCAQMMMInput(filename=orca_inp2)
+        assert orca_inp2.qm2_level_of_theory.strip('"') == "myqm2method.txt"
+        assert orca_inp2.qm_qm2_boundary_treatment == "pbeh3c"
+        assert orca_inp2.qm2_atoms == ['5:22']
+        assert orca_inp2.qm2_charge == 0
+        assert orca_inp2.qm2_multiplicity == 3
+
+        #todo:tests for crystal QMMM
+        # orca_inp3 = os.path.join(orca_inputs_directory, "ionic_crystal_qmmm.inp")
 
 
 class TestORCAOutput:
