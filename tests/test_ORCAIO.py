@@ -490,7 +490,7 @@ class TestORCAOutput:
         assert orca_out.num_vibration_modes == 3
         assert orca_out.temperature_in_K == 298.15
         assert orca_out.pressure_in_atm == 1.0
-        assert orca_out.mass == 18.02
+        assert orca_out.total_mass_in_amu == 18.02
         assert math.isclose(
             orca_out.internal_energy, -76.29889480, rel_tol=1e-4
         )  # in Hartrees, default unit in ORCA output file
@@ -639,7 +639,7 @@ class TestORCAOutput:
         assert orca_out.num_vibration_modes == 3
         assert orca_out.temperature_in_K == 298.15
         assert orca_out.pressure_in_atm == 1.0
-        assert orca_out.mass == 18.02
+        assert orca_out.total_mass_in_amu == 18.02
 
         entropy_TS_in_J_per_mol = 56266.786841951627
         TS = orca_out.entropy_in_J_per_mol_per_K * 298.15  # 56266.794 J/mol

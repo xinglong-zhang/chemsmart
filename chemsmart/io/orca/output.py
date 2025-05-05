@@ -1626,6 +1626,23 @@ class ORCAOutput(ORCAFileMixin):
         return all_dipole_moment[-1]
 
     @property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number from the output file."""
+        for i, line_i in enumerate(self.contents):
+            if line_i == "ENTHALPY":
+                for line_j in self.contents[i:]:
+                    if (
+                        "Point Group:" in line_j
+                        and "Symmetry Number:" in line_j
+                    ):
+                        line_j_elements = line_j.split()
+                        rotational_symmetry_number = int(
+                            line_j_elements[-1].strip()
+                        )
+                        return rotational_symmetry_number
+        return None
+
+    @property
     def rotational_constants_in_wavenumbers(self):
         all_rotational_constants_in_wavenumbers = []
         for i, line_i in enumerate(self.contents):
@@ -1834,7 +1851,7 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
-    def mass(self):
+    def total_mass_in_amu(self):
         """Total mass in amu."""
         for i, line_i in enumerate(self.optimized_output_lines):
             if "THERMOCHEMISTRY" in line_i:
@@ -1843,6 +1860,20 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
         return None
+
+    @property
+    def mass(self):
+        return self.total_mass_in_amu
+
+    @property
+    def moments_of_inertia(self):
+        all_moments_of_inertia = [
+            units._hplanck
+            / (8 * np.pi**2 * units._c * 1e2 * B)
+            / (units._amu * (units.Ang / units.m) ** 2)
+            for B in self.rotational_constants_in_wavenumbers
+        ]
+        return all_moments_of_inertia
 
     @property
     def internal_energy(self):
