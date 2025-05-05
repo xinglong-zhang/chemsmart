@@ -33,7 +33,7 @@ class GaussianJobRunner(JobRunner):
         "g16modred",
         "g16nci",
         "g16resp",
-        "g16saopt",
+        "g16traj",
         "g16scan",
         "g16sp",
         "g16td",
@@ -53,11 +53,19 @@ class GaussianJobRunner(JobRunner):
     # class attribute instead of instance attribute so it needs not be set at
     # instance level - set during initialization (__init__).
 
-    def __init__(self, server, scratch=None, fake=False, **kwargs):
+    def __init__(
+        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+    ):
         # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        super().__init__(
+            server=server,
+            scratch=scratch,
+            scratch_dir=scratch_dir,
+            fake=fake,
+            **kwargs,
+        )
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
@@ -132,7 +140,7 @@ class GaussianJobRunner(JobRunner):
     def _write_input(self, job):
         from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 
-        input_writer = GaussianInputWriter(job=job, jobrunner=self)
+        input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):
@@ -192,8 +200,16 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=None, fake=True, **kwargs):
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+    def __init__(
+        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
+    ):
+        super().__init__(
+            server=server,
+            scratch=scratch,
+            scratch_dir=scratch_dir,
+            fake=fake,
+            **kwargs,
+        )
 
     def run(self, job, **kwargs):
         self._prerun(job=job)

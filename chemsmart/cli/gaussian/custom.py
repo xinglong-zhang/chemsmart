@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def userjob(ctx, route, append_info, **kwargs):
+    """CLI for running Gaussian custom jobs."""
+
+    # get jobrunner for running Gaussian custom jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -58,5 +63,9 @@ def userjob(ctx, route, append_info, **kwargs):
     from chemsmart.jobs.gaussian.custom import GaussianCustomJob
 
     return GaussianCustomJob(
-        molecule=molecule, settings=opt_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=opt_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

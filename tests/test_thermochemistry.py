@@ -2,6 +2,7 @@ import os.path
 
 import numpy as np
 import pytest
+from ase import units
 
 from chemsmart.analysis.thermochemistry import (
     Thermochemistry,
@@ -13,7 +14,8 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.settings.gaussian import GaussianProjectSettings
-from chemsmart.utils.constants import cal_to_joules
+from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.constants import cal_to_joules, hartree_to_joules
 
 
 class TestThermochemistry:
@@ -100,11 +102,12 @@ class TestThermochemistry:
             g16_output.zero_point_energy, expected_ZPE, rtol=10e-6
         )
 
+        # Thermochemsitry using weighted mass
         thermochem1 = Thermochemistry(
             filename=gaussian_singlet_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
         )
 
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
@@ -117,7 +120,10 @@ class TestThermochemistry:
             (
                 2
                 * np.pi
-                * (mol.mass / (6.0221408 * 1e23 * 1000))
+                * (
+                    mol.natural_abundance_weighted_mass
+                    / (6.0221408 * 1e23 * 1000)
+                )
                 * 1.380649
                 * 1e-23
                 * 298.15
@@ -128,46 +134,73 @@ class TestThermochemistry:
             thermochem1.translational_partition_function,
             expected_translational_partition_function,
         )
-        # print(expected_translational_partition_function)
-        # print(thermochem1.translational_partition_function)
-        # # assert np.isclose(thermochem1.translational_internal_energy()
 
-        assert g16_output.freq
+        # Thermochemsitry not using weighted mass
+        thermochem1 = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+            use_weighted_mass=False,
+        )
 
+        # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
+        expected_translational_partition_function = (
+            (
+                2
+                * np.pi
+                * (mol.most_abundant_mass / (6.0221408 * 1e23 * 1000))
+                * 1.380649
+                * 1e-23
+                * 298.15
+                / (6.62606957 * 1e-34 * 6.62606957 * 1e-34)
+            )
+        ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
+        assert np.isclose(
+            thermochem1.translational_partition_function,
+            expected_translational_partition_function,
+        )
+        assert not np.isclose(mol.mass, mol.most_abundant_mass)
+
+        # Thermochemsitry not using weighted mass at different temperature
         thermochem2 = Thermochemistry(
             filename=gaussian_singlet_opt_outfile,
             temperature=598.15,
             pressure=1.2,
+            use_weighted_mass=False,
         )
 
         expected_translational_partition_function2 = (
             (
                 2
                 * np.pi
-                * (mol.mass / (6.0221408 * 1e23 * 1000))
+                * (mol.most_abundant_mass / (6.0221408 * 1e23 * 1000))
                 * 1.380649
                 * 1e-23
                 * 598.15
                 / (6.62606957 * 1e-34 * 6.62606957 * 1e-34)
             )
-        ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / (1.2 * 101325))
+        ) ** (3 / 2) * (1.380649 * 1e-23 * 598.15 / (1.2 * 101325))
 
         assert np.isclose(
             thermochem2.translational_partition_function,
             expected_translational_partition_function2,
-            rtol=1e5,
         )
 
-        # tests on thermochem2
-
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_thermochemistry_co2(
         self,
         tmpdir,
         gaussian_yaml_settings_gas_solv_project_name,
-        jobrunner_scratch,
+        gaussian_jobrunner_scratch,
     ):
+        # set scratch
+        gaussian_jobrunner_scratch.scratch_dir = tmpdir
+
         mol = Molecule.from_pubchem("280")
-        tmp_path = tmpdir.join("co2.com")
+        tmp_path = os.path.join(tmpdir, "CO2.com")
 
         os.chdir(tmpdir)
         mol.write_com(tmp_path)
@@ -185,14 +218,12 @@ class TestThermochemistry:
         job = GaussianOptJob.from_filename(
             filename=tmp_path,
             settings=settings,
+            jobrunner=gaussian_jobrunner_scratch,
         )
         assert isinstance(job, GaussianOptJob)
 
-        # set scratch
-        jobrunner_scratch.scratch_dir = tmpdir
-
         # run the job
-        job.run(jobrunner=jobrunner_scratch)
+        job.run()
         assert job.is_complete()
 
         # check that the job finished
@@ -203,13 +234,13 @@ class TestThermochemistry:
         # get thermochemistry for CO2 molecule
         # CO2_fake.log file has no thermochemistry data
         # since it was run with fake gaussian
-        with pytest.raises(TypeError):
-            thermochem1 = Thermochemistry(
-                filename=tmp_log_path, temperature=298.15, pressure=1
-            )
-            assert np.isclose(
-                thermochem1.translational_partition_function, 1.15e7, rtol=1e5
-            )
+        thermochem1 = Thermochemistry(
+            filename=tmp_log_path, temperature=298.15, pressure=1
+        )
+        assert np.isclose(
+            thermochem1.translational_partition_function, 1.15e7, rtol=1e5
+        )
+        assert len(thermochem1.vibrational_frequencies) == 0
 
 
 class TestThermochemistryCO2:
@@ -241,20 +272,62 @@ class TestThermochemistryCO2:
         assert g16_output.job_type == "opt"
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
+        mol_as_ase_atoms = mol.to_ase()
+        (
+            mol_as_ase_atoms_moi_along_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        ) = mol_as_ase_atoms.get_moments_of_inertia(vectors=True)
+
+        assert np.allclose(mol.masses, mol_as_ase_atoms.get_masses())
+        assert np.allclose(mol.positions, mol_as_ase_atoms.get_positions())
+        assert np.allclose(
+            mol.center_of_mass, mol_as_ase_atoms.get_center_of_mass()
+        )
+        assert np.allclose(
+            mol.moments_of_inertia,
+            mol_as_ase_atoms_moi_along_principal_axes,
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes,
+            mol_as_ase_atoms_moi_principal_axes,
+        )
+        # test moments of inertia from molecular structure and from gaussian output
+        assert np.allclose(
+            mol.moments_of_inertia, g16_output.moments_of_inertia, rtol=1e-2
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[0],
+            g16_output.moments_of_inertia_principal_axes[0],
+        )
+
+        # components X and Y are swapped but they are physically the same (same moment of inertia values)
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[1],
+            g16_output.moments_of_inertia_principal_axes[2],
+        )
+        assert np.allclose(
+            mol.moments_of_inertia_principal_axes[2],
+            g16_output.moments_of_inertia_principal_axes[1],
+        )
         assert mol.empirical_formula == "CO2"
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -188.444679593)
         assert np.isclose(
-            mol.mass, 44.009
-        )  # natural_abundance_weighted_mass=True
+            mol.natural_abundance_weighted_mass, 44.0095457453718
+        )  # use_weighted_mass=True
         assert np.isclose(
             mol.most_abundant_mass, 43.98982923914
-        )  # natural_abundance_weighted_mass=False
+        )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 43.98983)
         assert np.isclose(
             g16_output.moments_of_inertia[-1], 43.27307045
         )  # in amu Å^2
-        assert np.isclose(mol.moments_of_inertia[-1], 43.28411748057631)
+        assert np.isclose(
+            mol.moments_of_inertia_weighted_mass[-1], 43.285212973529816
+        )  # use_weighted_mass=True
+        assert np.isclose(
+            mol.moments_of_inertia_most_abundant_mass[-1], 43.27306478437749
+        )  # use_weighted_mass=False
         assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_temperatures == [0.56050]
         assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
@@ -273,18 +346,21 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=True,
         )
         # q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
         # here T = 298.15 K, P = 1 atm = 101325 Pa
         # k_B = 1.3806488 * 10^-23 J/K
         # h = 6.62606957 * 10^-34 J s
         # N_A = 6.02214129 * 10^23 mol^-1
-        # using these constants, we got 11467858.194120048
+        # using these constants, we got 11475568.704837948
         expected_translational_partition_function = (
             2
             * np.pi
-            * (mol.mass / (6.02214129 * 1e23 * 1000))
+            * (
+                mol.natural_abundance_weighted_mass
+                / (6.02214129 * 1e23 * 1000)
+            )
             * 1.3806488
             * 1e-23
             * 298.15
@@ -297,7 +373,7 @@ class TestThermochemistryCO2:
 
         # S_t = R * [ln(q_t) + 1 + 3 / 2]
         # R = 8.314462145468951 J mol^-1 K^-1
-        # using these constants, we got 155.9382259343905 J mol^-1 K^-1
+        # using these constants, we got 155.94381435430543 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
             np.log(expected_translational_partition_function) + 1 + 3 / 2
         )
@@ -360,7 +436,7 @@ class TestThermochemistryCO2:
         # q_r = 1 / σ_r * (T / Θ_r)
         # Θ_r = h^2 / (8 * pi^2 * I * k_B)
         # 1 Angstrom = 1 * 10^-10 m
-        # using these constants, we got 265.9699419335578
+        # using these constants, we got 266.0445737136595
         expected_rotational_partition_function = (
             1
             / g16_output.rotational_symmetry_number
@@ -372,7 +448,7 @@ class TestThermochemistryCO2:
                         8
                         * np.pi**2
                         * (
-                            mol.moments_of_inertia[-1]
+                            mol.moments_of_inertia_weighted_mass[-1]
                             / (6.02214129 * 1e23 * 1000)
                             * 1e-10**2
                         )
@@ -388,7 +464,7 @@ class TestThermochemistryCO2:
         )
 
         # S_r = R * (ln(q_r) + 1)
-        # we got 54.737291254812845 J mol^-1 K^-1
+        # we got 54.739623984828 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(expected_rotational_partition_function) + 1
         )
@@ -500,7 +576,7 @@ class TestThermochemistryCO2:
         )
 
         # q_tot = q_t * q_r * q_v * q_e
-        # we got 3332032092.51935
+        # we got 3335208016.8069067
         expected_total_partition_function = (
             expected_translational_partition_function
             * expected_rotational_partition_function
@@ -513,7 +589,7 @@ class TestThermochemistryCO2:
         )
 
         # S_tot = S_t + S_r + S_v + S_e
-        # we got 213.81676641954562 J mol^-1 K^-1
+        # we got 213.8246875694757 J mol^-1 K^-1
         expected_total_entropy = (
             expected_translational_entropy
             + expected_rotational_entropy
@@ -555,7 +631,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=False,
+            use_weighted_mass=False,
         )
         """Values from Gaussian output
                             E (Thermal)             CV                S
@@ -579,48 +655,53 @@ class TestThermochemistryCO2:
             0.114679e08,
         )
         assert np.isclose(
-            thermochem1.translational_entropy,
-            37.270 * cal_to_joules,
-            atol=1e-2,
+            thermochem1.translational_entropy / cal_to_joules,
+            37.270,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.translational_internal_energy,
-            0.889 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem1.translational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.translational_heat_capacity,
-            2.981 * cal_to_joules,
-            atol=1e-2,
+            thermochem1.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem1.electronic_partition_function, 0.100000e01
         )
         assert np.isclose(
-            thermochem1.electronic_entropy, 0.000 * cal_to_joules
+            thermochem1.electronic_entropy / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.electronic_internal_energy,
-            0.000 * cal_to_joules * 1000,
+            thermochem1.electronic_internal_energy / (cal_to_joules * 1000),
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.electronic_heat_capacity, 0.000 * cal_to_joules
+            thermochem1.electronic_heat_capacity / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.rotational_partition_function, 0.265970e03, atol=1e0
+            thermochem1.rotational_partition_function, 0.265970e03
         )
         assert np.isclose(
-            thermochem1.rotational_entropy, 13.083 * cal_to_joules, atol=1e-2
+            thermochem1.rotational_entropy / cal_to_joules, 13.083, atol=1e-3
         )
         assert np.isclose(
-            thermochem1.rotational_internal_energy,
-            0.592 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem1.rotational_internal_energy / (cal_to_joules * 1000),
+            0.592,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.rotational_heat_capacity,
-            1.987 * cal_to_joules,
-            atol=1e-2,
+            thermochem1.rotational_heat_capacity / cal_to_joules,
+            1.987,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem1.vibrational_partition_function_bot,
@@ -631,31 +712,33 @@ class TestThermochemistryCO2:
             0.109243e01,
         )
         assert np.isclose(
-            thermochem1.vibrational_entropy, 0.751 * cal_to_joules, atol=1e-2
+            thermochem1.vibrational_entropy / cal_to_joules, 0.751, atol=1e-3
         )
         assert np.isclose(
-            thermochem1.vibrational_internal_energy,
-            7.561 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem1.vibrational_internal_energy / (cal_to_joules * 1000),
+            7.561,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.vibrational_heat_capacity,
-            1.952 * cal_to_joules,
-            atol=1e-2,
+            thermochem1.vibrational_heat_capacity / cal_to_joules,
+            1.952,
+            atol=1e-3,
+        )
+        assert np.isclose(thermochem1.total_partition_function, 0.333203e10)
+        assert np.isclose(
+            thermochem1.total_entropy / cal_to_joules,
+            51.103,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.total_partition_function, 0.333203e10, atol=1e6
+            thermochem1.total_internal_energy / (cal_to_joules * 1000),
+            9.043,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem1.total_entropy, 51.103 * cal_to_joules, atol=1e-2
-        )
-        assert np.isclose(
-            thermochem1.total_internal_energy,
-            9.043 * cal_to_joules * 1000,
-            atol=1e1,
-        )
-        assert np.isclose(
-            thermochem1.total_heat_capacity, 6.920 * cal_to_joules, atol=1e-2
+            thermochem1.total_heat_capacity / cal_to_joules,
+            6.920,
+            atol=1e-3,
         )
 
     def test_thermochemistry_co2_orca_output(self, orca_co2_output):
@@ -688,8 +771,8 @@ class TestThermochemistryCO2:
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -188.370538039014)
         assert np.isclose(
-            mol.mass, 44.009
-        )  # natural_abundance_weighted_mass=True
+            mol.natural_abundance_weighted_mass, 44.0095457453718
+        )  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 44.01)
         assert orca_out.rotational_symmetry_number == 1
         assert orca_out.rotational_constants_in_wavenumbers == [
@@ -723,7 +806,7 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             concentration=1.0,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=False,
         )
 
         # when arguments are not specified, the quasi-rrho calculation use
@@ -743,9 +826,11 @@ class TestThermochemistryCO2:
         # u_K = h / (8 * pi^2 * v_K)
         # B_av = h / (8 * pi^2 * I)
         expected_i = (
-            mol.moments_of_inertia[-1] / (6.02214129 * 1e23 * 1000) * 1e-10**2
+            mol.moments_of_inertia_most_abundant_mass[-1]
+            / (6.02214129 * 1e23 * 1000)
+            * 1e-10**2
         )
-        # we got B_av = 5.675019509661021 * 10^-44 kg m^2
+        # we got B_av = 5.673570380737674 * 10^-44 kg m^2
         expected_bav = (
             6.62606957
             * 1e-34
@@ -759,8 +844,8 @@ class TestThermochemistryCO2:
         expected_mu_prime = (
             expected_mu * expected_bav / (expected_mu + expected_bav)
         )
-        # we got S_R,K = [4.13984133, 4.13984133, 1.00676497, -1.39084927] in J mol^-1 K^-1
-        expected_freerot_entropy = 8.314462145468951 * (
+        # we got S_R,K = [4.13984132, 4.13984132, 1.00676497, -1.39084927] in J mol^-1 K^-1
+        expected_free_rotor_entropy = 8.314462145468951 * (
             1 / 2
             + np.log(
                 (
@@ -776,8 +861,8 @@ class TestThermochemistryCO2:
             )
         )
         assert np.allclose(
-            qrrho_thermochem_co2_1.freerot_entropy,
-            expected_freerot_entropy,
+            qrrho_thermochem_co2_1.free_rotor_entropy,
+            expected_free_rotor_entropy,
         )
 
         # S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
@@ -801,11 +886,11 @@ class TestThermochemistryCO2:
         )
 
         # S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
-        # we got S^qrrho_v = 3.1441256211641195 J mol^-1 K^-1
+        # we got S^qrrho_v = 3.144125621155244 J mol^-1 K^-1
         expected_qrrho_vibrational_entropy = np.sum(
             expected_entropy_damping_function * expected_rrho_entropy
             + (1 - expected_entropy_damping_function)
-            * expected_freerot_entropy
+            * expected_free_rotor_entropy
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_vibrational_entropy,
@@ -813,11 +898,11 @@ class TestThermochemistryCO2:
         )
 
         # q_t,c = (2 * pi * m * k_B * T / h^2)^(3/2) * (1 / c)
-        # we got 469044.20805173856
+        # we got 468737.7609035391
         expected_translational_partition_function_concentration = (
             2
             * np.pi
-            * (mol.mass / (6.02214129 * 1e23 * 1000))
+            * (mol.most_abundant_mass / (6.02214129 * 1e23 * 1000))
             * 1.3806488
             * 1e-23
             * 298.15
@@ -829,14 +914,14 @@ class TestThermochemistryCO2:
         )
 
         # S_t,c = R * [ln(q_t,c) + 1 + 3/2]
-        # we got 129.3601627172439 J mol^-1 K^-1
+        # we got 129.3547287392227 J mol^-1 K^-1
         expected_translational_entropy_concentration = 8.314462145468951 * (
             np.log(expected_translational_partition_function_concentration)
             + 1
             + 3 / 2
         )
         # S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
-        # we got 129.3601627172439 + 54.737291254812845 + 3.1441256211641195 + 0 = 187.24157959322085 J mol^-1 K^-1
+        # we got 129.3547287392227 + 54.73729016622342 + 3.144125621155244 + 0 = 187.23614452660138 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(
                 1
@@ -849,7 +934,7 @@ class TestThermochemistryCO2:
                             8
                             * np.pi**2
                             * (
-                                mol.moments_of_inertia[-1]
+                                mol.moments_of_inertia_most_abundant_mass[-1]
                                 / (6.02214129 * 1e23 * 1000)
                                 * 1e-10**2
                             )
@@ -877,12 +962,15 @@ class TestThermochemistryCO2:
 
         # E0 in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.energies, -188.444680, atol=1e-6
+            qrrho_thermochem_co2_1.energies / (hartree_to_joules * units._Nav),
+            -188.444680,
+            atol=1e-6,
         )
 
         # ZPE in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.zero_point_energy_hartree,
+            qrrho_thermochem_co2_1.zero_point_energy
+            / (hartree_to_joules * units._Nav),
             0.011776,
             atol=1e-6,
         )
@@ -904,50 +992,61 @@ class TestThermochemistryCO2:
             + expected_vibrational_internal_energy
             + expected_electronic_internal_energy
         )
-        # H = E0 + E_tot + k_B * T in Hartree
-        # we got -188.4293252361468 Hartree
-        expected_enthalpy = g16_output.energies[-1] + (
+        # H = E0 + E_tot + k_B * T
+        # we got -494721090.06974626 J mol^-1
+        expected_enthalpy = g16_output.energies[
+            -1
+        ] * hartree_to_joules * units._Nav + (
             expected_total_internal_energy + 8.314462145468951 * 298.15
-        ) / (4.35974434e-18 * 6.02214129 * 1e23)
+        )
         assert np.isclose(
             qrrho_thermochem_co2_1.enthalpy,
             expected_enthalpy,
         )
+
+        # H in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.enthalpy, -188.429325, atol=1e-6
+            qrrho_thermochem_co2_1.enthalpy / (hartree_to_joules * units._Nav),
+            -188.429325,
+            atol=1e-6,
         )
 
-        # T * S_tot in Hartree
+        # T.S in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.entropy_times_temperature,
+            qrrho_thermochem_co2_1.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.021262,
             atol=1e-6,
         )
 
-        # T * S^qrrho_tot in Hartree
-        # 1 Hartree = 4.35974434 × 10^-18 Joules
-        # 1 mol = 6.02214129 * 10^23 Particle
-        # we got 0.021263029747636365 Hartree
+        # T * S^qrrho_tot
+        # we got 55824.45649060619 J mol^-1
         expected_qrrho_entropy_times_temperature = (
             298.15 * expected_qrrho_total_entropy
-        ) / (4.35974434e-18 * 6.02214129 * 1e23)
+        )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_entropy_times_temperature,
             expected_qrrho_entropy_times_temperature,
         )
+
+        # T.qh-S in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature,
+            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.021262,
-            atol=1e-5,
+            atol=1e-6,
         )
 
-        # G = H - T * S_tot
+        # G(T) in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.gibbs_free_energy, -188.450587, atol=1e-6
+            qrrho_thermochem_co2_1.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -188.450587,
+            atol=1e-6,
         )
 
         # G^qrrho_qs = H - T * S^qrrho_tot
-        # we got -188.45058826589445 Hartree
+        # we got -494776914.5262369 J mol^-1
         expected_qrrho_gibbs_free_energy_qs = (
             expected_enthalpy - expected_qrrho_entropy_times_temperature
         )
@@ -955,8 +1054,11 @@ class TestThermochemistryCO2:
             qrrho_thermochem_co2_1.qrrho_gibbs_free_energy,
             expected_qrrho_gibbs_free_energy_qs,
         )
+
+        # qh-G(T) in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qs,
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qs
+            / (hartree_to_joules * units._Nav),
             -188.450588,
             atol=1e-6,
         )
@@ -1018,20 +1120,25 @@ class TestThermochemistryCO2:
             expected_qrrho_total_internal_energy,
         )
         # H^qrrho = E0 + E^qrrho_tot + R * T
-        # we got -188.42932658096436 Hartree
-        expected_qrrho_enthalpy = g16_output.energies[-1] + (
+        # we got -494721093.60056424 J mol^-1
+        expected_qrrho_enthalpy = g16_output.energies[
+            -1
+        ] * hartree_to_joules * units._Nav + (
             expected_qrrho_total_internal_energy + 8.314462145468951 * 298.15
-        ) / (4.35974434e-18 * 6.02214129 * 1e23)
+        )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_enthalpy,
             expected_qrrho_enthalpy,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_enthalpy, -188.429327, atol=1e-6
+            qrrho_thermochem_co2_1.qrrho_enthalpy
+            / (hartree_to_joules * units._Nav),
+            -188.429327,
+            atol=1e-6,
         )
 
         # G^qrrho_qh = H - T * S^qrrho_tot
-        # we got -188.45058826589445 Hartree
+        # we got -494776914.5262369 J mol^-1
         expected_qrrho_gibbs_free_energy_qh = (
             expected_enthalpy - expected_qrrho_entropy_times_temperature
         )
@@ -1041,7 +1148,7 @@ class TestThermochemistryCO2:
         )
 
         # G^qrrho_q = H^qrrho - T * S^qrrho_tot
-        # we got -188.450589610712 Hartree
+        # we got -494776918.0570549 J mol^-1
         expected_qrrho_gibbs_free_energy = (
             expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature
         )
@@ -1050,7 +1157,8 @@ class TestThermochemistryCO2:
             expected_qrrho_gibbs_free_energy,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy,
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
             -188.450589,
             atol=1e-6,
         )
@@ -1066,34 +1174,45 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=598.15,
             concentration=0.5,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=False,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.energies, -188.444680, atol=1e-6
+            qrrho_thermochem_co2_2.energies / (hartree_to_joules * units._Nav),
+            -188.444680,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.zero_point_energy_hartree,
+            qrrho_thermochem_co2_2.zero_point_energy
+            / (hartree_to_joules * units._Nav),
             0.011776,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.enthalpy, -188.424452, atol=1e-6
+            qrrho_thermochem_co2_2.enthalpy / (hartree_to_joules * units._Nav),
+            -188.424452,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.entropy_times_temperature,
+            qrrho_thermochem_co2_2.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.049327,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.qrrho_entropy_times_temperature,
+            qrrho_thermochem_co2_2.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.049327,
             atol=1e-5,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.gibbs_free_energy, -188.473778, atol=1e-6
+            qrrho_thermochem_co2_2.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -188.473778,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.qrrho_gibbs_free_energy_qs,
+            qrrho_thermochem_co2_2.qrrho_gibbs_free_energy_qs
+            / (hartree_to_joules * units._Nav),
             -188.473779,
             atol=1e-6,
         )
@@ -1109,7 +1228,6 @@ class TestThermochemistryCO2:
             filename=gaussian_co2_opt_outfile,
             temperature=298.15,
             concentration=1.0,
-            natural_abundance_weighted_mass=True,
             s_freq_cutoff=1000,
             h_freq_cutoff=1000,
         )
@@ -1127,34 +1245,48 @@ class TestThermochemistryCO2:
             expected_damping_function,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.energies, -188.444680, atol=1e-6
+            qrrho_thermochem_co2_3.energies / (hartree_to_joules * units._Nav),
+            -188.444680,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.zero_point_energy_hartree,
+            qrrho_thermochem_co2_3.zero_point_energy
+            / (hartree_to_joules * units._Nav),
             0.011776,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.enthalpy, -188.429325, atol=1e-6
+            qrrho_thermochem_co2_3.enthalpy / (hartree_to_joules * units._Nav),
+            -188.429325,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.qrrho_enthalpy, -188.431976, atol=1e-6
+            qrrho_thermochem_co2_3.qrrho_enthalpy
+            / (hartree_to_joules * units._Nav),
+            -188.431976,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.entropy_times_temperature,
+            qrrho_thermochem_co2_3.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.021262,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.qrrho_entropy_times_temperature,
+            qrrho_thermochem_co2_3.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.021781,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.gibbs_free_energy, -188.450587, atol=1e-6
+            qrrho_thermochem_co2_3.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -188.450587,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.qrrho_gibbs_free_energy,
+            qrrho_thermochem_co2_3.qrrho_gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
             -188.453757,
             atol=1e-6,
         )
@@ -1179,11 +1311,11 @@ class TestThermochemistryHe:
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -2.91512971456)
         assert np.isclose(
-            mol.mass, 4.002602
-        )  # natural_abundance_weighted_mass=True
+            mol.natural_abundance_weighted_mass, 4.002601932120929
+        )  # use_weighted_mass=True
         assert np.isclose(
             mol.most_abundant_mass, 4.00260325413
-        )  # natural_abundance_weighted_mass=False
+        )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 4.00260)
         assert mol.is_monoatomic
 
@@ -1191,7 +1323,7 @@ class TestThermochemistryHe:
             filename=gaussian_he_opt_outfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=False,
+            use_weighted_mass=False,
         )
         """Values from Gaussian output
                             E (Thermal)             CV                S
@@ -1214,51 +1346,55 @@ class TestThermochemistryHe:
             thermochem2.translational_partition_function, 0.314751e06
         )
         assert np.isclose(
-            thermochem2.translational_entropy,
-            30.125 * cal_to_joules,
-            atol=1e-2,
+            thermochem2.translational_entropy / cal_to_joules,
+            30.125,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.translational_internal_energy,
-            0.889 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem2.translational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.translational_heat_capacity,
-            2.981 * cal_to_joules,
-            atol=1e-2,
+            thermochem2.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem2.electronic_partition_function, 0.100000e01
         )
         assert np.isclose(
-            thermochem2.electronic_entropy, 0.000 * cal_to_joules, atol=1e-2
+            thermochem2.electronic_entropy / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.electronic_internal_energy,
-            0.000 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem2.electronic_internal_energy / (cal_to_joules * 1000),
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.electronic_heat_capacity,
-            0.000 * cal_to_joules,
-            atol=1e-2,
+            thermochem2.electronic_heat_capacity / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem2.rotational_partition_function, 0.100000e01
         )
         assert np.isclose(
-            thermochem2.rotational_entropy, 0.000 * cal_to_joules, atol=1e-2
+            thermochem2.rotational_entropy / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.rotational_internal_energy,
-            0.000 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem2.rotational_internal_energy / (cal_to_joules * 1000),
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.rotational_heat_capacity,
-            0.000 * cal_to_joules,
-            atol=1e-2,
+            thermochem2.rotational_heat_capacity / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem2.vibrational_partition_function_bot, 0.100000e01
@@ -1267,29 +1403,35 @@ class TestThermochemistryHe:
             thermochem2.vibrational_partition_function_v0, 0.100000e01
         )
         assert np.isclose(
-            thermochem2.vibrational_entropy, 0.000 * cal_to_joules, atol=1e-2
+            thermochem2.vibrational_entropy / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.vibrational_internal_energy,
-            0.000 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem2.vibrational_internal_energy / (cal_to_joules * 1000),
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.vibrational_heat_capacity,
-            0.000 * cal_to_joules,
-            atol=1e-2,
+            thermochem2.vibrational_heat_capacity / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(thermochem2.total_partition_function, 0.314751e06)
         assert np.isclose(
-            thermochem2.total_entropy, 30.125 * cal_to_joules, atol=1e-2
+            thermochem2.total_entropy / cal_to_joules,
+            30.125,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.total_internal_energy,
-            0.889 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem2.total_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem2.total_heat_capacity, 2.981 * cal_to_joules, atol=1e-2
+            thermochem2.total_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
         )
 
     def test_thermochemistry_he_orca_output(self, orca_he_output_freq):
@@ -1315,8 +1457,8 @@ class TestThermochemistryHe:
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -2.899160731389)
         assert np.isclose(
-            mol.mass, 4.002602
-        )  # natural_abundance_weighted_mass=True
+            mol.natural_abundance_weighted_mass, 4.002602
+        )  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 4.00)
         assert orca_out.rotational_symmetry_number == 1
         assert orca_out.rotational_constants_in_wavenumbers == [
@@ -1343,31 +1485,55 @@ class TestThermochemistryHe:
             filename=gaussian_he_opt_outfile,
             temperature=598.15,
             concentration=0.5,
-            natural_abundance_weighted_mass=True,
+            use_weighted_mass=False,
             s_freq_cutoff=1000,
             h_freq_cutoff=1000,
         )
-        assert np.isclose(qrrho_thermochem_he.energies, -2.915130, atol=1e-6)
         assert np.isclose(
-            qrrho_thermochem_he.zero_point_energy_hartree, 0.000000, atol=1e-6
-        )
-        assert np.isclose(qrrho_thermochem_he.enthalpy, -2.910394, atol=1e-6)
-        assert np.isclose(
-            qrrho_thermochem_he.qrrho_enthalpy, -2.910394, atol=1e-6
+            qrrho_thermochem_he.energies / (hartree_to_joules * units._Nav),
+            -2.915130,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.entropy_times_temperature, 0.025951, atol=1e-6
+            qrrho_thermochem_he.zero_point_energy
+            / (hartree_to_joules * units._Nav),
+            0.000000,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.qrrho_entropy_times_temperature,
+            qrrho_thermochem_he.enthalpy / (hartree_to_joules * units._Nav),
+            -2.910394,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.qrrho_enthalpy
+            / (hartree_to_joules * units._Nav),
+            -2.910394,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.025951,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.gibbs_free_energy, -2.936345, atol=1e-6
+            qrrho_thermochem_he.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.025951,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.qrrho_gibbs_free_energy, -2.936345, atol=1e-6
+            qrrho_thermochem_he.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -2.936345,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_he.qrrho_gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -2.936345,
+            atol=1e-6,
         )
 
 
@@ -1404,18 +1570,23 @@ class TestThermochemistryH2O:
         assert g16_output.multiplicity == 1
         assert np.isclose(g16_output.energies[-1], -76.328992324258)
         assert np.isclose(
-            mol.mass, 18.015
-        )  # natural_abundance_weighted_mass=True
+            mol.natural_abundance_weighted_mass, 18.015286432429832
+        )  # use_weighted_mass=True
         assert np.isclose(
             mol.most_abundant_mass, 18.010564684029998
-        )  # natural_abundance_weighted_mass=False
+        )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 18.01056)
         assert np.allclose(
             g16_output.moments_of_inertia, [0.62549131, 1.15863761, 1.78412891]
         )  # in amu Å^2
         assert np.allclose(
-            mol.moments_of_inertia, [0.62560528, 1.15883759, 1.78444287]
-        )  # in amu Å^2
+            mol.moments_of_inertia_weighted_mass,
+            [0.6255744, 1.15876948, 1.78434388],
+        )  # use_weighted_mass=True
+        assert np.allclose(
+            mol.moments_of_inertia_most_abundant_mass,
+            [0.62549096, 1.15863644, 1.7841274],
+        )  # use_weighted_mass=False
         assert g16_output.rotational_symmetry_number == 2
         assert g16_output.rotational_temperatures == [
             38.77653,
@@ -1442,7 +1613,7 @@ class TestThermochemistryH2O:
             filename=gaussian_mp2_outputfile,
             temperature=298.15,
             pressure=1,
-            natural_abundance_weighted_mass=False,
+            use_weighted_mass=False,
         )
         """Values from Gaussian output
                             E (Thermal)             CV                S
@@ -1465,51 +1636,55 @@ class TestThermochemistryH2O:
             thermochem3.translational_partition_function, 0.300431e07
         )
         assert np.isclose(
-            thermochem3.translational_entropy,
-            34.608 * cal_to_joules,
-            atol=1e-2,
+            thermochem3.translational_entropy / cal_to_joules,
+            34.608,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.translational_internal_energy,
-            0.889 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem3.translational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.translational_heat_capacity,
-            2.981 * cal_to_joules,
-            atol=1e-2,
+            thermochem3.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem3.electronic_partition_function, 0.100000e01
         )
         assert np.isclose(
-            thermochem3.electronic_entropy, 0.000 * cal_to_joules, atol=1e-2
+            thermochem3.electronic_entropy / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.electronic_internal_energy,
-            0.000 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem3.electronic_internal_energy / (cal_to_joules * 1000),
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.electronic_heat_capacity,
-            0.000 * cal_to_joules,
-            atol=1e-2,
+            thermochem3.electronic_heat_capacity / cal_to_joules,
+            0.000,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.rotational_partition_function, 0.434320e02, atol=1e-1
+            thermochem3.rotational_partition_function, 0.434320e02
         )
         assert np.isclose(
-            thermochem3.rotational_entropy, 10.475 * cal_to_joules, atol=1e-2
+            thermochem3.rotational_entropy / cal_to_joules,
+            10.475,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.rotational_internal_energy,
-            0.889 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem3.rotational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.rotational_heat_capacity,
-            2.981 * cal_to_joules,
-            atol=1e-2,
+            thermochem3.rotational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
         )
         assert np.isclose(
             thermochem3.vibrational_partition_function_bot, 0.142038e-09
@@ -1518,31 +1693,35 @@ class TestThermochemistryH2O:
             thermochem3.vibrational_partition_function_v0, 0.100039e01
         )
         assert np.isclose(
-            thermochem3.vibrational_entropy, 0.007 * cal_to_joules, atol=1e-2
+            thermochem3.vibrational_entropy / cal_to_joules,
+            0.007,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.vibrational_internal_energy,
-            13.437 * cal_to_joules * 1000,
-            atol=1e1,
+            thermochem3.vibrational_internal_energy / (cal_to_joules * 1000),
+            13.437,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.vibrational_heat_capacity,
-            0.047 * cal_to_joules,
-            atol=1e-2,
+            thermochem3.vibrational_heat_capacity / cal_to_joules,
+            0.047,
+            atol=1e-3,
+        )
+        assert np.isclose(thermochem3.total_partition_function, 0.130534e09)
+        assert np.isclose(
+            thermochem3.total_entropy / cal_to_joules,
+            45.090,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.total_partition_function, 0.130534e09, atol=1e5
+            thermochem3.total_internal_energy / (cal_to_joules * 1000),
+            15.214,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem3.total_entropy, 45.090 * cal_to_joules, atol=1e-2
-        )
-        assert np.isclose(
-            thermochem3.total_internal_energy,
-            15.214 * cal_to_joules * 1000,
-            atol=1e1,
-        )
-        assert np.isclose(
-            thermochem3.total_heat_capacity, 6.009 * cal_to_joules, atol=1e-2
+            thermochem3.total_heat_capacity / cal_to_joules,
+            6.009,
+            atol=1e-3,
         )
 
     def test_thermochemistry_water_orca_output(self, water_output_gas_path):
@@ -1572,8 +1751,8 @@ class TestThermochemistryH2O:
         assert orca_out.multiplicity == 1
         assert np.isclose(orca_out.energies[-1], -76.323311011349)
         assert np.isclose(
-            mol.mass, 18.015
-        )  # natural_abundance_weighted_mass=True
+            mol.natural_abundance_weighted_mass, 18.015286432429832
+        )  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 18.02)
         assert orca_out.rotational_symmetry_number == 2
         assert orca_out.rotational_constants_in_wavenumbers == [
@@ -1606,12 +1785,13 @@ class TestThermochemistryH2O:
             filename=gaussian_mp2_outputfile,
             temperature=1298.15,
             concentration=2.0,
-            natural_abundance_weighted_mass=True,
             s_freq_cutoff=500,
             h_freq_cutoff=500,
         )
         vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
-        moments_of_inertia = np.array(mol.moments_of_inertia)
+        moments_of_inertia = np.array(
+            mol.moments_of_inertia_most_abundant_mass
+        )
         expected_mu = (
             6.62606957
             * 1e-34
@@ -1619,21 +1799,21 @@ class TestThermochemistryH2O:
         )
         expected_i = moments_of_inertia / (6.02214129 * 1e23 * 1000) * 1e-10**2
         expected_b = 6.62606957 * 1e-34 / (8 * np.pi**2 * expected_i)
-        # we got 509048848271.2939 Hz
+        # we got 509139993335.7498 Hz
         expected_average_rotational_constant = sum(expected_b) / len(
             expected_b
         )
         # B_av = (B_x + B_y + B_z) / 3
         # B_i = h / (8 * pi^2 * I_i) for i = x, y, z
-        # we got B_av = 1.3016569220226748 * 10^-45 kg m^2
+        # we got B_av = 1.3014239024099745 * 10^-45 kg m^2
         expected_bav = (
             6.62606957 * 1e-34 / expected_average_rotational_constant
         )
         expected_mu_prime = (
             expected_mu * expected_bav / (expected_mu + expected_bav)
         )
-        # we got S_R,K = [6.46111674, 2.9146504, 2.77994675] in J mol^-1 K^-1
-        expected_freerot_entropy = 8.314462145468951 * (
+        # we got S_R,K = [6.46111664, 2.91465036, 2.77994671] in J mol^-1 K^-1
+        expected_free_rotor_entropy = 8.314462145468951 * (
             1 / 2
             + np.log(
                 (
@@ -1649,39 +1829,53 @@ class TestThermochemistryH2O:
             )
         )
         assert np.allclose(
-            qrrho_thermochem_water.freerot_entropy,
-            expected_freerot_entropy,
+            qrrho_thermochem_water.free_rotor_entropy,
+            expected_free_rotor_entropy,
         )
 
         assert np.isclose(
-            qrrho_thermochem_water.energies, -76.328992, atol=1e-6
+            qrrho_thermochem_water.energies / (hartree_to_joules * units._Nav),
+            -76.328992,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.zero_point_energy_hartree,
+            qrrho_thermochem_water.zero_point_energy
+            / (hartree_to_joules * units._Nav),
             0.021410,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.enthalpy, -76.289193, atol=1e-6
+            qrrho_thermochem_water.enthalpy / (hartree_to_joules * units._Nav),
+            -76.289193,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.qrrho_enthalpy, -76.289224, atol=1e-6
+            qrrho_thermochem_water.qrrho_enthalpy
+            / (hartree_to_joules * units._Nav),
+            -76.289224,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.entropy_times_temperature,
+            qrrho_thermochem_water.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.098212,
-            atol=1e-5,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.qrrho_entropy_times_temperature,
+            qrrho_thermochem_water.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
             0.098221,
-            atol=1e-5,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.gibbs_free_energy, -76.387404, atol=1e-6
+            qrrho_thermochem_water.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -76.387404,
+            atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.qrrho_gibbs_free_energy,
+            qrrho_thermochem_water.qrrho_gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
             -76.387445,
             atol=1e-6,
         )

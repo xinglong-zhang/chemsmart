@@ -20,7 +20,7 @@ class Thermochemistry:
         temperature: float. Temperature of the system, in K.
         concentration: float. Concentration of the system, in mol/L.
         pressure: float. Pressure of the system, in atm.
-        natural_abundance_weighted_mass: bool. If True, use natural abundance weighted masses; otherwise, use most abundant masses.
+        use_weighted_mass: bool. If True, use natural abundance weighted masses; otherwise, use most abundant masses.
         alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
         s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
         h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
@@ -32,7 +32,7 @@ class Thermochemistry:
         temperature,
         concentration=1.0,
         pressure=1.0,
-        natural_abundance_weighted_mass=False,
+        use_weighted_mass=False,
         alpha=4,
         s_freq_cutoff=100.0,
         h_freq_cutoff=100.0,
@@ -41,7 +41,7 @@ class Thermochemistry:
         self.molecule = Molecule.from_filepath(filename)
         self.temperature = temperature
         self.pressure = pressure
-        self.natural_abundance_weighted_mass = natural_abundance_weighted_mass
+        self.use_weighted_mass = use_weighted_mass
         self.m = (
             self.mass
             * units._amu  # converts mass from g/mol to kg/molecule
@@ -63,26 +63,32 @@ class Thermochemistry:
         self.c = (
             self.concentration * 1000 * units._Nav
         )  # convert the unit of concentration from mol/L to Particle/m^3
-        if self.moments_of_inertia is not None:
-            if self.molecule.is_linear:
-                self.I = self.moments_of_inertia * (
-                    units._amu * (units.Ang / units.m) ** 2
-                )  # convert the unit of moments of inertia from amu Å^2 to kg m^2
-            else:
-                self.I = [
-                    i * (units._amu * (units.Ang / units.m) ** 2)
-                    for i in self.moments_of_inertia
-                ]
-            self.Bav = (
-                units._hplanck / self.average_rotational_constant
-            )  # convert the unit of average moments of inertia from Hz to kg m^2
-        if self.cleaned_frequencies is not None:
-            self.v = [
-                k * units._c * 1e2 for k in self.cleaned_frequencies
-            ]  # convert the unit of vibrational frequencies from cm^-1 to Hz
 
-            # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
-            self.theta = [units._hplanck * vk / units._k for vk in self.v]
+        self.I = [
+            i * (units._amu * (units.Ang / units.m) ** 2)
+            for i in self.moments_of_inertia
+        ]
+
+        # convert the unit of moments of inertia from amu Ang^2 to kg m^2
+        self.Bav = (
+            (units._hplanck / self.average_rotational_constant)
+            if self.average_rotational_constant
+            else None
+        )
+
+        # convert the unit of vibrational frequencies from cm^-1 to Hz
+        self.v = (
+            [k * units._c * 1e2 for k in self.cleaned_frequencies]
+            if self.cleaned_frequencies
+            else None
+        )
+
+        # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
+        self.theta = (
+            [units._hplanck * vk / units._k for vk in self.v]
+            if self.v
+            else None
+        )
 
     @property
     def file_object(self):
@@ -106,8 +112,8 @@ class Thermochemistry:
     @property
     def mass(self):
         """Obtain the molecular mass."""
-        if self.natural_abundance_weighted_mass:
-            return self.molecule.mass
+        if self.use_weighted_mass:
+            return self.molecule.natural_abundance_weighted_mass
         return self.molecule.most_abundant_mass
 
     @property
@@ -116,20 +122,24 @@ class Thermochemistry:
         Direct calculation from molecular structure, since sometimes Gaussian
         output does not print it properly (prints as ***** if values too large)
         """
-        if self.molecule.is_monoatomic:
-            return None
-        if self.molecule.is_linear:
-            return self.molecule.moments_of_inertia[-1]
-        return self.molecule.moments_of_inertia
+        if self.use_weighted_mass:
+            return self.molecule.moments_of_inertia_weighted_mass
+        return self.molecule.moments_of_inertia_most_abundant_mass
 
     @property
     def average_rotational_constant(self):
+        if self.molecule.is_monoatomic:
+            return None
         if self.molecule.is_linear:
-            return units._hplanck / (8 * np.pi**2 * self.I)
-        rotational_constant = [
+            return units._hplanck / (8 * np.pi**2 * self.I[-1])
+
+        assert (
+            len(self.I) == 3
+        ), "Number of moments of inertia should be 3 for nonlinear molecules."
+        rotational_constants = [
             units._hplanck / (8 * np.pi**2 * i) for i in self.I
         ]
-        return sum(rotational_constant) / len(rotational_constant)
+        return sum(rotational_constants) / len(rotational_constants)
 
     @property
     def rotational_symmetry_number(self):
@@ -144,7 +154,7 @@ class Thermochemistry:
     @property
     def real_frequencies(self):
         """Obtain the real vibrational frequencies of the molecule."""
-        return [k for k in self.vibrational_frequencies if k > 0.0]
+        return [k for k in self.vibrational_frequencies if k >= 0.0]
 
     @property
     def imaginary_frequencies(self):
@@ -158,6 +168,8 @@ class Thermochemistry:
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
         All other negative frequencies are replaced by the cutoff value.
         """
+        if not self.vibrational_frequencies:
+            return None
         if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
             return [
                 self.cutoff if k < 0.0 else k
@@ -175,8 +187,8 @@ class Thermochemistry:
 
     @property
     def energies(self):
-        """Obtain the total electronic energy in Hartree."""
-        return self.file_object.energies[-1]
+        """Obtain the total electronic energy in J mol^-1."""
+        return self.file_object.energies[-1] * hartree_to_joules * units._Nav
 
     @property
     def multiplicity(self):
@@ -270,7 +282,7 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
-        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I * units._k)
+        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[-1] * units._k)
         return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
@@ -367,10 +379,14 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        return [
-            math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T))
-            for t in self.theta
-        ]
+        return (
+            [
+                math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T))
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
 
     @property
     def vibrational_partition_function_bot(self):
@@ -397,7 +413,11 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        return [1 / (1 - math.exp(-t / self.T)) for t in self.theta]
+        return (
+            [1 / (1 - math.exp(-t / self.T)) for t in self.theta]
+            if self.theta
+            else []
+        )
 
     @property
     def vibrational_partition_function_v0(self):
@@ -414,11 +434,15 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        s = [
-            (t / self.T) / (math.exp(t / self.T) - 1)
-            - np.log(1 - math.exp(-t / self.T))
-            for t in self.theta
-        ]
+        s = (
+            [
+                (t / self.T) / (math.exp(t / self.T) - 1)
+                - np.log(1 - math.exp(-t / self.T))
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return R * sum(s)
 
     @property
@@ -429,7 +453,7 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        u = [1 / 2 * t for t in self.theta]
+        u = [1 / 2 * t for t in self.theta] if self.theta else []
         return R * sum(u)
 
     @property
@@ -440,7 +464,11 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        u = [t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
+        u = (
+            [t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
+            if self.theta
+            else []
+        )
         return R * sum(u)
 
     @property
@@ -451,11 +479,15 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        c = [
-            math.exp(-t / self.T)
-            * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
-            for t in self.theta
-        ]
+        c = (
+            [
+                math.exp(-t / self.T)
+                * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return R * sum(c)
 
     @property
@@ -464,6 +496,11 @@ class Thermochemistry:
         Formula:
             q_tot = q_t * q_r * q_v * q_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_partition_function
+                * self.electronic_partition_function
+            )
         return (
             self.translational_partition_function
             * self.rotational_partition_function
@@ -477,6 +514,8 @@ class Thermochemistry:
         Formula:
             S_tot = S_t + S_r + S_v + S_e
         """
+        if self.molecule.is_monoatomic:
+            return self.translational_entropy + self.electronic_entropy
         return (
             self.translational_entropy
             + self.rotational_entropy
@@ -490,6 +529,11 @@ class Thermochemistry:
         Formula:
             E_tot = E_t + E_r + E_v + E_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_internal_energy
+                + self.electronic_internal_energy
+            )
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
@@ -503,6 +547,11 @@ class Thermochemistry:
         Formula:
             C_tot = C_t + C_r + C_v + C_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_heat_capacity
+                + self.electronic_heat_capacity
+            )
         return (
             self.translational_heat_capacity
             + self.rotational_heat_capacity
@@ -510,17 +559,13 @@ class Thermochemistry:
             + self.vibrational_heat_capacity
         )
 
-    @property
-    def zero_point_energy_hartree(self):
-        """Obtain the ZPE in Hartree."""
-        return self.zero_point_energy / (hartree_to_joules * units._Nav)
-
     def _calculate_damping_function(self, freq_cutoff):
-        """Calculate the damping function of Head-Gordon, which interpolates between the RRHO and the free rotor entropy.
+        """Calculate the damping function of Head-Gordon, which interpolates
+        between the RRHO and the free rotor entropy.
         Formula:
             w(v_K) = 1 / (1 + (v_0 / v_K)^α)
         where:
-            v_0 = cutoff frquency (Hz), default is 100 cm^-1
+            v_0 = cutoff frequency in Hz, default is 100 cm^-1 (already converted to Hz)
             α = dimensionless interpolator exponent, default value is 4
         """
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]
@@ -535,8 +580,9 @@ class Thermochemistry:
         return self._calculate_damping_function(self.h_freq_cutoff)
 
     @property
-    def freerot_entropy(self):
-        """Obtain the free rotor entropy in J mol^-1 K^-1, which is used to treat low frequency modes below cutoff.
+    def free_rotor_entropy(self):
+        """Obtain the free rotor entropy in J mol^-1 K^-1, which is used to treat
+        low frequency modes below cutoff.
         Formula:
             S_R,K = R * (1/2 + ln((8 * pi^3 * u'_K * k_B * T / h^2)^(1/2)))
         where:
@@ -569,18 +615,23 @@ class Thermochemistry:
 
     @property
     def rrho_entropy(self):
-        """Obtain the RRHO vibrational entropy in J mol^-1 K^-1.
+        """Obtain the Harmonic Oscillator (within RRHO approximation)
+        vibrational entropy in J mol^-1 K^-1.
         Formula:
             S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
         """
-        entropy = [
-            R
-            * (
-                (t / self.T) / (math.exp(t / self.T) - 1)
-                - np.log(1 - math.exp(-t / self.T))
-            )
-            for t in self.theta
-        ]
+        entropy = (
+            [
+                R
+                * (
+                    (t / self.T) / (math.exp(t / self.T) - 1)
+                    - np.log(1 - math.exp(-t / self.T))
+                )
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return entropy
 
     @property
@@ -590,24 +641,30 @@ class Thermochemistry:
             S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
         """
         vib_entropy = []
-        for j in range(0, len(self.v)):
-            vib_entropy.append(
-                self.entropy_damping_function[j] * self.rrho_entropy[j]
-                + (1 - self.entropy_damping_function[j])
-                * self.freerot_entropy[j]
-            )
-        return sum(vib_entropy)
+        if self.v:
+            for j in range(0, len(self.v)):
+                vib_entropy.append(
+                    self.entropy_damping_function[j] * self.rrho_entropy[j]
+                    + (1 - self.entropy_damping_function[j])
+                    * self.free_rotor_entropy[j]
+                )
+            return sum(vib_entropy)
 
     @property
     def rrho_internal_energy(self):
-        """Obtain the RRHO vibrational internal energy in J mol^-1.
+        """Obtain the Harmonic Oscillator (within RRHO approximation)
+         vibrational internal energy in J mol^-1.
         Formula:
             E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
         """
-        energy = [
-            R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
-            for t in self.theta
-        ]
+        energy = (
+            [
+                R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
+                for t in self.theta
+            ]
+            if self.theta
+            else []
+        )
         return energy
 
     @property
@@ -617,29 +674,33 @@ class Thermochemistry:
             E^qrrho_v = Σ(w(v_K) * E^rrho_v,K + (1 - w(v_K)) * 1/2 * R * T)
         """
         vib_energy = []
-        for j in range(0, len(self.v)):
-            vib_energy.append(
-                self.enthalpy_damping_function[j]
-                * self.rrho_internal_energy[j]
-                + (1 - self.enthalpy_damping_function[j]) * 1 / 2 * R * self.T
-            )
-        return sum(vib_energy)
+        if self.v:
+            for j in range(0, len(self.v)):
+                vib_energy.append(
+                    self.enthalpy_damping_function[j]
+                    * self.rrho_internal_energy[j]
+                    + (1 - self.enthalpy_damping_function[j])
+                    * 1
+                    / 2
+                    * R
+                    * self.T
+                )
+            return sum(vib_energy)
 
     @property
     def enthalpy(self):
-        """Obtain the enthalpy in Hartree.
+        """Obtain the enthalpy in J mol^-1.
         Formula:
             H = E0 + E_tot + R * T
         where:
-            E0 = the total electronic energy (Hartree)
+            E0 = the total electronic energy (J mol^-1)
         """
-        return self.energies + (self.total_internal_energy + R * self.T) / (
-            hartree_to_joules * units._Nav
-        )
+        return self.energies + self.total_internal_energy + R * self.T
 
     @property
     def translational_partition_function_concentration(self):
-        """Obtain the translational partition function. Uses concentration instead of pressure.
+        """Obtain the translational partition function.
+        Uses concentration instead of pressure.
         Formula:
             q_t,c = (2 * pi * m * k_B * T / h^2)^(3/2) * (1 / c)
         where:
@@ -651,7 +712,8 @@ class Thermochemistry:
 
     @property
     def translational_entropy_concentration(self):
-        """Obtain the translational entropy in J mol^-1 K^-1. Uses concentration instead of pressure.
+        """Obtain the translational entropy in J mol^-1 K^-1.
+        Uses concentration instead of pressure.
         Formula:
             S_t,c = R * [ln(q_t) + 1 + 3/2]
         """
@@ -663,10 +725,16 @@ class Thermochemistry:
 
     @property
     def total_entropy_concentration(self):
-        """Obtain the total entropy in J mol^-1 K^-1. Uses concentration instead of pressure.
+        """Obtain the total entropy in J mol^-1 K^-1.
+        Uses concentration instead of pressure.
         Formula:
             S_tot,c = S_t,c + S_r + S_v + S_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_entropy_concentration
+                + self.electronic_entropy
+            )
         return (
             self.translational_entropy_concentration
             + self.rotational_entropy
@@ -680,6 +748,11 @@ class Thermochemistry:
         Formula:
             S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_entropy_concentration
+                + self.electronic_entropy
+            )
         return (
             self.translational_entropy_concentration
             + self.rotational_entropy
@@ -689,25 +762,19 @@ class Thermochemistry:
 
     @property
     def entropy_times_temperature(self):
-        """Obtain the total entropy times temperature in Hartree.
+        """Obtain the total entropy times temperature in J mol^-1.
         Formula:
             T * S_tot,c
         """
-        return (
-            self.T
-            * self.total_entropy_concentration
-            / (hartree_to_joules * units._Nav)
-        )
+        return self.T * self.total_entropy_concentration
 
     @property
     def qrrho_entropy_times_temperature(self):
-        """Obtain the quasi-RRHO entropy times temperature in Hartree.
+        """Obtain the quasi-RRHO entropy times temperature in J mol^-1.
         Formula:
             T * S^qrrho_tot
         """
-        return (self.qrrho_total_entropy * self.T) / (
-            hartree_to_joules * units._Nav
-        )
+        return self.qrrho_total_entropy * self.T
 
     @property
     def gibbs_free_energy(self):
@@ -723,6 +790,11 @@ class Thermochemistry:
         Formula:
             E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
         """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_internal_energy
+                + self.electronic_internal_energy
+            )
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
@@ -732,20 +804,18 @@ class Thermochemistry:
 
     @property
     def qrrho_enthalpy(self):
-        """Obtain the quasi-RRHO enthalpy in Hartree.
+        """Obtain the quasi-RRHO enthalpy in J mol^-1.
         Formula:
             H^qrrho = E0 + H^qrrho_corr
                     = E0 + E^qrrho_tot + R * T
         where:
-            E0 = the total electronic energy (Hartree)
+            E0 = the total electronic energy (J mol^-1)
         """
-        return self.energies + (
-            self.qrrho_total_internal_energy + R * self.T
-        ) / (hartree_to_joules * units._Nav)
+        return self.energies + self.qrrho_total_internal_energy + R * self.T
 
     @property
     def qrrho_gibbs_free_energy(self):
-        """Obtain the Gibbs free energy in Hartree, by quasi-RRHO corrections to both entropy and enthalpy.
+        """Obtain the Gibbs free energy in J mol^-1, by quasi-RRHO corrections to both entropy and enthalpy.
         Formula:
             G^qrrho_q = H^qrrho - T * S^qrrho_tot
         """
@@ -753,7 +823,7 @@ class Thermochemistry:
 
     @property
     def qrrho_gibbs_free_energy_qs(self):
-        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to entropy only.
+        """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to entropy only.
         Formula:
             G^qrrho_qs = H - T * S^qrrho_tot
         """
@@ -761,7 +831,7 @@ class Thermochemistry:
 
     @property
     def qrrho_gibbs_free_energy_qh(self):
-        """Obtain the Gibbs free energy in Hartree, by a quasi-RRHO correction to enthalpy only.
+        """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to enthalpy only.
         Formula:
             G^qrrho_qh = H^qrrho - T * S_tot,c
         """

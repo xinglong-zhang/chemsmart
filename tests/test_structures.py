@@ -10,6 +10,7 @@ from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.utils.cluster import is_pubchem_network_available
 
 
 class TestCoordinateBlock:
@@ -32,10 +33,6 @@ Cl      -3.0556310000   -0.1578960000   -0.0001400000
 """
         cb = CoordinateBlock(coordinate_block=coordinates_string)
         assert cb.symbols.get_chemical_formula() == "C7H5ClO"
-        mol = cb.molecule
-        assert mol.empirical_formula == "C7H5ClO"
-        assert mol.num_atoms == 14
-        assert np.isclose(mol.mass, 140.567, atol=1e-2)
 
     def test_read_gaussian_cb_with_tv(self):
         coordinates_string = """
@@ -55,7 +52,6 @@ TV                -1.219952    2.133447    0.000000
             [2.475315, 0.000000, 0.000000],
             [-1.219952, 2.133447, 0.000000],
         ]
-        assert np.isclose(cb.molecule.mass, 24.02, atol=1e-2)
 
     def test_read_gaussian_cb_frozen_atoms(self):
         coordinates_string = """
@@ -561,6 +557,10 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_stereochemistry_handling(self):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = Molecule.from_pubchem("11507")

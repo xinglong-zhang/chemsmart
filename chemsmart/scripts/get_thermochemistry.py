@@ -69,7 +69,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
     is_flag=True,
     default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (True) or use most abundant masses (False).",
+    help="Use natural abundance weighted masses (True) or use most abundant masses (False).\n"
+    "Default to False, i.e., use single isotopic mass.",
 )
 @click.option(
     "-q",
@@ -139,20 +140,22 @@ def get_thermo(
     # Energy Conversion
     if unit.lower() == "ev":
         energy_unit = "eV"
-        unit_conversion = 27.211386024367243  # 1 Eh = 27.211386024367243 eV
+        unit_conversion = (
+            1.0364269574711572e-05  # 1 J/mol = 1.0364269574711572e-05 eV
+        )
     elif unit.lower() == "kcal/mol":
         energy_unit = "kcal/mol"
         unit_conversion = (
-            627.5094738898777  # 1 Eh = 627.5094738898777 kcal/mol
+            0.0002390057361376673  # 1 J/mol = 0.0002390057361376673 kcal/mol
         )
     elif unit.lower() == "kj/mol":
         energy_unit = "kJ/mol"
-        unit_conversion = (
-            2625.4996387552483  # 1 Eh = 2625.4996387552483 kJ/mol
-        )
+        unit_conversion = 0.001  # 1 J/mol = 0.001 kJ/mol
     else:
         energy_unit = "Hartree"
-        unit_conversion = 1.0
+        unit_conversion = (
+            3.8087991196914175e-07  # 1 J/mol = 3.8087991196914175e-07 Eh
+        )
 
     files = []
     for filename in filenames:
@@ -203,20 +206,24 @@ def get_thermo(
 
     # Only output SCF energy without thermochemical corrections.
     if scf:
-        log(" " * 19 + f" * SCF Energies (in {energy_unit}): \n\n")
-        log("   " + " " * 19 + "{:<50} {:>22}\n".format("Structure", "E"))
-        log("   " + " " * 19 + "=" * 73 + "\n")
+        log(f" * SCF Energies (in {energy_unit}): \n\n")
+        log(
+            "   "
+            + "{:<60} {:>22} {:>22}\n".format("Structure", "E", "Job Type")
+        )
+        log("   " + "=" * 106 + "\n")
         index = 1
         for file in files:
             scf_energy = Thermochemistry(file, temperature=temperature)
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = scf_energy.energies * unit_conversion
+            job_type = scf_energy.job_type
             log(
-                " " * 19
-                + "{:2} {:50} {:22.6f}\n".format(
+                "{:2} {:60} {:22.6f} {:>22}\n".format(
                     index,
                     structure,
                     energy,
+                    job_type,
                 )
             )
             index += 1
@@ -327,7 +334,7 @@ def get_thermo(
                 file,
                 temperature=temperature,
                 concentration=concentration,
-                natural_abundance_weighted_mass=weighted,
+                use_weighted_mass=weighted,
                 alpha=alpha,
                 s_freq_cutoff=fs,
                 h_freq_cutoff=fh,
@@ -335,7 +342,7 @@ def get_thermo(
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = thermochemistry.energies * unit_conversion
             zero_point_energy = (
-                thermochemistry.zero_point_energy_hartree * unit_conversion
+                thermochemistry.zero_point_energy * unit_conversion
             )
             enthalpy = thermochemistry.enthalpy * unit_conversion
             qrrho_enthalpy = thermochemistry.qrrho_enthalpy * unit_conversion
@@ -371,9 +378,13 @@ def get_thermo(
                     and thermochemistry.vibrational_frequencies[0] < 0.0
                 ):
                     if thermochemistry.num_replaced_frequencies > 0:
-                        logger.warning(
-                            f"!! Transition state detected: ignored 1 imaginary frequency and replaced "
-                            f"{thermochemistry.num_replaced_frequencies} other imaginary frequency(s) with the cutoff value ({thermochemistry.cutoff:.1f} cm-1) for {file}.\n"
+                        logger.error(
+                            f"!! Detected multiple imaginary frequencies in transition state for {file} — aborting.\n"
+                        )
+                        raise ValueError(
+                            f"Error: Detected multiple imaginary frequencies in TS calculation for {file}. "
+                            f"Only one imaginary frequency is allowed for a valid TS. "
+                            f"Please re-optimize the geometry to locate a true TS."
                         )
                     else:
                         logger.warning(

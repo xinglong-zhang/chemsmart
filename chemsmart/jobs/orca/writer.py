@@ -3,6 +3,7 @@ import os.path
 
 from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCATSJobSettings
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.utils.io import remove_keyword
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
@@ -64,7 +65,16 @@ class ORCAInputWriter(InputWriter):
 
     def _write_route_section(self, f):
         logger.debug("Writing ORCA route section.")
-        route_string = self.settings.route_string
+        if self.job.molecule.is_monoatomic:
+            # TODO: need to merge thermo branch into main branch
+            logger.info(f"Molecule {self.job.molecule} is monoatomic.")
+            logger.info(
+                "Removing `opt` keyword from route string, since ORCA cannot run"
+                "OPT on monoatomic molecule."
+            )
+            route_string = remove_keyword(self.settings.route_string, "opt")
+        else:
+            route_string = self.settings.route_string
         f.write(route_string + "\n")
 
     def _write_processors(self, f):
@@ -75,8 +85,11 @@ class ORCAInputWriter(InputWriter):
     def _write_memory(self, f):
         logger.debug("Writing memory.")
         f.write("# Memory per core\n")
-        mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
-        f.write(f"%maxcore {round(mpc)}\n")
+        mpc = (self.jobrunner.mem_gb * 1000) / self.jobrunner.num_cores * 0.75
+        # Safety Factor: Applies a 75% factor to the memory per core to
+        # reduce the risk of out-of-memory errors, as recommended for ORCA.
+        mpc = int(mpc)
+        f.write(f"%maxcore {mpc}\n")
 
     def _write_scf_block(self, f):
         logger.debug("Writing SCF black.")
@@ -206,7 +219,7 @@ class ORCAInputWriter(InputWriter):
     def _write_modred_if_dict(f, modred):
         f.write("  Scan\n")
         # append for scanning job
-        coords_list = modred["coordinates"]
+        coords_list = modred["coords"]
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
             input_modred=coords_list, program="orca"
         )

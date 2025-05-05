@@ -12,6 +12,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
+from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
@@ -716,10 +717,65 @@ def gtoint_errfile(orca_errors_directory):
     return os.path.join(orca_errors_directory, "GTOInt_error.out")
 
 
+# orca written files
+@pytest.fixture()
+def orca_written_files_directory(orca_test_directory):
+    orca_written_files = os.path.join(orca_test_directory, "written_files")
+    return orca_written_files
+
+
+@pytest.fixture()
+def orca_written_opt_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_opt.inp")
+
+
+@pytest.fixture()
+def orca_written_opt_file_with_route(orca_written_files_directory):
+    return os.path.join(
+        orca_written_files_directory, "orca_opt_with_route.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_modred_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_modred.inp")
+
+
+@pytest.fixture()
+def orca_written_scan_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_scan.inp")
+
+
+@pytest.fixture()
+def orca_written_ts_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_ts.inp")
+
+
+@pytest.fixture()
+def orca_written_ts_from_nhc_singlet_log_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_ts_from_log.inp")
+
+
+@pytest.fixture()
+def orca_written_sp_from_nhc_singlet_log_with_solvent_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory, "orca_sp_from_log_with_solvent.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_he_monoatomic_opt_file(orca_written_files_directory):
+    return os.path.join(
+        orca_written_files_directory, "orca_he_monoatomic_opt.inp"
+    )
+
+
 # orca yaml files
 @pytest.fixture()
 def orca_yaml_settings_directory(orca_test_directory):
-    return os.path.join(orca_test_directory, "yaml_settings")
+    return os.path.join(orca_test_directory, "project_yaml")
 
 
 @pytest.fixture()
@@ -735,6 +791,21 @@ def orca_yaml_settings_gas_solv(orca_yaml_settings_directory):
 @pytest.fixture()
 def orca_yaml_settings_solv(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "solv.yaml")
+
+
+@pytest.fixture()
+def orca_yaml_settings_gas_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "gas_solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "orca")
 
 
 # test for structure.py
@@ -777,13 +848,27 @@ def pbs_server(server_yaml_file):
 
 
 @pytest.fixture()
-def jobrunner_no_scratch(pbs_server):
+def gaussian_jobrunner_no_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
 
 
 @pytest.fixture()
-def jobrunner_scratch(pbs_server):
-    return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+def gaussian_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeGaussianJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def orca_jobrunner_no_scratch(pbs_server):
+    return FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def orca_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeORCAJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
 
 
 @pytest.fixture()
@@ -926,3 +1011,17 @@ def temp_folder_with_files():
         with open(file2, "w") as f:
             f.write("Test file 2")
         yield tmpdir, file1, file2
+
+
+# pytest fixtures for Popen
+@pytest.fixture
+def mock_popen(mocker):
+    """Fixture to mock subprocess.Popen."""
+    return mocker.patch("subprocess.Popen")
+
+
+@pytest.fixture
+def capture_log(caplog):
+    """Fixture to capture log messages."""
+    caplog.set_level("INFO")
+    return caplog

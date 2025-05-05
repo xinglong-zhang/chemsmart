@@ -2,6 +2,7 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
+from chemsmart.jobs.runner import JobRunner
 
 
 class PyMOLIRCMovieJob(PyMOLMovieJob):
@@ -11,13 +12,22 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
         self,
         molecules,
         label,
+        jobrunner=None,
         **kwargs,
     ):
-        super().__init__(molecule=molecules, label=label, **kwargs)
+        super().__init__(
+            molecule=molecules, label=label, jobrunner=jobrunner, **kwargs
+        )
 
     @classmethod
     def from_files(
-        cls, reactant_file, product_file, all_file, label, **kwargs
+        cls,
+        reactant_file,
+        product_file,
+        all_file,
+        label,
+        jobrunner=None,
+        **kwargs,
     ):
         """
         Create a PyMOLIRCMovieJob instance from reactant and product files.
@@ -49,4 +59,22 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
             raise ValueError(
                 "You can only provide reactant and product files or full irc file."
             )
-        return cls(molecules=molecules, label=label, **kwargs)
+
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecules=molecules,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
+
+        return cls(
+            molecules=molecules, label=label, jobrunner=jobrunner, **kwargs
+        )
