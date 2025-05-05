@@ -1681,8 +1681,18 @@ class ORCAOutput(ORCAFileMixin):
                         vibrational_frequencies.append(
                             float(line_j_elements[1])
                         )
-                return vibrational_frequencies
-        return None
+
+        if self.molecule.is_monoatomic:
+            # remove the first three frequencies (translations) for  monoatomic molecules
+            vibrational_frequencies = vibrational_frequencies[3:]
+        elif self.molecule.is_linear:
+            # remove the first five frequencies (3 trans + 2 rot) for linear molecules
+            vibrational_frequencies = vibrational_frequencies[5:]
+        else:
+            # remove the first six frequencies (3 trans + 3 rot) for non-linear molecules
+            vibrational_frequencies = vibrational_frequencies[6:]
+
+        return vibrational_frequencies
 
     @property
     def vib_freq_scale_factor(self):
