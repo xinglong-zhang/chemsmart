@@ -8,4 +8,4 @@ dependencies:
   - ffmpeg=7.1.1  # movie support for pymol
   - pip
   - pip:
-      - -e .[test]  # Pulls in pyproject.toml dependencies
+      - -e .[test,dev]  # Install both test and dev dependencies
