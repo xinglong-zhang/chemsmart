@@ -55,7 +55,7 @@ Optimize Unique Structure from an MD Trajectory File
 
     .. code-block:: console
 
-        chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt
+        chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj
 
 .. note::
 
@@ -68,7 +68,7 @@ Optimize a Fixed Number of Lowest Energy Structures
 
     .. code-block:: console
 
-        chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt -n <n_conformers_to_opt>
+        chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj -n <n_conformers_to_opt>
 
 
     If the job terminates before ``<n_conformers_to_opt>`` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all ``<n_conformers_to_opt>`` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file.
@@ -83,7 +83,7 @@ Optimize a Fixed Number of Lowest Energy Structures
 
     .. code-block:: console
 
-        chemsmart sub -s shared gaussian -p test -f imd.traj saopt -x 0.2 -n 10 -g seq
+        chemsmart sub -s shared gaussian -p test -f imd.traj traj -x 0.2 -n 10 -g seq
 
 run opt or modred or ts conformers from CREST run output
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
