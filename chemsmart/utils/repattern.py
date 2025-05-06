@@ -75,6 +75,9 @@ orca_frozen_atoms_output_pattern = r"Will constrain atom \d+ coordinate \d"
 # 49. D(H   9,C   4,C   3,C   2)   -180.0000         0.024745 C
 orca_constrained_coordinates_pattern = r"^\d+\.\s+[BAD]\([A-Z][a-z]?\s+\d+,[A-Z][a-z]?\s+\d+(?:,[A-Z][a-z]?\s+\d+)?(?:,[A-Z][a-z]?\s+\d+)?\)\s+-?\d+\.\d{4}\s+\d+\.\d{6}\s+C$"
 
+# regex pattern for QMMM calculations in orca
+orca_qm_h_bond_length_pattern = r"Dist_\w+_\w+\s+[\d.]+"
+
 # filename pattern for orca output files
 
 # filename matches with point pxx but not with fragment fx

@@ -205,9 +205,9 @@ class TestORCAInput:
             orca_inp.solvent_id  # noqa: B018
 
     def test_orca_qmmm_input(self, orca_inputs_directory):
-        orca_inp1= os.path.join(orca_inputs_directory, "dna_qmmm1.inp")
+        orca_inp1 = os.path.join(orca_inputs_directory, "dna_qmmm1.inp")
         orca_inp1 = ORCAQMMMInput(filename=orca_inp1)
-        #charge and multiplicity of QM region (instead of real system in regular input)
+        # charge and multiplicity of QM region (instead of real system in regular input)
         assert orca_inp1.qm_charge == 2
         assert orca_inp1.qm_multiplicity == 1
         assert orca_inp1.qm_atoms == [
@@ -234,18 +234,18 @@ class TestORCAInput:
             "Will include bonds at QM1-MM1 boundary.\n"
         )
         assert orca_inp1.qm_embedding_type == "electrostatic"
-        assert orca_inp1.qm2_functional.strip('"')  == 'b3lyp'
-        assert orca_inp1.qm2_basis.strip('"')  == 'def2-svp def2/j'
+        assert orca_inp1.qm2_functional.strip('"') == "b3lyp"
+        assert orca_inp1.qm2_basis.strip('"') == "def2-svp def2/j"
 
         orca_inp2 = os.path.join(orca_inputs_directory, "dna_qmmm2.inp")
         orca_inp2 = ORCAQMMMInput(filename=orca_inp2)
         assert orca_inp2.qm2_level_of_theory.strip('"') == "myqm2method.txt"
         assert orca_inp2.qm_qm2_boundary_treatment == "pbeh3c"
-        assert orca_inp2.qm2_atoms == ['5:22']
+        assert orca_inp2.qm2_atoms == ["5:22"]
         assert orca_inp2.qm2_charge == 0
         assert orca_inp2.qm2_multiplicity == 3
 
-        #todo:tests for crystal QMMM
+        # todo:tests for crystal QMMM
         # orca_inp3 = os.path.join(orca_inputs_directory, "ionic_crystal_qmmm.inp")
 
 

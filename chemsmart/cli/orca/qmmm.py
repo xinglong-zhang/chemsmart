@@ -236,6 +236,8 @@ def qmmm(
     ecp_layer_ecp,
     ecp_layer,
     scale_formal_charge_ecp_atom,
+    skip_completed,
+    **kwargs,
 ):
     """
     QM/MM calculation using ORCA.
@@ -244,7 +246,6 @@ def qmmm(
 
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
-    print("Project settings:", ctx.obj["project_settings"].__dict__)
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `chemsmart sub orca qmmm -qf <qm_functional> -qb <qm_basis>`
@@ -314,5 +315,7 @@ def qmmm(
         molecule=molecule,
         settings=qmmm_settings,
         label=label,
-        **ctx.obj["kwargs"],
+        skip_completed=skip_completed,
+        # **ctx.obj["kwargs"],
+        **kwargs,
     )

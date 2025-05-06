@@ -144,6 +144,7 @@ class ORCAInput(ORCAFileMixin):
                 return line.split()[-1]
         return None
 
+
 class ORCAQMMMInput(ORCAInput):
 
     @property
@@ -183,7 +184,6 @@ class ORCAQMMMInput(ORCAInput):
     def qm2_atoms(self):
         return self._get_qmmm_block()["qm2atoms"]
 
-
     @property
     def qm2_level_of_theory(self):
         qm2_level_of_theory, _, _ = self._get_qm2_level_of_theory()
@@ -218,7 +218,7 @@ class ORCAQMMMInput(ORCAInput):
 
     @property
     def qm_embedding_type(self):
-        _, embedding_type,_ = self._get_qm_boundary_interaction()
+        _, embedding_type, _ = self._get_qm_boundary_interaction()
         return embedding_type
 
     @property
@@ -316,8 +316,10 @@ class ORCAQMMMInput(ORCAInput):
                     )
             if "embedding" in line:
                 embedding = line.split()[-1]
-            if 'autoff qm2 method' in line:
-                boundary_treatment = line.replace('autoff qm2 method', "").strip()
+            if "autoff qm2 method" in line:
+                boundary_treatment = line.replace(
+                    "autoff qm2 method", ""
+                ).strip()
         return boundary_interaction, embedding, boundary_treatment
 
     def _get_qm2_level_of_theory(self):

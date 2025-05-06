@@ -2,6 +2,7 @@ from .irc import ORCAIRCJob
 from .job import ORCAGeneralJob, ORCAInpJob, ORCAJob
 from .modred import ORCAModredJob
 from .opt import ORCAOptJob
+from .qmmm import ORCAQMMMJob
 from .runner import ORCAJobRunner
 from .scan import ORCAScanJob
 from .singlepoint import ORCASinglePointJob
@@ -21,5 +22,6 @@ __all__ = [
     "ORCAScanJob",
     "ORCASinglePointJob",
     "ORCATSJob",
+    "ORCAQMMMJob",
     "jobs",
 ]
