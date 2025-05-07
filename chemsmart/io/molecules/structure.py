@@ -703,7 +703,7 @@ class Molecule:
                 # energy found in file, e.g., .out, .log
                 xyz_info = (
                     f"{base_filename}    Empirical formula: {self.chemical_formula}    "
-                    f"Energy(Hartree): {self.energy/units.Hartree}"
+                    f"Energy(Hartree): {self.energy:.6f}    "
                 )
             else:
                 # no energy found in file, e.g., .xyz or .com

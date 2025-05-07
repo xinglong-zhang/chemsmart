@@ -68,6 +68,13 @@ def entry_point(
     else:
         raise TypeError(f"File {neutral_filename} is of unknown filetype.")
 
+    neutral_output = None
+    radical_cation_output = None
+    radical_anion_output = None
+    charge_for_neutral = None
+    charge_for_radical_cation = None
+    charge_for_radical_anion = None
+
     if file == "gaussian":
         neutral_output = Gaussian16WBIOutput(neutral_filename)
         if radical_cation_filename is not None:
@@ -130,6 +137,10 @@ def entry_point(
             charge_for_radical_anion = (
                 radical_anion_output.hirshfeld_cm5_charges
             )
+    else:
+        raise ValueError(
+            f"Unknown mode {mode}. Supported modes are: mulliken, nbo, hirshfeld, cm5."
+        )
 
     logger.info("\nNeutral System Charges:")
     for key, value in charge_for_neutral.items():

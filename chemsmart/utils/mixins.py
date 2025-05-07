@@ -73,7 +73,7 @@ class FileMixin:
 
     @property
     def num_energies(self):
-        return len(self.energies_in_eV)
+        return len(self.energies)
 
 
 class GaussianFileMixin(FileMixin):
