@@ -707,6 +707,11 @@ def orca_fixed_dihedral(orca_outputs_directory):
         orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
     )
 
+@pytest.fixture()
+def orca_two_layer_qmmmm_output_file(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "methanol_ethane_qmmm.out"
+    )
 
 @pytest.fixture()
 def orca_errors_directory(orca_test_directory):

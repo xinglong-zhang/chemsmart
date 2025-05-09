@@ -2200,9 +2200,6 @@ class ORCAQMMMFile(ORCAOutput):
         super().__init__(filename)
         self.filename = filename
 
-    @property
-    def qm_mm_energy(self):
-        return self.energies
 
     @property
     def multiscale_model(self):
@@ -2241,7 +2238,7 @@ class ORCAQMMMFile(ORCAOutput):
         for line in self.contents:
             match = pattern.search(line)
             if match:
-                return int(match.group("scaling"))
+                return float(match.group("scaling"))
         return None
 
     @property
@@ -2292,20 +2289,26 @@ class ORCAQMMMFile(ORCAOutput):
 
     @property
     def qm_region(self):
-        pattern = re.compile(r"QM1 Subsystem\s+\.{3}\s+(?P<qm_region>\d+)")
+        pattern = re.compile(r"^QM1 Subsystem\s+\.{3}\s+(?P<qm_region>\d+)")
         qm_region = []
         reading_qm_lines = False
         for line in self.contents:
             match = pattern.search(line)
             if match:
                 reading_qm_lines = True
-                qm_region += re.sub(
+                qm_atom_list= re.sub(
                     r"^QM1 Subsystem\s+\.\.\.", "", line
-                ).strip()
+                ).strip().split()
+                for atom in qm_atom_list:
+                    qm_region.append(int(atom))
             elif reading_qm_lines == True:
                 if "..." in line.split():
                     break
-                qm_region += line.split()
+                qm_atom_list = line.split()
+                for atom in qm_atom_list:
+                    qm_region.append(int(atom))
+        #convert to 1-indexed
+        qm_region = list(map(lambda x: x + 1, qm_region))
         qm_region = get_range_from_list(qm_region)
         return qm_region
 
@@ -2335,12 +2338,11 @@ class ORCAQMMMFile(ORCAOutput):
         qm2_energy_of_large_system = qm2_energy_of_small_system = (
             qm_qm2_energy
         ) = qm_energy = None
+        pattern=re.compile(r"FINAL SINGLE POINT ENERGY(?:\s+\([^)]+\))?\s+(?P<energy>-?\d+\.\d+)")
+        # pattern = re.compile(r"FINAL SINGLE POINT ENERGY\s+\([^)]+\)\s+(?P<energy>-?\d+\.\d+)")
         for line in self.contents:
-            if "FINAL SINGLE POINT ENERGY" in line:
-                match = re.search(
-                    r"FINAL SINGLE POINT ENERGY\s+\.{3}\s+(?P<energy>-?\d+\.\d+)",
-                    line,
-                )
+            match = pattern.search(line)
+            if match:
                 if "(L-QM2)" in line:
                     qm2_energy_of_large_system = (
                         float(match.group("energy")) * units.Hartree
@@ -2355,6 +2357,26 @@ class ORCAQMMMFile(ORCAOutput):
                     )
                 else:
                     qm_energy = float(match.group("energy")) * units.Hartree
+            #
+            # if "FINAL SINGLE POINT ENERGY" in line:
+            #     match = re.search(
+            #         r"FINAL SINGLE POINT ENERGY\s+\.{3}\s+(?P<energy>-?\d+\.\d+)",
+            #         line,
+            #     )
+            #     if "(L-QM2)" in line:
+            #         qm2_energy_of_large_system = (
+            #             float(match.group("energy")) * units.Hartree
+            #         )
+            #     elif "(S-QM2)" in line:
+            #         qm2_energy_of_small_system = (
+            #             float(match.group("energy")) * units.Hartree
+            #         )
+            #     elif "(QM/QM2)" in line:
+            #         qm_qm2_energy = (
+            #             float(match.group("energy")) * units.Hartree
+            #         )
+            #     else:
+            #         qm_energy = float(match.group("energy")) * units.Hartree
         return (
             qm2_energy_of_large_system,
             qm2_energy_of_small_system,
@@ -2363,27 +2385,38 @@ class ORCAQMMMFile(ORCAOutput):
         )
 
     def _get_point_charge_treatment(self):
-        pattern1 = re.compile(
-            r"Point charges in QM calc. from MM atoms\s+\.{3}\s+(?P<charges>-?\d+\.\d+)"
-        )
-        pattern2 = re.compile(
-            r"from charge shift scheme\s+\.{3}\s+(?P<charges>-?\d+\.\d+)"
-        )
-        match1 = None
-        match2 = None
+        pattern1 = re.compile(r"Point charges in QM calc\. from MM atoms\s*\.{3}\s*(\d+)")
+        pattern2 = re.compile(r"from charge shift scheme\s*\.{3}\s*(\d+)")
+        point_charges_treatment = []
         for line in self.contents:
             match1 = pattern1.search(line)
             match2 = pattern2.search(line)
-        if match1 is not None and match2 is not None:
-            return int(match1.group("charges")), int(match2.group("charges"))
+            if match1 is not None:
+                point_charges_in_qm_from_mm = int(re.sub(
+                    r"Point charges in QM calc\. from MM atoms\s*\.{3}\s", "", line
+                ).strip())
+                point_charges_treatment.append(point_charges_in_qm_from_mm)
+            if match2 is not None:
+                point_charges_in_qm_from_charge_shift = int(re.sub(
+                    r"from charge shift scheme\s*\.{3}\s", "", line
+                ).strip())
+                point_charges_treatment.append(point_charges_in_qm_from_charge_shift)
+        return point_charges_treatment[0], point_charges_treatment[1]
 
     def _get_partition_system_sizes(self):
-        pattern = re.compile(
+        pattern1 = re.compile(
             r"Size of (?P<partition>\w+) System\s+\.{3}\s+(?P<atoms>\d+)"
         )
+        pattern2 = re.compile(
+            r"Size of (?P<partition>\w+) Subsystem\s+\.{3}\s+(?P<atoms>\d+)"
+        )
         system_sizes = {}
+        match = None
         for line in self.contents:
-            match = pattern.search(line)
+            if pattern1.search(line):
+                match = pattern1.search(line)
+            elif pattern2.search(line):
+                match = pattern2.search(line)
             if match:
                 partition = match.group("partition")
                 atoms = int(match.group("atoms"))

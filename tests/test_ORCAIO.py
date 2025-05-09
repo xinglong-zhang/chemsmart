@@ -8,7 +8,7 @@ from ase import units
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.input import ORCAInput, ORCAQMMMInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput, ORCAQMMMFile
 from chemsmart.io.orca.route import ORCARoute
 
 
@@ -1936,3 +1936,25 @@ class TestORCAEngrad:
         assert np.allclose(
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
+
+class TestORCAQMMM:
+    def test_read_qmmm_output(self, orca_two_layer_qmmmm_output_file):
+        orca_qmmm1 = ORCAQMMMFile(filename=orca_two_layer_qmmmm_output_file)
+        assert orca_qmmm1.multiscale_model == "QM1/QM2"
+        assert orca_qmmm1.qm2_method == 'XTB2'
+        assert orca_qmmm1.total_charge == 0
+        assert orca_qmmm1.scaling_factor_qm2 == 1.0
+        assert orca_qmmm1.point_charges_in_qm_from_mm == 24
+        assert orca_qmmm1.point_charges_in_qm_from_charge_shift == 0
+        assert orca_qmmm1.total_system_size == 36
+        assert orca_qmmm1.qm_system_size == 12
+        assert orca_qmmm1.qm2_system_size == 24
+        assert orca_qmmm1.number_of_link_atoms == 0
+        assert orca_qmmm1.qm_plus_link_atoms_size == 12
+        assert orca_qmmm1.qm_region == ['1-12']
+        assert orca_qmmm1.qm2_energy_of_large_region == -994.9374837306615
+        assert orca_qmmm1.qm2_energy_of_small_region == -396.0605045891306
+        assert orca_qmmm1.qm_qm2_energy == -5889.533884098047
+        assert orca_qmmm1.qm_energy == -5290.656904956516
+
+        print(orca_qmmm1.qm2_energy_of_small_region,orca_qmmm1.qm_qm2_energy, orca_qmmm1.qm_energy)
