@@ -72,31 +72,31 @@ logger = logging.getLogger(__name__)
     help="Low level layer force field.",
 )
 @click.option(
-    "-rc",
+    "-cr",
     "--real-charge",
     type=int,
     help="Charge of real system.",
 )
 @click.option(
-    "-rm",
+    "-mr",
     "--real-multiplicity",
     type=int,
     help="Spin multiplicity of real system.",
 )
 @click.option(
-    "-ic",
+    "-ci",
     "--int-charge",
     type=int,
     help="Charge of intermediate system.",
 )
 @click.option(
-    "-im",
+    "-mi",
     "--int-multiplicity",
     type=int,
     help="Spin multiplicity of intermediate system.",
 )
 @click.option(
-    "-mc",
+    "-cm",
     "--model-charge",
     type=int,
     help="Charge of model system.",
@@ -163,8 +163,6 @@ def qmmm(
     **kwargs,
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
-
-    print(high_level_atoms)
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]

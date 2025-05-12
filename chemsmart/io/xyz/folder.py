@@ -13,10 +13,10 @@ class XYZFolder(BaseFolder):
 
     @property
     def all_xyzfiles(self):
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="xyz"
         )
 
     @property
     def all_xyzfiles_in_current_folder(self):
-        return self.get_all_files_in_current_folder(filetype="xyz")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="xyz")

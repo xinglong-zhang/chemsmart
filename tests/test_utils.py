@@ -10,6 +10,8 @@ from chemsmart.utils.utils import (
     get_list_from_string_range,
     get_range_from_list,
     is_float,
+    iterative_compare,
+    naturally_sorted,
     str_indices_range_to_list,
     string2index_1based,
 )
@@ -22,6 +24,7 @@ class TestUtils:
         assert is_float("-0.1")
         assert not is_float("-1")
         assert not is_float("1")
+        assert not is_float("abc")
 
     def test_content_blocking(self, gaussian_opt_inputfile):
         g16_input = Gaussian16Input(filename=gaussian_opt_inputfile)
@@ -113,10 +116,216 @@ class TestUtils:
             41,
         ]
 
+    def test_iterative_compare_list_of_elements(self):
+        list1 = [1, 2, 3, 4, 5]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_lists(self):
+        list1 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+        ]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+        ]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_tuples(self):
+        list1 = [(1, 2, 3), (4, 5, 6), (7, 8, 9)]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = [
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+        ]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+            (1, 2, 3),
+            (4, 5, 6),
+            (7, 8, 9),
+        ]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_string(self):
+        list1 = ["a", "b", "c", "d", "e"]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        list2 = ["a", "b", "c", "d", "e", "a", "b", "c", "d", "e"]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        list3 = [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+        ]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+    def test_iterative_compare_list_of_dicts(self):
+        dict1 = {"a": 1, "b": 2, "c": 3}
+        dict2 = {"d": 4, "e": 5, "f": 6}
+        dict3 = {"g": 7, "h": 8, "i": 9}
+        list1 = [dict1, dict2, dict3]
+        unique_list1 = iterative_compare(list1)
+        assert unique_list1 == list1
+
+        dict4 = {"a": 1, "b": 2, "c": 3}
+        dict5 = {"d": 4, "e": 5, "f": 6}
+        dict6 = {"g": 7, "h": 8, "i": 9}
+        list2 = [dict4, dict5, dict6, dict1, dict2, dict3]
+        unique_list2 = iterative_compare(list2)
+        assert unique_list2 == list1
+
+        dict7 = {"a": 1, "b": 2, "c": 3}
+        dict8 = {"d": 4, "e": 5, "f": 6}
+        dict9 = {"g": 7, "h": 8, "i": 9}
+        list3 = [dict7, dict8, dict9, dict1, dict2, dict3, dict4, dict5, dict6]
+        unique_list3 = iterative_compare(list3)
+        assert unique_list3 == list1
+
+        dict11 = {"a": 11, "b": 12, "c": 13}
+        dict12 = {"d": 14, "e": 15, "f": 16}
+        dict13 = {"g": 17, "h": 18, "i": 19}
+        list4 = [dict11, dict12, dict13, dict1, dict2, dict3]
+        unique_list4 = iterative_compare(list4)
+        assert len(unique_list4) == 6
+
+        list5 = [dict1, dict11]
+        unique_list5 = iterative_compare(list5)
+        assert len(unique_list5) == 2
+
+        list6 = [dict1, dict11, dict1]
+        unique_list6 = iterative_compare(list6)
+        assert len(unique_list6) == 2
+
     def test_get_range_from_list(self):
         s1 = [1, 2, 3, 5, 6, 7]
         range = get_range_from_list(s1)
         assert range == ["1-3", "5-7"]
+
+        s2 = [1, 34, 45, 46, 48, 50]
+        range = get_range_from_list(s2)
+        assert range == ["1", "34", "45-46", "48", "50"]
+
+        s3 = [28, 45, 60, 89]
+        range = get_range_from_list(s3)
+        assert range == ["28", "45", "60", "89"]
+
+        s4 = [
+            18,
+            19,
+            20,
+            21,
+            23,
+            25,
+            27,
+            29,
+            30,
+            31,
+            33,
+            35,
+            37,
+            39,
+            41,
+            43,
+            46,
+            47,
+            48,
+            49,
+            51,
+            53,
+            55,
+            57,
+            61,
+            62,
+            63,
+            64,
+            66,
+            68,
+            70,
+            72,
+        ]
+        range = get_range_from_list(s4)
+        assert range == [
+            "18-21",
+            "23",
+            "25",
+            "27",
+            "29-31",
+            "33",
+            "35",
+            "37",
+            "39",
+            "41",
+            "43",
+            "46-49",
+            "51",
+            "53",
+            "55",
+            "57",
+            "61-64",
+            "66",
+            "68",
+            "70",
+            "72",
+        ]
 
 
 class TestGetListFromStringRange:
@@ -291,3 +500,61 @@ class TestIOUtilities:
         assert isinstance(molecules[1], Molecule)
         assert molecules[0].energy == 1.0
         assert molecules[1].energy == 2.0
+
+
+class TestNaturallySorted:
+    def test_empty_list(self):
+        """Test sorting an empty list."""
+        assert naturally_sorted([]) == []
+
+    def test_single_item(self):
+        """Test sorting a list with one item."""
+        assert naturally_sorted(["item1"]) == ["item1"]
+
+    def test_numeric_order(self):
+        """Test sorting strings with numbers in natural order."""
+        input_list = ["z10", "z2", "z1"]
+        expected = ["z1", "z2", "z10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_mixed_case(self):
+        """Test sorting with mixed case letters."""
+        input_list = ["Z1", "z2", "Z10", "z1"]
+        expected = ["Z1", "z1", "z2", "Z10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_alphanumeric(self):
+        """Test sorting alphanumeric strings."""
+        input_list = ["a11", "a1", "b2", "b10"]
+        expected = ["a1", "a11", "b2", "b10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_file_names(self):
+        """Test sorting typical file names."""
+        input_list = ["file10.txt", "file2.txt", "file1.txt"]
+        expected = ["file1.txt", "file2.txt", "file10.txt"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_special_characters(self):
+        """Test sorting with special characters."""
+        input_list = ["item-2", "item_10", "item_1"]
+        expected = ["item-2", "item_1", "item_10"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_mixed_types(self):
+        """Test sorting with mixed formats (numbers, letters, and empty strings)."""
+        input_list = ["100", "2", "abc", "", "Z", "z1"]
+        expected = ["", "2", "100", "abc", "Z", "z1"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_large_numbers(self):
+        """Test sorting with large numbers."""
+        input_list = ["item1000", "item999", "item10000"]
+        expected = ["item999", "item1000", "item10000"]
+        assert naturally_sorted(input_list) == expected
+
+    def test_no_numbers(self):
+        """Test sorting strings without numbers."""
+        input_list = ["zebra", "Apple", "banana"]
+        expected = ["Apple", "banana", "zebra"]
+        assert naturally_sorted(input_list) == expected

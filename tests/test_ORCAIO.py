@@ -7,8 +7,8 @@ from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.input import ORCAInput, ORCAQMMMInput
+from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput, ORCAQMMMFile
 from chemsmart.io.orca.route import ORCARoute
 
 
@@ -91,6 +91,53 @@ class TestORCARoute:
         assert r6.extrapolation_basis is None
         assert r6.auxiliary_basis is None
 
+        # two-layer ONIOM
+        s7 = "!QM/XTB BP86 def2-TZVP def2/J"
+        r7 = ORCARoute(route_string=s7)
+        assert r7.route_keywords == ["qm/xtb", "bp86", "def2-tzvp", "def2/j"]
+        assert r7.qm_functional == "bp86"
+        assert r7.qm_basis == "def2-tzvp"
+        assert r7.auxiliary_basis == "def2/j"
+        assert r7.qm2_method == "xtb"
+        assert r7.qmmm_jobtype == "qm/xtb"
+
+        # three-layer ONIOM
+        s8 = "!QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq CPCM(water)"
+        r8 = ORCARoute(route_string=s8)
+        assert r8.route_keywords == [
+            "qm/hf-3c/mm",
+            "opt",
+            "b3lyp",
+            "def2-tzvp",
+            "def2/j",
+            "numfreq",
+            "cpcm(water)",
+        ]
+        assert r8.qm_functional == "b3lyp"
+        assert r8.qm_basis == "def2-tzvp"
+        assert r8.auxiliary_basis == "def2/j"
+        assert r8.qm2_method == "hf-3c"
+        assert r8.qmmm_jobtype == "qm/hf-3c/mm"
+
+        # MOL-CRYSTAL-QMMM route
+        s9 = "! MOL-CRYSTAL-QMMM PBE def2-SVP Opt NumFreq"
+        r9 = ORCARoute(route_string=s9)
+        assert r9.route_keywords == [
+            "mol-crystal-qmmm",
+            "pbe",
+            "def2-svp",
+            "opt",
+            "numfreq",
+        ]
+        assert r9.qm_functional == "pbe"
+        assert r9.qm_basis == "def2-svp"
+        assert r9.qmmm_jobtype == "mol-crystal-qmmm"
+
+        # IONIC-CRYSTAL-QMMM route
+        s10 = "! IONIC-CRYSTAL-QMMM"
+        r10 = ORCARoute(route_string=s10)
+        assert r10.qmmm_jobtype == "ionic-crystal-qmmm"
+
 
 class TestORCABasis:
     def test_orca_all_auxiliary_basis_sets(self):
@@ -156,6 +203,50 @@ class TestORCAInput:
             "thus, your input file is not valid to run for ORCA!",
         ):
             orca_inp.solvent_id  # noqa: B018
+
+    def test_orca_qmmm_input(self, orca_inputs_directory):
+        orca_inp1 = os.path.join(orca_inputs_directory, "dna_qmmm1.inp")
+        orca_inp1 = ORCAQMMMInput(filename=orca_inp1)
+        # charge and multiplicity of QM region (instead of real system in regular input)
+        assert orca_inp1.qm_charge == 2
+        assert orca_inp1.qm_multiplicity == 1
+        assert orca_inp1.qm_atoms == [
+            "54",
+            "124:133",
+            "209",
+            "210",
+            "259:263",
+            "271",
+            "272",
+            "326:340",
+            "424:476",
+            "488:516",
+        ]
+        assert orca_inp1.qm_active_atoms == ["0:5", "16", "21:30"]
+        # assert orca_inp.qm_force_field
+        assert orca_inp1.qm_h_bond_length == [
+            ("c", "hla", "1.09"),
+            ("o", "hla", "0.98"),
+            ("n", "hla", "0.99"),
+        ]
+        assert orca_inp1.qm_boundary_interaction == (
+            "Will neglect bends at QM2-QM1-MM1 and torsions at QM3-QM2-QM1-MM1 boundary.\n"
+            "Will include bonds at QM1-MM1 boundary.\n"
+        )
+        assert orca_inp1.qm_embedding_type == "electrostatic"
+        assert orca_inp1.qm2_functional.strip('"') == "b3lyp"
+        assert orca_inp1.qm2_basis.strip('"') == "def2-svp def2/j"
+
+        orca_inp2 = os.path.join(orca_inputs_directory, "dna_qmmm2.inp")
+        orca_inp2 = ORCAQMMMInput(filename=orca_inp2)
+        assert orca_inp2.qm2_level_of_theory.strip('"') == "myqm2method.txt"
+        assert orca_inp2.qm_qm2_boundary_treatment == "pbeh3c"
+        assert orca_inp2.qm2_atoms == ["5:22"]
+        assert orca_inp2.qm2_charge == 0
+        assert orca_inp2.qm2_multiplicity == 3
+
+        # todo:tests for crystal QMMM
+        # orca_inp3 = os.path.join(orca_inputs_directory, "ionic_crystal_qmmm.inp")
 
 
 class TestORCAOutput:
@@ -241,11 +332,35 @@ class TestORCAOutput:
         molecule = orca_out.input_coordinates_block.molecule
         assert isinstance(molecule, Molecule)
         assert all(molecule.symbols == ["O", "H", "H"])
-        assert orca_out.input_coordinates_block.coordinate_block == [
+        expected_coordinate_block = [
             "O  0.0000  0.0000  0.0626",
             "H  -0.7920  0.0000  -0.4973",
             "H  0.7920  0.0000  -0.4973",
         ]
+        orca_coordinate_block = (
+            orca_out.input_coordinates_block.coordinate_block
+        )
+        for i, line in enumerate(orca_coordinate_block):
+            assert len(line.split()) == len(
+                expected_coordinate_block[i].split()
+            )
+            assert line.split()[0] == expected_coordinate_block[i].split()[0]
+            assert math.isclose(
+                float(line.split()[1]),
+                float(expected_coordinate_block[i].split()[1]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[2]),
+                float(expected_coordinate_block[i].split()[2]),
+                rel_tol=1e-4,
+            )
+            assert math.isclose(
+                float(line.split()[3]),
+                float(expected_coordinate_block[i].split()[3]),
+                rel_tol=1e-4,
+            )
+
         assert orca_out.molecule.empirical_formula == "H2O"
         assert len(orca_out.energies) == 6
         assert orca_out.energies[0] == -76.322282695198
@@ -258,9 +373,9 @@ class TestORCAOutput:
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
         assert optimized_geometry == {
-            "B(H1,O0)": 0.9627,
-            "B(H2,O0)": 0.9627,
-            "A(H1,O0,H2)": 103.35,
+            "B(H2,O1)": 0.9627,
+            "B(H3,O1)": 0.9627,
+            "A(H2,O1,H3)": 103.35,
         }
         molecule = orca_out.final_structure
         assert isinstance(molecule, Molecule)
@@ -1767,6 +1882,32 @@ class TestORCAOutput:
         assert orca_out.natoms == 27
         assert orca_out.normal_termination is False
 
+    def test_get_constrained_atoms(
+        self,
+        orca_fixed_atoms,
+        orca_fixed_bonds_and_angles,
+        orca_fixed_dihedral,
+    ):
+        fixed_atoms = ORCAOutput(filename=orca_fixed_atoms)
+        assert fixed_atoms.frozen_atoms == [3, 12]  # atoms 3 and 12 are frozen
+
+    def test_get_constrained_bond_lengths_and_angles(
+        self, orca_fixed_bonds_and_angles
+    ):
+        fixed_bond = ORCAOutput(filename=orca_fixed_bonds_and_angles)
+        assert fixed_bond.constrained_bond_lengths == {
+            "B(H10,H9)": 2.4714,
+        }
+        assert fixed_bond.constrained_bond_angles == {
+            "A(C2,C6,H9)": 69.0631,
+        }
+
+    def test_get_constrained_dihedral_angles(self, orca_fixed_dihedral):
+        fixed_dihedral = ORCAOutput(filename=orca_fixed_dihedral)
+        assert fixed_dihedral.constrained_dihedral_angles == {
+            "D(O18,H14,C13,C4)": -125.9028,
+        }
+
 
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
@@ -1795,3 +1936,25 @@ class TestORCAEngrad:
         assert np.allclose(
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
+
+class TestORCAQMMM:
+    def test_read_qmmm_output(self, orca_two_layer_qmmmm_output_file):
+        orca_qmmm1 = ORCAQMMMFile(filename=orca_two_layer_qmmmm_output_file)
+        assert orca_qmmm1.multiscale_model == "QM1/QM2"
+        assert orca_qmmm1.qm2_method == 'XTB2'
+        assert orca_qmmm1.total_charge == 0
+        assert orca_qmmm1.scaling_factor_qm2 == 1.0
+        assert orca_qmmm1.point_charges_in_qm_from_mm == 24
+        assert orca_qmmm1.point_charges_in_qm_from_charge_shift == 0
+        assert orca_qmmm1.total_system_size == 36
+        assert orca_qmmm1.qm_system_size == 12
+        assert orca_qmmm1.qm2_system_size == 24
+        assert orca_qmmm1.number_of_link_atoms == 0
+        assert orca_qmmm1.qm_plus_link_atoms_size == 12
+        assert orca_qmmm1.qm_region == ['1-12']
+        assert orca_qmmm1.qm2_energy_of_large_region == -994.9374837306615
+        assert orca_qmmm1.qm2_energy_of_small_region == -396.0605045891306
+        assert orca_qmmm1.qm_qm2_energy == -5889.533884098047
+        assert orca_qmmm1.qm_energy == -5290.656904956516
+
+        print(orca_qmmm1.qm2_energy_of_small_region,orca_qmmm1.qm_qm2_energy, orca_qmmm1.qm_energy)

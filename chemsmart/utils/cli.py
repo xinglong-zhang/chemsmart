@@ -1,5 +1,6 @@
 """Utility functions for command line interface."""
 
+import ast
 import copy
 import logging
 import pprint
@@ -212,7 +213,7 @@ def get_setting_from_jobtype_for_gaussian(
         settings = project_settings.qmmm_settings()
 
     if coordinates is not None:
-        modred_info = eval(coordinates)
+        modred_info = ast.literal_eval(coordinates)
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":
@@ -266,9 +267,11 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.wbi_settings()
     elif jobtype.lower() == "nci":
         settings = project_settings.nci_settings()
+    elif jobtype.lower() == "qmmm":
+        settings = project_settings.qmmm_settings()
 
     if coordinates is not None:
-        modred_info = eval(coordinates)
+        modred_info = ast.literal_eval(coordinates)
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":

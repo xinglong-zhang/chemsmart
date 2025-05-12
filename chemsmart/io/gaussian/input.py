@@ -235,8 +235,15 @@ class Gaussian16Input(GaussianFileMixin):
                 return charge, multiplicity
 
     def _get_oniom_charge_and_multiplicity(self):
-        line = self.contents[5]
-        line_elements = line.split()
+        # line = self.contents[5]
+        line_elements = []
+        for line in self.contents:
+            line_elements = line.split()
+            if (
+                all(element.isdigit() for element in line_elements)
+                and len(line_elements) > 0
+            ):
+                break
         charge_multiplicity_list = [
             "real_charge",
             "real_multiplicity",

@@ -3,19 +3,31 @@ import math
 import os
 import re
 from functools import cached_property
+from xml.sax.handler import property_dom_node
 
 import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.utils.io import (
+    clean_duplicate_structure,
+    create_molecule_list,
+    increment_numbers,
+)
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
+    orca_constrained_coordinates_pattern,
+    orca_frozen_atoms_output_pattern,
     orca_input_coordinate_in_output,
     orca_nproc_used_line_pattern,
     standard_coord_pattern,
 )
-from chemsmart.utils.utils import is_float, string2index_1based
+from chemsmart.utils.utils import (
+    get_range_from_list,
+    is_float,
+    string2index_1based,
+)
 
 p = PeriodicTable()
 
@@ -102,7 +114,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def input_coordinates_block(self):
         """Obtain the coordinate block from the input that is printed in the outputfile."""
-        return self._get_input_structure_coordinates_block_in_output()
+        return self._get_first_structure_coordinates_block_in_output()
 
     def _get_input_structure_coordinates_block_in_output(self):
         """In ORCA output file, the input structure is rewritten and for single points,
@@ -114,6 +126,7 @@ class ORCAOutput(ORCAFileMixin):
         | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
         | 23>   H   0.75520524233942      0.00000000000000     -0.50967030177046
         | 24> *.
+        # this will not work if the input file is supplied separately as .xyz file
         """
         coordinates_block_lines_list = []
         pattern = re.compile(orca_input_coordinate_in_output)
@@ -130,6 +143,177 @@ class ORCAOutput(ORCAFileMixin):
                         break
         cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
         return cb
+
+    @cached_property
+    def get_frozen_atoms(self):
+        return self._get_constraints()["frozen_atoms"]
+
+    @cached_property
+    def get_constrained_bond_angles(self):
+        return self._get_constraints()["constrained_bond_angles"]
+
+    @cached_property
+    def get_constrained_bond_lengths(self):
+        return self._get_constraints()["constrained_bond_lengths"]
+
+    @cached_property
+    def get_constrained_dihedrals(self):
+        return self._get_constraints()["constrained_dihedrals"]
+
+    def _get_constraints(self):
+        """Extract frozen atoms and constrained internal coordinates from ORCA output."""
+        constraints = {
+            "frozen_atoms": [],
+            "constrained_bond_lengths": [],
+            "constrained_bond_angles": [],
+            "constrained_dihedrals": [],
+        }
+
+        # Regex patterns
+        constrained_bond_length_pattern = (
+            r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)\s+C\s*\}"
+        )
+        constrained_bond_angles_pattern = (
+            r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
+        )
+        constrained_dihedrals_pattern = (
+            r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+C\s*\}"
+        )
+        orca_frozen_atoms_output_pattern = (
+            r"Will constrain atom \d+ coordinate \d"
+        )
+
+        for line in self.contents:
+            frozen_match = re.match(orca_frozen_atoms_output_pattern, line)
+            if frozen_match:
+                atom_index = int(line.split()[3])
+                if atom_index not in constraints["frozen_atoms"]:
+                    constraints["frozen_atoms"].append(atom_index)
+            elif re.match(constrained_bond_length_pattern, line):
+                constraints["constrained_bond_lengths"].append(
+                    f"{line.split()[4]}-{line.split()[5]}"
+                )
+            elif re.match(constrained_bond_angles_pattern, line):
+                constraints["constrained_bond_angles"].append(
+                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}"
+                )
+            elif re.match(constrained_dihedrals_pattern, line):
+                constraints["constrained_dihedrals"].append(
+                    f"{line.split()[4]}-{line.split()[5]}-{line.split()[6]}-{line.split()[7]}"
+                )
+        return constraints
+
+    def _get_first_structure_coordinates_block_in_output(self):
+        """Obtain the first structure coordinates block in the output file."""
+        coordinates_block_lines_list = []
+        pattern = re.compile(standard_coord_pattern)
+        found_header = False
+
+        for line in self.contents:
+            # Start collecting after finding the header
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                found_header = True
+                continue  # Skip the header line itself
+
+            # If we've found the header, process lines
+            if found_header:
+                match = pattern.match(line)
+                if match:
+                    # Extract the last 4 elements (symbol, x, y, z) and join with double spaces
+                    coord_line = "  ".join(line.split()[-4:])
+                    coordinates_block_lines_list.append(coord_line)
+                elif (
+                    coordinates_block_lines_list
+                ):  # Stop if we hit a non-matching line after collecting coords
+                    break
+
+        # Return CoordinateBlock instance
+        cb = CoordinateBlock(coordinate_block=coordinates_block_lines_list)
+        return cb
+
+    @property
+    def frozen_atoms(self):
+        """Get frozen atoms from the ORCA output file."""
+        frozen_atoms = []
+        for line in self.contents:
+            if re.match(orca_frozen_atoms_output_pattern, line):
+                atom_index = int(line.split()[3])
+                atom_index += 1  # Convert to 1-based index
+                if atom_index not in frozen_atoms:
+                    frozen_atoms.append(atom_index)
+        return frozen_atoms
+
+    @property
+    def constrained_bond_lengths(self):
+        constrained_bond_lengths, _, _ = self._get_constraints
+        return constrained_bond_lengths
+
+    @property
+    def constrained_bond_angles(self):
+        _, constrained_bond_angles, _ = self._get_constraints
+        return constrained_bond_angles
+
+    @property
+    def constrained_dihedral_angles(self):
+        _, _, constrained_dihedral_angles = self._get_constraints
+        return constrained_dihedral_angles
+
+    @cached_property
+    def _get_constraints(self):
+        """Extract constrained internal coordinates from ORCA output.
+        Reads from Redundant Internal Coordinates block where, if DOF is constrained,
+        there is a "C" at the end of the line.
+        Returns:
+             a dict similar to optimized parameters, specifying the constraints and
+             the associated values, e.g.,
+                optimized_geometry == {
+                    "B(H1,O0)": 0.9627,
+                    "B(H2,O0)": 0.9627,
+                    "A(H1,O0,H2)": 103.35,
+                }
+        """
+        constrained_bond_lengths = {}
+        constrained_bond_angles = {}
+        constrained_dihedral_angles = {}
+
+        for i, line in enumerate(self.contents):
+            if "Redundant Internal Coordinates" in line:
+                for j, line_j in enumerate(self.contents[i + 5 :]):
+                    if "------------------------------------" in line_j:
+                        continue
+                    if len(line_j) == 0:
+                        break
+                    if re.match(orca_constrained_coordinates_pattern, line_j):
+                        line_elements = line_j.split()
+                        if line_elements[1].lower().startswith("b"):  # bond
+                            parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}"
+                            parameter = increment_numbers(parameter, 1)
+                            constrained_bond_lengths[parameter] = float(
+                                line_elements[-3]
+                            )
+                        elif line_elements[1].lower().startswith("a"):  # angle
+                            parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
+                            parameter = increment_numbers(parameter, 1)
+                            constrained_bond_angles[parameter] = float(
+                                line_elements[-3]
+                            )
+                        elif (
+                            line_elements[1].lower().startswith("d")
+                        ):  # dihedral
+                            parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}{line_elements[5]}"
+                            parameter = increment_numbers(parameter, 1)
+                            constrained_dihedral_angles[parameter] = float(
+                                line_elements[-3]
+                            )
+                        else:
+                            raise ValueError(
+                                f"Unknown parameter type in line: {line_j}"
+                            )
+                return (
+                    constrained_bond_lengths,
+                    constrained_bond_angles,
+                    constrained_dihedral_angles,
+                )
 
     @cached_property
     def optimized_output_lines(self):
@@ -394,60 +578,112 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def all_structures(self):
-        """Obtain all structures in ORCA output file, including intermediate points."""
+        """Obtain all structures in ORCA output file, including intermediate points if present.
+        Include corresponding energies and forces where available."""
 
-        def create_molecule_list(orientations, num_structures):
-            """Helper function to create Molecule objects."""
-            if self.forces_in_eV_per_angstrom is not None:
-                forces = self.forces_in_eV_per_angstrom
-            else:
-                forces = [None] * num_structures
+        # Extract all raw structure data
+        orientations = self._get_all_orientations()
+        if not orientations:
+            return []  # No structures found
 
-            return [
-                Molecule(
-                    symbols=self.symbols,
-                    positions=orientations[i],
-                    charge=self.charge,
-                    multiplicity=self.multiplicity,
-                    energy=self.energies_in_eV[i],
-                    forces=forces[i],
-                )
-                for i in range(num_structures)
-            ]
+        # Clean duplicate structures (e.g., last structure might repeat in some cases)
+        clean_duplicate_structure(orientations)
 
-        all_structures = self._get_all_structures()
-        orientations = [m.positions for m in all_structures]
+        # Handle PBC (default to None if not present in ORCA output)
+        orientations_pbc = self._get_pbc_conditions() or [None] * len(
+            orientations
+        )
 
+        # Prepare energies and forces (adjust for length mismatches)
+        energies = (
+            self.energies_in_eV
+            if self.energies_in_eV is not None
+            else [None] * len(orientations)
+        )
+        forces = (
+            self.forces_in_eV_per_angstrom
+            if self.forces_in_eV_per_angstrom is not None
+            else [None] * len(orientations)
+        )
+
+        # Handle job termination
         if self.normal_termination:
-            if (
-                len(orientations) == 1
-            ):  # normal termination and has only one structure --> SP Job
-                return all_structures
-            num_structures_to_use = len(orientations) - 1
-            orientations = orientations[:-1]
-            molecules_list = create_molecule_list(
-                orientations=orientations,
-                num_structures=num_structures_to_use,
-            )
-            optimized_molecule = Molecule(
-                symbols=self.symbols,
-                positions=orientations[-1],
-                charge=self.charge,
-                multiplicity=self.multiplicity,
-                energy=self.energies_in_eV[-1],
-                forces=None,
-            )  # last gradient/forces calculation is not done, if the geometry is optimized
-            molecules_list.append(optimized_molecule)
-            return molecules_list
+            num_structures = len(orientations)
         else:
-            # remove last structure if the job did not terminate normally
-            num_structures_to_use = len(orientations) - 1
-        return create_molecule_list(
-            orientations,
+            # For abnormal termination, exclude the last structure (likely incomplete)
+            num_structures = max(0, len(orientations) - 1)
+            if num_structures == 0:
+                return []
+
+        # Truncate energies/forces to match number of structures
+        num_structures_to_use = min(num_structures, len(energies), len(forces))
+        orientations = orientations[:num_structures_to_use]
+        orientations_pbc = orientations_pbc[:num_structures_to_use]
+        energies = energies[:num_structures_to_use]
+        forces = forces[:num_structures_to_use]
+
+        # Create molecule list
+        all_structures = create_molecule_list(
+            orientations=orientations,
+            orientations_pbc=orientations_pbc,
+            energies=energies,
+            forces=forces,
+            symbols=self.symbols,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=self.frozen_atoms,
+            pbc_conditions=(
+                self.list_of_pbc_conditions
+                if hasattr(self, "list_of_pbc_conditions")
+                else None
+            ),
             num_structures=num_structures_to_use,
         )
 
+        # Filter optimized steps if requested (e.g., for geometry optimization)
+        if (
+            hasattr(self, "optimized_steps_indices")
+            and self.optimized_steps_indices
+            and not hasattr(self, "include_intermediate")
+        ):
+            all_structures = [
+                all_structures[i] for i in self.optimized_steps_indices
+            ]
+
+        logger.info(
+            f"Total number of structures located: {len(all_structures)}"
+        )
+        return all_structures
+
+    def _get_all_orientations(self):
+        """Extract all Cartesian coordinate blocks from the ORCA output."""
+        orientations = []
+        for i, line in enumerate(self.contents):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                coordinate_lines = []
+                for line_j in self.contents[i + 2 :]:  # Skip header lines
+                    if (
+                        not line_j.strip() or "----" in line_j
+                    ):  # End of coordinate block
+                        break
+                    pattern = re.compile(standard_coord_pattern)
+                    if pattern.match(line_j):
+                        coordinate_lines.append(
+                            [float(val) for val in line_j.split()[1:]]
+                        )
+                if coordinate_lines:
+                    orientations.append(np.array(coordinate_lines))
+        return orientations
+
+    def _get_pbc_conditions(self):
+        """Extract periodic boundary conditions if present (rare in ORCA outputs)."""
+        # ORCA rarely includes PBC in standard outputs; this is a placeholder
+        # If your ORCA output includes lattice vectors, implement parsing here
+        return None  # Default: no PBC unless explicitly parsed
+
     def _get_all_structures(self):
+        """Extract all Cartesian coordinate blocks from the ORCA output.
+        This does not however include energy and forces."""
         structures = []
         for i, line in enumerate(self.contents):
             if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
@@ -479,11 +715,13 @@ class ORCAOutput(ORCAFileMixin):
          2. B(H   2,O   0)                0.9627 -0.000014  0.0000    0.9627
          3. A(H   1,O   0,H   2)          103.34 -0.000009    0.00    103.35
         ----------------------------------------------------------------------------
+        #TODO: need to convert to 1-indexing
         """
         optimized_geometry = {}
         for i, line_i in enumerate(self.optimized_output_lines):
             if "--- Optimized Parameters ---" in line_i:
                 for line_j in self.optimized_output_lines[i + 5 :]:
+                    parameter = None
                     if "---------------" in line_j:
                         break
                     line_elements = line_j.split()
@@ -496,6 +734,9 @@ class ORCAOutput(ORCAFileMixin):
                             f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
                             f"{line_elements[5]}"
                         )
+                    if parameter is not None:
+                        # Convert to 1-indexing
+                        parameter = increment_numbers(parameter, 1)
                     optimized_geometry[parameter] = float(line_elements[-1])
         ## the above result will return a dictionary storing the optimized parameters:
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
@@ -1945,3 +2186,239 @@ class ORCAEngradFile(ORCAFileMixin):
                     list_of_symbols=symbols, positions=coords_tuple
                 )
         return None
+
+
+class ORCAQMMMFile(ORCAOutput):
+    """Class to parse the ORCA QMMM output files.
+
+    This class is used to parse the QMMM output files generated by ORCA.
+    It inherits from the ORCAOutput class and adds additional functionality
+    specific to QMMM calculations.
+    """
+
+    def __init__(self, filename):
+        super().__init__(filename)
+        self.filename = filename
+
+
+    @property
+    def multiscale_model(self):
+        pattern = re.compile(r"Multiscale model\s+\.{3}\s+(?P<model>\S+)")
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                return match.group("model")
+        return None
+
+    @property
+    def qm2_method(self):
+        pattern = re.compile(r"QM2 method\s+\.{3}\s+(?P<method>\S+)")
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                return match.group("method")
+        return None
+
+    @property
+    def total_charge(self):
+        pattern = re.compile(
+            r"Charge of total system\s+\.{3}\s+(?P<charge>-?\d+)"
+        )
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                return int(match.group("charge"))
+        return None
+
+    @property
+    def scaling_factor_qm2(self):
+        pattern = re.compile(
+            r"Scaling factor for QM2 charges\s+\.{3}\s+(?P<scaling>\d+\.\d+)"
+        )
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                return float(match.group("scaling"))
+        return None
+
+    @property
+    def point_charges_in_qm_from_mm(self):
+        point_charges_in_qm_from_mm, _ = self._get_point_charge_treatment()
+        return point_charges_in_qm_from_mm
+
+    @property
+    def point_charges_in_qm_from_charge_shift(self):
+        _, point_charges_in_qm_from_charge_shift = (
+            self._get_point_charge_treatment()
+        )
+        return point_charges_in_qm_from_charge_shift
+
+    @property
+    def total_system_size(self):
+        return self._get_partition_system_sizes()["QMMM"]
+
+    @property
+    def qm_system_size(self):
+        return self.natoms
+
+    @property
+    def qm2_system_size(self):
+        return self._get_partition_system_sizes()["QM2"]
+
+    @property
+    def number_of_link_atoms(self):
+        pattern = re.compile(
+            r"Number of link atoms\s+\.{3}\s+(?P<link_atoms>\d+)"
+        )
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                return int(match.group("link_atoms"))
+        return None
+
+    @property
+    def qm_plus_link_atoms_size(self):
+        pattern = re.compile(
+            r"Size of QM1 Subsystem plus link atoms\s+\.{3}\s+(?P<qm_plus_link_atoms>\d+)"
+        )
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                return int(match.group("qm_plus_link_atoms"))
+        return None
+
+    @property
+    def qm_region(self):
+        pattern = re.compile(r"^QM1 Subsystem\s+\.{3}\s+(?P<qm_region>\d+)")
+        qm_region = []
+        reading_qm_lines = False
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                reading_qm_lines = True
+                qm_atom_list= re.sub(
+                    r"^QM1 Subsystem\s+\.\.\.", "", line
+                ).strip().split()
+                for atom in qm_atom_list:
+                    qm_region.append(int(atom))
+            elif reading_qm_lines == True:
+                if "..." in line.split():
+                    break
+                qm_atom_list = line.split()
+                for atom in qm_atom_list:
+                    qm_region.append(int(atom))
+        #convert to 1-indexed
+        qm_region = list(map(lambda x: x + 1, qm_region))
+        qm_region = get_range_from_list(qm_region)
+        return qm_region
+
+    @property
+    def qm2_energy_of_large_region(self):
+        qm2_energy_of_large_region, _, _, _ = self._get_qmmm_energies()
+        return qm2_energy_of_large_region
+
+    @property
+    def qm2_energy_of_small_region(self):
+        _, qm2_energy_of_small_region, _, _ = self._get_qmmm_energies()
+        return qm2_energy_of_small_region
+
+    @property
+    def qm_energy(self):
+        _, _, _, qm_energy = self._get_qmmm_energies()
+        return qm_energy
+
+    @property
+    def qm_qm2_energy(self):
+        _, _, qm_qm2_energy, _ = self._get_qmmm_energies()
+        return qm_qm2_energy
+
+    def _get_qmmm_energies(self):
+        """Get the QM/MM energies from the ORCA output file."""
+        # todo: may need to refactor for 3-layer model
+        qm2_energy_of_large_system = qm2_energy_of_small_system = (
+            qm_qm2_energy
+        ) = qm_energy = None
+        pattern=re.compile(r"FINAL SINGLE POINT ENERGY(?:\s+\([^)]+\))?\s+(?P<energy>-?\d+\.\d+)")
+        # pattern = re.compile(r"FINAL SINGLE POINT ENERGY\s+\([^)]+\)\s+(?P<energy>-?\d+\.\d+)")
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                if "(L-QM2)" in line:
+                    qm2_energy_of_large_system = (
+                        float(match.group("energy")) * units.Hartree
+                    )
+                elif "(S-QM2)" in line:
+                    qm2_energy_of_small_system = (
+                        float(match.group("energy")) * units.Hartree
+                    )
+                elif "(QM/QM2)" in line:
+                    qm_qm2_energy = (
+                        float(match.group("energy")) * units.Hartree
+                    )
+                else:
+                    qm_energy = float(match.group("energy")) * units.Hartree
+            #
+            # if "FINAL SINGLE POINT ENERGY" in line:
+            #     match = re.search(
+            #         r"FINAL SINGLE POINT ENERGY\s+\.{3}\s+(?P<energy>-?\d+\.\d+)",
+            #         line,
+            #     )
+            #     if "(L-QM2)" in line:
+            #         qm2_energy_of_large_system = (
+            #             float(match.group("energy")) * units.Hartree
+            #         )
+            #     elif "(S-QM2)" in line:
+            #         qm2_energy_of_small_system = (
+            #             float(match.group("energy")) * units.Hartree
+            #         )
+            #     elif "(QM/QM2)" in line:
+            #         qm_qm2_energy = (
+            #             float(match.group("energy")) * units.Hartree
+            #         )
+            #     else:
+            #         qm_energy = float(match.group("energy")) * units.Hartree
+        return (
+            qm2_energy_of_large_system,
+            qm2_energy_of_small_system,
+            qm_qm2_energy,
+            qm_energy,
+        )
+
+    def _get_point_charge_treatment(self):
+        pattern1 = re.compile(r"Point charges in QM calc\. from MM atoms\s*\.{3}\s*(\d+)")
+        pattern2 = re.compile(r"from charge shift scheme\s*\.{3}\s*(\d+)")
+        point_charges_treatment = []
+        for line in self.contents:
+            match1 = pattern1.search(line)
+            match2 = pattern2.search(line)
+            if match1 is not None:
+                point_charges_in_qm_from_mm = int(re.sub(
+                    r"Point charges in QM calc\. from MM atoms\s*\.{3}\s", "", line
+                ).strip())
+                point_charges_treatment.append(point_charges_in_qm_from_mm)
+            if match2 is not None:
+                point_charges_in_qm_from_charge_shift = int(re.sub(
+                    r"from charge shift scheme\s*\.{3}\s", "", line
+                ).strip())
+                point_charges_treatment.append(point_charges_in_qm_from_charge_shift)
+        return point_charges_treatment[0], point_charges_treatment[1]
+
+    def _get_partition_system_sizes(self):
+        pattern1 = re.compile(
+            r"Size of (?P<partition>\w+) System\s+\.{3}\s+(?P<atoms>\d+)"
+        )
+        pattern2 = re.compile(
+            r"Size of (?P<partition>\w+) Subsystem\s+\.{3}\s+(?P<atoms>\d+)"
+        )
+        system_sizes = {}
+        match = None
+        for line in self.contents:
+            if pattern1.search(line):
+                match = pattern1.search(line)
+            elif pattern2.search(line):
+                match = pattern2.search(line)
+            if match:
+                partition = match.group("partition")
+                atoms = int(match.group("atoms"))
+                system_sizes[partition] = atoms
+        return system_sizes

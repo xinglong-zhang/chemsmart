@@ -52,7 +52,7 @@ def entry_point(filename, index, single_file):
     else:
         for i, molecule in enumerate(molecules):
             if single_file:
-                molecule.write_xyz(file_basename + "_all.xyz")
+                molecule.write_xyz(file_basename + "_all.xyz", mode="a")
             else:
                 molecule.write_xyz(file_basename + f"_{i+1}.xyz")
 
