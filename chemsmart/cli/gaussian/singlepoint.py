@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 def sp(
     ctx, remove_solvent, solvent_model, solvent_id, solvent_options, **kwargs
 ):
+    """CLI for single point calculation for Gaussian."""
+
+    # get jobrunner for single point
+    jobrunner = ctx.obj["jobrunner"]
 
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -76,5 +80,9 @@ def sp(
     from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 
     return GaussianSinglePointJob(
-        molecule=molecule, settings=sp_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=sp_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

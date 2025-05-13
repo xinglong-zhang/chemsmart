@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def crestopt(ctx, num_confs_to_opt, skip_completed, **kwargs):
+    """CLI for running Gaussian CREST optimization jobs."""
+
+    # get jobrunner for running Gaussian crest optimization jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
@@ -51,6 +56,7 @@ def crestopt(ctx, num_confs_to_opt, skip_completed, **kwargs):
         molecules=molecules,
         settings=opt_settings,
         label=label,
+        jobrunner=jobrunner,
         num_confs_to_opt=num_confs_to_opt,
         skip_completed=skip_completed,
         **kwargs,

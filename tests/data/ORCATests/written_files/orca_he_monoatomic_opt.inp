@@ -1,0 +1,8 @@
+!  Freq m062x def2-svp DEFGRID3
+# Number of processors
+%pal nprocs 64 end
+# Memory per core
+%maxcore 4687
+* xyz 0 1
+He       0.0000000000    0.0000000000    0.0000000000
+*
