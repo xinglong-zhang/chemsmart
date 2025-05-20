@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 from abc import abstractmethod
+from contextlib import suppress
 from functools import lru_cache
 
 from chemsmart.settings.server import Server
@@ -33,6 +34,7 @@ class JobRunner(RegistryMixin):
         self,
         server,
         scratch=None,
+        scratch_dir=None,  # Explicit scratch directory
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -52,6 +54,8 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = scratch
+        self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
+
         if self.scratch:
             self._set_scratch()
 
@@ -75,12 +79,29 @@ class JobRunner(RegistryMixin):
         self.kwargs = kwargs
 
     @property
-    @lru_cache(maxsize=12)
     def scratch_dir(self):
-        return self._set_scratch()
+        """Return the scratch directory, setting it if necessary."""
+        if self._scratch_dir is None:
+            self._scratch_dir = self._set_scratch()
+        return self._scratch_dir
+
+    @scratch_dir.setter
+    def scratch_dir(self, value):
+        """Allow explicit setting of scratch_dir."""
+        if value is not None:
+            value = os.path.expanduser(value)  # Expand '~' to absolute path
+            if not os.path.exists(value):
+                raise FileNotFoundError(
+                    f"Specified scratch dir does not exist: {value}"
+                )
+        self._scratch_dir = value
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
+        """Determine the scratch directory, considering multiple sources."""
+        if self._scratch_dir is not None:
+            return self._scratch_dir  # Use explicitly set directory
+
         scratch_dir = None
         if self.executable is not None:
             logger.info(f"Setting scratch dir for {self} from executable.")
@@ -138,12 +159,12 @@ class JobRunner(RegistryMixin):
         process.communicate()
         return process.poll()
 
-    def _postrun(self, job):
+    def _postrun(self, job, **kwargs):
         # Subclasses can implement
         pass
 
     @abstractmethod
-    def _get_command(self, **kwargs):
+    def _get_command(self, job):
         raise NotImplementedError
 
     @abstractmethod
@@ -165,7 +186,7 @@ class JobRunner(RegistryMixin):
     def run(self, job, **kwargs):
         self._prerun(job)
         self._write_input(job)
-        command = self._get_command(**kwargs)
+        command = self._get_command(job)
         env = self._update_os_environ(job)
         process = self._create_process(job, command=command, env=env)
         self._run(process, **kwargs)
@@ -177,12 +198,9 @@ class JobRunner(RegistryMixin):
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
-        logger.debug(f"All available runners: {runners}")
         jobtype = job.TYPE
-        logger.debug(f"Running job type: {jobtype}")
 
         for runner in runners:
-            logger.debug(f"Checking runner: {runner}")
             runner_jobtypes = runner.JOBTYPES
             logger.debug(f"Runner jobtypes: {runner_jobtypes}")
 
@@ -191,6 +209,14 @@ class JobRunner(RegistryMixin):
 
             if jobtype in runner_jobtypes and fake == runner.FAKE:
                 logger.info(f"Using job runner: {runner} for job: {job}")
+
+                # If scratch is None, use the runner's default scratch value
+                scratch = (
+                    scratch
+                    if scratch is not None
+                    else getattr(runner, "SCRATCH", None)
+                )
+
                 return runner(server=server, scratch=scratch, **kwargs)
 
         raise ValueError(
@@ -198,3 +224,15 @@ class JobRunner(RegistryMixin):
             f"Runners in registry: {runners}. \n "
             f"Fake: {fake}"
         )
+
+    def _remove_err_files(self, job):
+        # also remove .err and .pbs* and .slurm* files if job is complete
+        err_file = f"{job.folder}/{job.label}.err"
+        pbs_err_file = f"{job.folder}/{job.label}.pbserr"
+        slurm_err_file = f"{job.folder}/{job.label}.slurmerr"
+
+        files_to_be_removed = [err_file, pbs_err_file, slurm_err_file]
+        for file in files_to_be_removed:
+            with suppress(FileNotFoundError):
+                logger.info(f"Removing file {file}.")
+                os.remove(file)

@@ -25,7 +25,7 @@ GAUSSIAN:
         module load craype-x86-rome
         module load libfabric/1.11.0.4.125
     SCRIPTS: |
-        source GAUSS_DIR=~/bin/g16
+        tcsh -c "source ~/programs/g16/bsd/g16.login"
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export GAUSS_EXEDIR=~/bin/g16
@@ -34,3 +34,7 @@ GAUSSIAN:
 ORCA:
     EXEFOLDER: ~/bin/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart

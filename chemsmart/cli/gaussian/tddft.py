@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 @click_gaussian_td_options
 @click.pass_context
 def td(ctx, states, root, nstates, eqsolv, **kwargs):
+    """CLI for running Gaussian TDDFT jobs."""
+
+    # get jobrunner for running Gaussian TDDFT jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
 
     # get settings from project
@@ -52,5 +57,9 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     from chemsmart.jobs.gaussian.tddft import GaussianTDDFTJob
 
     return GaussianTDDFTJob(
-        molecule=molecule, settings=td_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=td_settings,
+        label=label,
+        jobrunner=jobrunner,
+        **kwargs,
     )

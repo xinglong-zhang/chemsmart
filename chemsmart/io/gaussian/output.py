@@ -6,7 +6,8 @@ from itertools import islice
 import numpy as np
 from ase import units
 
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
@@ -33,11 +34,19 @@ class Gaussian16Output(GaussianFileMixin):
         use_frozen (bool): To include frozen coordinates in the Molecule.
         Defaults to False, since we do not want the frozen coordinates
         data be passed if .log file is used to create a molecule for run.
+        include_intermediate (bool): To include intermediate steps in the Molecule.
+        by default include_intermediate=False, we ignore those pre-optimization points
+        such that the pointns obtained will be the same as points visualized in Gaussview.
+        For data collection, one may set include_intermediate=True to get all datapoints,
+        including those pre-optimization points. This feature allows user to use the index
+        to select a geometry on a scan.log Gaussian output file as input for a fresh calculation
+        of (any) other job.
     """
 
-    def __init__(self, filename, use_frozen=False):
+    def __init__(self, filename, use_frozen=False, include_intermediate=False):
         self.filename = filename
         self.use_frozen = use_frozen
+        self.include_intermediate = include_intermediate
 
     @property
     def normal_termination(self):
@@ -48,10 +57,10 @@ class Gaussian16Output(GaussianFileMixin):
 
         last_line = contents[-1]
         if "Normal termination of Gaussian" in last_line:
-            logger.info(f"File {self.filename} terminated normally.")
+            logger.debug(f"File {self.filename} terminated normally.")
             return True
 
-        logger.info(f"File {self.filename} has error termination.")
+        logger.debug(f"File {self.filename} has error termination.")
         return False
 
     @property
@@ -156,93 +165,79 @@ class Gaussian16Output(GaussianFileMixin):
         Use Standard orientations to get the structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
+        # Determine orientations and their periodic boundary conditions (PBC)
+        if self.standard_orientations:
+            orientations, orientations_pbc = (
+                self.standard_orientations,
+                self.standard_orientations_pbc,
+            )
+        elif self.input_orientations:
+            orientations, orientations_pbc = (
+                self.input_orientations,
+                self.input_orientations_pbc,
+            )
+        else:
+            return []  # No structures found
 
-        def create_molecule_list(
-            orientations, orientations_pbc, num_structures=None
-        ):
-            """Helper function to create Molecule objects."""
-            num_structures = num_structures or len(orientations)
-            if self.use_frozen:
-                frozen_atoms = self.frozen_atoms_masks
-            else:
-                frozen_atoms = None
-            return [
-                Molecule(
-                    symbols=self.symbols,
-                    positions=orientations[i],
-                    translation_vectors=orientations_pbc[i],
-                    charge=self.charge,
-                    multiplicity=self.multiplicity,
-                    frozen_atoms=frozen_atoms,
-                    pbc_conditions=self.list_of_pbc_conditions,
-                    energy=self.energies_in_eV[i],
-                    forces=self.forces_in_eV_per_angstrom[i],
-                )
-                for i in range(num_structures)
+        # Clean duplicate structures at the end
+        clean_duplicate_structure(orientations)
+
+        # Remove first structure if it's a link job
+        if self.job_type == "link" and len(orientations) > 1:
+            orientations, orientations_pbc = (
+                orientations[1:],
+                orientations_pbc[1:],
+            )
+            self.energies = self.energies[1:]
+
+        frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
+
+        # Handle normal termination
+        if self.normal_termination:
+            all_structures = create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies,
+                self.forces,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+            )
+        else:
+            # Handle abnormal termination
+            num_structures_to_use = min(
+                len(orientations),
+                len(self.energies),
+                len(self.forces),
+            )
+            all_structures = create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies,
+                self.forces,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+                num_structures=num_structures_to_use,
+            )
+
+        # Filter optimized steps if required
+        if self.optimized_steps_indices and not self.include_intermediate:
+            logger.debug(
+                "Ignoring intermediate geometry optimization for constrained opt."
+            )
+            all_structures = [
+                all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        # If the job terminated normally
-        if self.normal_termination:
-            # Use Standard orientations if available, otherwise Input orientations
-            if self.standard_orientations:
-                # log file has "Standard orientation:"
-                # and standard_orientations is not None
-                try:
-                    if np.allclose(
-                        self.standard_orientations[-1],
-                        self.standard_orientations[-2],
-                        rtol=1e-5,
-                    ):
-                        self.standard_orientations.pop(-1)
-                except IndexError:
-                    # for single point jobs, there will be only one structure
-                    pass
-                orientations = self.standard_orientations
-                orientations_pbc = self.standard_orientations_pbc
-            else:
-                if self.input_orientations is not None:
-                    # if the log file has "Input orientation:"
-                    try:
-                        if np.allclose(
-                            self.input_orientations[-1],
-                            self.input_orientations[-2],
-                            rtol=1e-5,
-                        ):
-                            self.input_orientations.pop(-1)
-                    except IndexError:
-                        # for single point jobs, there will be only one structure
-                        pass
-                orientations = self.input_orientations
-                orientations_pbc = self.input_orientations_pbc
-            return create_molecule_list(orientations, orientations_pbc)
-
-        # If the job did not terminate normally, the last structure is ignored
-        num_structures_to_use = len(self.energies)
-        if self.standard_orientations:
-            num_structures_to_use = min(
-                len(self.standard_orientations),
-                len(self.energies),
-                len(self.forces),
-            )
-        if self.input_orientations:
-            num_structures_to_use = min(
-                len(self.input_orientations),
-                len(self.energies),
-                len(self.forces),
-            )
-        # Use Standard orientations if available, otherwise Input orientations
-        if self.standard_orientations:
-            orientations = self.standard_orientations
-            orientations_pbc = self.standard_orientations_pbc
-        else:
-            orientations = self.input_orientations
-            orientations_pbc = self.input_orientations_pbc
-
-        return create_molecule_list(
-            orientations,
-            orientations_pbc,
-            num_structures=num_structures_to_use,
+        logger.debug(
+            f"Total number of structures located: {len(all_structures)}"
         )
+        return all_structures
 
     @cached_property
     def optimized_structure(self):
@@ -290,6 +285,7 @@ class Gaussian16Output(GaussianFileMixin):
                 i_gaussian = i + 1  # gaussian uses 1-index
                 each_steps = [step for step in steps if step[-1] == i_gaussian]
                 optimized_steps.append(each_steps[-1])
+            logger.debug(f"Optimized steps: {optimized_steps}")
             return optimized_steps
         return None
 
@@ -684,6 +680,14 @@ class Gaussian16Output(GaussianFileMixin):
         elif len(self.oniom_energies) != 0:
             return self.oniom_energies
 
+    @cached_property
+    def zero_point_energy(self):
+        """Zero point energy in Hartree."""
+        for line in self.contents:
+            if "Zero-point correction=" in line:
+                return float(line.split()[2])
+        return None
+
     # check for convergence criterion not met (happens for some output files)
     @property
     def convergence_criterion_not_met(self):
@@ -740,7 +744,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def num_forces(self):
-        return len(self.forces_in_eV_per_angstrom)
+        return len(self.forces)
 
     @cached_property
     def input_orientations(self):
@@ -1389,6 +1393,95 @@ class Gaussian16Output(GaussianFileMixin):
     def get_molecule(self, index="-1"):
         index = string2index_1based(index)
         return self.all_structures[index]
+
+    @property
+    def mass(self):
+        for line in self.contents:
+            if "Molecular mass:" and "amu." in line:
+                return float(line.split()[2])
+
+    @cached_property
+    def moments_of_inertia(self):
+        """Obtain moments of inertia from the output file which are in atomic units
+        (amu * Bohr^2) and convert to SI units (kg * m^2)."""
+        moments_of_inertia, _ = (
+            self._get_moments_of_inertia_and_principal_axes()
+        )
+        return moments_of_inertia
+
+    @cached_property
+    def moments_of_inertia_principal_axes(self):
+        _, principal_axes = self._get_moments_of_inertia_and_principal_axes()
+        return principal_axes
+
+    def _get_moments_of_inertia_and_principal_axes(self):
+        """Obtain moments of inertia along principal axes from the output file
+        (amu * Bohr^2 in Gaussian) and convert to units of (amu * Å^2)."""
+        for i, line in enumerate(self.contents):
+            if "Principal axes and moments of inertia" in line:
+                moments_of_inertia = []
+                moments_of_inertia_principal_axes = []
+                for j_line in self.contents[i + 2 :]:
+                    if j_line.startswith("This molecule"):
+                        break
+                    if j_line.startswith("Eigenvalue"):
+                        for eigenval in j_line.split("Eigenvalues --")[
+                            -1
+                        ].split():
+                            try:
+                                moments_of_inertia.append(
+                                    float(eigenval) * units.Bohr**2
+                                )
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not convert '{j_line}' due to "
+                                    f"Gaussian incorrect printing."
+                                )
+                                moments_of_inertia.append(
+                                    np.array([np.inf] * 3)
+                                )
+                    else:
+                        if len(j_line.split()) == 4:
+                            moments_of_inertia_principal_axes.append(
+                                np.array(j_line.split()[1:4], dtype=float)
+                            )
+                moments_of_inertia_principal_axes = np.array(
+                    moments_of_inertia_principal_axes
+                ).transpose()
+                return np.array(moments_of_inertia), np.array(
+                    moments_of_inertia_principal_axes
+                )
+
+    @cached_property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number from the output file."""
+        for line in self.contents:
+            if "Rotational symmetry number" in line:
+                return int(line.split()[-1].split(".")[0])
+
+    @cached_property
+    def rotational_temperatures(self):
+        """Rotational temperatures in Kelvin, as a list."""
+        rot_temps = []
+        for line in reversed(self.contents):
+            # take from the end of outputfile
+            if "Rotational temperature" in line and "(Kelvin)" in line:
+                for rot_temp in line.split("(Kelvin)")[-1].split():
+                    # linear molecules may have only one rot temp,
+                    # non-linear has three
+                    rot_temps.append(float(rot_temp))
+                return rot_temps
+
+    @cached_property
+    def rotational_constants_in_Hz(self):
+        """Rotational constants in Hz, as a list."""
+        rot_consts = []
+        for line in reversed(self.contents):
+            # take from the end of outputfile
+            if "Rotational constant" in line and "(GHZ):" in line:
+                for rot_const in line.split("(GHZ):")[-1].split():
+                    rot_consts.append(float(rot_const) * 1e9)
+                return rot_consts
 
     def to_dataset(self, **kwargs):
         """Convert Gaussian .log file to Dataset with all data points taken from the .log file.

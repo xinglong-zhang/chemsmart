@@ -6,10 +6,11 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
+from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.io.xyz.file import XYZFile
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.utils.cluster import is_pubchem_network_available
 
 
 class TestCoordinateBlock:
@@ -100,7 +101,7 @@ class TestStructures:
         xyz_file = XYZFile(filename=single_molecule_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        molecule = xyz_file.get_molecule(index="-1", return_list=False)
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
         assert molecule.is_chiral
@@ -125,7 +126,7 @@ class TestStructures:
         assert len(graph.nodes) == 71
         assert len(graph.edges) == 78  # CH4 should have 4 bonds
 
-        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
@@ -134,6 +135,13 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+        assert len(molecule.chemical_symbols) == 71
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+        assert np.isclose(molecule.mass, 665.982, atol=1e-2)
+
+        # test conversion to RDKit molecule
+        rdkit_molecule = molecule.to_rdkit()
+        assert isinstance(rdkit_molecule, RDKitMolecule)
 
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
@@ -144,7 +152,7 @@ class TestStructures:
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         assert xyz_file.num_atoms == 71
 
-        all_molecules = xyz_file.get_molecule(index=":", return_list=True)
+        all_molecules = xyz_file.get_molecules(index=":", return_list=True)
 
         # set correct charge and multiplicity for molecules as needed by pymatgen checks
         molecules = []
@@ -217,7 +225,7 @@ class TestStructures:
         assert first_py_structure.spin_multiplicity == 1
 
         # obtain the last structure as molecule
-        molecule = xyz_file.get_molecule(index="-1", return_list=False)
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
         assert isinstance(molecule, Molecule)
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
 
@@ -301,12 +309,12 @@ class TestStructures:
         )
 
         # obtain the last structure as a list
-        molecule = xyz_file.get_molecule(index="-1", return_list=True)
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
         assert isinstance(molecule, list)
         assert len(molecule) == 1
 
         # obtain the last 10 structures
-        molecules = xyz_file.get_molecule(index="-10:", return_list=True)
+        molecules = xyz_file.get_molecules(index="-10:", return_list=True)
         assert isinstance(molecules, list)
         assert len(molecules) == 10
 
@@ -338,6 +346,30 @@ class TestStructures:
         )
         assert isinstance(molecule, list)
         assert len(molecule) == 1
+
+        # test first molecule is 1-indexed
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="1", return_list=False
+        )
+        assert np.allclose(
+            molecule.positions[0],
+            np.array([-1.0440166707, -2.3921211654, -1.1765767093]),
+            rtol=1e-5,
+        )
+        assert isinstance(molecule, Molecule)
+
+    def test_molecular_geometry(self):
+        """Test molecular geometry calculations."""
+        mol = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array([[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]),
+        )
+        assert np.isclose(mol.mass, 44.01, atol=1e-2)
+        assert np.isclose(mol.get_distance(1, 2), 1.16)
+        assert np.isclose(mol.get_distance(2, 3), 1.16)
+        assert np.isclose(mol.get_angle(1, 2, 3), 180)
+        assert np.isclose(mol.get_dihedral(0, 1, 2, 0), 0)
+        assert mol.is_linear
 
 
 class TestMoleculeAdvanced:
@@ -525,6 +557,10 @@ class TestGraphFeatures:
 
 
 class TestChemicalFeatures:
+    @pytest.mark.skipif(
+        not is_pubchem_network_available(),
+        reason="Network to pubchem is unavailable",
+    )
     def test_stereochemistry_handling(self):
         """Test preservation of stereochemical information."""
         methyl_3_hexane = Molecule.from_pubchem("11507")

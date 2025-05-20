@@ -171,7 +171,11 @@ solv:
 This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different `~/.chemsmart/orca/*project_settings*.yaml` files to adapt to different project requirements.
 
 ---
-Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the server configurations on which chemsmart is to be used (e.g., modules, scratch directories etc). Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
+Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
+
+One also need to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in scratch folder), one may do `ls -s /path/to/scratch/ ~/scratch`.
+
+Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
 
 The `make configure` will also add the required paths to the user `~/.bashrc` file. User may need to do 
 
@@ -345,14 +349,14 @@ If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps 
 To optimize unique structure from an md trajectory file, do:
 
 ```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt 
+chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj 
 ```
 This optimizes all the unique structures available in the md trajectory `<input_file>`. Typically, the `<input_file>` is a list of all structures on an md trajectory obtained by ASE md run and named `md.traj`. (TODO: this method is not properly implemented in chemsmart yet.)
 
 To optimize a fixed number of lowest energy structures, `<num_structures_to_opt>`, do:
 
 ```bash
-chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> saopt -n <n_conformers_to_opt>
+chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj -n <n_conformers_to_opt>
 ```
 If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
 
@@ -365,7 +369,7 @@ Two grouper types for determining/clustering unique structures are available fro
 For example, to consider the last 20% of the structures in md.traj trajectory file, then uses Sequential grouper to group those structures into unique structures and run the 10 lowest energy structures from the list of unique structures found by the grouper:
 
 ```bash
-chemsmart sub -s shared gaussian -p test -f imd.traj saopt -x 0.2 -n 10 -g seq
+chemsmart sub -s shared gaussian -p test -f imd.traj traj -x 0.2 -n 10 -g seq
 ```
 
 ---

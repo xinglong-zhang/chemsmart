@@ -121,7 +121,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             print(cli_args)
         return cli_args
 
-    def _process_single_job(job, jobrunner):
+    def _process_single_job(job):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
@@ -133,8 +133,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
+    job.jobrunner = jobrunner
 
-    _process_single_job(job=job, jobrunner=jobrunner)
+    _process_single_job(job=job)
 
 
 for subcommand in subcommands:

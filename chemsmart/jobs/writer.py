@@ -12,10 +12,10 @@ class InputWriter:
         jobrunner (JobRunner): The job runner for the job.
     """
 
-    def __init__(self, job, jobrunner):
+    def __init__(self, job):
         self.job = job
         self.settings = self.job.settings
-        self.jobrunner = jobrunner
+        self.jobrunner = job.jobrunner
 
     @abstractmethod
     def write(self):

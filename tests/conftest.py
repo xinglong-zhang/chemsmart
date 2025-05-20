@@ -1,11 +1,20 @@
+import logging
 import os
+import tempfile
 
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
+import yaml
+from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.mol.runner import (
+    PyMOLMovieJobRunner,
+    PyMOLVisualizationJobRunner,
+)
+from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
 # each test runs on cwd to its temp dir
@@ -121,6 +130,21 @@ def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     )
 
 
+@pytest.fixture()
+def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "qmmm")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfile_2layer(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3CH3.com")
+
+
+@pytest.fixture()
+def gaussian_qmmm_inputfile_3layer(gaussian_qmmm_input_test_directory):
+    return os.path.join(gaussian_qmmm_input_test_directory, "CH3COOH.com")
+
+
 # Gaussian output files
 @pytest.fixture()
 def gaussian_outputs_test_directory(gaussian_test_directory):
@@ -212,6 +236,22 @@ def gaussian_ozone_opt_outfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "ozone.log"
     )
     return gaussian_ozone_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_co2_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_co2_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "co2.log"
+    )
+    return gaussian_co2_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_he_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_he_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory, "he.log"
+    )
+    return gaussian_he_opt_outfile
 
 
 @pytest.fixture()
@@ -494,6 +534,18 @@ def gaussian_written_opt_from_graphite_2d_pbc_log(
     )
 
 
+@pytest.fixture()
+def qmmm_written_xyz_file(gaussian_written_files_directory):
+    return os.path.join(gaussian_written_files_directory, "qmmm_written.xyz")
+
+
+@pytest.fixture()
+def qmmm_written_xyz_only_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "qmmm_written_xyz_only.xyz"
+    )
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):
@@ -609,6 +661,16 @@ def water_output_gas_path(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_he_output_freq(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "He_freq.out")
+
+
+@pytest.fixture()
+def orca_co2_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "CO2.out")
+
+
+@pytest.fixture()
 def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"
@@ -628,6 +690,25 @@ def water_engrad_path(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_fixed_atoms(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "phenol_fixed_atoms.out")
+
+
+@pytest.fixture()
+def orca_fixed_bonds_and_angles(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenol_fixed_bond_and_angles.out"
+    )
+
+
+@pytest.fixture()
+def orca_fixed_dihedral(orca_outputs_directory):
+    return os.path.join(
+        orca_outputs_directory, "phenylalanine_fixed_dihedral.out"
+    )
+
+
+@pytest.fixture()
 def orca_errors_directory(orca_test_directory):
     orca_errors_directory = os.path.join(orca_test_directory, "error_files")
     return os.path.abspath(orca_errors_directory)
@@ -638,10 +719,65 @@ def gtoint_errfile(orca_errors_directory):
     return os.path.join(orca_errors_directory, "GTOInt_error.out")
 
 
+# orca written files
+@pytest.fixture()
+def orca_written_files_directory(orca_test_directory):
+    orca_written_files = os.path.join(orca_test_directory, "written_files")
+    return orca_written_files
+
+
+@pytest.fixture()
+def orca_written_opt_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_opt.inp")
+
+
+@pytest.fixture()
+def orca_written_opt_file_with_route(orca_written_files_directory):
+    return os.path.join(
+        orca_written_files_directory, "orca_opt_with_route.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_modred_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_modred.inp")
+
+
+@pytest.fixture()
+def orca_written_scan_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_scan.inp")
+
+
+@pytest.fixture()
+def orca_written_ts_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_ts.inp")
+
+
+@pytest.fixture()
+def orca_written_ts_from_nhc_singlet_log_file(orca_written_files_directory):
+    return os.path.join(orca_written_files_directory, "orca_ts_from_log.inp")
+
+
+@pytest.fixture()
+def orca_written_sp_from_nhc_singlet_log_with_solvent_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory, "orca_sp_from_log_with_solvent.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_he_monoatomic_opt_file(orca_written_files_directory):
+    return os.path.join(
+        orca_written_files_directory, "orca_he_monoatomic_opt.inp"
+    )
+
+
 # orca yaml files
 @pytest.fixture()
 def orca_yaml_settings_directory(orca_test_directory):
-    return os.path.join(orca_test_directory, "yaml_settings")
+    return os.path.join(orca_test_directory, "project_yaml")
 
 
 @pytest.fixture()
@@ -657,6 +793,21 @@ def orca_yaml_settings_gas_solv(orca_yaml_settings_directory):
 @pytest.fixture()
 def orca_yaml_settings_solv(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "solv.yaml")
+
+
+@pytest.fixture()
+def orca_yaml_settings_gas_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "gas_solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_solv_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "solv")
+
+
+@pytest.fixture()
+def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "orca")
 
 
 # test for structure.py
@@ -699,13 +850,37 @@ def pbs_server(server_yaml_file):
 
 
 @pytest.fixture()
-def jobrunner_no_scratch(pbs_server):
+def gaussian_jobrunner_no_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
 
 
 @pytest.fixture()
-def jobrunner_scratch(pbs_server):
-    return FakeGaussianJobRunner(server=pbs_server, scratch=True, fake=True)
+def gaussian_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeGaussianJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def orca_jobrunner_no_scratch(pbs_server):
+    return FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def orca_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeORCAJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def pymol_visualization_jobrunner(pbs_server):
+    return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_movie_jobrunner(pbs_server):
+    return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing
@@ -779,6 +954,107 @@ def conformers_from_rdkit():
     ]
 
     return conformers_from_rdkit
+
+
+@pytest.fixture()
+def io_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "IOTests")
+
+
+@pytest.fixture()
+def excel_file(io_test_directory):
+    return os.path.join(io_test_directory, "test.xlsx")
+
+
+## fixtures for mixins
+@pytest.fixture
+def temp_text_file():
+    with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
+        tmp.write("Line1\nLine2\n")
+        tmp_name = tmp.name
+    yield tmp_name
+    os.remove(tmp_name)
+
+
+@pytest.fixture
+def dummy_yaml_file():
+    class DummyYAMLFile:
+        def __init__(self):
+            self.filename = "dummy.yaml"
+            self.content_lines_string = yaml.dump(
+                {"key1": "value1", "key2": "value2"}
+            )
+
+        @property
+        def yaml_contents_dict(self):
+            return yaml.safe_load(self.content_lines_string)
+
+        @property
+        def yaml_contents_keys(self):
+            return self.yaml_contents_dict.keys()
+
+        @property
+        def yaml_contents_values(self):
+            return self.yaml_contents_dict.values()
+
+        def yaml_contents_by_key(self, key):
+            return self.yaml_contents_dict.get(key)
+
+    return DummyYAMLFile()
+
+
+@pytest.fixture
+def temp_folder_with_files():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file1 = os.path.join(tmpdir, "test1.txt")
+        file2 = os.path.join(tmpdir, "test2.log")
+        with open(file1, "w") as f:
+            f.write("Test file 1")
+        with open(file2, "w") as f:
+            f.write("Test file 2")
+        yield tmpdir, file1, file2
+
+
+# pytest fixtures for Popen
+@pytest.fixture
+def mock_popen(mocker):
+    """Fixture to mock subprocess.Popen."""
+    return mocker.patch("subprocess.Popen")
+
+
+@pytest.fixture(scope="session")
+def session_mocker(pytestconfig):
+    """Session-scoped mocker fixture for patching during the test session."""
+    from unittest.mock import MagicMock
+
+    mocker = MockerFixture(pytestconfig)
+    mock = MagicMock()
+    mocker.patch = mock.patch
+    mocker.patch.object = mock.patch.object
+    yield mocker
+    mocker.resetall()
+
+
+@pytest.fixture(scope="session")
+def tests_logger():
+    """Fixture to configure the root logger for tests."""
+    logger = logging.getLogger()  # Root logger
+    logger.setLevel(logging.INFO)
+    logger.handlers = []  # Clear handlers to avoid conflicts
+    logger.propagate = True
+    # Set environment variable to signal test mode
+    os.environ["TEST_MODE"] = "1"
+    yield logger
+    # Clean up
+    logger.handlers = []
+    os.environ.pop("TEST_MODE", None)
+
+
+@pytest.fixture
+def capture_log(caplog, tests_logger):
+    """Fixture to capture log messages."""
+    caplog.set_level(logging.INFO, logger="")  # Capture root logger
+    yield caplog
 
 
 ## xtb fixtures

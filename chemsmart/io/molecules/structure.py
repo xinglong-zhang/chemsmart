@@ -16,6 +16,7 @@ from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.io.xyz.file import XYZFile
+from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache
@@ -130,10 +131,60 @@ class Molecule:
         return type(self)(symbols=symbols, positions=positions)
 
     @property
+    def energy(self):
+        return self._energy
+
+    @energy.setter
+    def energy(self, value):
+        self._energy = value
+
+    @property
     def empirical_formula(self):
         return Symbols.fromsymbols(self.symbols).get_chemical_formula(
             mode="hill", empirical=True
         )
+
+    @property
+    def mass(self):
+        return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
+
+    @property
+    def natural_abundance_weighted_mass(self):
+        return sum(
+            p.to_weighted_atomic_mass_by_abundance(symbol)
+            for symbol in self.symbols
+        )
+
+    @property
+    def most_abundant_mass(self):
+        return sum(
+            p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols
+        )
+
+    @property
+    def masses(self):
+        """Numpy array of atomic masses of the molecule."""
+        return np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
+
+    @property
+    def natural_abundance_weighted_masses(self):
+        return np.array(
+            [
+                p.to_weighted_atomic_mass_by_abundance(symbol)
+                for symbol in self.symbols
+            ]
+        )
+
+    @property
+    def most_abundant_masses(self):
+        return np.array(
+            [p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols]
+        )
+
+    @property
+    def center_of_mass(self):
+        """Compute the center of mass of the molecule."""
+        return np.average(self.positions, axis=0, weights=self.masses)
 
     @property
     def chemical_formula(self):
@@ -165,11 +216,187 @@ class Molecule:
         """Check if molecule is chiral or not."""
         return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
 
+    @property
+    def is_aromatic(self):
+        """Check if molecule is aromatic or not."""
+        return Chem.GetAromaticAtoms(self.to_rdkit()) != []
+
+    @property
+    def is_ring(self):
+        """Check if molecule is a ring or not."""
+        return Chem.GetSymmSSSR(self.to_rdkit()) != []
+
+    @property
+    def is_monoatomic(self):
+        """Check if molecule is monoatomic or not."""
+        return self.num_atoms == 1
+
+    @property
+    def is_diatomic(self):
+        """Check if molecule is diatomic or not."""
+        return self.num_atoms == 2
+
+    @property
+    def is_linear(self):
+        """Check if molecule is linear or not."""
+        if self.num_atoms <= 2:
+            return True
+        else:
+            if self.num_atoms == 3:
+                return is_collinear(self.positions)
+            else:
+                from sklearn.decomposition import PCA
+
+                # Use PCA to check if all atoms lie on one principal axis
+                pca = PCA(n_components=1)
+                pca.fit(self.positions)
+                reconstructed = pca.inverse_transform(
+                    pca.transform(self.positions)
+                )
+                error = np.linalg.norm(
+                    self.positions - reconstructed, axis=1
+                ).max()
+                return error < 1e-2
+
+    @property
+    def moments_of_inertia_tensor(self):
+        """Calculate the moment of inertia tensor of the molecule."""
+        moi_tensor, _, _ = self._get_moments_of_inertia
+        return np.array(moi_tensor)
+
+    @property
+    def moments_of_inertia(self):
+        """Obtain moments of inertia from molecular structure
+        along principal axes as a list."""
+        if self.is_monoatomic:
+            return [0.0, 0.0, 0.0]
+        else:
+            _, eigenvalues, _ = self._get_moments_of_inertia
+            return eigenvalues
+
+    @property
+    def moments_of_inertia_weighted_mass(self):
+        if self.is_monoatomic:
+            return [0.0, 0.0, 0.0]
+        else:
+            _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            return eigenvalues
+
+    @property
+    def moments_of_inertia_most_abundant_mass(self):
+        if self.is_monoatomic:
+            return [0.0, 0.0, 0.0]
+        else:
+            _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            return eigenvalues
+
+    @property
+    def moments_of_inertia_principal_axes(self):
+        """Obtain moments of inertia along principal axes from molecular structure."""
+        _, _, eigenvectors = self._get_moments_of_inertia
+        return eigenvectors
+
+    @cached_property
+    def _get_moments_of_inertia(self):
+        """Calculate the moments of inertia of the molecule.
+        Units of amu Å^2."""
+        if self.num_atoms == 1:
+            return np.zeros(3)
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+
+            return calculate_moments_of_inertia(self.masses, self.positions)
+
+    @cached_property
+    def _get_moments_of_inertia_weighted_mass(self):
+        """Calculate the moments of inertia of the molecule. Use natural abundance weighted masses.
+        Units of amu Å^2."""
+        if self.num_atoms == 1:
+            return np.zeros(3)
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+
+            return calculate_moments_of_inertia(
+                self.natural_abundance_weighted_masses, self.positions
+            )
+
+    @cached_property
+    def _get_moments_of_inertia_most_abundant_mass(self):
+        """Calculate the moments of inertia of the molecule. Use most abundant masses.
+        Units of amu Å^2."""
+        if self.num_atoms == 1:
+            return np.zeros(3)
+        else:
+            from chemsmart.utils.geometry import calculate_moments_of_inertia
+
+            return calculate_moments_of_inertia(
+                self.most_abundant_masses, self.positions
+            )
+
+    @cached_property
+    def rotational_temperatures(self):
+        """Obtain the rotational temperatures of the molecule in K.
+        Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z"""
+        moi_in_SI_units = [
+            float(i) * units._amu * (1 / units.m) ** 2
+            for i in self.moments_of_inertia
+        ]
+        return [
+            units._hplanck**2 / (8 * np.pi**2 * moi_in_SI_units[i] * units._k)
+            for i in range(3)
+        ]
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
             return Symbols.fromsymbols(self.symbols).get_chemical_formula(
                 mode=mode, empirical=empirical
             )
+
+    def get_distance(self, idx1, idx2):
+        """Calculate the distance between two points.
+        Use 1-based indexing for idx1 and idx2."""
+        return np.linalg.norm(
+            self.positions[idx1 - 1] - self.positions[idx2 - 1]
+        )
+
+    def get_angle(self, idx1, idx2, idx3):
+        """Calculate the angle between three points.
+        Use 1-based indexing for idx1, idx2, and idx3."""
+        return self.get_angle_from_positions(
+            self.positions[idx1 - 1],
+            self.positions[idx2 - 1],
+            self.positions[idx3 - 1],
+        )
+
+    def get_angle_from_positions(self, position1, position2, position3):
+        """Calculate the angle between three points."""
+        v1 = position1 - position2
+        v2 = position3 - position2
+        cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        return np.degrees(np.arccos(cos_theta))
+
+    def get_dihedral(self, idx1, idx2, idx3, idx4):
+        """Calculate the dihedral angle between four points, about bond formed by idx2 and idx3.
+        Use 1-based indexing for idx1, idx2, idx3, and idx4."""
+        return self.get_dihedral_from_positions(
+            self.positions[idx1 - 1],
+            self.positions[idx2 - 1],
+            self.positions[idx3 - 1],
+            self.positions[idx4 - 1],
+        )
+
+    def get_dihedral_from_positions(
+        self, position1, position2, position3, position4
+    ):
+        """Calculate the dihedral angle between four points."""
+        v1 = position1 - position2
+        v2 = position3 - position2
+        v3 = position4 - position3
+        n1 = np.cross(v1, v2)
+        n2 = np.cross(v2, v3)
+        x = np.dot(n1, n2)
+        y = np.dot(np.cross(n1, v2), n2)
+        return np.degrees(np.arctan2(y, x))
 
     def copy(self):
         return copy.deepcopy(self)
@@ -206,7 +433,7 @@ class Molecule:
         molecule = cls._read_filepath(
             filepath, index=index, return_list=return_list, **kwargs
         )
-        if return_list and isinstance(molecule, Molecule):
+        if return_list and not isinstance(molecule, list):
             return [molecule]
         else:
             return molecule
@@ -216,6 +443,7 @@ class Molecule:
         basename = os.path.basename(filepath)
 
         if basename.endswith(".xyz"):
+            logger.debug(f"Reading xyz file: {filepath}")
             return cls._read_xyz_file(
                 filepath=filepath,
                 index=index,
@@ -229,7 +457,7 @@ class Molecule:
             return cls._read_gaussian_inputfile(filepath)
 
         if basename.endswith(".log"):
-            return cls._read_gaussian_logfile(filepath, index)
+            return cls._read_gaussian_logfile(filepath, index, **kwargs)
 
         if basename.endswith(".inp"):
             return cls._read_orca_inputfile(filepath, **kwargs)
@@ -251,7 +479,9 @@ class Molecule:
     @classmethod
     def _read_xyz_file(cls, filepath, index=":", return_list=False):
         xyz_file = XYZFile(filename=filepath)
-        molecules = xyz_file.get_molecule(index=index, return_list=return_list)
+        molecules = xyz_file.get_molecules(
+            index=index, return_list=return_list
+        )
         return molecules
 
     @staticmethod
@@ -271,14 +501,15 @@ class Molecule:
             return g16_input.molecule
         except ValueError:
             g16_input = Gaussian16Input(filename=filepath)
+            return g16_input.molecule
 
     @staticmethod
     @file_cache()
-    def _read_gaussian_logfile(filepath, index):
+    def _read_gaussian_logfile(filepath, index, **kwargs):
         """Returns a list of molecules."""
         from chemsmart.io.gaussian.output import Gaussian16Output
 
-        g16_output = Gaussian16Output(filename=filepath)
+        g16_output = Gaussian16Output(filename=filepath, **kwargs)
         return g16_output.get_molecule(index=index)
 
     @staticmethod
@@ -297,7 +528,7 @@ class Molecule:
         from chemsmart.io.orca.output import ORCAOutput
 
         orca_output = ORCAOutput(filename=filepath)
-        return orca_output.molecule
+        return orca_output.get_molecule(index=index)
 
     # @staticmethod
     # @file_cache()
@@ -453,10 +684,10 @@ class Molecule:
                 f"Program {program} is not supported for writing coordinates."
             )
 
-    def write(self, filename, format="xyz", **kwargs):
+    def write(self, filename, format="xyz", mode="w", **kwargs):
         """Write the molecule to a file."""
         if format.lower() == "xyz":
-            self.write_xyz(filename, **kwargs)
+            self.write_xyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
             self.write_com(filename, **kwargs)
         # elif format.lower() == "mol":
@@ -464,15 +695,15 @@ class Molecule:
         else:
             raise ValueError(f"Format {format} is not supported for writing.")
 
-    def write_xyz(self, filename, **kwargs):
+    def write_xyz(self, filename, mode, **kwargs):
         """Write the molecule to an XYZ file."""
-        with open(filename, "w") as f:
+        with open(filename, mode) as f:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
                 # energy found in file, e.g., .out, .log
                 xyz_info = (
                     f"{base_filename}    Empirical formula: {self.chemical_formula}    "
-                    f"Energy(Hartree): {self.energy/units.Hartree}"
+                    f"Energy(Hartree): {self.energy:.6f}    "
                 )
             else:
                 # no energy found in file, e.g., .xyz or .com
@@ -557,10 +788,10 @@ class Molecule:
         pass
 
     def __repr__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
 
     def __str__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
 
     @cached_property
     def distance_matrix(self):
@@ -623,9 +854,10 @@ class Molecule:
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
 
-    def to_rdkit(self, bond_cutoff_buffer=0.05, adjust_H=True):
+    def to_rdkit(self, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
         """Convert Molecule object to RDKit Mol with proper stereochemistry handling.
         Args:
+            add_bonds (bool): Flag to add bonds to molecule or not.
             bond_cutoff_buffer (float): Additional buffer for bond cutoff distance.
             From testing, see test_resonance_handling, it seems that a value of 0.1Å
             works for ozone, acetone, benzene, and probably other molecules, too.
@@ -642,6 +874,44 @@ class Molecule:
             rdkit_mol.AddAtom(Chem.Atom(symbol))
 
         # add bonds
+        if add_bonds:
+            rdkit_mol = self._add_bonds_to_rdkit_mol(
+                rdkit_mol, bond_cutoff_buffer, adjust_H
+            )
+
+        # Create a conformer and set 3D coordinates
+        conformer = rdchem.Conformer(len(self.symbols))
+        for i, pos in enumerate(self.positions):
+            conformer.SetAtomPosition(i, Point3D(*pos))
+        rdkit_mol.AddConformer(conformer)
+
+        # Compute valences (Fix for getNumImplicitHs issue)
+        rdkit_mol.UpdatePropertyCache(strict=False)
+
+        # Partial sanitization for stereochemistry detection
+        # Chem.SanitizeMol(rdkit_mol,
+        #                  Chem.SANITIZE_ALL ^ Chem.SANITIZE_ADJUSTHS ^ Chem.SANITIZE_SETAROMATICITY)
+
+        # I comment the following out since we do not want to modify the molecule
+        # Validate the RDKit molecule
+        # try:
+        #     Chem.SanitizeMol(rdkit_mol)
+        # except Chem.AtomValenceException as e:
+        #     raise ValueError(f"Sanitization failed: {e}") from e
+
+        # Detect stereochemistry from 3D coordinates
+        Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
+        Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
+
+        # Force update of stereo flags
+        Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
+
+        return rdkit_mol.GetMol()
+
+    def _add_bonds_to_rdkit_mol(
+        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+    ):
+        """Add bonds to the RDKit molecule."""
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
                 if adjust_H:
@@ -659,12 +929,15 @@ class Molecule:
                         cutoff_buffer = 0.1
                     else:
                         cutoff_buffer = bond_cutoff_buffer
+                else:
+                    cutoff_buffer = 0.3  # default buffer
                 cutoff = get_bond_cutoff(
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
-                bond_order = self.determine_bond_order(
+                bond_order = self.determine_bond_order_one_bond(
                     bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
                 )
+                logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
                     bond_type = {
                         1: Chem.BondType.SINGLE,
@@ -673,28 +946,61 @@ class Molecule:
                         3: Chem.BondType.TRIPLE,
                     }[bond_order]
                     rdkit_mol.AddBond(i, j, bond_type)
+        return rdkit_mol
 
-        # Create a conformer and set 3D coordinates
-        conformer = rdchem.Conformer(len(self.symbols))
-        for i, pos in enumerate(self.positions):
-            conformer.SetAtomPosition(i, Point3D(*pos))
-        rdkit_mol.AddConformer(conformer)
+    def _add_bonds_to_rdkit_mol_vectorized(
+        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+    ):
+        """
+        Add bonds to the RDKit molecule using a vectorized approach to compute bond orders.
+        """
+        num_atoms = len(self.symbols)
 
-        # Compute valences (Fix for getNumImplicitHs issue)
-        rdkit_mol.UpdatePropertyCache(strict=False)
+        # 1. Build an NxN cutoff matrix
+        cutoff_matrix = np.zeros((num_atoms, num_atoms))
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                # Decide on a pair-specific buffer
+                if adjust_H:
+                    if self.symbols[i] == "H" and self.symbols[j] == "H":
+                        # bond length of H-H is ~0.74 Å
+                        cutoff_buffer_ij = 0.2
+                    elif self.symbols[i] == "H" or self.symbols[j] == "H":
+                        # bond length to H is ~1.0–1.1 Å
+                        cutoff_buffer_ij = 0.1
+                    else:
+                        cutoff_buffer_ij = bond_cutoff_buffer
+                else:
+                    cutoff_buffer_ij = 0.3  # some default if not adjusting H
 
-        # Partial sanitization for stereochemistry detection
-        # Chem.SanitizeMol(rdkit_mol,
-        #                  Chem.SANITIZE_ALL ^ Chem.SANITIZE_ADJUSTHS ^ Chem.SANITIZE_SETAROMATICITY)
+                cutoff_ij = get_bond_cutoff(
+                    self.symbols[i], self.symbols[j], cutoff_buffer_ij
+                )
+                cutoff_matrix[i, j] = cutoff_ij
+                cutoff_matrix[j, i] = cutoff_ij
 
-        # Detect stereochemistry from 3D coordinates
-        Chem.AssignStereochemistryFrom3D(rdkit_mol, conformer.GetId())
-        Chem.AssignAtomChiralTagsFromStructure(rdkit_mol, conformer.GetId())
+        # 2. Vectorized bond order calculation
+        bond_orders = self.determine_bond_order(
+            bond_length=self.distance_matrix,  # NxN distances
+            bond_cutoff=cutoff_matrix,  # NxN cutoffs
+        )
 
-        # Force update of stereo flags
-        Chem.FindPotentialStereoBonds(rdkit_mol, cleanIt=True)
+        # 3. Add edges (bonds) for non-zero bond orders
+        bond_type_map = {
+            1.0: Chem.BondType.SINGLE,
+            1.5: Chem.BondType.AROMATIC,
+            2.0: Chem.BondType.DOUBLE,
+            3.0: Chem.BondType.TRIPLE,
+        }
 
-        return rdkit_mol.GetMol()
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
+                bo = bond_orders[i, j]
+                if bo > 0:
+                    bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
+                    rdkit_mol.AddBond(i, j, bond_type)
+
+        return rdkit_mol
 
     @cached_property
     def rdkit_fingerprints(self):
@@ -761,7 +1067,7 @@ class Molecule:
 
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
-                element_i, element_j = symbols[i], symbols[j]
+                element_i, element_j = str(symbols[i]), str(symbols[j])
 
                 cutoff_buffer = bond_cutoff_buffer
                 if adjust_H:
@@ -861,6 +1167,33 @@ class Molecule:
 
         return AseAtomsAdaptor.get_molecule(atoms=self.to_ase())
 
+    def to_X_data(self, wbo=False):
+        """Convert molecule object to X_data for ML models."""
+        if self.positions is None:
+            raise ValueError(
+                "Positions are not available in the molecule object."
+            )
+
+        # Ensure energy is always included
+        energy_array = np.array(
+            [self.energy if self.energy is not None else 0.0]
+        )  # Ensures shape (1,)
+        positions_array = (
+            np.array(self.positions).flatten().reshape(1, -1)
+        )  # Ensures shape (1, num_atoms*3)
+
+        # Concatenate energy and positions
+        X = np.hstack(
+            [energy_array.reshape(1, -1), positions_array]
+        )  # Ensures (1, num_features)
+        if wbo:
+            # Add Wiberg bond orders if requested
+            bond_orders = np.array(self.bond_orders).flatten()
+            bond_orders = bond_orders.reshape(1, -1)
+            X = np.hstack([X, bond_orders])
+
+        return X
+
 
 class CoordinateBlock:
     """Class to create coordinate block object to abstract the geometry."""
@@ -938,19 +1271,57 @@ class CoordinateBlock:
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
+                logger.debug(f"Line {line} has less than 4 line elements!")
                 continue
 
             if (
                 line_elements[0].upper() == "TV"
             ):  # cases where PBC system occurs in Gaussian
+                logger.debug(f"Skipping line {line} with TV!")
                 continue
 
             try:
-                atomic_number = int(line_elements[0])
-                chemical_symbol = p.to_symbol(atomic_number=atomic_number)
+                logger.debug(
+                    f"Converting atomic number {line_elements[0]} to symbol."
+                )
+                atomic_number = int(
+                    line_elements[0]
+                )  # Could raise ValueError if not an integer
+                chemical_symbol = p.to_symbol(
+                    atomic_number=atomic_number
+                )  # Could raise KeyError or similar
+                logger.debug(
+                    f"Successfully converted {line_elements[0]} to {chemical_symbol}."
+                )
                 symbols.append(chemical_symbol)
             except ValueError:
-                symbols.append(p.to_element(element_str=str(line_elements[0])))
+                # Handle case where line_elements[0] isn’t a valid integer
+                logger.debug(
+                    f"{line_elements[0]} is not a valid atomic number; treating as symbol."
+                )
+                try:
+                    symbols.append(
+                        p.to_element(element_str=str(line_elements[0]))
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to convert {line_elements[0]} to element: {str(e)}"
+                    )
+            except Exception as e:
+                # Catch any other unexpected errors
+                logger.error(
+                    f"Unexpected error processing {line_elements[0]}: {str(e)}"
+                )
+                try:
+                    # Fallback attempt
+                    symbols.append(
+                        p.to_element(element_str=str(line_elements[0]))
+                    )
+                except Exception as fallback_e:
+                    logger.error(
+                        f"Fallback failed for {line_elements[0]}: {str(fallback_e)}"
+                    )
+
         if len(symbols) == 0:
             raise ValueError(
                 f"No symbols found in the coordinate block: {self.coordinate_block}!"
@@ -1074,12 +1445,14 @@ class CoordinateBlock:
 class XTBCoordinateBlock(CoordinateBlock):
     """Class to create coordinate block object to abstract the geometry.
     Corresponds to XTB coordinates."""
+
     pass
 
 
 class SDFCoordinateBlock(CoordinateBlock):
     """Class to create coordinate block object to abstract the geometry.
     Corresponds to SDF coordinates."""
+
     pass
 
 

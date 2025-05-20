@@ -22,6 +22,7 @@ class ORCAJobRunner(JobRunner):
     # combines information about server and program
 
     JOBTYPES = [
+        "orcajob",
         "orcainp",
         "orcaopt",
         "orcamodred",
@@ -34,14 +35,18 @@ class ORCAJobRunner(JobRunner):
     PROGRAM = "orca"
 
     FAKE = False
+    SCRATCH = True
 
     def __init__(self, server, scratch=None, fake=False, **kwargs):
+        if scratch is None:
+            scratch = self.SCRATCH  # default to True for ORCA jobs
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
         logger.debug(f"Jobrunner num gpus: {self.num_gpus}")
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
+        logger.debug(f"Jobrunner scratch: {self.scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -109,10 +114,10 @@ class ORCAJobRunner(JobRunner):
     def _write_input(self, job):
         from chemsmart.jobs.orca.writer import ORCAInputWriter
 
-        input_writer = ORCAInputWriter(job=job, jobrunner=self)
+        input_writer = ORCAInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
-    def _get_command(self):
+    def _get_command(self, job):
         exe = self._get_executable()
         command = f"{exe} {self.job_inputfile}"
         return command
@@ -153,28 +158,21 @@ class ORCAJobRunner(JobRunner):
                     copy(file, job.folder)
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
+            # if job is completed, remove scratch directory
+            # and err files
             if self.scratch:
                 logger.info(
                     f"Removing scratch directory: {self.running_directory}."
                 )
                 rmtree(self.running_directory)
 
+            self._remove_err_files(job)
+
 
 class FakeORCAJobRunner(ORCAJobRunner):
     # creates job runner process
     # combines information about server and program
     FAKE = True
-    JOBTYPES = [
-        "orcainp",
-        "orcaopt",
-        "orcamodred",
-        "orcascan",
-        "orcats",
-        "orcasp",
-        "orcairc",
-    ]
 
     def __init__(self, server, scratch=None, fake=True, **kwargs):
         super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
