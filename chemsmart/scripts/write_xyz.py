@@ -35,11 +35,15 @@ def entry_point(filename, index):
     except FileNotFoundError as err:
         logger.error(err)
         return
+    if index == "-1":
+        suffix = "_last"
+    else:
+        suffix = f"_idx{index}"
 
     file_basename = os.path.splitext(filename)[0]
 
     if len(molecules) == 1:
-        molecules[0].write_xyz(file_basename + "_single.xyz")
+        molecules[0].write_xyz(file_basename + suffix + ".xyz")
     else:
         for i, molecule in enumerate(molecules):
             molecule.write_xyz(file_basename + f"_{i+1}.xyz")
