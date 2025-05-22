@@ -23,10 +23,13 @@ jobs:
           python-version: "3.10"
           environment-file: environment.yml
           activate-environment: chemsmart
-      - name: Install pre-commit
+      - name: Install dependencies
         shell: bash -l {0}
         run: |
+          conda activate chemsmart
+          python -m pip install --upgrade pip
           pip install pre-commit
+          pip install .[dev]  # Install dev dependencies from pyproject.toml
       - name: Run pre-commit
         shell: bash -l {0}
         run: pre-commit run --all-files

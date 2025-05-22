@@ -30,7 +30,7 @@ help:             ## Show the help menu.
 	@if [ "$(OS)" = "Windows" ]; then \
 		type $(MAKEFILE_LIST) | findstr /R "^[a-zA-Z_-]*:.*## " | for /F "tokens=1,2 delims=##" %%a in ('more') do @echo %%a                    %%b; \
 	else \
-		grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'; \
+		grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf="\033[36m%-15s\033[0m %s\n", $$1, $$2}'; \
 	fi
 
 # === Environment Setup ===
@@ -49,10 +49,10 @@ env:  ## Create a Conda environment if USE_CONDA=true.
 .PHONY: conda-env
 conda-env:  ## Create or update the Conda environment using environment.yml.
 	@echo Managing Conda environment 'chemsmart' with environment.yml...
-	@if not exist environment.yml ( \
+	@if [ ! -f environment.yml ]; then \
 		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
-		exit 1 \
-	)
+		exit 1; \
+	fi
 	@if [ "$(OS)" = "Windows" ]; then \
 		conda env list | findstr chemsmart >$(NULL) && ( \
 			$(ECHO) "Updating existing 'chemsmart' environment..."; \
@@ -79,9 +79,9 @@ virtualenv:  ## Create a virtual environment using virtualenv.
 			$(ECHO) "Python 3 is required but not installed. Exiting."; \
 			exit 1 \
 		); \
-		if not exist venv ( \
+		if [ ! -d "venv" ]; then \
 			python3 -m venv venv \
-		); \
+		fi; \
 		call venv\Scripts\activate.bat && pip install -U pip; \
 	else \
 		if ! command -v python3 >$(NULL); then \
@@ -101,42 +101,30 @@ install:          ## Install the project in development mode.
 	$(ENV_PREFIX)pip install -e .[test]
 	$(ENV_PREFIX)pip install types-PyYAML
 
+.PHONY: pre-commit
+pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
+	$(ENV_PREFIX)pre-commit install
+	@echo Pre-commit hooks installed. They will run automatically on each commit.
+
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
 	@echo Running chemsmart configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@if [ "$(OS)" = "Windows" ]; then \
-		set /p gaussian_folder=Enter the path to the Gaussian g16 folder (or press Enter to skip):  & \
-		if defined gaussian_folder ( \
-			$(ECHO) Configuring Gaussian with folder: !gaussian_folder! & \
-			$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "!gaussian_folder!" \
-		) else ( \
-			$(ECHO) Skipping Gaussian configuration. \
-		); \
-		set /p orca_folder=Enter the path to the ORCA folder (or press Enter to skip):  & \
-		if defined orca_folder ( \
-			$(ECHO) Configuring ORCA with folder: !orca_folder! & \
-			$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "!orca_folder!" \
-		) else ( \
-			$(ECHO) Skipping ORCA configuration. \
-		); \
+	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
+	if [ -n "$$gaussian_folder" ]; then \
+		$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config gaussian --folder "$$gaussian_folder"; \
 	else \
-		read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
-		if [ -n "$$gaussian_folder" ]; then \
-			$(ECHO) "Configuring Gaussian with folder: $$gaussian_folder"; \
-			$(ENV_PREFIX)$(CHEMSMART_PATH) config gaussian --folder $$gaussian_folder; \
-		else \
-			$(ECHO) "Skipping Gaussian configuration."; \
-		fi; \
-		read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
-		if [ -n "$$orca_folder" ]; then \
-			$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
-			$(ENV_PREFIX)$(CHEMSMART_PATH) config orca --folder $$orca_folder; \
-		else \
-			$(ECHO) "Skipping ORCA configuration."; \
-		fi; \
+		$(ECHO) "Skipping Gaussian configuration."; \
+	fi; \
+	read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
+	if [ -n "$$orca_folder" ]; then \
+		$(ECHO) "Configuring ORCA with folder: $$orca_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
+	else \
+		$(ECHO) "Skipping ORCA configuration."; \
 	fi
 
 .PHONY: show

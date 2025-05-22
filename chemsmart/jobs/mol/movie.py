@@ -8,12 +8,16 @@ class PyMOLMovieJob(PyMOLJob):
         self,
         molecule,
         label,
+        jobrunner=None,
         overwrite=False,
         **kwargs,
     ):
         super().__init__(
             molecule=molecule,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
         self.overwrite = overwrite
+
+        self.label = f"{label}_movie"

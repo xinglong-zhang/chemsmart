@@ -58,10 +58,10 @@ class Gaussian16Output(GaussianFileMixin):
 
         last_line = contents[-1]
         if "Normal termination of Gaussian" in last_line:
-            logger.info(f"File {self.filename} terminated normally.")
+            logger.debug(f"File {self.filename} terminated normally.")
             return True
 
-        logger.info(f"File {self.filename} has error termination.")
+        logger.debug(f"File {self.filename} has error termination.")
         return False
 
     @property
@@ -189,7 +189,7 @@ class Gaussian16Output(GaussianFileMixin):
                 orientations[1:],
                 orientations_pbc[1:],
             )
-            self.energies_in_eV = self.energies_in_eV[1:]
+            self.energies = self.energies[1:]
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
@@ -198,8 +198,8 @@ class Gaussian16Output(GaussianFileMixin):
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies_in_eV,
-                self.forces_in_eV_per_angstrom,
+                self.energies,
+                self.forces,
                 self.symbols,
                 self.charge,
                 self.multiplicity,
@@ -210,14 +210,14 @@ class Gaussian16Output(GaussianFileMixin):
             # Handle abnormal termination
             num_structures_to_use = min(
                 len(orientations),
-                len(self.energies_in_eV),
-                len(self.forces_in_eV_per_angstrom),
+                len(self.energies),
+                len(self.forces),
             )
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies_in_eV,
-                self.forces_in_eV_per_angstrom,
+                self.energies,
+                self.forces,
                 self.symbols,
                 self.charge,
                 self.multiplicity,
@@ -228,14 +228,14 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
-            logger.info(
+            logger.debug(
                 "Ignoring intermediate geometry optimization for constrained opt."
             )
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.info(
+        logger.debug(
             f"Total number of structures located: {len(all_structures)}"
         )
         return all_structures
@@ -286,7 +286,7 @@ class Gaussian16Output(GaussianFileMixin):
                 i_gaussian = i + 1  # gaussian uses 1-index
                 each_steps = [step for step in steps if step[-1] == i_gaussian]
                 optimized_steps.append(each_steps[-1])
-            print(f"Optimized steps: {optimized_steps}")
+            logger.debug(f"Optimized steps: {optimized_steps}")
             return optimized_steps
         return None
 
@@ -695,6 +695,14 @@ class Gaussian16Output(GaussianFileMixin):
         elif len(self.oniom_energies) != 0:
             return self.oniom_energies
 
+    @cached_property
+    def zero_point_energy(self):
+        """Zero point energy in Hartree."""
+        for line in self.contents:
+            if "Zero-point correction=" in line:
+                return float(line.split()[2])
+        return None
+
     # check for convergence criterion not met (happens for some output files)
     @property
     def convergence_criterion_not_met(self):
@@ -751,7 +759,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def num_forces(self):
-        return len(self.forces_in_eV_per_angstrom)
+        return len(self.forces)
 
     @cached_property
     def input_orientations(self):
@@ -1400,6 +1408,95 @@ class Gaussian16Output(GaussianFileMixin):
     def get_molecule(self, index="-1"):
         index = string2index_1based(index)
         return self.all_structures[index]
+
+    @property
+    def mass(self):
+        for line in self.contents:
+            if "Molecular mass:" and "amu." in line:
+                return float(line.split()[2])
+
+    @cached_property
+    def moments_of_inertia(self):
+        """Obtain moments of inertia from the output file which are in atomic units
+        (amu * Bohr^2) and convert to SI units (kg * m^2)."""
+        moments_of_inertia, _ = (
+            self._get_moments_of_inertia_and_principal_axes()
+        )
+        return moments_of_inertia
+
+    @cached_property
+    def moments_of_inertia_principal_axes(self):
+        _, principal_axes = self._get_moments_of_inertia_and_principal_axes()
+        return principal_axes
+
+    def _get_moments_of_inertia_and_principal_axes(self):
+        """Obtain moments of inertia along principal axes from the output file
+        (amu * Bohr^2 in Gaussian) and convert to units of (amu * Å^2)."""
+        for i, line in enumerate(self.contents):
+            if "Principal axes and moments of inertia" in line:
+                moments_of_inertia = []
+                moments_of_inertia_principal_axes = []
+                for j_line in self.contents[i + 2 :]:
+                    if j_line.startswith("This molecule"):
+                        break
+                    if j_line.startswith("Eigenvalue"):
+                        for eigenval in j_line.split("Eigenvalues --")[
+                            -1
+                        ].split():
+                            try:
+                                moments_of_inertia.append(
+                                    float(eigenval) * units.Bohr**2
+                                )
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not convert '{j_line}' due to "
+                                    f"Gaussian incorrect printing."
+                                )
+                                moments_of_inertia.append(
+                                    np.array([np.inf] * 3)
+                                )
+                    else:
+                        if len(j_line.split()) == 4:
+                            moments_of_inertia_principal_axes.append(
+                                np.array(j_line.split()[1:4], dtype=float)
+                            )
+                moments_of_inertia_principal_axes = np.array(
+                    moments_of_inertia_principal_axes
+                ).transpose()
+                return np.array(moments_of_inertia), np.array(
+                    moments_of_inertia_principal_axes
+                )
+
+    @cached_property
+    def rotational_symmetry_number(self):
+        """Obtain the rotational symmetry number from the output file."""
+        for line in self.contents:
+            if "Rotational symmetry number" in line:
+                return int(line.split()[-1].split(".")[0])
+
+    @cached_property
+    def rotational_temperatures(self):
+        """Rotational temperatures in Kelvin, as a list."""
+        rot_temps = []
+        for line in reversed(self.contents):
+            # take from the end of outputfile
+            if "Rotational temperature" in line and "(Kelvin)" in line:
+                for rot_temp in line.split("(Kelvin)")[-1].split():
+                    # linear molecules may have only one rot temp,
+                    # non-linear has three
+                    rot_temps.append(float(rot_temp))
+                return rot_temps
+
+    @cached_property
+    def rotational_constants_in_Hz(self):
+        """Rotational constants in Hz, as a list."""
+        rot_consts = []
+        for line in reversed(self.contents):
+            # take from the end of outputfile
+            if "Rotational constant" in line and "(GHZ):" in line:
+                for rot_const in line.split("(GHZ):")[-1].split():
+                    rot_consts.append(float(rot_const) * 1e9)
+                return rot_consts
 
     def to_dataset(self, **kwargs):
         """Convert Gaussian .log file to Dataset with all data points taken from the .log file.

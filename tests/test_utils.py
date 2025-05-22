@@ -1,3 +1,5 @@
+import subprocess
+
 import numpy as np
 import pytest
 
@@ -12,6 +14,7 @@ from chemsmart.utils.utils import (
     is_float,
     iterative_compare,
     naturally_sorted,
+    run_command,
     str_indices_range_to_list,
     string2index_1based,
 )
@@ -558,3 +561,85 @@ class TestNaturallySorted:
         input_list = ["zebra", "Apple", "banana"]
         expected = ["Apple", "banana", "zebra"]
         assert naturally_sorted(input_list) == expected
+
+
+class TestRunCommand:
+    """Tests for the run_command utility function."""
+
+    def test_list_command_success(self, mock_popen):
+        """Test running a command provided as a list with successful execution."""
+        mock_process = mock_popen.return_value
+        mock_process.communicate.return_value = ("dir contents\n", "")
+        mock_process.returncode = 0
+
+        result = run_command(["ls", "-l"])
+        assert result == "dir contents"
+        mock_popen.assert_called_once_with(
+            ["ls", "-l"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def test_string_command_success(self, mock_popen):
+        """Test running a command provided as a string with successful execution."""
+        mock_process = mock_popen.return_value
+        mock_process.communicate.return_value = ("dir contents\n", "")
+        mock_process.returncode = 0
+
+        result = run_command("ls -l")
+        assert result == "dir contents"
+        mock_popen.assert_called_once_with(
+            ["ls", "-l"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def test_string_command_with_quotes(self, mock_popen):
+        """Test running a string command with quoted arguments."""
+        mock_process = mock_popen.return_value
+        mock_process.communicate.return_value = ("committed\n", "")
+        mock_process.returncode = 0
+
+        result = run_command("git commit -m 'initial commit'")
+        assert result == "committed"
+        mock_popen.assert_called_once_with(
+            ["git", "commit", "-m", "initial commit"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def test_command_failure(self, mock_popen, capture_log):
+        """Test running a command that fails with non-zero return code."""
+        mock_process = mock_popen.return_value
+        mock_process.communicate.return_value = ("", "command not found")
+        mock_process.returncode = 1
+
+        result = run_command(["invalid_cmd"])
+        assert result is None
+        assert (
+            "Error running ['invalid_cmd']: command not found"
+            in capture_log.text
+        )
+
+    def test_command_exception(self, mock_popen, capture_log):
+        """Test handling an exception during command execution."""
+        mock_popen.side_effect = OSError("Permission denied")
+
+        result = run_command(["ls", "-l"])
+        assert result is None
+        assert (
+            "Exception while running ['ls', '-l']: Permission denied"
+            in capture_log.text
+        )
+
+    def test_invalid_input_type(self, capture_log):
+        """Test handling invalid input type (neither string nor list)."""
+        result = run_command(123)
+        assert result is None
+        assert (
+            "Invalid command type: <class 'int'>. Expected str or list."
+            in capture_log.text
+        )

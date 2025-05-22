@@ -12,10 +12,10 @@ from .opt import GaussianOptJob
 from .qmmm import GaussianQMMMJob
 from .resp import GaussianRESPJob
 from .runner import GaussianJobRunner
-from .saopt import GaussianSAOptJob
 from .scan import GaussianScanJob
 from .singlepoint import GaussianSinglePointJob
 from .tddft import GaussianTDDFTJob
+from .traj import GaussianTrajJob
 from .ts import GaussianTSJob
 from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
@@ -38,7 +38,7 @@ __all__ = [
     "GaussianNCIJob",
     "GaussianRESPJob",
     "GaussianJobRunner",
-    "GaussianSAOptJob",
+    "GaussianTrajJob",
     "GaussianScanJob",
     "GaussianSinglePointJob",
     "GaussianTDDFTJob",
