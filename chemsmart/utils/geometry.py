@@ -124,3 +124,32 @@ def calculate_moments_of_inertia(mass, coords):
     # NumPy’s np.linalg.eigh returns the eigenvectors as columns in a matrix
     # so transpose to row vectors as in ASE
     return moi_tensor, evals, evecs.transpose()
+
+
+def calculate_occupied_volume(coords, radii):
+    """Calculate the occupied volume of a molecule using the Voronoi tessellation method.
+
+    Parameters:
+    - coords (list or np.array): Nx3 array of atomic coordinates.
+    - radii (list or np.array): Atomic radii corresponding to each coordinate.
+
+    Returns:
+    - occupied_volume (float): Total occupied volume of the molecule.
+    """
+    # Convert inputs to NumPy arrays
+    coords = np.array(coords)
+    radii = np.array(radii)
+
+    # Calculate the occupied volume using Voronoi tessellation
+    from scipy.spatial import Voronoi
+
+    vor = Voronoi(coords)
+    occupied_volume = 0.0
+
+    for region in vor.regions:
+        if len(region) > 0 and -1 not in region:
+            vertices = vor.vertices[region]
+            volume = np.abs(np.linalg.det(vertices)) / 6.0
+            occupied_volume += volume
+
+    return occupied_volume

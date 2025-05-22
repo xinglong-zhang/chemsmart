@@ -219,7 +219,15 @@ class Molecule:
     @property
     def is_aromatic(self):
         """Check if molecule is aromatic or not."""
-        return Chem.GetAromaticAtoms(self.to_rdkit()) != []
+        mol = self.to_rdkit()  # Assuming this returns an RDKit molecule object
+        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+
+    @property
+    def occupied_volume(self):
+        """Calculate the occupied volume of the molecule."""
+        from chemsmart.utils.geometry import calculate_occupied_volume
+
+        return calculate_occupied_volume(self.positions, self.masses)
 
     @property
     def is_ring(self):

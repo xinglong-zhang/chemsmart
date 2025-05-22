@@ -12,6 +12,7 @@ from chemsmart.io.gaussian.output import (
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.molecules.structure import Molecule
 
 
 class TestRouteString:
@@ -1437,6 +1438,10 @@ class TestGaussianWBIOutput:
         assert g16_output.standard_orientations is not None
         assert len(g16_output.standard_orientations) == 1
         assert len(g16_output.all_structures) == 1
+
+    def test_molecules(self):
+        mol = Molecule.from_pubchem("241")  # benzene molecule
+        assert mol.is_aromatic
 
 
 class TestGaussianCubeFile:
