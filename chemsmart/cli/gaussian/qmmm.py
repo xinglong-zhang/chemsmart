@@ -128,6 +128,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-b",
     "--bonded-atoms",
+    type=str,
     help="List of tuples of the bonds to be cut, specified by two atomic indexes in each tuple.",
 )
 @click.option(
@@ -167,7 +168,7 @@ def qmmm(
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
-    print("Project settings:", ctx.obj["project_settings"].__dict__)
+    #print("Project settings:", ctx.obj["project_settings"].__dict__)
 
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
@@ -200,6 +201,11 @@ def qmmm(
     qmmm_settings.int_multiplicity = int_multiplicity
     qmmm_settings.model_charge = model_charge
     qmmm_settings.model_multiplicity = model_multiplicity
+    qmmm_settings.high_level_atoms = high_level_atoms
+    qmmm_settings.medium_level_atoms = medium_level_atoms
+    qmmm_settings.low_level_atoms = low_level_atoms
+    qmmm_settings.bonded_atoms = bonded_atoms
+    qmmm_settings.scale_factors = scale_factors
 
     # get molecule
     molecules = ctx.obj["molecules"]

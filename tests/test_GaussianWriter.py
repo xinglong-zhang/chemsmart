@@ -221,6 +221,8 @@ class TestGaussianInputWriter:
         )
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_qmmm.com")
+        with open(g16_file, 'r') as f:
+            print(f.read())
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
 
