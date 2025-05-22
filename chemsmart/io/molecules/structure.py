@@ -461,7 +461,7 @@ class Molecule:
         if len(partition_level_strings) == 0:
             return None
         return partition_level_strings
-      
+
     def get_distance(self, idx1, idx2):
         """Calculate the distance between two points.
         Use 1-based indexing for idx1 and idx2."""
@@ -988,7 +988,7 @@ class Molecule:
 
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of an atom based on its integer index."""
-        atom_index=str(atom_index)
+        atom_index = str(atom_index)
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"

@@ -72,6 +72,7 @@ class GaussianJobSettings(MolecularJobSettings):
         self.dieze_tag = dieze_tag
         self.additional_opt_options_in_route = additional_opt_options_in_route
         self.append_additional_info = append_additional_info
+        self._route_string = None
 
         if gen_genecp_file is not None and "~" in gen_genecp_file:
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
@@ -280,6 +281,10 @@ class GaussianJobSettings(MolecularJobSettings):
             route_string = self._get_route_string_from_jobtype()
         logger.debug(f"Route for settings {self}: {route_string}")
         return route_string
+
+    @route_string.setter
+    def route_string(self, value):
+        self._route_string = value
 
     def _get_route_string_from_user_input(self):
         route_string = self.route_to_be_written
@@ -795,6 +800,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             or self.low_level_basis
         )
         self.title = "Gaussian QM/MM job"
+        self.route_string = self.get_qmmm_level_of_theory_string()
 
         if self.real_charge and self.real_multiplicity:
             # the charge and multiplicity of the real system equal to
@@ -843,36 +849,36 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         return level_of_theory
 
-    def _get_level_of_theory_string(self):
+    def get_qmmm_level_of_theory_string(self):
         """Get ONIOM level of theory for route string."""
-        oniom_string = " oniom"
-        self.high_level_of_theory = self.validate_and_assign_level(
+        oniom_string = "# oniom"
+        high_level_of_theory = self.validate_and_assign_level(
             self.high_level_functional,
             self.high_level_basis,
             self.high_level_force_field,
             level_name="high",
         )
 
-        self.medium_level_of_theory = self.validate_and_assign_level(
+        medium_level_of_theory = self.validate_and_assign_level(
             self.medium_level_functional,
             self.medium_level_basis,
             self.medium_level_force_field,
             level_name="medium",
         )
 
-        self.low_level_of_theory = self.validate_and_assign_level(
+        low_level_of_theory = self.validate_and_assign_level(
             self.low_level_functional,
             self.low_level_basis,
             self.low_level_force_field,
             level_name="low",
         )
 
-        if self.high_level_of_theory is not None:
-            oniom_string += f"({self.high_level_of_theory}"
-        if self.medium_level_of_theory is not None:
-            oniom_string += f":{self.medium_level_of_theory}"
-        if self.low_level_of_theory is not None:
-            oniom_string += f":{self.low_level_of_theory})"
+        if high_level_of_theory is not None:
+            oniom_string += f"({high_level_of_theory}"
+        if medium_level_of_theory is not None:
+            oniom_string += f":{medium_level_of_theory}"
+        if low_level_of_theory is not None:
+            oniom_string += f":{low_level_of_theory})"
 
         return oniom_string
 

@@ -1,12 +1,12 @@
 %chk=gaussian_qmmm_from_log.chk
-%nprocshared=64
+%nprocshared=12
 %mem=400GB
-# freq oniom(MN15/def2svp:PBEPBE/6-31g(d,p)/auto:AMBER=HardFirst)
+# freq oniom(MN15/def2svp:PBE/6-31g(d,p)/auto:AMBER=HardFirst)
 
 Gaussian QM/MM job
 
 0 1 0 1 0 1 0 1 0 1 0 1
-C        0.9200700000    0.5470510000   -0.9928680000 L H 3
+C        0.9200700000    0.5470510000   -0.9928680000 L
 C        1.8779140000    1.0073640000    0.9953310000 L
 C        3.3985290000    1.0381780000   -0.9236710000 H
 H        3.2763280000    1.3302030000   -1.9756010000 L

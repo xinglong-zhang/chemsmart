@@ -168,8 +168,8 @@ def qmmm(
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
-    #print("Project settings:", ctx.obj["project_settings"].__dict__)
-
+    # print("Project settings:", ctx.obj["project_settings"].__dict__)
+    # print("Job settings:", qmmm_settings.__dict__)
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]

@@ -75,6 +75,8 @@ class GaussianInputWriter(InputWriter):
     def _write_route_section(self, f):
         logger.debug("Writing route section.")
         route_string = self.settings.route_string
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            route_string = self.settings._route_string
         # if project settings has heavy elements but molecule has no heavy elements,
         # then replace the basis set with light elements basis
         if self.settings.heavy_elements_basis is not None:

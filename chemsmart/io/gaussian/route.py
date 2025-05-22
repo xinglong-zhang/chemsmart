@@ -157,6 +157,9 @@ class GaussianRoute:
                     functional = func_basis[0]
                     basis = f"{func_basis[1]}/{func_basis[2]}"  # note if the basis set for density fitting is written
                     # as 'def2tzvp fit', then the job fails to run
+                elif "oniom" in each_input:
+                    functional = func_basis[0].replace("oniom(", "")
+                    basis = func_basis[1].split(":")[0]
             else:  # '/' not in route
                 if any(
                     functional in each_input
