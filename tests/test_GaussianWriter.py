@@ -18,7 +18,6 @@ from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.utils import cmp_with_ignore
 from tests.conftest import (
     gaussian_yaml_settings_qmmm_project_name,
-    jobrunner_no_scratch,
 )
 
 
@@ -195,7 +194,6 @@ class TestGaussianInputWriter:
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_qmmm_project_name,
-        jobrunner_no_scratch,
         gaussian_written_qmmm_file,
     ):
         project_settings = GaussianProjectSettings.from_project(
@@ -206,6 +204,7 @@ class TestGaussianInputWriter:
         qmmm_settings.multiplicity = 1
         qmmm_settings.real_charge = 0
         qmmm_settings.real_multiplicity = 1
+        qmmm_settings.high_level_atoms = [1,2,3]
         job = GaussianQMMMJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=qmmm_settings,
@@ -213,21 +212,20 @@ class TestGaussianInputWriter:
         )
         assert isinstance(job, GaussianQMMMJob)
         g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
+            job=job
         )
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_qmmm.com")
-        with open(g16_file, 'r') as f:
-            print(f.read())
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_qmmm_file, shallow=False)
+
 
     def test_write_qmmm_input_from_logfile(
         self,
         tmpdir,
         gaussian_yaml_settings_qmmm_project_name,
         gaussian_singlet_opt_outfile,
-        jobrunner_no_scratch,
+        gaussian_jobrunner_no_scratch,
         gaussian_written_qmmm_log_file,
     ):
         """Taking the Gaussian nhc_neutral_singlet.log output and write qmmm .com"""
@@ -254,7 +252,7 @@ class TestGaussianInputWriter:
         )
         assert isinstance(job, GaussianQMMMJob)
         g16_writer = GaussianInputWriter(
-            job=job, jobrunner=jobrunner_no_scratch
+            job=job
         )
         # write input file
         g16_writer.write(target_directory=tmpdir)

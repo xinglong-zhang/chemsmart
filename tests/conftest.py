@@ -5,7 +5,7 @@ import tempfile
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
-from pytest_mock import MockerFixture
+# from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
