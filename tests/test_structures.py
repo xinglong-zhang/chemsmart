@@ -105,6 +105,7 @@ class TestStructures:
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
         assert molecule.is_chiral
+        assert molecule.is_aromatic
 
         # test conversion of molecule to RDKit molecule
         rdkit_mol = molecule.to_rdkit()

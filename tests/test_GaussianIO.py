@@ -441,6 +441,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.molecule.num_atoms == 40
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116
         assert g16_output.alpha_occ_eigenvalues[0] == -25.29096 * units.Hartree
