@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 @gaussian.command("qmmm", cls=MyCommand)
 @click_job_options
 @click.option(
+    "-j",
+    "--jobtype",
+    type=str,
+    help="ONIOM supported job types, please choose from'sp''opt''freq''ts''irc'.",
+)
+@click.option(
     "-hx",
     "--high-level-functional",
     type=str,
@@ -141,6 +147,7 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def qmmm(
     ctx,
+    jobtype,
     high_level_functional,
     high_level_basis,
     high_level_force_field,
@@ -186,6 +193,7 @@ def qmmm(
     qmmm_settings = GaussianQMMMJobSettings(**qmmm_settings.__dict__)
 
     # populate cli options
+    qmmm_settings.jobtype = jobtype
     qmmm_settings.high_level_functional = high_level_functional
     qmmm_settings.high_level_basis = high_level_basis
     qmmm_settings.high_level_force_field = high_level_force_field
@@ -228,6 +236,8 @@ def qmmm(
     if scale_factors is not None:
         scale_factors = ast.literal_eval(scale_factors)
         molecule.scale_factors = scale_factors
+
+    print("Job settings:", qmmm_settings.__dict__)
 
     from chemsmart.jobs.gaussian.qmmm import GaussianQMMMJob
 

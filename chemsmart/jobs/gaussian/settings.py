@@ -714,6 +714,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
     def __init__(
         self,
+        jobtype=None,
         high_level_functional=None,
         high_level_basis=None,
         high_level_force_field=None,
@@ -738,6 +739,12 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     ):
         """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
         Args:
+            job_type: different calculations support by Gaussian ONIOM, including:
+                1.Single-point energy;
+                2.Geometry optimization;
+                3.Frequency analysis;
+                4.Transition state search (QST2/QST3)
+                5.IRC calculations
             high_level_functional/medium_level_functional/low_level_functional: Functional for high/medium/low level of theory
             high_level_basis/medium_level_basis/low_level_basis: Basis set for high/medium/low level of theory
             high_level_force_field/medium_level_force_field/low_level_force_field: Force field for high/medium/low level of theory (if specified)
@@ -765,6 +772,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             ONIOM calculation, both the high- and medium-layer will use the second scale factor.
         """
         super().__init__(**kwargs)
+        self.jobtype = jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
         self.high_level_force_field = high_level_force_field
@@ -800,7 +808,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             or self.low_level_basis
         )
         self.title = "Gaussian QM/MM job"
-        self.route_string = self.get_qmmm_level_of_theory_string()
+        self._route_string = self.get_qmmm_level_of_theory_string()
 
         if self.real_charge and self.real_multiplicity:
             # the charge and multiplicity of the real system equal to
@@ -852,6 +860,11 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     def get_qmmm_level_of_theory_string(self):
         """Get ONIOM level of theory for route string."""
         oniom_string = "# oniom"
+        assert (
+            self.jobtype is not None
+        ), f"Job type must be specified for ONIOM job!"
+        jobtype = self.jobtype.lower()
+        jobtype = self.jobtype
         high_level_of_theory = self.validate_and_assign_level(
             self.high_level_functional,
             self.high_level_basis,
@@ -879,7 +892,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             oniom_string += f":{medium_level_of_theory}"
         if low_level_of_theory is not None:
             oniom_string += f":{low_level_of_theory})"
-
+        if jobtype == "sp" or jobtype == "opt" or jobtype == "freq":
+            oniom_string += f" {jobtype}"
+        # oniom_string += f" {jobtype}"
         return oniom_string
 
     def _get_charge_and_multiplicity(self):
