@@ -118,9 +118,12 @@ class GaussianJobSettings(MolecularJobSettings):
             other_dict = {
                 k: other_dict[k] for k in keywords if k in other_dict
             }
-        # Update self with other
+
+        # Update self with other only if other value is not None
         merged_dict = self.__dict__.copy()
-        merged_dict.update(other_dict)
+        for key, value in other_dict.items():
+            if value is not None:
+                merged_dict[key] = value
         return type(self)(**merged_dict)
 
     def copy(self):
@@ -1015,3 +1018,28 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 updated_list.append(str(charge_and_multiplicity))
             charge_and_multiplicity = " ".join(updated_list)
         return charge_and_multiplicity
+
+    @classmethod
+    def default(cls):
+        return cls(
+            high_level_functional=None,
+            high_level_basis=None,
+            high_level_force_field=None,
+            medium_level_functional=None,
+            medium_level_basis=None,
+            medium_level_force_field=None,
+            low_level_functional=None,
+            low_level_basis=None,
+            low_level_force_field=None,
+            real_charge=None,
+            real_multiplicity=None,
+            int_charge=None,
+            int_multiplicity=None,
+            model_charge=None,
+            model_multiplicity=None,
+            high_level_atoms=None,
+            medium_level_atoms=None,
+            low_level_atoms=None,
+            bonded_atoms=None,
+            scale_factors=None,
+        )

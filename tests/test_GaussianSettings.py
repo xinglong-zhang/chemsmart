@@ -36,6 +36,56 @@ class TestGaussianJobSettings:
         assert merged_settings.charge == 0
         assert merged_settings.multiplicity == 1
 
+    def test_merge_other_settings_with_none(self):
+        settings1 = GaussianJobSettings.default()
+        settings1.charge = 0
+        settings1.multiplicity = 1
+        settings1.solvent_model = "smd"
+
+        settings2 = GaussianJobSettings.default()
+        settings2.charge = 1
+        settings2.multiplicity = None
+        settings2.solvent_model = None
+
+        merged_settings = settings1.merge(
+            settings2, keywords=("charge", "multiplicity")
+        )
+        assert merged_settings.charge == 1
+        assert merged_settings.multiplicity == 1
+        assert merged_settings.solvent_model == "smd"
+
+    def test_merge_other_settings_with_none2_qmmm(self):
+        settings1 = GaussianQMMMJobSettings.default()
+        settings1.charge = 0
+        settings1.multiplicity = 1
+        settings1.solvent_model = "smd"
+        settings1.high_level_functional = "b3lyp"
+        settings1.high_level_basis = "6-31g(d)"
+        settings1.medium_level_functional = "b3lyp"
+        settings1.medium_level_basis = "6-31g(d)"
+        settings1.low_level_force_field = "uff"
+
+        settings2 = GaussianQMMMJobSettings.default()
+        settings2.charge = 1
+        settings2.multiplicity = None
+        settings2.solvent_model = None
+        settings2.high_level_functional = "mn15"
+        settings2.high_level_basis = "def2svp"
+
+        keywords = (
+            "charge",
+            "multiplicity",
+            "title",
+        )
+        keywords += ("high_level_functional", "high_level_basis")
+        merged_settings = settings1.merge(settings2, keywords=keywords)
+
+        assert merged_settings.charge == 1
+        assert merged_settings.multiplicity == 1
+        assert merged_settings.solvent_model == "smd"
+        assert merged_settings.high_level_functional == "mn15"
+        assert merged_settings.high_level_basis == "def2svp"
+
     def test_get_settings_from_yaml_gas_solv(
         self, gaussian_yaml_settings_gas_solv
     ):

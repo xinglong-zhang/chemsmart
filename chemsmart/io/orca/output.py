@@ -3,7 +3,6 @@ import math
 import os
 import re
 from functools import cached_property
-from xml.sax.handler import property_dom_node
 
 import numpy as np
 from ase import units
@@ -2200,7 +2199,6 @@ class ORCAQMMMFile(ORCAOutput):
         super().__init__(filename)
         self.filename = filename
 
-
     @property
     def multiscale_model(self):
         pattern = re.compile(r"Multiscale model\s+\.{3}\s+(?P<model>\S+)")
@@ -2296,9 +2294,11 @@ class ORCAQMMMFile(ORCAOutput):
             match = pattern.search(line)
             if match:
                 reading_qm_lines = True
-                qm_atom_list= re.sub(
-                    r"^QM1 Subsystem\s+\.\.\.", "", line
-                ).strip().split()
+                qm_atom_list = (
+                    re.sub(r"^QM1 Subsystem\s+\.\.\.", "", line)
+                    .strip()
+                    .split()
+                )
                 for atom in qm_atom_list:
                     qm_region.append(int(atom))
             elif reading_qm_lines == True:
@@ -2307,7 +2307,7 @@ class ORCAQMMMFile(ORCAOutput):
                 qm_atom_list = line.split()
                 for atom in qm_atom_list:
                     qm_region.append(int(atom))
-        #convert to 1-indexed
+        # convert to 1-indexed
         qm_region = list(map(lambda x: x + 1, qm_region))
         qm_region = get_range_from_list(qm_region)
         return qm_region
@@ -2338,7 +2338,9 @@ class ORCAQMMMFile(ORCAOutput):
         qm2_energy_of_large_system = qm2_energy_of_small_system = (
             qm_qm2_energy
         ) = qm_energy = None
-        pattern=re.compile(r"FINAL SINGLE POINT ENERGY(?:\s+\([^)]+\))?\s+(?P<energy>-?\d+\.\d+)")
+        pattern = re.compile(
+            r"FINAL SINGLE POINT ENERGY(?:\s+\([^)]+\))?\s+(?P<energy>-?\d+\.\d+)"
+        )
         # pattern = re.compile(r"FINAL SINGLE POINT ENERGY\s+\([^)]+\)\s+(?P<energy>-?\d+\.\d+)")
         for line in self.contents:
             match = pattern.search(line)
@@ -2385,22 +2387,32 @@ class ORCAQMMMFile(ORCAOutput):
         )
 
     def _get_point_charge_treatment(self):
-        pattern1 = re.compile(r"Point charges in QM calc\. from MM atoms\s*\.{3}\s*(\d+)")
+        pattern1 = re.compile(
+            r"Point charges in QM calc\. from MM atoms\s*\.{3}\s*(\d+)"
+        )
         pattern2 = re.compile(r"from charge shift scheme\s*\.{3}\s*(\d+)")
         point_charges_treatment = []
         for line in self.contents:
             match1 = pattern1.search(line)
             match2 = pattern2.search(line)
             if match1 is not None:
-                point_charges_in_qm_from_mm = int(re.sub(
-                    r"Point charges in QM calc\. from MM atoms\s*\.{3}\s", "", line
-                ).strip())
+                point_charges_in_qm_from_mm = int(
+                    re.sub(
+                        r"Point charges in QM calc\. from MM atoms\s*\.{3}\s",
+                        "",
+                        line,
+                    ).strip()
+                )
                 point_charges_treatment.append(point_charges_in_qm_from_mm)
             if match2 is not None:
-                point_charges_in_qm_from_charge_shift = int(re.sub(
-                    r"from charge shift scheme\s*\.{3}\s", "", line
-                ).strip())
-                point_charges_treatment.append(point_charges_in_qm_from_charge_shift)
+                point_charges_in_qm_from_charge_shift = int(
+                    re.sub(
+                        r"from charge shift scheme\s*\.{3}\s", "", line
+                    ).strip()
+                )
+                point_charges_treatment.append(
+                    point_charges_in_qm_from_charge_shift
+                )
         return point_charges_treatment[0], point_charges_treatment[1]
 
     def _get_partition_system_sizes(self):
