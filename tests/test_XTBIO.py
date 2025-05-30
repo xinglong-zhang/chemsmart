@@ -45,6 +45,9 @@ class TestXTBOutput:
         assert xtb_output.s6_in_model_hessian is None
         assert xtb_output.homo_energy == -12.1467
         assert xtb_output.lumo_energy == 2.2442
+        assert xtb_output.c6_coefficient == 44.535326
+        assert xtb_output.c8_coefficient == 795.739567
+        assert xtb_output.alpha_coefficient == 9.429122
         assert xtb_output.total_energy_without_gsasa_hb is None
         assert xtb_output.scc_energy == -5.104925504312
         assert xtb_output.isotropic_es == 0.031459394051
@@ -413,3 +416,39 @@ class TestXTBOutput:
         assert xtb_output.scc_accuracy == 0.3
         assert xtb_output.hessian_scale_factor == 1.0
         assert xtb_output.rms_gradient == 0.00055
+
+    def test_gei_output(self, xtb_gei_outfile):
+        assert os.path.exists(xtb_gei_outfile)
+        xtb_output = XTBOutput(filename=xtb_gei_outfile)
+        assert xtb_output.normal_termination
+        assert xtb_output.vertical_ionization_potentials == 9.9124
+        assert xtb_output.vertical_electron_affinities == -0.6583
+        assert xtb_output.global_electrophilicity_index == 1.0127
+        assert xtb_output.total_energy == -16.575987464893
+        assert xtb_output.gradient_norm == 0.122921601494
+        assert xtb_output.fmo_gap == 0.113873741781
+
+    def test_fukui_output(self, xtb_fukui_outfile):
+        assert os.path.exists(xtb_fukui_outfile)
+        xtb_output = XTBOutput(filename=xtb_fukui_outfile)
+        assert xtb_output.normal_termination
+        assert xtb_output.fukui_index == [
+            '#        f(+)     f(-)     f(0)',
+            '1N       0.172    0.257    0.215',
+            '2C       0.089    0.029    0.059',
+            '3C       0.051    0.046    0.049',
+            '4C       0.051    0.046    0.049',
+            '5C       0.042    0.012    0.027',
+            '6C       0.042    0.012    0.027',
+            '7H       0.115    0.134    0.125',
+            '8H       0.107    0.110    0.109',
+            '9H       0.107    0.110    0.109',
+            '10H       0.111    0.122    0.116',
+            '11H       0.111    0.122    0.116',
+        ]
+        assert xtb_output.c6_coefficient == 1554.631149
+        assert xtb_output.c8_coefficient == 37458.566172
+        assert xtb_output.alpha_coefficient == 63.285352
+        assert xtb_output.total_energy == -16.150108254157
+        assert xtb_output.gradient_norm == 0.000498698684
+        assert xtb_output.fmo_gap == 3.211959041276
