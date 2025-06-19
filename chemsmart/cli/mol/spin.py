@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_pymol_visualization_options
 @click.pass_context
-def mo(
+def spin(
     ctx,
     file,
     style,
