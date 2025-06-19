@@ -91,6 +91,23 @@ class PyMOLJobRunner(JobRunner):
             shutil.copy(source_style_file, dest_style_file)
         return dest_style_file
 
+    def _generate_fchk_file(self, job):
+        """Generate the fchk file from the chk file."""
+        assert os.path.exists(
+            os.path.join(job.folder, f"{self.job_basename}.chk")
+        ), ".chk file is required but not found!"
+
+        gaussian_exe = self._get_gaussian_executable(job)
+        if os.path.exists(
+            os.path.join(job.folder, f"{self.job_basename}.fchk")
+        ):
+            pass
+        else:
+            # generate .fchk file from .chk file
+            logger.info(f"Generating .fchk file from {self.job_basename}.chk")
+            fchk_command = f"{gaussian_exe}/formchk {self.job_basename}.chk"
+            run_command(fchk_command)
+
     def _write_input(self, job):
         # write to .xyz file if the supplied file is not .xyz
         if not os.path.exists(job.inputfile):
@@ -489,23 +506,6 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         self._generate_mo_cube_file(job)
         self._write_molecular_orbital_pml(job)
 
-    def _generate_fchk_file(self, job):
-        """Generate the fchk file from the chk file."""
-        assert os.path.exists(
-            os.path.join(job.folder, f"{self.job_basename}.chk")
-        ), ".chk file is required but not found!"
-
-        gaussian_exe = self._get_gaussian_executable(job)
-        if os.path.exists(
-            os.path.join(job.folder, f"{self.job_basename}.fchk")
-        ):
-            pass
-        else:
-            # generate .fchk file from .chk file
-            logger.info(f"Generating .fchk file from {self.job_basename}.chk")
-            fchk_command = f"{gaussian_exe}/formchk {self.job_basename}.chk"
-            run_command(fchk_command)
-
     def _generate_mo_cube_file(self, job):
         """Generate the MO cube file."""
         gaussian_exe = self._get_gaussian_executable(job)
@@ -597,6 +597,81 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _call_pml(self, job, command):
         """Call the PML file for visualization."""
         pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
+        command += f"; load {quote_path(pml_file)}"
+        return command
+
+    def _save_pse_command(self, job, command):
+        # Append the final PyMOL commands, quoting the output file path
+        command += f"; save {quote_path(job.mo_basename)}.pse"
+
+        return command
+
+
+class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
+    JOBTYPES = ["pymol_spin"]
+
+    def _get_gaussian_executable(self, job):
+        """Get the Gaussian executable for the job."""
+        logger.info(
+            f"Obtaining Gaussian executable from server: {self.server.name}"
+        )
+        gaussian_exe = GaussianExecutable.from_servername(self.server.name)
+        gaussian_exe_path = gaussian_exe.executable_folder
+        return gaussian_exe_path
+
+    def _prerun(self, job):
+        self._assign_variables(job)
+        self._generate_fchk_file(job)
+        self._generate_spin_cube_file(job)
+        self._write_spin_density_pml(job)
+
+    def _generate_spin_cube_file(self, job):
+        """Generate the spin density cube file."""
+        gaussian_exe = self._get_gaussian_executable(job)
+
+        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {self.job_basename}.fchk {self.job_basename}_spin.cube {job.npts}"
+        run_command(cubegen_command)
+
+    def _write_spin_density_pml(self, job, isosurface=0.05, transparency=0.2):
+        """Write the .pml file based on the .cube file"""
+
+        pml_file = os.path.join(job.folder, f"{job.spin_basename}.pml")
+        if not os.path.exists(pml_file):
+            with open(pml_file, "w") as f:
+                f.write(f"load {job.spin_basename}.cube\n")
+                f.write(
+                    f"isosurface pos_iso_spin, {job.spin_basename}, {isosurface}\n"
+                )
+                f.write(
+                    f"isosurface neg_iso_spin, {job.spin_basename}, {-isosurface}\n"
+                )
+                f.write("print(pos_iso_spin)\n")
+                f.write("print(neg_iso_spin)\n")
+                f.write(
+                    f"ramp_new ramp, {job.spin_basename}, [{-isosurface}\,{isosurface}], [red, blue]\n"
+                )
+                f.write("set surface_color, ramp, pos_iso_spin\n")
+                f.write("set surface_color, ramp, neg_iso_spin\n")
+                f.write(f"set transparency, {transparency}\n")
+                f.write("set surface_quality, 3")
+                f.write("set antialias, 3")
+                f.write("set ray_trace_mode, 1")
+            logger.info(f"Wrote PML file: {pml_file}")
+
+    def _job_specific_commands(self, job, command):
+        """Job specific commands."""
+        command = self._hide_labels(job, command)
+        command = self._call_pml(job, command)
+        command = self._add_ray_command(job, command)
+        return command
+
+    def _offset_labels(self, job, command):
+        # not needed for MO visualization
+        return command
+
+    def _call_pml(self, job, command):
+        """Call the PML file for visualization."""
+        pml_file = os.path.join(job.folder, f"{job.spin_basename}.pml")
         command += f"; load {quote_path(pml_file)}"
         return command
 
