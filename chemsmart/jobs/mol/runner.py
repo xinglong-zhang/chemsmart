@@ -677,6 +677,6 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
 
     def _save_pse_command(self, job, command):
         # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.mo_basename)}.pse"
+        command += f"; save {quote_path(job.spin_basename)}.pse"
 
         return command
