@@ -645,8 +645,6 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
                 f.write(
                     f"isosurface neg_iso_spin, {job.spin_basename}, {-isosurface}\n"
                 )
-                f.write("print(pos_iso_spin)\n")
-                f.write("print(neg_iso_spin)\n")
                 f.write(
                     f"ramp_new ramp, {job.spin_basename}, [{-isosurface}\,{isosurface}], [red, blue]\n"
                 )
