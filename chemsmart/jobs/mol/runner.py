@@ -653,9 +653,9 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
                 f.write("set surface_color, ramp, pos_iso_spin\n")
                 f.write("set surface_color, ramp, neg_iso_spin\n")
                 f.write(f"set transparency, {transparency}\n")
-                f.write("set surface_quality, 3")
-                f.write("set antialias, 3")
-                f.write("set ray_trace_mode, 1")
+                f.write("set surface_quality, 3\n")
+                f.write("set antialias, 3\n")
+                f.write("set ray_trace_mode, 1\n")
             logger.info(f"Wrote PML file: {pml_file}")
 
     def _job_specific_commands(self, job, command):
