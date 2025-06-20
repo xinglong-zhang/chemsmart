@@ -93,9 +93,9 @@ class PyMOLJobRunner(JobRunner):
 
     def _generate_fchk_file(self, job):
         """Generate the fchk file from the chk file."""
-        assert os.path.exists(
-            os.path.join(job.folder, f"{self.job_basename}.chk")
-        ), ".chk file is required but not found!"
+        chk_file_path = os.path.join(job.folder, f"{self.job_basename}.chk")
+        if not os.path.exists(chk_file_path):
+            raise FileNotFoundError(f".chk file is required but not found at {chk_file_path}!")
 
         gaussian_exe = self._get_gaussian_executable(job)
         if os.path.exists(
