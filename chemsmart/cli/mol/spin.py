@@ -31,8 +31,9 @@ def spin(
 ):
     """CLI for generating spin density and saving as pse file.
     Example usage:
-        chemsmart run --debug mol -f phenyldioxazolone.com spin
-    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_spin.pse
+        chemsmart run --debug mol -f phenyldioxazolone.log spin
+    This visualizes phenyldioxazolone.log file and saves as phenyldioxazolone_spin.pse.
+    Requires phenyldioxazolone.chk be present together with phenyldioxazolone.log
     """
 
     # get molecule
