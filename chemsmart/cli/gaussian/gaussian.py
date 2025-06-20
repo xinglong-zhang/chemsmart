@@ -195,7 +195,7 @@ def click_gaussian_solvent_options(f):
         default=None,
         help="Additional solvent options in scrf=() route. "
         "E.g., `iterative` in scrf=(smd,water,iterative) via"
-        "chemsmart sub -s xz gaussian -p dnam -f xtbopt.xyz  -c 0 -m 2 -a D_in_S_intercalate_c3_scrf_iter sp -so iterative",
+        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp -so iterative",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
