@@ -1,14 +1,14 @@
 import logging
 
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.mixins import FolderMixin
+from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
 
 
-class ORCAInpFolder(FolderMixin):
+class ORCAInpFolder(BaseFolder):
     """Input folder containing all ORCA input files for postprocessing."""
 
     def __init__(self, folder):
@@ -18,17 +18,17 @@ class ORCAInpFolder(FolderMixin):
     @property
     def all_inpfiles(self):
         """Get all input files in the folder."""
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="inp"
         )
 
     @property
     def all_inpfiles_in_current_folder(self):
         """Get all input files in the folder."""
-        return self.get_all_files_in_current_folder(filetype="inp")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="inp")
 
 
-class ORCAOutFolder(FolderMixin):
+class ORCAOutFolder(BaseFolder):
     """Log folder containing all Gaussian log files for postprocessing."""
 
     def __init__(self, folder):
@@ -38,14 +38,14 @@ class ORCAOutFolder(FolderMixin):
     @property
     def all_outfiles(self):
         """Get all log files in the folder, including subfolders."""
-        return self.get_all_files_in_current_folder_and_subfolders(
+        return self.get_all_files_in_current_folder_and_subfolders_by_suffix(
             filetype="out"
         )
 
     @property
     def all_logfiles_in_current_folder(self):
         """Get all log files in the folder."""
-        return self.get_all_files_in_current_folder(filetype="out")
+        return self.get_all_files_in_current_folder_by_suffix(filetype="out")
 
     @property
     def total_service_units(self):

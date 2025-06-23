@@ -5,6 +5,7 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -13,24 +14,28 @@ logger = logging.getLogger(__name__)
 class GaussianJob(Job):
     PROGRAM = "gaussian"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(molecule=molecule, label=label, **kwargs)
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
+        super().__init__(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )
+
         if not isinstance(settings, GaussianJobSettings):
             raise ValueError(
                 f"Settings must be instance of {GaussianJobSettings} for {self}, but is {settings} instead!"
             )
+
         if not isinstance(molecule, Molecule):
             raise ValueError(
                 f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
             )
-        molecule = molecule.copy()
-        settings = settings.copy()
+
+        self.molecule = molecule.copy() if molecule is not None else None
+        self.settings = settings.copy()
 
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
-
-        self.settings = settings
-        self.molecule = molecule
         self.label = label
 
     @classmethod
@@ -79,8 +84,12 @@ class GaussianJob(Job):
 
             return Gaussian16OutputWithPBC(filename=self.outputfile)
 
-    def _run(self, jobrunner):
-        jobrunner.run(self)
+    def _run(self, **kwargs):
+        """Run the job using the assigned jobrunner."""
+        logger.info(
+            f"Running GaussianJob {self} with jobrunner {self.jobrunner}"
+        )
+        self.jobrunner.run(self, **kwargs)
 
     @classmethod
     def from_filename(
@@ -89,66 +98,163 @@ class GaussianJob(Job):
         settings=None,
         index="-1",
         label=None,
+        jobrunner=None,
         keywords=("charge", "multiplicity"),
         **kwargs,
     ):
-        # get all molecule in a file and give the result as a list
-        logger.info(f"Reading images from file: {filename}.")
+        """Create a GaussianJob from a file containing molecule data."""
+        logger.info(f"Reading molecules from file: {filename}.")
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
         )
-        logger.info(f"Num of images read: {len(molecules)}.")
+        logger.info(f"Num of molecules read: {len(molecules)}.")
         molecules = molecules[string2index_1based(index)]
 
-        # only supply last molecule in some jobs; but require all molecule in others e.g., dias job
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecule=molecules,
+                    settings=settings,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
+
         return cls(
             molecule=molecules,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
 
     @classmethod
-    def from_pubchem(cls, identifier, settings=None, label=None, **kwargs):
+    def from_pubchem(
+        cls, identifier, settings=None, label=None, jobrunner=None, **kwargs
+    ):
+        """Create a GaussianJob from a PubChem identifier."""
         molecules = Molecule.from_pubchem(identifier=identifier)
+
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecule=molecules,
+                    settings=settings,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
+
         return cls(
             molecule=molecules,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
 
     @classmethod
     def from_jobtype(
-        cls, jobtype, molecule, settings=None, label=None, **kwargs
+        cls,
+        jobtype,
+        molecule,
+        settings=None,
+        label=None,
+        jobrunner=None,
+        **kwargs,
     ):
+        """Create a GaussianJob based on the specified job type."""
         if jobtype.lower() == "opt":
             from chemsmart.jobs.gaussian.opt import GaussianOptJob
 
             logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
 
+            # Create jobrunner if not provided
+            if jobrunner is None:
+                jobrunner = JobRunner.from_job(
+                    GaussianOptJob(
+                        molecule=molecule,
+                        settings=settings,
+                        label=label,
+                        jobrunner=None,
+                        **kwargs,
+                    ),
+                    server=kwargs.get("server"),
+                    scratch=kwargs.get("scratch"),
+                    fake=kwargs.get("fake", False),
+                    **kwargs,
+                )
+
             return GaussianOptJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
+                jobrunner=jobrunner,
                 **kwargs,
             )
+
         elif jobtype.lower() == "com":
+            # Create jobrunner if not provided
+            if jobrunner is None:
+                jobrunner = JobRunner.from_job(
+                    GaussianComJob(
+                        molecule=molecule,
+                        settings=settings,
+                        label=label,
+                        jobrunner=None,
+                        **kwargs,
+                    ),
+                    server=kwargs.get("server"),
+                    scratch=kwargs.get("scratch"),
+                    fake=kwargs.get("fake", False),
+                    **kwargs,
+                )
+
             return GaussianComJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
+                jobrunner=jobrunner,
                 **kwargs,
             )
         elif jobtype.lower() == "g16":
-            return GaussianGeneralJob(
-                molecule=molecule,
-                settings=settings,
-                label=label,
-                **kwargs,
-            )
-        else:
-            raise ValueError(f"Invalid job type: {jobtype}")
+            # Create jobrunner if not provided
+            if jobrunner is None:
+                jobrunner = JobRunner.from_job(
+                    GaussianGeneralJob(
+                        molecule=molecule,
+                        settings=settings,
+                        label=label,
+                        jobrunner=None,
+                        **kwargs,
+                    ),
+                    server=kwargs.get("server"),
+                    scratch=kwargs.get("scratch"),
+                    fake=kwargs.get("fake", False),
+                    **kwargs,
+                )
+
+                return GaussianGeneralJob(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                    jobrunner=jobrunner,
+                    **kwargs,
+                )
+            else:
+                raise ValueError(f"Invalid job type: {jobtype}")
 
 
 class GaussianComJob(GaussianJob):
@@ -156,18 +262,27 @@ class GaussianComJob(GaussianJob):
 
     TYPE = "g16com"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
         super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
         )
 
     @classmethod
-    def from_filename(cls, filename, settings=None, label=None, **kwargs):
+    def from_filename(
+        cls, filename, settings=None, label=None, jobrunner=None, **kwargs
+    ):
+        """Create a GaussianComJob from a .com file."""
         # job.label as the filename (without extension) used
         if label is None:
             label = os.path.splitext(os.path.basename(filename))[0]
 
-        # set file
+        # get input lines
         from chemsmart.io.gaussian.input import Gaussian16Input
 
         g16com_file = Gaussian16Input(filename=filename)
@@ -185,19 +300,47 @@ class GaussianComJob(GaussianJob):
         )
         logger.debug(f"Writing input lines: \n{input_lines}")
 
-        return cls(molecule=None, settings=settings, label=label, **kwargs)
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecule=None,
+                    settings=settings,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
+
+        return cls(
+            molecule=None,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )
 
 
 class GaussianGeneralJob(GaussianJob):
-    """GaussianGeneralJob subclasses GaussianJob, this is needed to prevent recursive loop.
-
-    For example, recursive loop occurs in class GaussianCrestOptJob(GaussianJob) that
-    subclasses GaussianJob and calls and runs GaussianGeneralJob.
+    """GaussianGeneralJob subclasses GaussianJob, this is needed
+    to prevent recursive loop.
+    For example, recursive loop occurs in class GaussianCrestOptJob(GaussianJob)
+    that subclasses GaussianJob and calls and runs GaussianGeneralJob.
     """
 
     TYPE = "g16"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
         super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
         )

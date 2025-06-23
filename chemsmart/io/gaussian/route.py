@@ -69,6 +69,10 @@ class GaussianRoute:
         return self.get_solvent_id()
 
     @property
+    def additional_solvent_options(self):
+        return self.get_additional_solvent_options()
+
+    @property
     def solv(self):
         return self.solvent_model is not None and self.solvent_id is not None
 
@@ -97,6 +101,7 @@ class GaussianRoute:
             "opt" in self.route_string
             and "ts" not in self.route_string
             and "modred" not in self.route_string
+            and "stable=opt" not in self.route_string
         ):
             job_type = "opt"
         elif "opt=modred" in self.route_string:
@@ -112,6 +117,10 @@ class GaussianRoute:
             in self.route_string
         ):
             job_type = "resp"
+        elif "stable=opt" in self.route_string:
+            job_type = (
+                "link"  # so far only using stable=opt to determine link job
+            )
         else:
             job_type = "sp"
         return job_type
@@ -255,7 +264,49 @@ class GaussianRoute:
                             .split(")")[0]
                         )
                         if "read" in each_input:
+                            # include read in solvent_id
                             solvent_id = f"{solvent_id},read"
                         return solvent_id
             return None
+        return None
+
+    def get_additional_solvent_options(self):
+        if "scrf" in self.route_string:
+            scrf_string = ""
+            for each_input in self.route_inputs:
+                if "scrf" in each_input:
+                    scrf_string = each_input
+                    scrf_line = scrf_string.split("(")[-1].split(")")[0]
+                    scrf_line_elements = [
+                        e.strip() for e in scrf_line.split(",")
+                    ]
+                    if len(scrf_line_elements) <= 2:
+                        return None
+
+                    # Identify elements to remove
+                    elements_to_remove = set()
+
+                    # Remove solvent model and solvent id
+                    for element in scrf_line_elements:
+                        if element in gaussian_solvation_models:
+                            elements_to_remove.add(element)
+                        if element.startswith(
+                            "solvent="
+                        ):  # Check if it's the solvent id
+                            elements_to_remove.add(element)
+                        if element == "read":
+                            # included as part of solvent id
+                            elements_to_remove.add(element)
+
+                    # Remove identified elements
+                    filtered_elements = [
+                        e
+                        for e in scrf_line_elements
+                        if e not in elements_to_remove
+                    ]
+                    return (
+                        ",".join(filtered_elements)
+                        if filtered_elements
+                        else None
+                    )
         return None

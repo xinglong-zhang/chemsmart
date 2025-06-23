@@ -1,5 +1,6 @@
 """Utility functions for command line interface."""
 
+import ast
 import copy
 import logging
 import pprint
@@ -210,7 +211,7 @@ def get_setting_from_jobtype_for_gaussian(
         settings = project_settings.nci_settings()
 
     if coordinates is not None:
-        modred_info = eval(coordinates)
+        modred_info = ast.literal_eval(coordinates)
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":
@@ -227,6 +228,7 @@ def get_setting_from_jobtype_for_gaussian(
 def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
     assert all(v is not None for v in [coordinates, step_size, num_steps]), (
         "Scanning coordinates, step size and number of steps of scan required!\n"
+        f"But is coordinates: {coordinates}, step_size: {step_size}, num_steps: {num_steps}\n"
         "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
         "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
     )
@@ -266,7 +268,7 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.nci_settings()
 
     if coordinates is not None:
-        modred_info = eval(coordinates)
+        modred_info = ast.literal_eval(coordinates)
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":

@@ -69,7 +69,7 @@ class TestGrouper:
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
-        molecules = xyz_file.get_molecule(index=":", return_list=True)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = RMSDGrouper(
             molecules, threshold=0.2, num_procs=self.NUM_PROCS
@@ -142,7 +142,7 @@ class TestGrouper:
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
-        molecules = xyz_file.get_molecule(index=":", return_list=True)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = RMSDGrouper(
             molecules,
@@ -294,7 +294,7 @@ class TestGrouper:
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
-        molecules = xyz_file.get_molecule(index=":", return_list=True)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = ConnectivityGrouper(
             molecules, num_procs=self.NUM_PROCS, threshold=0.2
@@ -347,7 +347,7 @@ class TestGrouper:
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
-        molecules = xyz_file.get_molecule(index=":", return_list=True)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
         assert len(molecules) == 18
         grouper = TanimotoSimilarityGrouper(
             molecules, threshold=0.95, num_procs=self.NUM_PROCS

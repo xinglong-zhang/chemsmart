@@ -7,6 +7,7 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.settings import ORCAJobSettings
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -15,8 +16,12 @@ logger = logging.getLogger(__name__)
 class ORCAJob(Job):
     PROGRAM = "orca"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(molecule=molecule, label=label, **kwargs)
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
+        super().__init__(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )
 
         if not isinstance(settings, ORCAJobSettings):
             raise ValueError(
@@ -26,14 +31,12 @@ class ORCAJob(Job):
             raise ValueError(
                 f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
             )
-        molecule = molecule.copy()
-        settings = settings.copy()
+
+        self.molecule = molecule.copy() if molecule is not None else None
+        self.settings = settings.copy()
 
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
-
-        self.settings = settings
-        self.molecule = molecule
         self.label = label
 
     @classmethod
@@ -78,8 +81,10 @@ class ORCAJob(Job):
         except AttributeError:
             return None
 
-    def _run(self, jobrunner):
-        jobrunner.run(self)
+    def _run(self, **kwargs):
+        """Run the job using the assigned jobrunner."""
+        logger.info(f"Running ORCAJob {self} with jobrunner {self.jobrunner}")
+        self.jobrunner.run(self, **kwargs)
 
     @classmethod
     def from_filename(
@@ -88,60 +93,155 @@ class ORCAJob(Job):
         settings=None,
         index="-1",
         label=None,
+        jobrunner=None,
         keywords=("charge", "multiplicity"),
         **kwargs,
     ):
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True
         )
-        logger.info(f"Num of images read: {len(molecules)}.")
+        logger.info(f"Num of molecules read: {len(molecules)}.")
         molecules = molecules[string2index_1based(index)]
+
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecule=molecules,
+                    settings=settings,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
 
         # only supply last molecule in some jobs; but require all molecule in others e.g., dias job
         return cls(
             molecule=molecules,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
 
     @classmethod
-    def from_pubchem(cls, identifier, settings=None, label=None, **kwargs):
+    def from_pubchem(
+        cls, identifier, settings=None, label=None, jobrunner=None, **kwargs
+    ):
         molecule = Molecule.from_pubchem(identifier=identifier)
+
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
+
         return cls(
             molecule=molecule,
             settings=settings,
             label=label,
+            jobrunner=jobrunner,
             **kwargs,
         )
 
     @classmethod
     def from_jobtype(
-        cls, jobtype, molecule, settings=None, label=None, **kwargs
+        cls,
+        jobtype,
+        molecule,
+        settings=None,
+        label=None,
+        jobrunner=None,
+        **kwargs,
     ):
         if jobtype.lower() == "opt":
             from chemsmart.jobs.orca.opt import ORCAOptJob
 
             logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
 
+            # Create jobrunner if not provided
+            if jobrunner is None:
+                jobrunner = JobRunner.from_job(
+                    ORCAOptJob(
+                        molecule=molecule,
+                        settings=settings,
+                        label=label,
+                        jobrunner=None,
+                        **kwargs,
+                    ),
+                    server=kwargs.get("server"),
+                    scratch=kwargs.get("scratch"),
+                    fake=kwargs.get("fake", False),
+                    **kwargs,
+                )
+
             return ORCAOptJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
+                jobrunner=jobrunner,
                 **kwargs,
             )
         elif jobtype.lower() == "inp":
+            # Create jobrunner if not provided
+            if jobrunner is None:
+                jobrunner = JobRunner.from_job(
+                    ORCAInpJob(
+                        molecule=molecule,
+                        settings=settings,
+                        label=label,
+                        jobrunner=None,
+                        **kwargs,
+                    ),
+                    server=kwargs.get("server"),
+                    scratch=kwargs.get("scratch"),
+                    fake=kwargs.get("fake", False),
+                    **kwargs,
+                )
+
             return ORCAInpJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
+                jobrunner=jobrunner,
                 **kwargs,
             )
         elif jobtype.lower() == "orca":
+            # Create jobrunner if not provided
+            if jobrunner is None:
+                jobrunner = JobRunner.from_job(
+                    ORCAGeneralJob(
+                        molecule=molecule,
+                        settings=settings,
+                        label=label,
+                        jobrunner=None,
+                        **kwargs,
+                    ),
+                    server=kwargs.get("server"),
+                    scratch=kwargs.get("scratch"),
+                    fake=kwargs.get("fake", False),
+                    **kwargs,
+                )
+
             return ORCAGeneralJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
+                jobrunner=jobrunner,
                 **kwargs,
             )
         else:
@@ -153,13 +253,21 @@ class ORCAInpJob(ORCAJob):
 
     TYPE = "orcainp"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
         super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
         )
 
     @classmethod
-    def from_filename(cls, filename, settings=None, label=None, **kwargs):
+    def from_filename(
+        cls, filename, settings=None, label=None, jobrunner=None, **kwargs
+    ):
 
         # first check that the file is orca format with .inp extension
         logger.debug(f"Checking if {filename} is an ORCA input file.")
@@ -190,24 +298,48 @@ class ORCAInpJob(ORCAJob):
 
         logger.debug(f"Writing input lines: \n{input_lines}")
 
-        return cls(molecule=molecule, settings=settings, label=label, **kwargs)
+        # Create jobrunner if not provided
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                    jobrunner=None,
+                    **kwargs,
+                ),
+                server=kwargs.get("server"),
+                scratch=kwargs.get("scratch"),
+                fake=kwargs.get("fake", False),
+                **kwargs,
+            )
 
-    def _run(self, jobrunner, queue_manager=None, **kwargs):
+        return cls(
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )
+
+    def _run(self, **kwargs):
         """Override the _run method of parent to run the job as is."""
         # instead of applying setting and write the input file, create the input file
         # from the supplied .inp file and run it as is
-        self._copy_input(jobrunner=jobrunner)
-        jobrunner.run(self)
+        self._copy_input()
+        self.jobrunner.run(self, **kwargs)
 
-    def _copy_input(self, jobrunner):
+    def _copy_input(self):
         """Copy the supplied orca .inp file."""
         if (
-            jobrunner.scratch
-            and jobrunner.scratch_dir is not None
-            and os.path.exists(jobrunner.scratch_dir)
+            self.jobrunner.scratch
+            and self.jobrunner.scratch_dir is not None
+            and os.path.exists(self.jobrunner.scratch_dir)
         ):
             # if running job in scratch, then copy the input file over to scratch
-            job_scratch_dir = os.path.join(jobrunner.scratch_dir, self.label)
+            job_scratch_dir = os.path.join(
+                self.jobrunner.scratch_dir, self.label
+            )
             with suppress(FileExistsError):
                 os.mkdir(job_scratch_dir)
                 logger.info(f"Folder in scratch {job_scratch_dir} is made.")
@@ -218,10 +350,10 @@ class ORCAInpJob(ORCAJob):
             assert os.path.exists(
                 scratch_inputfile
             ), f"inputfile {scratch_inputfile} is not found"
-        elif jobrunner.scratch and jobrunner.scratch_dir is not None:
+        elif self.jobrunner.scratch and self.jobrunner.scratch_dir is not None:
             # if running job in scratch, but scratch dir is not found, then run the job in the run folder
             logger.warning(
-                f"{jobrunner.scratch_dir} does not exist! Running job in {self.folder}."
+                f"{self.jobrunner.scratch_dir} does not exist! Running job in {self.folder}."
             )
         else:
             logger.info(f"Running job in {self.folder}.")

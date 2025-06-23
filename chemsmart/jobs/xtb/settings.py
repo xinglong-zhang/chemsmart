@@ -2,8 +2,6 @@ import copy
 import logging
 import os
 
-from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
-from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -84,7 +82,9 @@ class XTBJobSettings(MolecularJobSettings):
             filename=com_path
         ).read_settings()
         xtb_default_settings = cls.default()
-        return xtb_default_settings.merge(gaussian_settings_from_comfile, merge_all=True)
+        return xtb_default_settings.merge(
+            gaussian_settings_from_comfile, merge_all=True
+        )
 
     @classmethod
     def from_inpfile(cls, filename):
@@ -101,7 +101,9 @@ class XTBJobSettings(MolecularJobSettings):
             filename=inp_path
         ).read_settings()
         xtb_default_settings = cls.default()
-        return xtb_default_settings.merge(orca_settings_from_inpfile, merge_all=True)
+        return xtb_default_settings.merge(
+            orca_settings_from_inpfile, merge_all=True
+        )
 
     @classmethod
     def from_logfile(cls, filename):

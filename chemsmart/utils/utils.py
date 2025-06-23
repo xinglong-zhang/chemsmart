@@ -3,7 +3,9 @@ import hashlib
 import logging
 import os
 import re
+import shlex
 import subprocess
+import sys
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
@@ -12,6 +14,31 @@ from typing import Tuple, Union
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+class OrderedSet:
+    def __init__(self, iterable=None):
+        self.items = []
+        if iterable:
+            for item in iterable:
+                self.add(item)
+
+    def add(self, item):
+        if item not in self.items:
+            self.items.append(item)
+
+    def remove(self, item):
+        if item in self.items:
+            self.items.remove(item)
+
+    def __contains__(self, item):
+        return item in self.items
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self):
+        return len(self.items)
 
 
 def file_cache(copy_result=True, maxsize=64):
@@ -362,7 +389,7 @@ def get_prepend_string_list_from_modred_free_format(
         num_list = len(input_modred)
         for i in range(num_list):
             prepend_string = get_prepend_string_for_modred(input_modred[i])
-            if program == "gaussian":
+            if program == "gaussian" or program == "pymol":
                 modred_string = convert_modred_list_to_string(input_modred[i])
             elif program == "orca":
                 modred_string = convert_modred_list_to_string(
@@ -377,7 +404,7 @@ def get_prepend_string_list_from_modred_free_format(
     elif isinstance(input_modred[0], int):
         # for a single list; e.g.: [2,3]
         prepend_string = get_prepend_string_for_modred(input_modred)
-        if program == "gaussian":
+        if program == "gaussian" or program == "pymol":
             modred_string = convert_modred_list_to_string(input_modred)
         elif program == "orca":
             modred_string = convert_modred_list_to_string(
@@ -483,19 +510,45 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
 
 
 def run_command(command):
-    """Runs a shell command using subprocess.Popen and captures its output."""
+    """Runs a shell command using subprocess.Popen and captures its output.
+
+    Args:
+        command: A string (e.g., 'ls -l') or a list (e.g., ['ls', '-l']) representing the command.
+
+    Returns:
+        The command's stdout as a string, or None if an error occurs.
+    """
     try:
+        # If command is a string, split it into a list using shlex.split
+        if isinstance(command, str):
+            command = shlex.split(command)
+
+        # Ensure command is a list at this point
+        if not isinstance(command, list):
+            logger.error(
+                f"Invalid command type: {type(command)}. Expected str or list."
+            )
+            return None
+
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            logger.error(f"Error running {command}: {stderr.strip()}")
+            logger.info(f"Error running {command}: {stderr.strip()}")
             return None
         return stdout.strip()
     except Exception as e:
         logger.error(f"Exception while running {command}: {e}")
         return None
+
+
+def quote_path(path):
+    """Quote paths on Windows to handle spaces and backslashes."""
+    if sys.platform == "win32":
+        # Double-quote paths on Windows to preserve spaces
+        return f'"{path}"'
+    return path
 
 
 def kabsch_align(
@@ -592,3 +645,117 @@ def extract_number(filename):
         return int(match.group(1))
     else:
         return float("inf")  # If no number is found, place it at the end
+
+
+## file handling
+
+
+def search_file(filename):
+    """Searches for a file in the current directory and its subdirectories securely."""
+    try:
+        # Search for the absolute file path
+        result = subprocess.run(
+            ["find", ".", "-name", filename],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_path = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        # Search for the absolute directory path
+        result = subprocess.run(
+            ["find", ".", "-name", filename, "-exec", "dirname", "{}", ";"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_dir = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        if absolute_file_path and absolute_file_dir:
+            return absolute_file_path, absolute_file_dir
+        else:
+            logger.error(f"{filename} not found! Check your Excel file.")
+            return None, None
+    except subprocess.CalledProcessError:
+        logger.error(f"Error occurred while searching for {filename}.")
+        return None, None
+
+
+def iterative_compare(input_list):
+    """Compare an input list and return a list of unique elements.
+    The input list can be a list of lists or a list of strings or
+    a list of dictionaries.
+    """
+    if not input_list:
+        return []
+    if isinstance(input_list[0], list):
+        return [list(x) for x in OrderedSet(tuple(x) for x in input_list)]
+    elif isinstance(input_list[0], tuple):
+        return [tuple(x) for x in OrderedSet(input_list)]
+    elif isinstance(input_list[0], dict):
+        return [
+            dict(x)
+            for x in OrderedSet(frozenset(x.items()) for x in input_list)
+        ]
+    else:
+        return list(OrderedSet(input_list))
+
+
+def naturally_sorted(lst):
+    """Sort a list of strings in natural order, treating numbers numerically.
+
+    Unlike standard alphabetical sorting, it ensures that numerical parts are compared as numbers,
+    not as strings."""
+
+    def key_func(key):
+        return [
+            int(c) if c.isdigit() else c.lower()
+            for c in re.split("([0-9]+)", key)
+        ]
+
+    return sorted(lst, key=key_func)
+
+
+def spline_data(x, y, new_length=1000, k=3):
+    """Interpolate data points using a univariate spline and return evenly spaced points.
+
+    Args:
+        x (list or array-like): X-coordinates of the input data points.
+        y (list or array-like): Y-coordinates of the input data points.
+        new_length (int, optional): Number of points in the interpolated output. Defaults to 1000.
+        k (int, optional): Degree of the spline. Must be 1 <= k <= 5. Defaults to 3 (cubic spline).
+
+    Returns:
+        tuple: Two arrays (`new_x`, `new_y`) containing the interpolated x and y coordinates.
+
+    Notes:
+        - Input points are sorted by x-values to ensure proper spline interpolation.
+        - Uses `scipy.interpolate.UnivariateSpline` for interpolation.
+        - The output `new_x` is evenly spaced between the minimum and maximum of input x-values.
+
+    Raises:
+        ValueError: If input lists `x` and `y` have different lengths or are empty.
+        scipy.interpolate.InterpolationError:
+            If spline interpolation fails (e.g., invalid `k` or insufficient points).
+    """
+    from scipy.interpolate import UnivariateSpline
+
+    # Combine lists into list of tuples
+    points = zip(x, y, strict=False)
+
+    # Sort list of tuples by x-value
+    points = sorted(points, key=lambda point: point[0])
+
+    # Split list of tuples into two list of x values any y values
+    x1, y1 = zip(*points, strict=False)
+    new_x = np.linspace(min(x1), max(x1), new_length)
+    new_y = UnivariateSpline(x1, y1, k=k)(new_x)
+    return new_x, new_y

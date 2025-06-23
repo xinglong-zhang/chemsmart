@@ -4,14 +4,19 @@ import os
 from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.molecules.structure import SDFFile
 from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.io.xyz.folder import XYZFolder
+from chemsmart.utils.logger import create_logger
+from chemsmart.utils.mixins import BaseFolder
 
 logger = logging.getLogger(__name__)
 os.environ["OMP_NUM_THREADS"] = "1"
+
+create_logger()
 
 
 class FileConverter:
@@ -24,12 +29,18 @@ class FileConverter:
     """
 
     def __init__(
-        self, directory=None, type=None, filename=None, output_filetype="xyz"
+        self,
+        directory=None,
+        type=None,
+        filename=None,
+        output_filetype="xyz",
+        include_intermediate_structures=False,
     ):
         self.directory = directory
         self.type = type
         self.filename = filename
         self.output_filetype = output_filetype
+        self.include_intermediate_structures = include_intermediate_structures
 
     def convert_files(self):
         if self.directory is not None:
@@ -56,9 +67,12 @@ class FileConverter:
         if type == "log":
             g16_folder = GaussianLogFolder(folder=directory)
             all_files = g16_folder.all_logfiles
-        elif type == ("com" or "gjf"):
+        elif type == "com":
             g16_folder = GaussianComFolder(folder=directory)
-            all_files = g16_folder.all_comfiles
+            all_files = g16_folder.all_com_files
+        elif type == "gjf":
+            g16_folder = GaussianComFolder(folder=directory)
+            all_files = g16_folder.all_gjf_files
         elif type == "out":
             orca_folder = ORCAOutFolder(folder=directory)
             all_files = orca_folder.all_outfiles
@@ -68,6 +82,11 @@ class FileConverter:
         elif type == "xyz":
             xyz_folder = XYZFolder(folder=directory)
             all_files = xyz_folder.all_xyzfiles
+        elif type == "sdf":
+            sdf_folder = BaseFolder(folder=directory)
+            all_files = sdf_folder.get_all_files_in_current_folder_and_subfolders_by_suffix(
+                filetype="sdf"
+            )
         else:
             raise ValueError(f"File type {type} is not supported.")
 
@@ -85,21 +104,36 @@ class FileConverter:
                 outfile = ORCAInput(filename=file)
             elif type == "xyz":
                 outfile = XYZFile(filename=file)
-            mol = (
-                outfile.molecule
-            )  # for xyz file with multiple mols, only converts the last one
+            elif type == "sdf":
+                outfile = SDFFile(filename=file)
+            else:
+                raise ValueError(f"File type {type} is not supported.")
+            if self.include_intermediate_structures:
+                mol = outfile.all_structures
+            else:
+                mol = (
+                    outfile.molecule
+                )  # for xyz file with multiple mols, only converts the last one
             filedir, filename = os.path.split(file)
             file_basename = os.path.splitext(filename)[0]
             output_filepath = os.path.join(
                 filedir, f"{file_basename}.{output_filetype}"
             )
-            mol.write(output_filepath, format=output_filetype)
+            if isinstance(mol, list):
+                for i, m in enumerate(mol):
+                    output_filepath = os.path.join(
+                        filedir, f"{file_basename}.{output_filetype}"
+                    )
+                    m.write(output_filepath, format=output_filetype)
+            else:
+                mol.write(output_filepath, format=output_filetype)
 
     def _convert_single_file(self, filename, output_filetype):
         """Convert single file to specified format."""
+        logger.info(f"Converting file type: {self.type}")
         if self.type == "log":
             outfile = Gaussian16Output(filename=filename)
-        elif self.type == ("com" or "gjf"):
+        elif self.type == "com" or self.type == "gjf":
             outfile = Gaussian16Input(filename=filename)
         elif self.type == "out":
             outfile = ORCAOutput(filename=filename)
@@ -107,12 +141,24 @@ class FileConverter:
             outfile = ORCAInput(filename=filename)
         elif self.type == "xyz":
             outfile = XYZFile(filename=filename)
+        elif self.type == "sdf":
+            outfile = SDFFile(filename=filename)
         else:
             raise ValueError(f"File type {self.type} is not supported.")
-        mol = outfile.molecule
+        if self.include_intermediate_structures:
+            mol = outfile.all_structures
+        else:
+            mol = outfile.molecule
         filedir, filename = os.path.split(filename)
         file_basename = os.path.splitext(filename)[0]
         output_filepath = os.path.join(
             filedir, f"{file_basename}.{output_filetype}"
         )
-        mol.write(output_filepath, format=output_filetype)
+        if isinstance(mol, list):
+            for m in mol:
+                output_filepath = os.path.join(
+                    filedir, f"{file_basename}.{output_filetype}"
+                )
+                m.write(output_filepath, format=output_filetype)
+        else:
+            mol.write(output_filepath, format=output_filetype)

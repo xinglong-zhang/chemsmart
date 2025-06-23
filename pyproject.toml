@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=70.1.1", "wheel"]
+requires = ["setuptools==74.1.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -23,26 +23,35 @@ dependencies = [
     "filelock",
     "joblib==1.4.2",
     "networkx==3.4.2",
-    "numpy==2.2.2",
-    "pytest~=8.3.4",
+    "numpy~=1.26.4",  # rdkit works with numpy 1.x not 2.x
+    "pytest==8.3.4",
     "pyyaml",
     "pymatgen==2025.1.24",
-    "rdkit==2024.9.5",
-    "scipy==1.15.1",
-    "setuptools>=70.1.1",
+    "rdkit==2024.3.2",
     "tomlkit==0.13.2",
-    "pytest==8.3.4",
+    "types-PyYAML",
+    "scipy==1.15.2",
+    "pandas==2.2.3",
+    "openpyxl==3.1.5",
+    "requests>=2.32.3",
+    "tenacity>=9.1.2",
+    "matplotlib>=3.10.1",
+    "scikit-learn>=1.6.1",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pytest-mock",
     "coverage",
+    "pytest-cov",
+]
+dev = [
+    "pre-commit>=3.6.0",
     "flake8",
     "ruff",
     "black",
     "isort",
-    "pytest-cov",
     "gitchangelog",
     "mkdocs",
 ]
