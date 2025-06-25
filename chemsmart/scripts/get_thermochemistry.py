@@ -149,6 +149,7 @@ def entry_point(
     """Thermochemistry calculation script using quasi-RRHO approximation."""
 
     def log(message, output="thermochemistry.dat"):
+        # log is a math function for logarithm
         logger.info(message)
         with open(output, "a") as out:
             out.write(message)
