@@ -295,7 +295,7 @@ class XTBOutput(FileMixin):
                 c6_coefficient = line.split()[-1]
                 return float(c6_coefficient)
         return None
-    
+
     @property
     def c8_coefficient(self):
         """C8 dispersion coefficient in au·bohr⁸."""
@@ -304,7 +304,7 @@ class XTBOutput(FileMixin):
                 c8_coefficient = line.split()[-1]
                 return float(c8_coefficient)
         return None
-    
+
     @property
     def alpha_coefficient(self):
         """Alpha coefficient α(0)."""
@@ -331,18 +331,18 @@ class XTBOutput(FileMixin):
         if len(summary_blocks) == 0:
             return None
         return summary_blocks
-    
+
     @property
-    def vertical_ionization_potentials(self):
-        """Vertical Ionization Potentials (VIP) in eV, using command line '--vip', '--vipea' or '--vomega'."""
+    def vertical_ionization_potential(self):
+        """Vertical Ionization Potential (VIP) in eV, using command line '--vip', '--vipea' or '--vomega'."""
         for line in reversed(self.contents):
             if "delta SCC IP (eV)" in line:
                 vertical_ionization_potentials = line.split()[-1]
                 return float(vertical_ionization_potentials)
         return None
-    
+
     @property
-    def vertical_electron_affinities(self):
+    def vertical_electron_affinity(self):
         """Vertical electron Affinities (EA) in eV, using command line '--ea', '--vipea' or '--vomega'."""
         for line in reversed(self.contents):
             if "delta SCC EA (eV)" in line:

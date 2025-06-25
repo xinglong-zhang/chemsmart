@@ -421,8 +421,8 @@ class TestXTBOutput:
         assert os.path.exists(xtb_gei_outfile)
         xtb_output = XTBOutput(filename=xtb_gei_outfile)
         assert xtb_output.normal_termination
-        assert xtb_output.vertical_ionization_potentials == 9.9124
-        assert xtb_output.vertical_electron_affinities == -0.6583
+        assert xtb_output.vertical_ionization_potential == 9.9124
+        assert xtb_output.vertical_electron_affinity == -0.6583
         assert xtb_output.global_electrophilicity_index == 1.0127
         assert xtb_output.total_energy == -16.575987464893
         assert xtb_output.gradient_norm == 0.122921601494
@@ -433,18 +433,18 @@ class TestXTBOutput:
         xtb_output = XTBOutput(filename=xtb_fukui_outfile)
         assert xtb_output.normal_termination
         assert xtb_output.fukui_index == [
-            '#        f(+)     f(-)     f(0)',
-            '1N       0.172    0.257    0.215',
-            '2C       0.089    0.029    0.059',
-            '3C       0.051    0.046    0.049',
-            '4C       0.051    0.046    0.049',
-            '5C       0.042    0.012    0.027',
-            '6C       0.042    0.012    0.027',
-            '7H       0.115    0.134    0.125',
-            '8H       0.107    0.110    0.109',
-            '9H       0.107    0.110    0.109',
-            '10H       0.111    0.122    0.116',
-            '11H       0.111    0.122    0.116',
+            "#        f(+)     f(-)     f(0)",
+            "1N       0.172    0.257    0.215",
+            "2C       0.089    0.029    0.059",
+            "3C       0.051    0.046    0.049",
+            "4C       0.051    0.046    0.049",
+            "5C       0.042    0.012    0.027",
+            "6C       0.042    0.012    0.027",
+            "7H       0.115    0.134    0.125",
+            "8H       0.107    0.110    0.109",
+            "9H       0.107    0.110    0.109",
+            "10H       0.111    0.122    0.116",
+            "11H       0.111    0.122    0.116",
         ]
         assert xtb_output.c6_coefficient == 1554.631149
         assert xtb_output.c8_coefficient == 37458.566172
