@@ -1114,3 +1114,17 @@ def xtb_hess_outfile(xtb_outputs_directory):
         xtb_outputs_directory, "pyridine_hess_acetonitrile.out"
     )
     return xtb_hess_outfile
+
+
+@pytest.fixture()
+def xtb_gei_outfile(xtb_outputs_directory):
+    xtb_gei_outfile = os.path.join(xtb_outputs_directory, "pyridine_gei.out")
+    return xtb_gei_outfile
+
+
+@pytest.fixture()
+def xtb_fukui_outfile(xtb_outputs_directory):
+    xtb_fukui_outfile = os.path.join(
+        xtb_outputs_directory, "pyridine_fukui.out"
+    )
+    return xtb_fukui_outfile
