@@ -30,7 +30,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-ft",
     "--filetype",
     default=None,
-    help="Type of file to be converted, if direcotry is specified.",
+    help="Type of file to be converted, if directory is specified.",
 )
 @click.option(
     "-c",
