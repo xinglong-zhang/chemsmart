@@ -916,9 +916,7 @@ class TestThermochemistryCO2:
         # S_t = R * [ln(q_t) + 1 + 3/2]
         # we got 129.3547287392227 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
-            np.log(expected_translational_partition_function)
-            + 1
-            + 3 / 2
+            np.log(expected_translational_partition_function) + 1 + 3 / 2
         )
         # S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
         # we got 129.3547287392227 + 54.73729016622342 + 3.144125621155244 + 0 = 187.23614452660138 J mol^-1 K^-1
@@ -1022,7 +1020,7 @@ class TestThermochemistryCO2:
         # T * S^qrrho_tot
         # we got 55824.45649060619 J mol^-1
         expected_qrrho_entropy_times_temperature = (
-                298.15 * expected_qrrho_total_entropy
+            298.15 * expected_qrrho_total_entropy
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_entropy_times_temperature,
@@ -1048,7 +1046,7 @@ class TestThermochemistryCO2:
         # G^qrrho_qs = H - T * S^qrrho_tot
         # we got -494776914.5262369 J mol^-1
         expected_qrrho_gibbs_free_energy_qs = (
-                expected_enthalpy - expected_qrrho_entropy_times_temperature
+            expected_enthalpy - expected_qrrho_entropy_times_temperature
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qs,
@@ -1140,7 +1138,7 @@ class TestThermochemistryCO2:
         # G^qrrho_qh = H - T * S^qrrho_tot
         # we got -494776914.5262369 J mol^-1
         expected_qrrho_gibbs_free_energy_qh = (
-                expected_enthalpy - expected_qrrho_entropy_times_temperature
+            expected_enthalpy - expected_qrrho_entropy_times_temperature
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qh,
@@ -1150,7 +1148,7 @@ class TestThermochemistryCO2:
         # G^qrrho_q = H^qrrho - T * S^qrrho_tot
         # we got -494776918.0570549 J mol^-1
         expected_qrrho_gibbs_free_energy = (
-                expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature
+            expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature
         )
         assert np.isclose(
             qrrho_thermochem_co2_1.qrrho_gibbs_free_energy,
@@ -1187,22 +1185,23 @@ class TestThermochemistryCO2:
         # S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
         # we got 155.93822974452405 + 54.73729016622342 + 3.144125621155244 + 0 = 213.81964553190272 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
-                np.log(
+            np.log(
+                (
                     (
-                        (
-                                2
-                                * np.pi
-                                * (
-                                        mol.most_abundant_mass
-                                        / (6.0221408 * 1e23 * 1000)
-                                )
-                                * 1.380649
-                                * 1e-23
-                                * 298.15
-                                / (6.62606957 * 1e-34) ** 2
-                        )
-                    ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
-                ) + 1 + 3 / 2
+                        2
+                        * np.pi
+                        * (mol.most_abundant_mass / (6.0221408 * 1e23 * 1000))
+                        * 1.380649
+                        * 1e-23
+                        * 298.15
+                        / (6.62606957 * 1e-34) ** 2
+                    )
+                )
+                ** (3 / 2)
+                * (1.380649 * 1e-23 * 298.15 / 101325)
+            )
+            + 1
+            + 3 / 2
         )
         expected_qrrho_total_entropy = (
             expected_translational_entropy
@@ -1218,7 +1217,7 @@ class TestThermochemistryCO2:
         # T * S^qrrho_tot
         # we got 63750.32731533679 J mol^-1
         expected_qrrho_entropy_times_temperature = (
-                298.15 * expected_qrrho_total_entropy
+            298.15 * expected_qrrho_total_entropy
         )
         assert np.isclose(
             qrrho_thermochem_co2_1_gas.qrrho_entropy_times_temperature,

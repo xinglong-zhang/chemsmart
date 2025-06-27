@@ -285,11 +285,7 @@ def entry_point(
             + "\n"
         )
     else:
-        log(
-            "   "
-            + f"Pressure                   : {pressure:.1f} atm"
-            + "\n"
-        )
+        log("   " + f"Pressure                   : {pressure:.1f} atm" + "\n")
     if quasi_rrho or quasi_rrho_entropy:
         log(
             "   "
@@ -399,18 +395,18 @@ def entry_point(
             enthalpy = thermochemistry.enthalpy * unit_conversion
             qrrho_enthalpy = thermochemistry.qrrho_enthalpy * unit_conversion
             entropy_times_temperature = (
-                    thermochemistry.entropy_times_temperature * unit_conversion
+                thermochemistry.entropy_times_temperature * unit_conversion
             )
             qrrho_entropy_times_temperature = (
                 thermochemistry.qrrho_entropy_times_temperature
                 * unit_conversion
             )
             gibbs_free_energy = (
-                    thermochemistry.gibbs_free_energy * unit_conversion
+                thermochemistry.gibbs_free_energy * unit_conversion
             )
             if quasi_rrho:
                 qrrho_gibbs_free_energy = (
-                        thermochemistry.qrrho_gibbs_free_energy * unit_conversion
+                    thermochemistry.qrrho_gibbs_free_energy * unit_conversion
                 )
             elif quasi_rrho_enthalpy:
                 qrrho_gibbs_free_energy = (

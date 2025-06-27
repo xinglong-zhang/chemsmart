@@ -218,7 +218,7 @@ class Thermochemistry:
         """
         if self.c is not None:
             return (
-                    2 * np.pi * self.m * units._k * self.T / units._hplanck ** 2
+                2 * np.pi * self.m * units._k * self.T / units._hplanck**2
             ) ** (3 / 2) * (1 / self.c)
         else:
             return (
@@ -664,41 +664,6 @@ class Thermochemistry:
                 )
             return sum(vib_entropy)
 
-
-    @property
-    def qrrho_total_entropy(self):
-        """Obtain the quasi-RRHO total entropy in J mol^-1 K^-1.
-        Formula:
-            S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
-        """
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_entropy
-                + self.electronic_entropy
-            )
-        return (
-            self.translational_entropy
-            + self.rotational_entropy
-            + self.electronic_entropy
-            + self.qrrho_vibrational_entropy
-        )
-
-    @property
-    def entropy_times_temperature(self):
-        """Obtain the total entropy times temperature in J mol^-1.
-        Formula:
-            T * S_tot
-        """
-        return self.T * self.total_entropy
-
-    @property
-    def qrrho_entropy_times_temperature(self):
-        """Obtain the quasi-RRHO entropy times temperature in J mol^-1.
-        Formula:
-            T * S^qrrho_tot
-        """
-        return self.T * self.qrrho_total_entropy
-
     @property
     def rrho_internal_energy(self):
         """Obtain the Harmonic Oscillator (within RRHO approximation)
@@ -737,6 +702,55 @@ class Thermochemistry:
             return sum(vib_energy)
 
     @property
+    def enthalpy(self):
+        """Obtain the enthalpy in J mol^-1.
+        Formula:
+            H = E0 + E_tot + R * T
+        where:
+            E0 = the total electronic energy (J mol^-1)
+        """
+        return self.energies + self.total_internal_energy + R * self.T
+
+    @property
+    def qrrho_total_entropy(self):
+        """Obtain the quasi-RRHO total entropy in J mol^-1 K^-1.
+        Formula:
+            S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
+        """
+        if self.molecule.is_monoatomic:
+            return self.translational_entropy + self.electronic_entropy
+        return (
+            self.translational_entropy
+            + self.rotational_entropy
+            + self.electronic_entropy
+            + self.qrrho_vibrational_entropy
+        )
+
+    @property
+    def entropy_times_temperature(self):
+        """Obtain the total entropy times temperature in J mol^-1.
+        Formula:
+            T * S_tot
+        """
+        return self.T * self.total_entropy
+
+    @property
+    def qrrho_entropy_times_temperature(self):
+        """Obtain the quasi-RRHO entropy times temperature in J mol^-1.
+        Formula:
+            T * S^qrrho_tot
+        """
+        return self.T * self.qrrho_total_entropy
+
+    @property
+    def gibbs_free_energy(self):
+        """Obtain the Gibbs free energy in J mol^-1 .
+        Formula:
+            G = H - T * S_tot
+        """
+        return self.enthalpy - self.entropy_times_temperature
+
+    @property
     def qrrho_total_internal_energy(self):
         """Obtain the quasi-RRHO total internal energy in J mol^-1.
         Formula:
@@ -755,16 +769,6 @@ class Thermochemistry:
         )
 
     @property
-    def enthalpy(self):
-        """Obtain the enthalpy in J mol^-1.
-        Formula:
-            H = E0 + E_tot + R * T
-        where:
-            E0 = the total electronic energy (J mol^-1)
-        """
-        return self.energies + self.total_internal_energy + R * self.T
-
-    @property
     def qrrho_enthalpy(self):
         """Obtain the quasi-RRHO enthalpy in J mol^-1.
         Formula:
@@ -774,14 +778,6 @@ class Thermochemistry:
             E0 = the total electronic energy (J mol^-1)
         """
         return self.energies + self.qrrho_total_internal_energy + R * self.T
-
-    @property
-    def gibbs_free_energy(self):
-        """Obtain the Gibbs free energy in J mol^-1 .
-        Formula:
-            G = H - T * S_tot
-        """
-        return self.enthalpy - self.entropy_times_temperature
 
     @property
     def qrrho_gibbs_free_energy(self):
