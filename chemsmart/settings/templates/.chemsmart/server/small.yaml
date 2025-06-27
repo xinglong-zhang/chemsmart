@@ -34,6 +34,10 @@ GAUSSIAN:
 ORCA:
     EXEFOLDER: ~/bin/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart
     ENVARS: |
         export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH

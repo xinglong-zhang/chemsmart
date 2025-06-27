@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import platform
 from multiprocessing import set_start_method
@@ -13,13 +12,23 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
+logger = logging.getLogger(__name__)
+
+
 system_type = platform.system()
 
-if system_type in ("Darwin", "Windows"):
-    with contextlib.suppress(RuntimeError):
+if system_type == "Darwin":
+    try:
         set_start_method("fork")
-
-logger = logging.getLogger(__name__)
+    except RuntimeError as e:
+        logger.error(f"Failed to set start method to 'fork' on Darwin: {e}")
+elif system_type == "Windows":
+    try:
+        set_start_method("spawn")
+    except RuntimeError as e:
+        logger.error(f"Failed to set start method to 'spawn' on Windows: {e}")
+else:
+    pass
 
 
 @click.group(name="run")
@@ -90,10 +99,9 @@ def process_pipeline(ctx, *args, **kwargs):
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,
         )
+
+        # Attach jobrunner to job and run the job with the jobrunner
         job.jobrunner = jobrunner
-        # Run the job with the jobrunner
-        print(f"Running job: {job}")
-        print(f"Jobrunner: {jobrunner}")
         job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")

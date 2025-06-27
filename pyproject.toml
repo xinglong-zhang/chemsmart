@@ -42,15 +42,18 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pytest-mock",
     "coverage",
+    "pytest-cov",
+]
+dev = [
+    "pre-commit>=3.6.0",
     "flake8",
     "ruff",
     "black",
     "isort",
-    "pytest-cov",
     "gitchangelog",
     "mkdocs",
-    "pre-commit>=3.6.0",
 ]
 
 [project.urls]

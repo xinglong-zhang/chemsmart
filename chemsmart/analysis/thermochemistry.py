@@ -54,6 +54,7 @@ class Thermochemistry:
         self.concentration = concentration
         self.alpha = alpha
         self.cutoff = max(min(s_freq_cutoff, h_freq_cutoff, 100.0), 1e-6)
+        # why min of 100? if use 150, then cannot work?
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
@@ -171,10 +172,13 @@ class Thermochemistry:
         if not self.vibrational_frequencies:
             return None
         if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
+            # in this case the structure is not quite TS, so this correction is not right.
             return [
                 self.cutoff if k < 0.0 else k
                 for k in self.vibrational_frequencies[1:]
             ]
+
+        # this is bad, since for geometry opt, it will ignore the neg freq
         return [
             self.cutoff if k < 0.0 else k for k in self.vibrational_frequencies
         ]

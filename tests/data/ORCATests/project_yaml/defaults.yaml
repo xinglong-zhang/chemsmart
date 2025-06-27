@@ -5,7 +5,7 @@ basis : Null  # default value; will get updated by project settings
 aux_basis: Null
 extrapolation_basis: Null
 defgrid: Null  # 'DEFGRID2' by default when Null
-scf_maxiter: NNull
+scf_maxiter: Null
 scf_convergence: Null 
 charge : Null  # default value; will get updated by user at runtime
 multiplicity : Null  # default value; will get updated by user at runtime
