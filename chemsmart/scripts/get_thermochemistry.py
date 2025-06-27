@@ -59,10 +59,17 @@ os.environ["OMP_NUM_THREADS"] = "1"
 @click.option(
     "-c",
     "--concentration",
+    default=None,
+    type=float,
+    help="Concentration in mol/L (solution).",
+)
+@click.option(
+    "-p",
+    "--pressure",
     default=1.0,
     type=float,
     show_default=True,
-    help="Concentration in mol/L",
+    help="Pressure in Standard atmosphere (gas phase). Ignored if -c/--concentration is provided.",
 )
 @click.option(
     "-t",
@@ -137,6 +144,7 @@ def entry_point(
     entropy_cutoff,
     enthalpy_cutoff,
     concentration,
+    pressure,
     temperature,
     alpha,
     weighted,
@@ -242,7 +250,7 @@ def entry_point(
         log("   " + "=" * 106 + "\n")
         index = 1
         for file in filenames:
-            thermochemistry = Thermochemistry(file, temperature=temperature)
+            thermochemistry = Thermochemistry(file, temperature=298.15)
             structure = os.path.splitext(os.path.basename(file))[0]
             energy = thermochemistry.energies * unit_conversion
             job_type = thermochemistry.job_type
@@ -270,11 +278,18 @@ def entry_point(
     )
     log("   " + "└" + "─" * 106 + "┘" + "\n")
     log("   " + f"Temperature                : {temperature:.2f} K" + "\n")
-    log(
-        "   "
-        + f"Concentration              : {concentration:.1f} mol/L"
-        + "\n"
-    )
+    if concentration is not None:
+        log(
+            "   "
+            + f"Concentration              : {concentration:.1f} mol/L"
+            + "\n"
+        )
+    else:
+        log(
+            "   "
+            + f"Pressure                   : {pressure:.1f} atm"
+            + "\n"
+        )
     if quasi_rrho or quasi_rrho_entropy:
         log(
             "   "
@@ -370,6 +385,7 @@ def entry_point(
                 file,
                 temperature=temperature,
                 concentration=concentration,
+                pressure=pressure,
                 use_weighted_mass=weighted,
                 alpha=alpha,
                 s_freq_cutoff=entropy_cutoff,
@@ -383,27 +399,27 @@ def entry_point(
             enthalpy = thermochemistry.enthalpy * unit_conversion
             qrrho_enthalpy = thermochemistry.qrrho_enthalpy * unit_conversion
             entropy_times_temperature = (
-                    thermochemistry.entropy_times_temperature_concentration * unit_conversion
+                    thermochemistry.entropy_times_temperature * unit_conversion
             )
             qrrho_entropy_times_temperature = (
-                thermochemistry.qrrho_entropy_times_temperature_concentration
+                thermochemistry.qrrho_entropy_times_temperature
                 * unit_conversion
             )
             gibbs_free_energy = (
-                    thermochemistry.gibbs_free_energy_concentration * unit_conversion
+                    thermochemistry.gibbs_free_energy * unit_conversion
             )
             if quasi_rrho:
                 qrrho_gibbs_free_energy = (
-                        thermochemistry.qrrho_gibbs_free_energy_concentration * unit_conversion
+                        thermochemistry.qrrho_gibbs_free_energy * unit_conversion
                 )
             elif quasi_rrho_enthalpy:
                 qrrho_gibbs_free_energy = (
-                    thermochemistry.qrrho_gibbs_free_energy_concentration_qh
+                    thermochemistry.qrrho_gibbs_free_energy_qh
                     * unit_conversion
                 )
             elif quasi_rrho_entropy:
                 qrrho_gibbs_free_energy = (
-                    thermochemistry.qrrho_gibbs_free_energy_concentration_qs
+                    thermochemistry.qrrho_gibbs_free_energy_qs
                     * unit_conversion
                 )
 
