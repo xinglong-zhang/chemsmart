@@ -650,6 +650,41 @@ class Thermochemistry:
                 )
             return sum(vib_entropy)
 
+
+    @property
+    def qrrho_total_entropy(self):
+        """Obtain the quasi-RRHO total entropy in J mol^-1 K^-1.
+        Formula:
+            S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
+        """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_entropy
+                + self.electronic_entropy
+            )
+        return (
+            self.translational_entropy
+            + self.rotational_entropy
+            + self.electronic_entropy
+            + self.qrrho_vibrational_entropy
+        )
+
+    @property
+    def entropy_times_temperature(self):
+        """Obtain the total entropy times temperature in J mol^-1.
+        Formula:
+            T * S_tot
+        """
+        return self.T * self.total_entropy
+
+    @property
+    def qrrho_entropy_times_temperature(self):
+        """Obtain the quasi-RRHO entropy times temperature in J mol^-1.
+        Formula:
+            T * S^qrrho_tot
+        """
+        return self.T * self.qrrho_total_entropy
+
     @property
     def rrho_internal_energy(self):
         """Obtain the Harmonic Oscillator (within RRHO approximation)
@@ -688,6 +723,24 @@ class Thermochemistry:
             return sum(vib_energy)
 
     @property
+    def qrrho_total_internal_energy(self):
+        """Obtain the quasi-RRHO total internal energy in J mol^-1.
+        Formula:
+            E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
+        """
+        if self.molecule.is_monoatomic:
+            return (
+                self.translational_internal_energy
+                + self.electronic_internal_energy
+            )
+        return (
+            self.translational_internal_energy
+            + self.rotational_internal_energy
+            + self.electronic_internal_energy
+            + self.qrrho_vibrational_internal_energy
+        )
+
+    @property
     def enthalpy(self):
         """Obtain the enthalpy in J mol^-1.
         Formula:
@@ -696,6 +749,51 @@ class Thermochemistry:
             E0 = the total electronic energy (J mol^-1)
         """
         return self.energies + self.total_internal_energy + R * self.T
+
+    @property
+    def qrrho_enthalpy(self):
+        """Obtain the quasi-RRHO enthalpy in J mol^-1.
+        Formula:
+            H^qrrho = E0 + H^qrrho_corr
+                    = E0 + E^qrrho_tot + R * T
+        where:
+            E0 = the total electronic energy (J mol^-1)
+        """
+        return self.energies + self.qrrho_total_internal_energy + R * self.T
+
+    @property
+    def gibbs_free_energy(self):
+        """Obtain the Gibbs free energy in J mol^-1 .
+        Formula:
+            G = H - T * S_tot
+        """
+        return self.enthalpy - self.entropy_times_temperature
+
+    @property
+    def qrrho_gibbs_free_energy(self):
+        """Obtain the Gibbs free energy in J mol^-1, by quasi-RRHO corrections to both entropy and enthalpy.
+        Formula:
+            G^qrrho_q = H^qrrho - T * S^qrrho_tot
+        """
+        return self.qrrho_enthalpy - self.qrrho_entropy_times_temperature
+
+    @property
+    def qrrho_gibbs_free_energy_qs(self):
+        """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to entropy only.
+        Formula:
+            G^qrrho_qs = H - T * S^qrrho_tot
+        """
+        return self.enthalpy - self.qrrho_entropy_times_temperature
+
+    @property
+    def qrrho_gibbs_free_energy_qh(self):
+        """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to enthalpy only.
+        Formula:
+            G^qrrho_qh = H^qrrho - T * S_tot
+        """
+        return self.qrrho_enthalpy - self.entropy_times_temperature
+
+    # CALCULATION IN SOLUTION
 
     @property
     def translational_partition_function_concentration(self):
@@ -743,10 +841,11 @@ class Thermochemistry:
         )
 
     @property
-    def qrrho_total_entropy(self):
+    def qrrho_total_entropy_concentration(self):
         """Obtain the quasi-RRHO total entropy in J mol^-1 K^-1.
+        Uses concentration instead of pressure.
         Formula:
-            S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
+            S^qrrho_tot,c = S_t,c + S_r + S^qrrho_v + S_e
         """
         if self.molecule.is_monoatomic:
             return (
@@ -761,7 +860,7 @@ class Thermochemistry:
         )
 
     @property
-    def entropy_times_temperature(self):
+    def entropy_times_temperature_concentration(self):
         """Obtain the total entropy times temperature in J mol^-1.
         Formula:
             T * S_tot,c
@@ -769,70 +868,41 @@ class Thermochemistry:
         return self.T * self.total_entropy_concentration
 
     @property
-    def qrrho_entropy_times_temperature(self):
+    def qrrho_entropy_times_temperature_concentration(self):
         """Obtain the quasi-RRHO entropy times temperature in J mol^-1.
         Formula:
-            T * S^qrrho_tot
+            T * S^qrrho_tot,c
         """
-        return self.qrrho_total_entropy * self.T
+        return self.T * self.qrrho_total_entropy_concentration
 
     @property
-    def gibbs_free_energy(self):
-        """
+    def gibbs_free_energy_concentration(self):
+        """Obtain the Gibbs free energy in J mol^-1.
         Formula:
-            G = H - T * S_tot,c
+            G_c = H - T * S_tot,c
         """
-        return self.enthalpy - self.entropy_times_temperature
+        return self.enthalpy - self.entropy_times_temperature_concentration
 
     @property
-    def qrrho_total_internal_energy(self):
-        """Obtain the quasi-RRHO total internal energy in J mol^-1.
-        Formula:
-            E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
-        """
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_internal_energy
-                + self.electronic_internal_energy
-            )
-        return (
-            self.translational_internal_energy
-            + self.rotational_internal_energy
-            + self.electronic_internal_energy
-            + self.qrrho_vibrational_internal_energy
-        )
-
-    @property
-    def qrrho_enthalpy(self):
-        """Obtain the quasi-RRHO enthalpy in J mol^-1.
-        Formula:
-            H^qrrho = E0 + H^qrrho_corr
-                    = E0 + E^qrrho_tot + R * T
-        where:
-            E0 = the total electronic energy (J mol^-1)
-        """
-        return self.energies + self.qrrho_total_internal_energy + R * self.T
-
-    @property
-    def qrrho_gibbs_free_energy(self):
+    def qrrho_gibbs_free_energy_concentration(self):
         """Obtain the Gibbs free energy in J mol^-1, by quasi-RRHO corrections to both entropy and enthalpy.
         Formula:
-            G^qrrho_q = H^qrrho - T * S^qrrho_tot
+            G^qrrho_q,c = H^qrrho - T * S^qrrho_tot,c
         """
-        return self.qrrho_enthalpy - self.qrrho_entropy_times_temperature
+        return self.qrrho_enthalpy - self.qrrho_entropy_times_temperature_concentration
 
     @property
-    def qrrho_gibbs_free_energy_qs(self):
+    def qrrho_gibbs_free_energy_concentration_qs(self):
         """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to entropy only.
         Formula:
-            G^qrrho_qs = H - T * S^qrrho_tot
+            G^qrrho_qs,c = H - T * S^qrrho_tot,c
         """
-        return self.enthalpy - self.qrrho_entropy_times_temperature
+        return self.enthalpy - self.qrrho_entropy_times_temperature_concentration
 
     @property
-    def qrrho_gibbs_free_energy_qh(self):
+    def qrrho_gibbs_free_energy_concentration_qh(self):
         """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to enthalpy only.
         Formula:
-            G^qrrho_qh = H^qrrho - T * S_tot,c
+            G^qrrho_qh,c = H^qrrho - T * S_tot,c
         """
-        return self.qrrho_enthalpy - self.entropy_times_temperature
+        return self.qrrho_enthalpy - self.entropy_times_temperature_concentration

@@ -347,27 +347,27 @@ def get_thermo(
             enthalpy = thermochemistry.enthalpy * unit_conversion
             qrrho_enthalpy = thermochemistry.qrrho_enthalpy * unit_conversion
             entropy_times_temperature = (
-                thermochemistry.entropy_times_temperature * unit_conversion
+                    thermochemistry.entropy_times_temperature_concentration * unit_conversion
             )
             qrrho_entropy_times_temperature = (
-                thermochemistry.qrrho_entropy_times_temperature
+                thermochemistry.qrrho_entropy_times_temperature_concentration
                 * unit_conversion
             )
             gibbs_free_energy = (
-                thermochemistry.gibbs_free_energy * unit_conversion
+                    thermochemistry.gibbs_free_energy_concentration * unit_conversion
             )
             if q:
                 qrrho_gibbs_free_energy = (
-                    thermochemistry.qrrho_gibbs_free_energy * unit_conversion
+                        thermochemistry.qrrho_gibbs_free_energy_concentration * unit_conversion
                 )
             elif qh:
                 qrrho_gibbs_free_energy = (
-                    thermochemistry.qrrho_gibbs_free_energy_qh
+                    thermochemistry.qrrho_gibbs_free_energy_concentration_qh
                     * unit_conversion
                 )
             elif qs:
                 qrrho_gibbs_free_energy = (
-                    thermochemistry.qrrho_gibbs_free_energy_qs
+                    thermochemistry.qrrho_gibbs_free_energy_concentration_qs
                     * unit_conversion
                 )
 

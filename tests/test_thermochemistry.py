@@ -102,7 +102,7 @@ class TestThermochemistry:
             g16_output.zero_point_energy, expected_ZPE, rtol=10e-6
         )
 
-        # Thermochemsitry using weighted mass
+        # Thermochemistry using weighted mass
         thermochem1 = Thermochemistry(
             filename=gaussian_singlet_opt_outfile,
             temperature=298.15,
@@ -918,7 +918,7 @@ class TestThermochemistryCO2:
             + 1
             + 3 / 2
         )
-        # S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
+        # S^qrrho_tot,c = S_t,c + S_r + S^qrrho_v + S_e
         # we got 129.3547287392227 + 54.73729016622342 + 3.144125621155244 + 0 = 187.23614452660138 J mol^-1 K^-1
         expected_rotational_entropy = 8.314462145468951 * (
             np.log(
@@ -947,15 +947,15 @@ class TestThermochemistryCO2:
         expected_electronic_entropy = 8.314462145468951 * np.log(
             g16_output.multiplicity
         )
-        expected_qrrho_total_entropy = (
+        expected_qrrho_total_entropy_concentration = (
             expected_translational_entropy_concentration
             + expected_rotational_entropy
             + expected_qrrho_vibrational_entropy
             + expected_electronic_entropy
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_total_entropy,
-            expected_qrrho_total_entropy,
+            qrrho_thermochem_co2_1.qrrho_total_entropy_concentration,
+            expected_qrrho_total_entropy_concentration,
         )
 
         # E0 in Hartree
@@ -1011,25 +1011,25 @@ class TestThermochemistryCO2:
 
         # T.S in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.entropy_times_temperature
+            qrrho_thermochem_co2_1.entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.021262,
             atol=1e-6,
         )
 
-        # T * S^qrrho_tot
+        # T * S^qrrho_tot,c
         # we got 55824.45649060619 J mol^-1
-        expected_qrrho_entropy_times_temperature = (
-            298.15 * expected_qrrho_total_entropy
+        expected_qrrho_entropy_times_temperature_concentration = (
+                298.15 * expected_qrrho_total_entropy_concentration
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature,
-            expected_qrrho_entropy_times_temperature,
+            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature_concentration,
+            expected_qrrho_entropy_times_temperature_concentration,
         )
 
         # T.qh-S in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature
+            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.021262,
             atol=1e-6,
@@ -1037,25 +1037,25 @@ class TestThermochemistryCO2:
 
         # G(T) in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.gibbs_free_energy
+            qrrho_thermochem_co2_1.gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -188.450587,
             atol=1e-6,
         )
 
-        # G^qrrho_qs = H - T * S^qrrho_tot
+        # G^qrrho_qs,c = H - T * S^qrrho_tot,c
         # we got -494776914.5262369 J mol^-1
-        expected_qrrho_gibbs_free_energy_qs = (
-            expected_enthalpy - expected_qrrho_entropy_times_temperature
+        expected_qrrho_gibbs_free_energy_concentration_qs = (
+                expected_enthalpy - expected_qrrho_entropy_times_temperature_concentration
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy,
-            expected_qrrho_gibbs_free_energy_qs,
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_concentration_qs,
+            expected_qrrho_gibbs_free_energy_concentration_qs,
         )
 
         # qh-G(T) in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qs
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_concentration_qs
             / (hartree_to_joules * units._Nav),
             -188.450588,
             atol=1e-6,
@@ -1135,29 +1135,110 @@ class TestThermochemistryCO2:
             atol=1e-6,
         )
 
-        # G^qrrho_qh = H - T * S^qrrho_tot
+        # G^qrrho_qh,c = H - T * S^qrrho_tot,c
         # we got -494776914.5262369 J mol^-1
-        expected_qrrho_gibbs_free_energy_qh = (
-            expected_enthalpy - expected_qrrho_entropy_times_temperature
+        expected_qrrho_gibbs_free_energy_concentration_qh = (
+                expected_enthalpy - expected_qrrho_entropy_times_temperature_concentration
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_qh,
-            expected_qrrho_gibbs_free_energy_qh,
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_concentration_qh,
+            expected_qrrho_gibbs_free_energy_concentration_qh,
         )
 
-        # G^qrrho_q = H^qrrho - T * S^qrrho_tot
+        # G^qrrho_q,c = H^qrrho - T * S^qrrho_tot,c
         # we got -494776918.0570549 J mol^-1
-        expected_qrrho_gibbs_free_energy = (
-            expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature
+        expected_qrrho_gibbs_free_energy_concentration = (
+                expected_qrrho_enthalpy - expected_qrrho_entropy_times_temperature_concentration
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy,
-            expected_qrrho_gibbs_free_energy,
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_concentration,
+            expected_qrrho_gibbs_free_energy_concentration,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy
+            qrrho_thermochem_co2_1.qrrho_gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -188.450589,
+            atol=1e-6,
+        )
+
+        """Values from Goodvibes, as a reference:
+                goodvibes -f 100 -t 298.15 -q --bav "conf" co2.log
+        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
+           **********************************************************************************************************************************************
+        o  co2                                       -188.444680   0.011776   -188.429325   -188.429327   0.024281   0.024281   -188.453606   -188.453608
+           **********************************************************************************************************************************************
+        """
+        qrrho_thermochem_co2_1_gas = Thermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+        )
+        # In Goodvibes, if no concentration is specified, the default pressure is 1 atmosphere.
+        assert np.isclose(
+            qrrho_thermochem_co2_1_gas.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.024281,
+            atol=1e-6,
+        )
+
+        # S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
+        # we got 155.93822974452405 + 54.73729016622342 + 3.144125621155244 + 0 = 213.81964553190272 J mol^-1 K^-1
+        expected_translational_entropy = 8.314462145468951 * (
+                np.log(
+                    (
+                        (
+                                2
+                                * np.pi
+                                * (
+                                        mol.most_abundant_mass
+                                        / (6.0221408 * 1e23 * 1000)
+                                )
+                                * 1.380649
+                                * 1e-23
+                                * 298.15
+                                / (6.62606957 * 1e-34) ** 2
+                        )
+                    ) ** (3 / 2) * (1.380649 * 1e-23 * 298.15 / 101325)
+                ) + 1 + 3 / 2
+        )
+        expected_qrrho_total_entropy = (
+            expected_translational_entropy
+            + expected_rotational_entropy
+            + expected_qrrho_vibrational_entropy
+            + expected_electronic_entropy
+        )
+        assert np.isclose(
+            qrrho_thermochem_co2_1.qrrho_total_entropy,
+            expected_qrrho_total_entropy,
+        )
+
+        # T * S^qrrho_tot
+        # we got 63750.32731533679 J mol^-1
+        expected_qrrho_entropy_times_temperature = (
+                298.15 * expected_qrrho_total_entropy
+        )
+        assert np.isclose(
+            qrrho_thermochem_co2_1.qrrho_entropy_times_temperature,
+            expected_qrrho_entropy_times_temperature,
+        )
+
+        assert np.isclose(
+            qrrho_thermochem_co2_1_gas.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.024281,
+            atol=1e-5,
+        )
+        assert np.isclose(
+            qrrho_thermochem_co2_1_gas.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -188.453606,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_co2_1_gas.qrrho_gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -188.453608,
             atol=1e-6,
         )
 
@@ -1191,25 +1272,25 @@ class TestThermochemistryCO2:
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.entropy_times_temperature
+            qrrho_thermochem_co2_2.entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.049327,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.qrrho_entropy_times_temperature
+            qrrho_thermochem_co2_2.qrrho_entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.049327,
             atol=1e-5,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.gibbs_free_energy
+            qrrho_thermochem_co2_2.gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -188.473778,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.qrrho_gibbs_free_energy_qs
+            qrrho_thermochem_co2_2.qrrho_gibbs_free_energy_concentration_qs
             / (hartree_to_joules * units._Nav),
             -188.473779,
             atol=1e-6,
@@ -1265,25 +1346,25 @@ class TestThermochemistryCO2:
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.entropy_times_temperature
+            qrrho_thermochem_co2_3.entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.021262,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.qrrho_entropy_times_temperature
+            qrrho_thermochem_co2_3.qrrho_entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.021781,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.gibbs_free_energy
+            qrrho_thermochem_co2_3.gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -188.450587,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.qrrho_gibbs_free_energy
+            qrrho_thermochem_co2_3.qrrho_gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -188.453757,
             atol=1e-6,
@@ -1510,25 +1591,25 @@ class TestThermochemistryHe:
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.entropy_times_temperature
+            qrrho_thermochem_he.entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.025951,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.qrrho_entropy_times_temperature
+            qrrho_thermochem_he.qrrho_entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.025951,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.gibbs_free_energy
+            qrrho_thermochem_he.gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -2.936345,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_he.qrrho_gibbs_free_energy
+            qrrho_thermochem_he.qrrho_gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -2.936345,
             atol=1e-6,
@@ -1854,25 +1935,25 @@ class TestThermochemistryH2O:
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.entropy_times_temperature
+            qrrho_thermochem_water.entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.098212,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.qrrho_entropy_times_temperature
+            qrrho_thermochem_water.qrrho_entropy_times_temperature_concentration
             / (hartree_to_joules * units._Nav),
             0.098221,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.gibbs_free_energy
+            qrrho_thermochem_water.gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -76.387404,
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_water.qrrho_gibbs_free_energy
+            qrrho_thermochem_water.qrrho_gibbs_free_energy_concentration
             / (hartree_to_joules * units._Nav),
             -76.387445,
             atol=1e-6,
