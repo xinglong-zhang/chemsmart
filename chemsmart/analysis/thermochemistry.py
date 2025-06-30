@@ -29,7 +29,7 @@ class Thermochemistry:
     def __init__(
         self,
         filename,
-        temperature,
+        temperature=None,
         concentration=None,
         pressure=1.0,
         use_weighted_mass=False,
@@ -53,8 +53,6 @@ class Thermochemistry:
         )  # convert the unit of pressure from atm to Pascal
         self.concentration = concentration
         self.alpha = alpha
-        self.cutoff = max(min(s_freq_cutoff, h_freq_cutoff, 100.0), 1e-6)
-        # why min of 100? if use 150, then cannot work?
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
@@ -166,30 +164,33 @@ class Thermochemistry:
 
     @property
     def cleaned_frequencies(self):
-        """Replace residue imaginary frequencies with the cutoff value.
+        """Clean up the vibrational frequencies for thermochemical calculations.
         For transition states (job_type == "ts"), the first imaginary frequency is assumed to
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
-        All other negative frequencies are replaced by the cutoff value.
+        For optimization, only geometries without imaginary frequencies are parsed for thermochemical calculations.
         """
         if not self.vibrational_frequencies:
             return None
-        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
-            # in this case the structure is not quite TS, so this correction is not right.
-            return [
-                self.cutoff if k < 0.0 else k
-                for k in self.vibrational_frequencies[1:]
-            ]
-
-        # this is bad, since for geometry opt, it will ignore the neg freq
-        return [
-            self.cutoff if k < 0.0 else k for k in self.vibrational_frequencies
-        ]
-
-    @property
-    def num_replaced_frequencies(self):
-        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
-            return len(self.imaginary_frequencies) - 1
-        return len(self.imaginary_frequencies)
+        if self.imaginary_frequencies:
+            if self.job_type == "ts":
+                if (
+                    len(self.imaginary_frequencies) == 1
+                    and self.vibrational_frequencies[0] < 0.0
+                ):
+                    return self.vibrational_frequencies[1:]
+                else:
+                    raise ValueError(
+                        f"!! ERROR: Detected multiple imaginary frequencies in TS calculation for {self.filename}. "
+                        f"Only one imaginary frequency is allowed for a valid TS. "
+                        f"Please re-optimize the geometry to locate a true TS."
+                    )
+            else:
+                raise ValueError(
+                    f"!! ERROR: Detected imaginary frequencies in geometry optimization for {self.filename}. "
+                    f"A valid optimized geometry should not contain imaginary frequencies. "
+                    f"Please re-optimize the geometry to locate a true minimum."
+                )
+        return self.vibrational_frequencies
 
     @property
     def energies(self):
