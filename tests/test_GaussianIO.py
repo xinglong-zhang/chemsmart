@@ -123,6 +123,18 @@ class TestRouteString:
         assert r1.solvent_id == "water"
         # TODO: fix nonstandard functional/basis (very rare cases such as this)
 
+    def test_read_route_semiempirical(self):
+        s1 = "# opt freq PM6"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+        assert r1.ab_initio is None
+        assert r1.semiempirical == "pm6"
+        assert r1.solv is False
+        assert r1.dieze_tag is None
+        assert r1.additional_opt_options_in_route is None
+        assert r1.additional_route_parameters is None
+
     def test_read_route_string_opt_options(self):
         s2a = "# opt=(recalcfc=5) freq mn15 def2svp"
         r2a = GaussianRoute(s2a)
