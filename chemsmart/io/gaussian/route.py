@@ -68,7 +68,7 @@ class GaussianRoute:
                 semiemp.lower() in each_input
                 for semiemp in GAUSSIAN_SEMIEMPIRICAL
             ):
-                return each_input
+                return each_input.upper()
         return None
 
     @property

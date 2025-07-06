@@ -26,10 +26,10 @@ class GaussianRefs:
     ]
     g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
     g_semiempirical = [
-        "am1",
-        "pm3",
-        "pm6",
-        "pm7",
+        "AM1",
+        "PM3",
+        "PM6",
+        "PM7",
         "CNDO",
         "INDO",
         "MNDO",
