@@ -29,8 +29,8 @@ class Thermochemistry:
     def __init__(
         self,
         filename,
-        temperature,
-        concentration=1.0,
+        temperature=None,
+        concentration=None,
         pressure=1.0,
         use_weighted_mass=False,
         alpha=4,
@@ -53,8 +53,6 @@ class Thermochemistry:
         )  # convert the unit of pressure from atm to Pascal
         self.concentration = concentration
         self.alpha = alpha
-        self.cutoff = max(min(s_freq_cutoff, h_freq_cutoff, 100.0), 1e-6)
-        # why min of 100? if use 150, then cannot work?
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
@@ -63,6 +61,8 @@ class Thermochemistry:
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
         self.c = (
             self.concentration * 1000 * units._Nav
+            if self.concentration is not None
+            else None
         )  # convert the unit of concentration from mol/L to Particle/m^3
 
         self.I = [
@@ -164,30 +164,33 @@ class Thermochemistry:
 
     @property
     def cleaned_frequencies(self):
-        """Replace residue imaginary frequencies with the cutoff value.
+        """Clean up the vibrational frequencies for thermochemical calculations.
         For transition states (job_type == "ts"), the first imaginary frequency is assumed to
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
-        All other negative frequencies are replaced by the cutoff value.
+        For optimization, only geometries without imaginary frequencies are parsed for thermochemical calculations.
         """
         if not self.vibrational_frequencies:
             return None
-        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
-            # in this case the structure is not quite TS, so this correction is not right.
-            return [
-                self.cutoff if k < 0.0 else k
-                for k in self.vibrational_frequencies[1:]
-            ]
-
-        # this is bad, since for geometry opt, it will ignore the neg freq
-        return [
-            self.cutoff if k < 0.0 else k for k in self.vibrational_frequencies
-        ]
-
-    @property
-    def num_replaced_frequencies(self):
-        if self.job_type == "ts" and self.vibrational_frequencies[0] < 0.0:
-            return len(self.imaginary_frequencies) - 1
-        return len(self.imaginary_frequencies)
+        if self.imaginary_frequencies:
+            if self.job_type == "ts":
+                if (
+                    len(self.imaginary_frequencies) == 1
+                    and self.vibrational_frequencies[0] < 0.0
+                ):
+                    return self.vibrational_frequencies[1:]
+                else:
+                    raise ValueError(
+                        f"!! ERROR: Detected multiple imaginary frequencies in TS calculation for {self.filename}. "
+                        f"Only one imaginary frequency is allowed for a valid TS. "
+                        f"Please re-optimize the geometry to locate a true TS."
+                    )
+            else:
+                raise ValueError(
+                    f"!! ERROR: Detected imaginary frequencies in geometry optimization for {self.filename}. "
+                    f"A valid optimized geometry should not contain imaginary frequencies. "
+                    f"Please re-optimize the geometry to locate a true minimum."
+                )
+        return self.vibrational_frequencies
 
     @property
     def energies(self):
@@ -202,18 +205,26 @@ class Thermochemistry:
     @property
     def translational_partition_function(self):
         """Obtain the translational partition function.
-        Formula:
+        Formula in gas phase:
             q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (k_B * T / P)
+        In solution, uses concentration instead of pressure. Formula:
+            q_t = (2 * pi * m * k_B * T / h^2)^(3/2) * (1 / c)
         where:
             m = mass of the molecule (kg)
             k_B = Boltzmann constant (J K^-1)
             T = temperature (K)
             h = Planck constant (J s)
             P = pressure of the system (Pa)
+            c = pressure of the system (m^-3)
         """
-        return (
-            2 * np.pi * self.m * units._k * self.T / units._hplanck**2
-        ) ** (3 / 2) * (units._k * self.T / self.P)
+        if self.c is not None:
+            return (
+                2 * np.pi * self.m * units._k * self.T / units._hplanck**2
+            ) ** (3 / 2) * (1 / self.c)
+        else:
+            return (
+                2 * np.pi * self.m * units._k * self.T / units._hplanck**2
+            ) ** (3 / 2) * (units._k * self.T / self.P)
 
     @property
     def translational_entropy(self):
@@ -702,63 +713,15 @@ class Thermochemistry:
         return self.energies + self.total_internal_energy + R * self.T
 
     @property
-    def translational_partition_function_concentration(self):
-        """Obtain the translational partition function.
-        Uses concentration instead of pressure.
-        Formula:
-            q_t,c = (2 * pi * m * k_B * T / h^2)^(3/2) * (1 / c)
-        where:
-            c = pressure of the system (m^-3)
-        """
-        return (
-            2 * np.pi * self.m * units._k * self.T / units._hplanck**2
-        ) ** (3 / 2) * (1 / self.c)
-
-    @property
-    def translational_entropy_concentration(self):
-        """Obtain the translational entropy in J mol^-1 K^-1.
-        Uses concentration instead of pressure.
-        Formula:
-            S_t,c = R * [ln(q_t) + 1 + 3/2]
-        """
-        return R * (
-            np.log(self.translational_partition_function_concentration)
-            + 1
-            + 3 / 2
-        )
-
-    @property
-    def total_entropy_concentration(self):
-        """Obtain the total entropy in J mol^-1 K^-1.
-        Uses concentration instead of pressure.
-        Formula:
-            S_tot,c = S_t,c + S_r + S_v + S_e
-        """
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_entropy_concentration
-                + self.electronic_entropy
-            )
-        return (
-            self.translational_entropy_concentration
-            + self.rotational_entropy
-            + self.electronic_entropy
-            + self.vibrational_entropy
-        )
-
-    @property
     def qrrho_total_entropy(self):
         """Obtain the quasi-RRHO total entropy in J mol^-1 K^-1.
         Formula:
-            S^qrrho_tot = S_t,c + S_r + S^qrrho_v + S_e
+            S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
         """
         if self.molecule.is_monoatomic:
-            return (
-                self.translational_entropy_concentration
-                + self.electronic_entropy
-            )
+            return self.translational_entropy + self.electronic_entropy
         return (
-            self.translational_entropy_concentration
+            self.translational_entropy
             + self.rotational_entropy
             + self.electronic_entropy
             + self.qrrho_vibrational_entropy
@@ -768,9 +731,9 @@ class Thermochemistry:
     def entropy_times_temperature(self):
         """Obtain the total entropy times temperature in J mol^-1.
         Formula:
-            T * S_tot,c
+            T * S_tot
         """
-        return self.T * self.total_entropy_concentration
+        return self.T * self.total_entropy
 
     @property
     def qrrho_entropy_times_temperature(self):
@@ -778,13 +741,13 @@ class Thermochemistry:
         Formula:
             T * S^qrrho_tot
         """
-        return self.qrrho_total_entropy * self.T
+        return self.T * self.qrrho_total_entropy
 
     @property
     def gibbs_free_energy(self):
-        """
+        """Obtain the Gibbs free energy in J mol^-1 .
         Formula:
-            G = H - T * S_tot,c
+            G = H - T * S_tot
         """
         return self.enthalpy - self.entropy_times_temperature
 
@@ -837,6 +800,6 @@ class Thermochemistry:
     def qrrho_gibbs_free_energy_qh(self):
         """Obtain the Gibbs free energy in J mol^-1, by a quasi-RRHO correction to enthalpy only.
         Formula:
-            G^qrrho_qh = H^qrrho - T * S_tot,c
+            G^qrrho_qh = H^qrrho - T * S_tot
         """
         return self.qrrho_enthalpy - self.entropy_times_temperature

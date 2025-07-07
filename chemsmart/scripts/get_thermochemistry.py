@@ -27,13 +27,19 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Gaussian or ORCA output files for parsing thermochemistry.",
 )
 @click.option(
+    "-d",
+    "--directory",
+    default=None,
+    help="Directory in which to analyze files.",
+)
+@click.option(
     "-ft",
     "--filetype",
     default=None,
-    help="Type of file to be converted, if directory is specified.",
+    type=click.Choice(["log", "out"], case_sensitive=False),
+    help="Type of file to be analyzed, if directory is specified.",
 )
 @click.option(
-    "-c",
     "--cutoff",
     default=100.0,
     type=float,
@@ -59,17 +65,24 @@ os.environ["OMP_NUM_THREADS"] = "1"
 @click.option(
     "-c",
     "--concentration",
+    default=None,
+    type=float,
+    help="Concentration in mol/L (solution).",
+)
+@click.option(
+    "-p",
+    "--pressure",
     default=1.0,
     type=float,
     show_default=True,
-    help="Concentration in mol/L",
+    help="Pressure in Standard atmosphere (gas phase). Ignored if -c/--concentration is provided.",
 )
 @click.option(
     "-t",
     "--temperature",
-    required=True,
-    default=None,
+    default=298.15,
     type=float,
+    show_default=True,
     help="Temperature in Kelvin.",
 )
 @click.option(
@@ -123,20 +136,15 @@ os.environ["OMP_NUM_THREADS"] = "1"
     ),
     help="Units of energetic values.",
 )
-@click.option(
-    "--scf",
-    is_flag=True,
-    default=False,
-    show_default=True,
-    help="Only output SCF energy without thermochemical corrections.",
-)
 def entry_point(
     filenames,
+    directory,
     filetype,
     cutoff,
     entropy_cutoff,
     enthalpy_cutoff,
     concentration,
+    pressure,
     temperature,
     alpha,
     weighted,
@@ -144,7 +152,6 @@ def entry_point(
     quasi_rrho_entropy,
     quasi_rrho_enthalpy,
     units,
-    scf,
 ):
     """Thermochemistry calculation script using quasi-RRHO approximation."""
 
@@ -185,9 +192,11 @@ def entry_point(
         )
         assert filetype, "Type of file to be converted must be specified."
         if filetype == "log":
-            filenames = glob.glob("*.log")
+            pattern = "*.log"
+            filenames = glob.glob(os.path.join(directory, pattern))
         elif filetype == "out":
-            filenames = glob.glob("*.out")
+            pattern = "*.out"
+            filenames = glob.glob(os.path.join(directory, pattern))
         else:
             logger.error(
                 "Please provide calculation output files on the command line."
@@ -205,57 +214,32 @@ def entry_point(
             return
 
     # ASCII Arts for CHEMSMART
-    log("\n")
-    log(
+    logger.info("\n")
+    logger.info(
         "   "
         + " " * 25
         + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ "
     )
-    log(
+    logger.info(
         "   "
         + " " * 25
         + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
     )
-    log(
+    logger.info(
         "   "
         + " " * 25
         + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || | "
     )
-    log(
+    logger.info(
         "   "
         + " " * 25
         + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | | "
     )
-    log(
+    logger.info(
         "   "
         + " " * 25
         + " \____|_| |_|_____|_|  |_|____/|_|  |_/_/   \_\_| \_\|_| \n"
     )
-
-    # Only output SCF energy without thermochemical corrections.
-    if scf:
-        log(f" * SCF Energies (in {energy_unit}): \n\n")
-        log(
-            "   "
-            + "{:<60} {:>22} {:>22}\n".format("Structure", "E", "Job Type")
-        )
-        log("   " + "=" * 106 + "\n")
-        index = 1
-        for file in filenames:
-            thermochemistry = Thermochemistry(file, temperature=temperature)
-            structure = os.path.splitext(os.path.basename(file))[0]
-            energy = thermochemistry.energies * unit_conversion
-            job_type = thermochemistry.job_type
-            log(
-                "{:2} {:60} {:22.6f} {:>22}\n".format(
-                    index,
-                    structure,
-                    energy,
-                    job_type,
-                )
-            )
-            index += 1
-        return
 
     # Output Thermochemistry analysis.
     log("   " + "┌" + "─" * 106 + "┐" + "\n")
@@ -270,11 +254,14 @@ def entry_point(
     )
     log("   " + "└" + "─" * 106 + "┘" + "\n")
     log("   " + f"Temperature                : {temperature:.2f} K" + "\n")
-    log(
-        "   "
-        + f"Concentration              : {concentration:.1f} mol/L"
-        + "\n"
-    )
+    if concentration is not None:
+        log(
+            "   "
+            + f"Concentration              : {concentration:.1f} mol/L"
+            + "\n"
+        )
+    else:
+        log("   " + f"Pressure                   : {pressure:.1f} atm" + "\n")
     if quasi_rrho or quasi_rrho_entropy:
         log(
             "   "
@@ -370,6 +357,7 @@ def entry_point(
                 file,
                 temperature=temperature,
                 concentration=concentration,
+                pressure=pressure,
                 use_weighted_mass=weighted,
                 alpha=alpha,
                 s_freq_cutoff=entropy_cutoff,
@@ -406,30 +394,20 @@ def entry_point(
                     thermochemistry.qrrho_gibbs_free_energy_qs
                     * unit_conversion
                 )
-
             # Warning for imaginary frequency.
             if thermochemistry.imaginary_frequencies:
                 if (
                     thermochemistry.job_type == "ts"
                     and thermochemistry.vibrational_frequencies[0] < 0.0
                 ):
-                    if thermochemistry.num_replaced_frequencies > 0:
-                        logger.error(
-                            f"!! Detected multiple imaginary frequencies in transition state for {file} — aborting.\n"
-                        )
-                        raise ValueError(
-                            f"Error: Detected multiple imaginary frequencies in TS calculation for {file}. "
-                            f"Only one imaginary frequency is allowed for a valid TS. "
-                            f"Please re-optimize the geometry to locate a true TS."
-                        )
+                    if len(thermochemistry.imaginary_frequencies) > 1:
+                        continue
                     else:
                         logger.warning(
                             f"!! Transition state detected: ignored 1 imaginary frequency for {file}.\n"
                         )
                 else:
-                    logger.warning(
-                        f"!! Replaced {thermochemistry.num_replaced_frequencies} imaginary frequency(s) with the cutoff value ({thermochemistry.cutoff:.1f} cm-1) for {file}.\n"
-                    )
+                    continue
 
             if quasi_rrho:
                 log(
@@ -487,10 +465,21 @@ def entry_point(
                     )
                 )
             index += 1
-        except (ValueError, TypeError, IndexError, AttributeError):
-            logger.warning(
-                f"!! Frequency information not found, skipped {file}.\n"
+
+        except TypeError:
+            log(
+                "{:2} {:39} {:13.6f} {:<50}\n".format(
+                    " ×",
+                    structure,
+                    energy,
+                    "  Warning! Frequency information not found ...",
+                )
             )
+            continue
+
+        except Exception as e:
+            logger.error(f"{e}\n")
+            continue
     log("\n")
     logger.info(" * Done. Results saved to 'thermochemistry.dat'.")
 
