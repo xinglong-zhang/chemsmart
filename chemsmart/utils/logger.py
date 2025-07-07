@@ -88,3 +88,5 @@ def create_logger(
         errfile_handler.setLevel(logging.WARNING)
         errfile_handler.setFormatter(formatter)
         logger.addHandler(errfile_handler)
+
+    return logger

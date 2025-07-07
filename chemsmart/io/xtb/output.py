@@ -333,6 +333,28 @@ class XTBOutput(FileMixin):
         return summary_blocks
 
     @property
+    def global_electrophilicity_index(self):
+        """Global Electrophilicity Indexes (GEI) in eV, using command line '--vomega'."""
+        for line in reversed(self.contents):
+            if "Global electrophilicity index (eV):" in line:
+                global_electrophilicity_index = line.split()[-1]
+                return float(global_electrophilicity_index)
+        return None
+
+    @property
+    def fukui_index(self):
+        """Return Fukui Index block, using command line '--vfukui'."""
+        fukui_block = []
+        for i, line in enumerate(self.contents):
+            if "Fukui functions:" in line:
+                for j_line in self.contents[i + 1 :]:
+                    if "------" in j_line:
+                        break
+                    fukui_block.append(j_line)
+                return fukui_block
+        return None
+
+    @property
     def vertical_ionization_potential(self):
         """Vertical Ionization Potential (VIP) in eV, using command line '--vip', '--vipea' or '--vomega'."""
         for line in reversed(self.contents):
