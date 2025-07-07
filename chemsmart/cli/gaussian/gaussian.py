@@ -72,6 +72,13 @@ def click_gaussian_settings_options(f):
         "-b", "--basis", type=str, default=None, help="New basis set to run."
     )
     @click.option(
+        "-s",
+        "--semiempirical",
+        type=str,
+        default=None,
+        help="Semiempirical method to run.",
+    )
+    @click.option(
         "-i",
         "--index",
         type=str,
@@ -269,6 +276,7 @@ def gaussian(
     multiplicity,
     functional,
     basis,
+    semiempirical,
     index,
     additional_opt_options,
     additional_route_parameters,
@@ -319,6 +327,9 @@ def gaussian(
     if basis is not None:
         job_settings.basis = basis
         keywords += ("basis",)
+    if semiempirical is not None:
+        job_settings.semiempirical = semiempirical
+        keywords += ("semiempirical",)
     if additional_opt_options is not None:
         job_settings.additional_opt_options_in_route = additional_opt_options
         keywords += ("additional_opt_options_in_route",)

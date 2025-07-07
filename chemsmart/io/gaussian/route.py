@@ -7,6 +7,7 @@ from chemsmart.io.gaussian import (
     GAUSSIAN_BASES,
     GAUSSIAN_DIEZE_TAGS,
     GAUSSIAN_FUNCTIONALS,
+    GAUSSIAN_SEMIEMPIRICAL,
 )
 from chemsmart.io.gaussian import (
     GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
@@ -59,6 +60,16 @@ class GaussianRoute:
     def basis(self):
         _, basis = self.get_functional_and_basis()
         return basis
+
+    @property
+    def semiempirical(self):
+        for each_input in self.route_inputs:
+            if any(
+                semiemp.lower() in each_input
+                for semiemp in GAUSSIAN_SEMIEMPIRICAL
+            ):
+                return each_input.upper()
+        return None
 
     @property
     def solvent_model(self):
