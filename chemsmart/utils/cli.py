@@ -294,3 +294,47 @@ def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
         "Note: all indices should be 1-indexed. Chemsmart has already taken care of converting 0-indexed "
         "(used in ORCA) to 1-indexed (used in visualization software such as PyMOL, Gaussview, etc)."
     )
+
+
+def get_setting_from_jobtype_for_xtb(
+    project_settings, jobtype, coordinates, step_size, num_steps
+):
+    if jobtype is None:
+        raise ValueError("Jobtype must be provided for Crest and Link job.")
+
+    settings = None
+
+    if jobtype.lower() == "opt":
+        settings = project_settings.opt_settings()
+    elif jobtype.lower() == "modred":
+        assert (
+            coordinates is not None
+        ), "Coordinates must be provided for modred job."
+        settings = project_settings.modred_settings()
+    elif jobtype.lower() == "scan":
+        check_scan_coordinates_xtb(coordinates, step_size, num_steps)
+        settings = project_settings.scan_settings()
+    elif jobtype.lower() == "sp":
+        settings = project_settings.sp_settings()
+
+    if coordinates is not None:
+        modred_info = ast.literal_eval(coordinates)
+        if jobtype == "modred":
+            settings.modred = modred_info
+        elif jobtype == "scan":
+            scan_info = {
+                "coords": modred_info,
+                "num_steps": int(num_steps),
+                "step_size": float(step_size),
+            }
+            settings.modred = scan_info
+
+    return settings
+
+def check_scan_coordinates_xtb(coordinates, step_size, num_steps):
+    assert all(v is not None for v in [coordinates, step_size, num_steps]), (
+        "Scanning coordinates, step size and number of steps of scan required!\n"
+        f"But is coordinates: {coordinates}, step_size: {step_size}, num_steps: {num_steps}\n"
+        "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
+        "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
+    )

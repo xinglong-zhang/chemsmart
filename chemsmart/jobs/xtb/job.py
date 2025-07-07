@@ -125,3 +125,22 @@ class XTBJob(Job):
             )
         else:
             raise ValueError(f"Invalid job type: {jobtype}")
+
+class XTBGeneralJob(XTBJob):
+    """XTBGeneralJob subclasses XTBJob, this is needed
+    to prevent recursive loop.
+    For example, recursive loop occurs in class XTBCrestOptJob(XYBJob)
+    that subclasses XTBJob and calls and runs XTBGeneralJob.
+    """
+
+    TYPE = "xtb"
+
+    def __init__(
+            self, molecule, settings=None, label=None, **kwargs
+    ):
+        super().__init__(
+            molecule=molecule, 
+            settings=settings, 
+            label=label, 
+            **kwargs,
+        )
