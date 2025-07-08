@@ -807,6 +807,8 @@ class TestThermochemistryCO2:
             temperature=298.15,
             concentration=1.0,
             use_weighted_mass=False,
+            h_freq_cutoff=100,
+            s_freq_cutoff=100,
         )
 
         # when arguments are not specified, the quasi-rrho calculation use
@@ -1173,6 +1175,8 @@ class TestThermochemistryCO2:
             temperature=298.15,
             pressure=1.0,
             use_weighted_mass=False,
+            h_freq_cutoff=100,
+            s_freq_cutoff=100,
         )
         # In Goodvibes, if no concentration is specified, the default pressure is 1 atmosphere.
         assert np.isclose(
@@ -1255,6 +1259,8 @@ class TestThermochemistryCO2:
             temperature=598.15,
             concentration=0.5,
             use_weighted_mass=False,
+            h_freq_cutoff=100,
+            s_freq_cutoff=100,
         )
         assert np.isclose(
             qrrho_thermochem_co2_2.energies / (hartree_to_joules * units._Nav),
@@ -1512,6 +1518,23 @@ class TestThermochemistryHe:
             thermochem2.total_heat_capacity / cal_to_joules,
             2.981,
             atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem2.enthalpy / (hartree_to_joules * units._Nav),
+            -2.912769,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            thermochem2.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.014313,
+            atol=1e-6,
+        )
+
+        assert np.isclose(
+            thermochem2.gibbs_free_energy / (hartree_to_joules * units._Nav),
+            -2.927083,
+            atol=1e-6,
         )
 
     def test_thermochemistry_he_orca_output(self, orca_he_output_freq):

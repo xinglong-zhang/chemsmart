@@ -34,8 +34,8 @@ class Thermochemistry:
         pressure=1.0,
         use_weighted_mass=False,
         alpha=4,
-        s_freq_cutoff=100.0,
-        h_freq_cutoff=100.0,
+        s_freq_cutoff=None,
+        h_freq_cutoff=None,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
@@ -54,10 +54,10 @@ class Thermochemistry:
         self.concentration = concentration
         self.alpha = alpha
         self.s_freq_cutoff = (
-            s_freq_cutoff * units._c * 1e2
+            s_freq_cutoff * units._c * 1e2 if s_freq_cutoff else None
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
         self.h_freq_cutoff = (
-            h_freq_cutoff * units._c * 1e2
+            h_freq_cutoff * units._c * 1e2 if h_freq_cutoff else None
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
         self.c = (
             self.concentration * 1000 * units._Nav
@@ -583,6 +583,8 @@ class Thermochemistry:
             v_0 = cutoff frequency in Hz, default is 100 cm^-1 (already converted to Hz)
             α = dimensionless interpolator exponent, default value is 4
         """
+        if freq_cutoff is None or not self.v:
+            return []
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]
         return damp
 
@@ -657,6 +659,10 @@ class Thermochemistry:
         """
         vib_entropy = []
         if self.v:
+            assert len(self.v) == len(self.entropy_damping_function), (
+                f"The length of vibrational frequencies and damping function must be equal.\n"
+                f"The damping function is {self.entropy_damping_function}.\n"
+            )
             for j in range(0, len(self.v)):
                 vib_entropy.append(
                     self.entropy_damping_function[j] * self.rrho_entropy[j]
@@ -690,6 +696,10 @@ class Thermochemistry:
         """
         vib_energy = []
         if self.v:
+            assert len(self.v) == len(self.enthalpy_damping_function), (
+                f"The length of vibrational frequencies and damping function must be equal.\n"
+                f"The damping function is {self.enthalpy_damping_function}.\n"
+            )
             for j in range(0, len(self.v)):
                 vib_energy.append(
                     self.enthalpy_damping_function[j]

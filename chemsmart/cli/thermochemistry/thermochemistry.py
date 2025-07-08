@@ -4,8 +4,9 @@ import os
 
 import click
 
-from chemsmart.analysis.thermochemistry import Thermochemistry
-from chemsmart.utils.cli import MyGroup
+from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
+from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
+from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def click_thermochemistry_options(f):
         help="Pressure in atm.",
     )
     @click.option(
-        "-t",
+        "-T",
         "--temperature",
         required=True,
         default=None,
@@ -91,30 +92,6 @@ def click_thermochemistry_options(f):
         "Default to False, i.e., use single isotopic mass.",
     )
     @click.option(
-        "-q",
-        "--quasi-rrho",
-        is_flag=True,
-        default=False,
-        show_default=True,
-        help="Quasi-RRHO approximation for both entropy and enthalpy.",
-    )
-    @click.option(
-        "-qs",
-        "--quasi-rrho-entropy",
-        is_flag=True,
-        default=False,
-        show_default=True,
-        help="Apply quasi-RRHO approximation for entropy.",
-    )
-    @click.option(
-        "-qh",
-        "--quasi-rrho-enthalpy",
-        is_flag=True,
-        default=False,
-        show_default=True,
-        help="Apply quasi-RRHO approximation for enthalpy.",
-    )
-    @click.option(
         "-u",
         "--units",
         default="hartree",
@@ -131,7 +108,8 @@ def click_thermochemistry_options(f):
     return wrapper_common_options
 
 
-@click.group(cls=MyGroup)
+# use MyGroup to allow potential subcommands in the future
+@click.command(cls=MyCommand)
 @click_thermochemistry_options
 @click.pass_context
 def thermochemistry(
@@ -148,71 +126,111 @@ def thermochemistry(
     weighted,
     units,
 ):
-    if directory is not None:
+    """CLI for running thermochemistry jobs using the chemsmart framework."""
+    # validate input
+    if directory and filenames:
+        raise ValueError(
+            "Cannot specify both --directory and --filenames. Choose one."
+        )
+    if directory and not filetype:
+        raise ValueError("Must specify --filetype when using --directory.")
+
+    # Create job settings
+    job_settings = ThermochemistryJobSettings(
+        temperature=temperature,
+        concentration=concentration,
+        pressure=pressure,
+        use_weighted_mass=weighted,
+        alpha=alpha,
+        s_freq_cutoff=cutoff_entropy,
+        h_freq_cutoff=cutoff_enthalpy,
+        units=units,
+    )
+
+    # Initialize list to store jobs
+    jobs = []
+
+    if directory:
         directory = os.path.abspath(directory)
         logger.info(
             f"Obtaining thermochemistry of files in directory: {directory}"
         )
-        assert (
-            filetype is not None
-        ), "Type of files to calculate thermochemistry for should be given!"
-        assert filenames is None, (
-            "Filenames cannot be specified with directory!\n"
-            "All files will be converted."
-        )
-
         if filetype == "log":
-            logger.info(
-                "Obtaining thermochemistry of files in Gaussian .log files."
-            )
             from chemsmart.io.gaussian.folder import GaussianLogFolder
 
-            gaussian_log_folder = GaussianLogFolder(directory)
-            gaussian_log_files = gaussian_log_folder.all_logfiles
-            for file in gaussian_log_files:
-                thermochemistry = Thermochemistry(
-                    filename=file,
-                    temperature=temperature,
-                    concentration=concentration,
-                    pressure=pressure,
-                    use_weighted_mass=weighted,
-                    alpha=alpha,
-                    s_freq_cutoff=cutoff_entropy,
-                    h_freq_cutoff=cutoff_enthalpy,
-                )
-                energy = thermochemistry.energies
-                print(energy)
+            folder = GaussianLogFolder(directory)
+            files = folder.all_logfiles
         elif filetype == "out":
-            logger.info(
-                "Obtaining thermochemistry of files in ORCA .out files."
-            )
             from chemsmart.io.orca.folder import ORCAOutFolder
 
-            orca_out_folder = ORCAOutFolder(directory)
-            orca_out_files = orca_out_folder.all_outfiles
-            for file in orca_out_files:
-                thermochemistry = Thermochemistry(
-                    filename=file,
-                    temperature=temperature,
-                    concentration=concentration,
-                    pressure=pressure,
-                    use_weighted_mass=weighted,
-                    alpha=alpha,
-                    s_freq_cutoff=cutoff_entropy,
-                    h_freq_cutoff=cutoff_enthalpy,
-                )
-                energy = thermochemistry.energies
-                print(energy)
+            folder = ORCAOutFolder(directory)
+            files = folder.all_outfiles
         else:
             raise ValueError(
-                f"Unsupported file extension for '{filetype}'\n. "
-                f"Only Gaussian .log or ORCA .out files are accepted."
+                f"Unsupported filetype '{filetype}'. Use 'log' or 'out'."
             )
+        for file in files:
+            job = ThermochemistryJob.from_filename(
+                filename=file,
+                settings=job_settings,
+            )
+            jobs.append(job)
+            logger.info(f"Created thermochemistry job for file: {file}")
+    elif filenames:
+        for file in filenames:
+            if not file.endswith((".log", ".out")):
+                raise ValueError(
+                    f"Unsupported file extension for '{file}'. Use .log or .out."
+                )
+            job = ThermochemistryJob.from_filename(
+                filename=file,
+                settings=job_settings,
+            )
+            jobs.append(job)
+            logger.info(f"Created thermochemistry job for file: {file}")
+
+    # Store objects in context
+    ctx.obj["job_settings"] = job_settings
+    ctx.obj["jobs"] = jobs
+    ctx.obj["filenames"] = (
+        filenames if filenames else files if directory else None
+    )
+    ctx.obj["directory"] = directory
+    ctx.obj["filetype"] = filetype
+
+    # if ctx.invoked_subcommand is None:
+    #     # If no subcommand is invoked, run the thermochemistry jobs
+    #     logger.info("Running thermochemistry calculations on specified jobs.")
+    #     for job in jobs:
+    #         try:
+    #             job.calculate_thermochemistry()
+    #             logger.info(f"Thermochemistry calculation completed for {job.label}.")
+    #         except Exception as e:
+    #             logger.error(f"Error processing job for {job.label}: {e}")
+
+    # @thermochemistry.result_callback()
+    # @click.pass_context
+    # def thermochemistry_process_pipeline(ctx, *args, **kwargs):
+    #     """Process the thermochemistry jobs."""
+    #     jobs = ctx.obj.get("jobs", [])
+    for job in jobs:
+        try:
+            job.calculate_thermochemistry()
+            logger.info(
+                f"Completed thermochemistry job for {job.label}: results saved to {job.outputfile}"
+            )
+        except Exception as e:
+            logger.error(f"Error processing job for {job.label}: {e}")
+    # return args[0]
+
+    # if ctx.invoked_subcommand is None:
+    #     # If no subcommand is invoked, run the thermochemistry jobs
+    #     logger.info("Running thermochemistry calculations on specified jobs.")
+    #     for job in ctx.obj["jobs"]:
+    #         job.calculate_thermochemistry()
+    #         logger.info(f"Thermochemistry calculation completed for {job.label}.")
+    #
 
 
-@thermochemistry.result_callback()
-@click.pass_context
-def thermochemistry_process_pipeline(ctx, *args, **kwargs):
-    kwargs.update({"subcommand": ctx.invoked_subcommand})
-    ctx.obj[ctx.info_name] = kwargs
-    return args[0]
+if __name__ == "__main__":
+    thermochemistry()
