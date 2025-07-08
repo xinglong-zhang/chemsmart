@@ -364,7 +364,7 @@ def entry_point(
                 h_freq_cutoff=enthalpy_cutoff,
             )
             structure = os.path.splitext(os.path.basename(file))[0]
-            energy = thermochemistry.energies * unit_conversion
+            energy = thermochemistry.electronic_energy * unit_conversion
             zero_point_energy = (
                 thermochemistry.zero_point_energy * unit_conversion
             )

@@ -1,13 +1,27 @@
 import logging
 import math
+import os
+import sys
 
 import numpy as np
 from ase import units
+from scipy.constants import Boltzmann, physical_constants
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.constants import R, atm_to_pa, hartree_to_joules
+from chemsmart.utils.constants import (
+    R,
+    atm_to_pa,
+    energy_conversion,
+    hartree_to_joules,
+)
+from chemsmart.utils.references import (
+    grimme_quasi_rrho_entropy_ref,
+    head_gordon_damping_function_ref,
+    head_gordon_quasi_rrho_enthalpy_ref,
+    qrrho_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +38,9 @@ class Thermochemistry:
         alpha: int. Interpolator exponent used in the quasi-RRHO approximation.
         s_freq_cutoff: float. The cutoff frequency of the damping function used in calculating entropy.
         h_freq_cutoff: float. The cutoff frequency of the damping function used in calculating enthalpy.
+        energy_units: str. The energy units to use for output. Default is "hartree".
+        outputfile: str. The output file to save the thermochemistry results.
+        check_imaginary_frequencies: bool. If True, checks for imaginary frequencies in the vibrational analysis.
     """
 
     def __init__(
@@ -36,6 +53,9 @@ class Thermochemistry:
         alpha=4,
         s_freq_cutoff=None,
         h_freq_cutoff=None,
+        energy_units="hartree",
+        outputfile=None,
+        check_imaginary_frequencies=True,
     ):
         self.filename = filename
         self.molecule = Molecule.from_filepath(filename)
@@ -90,6 +110,10 @@ class Thermochemistry:
             if self.v
             else None
         )
+
+        self.energy_units = energy_units
+        self.outputfile = outputfile
+        self.check_imaginary_frequencies = check_imaginary_frequencies
 
     @property
     def file_object(self):
@@ -193,7 +217,7 @@ class Thermochemistry:
         return self.vibrational_frequencies
 
     @property
-    def energies(self):
+    def electronic_energy(self):
         """Obtain the total electronic energy in J mol^-1."""
         return self.file_object.energies[-1] * hartree_to_joules * units._Nav
 
@@ -720,7 +744,7 @@ class Thermochemistry:
         where:
             E0 = the total electronic energy (J mol^-1)
         """
-        return self.energies + self.total_internal_energy + R * self.T
+        return self.electronic_energy + self.total_internal_energy + R * self.T
 
     @property
     def qrrho_total_entropy(self):
@@ -788,7 +812,11 @@ class Thermochemistry:
         where:
             E0 = the total electronic energy (J mol^-1)
         """
-        return self.energies + self.qrrho_total_internal_energy + R * self.T
+        return (
+            self.electronic_energy
+            + self.qrrho_total_internal_energy
+            + R * self.T
+        )
 
     @property
     def qrrho_gibbs_free_energy(self):
@@ -813,3 +841,617 @@ class Thermochemistry:
             G^qrrho_qh = H^qrrho - T * S_tot
         """
         return self.qrrho_enthalpy - self.entropy_times_temperature
+
+    def compute_thermochemistry(self):
+        """Compute Boltzmann-averaged properties."""
+        self._calculate_thermochemistry()
+
+    def _calculate_thermochemistry(self):
+        """Calculate thermochemical properties based on the parsed data."""
+        # Check for imaginary frequencies if required
+        if self.check_imaginary_frequencies:
+            self.check_frequencies()
+        # convert energies to specified units
+        (
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+        ) = self.convert_energy_units()
+        # Log the results to the output file or console
+        self.log_results_to_file(
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+        )
+
+    def check_frequencies(self):
+        """Check for imaginary frequencies and raise an error if found."""
+        if self.imaginary_frequencies:
+            if self.job_type == "ts":
+                if len(self.imaginary_frequencies) == 1:
+                    logger.info(
+                        f"Correct Transition State detected: only 1 imaginary frequency\n"
+                        f"Imaginary frequency excluded for thermochemistry calculation in {self.filename}."
+                    )
+                else:
+                    raise ValueError(
+                        f"Invalid number of imaginary frequencies for {self.filename}. "
+                        f"Expected 0 for optimization or 1 for TS, but found "
+                        f"{len(self.imaginary_frequencies)} for job: {self.job_type}!"
+                    )
+            else:
+                raise ValueError(
+                    f"Invalid geometry optimization for {self.filename}. "
+                    f"A valid optimized geometry should not contain imaginary frequencies. "
+                    f"Please re-optimize the geometry to locate a true minimum."
+                )
+
+    def convert_energy_units(self):
+        """Convert all energies to the specified units."""
+        return (
+            self.electronic_energy
+            * energy_conversion("j/mol", self.energy_units),
+            self.zero_point_energy
+            * energy_conversion("j/mol", self.energy_units),
+            self.enthalpy * energy_conversion("j/mol", self.energy_units),
+            (
+                self.qrrho_enthalpy
+                * energy_conversion("j/mol", self.energy_units)
+                if self.h_freq_cutoff
+                else None
+            ),
+            self.entropy_times_temperature
+            * energy_conversion("j/mol", self.energy_units),
+            (
+                self.qrrho_entropy_times_temperature
+                * energy_conversion("j/mol", self.energy_units)
+                if self.s_freq_cutoff
+                else None
+            ),
+            self.gibbs_free_energy
+            * energy_conversion("j/mol", self.energy_units),
+            (
+                self.qrrho_gibbs_free_energy
+                * energy_conversion("j/mol", self.energy_units)
+                if self.h_freq_cutoff or self.s_freq_cutoff
+                else None
+            ),
+        )
+
+    def __str__(self):
+        """String representation of the thermochemistry results."""
+        return (
+            f"Thermochemistry Results for {self.filename}:\n"
+            f"Temperature: {self.temperature:.2f} K\n"
+            f"Concentration: {self.concentration:.1f} mol/L\n"
+            f"Pressure: {self.pressure:.1f} atm\n"
+            f"Mass Weighted: {'Most Abundant Masses' if not self.use_weighted_mass else 'Natural Abundance Weighted Masses'}\n"
+            f"Energy Unit: {self.energy_units}\n"
+        )
+
+    def log_results_to_file(
+        self,
+        electronic_energy,
+        zero_point_energy,
+        enthalpy,
+        qrrho_enthalpy,
+        entropy_times_temperature,
+        qrrho_entropy_times_temperature,
+        gibbs_free_energy,
+        qrrho_gibbs_free_energy,
+    ):
+        """Log the thermochemistry results to the output file."""
+        if self.outputfile is None:
+            logger.info(f"Logging results to console for {self.filename}.")
+            output = sys.stdout
+        else:
+            logger.info(
+                f"Logging results to {self.outputfile} for {self.filename}."
+            )
+            output = self.outputfile
+
+        if self.check_imaginary_frequencies:
+            self.check_frequencies()
+
+        # prepare output string
+        structure = os.path.splitext(os.path.basename(self.filename))[0]
+        output_string = f"Thermochemistry Results for {structure}:\n\n"
+        output_string += f"Temperature: {self.temperature:.2f} K\n"
+        if self.concentration is not None:
+            output_string += f"Concentration: {self.concentration:.1f} mol/L\n"
+        else:
+            output_string += f"Pressure: {self.pressure:.1f} atm\n"
+
+        if self.s_freq_cutoff:
+            output_string += (
+                f"Entropy Frequency Cut-off: {self.s_freq_cutoff:.1f} cm^-1\n"
+            )
+
+        if self.h_freq_cutoff:
+            output_string += (
+                f"Enthalpy Frequency Cut-off: {self.h_freq_cutoff:.1f} cm^-1\n"
+            )
+        if self.s_freq_cutoff or self.h_freq_cutoff:
+            output_string += f"Damping Function Exponent: {self.alpha}\n"
+        output_string += f"Mass Weighted: {'Most Abundant Masses' if not self.use_weighted_mass else 'Natural Abundance Weighted Masses'}\n"
+        output_string += f"Energy Unit: {self.energy_units}\n\n"
+
+        if self.h_freq_cutoff or self.s_freq_cutoff:
+            output_string += qrrho_header
+            output_string += head_gordon_damping_function_ref
+        if self.s_freq_cutoff:
+            output_string += grimme_quasi_rrho_entropy_ref
+        if self.h_freq_cutoff:
+            output_string += head_gordon_quasi_rrho_enthalpy_ref
+        output_string += "\n"
+
+        if self.h_freq_cutoff and self.s_freq_cutoff:
+            output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
+                "Structure",
+                "E",
+                "ZPE",
+                "H",
+                "qh-H",
+                "T.S",
+                "T.qh-S",
+                "G(T)",
+                "qh-G(T)",
+            )
+
+            output_string += "=" * 142 + "\n"
+            output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                structure,
+                electronic_energy,
+                zero_point_energy,
+                enthalpy,
+                qrrho_enthalpy,
+                entropy_times_temperature,
+                qrrho_entropy_times_temperature,
+                gibbs_free_energy,
+                qrrho_gibbs_free_energy,
+            )
+
+        elif self.s_freq_cutoff and not self.h_freq_cutoff:
+            output_string += "{:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
+                "Structure",
+                "E",
+                "ZPE",
+                "H",
+                "T.S",
+                "T.qh-S",
+                "G(T)",
+                "qh-G(T)",
+            )
+            output_string += "=" * 128 + "\n"
+            output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                structure,
+                electronic_energy,
+                zero_point_energy,
+                enthalpy,
+                entropy_times_temperature,
+                qrrho_entropy_times_temperature,
+                gibbs_free_energy,
+                qrrho_gibbs_free_energy,
+            )
+        elif self.h_freq_cutoff and not self.s_freq_cutoff:
+            output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
+                "Structure",
+                "E",
+                "ZPE",
+                "H",
+                "qh-H",
+                "T.S",
+                "G(T)",
+                "qh-G(T)",
+            )
+            output_string += "=" * 131 + "\n"
+            output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                structure,
+                electronic_energy,
+                zero_point_energy,
+                enthalpy,
+                qrrho_enthalpy,
+                entropy_times_temperature,
+                gibbs_free_energy,
+                qrrho_gibbs_free_energy,
+            )
+        else:
+            output_string += (
+                "{:<39} {:>13} {:>10} {:>13} {:>10} {:>13}\n".format(
+                    "Structure", "E", "ZPE", "H", "T.S", "G(T)"
+                )
+            )
+            output_string += "=" * 103 + "\n"
+            output_string += (
+                "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    entropy_times_temperature,
+                    gibbs_free_energy,
+                )
+            )
+
+        # Write output to file or console
+        if output is sys.stdout:
+            logger.info(output_string)
+        else:
+            with open(output, "w") as out:
+                out.write(output_string)
+        logger.info(f"Thermochemistry results saved to {output}")
+
+
+class BoltzmannAverageThermochemistry(Thermochemistry):
+    """Class to compute Boltzmann-averaged thermochemical properties from a list of files."""
+
+    def __init__(self, files, energy_type="gibbs", **kwargs):
+        super().__init__(
+            filename=None,  # No single file, we will process multiple files
+            **kwargs,
+        )
+        """
+        Initialize with a list of Gaussian or ORCA output files.
+
+        Parameters
+        ----------
+        files : list of str
+            List of file paths (.log or .out) containing thermochemistry data for conformers.
+        energy_type : str, optional
+            Energy type to use for Boltzmann weighting ("electronic" or "gibbs"). Default is "gibbs".
+        """
+        if not files:
+            raise ValueError("List of files cannot be empty.")
+        if not all(
+            isinstance(f, str) and f.endswith((".log", ".out")) for f in files
+        ):
+            raise ValueError("All files must be .log or .out files.")
+
+        self.files = files
+        self.energy_type = energy_type.lower()
+        if self.energy_type not in ["electronic", "gibbs"]:
+            raise ValueError("energy_type must be 'electronic' or 'gibbs'.")
+
+        # Create Thermochemistry instances for each file
+        self.thermochemistries = [
+            Thermochemistry(filename=f, **kwargs) for f in files
+        ]
+
+    def compute_boltzmann_averages(self):
+        """Compute Boltzmann-averaged properties."""
+        self._calculate_boltzmann_averages()
+        # Check for imaginary frequencies if required
+        if self.check_imaginary_frequencies:
+            self.check_frequencies()
+        # convert energies to specified units
+        (
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+        ) = self.convert_energy_units()
+        # Log the results to the output file or console
+        self.log_results_to_file(
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+        )
+
+    def _calculate_boltzmann_averages(self):
+        """Compute Boltzmann-averaged thermochemical properties."""
+        # Get temperature and units from settings
+        temperature = self.temperature
+        energy_units = self.energy_units
+
+        # Boltzmann constant in Hartree/K
+        k_B = Boltzmann / physical_constants["Hartree energy"][0]  # Hartree/K
+        if energy_units != "hartree":
+            k_B = k_B * energy_conversion(
+                "hartree", energy_units
+            )  # Convert to target units
+
+        # Extract energies for Boltzmann weighting
+        energies = []
+        for thermo in self.thermochemistries:
+            if self.energy_type == "electronic":
+                energy = thermo.electronic_energy / (
+                    hartree_to_joules * units._Nav
+                )  # Convert to Hartree
+            else:  # gibbs
+                if self.s_freq_cutoff and self.h_freq_cutoff:
+                    energy = thermo.qrrho_gibbs_free_energy / (
+                        hartree_to_joules * units._Nav
+                    )
+                elif self.s_freq_cutoff and not self.h_freq_cutoff:
+                    energy = thermo.qrrho_gibbs_free_energy_qs / (
+                        hartree_to_joules * units._Nav
+                    )
+                elif self.h_freq_cutoff and not self.s_freq_cutoff:
+                    energy = thermo.qrrho_gibbs_free_energy_qh / (
+                        hartree_to_joules * units._Nav
+                    )
+                else:
+                    energy = thermo.gibbs_free_energy / (
+                        hartree_to_joules * units._Nav
+                    )
+            if energy is None:
+                raise ValueError(
+                    f"Energy ({self.energy_type}) not available for file {thermo.filename}"
+                )
+            if energy_units != "hartree":
+                energy = energy * energy_conversion("hartree", energy_units)
+            energies.append(energy)
+        energies = np.array(energies)
+
+        # Compute Boltzmann weights
+        beta = 1.0 / (k_B * temperature)
+        energies_shifted = energies - np.min(
+            energies
+        )  # Shift to avoid overflow
+        boltzmann_factors = np.exp(-beta * energies_shifted)
+        partition_function = np.sum(boltzmann_factors)
+        weights = boltzmann_factors / partition_function
+
+        # Compute weighted averages for thermochemical properties
+        self._electronic_energy = np.sum(
+            [
+                t.electronic_energy / (hartree_to_joules * units._Nav) * w
+                for t, w in zip(self.thermochemistries, weights)
+            ]
+        )
+        # if energy_units != "hartree":
+        #     self._electronic_energy *= energy_conversion("hartree", energy_units)
+
+        self._zero_point_energy = np.sum(
+            [
+                t.zero_point_energy / (hartree_to_joules * units._Nav) * w
+                for t, w in zip(self.thermochemistries, weights)
+            ]
+        )
+        # if energy_units != "hartree":
+        #     self._zero_point_energy *= energy_conversion("hartree", energy_units)
+
+        self._qrrho_enthalpy = (
+            np.sum(
+                [
+                    t.qrrho_enthalpy / (hartree_to_joules * units._Nav) * w
+                    for t, w in zip(self.thermochemistries, weights)
+                ]
+            )
+            if self.h_freq_cutoff
+            else None
+        )
+        # if energy_units != "hartree":
+        #     if self._qrrho_enthalpy is not None:
+        #         self._qrrho_enthalpy *= energy_conversion("hartree", energy_units)
+
+        self._enthalpy = np.sum(
+            [
+                t.enthalpy / (hartree_to_joules * units._Nav) * w
+                for t, w in zip(self.thermochemistries, weights)
+            ]
+        )
+
+        # if energy_units != "hartree":
+        #     self._enthalpy *= energy_conversion("hartree", energy_units)
+
+        self._qrrho_entropy = (
+            np.sum(
+                [
+                    t.qrrho_total_entropy
+                    / (hartree_to_joules * units._Nav)
+                    * w
+                    for t, w in zip(self.thermochemistries, weights)
+                ]
+            )
+            if self.s_freq_cutoff
+            else None
+        )
+        # if energy_units != "hartree":
+        #     if self._qrrho_entropy is not None:
+        #         self._qrrho_entropy *= energy_conversion("hartree", energy_units)
+
+        self._entropy = np.sum(
+            [
+                t.total_entropy / (hartree_to_joules * units._Nav) * w
+                for t, w in zip(self.thermochemistries, weights)
+            ]
+        )
+        # if energy_units != "hartree":
+        #     self._entropy *= energy_conversion("hartree", energy_units)
+
+        self._qrrho_gibbs_free_energy = (
+            np.sum(
+                [
+                    (
+                        t.qrrho_gibbs_free_energy
+                        if (self.s_freq_cutoff and self.h_freq_cutoff)
+                        else (
+                            t.qrrho_gibbs_free_energy_qs
+                            if (self.s_freq_cutoff and not self.h_freq_cutoff)
+                            else (
+                                t.qrrho_gibbs_free_energy_qh
+                                if (
+                                    self.h_freq_cutoff
+                                    and not self.s_freq_cutoff
+                                )
+                                else t.gibbs_free_energy
+                            )
+                        )
+                    )
+                    / (hartree_to_joules * units._Nav)
+                    * w
+                    for t, w in zip(self.thermochemistries, weights)
+                ]
+            )
+            if not (self.h_freq_cutoff is None and self.s_freq_cutoff is None)
+            else None
+        )
+        # if energy_units != "hartree":
+        #     if self._qrrho_gibbs_free_energy is not None:
+        #         self._qrrho_gibbs_free_energy *= energy_conversion("hartree", energy_units)
+
+        self._gibbs_free_energy = np.sum(
+            [
+                t.gibbs_free_energy / (hartree_to_joules * units._Nav) * w
+                for t, w in zip(self.thermochemistries, weights)
+            ]
+        )
+        # if energy_units != "hartree":
+        #     self._gibbs_free_energy *= energy_conversion("hartree", energy_units)
+
+        # # Log results
+        # logger.info(f"Boltzmann-averaged thermochemistry calculated using {self.energy_type} energy:")
+        # logger.info(f"  Electronic Energy: {self._electronic_energy:.6f} {energy_units}")
+        # logger.info(f"  Enthalpy: {self._enthalpy:.6f} {energy_units}")
+        # logger.info(f"  Entropy: {self._entropy:.6f} {energy_units}/K")
+        # logger.info(f"  Gibbs Free Energy: {self._gibbs_free_energy:.6f} {energy_units}")
+        #
+        # # Write results to output file if specified
+        # if self.outputfile:
+        #     with open(self.outputfile, "w") as f:
+        #         f.write(f"Boltzmann-Averaged Thermochemistry (using {self.energy_type} energy)\n")
+        #         f.write(f"Temperature: {temperature:.2f} K\n")
+        #         f.write(f"Units: {energy_units}\n")
+        #         f.write(f"Number of conformers: {len(self.files)}\n")
+        #         f.write("\n")
+        #         f.write(f"Electronic Energy: {self._electronic_energy:.6f} {energy_units}\n")
+        #         f.write(f"Enthalpy: {self._enthalpy:.6f} {energy_units}\n")
+        #         f.write(f"Entropy: {self._entropy:.6f} {energy_units}/K\n")
+        #         f.write(f"Gibbs Free Energy: {self._gibbs_free_energy:.6f} {energy_units}\n")
+        #     logger.info(f"Results saved to {self.outputfile}")
+
+    @property
+    def boltzmann_electronic_energy(self):
+        """Boltzmann-averaged electronic energy."""
+        return self._electronic_energy
+
+    @property
+    def boltzmann_zero_point_energy(self):
+        """Boltzmann-averaged zero-point energy."""
+        return self._zero_point_energy
+
+    @property
+    def boltzmann_qrrho_enthalpy(self):
+        """Boltzmann-averaged enthalpy."""
+        assert (
+            self.h_freq_cutoff
+        ), "h_freq_cutoff must be set to compute qrrho enthalpy."
+        return self._enthalpy
+
+    @property
+    def boltzmann_enthalpy(self):
+        """Boltzmann-averaged enthalpy."""
+        assert (
+            not self.h_freq_cutoff
+        ), "h_freq_cutoff must not be set to compute enthalpy."
+        return self._enthalpy
+
+    @property
+    def boltzmann_entropy(self):
+        """Boltzmann-averaged entropy."""
+        assert (
+            not self.s_freq_cutoff
+        ), "s_freq_cutoff must not be set to compute entropy."
+        return self._entropy
+
+    @property
+    def boltzmann_qrrho_entropy(self):
+        """Boltzmann-averaged entropy."""
+        assert (
+            self.s_freq_cutoff
+        ), "s_freq_cutoff must be set to compute qrrho entropy."
+        return self._entropy
+
+    @property
+    def boltzmann_entropy_times_temperature(self):
+        """Boltzmann-averaged entropy."""
+        assert (
+            not self.s_freq_cutoff
+        ), "s_freq_cutoff must not be set to compute entropy."
+        return self._entropy * self.temperature
+
+    @property
+    def boltzmann_qrrho_entropy_times_temperature(self):
+        """Boltzmann-averaged entropy times temperature."""
+        assert (
+            self.s_freq_cutoff
+        ), "s_freq_cutoff must be set to compute qrrho entropy times temperature."
+        return self._entropy * self.temperature
+
+    @property
+    def boltzmann_gibbs_free_energy(self):
+        """Boltzmann-averaged Gibbs free energy."""
+        return self._gibbs_free_energy
+
+    @property
+    def boltzmann_qrrho_gibbs_free_energy(self):
+        """Boltzmann-averaged Gibbs free energy."""
+        assert (
+            not self.s_freq_cutoff
+        ), "s_freq_cutoff must not be set to compute Gibbs free energy."
+        return self._qrrho_gibbs_free_energy
+
+    def convert_energy_units(self):
+        """Convert all energies to the specified units."""
+        return (
+            self.boltzmann_electronic_energy
+            * energy_conversion("j/mol", self.energy_units),
+            self.boltzmann_zero_point_energy
+            * energy_conversion("j/mol", self.energy_units),
+            self.boltzmann_enthalpy
+            * energy_conversion("j/mol", self.energy_units),
+            (
+                self.boltzmann_qrrho_enthalpy
+                * energy_conversion("j/mol", self.energy_units)
+                if self.h_freq_cutoff
+                else None
+            ),
+            self.boltzmann_entropy_times_temperature
+            * energy_conversion("j/mol", self.energy_units),
+            (
+                self.boltzmann_qrrho_entropy_times_temperature
+                * energy_conversion("j/mol", self.energy_units)
+                if self.s_freq_cutoff
+                else None
+            ),
+            self.boltzmann_gibbs_free_energy
+            * energy_conversion("j/mol", self.energy_units),
+            (
+                self.boltzmann_qrrho_gibbs_free_energy
+                * energy_conversion("j/mol", self.energy_units)
+                if self.h_freq_cutoff or self.s_freq_cutoff
+                else None
+            ),
+        )
+
+    def __str__(self):
+        """String representation of the Boltzmann-averaged thermochemistry."""
+        energy_units = self.energy_units
+        return (
+            f"Boltzmann-Averaged Thermochemistry (using {self.energy_type} energy)\n"
+            f"Temperature: {self.temperature:.2f} K\n"
+            f"Electronic Energy: {self._electronic_energy:.6f} {energy_units}\n"
+            f"Enthalpy: {self._enthalpy:.6f} {energy_units}\n"
+            f"Entropy: {self._entropy:.6f} {energy_units}/K\n"
+            f"Gibbs Free Energy: {self._gibbs_free_energy:.6f} {energy_units}"
+        )

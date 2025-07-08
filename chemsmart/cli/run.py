@@ -74,6 +74,7 @@ def run(
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
     """Process the job returned by subcommands."""
+    logger.debug(f"Processing pipeline with args: {args}, kwargs: {kwargs}")
     # will give the following error if without **kwargs:
     # TypeError: process_pipeline() got an unexpected keyword argument 'stream'
 

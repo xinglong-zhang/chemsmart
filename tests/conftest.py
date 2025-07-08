@@ -965,7 +965,7 @@ def excel_file(io_test_directory):
 
 
 ## fixtures for mixins
-@pytest.fixture
+@pytest.fixture()
 def temp_text_file():
     with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
         tmp.write("Line1\nLine2\n")
@@ -974,7 +974,7 @@ def temp_text_file():
     os.remove(tmp_name)
 
 
-@pytest.fixture
+@pytest.fixture()
 def dummy_yaml_file():
     class DummyYAMLFile:
         def __init__(self):
@@ -1001,7 +1001,7 @@ def dummy_yaml_file():
     return DummyYAMLFile()
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_folder_with_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         file1 = os.path.join(tmpdir, "test1.txt")
@@ -1014,14 +1014,27 @@ def temp_folder_with_files():
 
 
 # pytest fixtures for Popen
-@pytest.fixture
+@pytest.fixture()
 def mock_popen(mocker):
     """Fixture to mock subprocess.Popen."""
     return mocker.patch("subprocess.Popen")
 
 
-@pytest.fixture
+@pytest.fixture()
 def capture_log(caplog):
     """Fixture to capture log messages."""
     caplog.set_level("INFO")
     return caplog
+
+
+# Set up logging capture for testing debug messages
+@pytest.fixture()
+def log_capture_string():
+    import logging
+    from io import StringIO
+
+    log_capture = StringIO()
+    logging.getLogger("").handlers = [logging.StreamHandler(log_capture)]
+    logging.getLogger("").setLevel(logging.DEBUG)
+    yield log_capture
+    log_capture.close()

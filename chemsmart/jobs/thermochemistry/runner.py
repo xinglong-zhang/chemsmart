@@ -92,7 +92,7 @@ class ThermochemistryJobRunner(JobRunner):
     def _create_process(self, job, command, env):
         """Run the thermochemistry calculation directly."""
         try:
-            job.calculate_thermochemistry()
+            job.compute_thermochemistry()
             return 0  # Return 0 to indicate success
         except Exception as e:
             with open(self.job_errfile, "w") as err:
@@ -101,6 +101,10 @@ class ThermochemistryJobRunner(JobRunner):
                 )
             logger.error(f"Error processing job {job.label}: {str(e)}")
             return 1  # Return 1 to indicate failure
+
+    def _run(self, process, **kwargs):
+        """Run the thermochemistry job."""
+        pass
 
     def _get_executable(self):
         """No external executable is needed for thermochemistry jobs."""

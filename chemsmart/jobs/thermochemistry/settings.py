@@ -15,7 +15,7 @@ class ThermochemistryJobSettings:
         alpha=4,
         s_freq_cutoff=None,
         h_freq_cutoff=None,
-        units="hartree",
+        energy_units="hartree",
     ):
         self.temperature = temperature
         self.concentration = concentration
@@ -24,7 +24,7 @@ class ThermochemistryJobSettings:
         self.alpha = alpha
         self.s_freq_cutoff = s_freq_cutoff
         self.h_freq_cutoff = h_freq_cutoff
-        self.units = units.lower()
+        self.energy_units = energy_units.lower()
 
     def copy(self):
         return ThermochemistryJobSettings(
@@ -35,7 +35,7 @@ class ThermochemistryJobSettings:
             alpha=self.alpha,
             s_freq_cutoff=self.s_freq_cutoff,
             h_freq_cutoff=self.h_freq_cutoff,
-            units=self.units,
+            energy_units=self.energy_units,
         )
 
     @classmethod

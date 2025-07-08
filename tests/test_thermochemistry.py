@@ -962,7 +962,8 @@ class TestThermochemistryCO2:
 
         # E0 in Hartree
         assert np.isclose(
-            qrrho_thermochem_co2_1.energies / (hartree_to_joules * units._Nav),
+            qrrho_thermochem_co2_1.electronic_energy
+            / (hartree_to_joules * units._Nav),
             -188.444680,
             atol=1e-6,
         )
@@ -1263,7 +1264,8 @@ class TestThermochemistryCO2:
             s_freq_cutoff=100,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_2.energies / (hartree_to_joules * units._Nav),
+            qrrho_thermochem_co2_2.electronic_energy
+            / (hartree_to_joules * units._Nav),
             -188.444680,
             atol=1e-6,
         )
@@ -1331,7 +1333,8 @@ class TestThermochemistryCO2:
             expected_damping_function,
         )
         assert np.isclose(
-            qrrho_thermochem_co2_3.energies / (hartree_to_joules * units._Nav),
+            qrrho_thermochem_co2_3.electronic_energy
+            / (hartree_to_joules * units._Nav),
             -188.444680,
             atol=1e-6,
         )
@@ -1593,7 +1596,8 @@ class TestThermochemistryHe:
             h_freq_cutoff=1000,
         )
         assert np.isclose(
-            qrrho_thermochem_he.energies / (hartree_to_joules * units._Nav),
+            qrrho_thermochem_he.electronic_energy
+            / (hartree_to_joules * units._Nav),
             -2.915130,
             atol=1e-6,
         )
@@ -1937,7 +1941,8 @@ class TestThermochemistryH2O:
         )
 
         assert np.isclose(
-            qrrho_thermochem_water.energies / (hartree_to_joules * units._Nav),
+            qrrho_thermochem_water.electronic_energy
+            / (hartree_to_joules * units._Nav),
             -76.328992,
             atol=1e-6,
         )
