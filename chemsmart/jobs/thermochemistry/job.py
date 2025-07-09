@@ -17,11 +17,11 @@ class ThermochemistryJob(Job):
 
     def __init__(
         self,
+        filename=None,
         molecule=None,
         settings=None,
         label=None,
         jobrunner=None,
-        filename=None,
         **kwargs,
     ):
         super().__init__(

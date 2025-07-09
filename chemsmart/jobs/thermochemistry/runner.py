@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class ThermochemistryJobRunner(JobRunner):
     """Job runner for thermochemistry analysis jobs."""
 
-    JOBTYPES = ["thermochemistry"]
+    JOBTYPES = ["thermochemistry", "boltzmann"]
 
     PROGRAM = "Thermochemistry"
     FAKE = False

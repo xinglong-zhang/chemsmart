@@ -36,7 +36,7 @@ def click_thermochemistry_options(f):
         help="Gaussian or ORCA output files for parsing thermochemistry.",
     )
     @click.option(
-        "-S",
+        "-cs",
         "--cutoff-entropy",
         default=None,
         type=float,
@@ -44,7 +44,7 @@ def click_thermochemistry_options(f):
         help="Cutoff frequency for entropy in wavenumbers",
     )
     @click.option(
-        "-H",
+        "-ch",
         "--cutoff-enthalpy",
         default=None,
         type=float,
@@ -210,6 +210,7 @@ def thermochemistry(
             )
             jobs.append(job)
             logger.info(f"Created thermochemistry job for file: {file}")
+            logger.debug(f"Job settings: {job_settings.__dict__}")
 
     elif filenames:
         for file in filenames:
@@ -248,7 +249,7 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
 
     jobs = ctx.obj.get("jobs", [])
     outputfile = ctx.obj.get("outputfile", None)
-    logger.info(f"Jobs to process:{jobs}")
+    logger.debug(f"Jobs to process:{jobs}")
     if ctx.invoked_subcommand is None:
         # If no subcommand is invoked, run the thermochemistry jobs
         logger.info("Running thermochemistry calculations on specified jobs.")
@@ -268,6 +269,3 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
         else:
             # If output file is specified, save all results to this file
             jobs[0].show_results()
-
-    # workaround for click's requirement of returning a value for run.py process_pipeline
-    return jobs[0]

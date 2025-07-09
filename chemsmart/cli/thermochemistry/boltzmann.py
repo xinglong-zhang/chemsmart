@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @thermochemistry.command(cls=MyCommand)
+@click.pass_context
 @click.option(
     "-w",
     "--energy-type-for-weighting",
@@ -17,14 +18,6 @@ logger = logging.getLogger(__name__)
     show_default=True,
     help="Type of energy to use for Boltzmann weighting.",
 )
-@click.option(
-    "-o",
-    "--outputfile",
-    default=None,
-    type=str,
-    help="Output file to save the Boltzmann averaged thermochemistry results.",
-)
-@click.pass_context
 def boltzmann(
     ctx,
     energy_type_for_weighting="gibbs",
@@ -34,22 +27,15 @@ def boltzmann(
     jobs = ctx.obj.get("jobs", [])
     files = ctx.obj.get("filenames", [])
     job_settings = ctx.obj.get("job_settings", {})
-    from chemsmart.analysis.thermochemistry import (
-        BoltzmannAverageThermochemistry,
+    from chemsmart.jobs.thermochemistry.boltzmann import (
+        BoltzmannAverageThermochemistryJob,
     )
 
-    boltzmann_thermochemistry = BoltzmannAverageThermochemistry(
+    boltzmann_thermochemistry = BoltzmannAverageThermochemistryJob(
         files=files,
         energy_type=energy_type_for_weighting,
         outputfile=outputfile,
-        temperature=job_settings.temperature,
-        concentration=job_settings.concentration,
-        pressure=job_settings.pressure,
-        use_weighted_mass=job_settings.use_weighted_mass,
-        alpha=job_settings.alpha,
-        s_freq_cutoff=job_settings.s_freq_cutoff,
-        h_freq_cutoff=job_settings.h_freq_cutoff,
-        energy_units=job_settings.energy_units,
+        settings=job_settings.copy(),
     )
 
     boltzmann_thermochemistry.compute_boltzmann_averages()
@@ -57,3 +43,5 @@ def boltzmann(
     logger.info(
         f"Boltzmann-averaged thermochemistry calculation completed for {jobs}."
     )
+
+    boltzmann_thermochemistry.show_results()
