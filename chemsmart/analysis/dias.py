@@ -431,6 +431,8 @@ class GaussianDIASLogFolder(DIASOutputFolder):
                 all_files_full_molecule.append(filename)
                 all_files_full_molecule_indices.append(number_after_p)
 
+        logger.info(f"Files with full molecules: {all_files_full_molecule}")
+
         # Sort filenames based on indices
         return sorted(
             all_files_full_molecule,
@@ -511,7 +513,8 @@ class GaussianDIASLogFolder(DIASOutputFolder):
         for file in list_of_files:
             gout = Gaussian16Output(filename=file)
             energy = gout.molecule.energy
-            # convert energy from eV (ase units) to kcal/mol
+            # convert energy from Hartree (default energy unit) to kcal/mol
+            energy *= units.Hartree  # convert Hartree to eV using ase
             energy /= units.kcal / units.mol
             all_energies.append(energy)
         return all_energies
@@ -637,7 +640,8 @@ class ORCADIASOutFolder(DIASOutputFolder):
         for file in list_of_files:
             oout = ORCAOutput(filename=file)
             energy = oout.molecule.final_energy
-            # convert energy from eV (ase units) to kcal/mol
+            # convert energy from Hartree (default unit) to kcal/mol
+            energy *= units.Hartree  # convert Hartree to eV using ase
             energy /= units.kcal / units.mol
             all_energies.append(energy)
         logger.info(f"All energies: {all_energies}")
