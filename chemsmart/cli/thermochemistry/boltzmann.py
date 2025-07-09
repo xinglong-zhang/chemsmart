@@ -2,8 +2,9 @@ import logging
 
 import click
 
-from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.utils.cli import MyCommand
+
+from .thermochemistry import thermochemistry
 
 logger = logging.getLogger(__name__)
 

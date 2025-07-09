@@ -5,8 +5,8 @@ from .runner import ThermochemistryJobRunner
 jobs = ThermochemistryJob.subclasses()
 
 __all__ = [
+    "BoltzmannAverageThermochemistryJob",
     "ThermochemistryJob",
     "ThermochemistryJobRunner",
-    "BoltzmannAverageThermochemistryJob",
     "jobs",
 ]

@@ -269,3 +269,9 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
         else:
             # If output file is specified, save all results to this file
             jobs[0].show_results()
+    else:
+        # If a subcommand is invoked, just log the jobs
+        logger.info(
+            "Subcommand invoked. No thermochemistry calculations performed."
+        )
+        logger.debug(f"Jobs to process: {jobs}")

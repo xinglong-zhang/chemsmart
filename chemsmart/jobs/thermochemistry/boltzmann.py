@@ -2,9 +2,8 @@ import logging
 import os
 from typing import Type
 
-from chemsmart.analysis.thermochemistry import BoltzmannAverageThermochemistry
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.jobs.thermochemistry import ThermochemistryJob
+from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 
 logger = logging.getLogger(__name__)
@@ -88,6 +87,10 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
             self.settings.outputfile = self.outputfile
 
         try:
+            from chemsmart.analysis.thermochemistry import (
+                BoltzmannAverageThermochemistry,
+            )
+
             thermochemistry = BoltzmannAverageThermochemistry(
                 files=self.files,
                 energy_type=self.energy_type,
