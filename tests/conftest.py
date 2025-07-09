@@ -1078,6 +1078,7 @@ def capture_log(caplog, tests_logger):
     caplog.set_level(logging.INFO, logger="")  # Capture root logger
     yield caplog
 
+
 # Set up logging capture for testing debug messages
 @pytest.fixture()
 def log_capture_string():
@@ -1089,4 +1090,3 @@ def log_capture_string():
     logging.getLogger("").setLevel(logging.DEBUG)
     yield log_capture
     log_capture.close()
-
