@@ -16,6 +16,8 @@ class ThermochemistryJobSettings:
         s_freq_cutoff=None,
         h_freq_cutoff=None,
         energy_units="hartree",
+        outputfile=None,
+        check_imaginary_frequencies=True,
     ):
         self.temperature = temperature
         self.concentration = concentration
@@ -25,6 +27,8 @@ class ThermochemistryJobSettings:
         self.s_freq_cutoff = s_freq_cutoff
         self.h_freq_cutoff = h_freq_cutoff
         self.energy_units = energy_units.lower()
+        self.outputfile = outputfile
+        self.check_imaginary_frequencies = check_imaginary_frequencies
 
     def copy(self):
         return ThermochemistryJobSettings(
@@ -36,6 +40,8 @@ class ThermochemistryJobSettings:
             s_freq_cutoff=self.s_freq_cutoff,
             h_freq_cutoff=self.h_freq_cutoff,
             energy_units=self.energy_units,
+            outputfile=self.outputfile,
+            check_imaginary_frequencies=self.check_imaginary_frequencies,
         )
 
     @classmethod

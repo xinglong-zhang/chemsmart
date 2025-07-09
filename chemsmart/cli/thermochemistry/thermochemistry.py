@@ -36,7 +36,7 @@ def click_thermochemistry_options(f):
         help="Gaussian or ORCA output files for parsing thermochemistry.",
     )
     @click.option(
-        "-cs",
+        "-S",
         "--cutoff-entropy",
         default=None,
         type=float,
@@ -44,7 +44,7 @@ def click_thermochemistry_options(f):
         help="Cutoff frequency for entropy in wavenumbers",
     )
     @click.option(
-        "-ch",
+        "-H",
         "--cutoff-enthalpy",
         default=None,
         type=float,
@@ -94,13 +94,28 @@ def click_thermochemistry_options(f):
     )
     @click.option(
         "-u",
-        "--units",
+        "--energy-units",
         default="hartree",
         show_default=True,
         type=click.Choice(
             ["hartree", "eV", "kcal/mol", "kJ/mol"], case_sensitive=False
         ),
         help="Units of energetic values.",
+    )
+    @click.option(
+        "-o",
+        "--outputfile",
+        default=None,
+        type=str,
+        help="Output file to save the thermochemistry results.",
+    )
+    @click.option(
+        "-i",
+        "--check-imaginary-frequencies",
+        is_flag=True,
+        default=True,
+        show_default=True,
+        help="Check for imaginary frequencies in the calculations.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -126,7 +141,9 @@ def thermochemistry(
     temperature,
     alpha,
     weighted,
-    units,
+    energy_units,
+    outputfile,
+    check_imaginary_frequencies,
     skip_completed,
     **kwargs,
 ):
@@ -148,7 +165,9 @@ def thermochemistry(
         alpha=alpha,
         s_freq_cutoff=cutoff_entropy,
         h_freq_cutoff=cutoff_enthalpy,
-        energy_units=units,
+        energy_units=energy_units,
+        outputfile=outputfile,
+        check_imaginary_frequencies=check_imaginary_frequencies,
     )
 
     # Initialize list to store jobs
@@ -213,6 +232,9 @@ def thermochemistry(
 @click.pass_context
 def thermochemistry_process_pipeline(ctx, *args, **kwargs):
     """Process the thermochemistry jobs."""
+    logger.debug(f"Context object: {ctx.obj}")
+    logger.debug(f"args: {args}")
+    logger.debug(f"kwargs: {kwargs}")
 
     jobs = ctx.obj.get("jobs", [])
     logger.info(f"Jobs to process:{jobs}")

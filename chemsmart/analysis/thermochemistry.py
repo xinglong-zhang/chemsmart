@@ -963,117 +963,117 @@ class Thermochemistry:
         if self.check_imaginary_frequencies:
             self.check_frequencies()
 
-        # prepare output string
-        structure = os.path.splitext(os.path.basename(self.filename))[0]
-        output_string = f"Thermochemistry Results for {structure}:\n\n"
-        output_string += f"Temperature: {self.temperature:.2f} K\n"
-        if self.concentration is not None:
-            output_string += f"Concentration: {self.concentration:.1f} mol/L\n"
-        else:
-            output_string += f"Pressure: {self.pressure:.1f} atm\n"
+        header_present = False
 
-        if self.s_freq_cutoff:
-            output_string += (
-                f"Entropy Frequency Cut-off: {self.s_freq_cutoff:.1f} cm^-1\n"
-            )
-
-        if self.h_freq_cutoff:
-            output_string += (
-                f"Enthalpy Frequency Cut-off: {self.h_freq_cutoff:.1f} cm^-1\n"
-            )
-        if self.s_freq_cutoff or self.h_freq_cutoff:
-            output_string += f"Damping Function Exponent: {self.alpha}\n"
-        output_string += f"Mass Weighted: {'Most Abundant Masses' if not self.use_weighted_mass else 'Natural Abundance Weighted Masses'}\n"
-        output_string += f"Energy Unit: {self.energy_units}\n\n"
-
-        if self.h_freq_cutoff or self.s_freq_cutoff:
-            output_string += qrrho_header
-            output_string += head_gordon_damping_function_ref
-        if self.s_freq_cutoff:
-            output_string += grimme_quasi_rrho_entropy_ref
-        if self.h_freq_cutoff:
-            output_string += head_gordon_quasi_rrho_enthalpy_ref
-        output_string += "\n"
-
-        if self.h_freq_cutoff and self.s_freq_cutoff:
-            output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
-                "Structure",
-                "E",
-                "ZPE",
-                "H",
-                "qh-H",
-                "T.S",
-                "T.qh-S",
-                "G(T)",
-                "qh-G(T)",
-            )
-
-            output_string += "=" * 142 + "\n"
-            output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                structure,
-                electronic_energy,
-                zero_point_energy,
-                enthalpy,
-                qrrho_enthalpy,
-                entropy_times_temperature,
-                qrrho_entropy_times_temperature,
-                gibbs_free_energy,
-                qrrho_gibbs_free_energy,
-            )
-
-        elif self.s_freq_cutoff and not self.h_freq_cutoff:
-            output_string += "{:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
-                "Structure",
-                "E",
-                "ZPE",
-                "H",
-                "T.S",
-                "T.qh-S",
-                "G(T)",
-                "qh-G(T)",
-            )
-            output_string += "=" * 128 + "\n"
-            output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                structure,
-                electronic_energy,
-                zero_point_energy,
-                enthalpy,
-                entropy_times_temperature,
-                qrrho_entropy_times_temperature,
-                gibbs_free_energy,
-                qrrho_gibbs_free_energy,
-            )
-        elif self.h_freq_cutoff and not self.s_freq_cutoff:
-            output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
-                "Structure",
-                "E",
-                "ZPE",
-                "H",
-                "qh-H",
-                "T.S",
-                "G(T)",
-                "qh-G(T)",
-            )
-            output_string += "=" * 131 + "\n"
-            output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                structure,
-                electronic_energy,
-                zero_point_energy,
-                enthalpy,
-                qrrho_enthalpy,
-                entropy_times_temperature,
-                gibbs_free_energy,
-                qrrho_gibbs_free_energy,
-            )
-        else:
-            output_string += (
-                "{:<39} {:>13} {:>10} {:>13} {:>10} {:>13}\n".format(
-                    "Structure", "E", "ZPE", "H", "T.S", "G(T)"
+        if not header_present:
+            # prepare output string
+            structure = os.path.splitext(os.path.basename(self.filename))[0]
+            output_string = f"Thermochemistry Results for {structure}:\n\n"
+            output_string += f"Temperature: {self.temperature:.2f} K\n"
+            if self.concentration is not None:
+                output_string += (
+                    f"Concentration: {self.concentration:.1f} mol/L\n"
                 )
-            )
-            output_string += "=" * 103 + "\n"
-            output_string += (
-                "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
+            else:
+                output_string += f"Pressure: {self.pressure:.1f} atm\n"
+
+            if self.s_freq_cutoff:
+                output_string += f"Entropy Frequency Cut-off: {self.s_freq_cutoff:.1f} cm^-1\n"
+
+            if self.h_freq_cutoff:
+                output_string += f"Enthalpy Frequency Cut-off: {self.h_freq_cutoff:.1f} cm^-1\n"
+            if self.s_freq_cutoff or self.h_freq_cutoff:
+                output_string += f"Damping Function Exponent: {self.alpha}\n"
+            output_string += f"Mass Weighted: {'Most Abundant Masses' if not self.use_weighted_mass else 'Natural Abundance Weighted Masses'}\n"
+            output_string += f"Energy Unit: {self.energy_units}\n\n"
+
+            if self.h_freq_cutoff or self.s_freq_cutoff:
+                output_string += qrrho_header
+                output_string += head_gordon_damping_function_ref
+            if self.s_freq_cutoff:
+                output_string += grimme_quasi_rrho_entropy_ref
+            if self.h_freq_cutoff:
+                output_string += head_gordon_quasi_rrho_enthalpy_ref
+            output_string += "\n"
+
+            if self.h_freq_cutoff and self.s_freq_cutoff:
+                output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
+                    "Structure",
+                    "E",
+                    "ZPE",
+                    "H",
+                    "qh-H",
+                    "T.S",
+                    "T.qh-S",
+                    "G(T)",
+                    "qh-G(T)",
+                )
+
+                output_string += "=" * 142 + "\n"
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    qrrho_enthalpy,
+                    entropy_times_temperature,
+                    qrrho_entropy_times_temperature,
+                    gibbs_free_energy,
+                    qrrho_gibbs_free_energy,
+                )
+
+            elif self.s_freq_cutoff and not self.h_freq_cutoff:
+                output_string += "{:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
+                    "Structure",
+                    "E",
+                    "ZPE",
+                    "H",
+                    "T.S",
+                    "T.qh-S",
+                    "G(T)",
+                    "qh-G(T)",
+                )
+                output_string += "=" * 128 + "\n"
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    entropy_times_temperature,
+                    qrrho_entropy_times_temperature,
+                    gibbs_free_energy,
+                    qrrho_gibbs_free_energy,
+                )
+            elif self.h_freq_cutoff and not self.s_freq_cutoff:
+                output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
+                    "Structure",
+                    "E",
+                    "ZPE",
+                    "H",
+                    "qh-H",
+                    "T.S",
+                    "G(T)",
+                    "qh-G(T)",
+                )
+                output_string += "=" * 131 + "\n"
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    qrrho_enthalpy,
+                    entropy_times_temperature,
+                    gibbs_free_energy,
+                    qrrho_gibbs_free_energy,
+                )
+            else:
+                output_string += (
+                    "{:<39} {:>13} {:>10} {:>13} {:>10} {:>13}\n".format(
+                        "Structure", "E", "ZPE", "H", "T.S", "G(T)"
+                    )
+                )
+                output_string += "=" * 103 + "\n"
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
                     structure,
                     electronic_energy,
                     zero_point_energy,
@@ -1081,14 +1081,71 @@ class Thermochemistry:
                     entropy_times_temperature,
                     gibbs_free_energy,
                 )
-            )
 
-        # Write output to file or console
+            # Write output to file or console
+            if output is sys.stdout:
+                logger.info(output_string)
+            else:
+                with open(output, "w") as out:
+                    out.write(output_string)
+            header_present = True
+        if header_present:
+            # If the header is already present, just append the results
+            structure = os.path.splitext(os.path.basename(self.filename))[0]
+            output_string = ""
+            if self.h_freq_cutoff and self.s_freq_cutoff:
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    qrrho_enthalpy,
+                    entropy_times_temperature,
+                    qrrho_entropy_times_temperature,
+                    gibbs_free_energy,
+                    qrrho_gibbs_free_energy,
+                )
+
+            elif self.s_freq_cutoff and not self.h_freq_cutoff:
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    entropy_times_temperature,
+                    qrrho_entropy_times_temperature,
+                    gibbs_free_energy,
+                    qrrho_gibbs_free_energy,
+                )
+            elif self.h_freq_cutoff and not self.s_freq_cutoff:
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    qrrho_enthalpy,
+                    entropy_times_temperature,
+                    gibbs_free_energy,
+                    qrrho_gibbs_free_energy,
+                )
+            else:
+                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
+                    structure,
+                    electronic_energy,
+                    zero_point_energy,
+                    enthalpy,
+                    entropy_times_temperature,
+                    gibbs_free_energy,
+                )
         if output is sys.stdout:
             logger.info(output_string)
+            print(output_string)
+            output = sys.stdout
         else:
-            with open(output, "w") as out:
+            with open(output, "a") as out:
                 out.write(output_string)
+            output = self.outputfile
+
         logger.info(f"Thermochemistry results saved to {output}")
 
 
