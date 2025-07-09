@@ -23,6 +23,17 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
         self.files = files
         self.energy_type = energy_type
 
+        if self.label is None:
+            self.label = (
+                os.path.commonprefix(
+                    [
+                        os.path.splitext(os.path.basename(f))[0]
+                        for f in self.files
+                    ]
+                )
+                + f"_boltzmann_avg_by_{self.energy_type}"
+            )
+
     @classmethod
     def settings_class(cls) -> Type[ThermochemistryJobSettings]:
         return ThermochemistryJobSettings

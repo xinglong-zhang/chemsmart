@@ -1243,7 +1243,7 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             os.path.commonprefix(
                 [os.path.splitext(os.path.basename(f))[0] for f in self.files]
             )
-            + "_botzmann_avg"
+            + f"_boltzmann_avg_by_{self.energy_type}"
         )
         self.log_results_to_file(
             structure,
@@ -1261,14 +1261,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
         """Compute Boltzmann-averaged thermochemical properties."""
         # Get temperature and units from settings
         temperature = self.temperature
-        # energy_units = self.energy_units
-        #
-        # # Boltzmann constant in Hartree/K
-        # k_B = Boltzmann / physical_constants["Hartree energy"][0]  # Hartree/K
-        # if energy_units != "hartree":
-        #     k_B = k_B * energy_conversion(
-        #         "hartree", energy_units
-        #     )  # Convert to target units
 
         # Extract energies for Boltzmann weighting
         energies = []
