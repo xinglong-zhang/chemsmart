@@ -33,9 +33,7 @@ class TestEnergyConversion:
     def test_energy_conversion_hartree_to_kcal_mol(self):
         """Test conversion from Hartree to kcal/mol."""
         expected = HARTREE_TO_J_MOL / KCAL_MOL_TO_J_MOL  # ~627.509468
-        print(expected)
         result = energy_conversion("hartree", "kcal/mol")
-        print(result)
         assert (
             abs(result - expected) < TOLERANCE
         ), f"Expected {expected}, got {result}"
