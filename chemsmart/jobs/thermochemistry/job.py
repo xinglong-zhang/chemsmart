@@ -82,12 +82,12 @@ class ThermochemistryJob(Job):
         self.backup_file(self.outputfile, folder=folder, **kwargs)
 
     def _output(self):
-        if not os.path.exists(self.outputfile):
+        if not os.path.exists(self.settings.outputfile):
             return None
-        return os.path.abspath(self.outputfile)
+        return os.path.abspath(self.settings.outputfile)
 
     def _job_is_complete(self):
-        return os.path.exists(self.outputfile)
+        return os.path.exists(self.settings.outputfile)
 
     def _run(self, **kwargs):
         """Run the thermochemistry analysis job."""
@@ -153,6 +153,9 @@ class ThermochemistryJob(Job):
                 "No input file provided for thermochemistry calculation."
             )
 
+        if self.settings.outputfile is None:
+            self.settings.outputfile = self.outputfile
+
         try:
             thermochemistry = Thermochemistry(
                 filename=self.filename,
@@ -172,3 +175,9 @@ class ThermochemistryJob(Job):
         except Exception as e:
             logger.error(f"Error processing {self.filename}: {e}")
             raise
+
+    def show_results(self):
+        with open(self.settings.outputfile, "r") as out:
+            print()
+            results = out.read()
+            print(results)

@@ -107,7 +107,9 @@ def click_thermochemistry_options(f):
         "--outputfile",
         default=None,
         type=str,
-        help="Output file to save the thermochemistry results.",
+        help="Output file to save the thermochemistry results. Defaults to None, which "
+        "will save results to file_basename.dat.\n If specified, it will save all "
+        "thermochemistry results to this file.",
     )
     @click.option(
         "-i",
@@ -147,7 +149,14 @@ def thermochemistry(
     skip_completed,
     **kwargs,
 ):
-    """CLI for running thermochemistry jobs using the chemsmart framework."""
+    """CLI for running thermochemistry jobs using the chemsmart framework.
+    This command allows you to compute thermochemistry for Gaussian or ORCA output files.
+    `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log -f udc3_mCF3_monomer_c29.log  -T 298.15`
+    will save results to `udc3_mCF3_monomer_c9.dat` and `udc3_mCF3_monomer_c29.dat`.
+    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15 -o thermochemistry_results.dat`
+    will compute thermochemistry for all Gaussian log files in the specified directory and save to
+    `thermochemistry_results.dat`.
+    """
     # validate input
     if directory and filenames:
         raise ValueError(
@@ -226,6 +235,7 @@ def thermochemistry(
     )
     ctx.obj["directory"] = directory
     ctx.obj["filetype"] = filetype
+    ctx.obj["outputfile"] = outputfile
 
 
 @thermochemistry.result_callback()
@@ -237,6 +247,7 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
     logger.debug(f"kwargs: {kwargs}")
 
     jobs = ctx.obj.get("jobs", [])
+    outputfile = ctx.obj.get("outputfile", None)
     logger.info(f"Jobs to process:{jobs}")
     if ctx.invoked_subcommand is None:
         # If no subcommand is invoked, run the thermochemistry jobs
@@ -250,49 +261,13 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
             except Exception as e:
                 logger.error(f"Error processing job for {job.label}: {e}")
 
+        if outputfile is None:
+            # If no output file is specified, save results to individual files
+            for job in jobs:
+                job.show_results()
+        else:
+            # If output file is specified, save all results to this file
+            jobs[0].show_results()
+
     # workaround for click's requirement of returning a value for run.py process_pipeline
     return jobs[0]
-
-
-# @thermochemistry.command(cls=MyCommand)
-# @click.option(
-#     "-w",
-#     "--energy-type-for-weighting",
-#     default="gibbs",
-#     type=click.Choice(["gibbs", "electronic"]),
-#     show_default=True,
-#     help="Type of energy to use for Boltzmann weighting.",
-# )
-# @click.option(
-#     "-o",
-#     "--outputfile",
-#     default=None,
-#     type=str,
-#     help="Output file to save the Boltzmann averaged thermochemistry results.",
-# )
-# @click.pass_context
-# def boltzmann(
-#         ctx,
-#         energy_type_for_weighting="gibbs",
-#         outputfile=None,
-# ):
-#     """Run the Boltzmann weighted averaging for thermochemistry jobs."""
-#     jobs = ctx.obj.get("jobs", [])
-#     files = ctx.obj.get("filenames", [])
-#     job_settings = ctx.obj.get("job_settings", {})
-#     from chemsmart.analysis.thermochemistry import BoltzmannAverageThermochemistry
-#
-#     boltzmann_thermochemistry = BoltzmannAverageThermochemistry(files=files, energy_type=energy_type_for_weighting,
-#                                                                 outputfile=outputfile,
-#                                                                 temperature=job_settings.temperature,
-#                                                                 concentration=job_settings.concentration,
-#                                                                 pressure=job_settings.pressure,
-#                                                                 use_weighted_mass=job_settings.use_weighted_mass,
-#                                                                 alpha=job_settings.alpha,
-#                                                                 s_freq_cutoff=job_settings.s_freq_cutoff,
-#                                                                 h_freq_cutoff=job_settings.h_freq_cutoff,
-#                                                                 energy_units=job_settings.energy_units)
-#
-#     boltzmann_thermochemistry.compute_boltzmann_averages()
-#
-#     logger.info(f"Boltzmann-averaged thermochemistry calculation completed for {jobs}.")

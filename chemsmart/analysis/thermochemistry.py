@@ -1,7 +1,6 @@
 import logging
 import math
 import os
-import sys
 
 import numpy as np
 from ase import units
@@ -844,9 +843,9 @@ class Thermochemistry:
 
     def compute_thermochemistry(self):
         """Compute Boltzmann-averaged properties."""
-        self._calculate_thermochemistry()
+        self._compute_thermochemistry()
 
-    def _calculate_thermochemistry(self):
+    def _compute_thermochemistry(self):
         """Calculate thermochemical properties based on the parsed data."""
         # Check for imaginary frequencies if required
         if self.check_imaginary_frequencies:
@@ -952,24 +951,18 @@ class Thermochemistry:
     ):
         """Log the thermochemistry results to the output file."""
         if self.outputfile is None:
-            logger.info(f"Logging results to console for {self.filename}.")
-            output = sys.stdout
-        else:
-            logger.info(
-                f"Logging results to {self.outputfile} for {self.filename}."
-            )
-            output = self.outputfile
+            # If no output file is specified, log to individual output file
+            self.outputfile = os.path.splitext(self.filename)[0] + ".dat"
 
+        # Check if imaginary frequencies are present and handle them
         if self.check_imaginary_frequencies:
             self.check_frequencies()
 
-        header_present = False
-
-        if not header_present:
+        # Write output to outputfile
+        if not os.path.exists(self.outputfile):
             # prepare output string
             structure = os.path.splitext(os.path.basename(self.filename))[0]
-            output_string = f"Thermochemistry Results for {structure}:\n\n"
-            output_string += f"Temperature: {self.temperature:.2f} K\n"
+            output_string = f"Temperature: {self.temperature:.2f} K\n"
             if self.concentration is not None:
                 output_string += (
                     f"Concentration: {self.concentration:.1f} mol/L\n"
@@ -1082,15 +1075,12 @@ class Thermochemistry:
                     gibbs_free_energy,
                 )
 
-            # Write output to file or console
-            if output is sys.stdout:
-                logger.info(output_string)
-            else:
-                with open(output, "w") as out:
-                    out.write(output_string)
-            header_present = True
-        if header_present:
-            # If the header is already present, just append the results
+            # If the output file does not exist, create it and write the header
+            with open(self.outputfile, "w") as out:
+                out.write(output_string)
+            logger.info(f"Thermochemistry results saved to {self.outputfile}")
+        else:
+            # If the output file exists, append the results
             structure = os.path.splitext(os.path.basename(self.filename))[0]
             output_string = ""
             if self.h_freq_cutoff and self.s_freq_cutoff:
@@ -1137,16 +1127,11 @@ class Thermochemistry:
                     entropy_times_temperature,
                     gibbs_free_energy,
                 )
-        if output is sys.stdout:
-            logger.info(output_string)
-            print(output_string)
-            output = sys.stdout
-        else:
-            with open(output, "a") as out:
-                out.write(output_string)
-            output = self.outputfile
 
-        logger.info(f"Thermochemistry results saved to {output}")
+            # Check if the header is already present
+            with open(self.outputfile, "a") as out:
+                out.write(output_string)
+            logger.info(f"Thermochemistry results saved to {self.outputfile}")
 
 
 class BoltzmannAverageThermochemistry(Thermochemistry):
@@ -1275,8 +1260,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
                 for t, w in zip(self.thermochemistries, weights)
             ]
         )
-        # if energy_units != "hartree":
-        #     self._electronic_energy *= energy_conversion("hartree", energy_units)
 
         self._zero_point_energy = np.sum(
             [
@@ -1284,8 +1267,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
                 for t, w in zip(self.thermochemistries, weights)
             ]
         )
-        # if energy_units != "hartree":
-        #     self._zero_point_energy *= energy_conversion("hartree", energy_units)
 
         self._qrrho_enthalpy = (
             np.sum(
@@ -1297,9 +1278,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             if self.h_freq_cutoff
             else None
         )
-        # if energy_units != "hartree":
-        #     if self._qrrho_enthalpy is not None:
-        #         self._qrrho_enthalpy *= energy_conversion("hartree", energy_units)
 
         self._enthalpy = np.sum(
             [
@@ -1307,9 +1285,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
                 for t, w in zip(self.thermochemistries, weights)
             ]
         )
-
-        # if energy_units != "hartree":
-        #     self._enthalpy *= energy_conversion("hartree", energy_units)
 
         self._qrrho_entropy = (
             np.sum(
@@ -1323,9 +1298,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             if self.s_freq_cutoff
             else None
         )
-        # if energy_units != "hartree":
-        #     if self._qrrho_entropy is not None:
-        #         self._qrrho_entropy *= energy_conversion("hartree", energy_units)
 
         self._entropy = np.sum(
             [
@@ -1333,8 +1305,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
                 for t, w in zip(self.thermochemistries, weights)
             ]
         )
-        # if energy_units != "hartree":
-        #     self._entropy *= energy_conversion("hartree", energy_units)
 
         self._qrrho_gibbs_free_energy = (
             np.sum(
@@ -1363,9 +1333,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             if not (self.h_freq_cutoff is None and self.s_freq_cutoff is None)
             else None
         )
-        # if energy_units != "hartree":
-        #     if self._qrrho_gibbs_free_energy is not None:
-        #         self._qrrho_gibbs_free_energy *= energy_conversion("hartree", energy_units)
 
         self._gibbs_free_energy = np.sum(
             [
@@ -1373,29 +1340,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
                 for t, w in zip(self.thermochemistries, weights)
             ]
         )
-        # if energy_units != "hartree":
-        #     self._gibbs_free_energy *= energy_conversion("hartree", energy_units)
-
-        # # Log results
-        # logger.info(f"Boltzmann-averaged thermochemistry calculated using {self.energy_type} energy:")
-        # logger.info(f"  Electronic Energy: {self._electronic_energy:.6f} {energy_units}")
-        # logger.info(f"  Enthalpy: {self._enthalpy:.6f} {energy_units}")
-        # logger.info(f"  Entropy: {self._entropy:.6f} {energy_units}/K")
-        # logger.info(f"  Gibbs Free Energy: {self._gibbs_free_energy:.6f} {energy_units}")
-        #
-        # # Write results to output file if specified
-        # if self.outputfile:
-        #     with open(self.outputfile, "w") as f:
-        #         f.write(f"Boltzmann-Averaged Thermochemistry (using {self.energy_type} energy)\n")
-        #         f.write(f"Temperature: {temperature:.2f} K\n")
-        #         f.write(f"Units: {energy_units}\n")
-        #         f.write(f"Number of conformers: {len(self.files)}\n")
-        #         f.write("\n")
-        #         f.write(f"Electronic Energy: {self._electronic_energy:.6f} {energy_units}\n")
-        #         f.write(f"Enthalpy: {self._enthalpy:.6f} {energy_units}\n")
-        #         f.write(f"Entropy: {self._entropy:.6f} {energy_units}/K\n")
-        #         f.write(f"Gibbs Free Energy: {self._gibbs_free_energy:.6f} {energy_units}\n")
-        #     logger.info(f"Results saved to {self.outputfile}")
 
     @property
     def boltzmann_electronic_energy(self):
