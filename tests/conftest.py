@@ -1079,14 +1079,9 @@ def capture_log(caplog, tests_logger):
     yield caplog
 
 
-# Set up logging capture for testing debug messages
+# Use built-in caplog fixture for capturing log messages
 @pytest.fixture()
-def log_capture_string():
-    import logging
-    from io import StringIO
-
-    log_capture = StringIO()
-    logging.getLogger("").handlers = [logging.StreamHandler(log_capture)]
-    logging.getLogger("").setLevel(logging.DEBUG)
-    yield log_capture
-    log_capture.close()
+def log_capture_string(caplog):
+    """Fixture to capture log messages using caplog."""
+    caplog.set_level(logging.DEBUG)
+    return caplog

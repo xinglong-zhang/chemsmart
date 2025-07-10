@@ -115,7 +115,7 @@ class TestEnergyConversion:
         """Test that logging captures conversion details."""
         value = 1.0
         energy_conversion("hartree", "kcal/mol", value)
-        log_output = log_capture_string.getvalue()
+        log_output = log_capture_string.text
         assert (
             "Converted 1.0 hartree to" in log_output
         ), "Logging message not found"
