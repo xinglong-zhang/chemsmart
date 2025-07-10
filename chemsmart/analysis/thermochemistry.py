@@ -754,10 +754,12 @@ class Thermochemistry:
         Formula:
             S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
         """
-        if self.qrrho_vibrational_entropy is None:
-            return
         if self.molecule.is_monoatomic:
             return self.translational_entropy + self.electronic_entropy
+
+        if self.qrrho_vibrational_entropy is None:
+            return
+
         return (
             self.translational_entropy
             + self.rotational_entropy
@@ -798,14 +800,15 @@ class Thermochemistry:
             E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
         """
 
-        if self.qrrho_vibrational_internal_energy is None:
-            return
-
         if self.molecule.is_monoatomic:
             return (
                 self.translational_internal_energy
                 + self.electronic_internal_energy
             )
+
+        if self.qrrho_vibrational_internal_energy is None:
+            return
+
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
