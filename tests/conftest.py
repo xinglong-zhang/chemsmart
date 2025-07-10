@@ -1072,16 +1072,13 @@ def tests_logger():
     os.environ.pop("TEST_MODE", None)
 
 
-@pytest.fixture
-def capture_log(caplog, tests_logger):
-    """Fixture to capture log messages."""
-    caplog.set_level(logging.INFO, logger="")  # Capture root logger
-    yield caplog
-
-
 # Use built-in caplog fixture for capturing log messages
 @pytest.fixture()
-def log_capture_string(caplog):
-    """Fixture to capture log messages using caplog."""
-    caplog.set_level(logging.DEBUG)
+def capture_log(caplog):
+    """
+    Fixture to capture log messages.
+
+    Captures messages from the root logger at DEBUG level by default.
+    """
+    caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog

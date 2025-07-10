@@ -111,11 +111,11 @@ class TestEnergyConversion:
             abs(result - expected) < TOLERANCE
         ), f"Expected {expected}, got {result}"
 
-    def test_energy_conversion_logging(self, log_capture_string):
+    def test_energy_conversion_logging(self, capture_log):
         """Test that logging captures conversion details."""
         value = 1.0
         energy_conversion("hartree", "kcal/mol", value)
-        log_output = log_capture_string.text
+        log_output = capture_log.text
         assert (
             "Converted 1.0 hartree to" in log_output
         ), "Logging message not found"
