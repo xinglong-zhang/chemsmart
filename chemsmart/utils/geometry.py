@@ -136,20 +136,51 @@ def calculate_occupied_volume(coords, radii):
     Returns:
     - occupied_volume (float): Total occupied volume of the molecule.
     """
+    import pyvoro
+
     # Convert inputs to NumPy arrays
     coords = np.array(coords)
     radii = np.array(radii)
 
-    # Calculate the occupied volume using Voronoi tessellation
-    from scipy.spatial import Voronoi
+    # Ensure inputs are valid
+    if len(coords) != len(radii):
+        raise ValueError("Number of coordinates must match number of radii.")
+    if coords.shape[1] != 3:
+        raise ValueError("Coordinates must be 3D (Nx3 array).")
 
-    vor = Voronoi(coords)
+    # Define a bounding box for the molecule to handle finite system
+    # Extend box slightly beyond the molecule to avoid boundary issues
+    padding = 5.0  # Angstroms
+    box_min = np.min(coords, axis=0) - padding
+    box_max = np.max(coords, axis=0) + padding
+    box = [
+        [box_min[i], box_max[i]] for i in range(3)
+    ]  # [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
+
+    # Compute radical Voronoi tessellation using pyvoro
+    try:
+        # pyvoro.compute_voronoi takes coordinates, bounding box, radii, and periodic boundary conditions
+        cells = pyvoro.compute_voronoi(
+            points=coords,
+            limits=box,
+            radii=radii,  # Pass atomic radii for Voronoi-Dirichlet
+            periodic=[
+                False,
+                False,
+                False,
+            ],  # Non-periodic for a single molecule
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Error computing Voronoi-Dirichlet tessellation: {e}"
+        )
+
+    # Sum the volumes of all Voronoi cells
     occupied_volume = 0.0
-
-    for region in vor.regions:
-        if len(region) > 0 and -1 not in region:
-            vertices = vor.vertices[region]
-            volume = np.abs(np.linalg.det(vertices)) / 6.0
+    for cell in cells:
+        volume = cell["volume"]
+        # Ensure the volume is finite and positive
+        if volume > 0:
             occupied_volume += volume
 
     return occupied_volume
