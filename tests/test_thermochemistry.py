@@ -1406,6 +1406,7 @@ class TestThermochemistryHe:
             mol.most_abundant_mass, 4.00260325413
         )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 4.00260)
+        assert g16_output.vibrational_frequencies == []
         assert mol.is_monoatomic
 
         thermochem2 = Thermochemistry(
