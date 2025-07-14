@@ -221,6 +221,10 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.basis
 
     @property
+    def semiempirical(self):
+        return self.route_object.semiempirical
+
+    @property
     def force(self):
         return self.route_object.force
 
@@ -259,6 +263,7 @@ class GaussianFileMixin(FileMixin):
             ab_initio=self.ab_initio,
             functional=self.functional,
             basis=self.basis,
+            semiempirical=self.semiempirical,
             charge=self.charge,
             multiplicity=self.multiplicity,
             chk=self.chk,

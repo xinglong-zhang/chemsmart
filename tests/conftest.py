@@ -42,6 +42,21 @@ def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "GaussianTests")
 
 
+# Gaussian folder for semiempirical calculations
+@pytest.fixture()
+def gaussian_semiempirical_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "semiempirical")
+
+
+@pytest.fixture()
+def gaussian_semiempirical_pm6_output_file(
+    gaussian_semiempirical_test_directory,
+):
+    return os.path.join(
+        gaussian_semiempirical_test_directory, "DBU_PM6_opt.log"
+    )
+
+
 # Gaussian output file from outputs folder
 @pytest.fixture()
 def outputs_test_directory(gaussian_test_directory):
@@ -430,6 +445,13 @@ def gaussian_written_files_directory(gaussian_test_directory):
 @pytest.fixture()
 def gaussian_written_opt_file(gaussian_written_files_directory):
     return os.path.join(gaussian_written_files_directory, "gaussian_opt.com")
+
+
+@pytest.fixture()
+def gaussian_written_pm6_opt_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_pm6_opt.com"
+    )
 
 
 @pytest.fixture()

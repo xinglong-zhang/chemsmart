@@ -431,6 +431,8 @@ class GaussianDIASLogFolder(DIASOutputFolder):
                 all_files_full_molecule.append(filename)
                 all_files_full_molecule_indices.append(number_after_p)
 
+        logger.info(f"Files with full molecules: {all_files_full_molecule}")
+
         # Sort filenames based on indices
         return sorted(
             all_files_full_molecule,

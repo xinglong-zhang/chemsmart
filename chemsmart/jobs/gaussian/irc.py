@@ -75,7 +75,7 @@ class GaussianIRCJob(GaussianJob):
         )
         self._ircr_job().run()
 
-    def _run(self, jobrunner, **kwargs):
+    def _run(self, **kwargs):
         self._run_forward()
         self._run_reverse()
 

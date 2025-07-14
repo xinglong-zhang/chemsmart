@@ -4,6 +4,7 @@ from .mo import PyMOLMOJob
 from .movie import PyMOLMovieJob
 from .nci import PyMOLNCIJob
 from .runner import PyMOLJobRunner
+from .spin import PyMOLSpinJob
 from .visualize import PyMOLVisualizationJob
 
 jobs = PyMOLJob.subclasses()
@@ -15,5 +16,6 @@ __all__ = [
     "PyMOLMOJob",
     "PyMOLMovieJob",
     "PyMOLNCIJob",
+    "PyMOLSpinJob",
     "jobs",
 ]
