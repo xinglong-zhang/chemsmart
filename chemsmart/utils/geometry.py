@@ -126,7 +126,7 @@ def calculate_moments_of_inertia(mass, coords):
     return moi_tensor, evals, evecs.transpose()
 
 
-def calculate_occupied_volume(coords, radii):
+def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion):
     """Calculate the occupied volume of a molecule using the Voronoi tessellation method.
 
     Parameters:
@@ -148,12 +148,13 @@ def calculate_occupied_volume(coords, radii):
     if coords.shape[1] != 3:
         raise ValueError("Coordinates must be 3D (Nx3 array).")
 
-    # Define a bounding box for the molecule to handle finite system
-    # Extend box slightly beyond the molecule to avoid boundary issues
-    padding = 5.0  # Angstroms
+    # Automatically set bounding box
+    padding = max(
+        np.max(radii) * 2, 5.0
+    )  # Padding: at least 2x max radius or 5 Å
     box_min = np.min(coords, axis=0) - padding
     box_max = np.max(coords, axis=0) + padding
-    box = [
+    limits = [
         [box_min[i], box_max[i]] for i in range(3)
     ]  # [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
 
@@ -162,7 +163,8 @@ def calculate_occupied_volume(coords, radii):
         # pyvoro.compute_voronoi takes coordinates, bounding box, radii, and periodic boundary conditions
         cells = pyvoro.compute_voronoi(
             points=coords,
-            limits=box,
+            limits=limits,
+            dispersion=dispersion,
             radii=radii,  # Pass atomic radii for Voronoi-Dirichlet
             periodic=[
                 False,
@@ -182,5 +184,27 @@ def calculate_occupied_volume(coords, radii):
         # Ensure the volume is finite and positive
         if volume > 0:
             occupied_volume += volume
+
+    return occupied_volume
+
+
+def calculate_crude_occupied_volume(coords, radii):
+    """
+    Calculate the occupied volume of a molecule as the sum of atomic volumes.
+
+    Parameters:
+    - coords (list or np.array): Nx3 array of atomic coordinates.
+    - radii (list or np.array): Atomic radii corresponding to each coordinate.
+
+    Returns:
+    - occupied_volume (float): Total occupied volume of the molecule.
+    Ignores overlaps between atoms and gives an upper bound to true occupied volumes.
+    """
+    coords = np.array(coords)
+    radii = np.array(radii)
+
+    # Volume of a sphere: (4/3) * pi * r^3
+    volumes = (4 / 3) * np.pi * np.power(radii, 3)
+    occupied_volume = np.sum(volumes)
 
     return occupied_volume

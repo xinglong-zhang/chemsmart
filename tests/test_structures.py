@@ -640,6 +640,9 @@ class TestChemicalFeatures:
         assert not ozone.is_chiral
         rdkit_mol = ozone.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) == []
+        assert ozone.chemical_symbols == ["O", "O", "O"]
+        assert ozone.atomic_radii_list == [0.66, 0.66, 0.66]
+        assert ozone.vdw_radii_list == [1.52, 1.52, 1.52]
 
         graph = ozone.to_graph()
         assert any(
