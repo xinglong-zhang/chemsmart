@@ -5,6 +5,7 @@ from .mol import (
 )
 from .movie import movie
 from .nci import nci
+from .spin import spin
 from .visualize import visualize
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "mo",
     "movie",
     "nci",
+    "spin",
     "visualize",
 ]
