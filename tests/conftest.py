@@ -593,7 +593,7 @@ def gaussian_co2_pressure3_outfile(gaussian_thermochem_test_directory):
 # Gaussian folder for boltzmann weighting
 @pytest.fixture()
 def gaussian_boltzmann_test_directory(gaussian_test_directory):
-    return os.path.join(gaussian_test_directory, "thermochem")
+    return os.path.join(gaussian_test_directory, "boltzmann")
 
 
 @pytest.fixture()

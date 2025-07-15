@@ -1311,8 +1311,8 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
 
         # Compute Boltzmann weights
         beta = 1.0 / (
-            units._k * temperature
-        )  #  [1.0/ (k_B * temperature)] = 1/J
+            R * temperature
+        )  #  beta = 1 / (R * temperature) in J^-1 mol
         energies_shifted = energies - np.min(
             energies
         )  # Shift to avoid overflow
