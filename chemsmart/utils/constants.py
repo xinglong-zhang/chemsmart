@@ -50,7 +50,7 @@ def energy_conversion(from_unit, to_unit, value=1.0):
         If from_unit or to_unit is not supported.
     """
     if value is None:
-        return
+        return None
     valid_units = ["hartree", "ev", "kcal/mol", "kj/mol", "j/mol"]
     if from_unit.lower() not in valid_units:
         raise ValueError(

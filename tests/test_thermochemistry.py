@@ -1988,3 +1988,138 @@ class TestThermochemistryH2O:
             -76.387445,
             atol=1e-6,
         )
+
+
+class TestThermochemistryPressure:
+
+    def test_thermochemistry_co2_pressure1p5(
+        self, gaussian_co2_pressure1p5_outfile
+    ):
+        """Values from Gaussian output
+        Temperature   298.150 Kelvin.  Pressure   1.50000 Atm.
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.043              6.920             50.298
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             36.464
+        Rotational               0.592              1.987             13.083
+        Vibrational              7.561              1.952              0.751
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.850796D+04          3.929825          9.048757
+        Total V=0       0.222135D+10          9.346618         21.521383
+        Vib (Bot)       0.418410D-05         -5.378398        -12.384220
+        Vib (V=0)       0.109243D+01          0.038394          0.088406
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.764524D+07          6.883391         15.849594
+        Rotational      0.265970D+03          2.424833          5.583383
+        """
+        assert os.path.exists(gaussian_co2_pressure1p5_outfile)
+        g16_output_pressure1p5 = Gaussian16Output(filename=gaussian_co2_pressure1p5_outfile)
+        assert g16_output_pressure1p5.normal_termination
+        thermochem_pressure1p5 = Thermochemistry(
+            filename=gaussian_co2_pressure1p5_outfile,
+            temperature=298.15,
+            pressure=1.5,
+            use_weighted_mass=False,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_partition_function,
+            0.764524e07,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_entropy / cal_to_joules,
+            36.464,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
+        )
+        assert np.isclose(thermochem_pressure1p5.total_partition_function, 0.222135e10)
+        assert np.isclose(
+            thermochem_pressure1p5.total_entropy / cal_to_joules,
+            50.298,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.total_internal_energy / (cal_to_joules * 1000),
+            9.043,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.total_heat_capacity / cal_to_joules,
+            6.920,
+            atol=1e-3,
+        )
+
+    def test_thermochemistry_co2_pressure3(
+        self, gaussian_co2_pressure3_outfile
+    ):
+        """Values from Gaussian output
+        Temperature   298.150 Kelvin.  Pressure   3.00000 Atm.
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.043              6.920             48.920
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             35.087
+        Rotational               0.592              1.987             13.083
+        Vibrational              7.561              1.952              0.751
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.425398D+04          3.628795          8.355610
+        Total V=0       0.111068D+10          9.045588         20.828236
+        Vib (Bot)       0.418410D-05         -5.378398        -12.384220
+        Vib (V=0)       0.109243D+01          0.038394          0.088406
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.382262D+07          6.582361         15.156446
+        Rotational      0.265970D+03          2.424833          5.583383
+        """
+        assert os.path.exists(gaussian_co2_pressure3_outfile)
+        g16_output_pressure3 = Gaussian16Output(filename=gaussian_co2_pressure3_outfile)
+        assert g16_output_pressure3.normal_termination
+        thermochem_pressure3 = Thermochemistry(
+            filename=gaussian_co2_pressure3_outfile,
+            temperature=298.15,
+            pressure=3,
+            use_weighted_mass=False,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_partition_function,
+            0.382262e07,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_entropy / cal_to_joules,
+            35.087,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_internal_energy / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
+        )
+        assert np.isclose(thermochem_pressure3.total_partition_function, 0.111068e10)
+        assert np.isclose(
+            thermochem_pressure3.total_entropy / cal_to_joules,
+            48.920,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.total_internal_energy / (cal_to_joules * 1000),
+            9.043,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.total_heat_capacity / cal_to_joules,
+            6.920,
+            atol=1e-3,
+        )
