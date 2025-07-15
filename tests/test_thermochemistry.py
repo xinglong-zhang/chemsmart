@@ -2014,7 +2014,9 @@ class TestThermochemistryPressure:
         Rotational      0.265970D+03          2.424833          5.583383
         """
         assert os.path.exists(gaussian_co2_pressure1p5_outfile)
-        g16_output_pressure1p5 = Gaussian16Output(filename=gaussian_co2_pressure1p5_outfile)
+        g16_output_pressure1p5 = Gaussian16Output(
+            filename=gaussian_co2_pressure1p5_outfile
+        )
         assert g16_output_pressure1p5.normal_termination
         thermochem_pressure1p5 = Thermochemistry(
             filename=gaussian_co2_pressure1p5_outfile,
@@ -2032,7 +2034,8 @@ class TestThermochemistryPressure:
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_pressure1p5.translational_internal_energy / (cal_to_joules * 1000),
+            thermochem_pressure1p5.translational_internal_energy
+            / (cal_to_joules * 1000),
             0.889,
             atol=1e-3,
         )
@@ -2041,14 +2044,17 @@ class TestThermochemistryPressure:
             2.981,
             atol=1e-3,
         )
-        assert np.isclose(thermochem_pressure1p5.total_partition_function, 0.222135e10)
+        assert np.isclose(
+            thermochem_pressure1p5.total_partition_function, 0.222135e10
+        )
         assert np.isclose(
             thermochem_pressure1p5.total_entropy / cal_to_joules,
             50.298,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_pressure1p5.total_internal_energy / (cal_to_joules * 1000),
+            thermochem_pressure1p5.total_internal_energy
+            / (cal_to_joules * 1000),
             9.043,
             atol=1e-3,
         )
@@ -2080,7 +2086,9 @@ class TestThermochemistryPressure:
         Rotational      0.265970D+03          2.424833          5.583383
         """
         assert os.path.exists(gaussian_co2_pressure3_outfile)
-        g16_output_pressure3 = Gaussian16Output(filename=gaussian_co2_pressure3_outfile)
+        g16_output_pressure3 = Gaussian16Output(
+            filename=gaussian_co2_pressure3_outfile
+        )
         assert g16_output_pressure3.normal_termination
         thermochem_pressure3 = Thermochemistry(
             filename=gaussian_co2_pressure3_outfile,
@@ -2098,7 +2106,8 @@ class TestThermochemistryPressure:
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_pressure3.translational_internal_energy / (cal_to_joules * 1000),
+            thermochem_pressure3.translational_internal_energy
+            / (cal_to_joules * 1000),
             0.889,
             atol=1e-3,
         )
@@ -2107,14 +2116,17 @@ class TestThermochemistryPressure:
             2.981,
             atol=1e-3,
         )
-        assert np.isclose(thermochem_pressure3.total_partition_function, 0.111068e10)
+        assert np.isclose(
+            thermochem_pressure3.total_partition_function, 0.111068e10
+        )
         assert np.isclose(
             thermochem_pressure3.total_entropy / cal_to_joules,
             48.920,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_pressure3.total_internal_energy / (cal_to_joules * 1000),
+            thermochem_pressure3.total_internal_energy
+            / (cal_to_joules * 1000),
             9.043,
             atol=1e-3,
         )
