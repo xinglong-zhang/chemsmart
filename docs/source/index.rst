@@ -37,6 +37,7 @@ Welcome to chemsmart’s documentation!
    tutorials_SubmitaTransitionStateandReactionPathwayAnalysisJobUsingGaussian
    tutorials_SubmitaEnergyandThermodynamicAnalysisJobUsingGaussian
    tutorials_SubmitaElectronicStructureAnalysisJobUsingGaussian
+   tutorials_SubmitaGaussianMultiscaleONIOMcalculations
    tutorials_SubmitCustomJobSubmissionUsingGaussian
    tutorials_UseGeneralCLIOptionsforAllJobs
    tutorials_ORCA
