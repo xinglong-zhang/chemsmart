@@ -994,7 +994,7 @@ class Thermochemistry:
         no_freq = "{:39} {:13.6f}   {:<69}\n".format(
             structure,
             electronic_energy,
-            "-- Warning! Frequency information not found --",
+            "--- [NO FREQ INFO] Thermochemistry skipped. ---",
         )
 
         """Log the thermochemistry results to the output file."""
