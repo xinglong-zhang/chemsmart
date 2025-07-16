@@ -49,9 +49,9 @@ class PeriodicTable:
         return isotopes[self.to_atomic_number(symbol)]["most_abundant"]["mass"]
 
     def vdw_radius(self, symbol):
-        # obtain the van der waals radius of the element
+        """Obtain the van der waals radius of the element"""
         return vdw_radii[self.to_atomic_number(symbol)]
 
     def covalent_radius(self, symbol):
-        # obtain the covalent radius of the element
+        """Obtain the covalent/atomic radius of the element"""
         return covalent_radii[self.to_atomic_number(symbol)]

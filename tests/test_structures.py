@@ -105,6 +105,7 @@ class TestStructures:
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
         assert molecule.is_chiral
+        assert molecule.is_aromatic
 
         # test conversion of molecule to RDKit molecule
         rdkit_mol = molecule.to_rdkit()
@@ -639,6 +640,9 @@ class TestChemicalFeatures:
         assert not ozone.is_chiral
         rdkit_mol = ozone.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) == []
+        assert ozone.chemical_symbols == ["O", "O", "O"]
+        assert ozone.atomic_radii_list == [0.66, 0.66, 0.66]
+        assert ozone.vdw_radii_list == [1.52, 1.52, 1.52]
 
         graph = ozone.to_graph()
         assert any(
@@ -680,6 +684,30 @@ class TestChemicalFeatures:
         # check there are 6 aromatic C-C bonds and 6 single C-H bonds in benzene
         assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
         assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
+
+    def test_volume(
+        self, gaussian_ozone_opt_outfile, gaussian_acetone_opt_outfile
+    ):
+        """Test volume calculation."""
+        ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+        print(ozone.voronoi_dirichlet_occupied_volume)  # 42.796979883456515
+        print(ozone.crude_volume_by_vdw_radii)  # 44.13068085447146
+        print(ozone.crude_volume_by_atomic_radii)  # 3.612781286145805
+        print(ozone.vdw_volume)  # 32.95091895666134
+        print(ozone.vdw_volume_from_rdkit)  # 25.533471711063285
+        print(
+            ozone.voronoi_dirichlet_polyhedra_occupied_volume
+        )  # 20.94252748967074
+
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        print(acetone.voronoi_dirichlet_occupied_volume)  # 108.73483002110545
+        print(acetone.crude_volume_by_vdw_radii)  # 119.87818262306239
+        print(acetone.crude_volume_by_atomic_radii)  # 7.469325029468949
+        print(
+            acetone.voronoi_dirichlet_polyhedra_occupied_volume
+        )  # 12.369068467588548
+        print(acetone.vdw_volume)  # 63.328380116290674
+        print(acetone.vdw_volume_from_rdkit)  # 61.98249809788294
 
 
 class TestStructuresFromGaussianInput:
