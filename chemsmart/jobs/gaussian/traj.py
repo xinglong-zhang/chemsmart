@@ -70,6 +70,7 @@ class GaussianTrajJob(GaussianJob):
             self.grouper = StructureGrouperFactory.create(
                 self.molecules, strategy=self.grouping_strategy, **kwargs
             )
+            self.grouper.group()
         else:
             self.grouper = None
 

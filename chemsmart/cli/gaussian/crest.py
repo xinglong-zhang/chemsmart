@@ -37,6 +37,7 @@ def crest(
     num_steps,
     num_confs_to_run,
     grouping_strategy,
+    threshold,
     ignore_hydrogens,
     skip_completed,
     **kwargs,
@@ -85,6 +86,7 @@ def crest(
         num_confs_to_run=num_confs_to_run,
         grouping_strategy=grouping_strategy,
         ignore_hydrogens=ignore_hydrogens,
+        threshold=threshold,
         skip_completed=skip_completed,
         **kwargs,
     )

@@ -1,4 +1,4 @@
-from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob, logger
 
 
 class GaussianCrestJob(GaussianJob):
@@ -37,12 +37,19 @@ class GaussianCrestJob(GaussianJob):
         # if grouping strategy is provided, set the grouper
         # and carry out the grouping before running the group of molecules
         if grouping_strategy is not None:
+            logger.info(f"Using grouping strategy: {grouping_strategy}")
             from chemsmart.utils.grouper import StructureGrouperFactory
 
-            self.grouper = StructureGrouperFactory.create(
+            logger.info(f"Total structures to group: {len(molecules)}")
+            grouper = StructureGrouperFactory.create(
                 molecules, strategy=grouping_strategy, **kwargs
             )
-            unique_molecules = self.grouper.unique()
+            grouper.group()
+            unique_molecules = grouper.unique()
+            self.grouper = grouper
+            logger.debug(f"Grouping strategy: {grouper.__repr__()}")
+            logger.info(f"Number of unique groups: {len(unique_molecules)}")
+            logger.info(f"Unique molecules: {unique_molecules}")
             self.all_conformers = unique_molecules
 
         else:

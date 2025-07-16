@@ -185,6 +185,13 @@ def click_gaussian_grouper_options(f):
         help="Grouping strategy to use for Gaussian jobs.",
     )
     @click.option(
+        "-t",
+        "--threshold",
+        type=float,
+        default=0.1,
+        help="Threshold for grouping.",
+    )
+    @click.option(
         "-i",
         "--ignore-hydrogens",
         is_flag=True,

@@ -47,6 +47,7 @@ def traj(
     num_steps,
     num_structures_to_run,
     grouping_strategy,
+    threshold,
     ignore_hydrogens,
     num_procs,
     proportion_structures_to_use,
@@ -98,6 +99,7 @@ def traj(
         proportion_structures_to_use=proportion_structures_to_use,
         num_structures_to_run=num_structures_to_run,
         ignore_hydrogens=ignore_hydrogens,
+        threshold=threshold,
         skip_completed=skip_completed,
         **kwargs,
     )
