@@ -171,6 +171,40 @@ def click_gaussian_jobtype_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_grouper_options(f):
+    """Common click options for Gaussian grouper jobs."""
+
+    @click.option(
+        "-g",
+        "--grouping-strategy",
+        type=click.Choice(
+            ["rmsd", "tanimoto", "isomorphism", "formula", "connectivity"],
+            case_sensitive=False,
+        ),
+        default=None,
+        help="Grouping strategy to use for Gaussian jobs.",
+    )
+    @click.option(
+        "-i",
+        "--ignore-hydrogens",
+        is_flag=True,
+        default=False,
+        help="Whether to ignore hydrogens in the grouping.",
+    )
+    @click.option(
+        "-p",
+        "--num-procs",
+        type=int,
+        default=4,
+        help="Number of processors to use for grouper.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_gaussian_solvent_options(f):
     """Common click solvent options for Gaussian jobs."""
 

@@ -34,7 +34,7 @@ class GaussianTrajJob(GaussianJob):
         label,
         jobrunner,
         num_structures_to_run=None,
-        grouping_strategy="rmsd",
+        grouping_strategy=None,
         num_procs=1,
         proportion_structures_to_use=0.1,
         skip_completed=True,
@@ -66,9 +66,12 @@ class GaussianTrajJob(GaussianJob):
             round(len(molecules) * proportion_structures_to_use, 1)
         )
         self.molecules = molecules[-last_num_structures:]
-        self.grouper = StructureGrouperFactory.create(
-            self.molecules, strategy=self.grouping_strategy, **kwargs
-        )
+        if grouping_strategy is not None:
+            self.grouper = StructureGrouperFactory.create(
+                self.molecules, strategy=self.grouping_strategy, **kwargs
+            )
+        else:
+            self.grouper = None
 
     @cached_property
     def num_structures(self):
@@ -95,6 +98,8 @@ class GaussianTrajJob(GaussianJob):
 
     @property
     def unique_structures(self):
+        if self.grouper is None:
+            return self.molecules
         return self.grouper.unique()
 
     @property
@@ -103,6 +108,9 @@ class GaussianTrajJob(GaussianJob):
 
     @property
     def num_unique_structures(self):
+        """Number of unique structures after grouping."""
+        if self.grouper is None:
+            return len(self.molecules)
         return len(self.unique_structures)
 
     def _prepare_all_jobs(self):

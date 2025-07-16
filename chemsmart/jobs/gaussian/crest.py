@@ -13,6 +13,8 @@ class GaussianCrestJob(GaussianJob):
         label=None,
         jobrunner=None,
         num_confs_to_run=None,
+        grouping_strategy=None,
+        skip_completed=True,
         **kwargs,
     ):
         if not isinstance(molecules, list) and len(molecules) == 0:
@@ -23,14 +25,30 @@ class GaussianCrestJob(GaussianJob):
             settings=settings,
             label=label,
             jobrunner=jobrunner,
+            skip_completed=skip_completed,
             **kwargs,
         )
 
         if num_confs_to_run is None:
             num_confs_to_run = len(molecules)
 
-        self.all_conformers = molecules
         self.num_confs_to_opt = num_confs_to_run
+
+        # if grouping strategy is provided, set the grouper
+        # and carry out the grouping before running the group of molecules
+        if grouping_strategy is not None:
+            from chemsmart.utils.grouper import StructureGrouperFactory
+
+            self.grouper = StructureGrouperFactory.create(
+                molecules, strategy=grouping_strategy, **kwargs
+            )
+            unique_molecules = self.grouper.unique()
+            self.all_conformers = unique_molecules
+
+        else:
+            # if no grouping strategy is provided, use all molecules as conformers
+            self.grouper = None
+            self.all_conformers = molecules
 
     @property
     def num_conformers(self):

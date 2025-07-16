@@ -143,23 +143,21 @@ class Gaussian16Input(GaussianFileMixin):
         self.constrained_atoms = value
 
     def _get_route(self):
-        """Obtain route string that may span over multiple lines
-        and convert route to lower case."""
+        """Obtain route string that may span over multiple lines and convert route to lower case."""
         concatenated_string = ""
+        found_hash = False  # Initialize once before the loop
+
         for line in self.content_groups[0]:
-            found_hash = False
             if line.startswith("#"):
-                concatenated_string += (
-                    line.strip()
-                )  # Remove the '#' and any leading/trailing whitespace
+                concatenated_string += line.strip()
                 found_hash = True
             elif found_hash:
-                concatenated_string += (
-                    " " + line.strip()
-                )  # Concatenate with a space separator
-            else:
-                continue
-            return concatenated_string.lower()
+                # Include continuation lines until a blank or non-related line appears
+                if line.strip() == "":
+                    break
+                concatenated_string += " " + line.strip()
+
+        return concatenated_string.lower()
 
     def _get_charge_and_multiplicity(self):
         for line in self.contents:

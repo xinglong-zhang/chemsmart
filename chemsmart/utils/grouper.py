@@ -621,7 +621,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
 
 class StructureGrouperFactory:
     @staticmethod
-    def create(structures, strategy="rdkit", num_procs=1, **kwargs):
+    def create(structures, strategy="rmsd", num_procs=1, **kwargs):
         groupers = {
             "rmsd": RMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,

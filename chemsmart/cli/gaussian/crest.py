@@ -3,6 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_grouper_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click_gaussian_grouper_options
 @click.option(
     "-N",
     "--num-confs-to-run",
@@ -34,6 +36,8 @@ def crest(
     step_size,
     num_steps,
     num_confs_to_run,
+    grouping_strategy,
+    ignore_hydrogens,
     skip_completed,
     **kwargs,
 ):
@@ -79,6 +83,8 @@ def crest(
         label=label,
         jobrunner=jobrunner,
         num_confs_to_run=num_confs_to_run,
+        grouping_strategy=grouping_strategy,
+        ignore_hydrogens=ignore_hydrogens,
         skip_completed=skip_completed,
         **kwargs,
     )
