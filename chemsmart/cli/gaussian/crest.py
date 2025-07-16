@@ -78,6 +78,8 @@ def crest(
 
     from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 
+    logger.debug(f"Creating GaussianCrestJob with {len(molecules)} molecules")
+
     return GaussianCrestJob(
         molecules=molecules,
         settings=crest_settings,
