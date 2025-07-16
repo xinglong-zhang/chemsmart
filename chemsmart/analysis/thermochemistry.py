@@ -698,18 +698,18 @@ class Thermochemistry:
         """
         if self.h_freq_cutoff is None or self.v is None:
             return None
-        vib_energy = []
+        vib_energies = []
         assert len(self.v) == len(self.enthalpy_damping_function), (
             f"The length of vibrational frequencies and damping function must be equal.\n"
             f"The damping function is {self.enthalpy_damping_function}.\n"
         )
         for j in range(0, len(self.v)):
-            vib_energy.append(
+            vib_energies.append(
                 self.enthalpy_damping_function[j]
                 * self.rrho_internal_energy[j]
                 + (1 - self.enthalpy_damping_function[j]) * 1 / 2 * R * self.T
             )
-        return sum(vib_energy)
+        return sum(vib_energies)
 
     @property
     def enthalpy(self):
