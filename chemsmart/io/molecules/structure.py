@@ -224,7 +224,7 @@ class Molecule:
         for i in range(n_points):
             for j in range(i + 1, n_points):
                 radii_sum = radii[i] + radii[j]
-                max_radii_sum = max(max_radii_sum, max(radii_sum))
+                max_radii_sum = max(max_radii_sum, radii_sum)
 
         # Use a factor of 1.5 to ensure sufficient dispersion for Voronoi tessellation
         dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
@@ -244,6 +244,18 @@ class Molecule:
         )
 
     @property
+    def voronoi_dirichlet_polyhedra_occupied_volume(self):
+        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet Polyhedra (VDP)."""
+        from chemsmart.utils.geometry import (
+            calculate_molecular_volume_vdp,
+        )
+
+        return calculate_molecular_volume_vdp(
+            coordinates=self.positions,
+            vdw_radii=self.vdw_radii_list,
+        )
+
+    @property
     def crude_volume_by_atomic_radii(self):
         """Calculate the crude occupied volume of the molecule using atomic radii."""
         from chemsmart.utils.geometry import calculate_crude_occupied_volume
@@ -260,6 +272,24 @@ class Molecule:
         return calculate_crude_occupied_volume(
             coords=self.positions, radii=self.vdw_radii_list
         )
+
+    @property
+    def vdw_volume(self):
+        """Calculate the occupied volume of the molecule using van der Waals radii."""
+        from chemsmart.utils.geometry import calculate_vdw_volume
+
+        return calculate_vdw_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def vdw_volume_from_rdkit(self):
+        """Calculate the van der Waals volume of the molecule using RDKit."""
+        from rdkit.Chem.rdMolDescriptors import DoubleCubicLatticeVolume
+
+        dclv = DoubleCubicLatticeVolume(self.to_rdkit())
+        volume = dclv.GetVDWVolume()
+        return volume
 
     @property
     def num_atoms(self):

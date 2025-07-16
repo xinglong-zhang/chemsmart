@@ -685,6 +685,30 @@ class TestChemicalFeatures:
         assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
         assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
 
+    def test_volume(
+        self, gaussian_ozone_opt_outfile, gaussian_acetone_opt_outfile
+    ):
+        """Test volume calculation."""
+        ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+        print(ozone.voronoi_dirichlet_occupied_volume)  # 42.796979883456515
+        print(ozone.crude_volume_by_vdw_radii)  # 44.13068085447146
+        print(ozone.crude_volume_by_atomic_radii)  # 3.612781286145805
+        print(ozone.vdw_volume)  # 32.95091895666134
+        print(ozone.vdw_volume_from_rdkit)  # 25.533471711063285
+        print(
+            ozone.voronoi_dirichlet_polyhedra_occupied_volume
+        )  # 20.94252748967074
+
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        print(acetone.voronoi_dirichlet_occupied_volume)  # 108.73483002110545
+        print(acetone.crude_volume_by_vdw_radii)  # 119.87818262306239
+        print(acetone.crude_volume_by_atomic_radii)  # 7.469325029468949
+        print(
+            acetone.voronoi_dirichlet_polyhedra_occupied_volume
+        )  # 12.369068467588548
+        print(acetone.vdw_volume)  # 63.328380116290674
+        print(acetone.vdw_volume_from_rdkit)  # 61.98249809788294
+
 
 class TestStructuresFromGaussianInput:
     def test_read_molecule_from_gaussian_opt_input(
