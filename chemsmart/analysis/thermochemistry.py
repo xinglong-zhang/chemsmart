@@ -172,7 +172,7 @@ class Thermochemistry:
     @property
     def vibrational_frequencies(self):
         """Obtain the vibrational frequencies of the molecule."""
-        if self.job_type == "sp":
+        if not self.file_object.freq:
             return None
         return self.file_object.vibrational_frequencies
 
