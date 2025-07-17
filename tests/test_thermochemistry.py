@@ -275,6 +275,7 @@ class TestThermochemistryCO2:
         g16_output = Gaussian16Output(filename=gaussian_co2_opt_outfile)
         assert g16_output.normal_termination
         assert g16_output.job_type == "opt"
+        assert g16_output.freq
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
         mol_as_ase_atoms = mol.to_ase()
@@ -1399,6 +1400,7 @@ class TestThermochemistryHe:
         g16_output = Gaussian16Output(filename=gaussian_he_opt_outfile)
         assert g16_output.normal_termination
         assert g16_output.job_type == "opt"
+        assert g16_output.freq
         assert g16_output.num_atoms == 1
         mol = g16_output.molecule
         assert mol.empirical_formula == "He"
@@ -1677,6 +1679,7 @@ class TestThermochemistryH2O:
         g16_output = Gaussian16Output(filename=gaussian_mp2_outputfile)
         assert g16_output.normal_termination
         assert g16_output.job_type == "opt"
+        assert g16_output.freq
         assert g16_output.num_atoms == 3
         mol = g16_output.molecule
         assert mol.empirical_formula == "H2O"
