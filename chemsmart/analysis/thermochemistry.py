@@ -98,14 +98,14 @@ class Thermochemistry:
         # convert the unit of vibrational frequencies from cm^-1 to Hz
         self.v = (
             [k * units._c * 1e2 for k in self.cleaned_frequencies]
-            if self.cleaned_frequencies
+            if self.cleaned_frequencies is not None
             else None
         )
 
         # Calculate the characteristic vibrational temperature, theta, for each vibrational mode
         self.theta = (
             [units._hplanck * vk / units._k for vk in self.v]
-            if self.v
+            if self.v is not None
             else None
         )
 
@@ -172,16 +172,22 @@ class Thermochemistry:
     @property
     def vibrational_frequencies(self):
         """Obtain the vibrational frequencies of the molecule."""
+        if self.job_type == "sp":
+            return None
         return self.file_object.vibrational_frequencies
 
     @property
     def real_frequencies(self):
         """Obtain the real vibrational frequencies of the molecule."""
+        if self.vibrational_frequencies is None:
+            return None
         return [k for k in self.vibrational_frequencies if k >= 0.0]
 
     @property
     def imaginary_frequencies(self):
         """Obtain the imaginary vibrational frequencies of the molecule."""
+        if self.vibrational_frequencies is None:
+            return None
         return [k for k in self.vibrational_frequencies if k < 0.0]
 
     @property
@@ -191,7 +197,7 @@ class Thermochemistry:
         correspond to the reaction coordinate and is excluded from thermochemical calculation.
         For optimization, only geometries without imaginary frequencies are parsed for thermochemical calculations.
         """
-        if not self.vibrational_frequencies:
+        if self.vibrational_frequencies is None:
             return None
         if self.imaginary_frequencies:
             if self.job_type == "ts":
@@ -414,15 +420,13 @@ class Thermochemistry:
             Θ_v,K = h * v_K / k_B
             v_K = vibrational frequency for mode K (Hz)
         """
-        if self.molecule.is_monoatomic:
-            return 1
         return (
             [
                 math.exp(-t / (2 * self.T)) / (1 - math.exp(-t / self.T))
                 for t in self.theta
             ]
-            if self.theta
-            else []
+            if self.theta is not None
+            else None
         )
 
     @property
@@ -436,8 +440,8 @@ class Thermochemistry:
                  = 3 * N - 6 for nonlinear polyatomic molecules
             N = number of atoms in molecule
         """
-        if self.molecule.is_monoatomic:
-            return 1
+        if self.vibrational_partition_function_by_mode_bot is None:
+            return None
         return np.prod(self.vibrational_partition_function_by_mode_bot)
 
     @property
@@ -448,19 +452,17 @@ class Thermochemistry:
         Formula:
             q_v,K = 1 / (1 - exp(-Θ_v,K / T))
         """
-        if self.molecule.is_monoatomic:
-            return 1
         return (
             [1 / (1 - math.exp(-t / self.T)) for t in self.theta]
-            if self.theta
-            else []
+            if self.theta is not None
+            else None
         )
 
     @property
     def vibrational_partition_function_v0(self):
         """Obtain the overall vibrational partition function with V=0."""
-        if self.molecule.is_monoatomic:
-            return 1
+        if self.vibrational_partition_function_by_mode_v0 is None:
+            return None
         return np.prod(self.vibrational_partition_function_by_mode_v0)
 
     @property
@@ -469,17 +471,13 @@ class Thermochemistry:
         Formula:
             S_v = R * Σ((Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T)))
         """
-        if self.molecule.is_monoatomic:
-            return 0
-        s = (
-            [
-                (t / self.T) / (math.exp(t / self.T) - 1)
-                - np.log(1 - math.exp(-t / self.T))
-                for t in self.theta
-            ]
-            if self.theta
-            else []
-        )
+        if self.theta is None:
+            return None
+        s = [
+            (t / self.T) / (math.exp(t / self.T) - 1)
+            - np.log(1 - math.exp(-t / self.T))
+            for t in self.theta
+        ]
         return R * sum(s)
 
     @property
@@ -488,9 +486,9 @@ class Thermochemistry:
         Formula:
             E_ZPE = R * Σ(1/2 * Θ_v,K)
         """
-        if self.molecule.is_monoatomic:
-            return 0
-        u = [1 / 2 * t for t in self.theta] if self.theta else []
+        if self.theta is None:
+            return None
+        u = [1 / 2 * t for t in self.theta]
         return R * sum(u)
 
     @property
@@ -499,13 +497,9 @@ class Thermochemistry:
         Formula:
             E_v = R * Σ(Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1)))
         """
-        if self.molecule.is_monoatomic:
-            return 0
-        u = (
-            [t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
-            if self.theta
-            else []
-        )
+        if self.theta is None:
+            return None
+        u = [t * (1 / 2 + 1 / (math.exp(t / self.T) - 1)) for t in self.theta]
         return R * sum(u)
 
     @property
@@ -514,17 +508,13 @@ class Thermochemistry:
         Formula:
             C_v = R * Σ(exp(-Θ_v,K / T) * ((Θ_v,K / T) / (exp(-Θ_v,K / T) - 1))^2)
         """
-        if self.molecule.is_monoatomic:
-            return 0
-        c = (
-            [
-                math.exp(-t / self.T)
-                * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
-                for t in self.theta
-            ]
-            if self.theta
-            else []
-        )
+        if self.theta is None:
+            return None
+        c = [
+            math.exp(-t / self.T)
+            * ((t / self.T) / (math.exp(-t / self.T) - 1)) ** 2
+            for t in self.theta
+        ]
         return R * sum(c)
 
     @property
@@ -533,11 +523,8 @@ class Thermochemistry:
         Formula:
             q_tot = q_t * q_r * q_v * q_e
         """
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_partition_function
-                * self.electronic_partition_function
-            )
+        if self.vibrational_partition_function_v0 is None:
+            return None
         return (
             self.translational_partition_function
             * self.rotational_partition_function
@@ -551,8 +538,8 @@ class Thermochemistry:
         Formula:
             S_tot = S_t + S_r + S_v + S_e
         """
-        if self.molecule.is_monoatomic:
-            return self.translational_entropy + self.electronic_entropy
+        if self.vibrational_entropy is None:
+            return None
         return (
             self.translational_entropy
             + self.rotational_entropy
@@ -566,11 +553,8 @@ class Thermochemistry:
         Formula:
             E_tot = E_t + E_r + E_v + E_e
         """
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_internal_energy
-                + self.electronic_internal_energy
-            )
+        if self.vibrational_internal_energy is None:
+            return None
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
@@ -584,11 +568,8 @@ class Thermochemistry:
         Formula:
             C_tot = C_t + C_r + C_v + C_e
         """
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_heat_capacity
-                + self.electronic_heat_capacity
-            )
+        if self.vibrational_heat_capacity is None:
+            return None
         return (
             self.translational_heat_capacity
             + self.rotational_heat_capacity
@@ -605,8 +586,8 @@ class Thermochemistry:
             v_0 = cutoff frequency in Hz, default is 100 cm^-1 (already converted to Hz)
             α = dimensionless interpolator exponent, default value is 4
         """
-        if freq_cutoff is None or not self.v:
-            return []
+        if freq_cutoff is None or self.v is None:
+            return None
         damp = [1 / (1 + (freq_cutoff / vk) ** self.alpha) for vk in self.v]
         return damp
 
@@ -629,6 +610,8 @@ class Thermochemistry:
             u_K = h / (8 * pi^2 * v_K)
             B_av = average molecular moment of inertia (kg m^2)
         """
+        if self.v is None:
+            return None
         bav = self.Bav
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
@@ -659,18 +642,16 @@ class Thermochemistry:
         Formula:
             S^rrho_v,K = R * [(Θ_v,K / T) / (exp(Θ_v,K / T) - 1) - ln(1 - exp(-Θ_v,K / T))]
         """
-        entropy = (
-            [
-                R
-                * (
-                    (t / self.T) / (math.exp(t / self.T) - 1)
-                    - np.log(1 - math.exp(-t / self.T))
-                )
-                for t in self.theta
-            ]
-            if self.theta
-            else []
-        )
+        if self.theta is None:
+            return None
+        entropy = [
+            R
+            * (
+                (t / self.T) / (math.exp(t / self.T) - 1)
+                - np.log(1 - math.exp(-t / self.T))
+            )
+            for t in self.theta
+        ]
         return entropy
 
     @property
@@ -679,21 +660,20 @@ class Thermochemistry:
         Formula:
             S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
         """
-        if self.s_freq_cutoff is None:
+        if self.s_freq_cutoff is None or self.v is None:
             return None
         vib_entropy = []
-        if self.v:
-            assert len(self.v) == len(self.entropy_damping_function), (
-                f"The length of vibrational frequencies and damping function must be equal.\n"
-                f"The damping function is {self.entropy_damping_function}.\n"
+        assert len(self.v) == len(self.entropy_damping_function), (
+            f"The length of vibrational frequencies and damping function must be equal.\n"
+            f"The damping function is {self.entropy_damping_function}.\n"
+        )
+        for j in range(0, len(self.v)):
+            vib_entropy.append(
+                self.entropy_damping_function[j] * self.rrho_entropy[j]
+                + (1 - self.entropy_damping_function[j])
+                * self.free_rotor_entropy[j]
             )
-            for j in range(0, len(self.v)):
-                vib_entropy.append(
-                    self.entropy_damping_function[j] * self.rrho_entropy[j]
-                    + (1 - self.entropy_damping_function[j])
-                    * self.free_rotor_entropy[j]
-                )
-            return sum(vib_entropy)
+        return sum(vib_entropy)
 
     @property
     def rrho_internal_energy(self):
@@ -702,14 +682,12 @@ class Thermochemistry:
         Formula:
             E^rrho_v,K = R * Θ_v,K * (1/2 + 1 / (exp(Θ_v,K / T) - 1))
         """
-        energy = (
-            [
-                R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
-                for t in self.theta
-            ]
-            if self.theta
-            else []
-        )
+        if self.theta is None:
+            return None
+        energy = [
+            R * t * (1 / 2 + 1 / (math.exp(t / self.T) - 1))
+            for t in self.theta
+        ]
         return energy
 
     @property
@@ -718,25 +696,20 @@ class Thermochemistry:
         Formula:
             E^qrrho_v = Σ(w(v_K) * E^rrho_v,K + (1 - w(v_K)) * 1/2 * R * T)
         """
-        if self.h_freq_cutoff is None:
+        if self.h_freq_cutoff is None or self.v is None:
             return None
-        vib_energy = []
-        if self.v:
-            assert len(self.v) == len(self.enthalpy_damping_function), (
-                f"The length of vibrational frequencies and damping function must be equal.\n"
-                f"The damping function is {self.enthalpy_damping_function}.\n"
+        vib_energies = []
+        assert len(self.v) == len(self.enthalpy_damping_function), (
+            f"The length of vibrational frequencies and damping function must be equal.\n"
+            f"The damping function is {self.enthalpy_damping_function}.\n"
+        )
+        for j in range(0, len(self.v)):
+            vib_energies.append(
+                self.enthalpy_damping_function[j]
+                * self.rrho_internal_energy[j]
+                + (1 - self.enthalpy_damping_function[j]) * 1 / 2 * R * self.T
             )
-            for j in range(0, len(self.v)):
-                vib_energy.append(
-                    self.enthalpy_damping_function[j]
-                    * self.rrho_internal_energy[j]
-                    + (1 - self.enthalpy_damping_function[j])
-                    * 1
-                    / 2
-                    * R
-                    * self.T
-                )
-            return sum(vib_energy)
+        return sum(vib_energies)
 
     @property
     def enthalpy(self):
@@ -746,6 +719,8 @@ class Thermochemistry:
         where:
             E0 = the total electronic energy (J mol^-1)
         """
+        if self.total_internal_energy is None:
+            return None
         return self.electronic_energy + self.total_internal_energy + R * self.T
 
     @property
@@ -754,12 +729,8 @@ class Thermochemistry:
         Formula:
             S^qrrho_tot = S_t + S_r + S^qrrho_v + S_e
         """
-        if self.molecule.is_monoatomic:
-            return self.translational_entropy + self.electronic_entropy
-
         if self.qrrho_vibrational_entropy is None:
-            return
-
+            return None
         return (
             self.translational_entropy
             + self.rotational_entropy
@@ -773,6 +744,8 @@ class Thermochemistry:
         Formula:
             T * S_tot
         """
+        if self.total_entropy is None:
+            return None
         return self.T * self.total_entropy
 
     @property
@@ -782,7 +755,7 @@ class Thermochemistry:
             T * S^qrrho_tot
         """
         if self.qrrho_total_entropy is None:
-            return
+            return None
         return self.T * self.qrrho_total_entropy
 
     @property
@@ -791,6 +764,8 @@ class Thermochemistry:
         Formula:
             G = H - T * S_tot
         """
+        if self.entropy_times_temperature is None or self.enthalpy is None:
+            return None
         return self.enthalpy - self.entropy_times_temperature
 
     @property
@@ -799,16 +774,8 @@ class Thermochemistry:
         Formula:
             E^qrrho_tot = E_t + E_r + E^qrrho_v + E_e
         """
-
-        if self.molecule.is_monoatomic:
-            return (
-                self.translational_internal_energy
-                + self.electronic_internal_energy
-            )
-
         if self.qrrho_vibrational_internal_energy is None:
-            return
-
+            return None
         return (
             self.translational_internal_energy
             + self.rotational_internal_energy
@@ -826,7 +793,7 @@ class Thermochemistry:
             E0 = the total electronic energy (J mol^-1)
         """
         if self.qrrho_total_internal_energy is None:
-            return
+            return None
         return (
             self.electronic_energy
             + self.qrrho_total_internal_energy
@@ -843,7 +810,7 @@ class Thermochemistry:
             self.qrrho_enthalpy is None
             or self.qrrho_entropy_times_temperature is None
         ):
-            return
+            return None
         return self.qrrho_enthalpy - self.qrrho_entropy_times_temperature
 
     @property
@@ -852,8 +819,11 @@ class Thermochemistry:
         Formula:
             G^qrrho_qs = H - T * S^qrrho_tot
         """
-        if self.qrrho_entropy_times_temperature is None:
-            return
+        if (
+            self.qrrho_entropy_times_temperature is None
+            or self.enthalpy is None
+        ):
+            return None
         return self.enthalpy - self.qrrho_entropy_times_temperature
 
     @property
@@ -862,8 +832,11 @@ class Thermochemistry:
         Formula:
             G^qrrho_qh = H^qrrho - T * S_tot
         """
-        if self.qrrho_enthalpy is None:
-            return
+        if (
+            self.qrrho_enthalpy is None
+            or self.entropy_times_temperature is None
+        ):
+            return None
         return self.qrrho_enthalpy - self.entropy_times_temperature
 
     def compute_thermochemistry(self):
@@ -1006,6 +979,24 @@ class Thermochemistry:
         gibbs_free_energy,
         qrrho_gibbs_free_energy,
     ):
+        all_none = all(
+            x is None
+            for x in [
+                zero_point_energy,
+                enthalpy,
+                qrrho_enthalpy,
+                entropy_times_temperature,
+                qrrho_entropy_times_temperature,
+                gibbs_free_energy,
+                qrrho_gibbs_free_energy,
+            ]
+        )
+        no_freq = "{:39} {:13.6f}   {:<69}\n".format(
+            structure,
+            electronic_energy,
+            "--- [NO FREQ INFO] Thermochemistry skipped. ---",
+        )
+
         """Log the thermochemistry results to the output file."""
         if self.outputfile is None:
             # If no output file is specified, log to individual output file
@@ -1054,16 +1045,20 @@ class Thermochemistry:
                 )
 
                 output_string += "=" * 142 + "\n"
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    qrrho_enthalpy,
-                    entropy_times_temperature,
-                    qrrho_entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        qrrho_enthalpy,
+                        entropy_times_temperature,
+                        qrrho_entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
 
             elif self.s_freq_cutoff and not self.h_freq_cutoff:
@@ -1078,15 +1073,19 @@ class Thermochemistry:
                     "qh-G(T)",
                 )
                 output_string += "=" * 128 + "\n"
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    entropy_times_temperature,
-                    qrrho_entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        entropy_times_temperature,
+                        qrrho_entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
             elif self.h_freq_cutoff and not self.s_freq_cutoff:
                 output_string += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
@@ -1100,15 +1099,19 @@ class Thermochemistry:
                     "qh-G(T)",
                 )
                 output_string += "=" * 131 + "\n"
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    qrrho_enthalpy,
-                    entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        qrrho_enthalpy,
+                        entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
             else:
                 output_string += (
@@ -1117,13 +1120,17 @@ class Thermochemistry:
                     )
                 )
                 output_string += "=" * 103 + "\n"
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    entropy_times_temperature,
-                    gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        entropy_times_temperature,
+                        gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
 
             # If the output file does not exist, create it and write the header
@@ -1135,48 +1142,64 @@ class Thermochemistry:
             structure = os.path.splitext(os.path.basename(self.filename))[0]
             output_string = ""
             if self.h_freq_cutoff and self.s_freq_cutoff:
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    qrrho_enthalpy,
-                    entropy_times_temperature,
-                    qrrho_entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        qrrho_enthalpy,
+                        entropy_times_temperature,
+                        qrrho_entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
 
             elif self.s_freq_cutoff and not self.h_freq_cutoff:
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    entropy_times_temperature,
-                    qrrho_entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        entropy_times_temperature,
+                        qrrho_entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
             elif self.h_freq_cutoff and not self.s_freq_cutoff:
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    qrrho_enthalpy,
-                    entropy_times_temperature,
-                    gibbs_free_energy,
-                    qrrho_gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        qrrho_enthalpy,
+                        entropy_times_temperature,
+                        gibbs_free_energy,
+                        qrrho_gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
             else:
-                output_string += "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
-                    structure,
-                    electronic_energy,
-                    zero_point_energy,
-                    enthalpy,
-                    entropy_times_temperature,
-                    gibbs_free_energy,
+                output_string += (
+                    "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
+                        structure,
+                        electronic_energy,
+                        zero_point_energy,
+                        enthalpy,
+                        entropy_times_temperature,
+                        gibbs_free_energy,
+                    )
+                    if not all_none
+                    else no_freq
                 )
 
             # Check if the header is already present
@@ -1288,8 +1311,8 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
 
         # Compute Boltzmann weights
         beta = 1.0 / (
-            units._k * temperature
-        )  #  [1.0/ (k_B * temperature)] = 1/J
+            R * temperature
+        )  #  beta = 1 / (R * temperature) in J^-1 mol
         energies_shifted = energies - np.min(
             energies
         )  # Shift to avoid overflow

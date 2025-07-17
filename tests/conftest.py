@@ -568,6 +568,50 @@ def qmmm_written_xyz_only_file(gaussian_written_files_directory):
     )
 
 
+# Gaussian folder for thermochemistry analysis
+@pytest.fixture()
+def gaussian_thermochem_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "thermochem")
+
+
+@pytest.fixture()
+def gaussian_co2_pressure1p5_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure1p5_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure1p5.log"
+    )
+    return gaussian_co2_pressure1p5_outfile
+
+
+@pytest.fixture()
+def gaussian_co2_pressure3_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure3_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure3.log"
+    )
+    return gaussian_co2_pressure3_outfile
+
+
+# Gaussian folder for boltzmann weighting
+@pytest.fixture()
+def gaussian_boltzmann_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "boltzmann")
+
+
+@pytest.fixture()
+def gaussian_conformer1_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer1_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c1.log"
+    )
+    return gaussian_conformer1_outfile
+
+
+@pytest.fixture()
+def gaussian_conformer2_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer2_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c4.log"
+    )
+    return gaussian_conformer2_outfile
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):

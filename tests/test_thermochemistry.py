@@ -5,6 +5,7 @@ import pytest
 from ase import units
 
 from chemsmart.analysis.thermochemistry import (
+    BoltzmannAverageThermochemistry,
     Thermochemistry,
 )
 from chemsmart.io.gaussian.output import (
@@ -15,7 +16,11 @@ from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.cluster import is_pubchem_network_available
-from chemsmart.utils.constants import cal_to_joules, hartree_to_joules
+from chemsmart.utils.constants import (
+    cal_to_joules,
+    hartree_to_joules,
+    joule_per_mol_to_hartree,
+)
 
 
 class TestThermochemistry:
@@ -372,7 +377,7 @@ class TestThermochemistryCO2:
         )
 
         # S_t = R * [ln(q_t) + 1 + 3 / 2]
-        # R = 8.314462145468951 J mol^-1 K^-1
+        # R = 8.314462145468951 J mol^-1 K^-1 used by Gaussian16
         # using these constants, we got 155.94381435430543 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
             np.log(expected_translational_partition_function) + 1 + 3 / 2
@@ -1406,6 +1411,7 @@ class TestThermochemistryHe:
             mol.most_abundant_mass, 4.00260325413
         )  # use_weighted_mass=False
         assert np.isclose(g16_output.mass, 4.00260)
+        assert g16_output.vibrational_frequencies == []
         assert mol.is_monoatomic
 
         thermochem2 = Thermochemistry(
@@ -1985,5 +1991,509 @@ class TestThermochemistryH2O:
             qrrho_thermochem_water.qrrho_gibbs_free_energy
             / (hartree_to_joules * units._Nav),
             -76.387445,
+            atol=1e-6,
+        )
+
+
+class TestThermochemistryPressure:
+
+    def test_thermochemistry_co2_pressure1p5(
+        self, gaussian_co2_pressure1p5_outfile
+    ):
+        """Values from Gaussian output
+        Temperature   298.150 Kelvin.  Pressure   1.50000 Atm.
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.043              6.920             50.298
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             36.464
+        Rotational               0.592              1.987             13.083
+        Vibrational              7.561              1.952              0.751
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.850796D+04          3.929825          9.048757
+        Total V=0       0.222135D+10          9.346618         21.521383
+        Vib (Bot)       0.418410D-05         -5.378398        -12.384220
+        Vib (V=0)       0.109243D+01          0.038394          0.088406
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.764524D+07          6.883391         15.849594
+        Rotational      0.265970D+03          2.424833          5.583383
+        """
+        assert os.path.exists(gaussian_co2_pressure1p5_outfile)
+        g16_output_pressure1p5 = Gaussian16Output(
+            filename=gaussian_co2_pressure1p5_outfile
+        )
+        assert g16_output_pressure1p5.normal_termination
+        thermochem_pressure1p5 = Thermochemistry(
+            filename=gaussian_co2_pressure1p5_outfile,
+            temperature=298.15,
+            pressure=1.5,
+            use_weighted_mass=False,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_partition_function,
+            0.764524e07,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_entropy / cal_to_joules,
+            36.464,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_internal_energy
+            / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.total_partition_function, 0.222135e10
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.total_entropy / cal_to_joules,
+            50.298,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.total_internal_energy
+            / (cal_to_joules * 1000),
+            9.043,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure1p5.total_heat_capacity / cal_to_joules,
+            6.920,
+            atol=1e-3,
+        )
+
+    def test_thermochemistry_co2_pressure3(
+        self, gaussian_co2_pressure3_outfile
+    ):
+        """Values from Gaussian output
+        Temperature   298.150 Kelvin.  Pressure   3.00000 Atm.
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.043              6.920             48.920
+        Electronic               0.000              0.000              0.000
+        Translational            0.889              2.981             35.087
+        Rotational               0.592              1.987             13.083
+        Vibrational              7.561              1.952              0.751
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.425398D+04          3.628795          8.355610
+        Total V=0       0.111068D+10          9.045588         20.828236
+        Vib (Bot)       0.418410D-05         -5.378398        -12.384220
+        Vib (V=0)       0.109243D+01          0.038394          0.088406
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.382262D+07          6.582361         15.156446
+        Rotational      0.265970D+03          2.424833          5.583383
+        """
+        assert os.path.exists(gaussian_co2_pressure3_outfile)
+        g16_output_pressure3 = Gaussian16Output(
+            filename=gaussian_co2_pressure3_outfile
+        )
+        assert g16_output_pressure3.normal_termination
+        thermochem_pressure3 = Thermochemistry(
+            filename=gaussian_co2_pressure3_outfile,
+            temperature=298.15,
+            pressure=3,
+            use_weighted_mass=False,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_partition_function,
+            0.382262e07,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_entropy / cal_to_joules,
+            35.087,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_internal_energy
+            / (cal_to_joules * 1000),
+            0.889,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.translational_heat_capacity / cal_to_joules,
+            2.981,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.total_partition_function, 0.111068e10
+        )
+        assert np.isclose(
+            thermochem_pressure3.total_entropy / cal_to_joules,
+            48.920,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.total_internal_energy
+            / (cal_to_joules * 1000),
+            9.043,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_pressure3.total_heat_capacity / cal_to_joules,
+            6.920,
+            atol=1e-3,
+        )
+
+
+class TestBoltzmannWeightedAverage:
+
+    def test_thermochemistry_boltzmann_electronic(
+        self,
+        gaussian_conformer1_outfile,
+        gaussian_conformer2_outfile,
+    ):
+        assert os.path.exists(gaussian_conformer1_outfile)
+        assert os.path.exists(gaussian_conformer2_outfile)
+        g16_output_conformer1 = Gaussian16Output(
+            filename=gaussian_conformer1_outfile
+        )
+        g16_output_conformer2 = Gaussian16Output(
+            filename=gaussian_conformer2_outfile
+        )
+        assert g16_output_conformer1.normal_termination
+        assert g16_output_conformer2.normal_termination
+        assert np.isclose(g16_output_conformer1.energies[-1], -2189.63187379)
+        assert np.isclose(g16_output_conformer2.energies[-1], -2189.63199488)
+        boltzmannthermochem1 = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            energy_type="electronic",
+        )
+        boltzmannthermochem1.compute_boltzmann_averages()
+
+        # Convert the electronic energies from Hartree to J/mol
+        # 1 J/mol = 3.8087991196914175 *10^-7 Hartree
+        electronic_energy_1 = (
+            g16_output_conformer1.energies[-1] / joule_per_mol_to_hartree
+        )
+        electronic_energy_2 = (
+            g16_output_conformer2.energies[-1] / joule_per_mol_to_hartree
+        )
+
+        # energies shifted: deltaE1 = E1 - min(E1, E2)
+        # deltaE2 = E2 - min(E1, E2)
+        expected_energies_shifted_1 = electronic_energy_1 - min(
+            electronic_energy_1, electronic_energy_2
+        )
+        expected_energies_shifted_2 = electronic_energy_2 - min(
+            electronic_energy_1, electronic_energy_2
+        )
+
+        # partition function Z = b1 + b2
+        # where boltzmann factors: b_1 = exp(-deltaE1 * beta), b_2 = exp(-deltaE2 * beta)
+        # beta = 1 / (R * T)
+        # T = 298.15 K, R = 8.314462145468951 J mol^-1 K^-1
+        expected_beta = 1 / (8.314462145468951 * 298.15)
+        expected_boltzmann_factor_1 = np.exp(
+            -expected_energies_shifted_1 * expected_beta
+        )
+        expected_boltzmann_factor_2 = np.exp(
+            -expected_energies_shifted_2 * expected_beta
+        )
+        expected_partition_function = (
+            expected_boltzmann_factor_1 + expected_boltzmann_factor_2
+        )
+
+        # weights: w1 = b_1 / Z, w2 = b_2 / Z
+        # we got w1 = 0.4679818262421348, w2 = 0.5320181737578652
+        expected_weight_1 = (
+            expected_boltzmann_factor_1 / expected_partition_function
+        )
+        expected_weight_2 = (
+            expected_boltzmann_factor_2 / expected_partition_function
+        )
+
+        # boltzmann electronic energy = w1 * E1 + w2 * E2
+        # we got -5748877452.979145 J/mol = -2189.6319382120805 Hartree
+        expected_boltzmann_electronic_energy = (
+            expected_weight_1 * electronic_energy_1
+            + expected_weight_2 * electronic_energy_2
+        )
+        assert np.isclose(
+            boltzmannthermochem1.boltzmann_electronic_energy,
+            expected_boltzmann_electronic_energy,
+            atol=1e-6,
+        )
+
+    def test_thermochemistry_boltzmann_gibbs(
+        self,
+        gaussian_conformer1_outfile,
+        gaussian_conformer2_outfile,
+    ):
+        assert os.path.exists(gaussian_conformer1_outfile)
+        assert os.path.exists(gaussian_conformer2_outfile)
+        thermochem_conformer1 = Thermochemistry(
+            filename=gaussian_conformer1_outfile,
+            temperature=598.15,
+            concentration=0.5,
+            use_weighted_mass=False,
+            s_freq_cutoff=1000,
+            h_freq_cutoff=1000,
+        )
+        thermochem_conformer2 = Thermochemistry(
+            filename=gaussian_conformer2_outfile,
+            temperature=598.15,
+            concentration=0.5,
+            use_weighted_mass=False,
+            s_freq_cutoff=1000,
+            h_freq_cutoff=1000,
+        )
+        """Values from Goodvibes, as a reference:
+                goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf" udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
+        Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
+           **********************************************************************************************************************************************
+        o  udc3_mCF3_monomer_c1                     -2189.631874   0.288636  -2189.241594  -2189.344286   0.285181   0.267978  -2189.526775  -2189.612264
+        o  udc3_mCF3_monomer_c4                     -2189.631995   0.288817  -2189.241650  -2189.344328   0.283751   0.267251  -2189.525401  -2189.611579
+           **********************************************************************************************************************************************
+        """
+        assert np.isclose(
+            thermochem_conformer1.electronic_energy * joule_per_mol_to_hartree,
+            -2189.631874,
+        )
+        assert np.isclose(
+            thermochem_conformer2.electronic_energy * joule_per_mol_to_hartree,
+            -2189.631995,
+        )
+        assert np.isclose(
+            thermochem_conformer1.zero_point_energy * joule_per_mol_to_hartree,
+            0.288636,
+        )
+        assert np.isclose(
+            thermochem_conformer2.zero_point_energy * joule_per_mol_to_hartree,
+            0.288817,
+        )
+        assert np.isclose(
+            thermochem_conformer1.enthalpy * joule_per_mol_to_hartree,
+            -2189.241594,
+        )
+        assert np.isclose(
+            thermochem_conformer2.enthalpy * joule_per_mol_to_hartree,
+            -2189.241650,
+        )
+        assert np.isclose(
+            thermochem_conformer1.qrrho_enthalpy * joule_per_mol_to_hartree,
+            -2189.344286,
+        )
+        assert np.isclose(
+            thermochem_conformer2.qrrho_enthalpy * joule_per_mol_to_hartree,
+            -2189.344328,
+        )
+        assert np.isclose(
+            thermochem_conformer1.entropy_times_temperature
+            * joule_per_mol_to_hartree,
+            0.285181,
+        )
+        assert np.isclose(
+            thermochem_conformer2.entropy_times_temperature
+            * joule_per_mol_to_hartree,
+            0.283751,
+        )
+        assert np.isclose(
+            thermochem_conformer1.qrrho_entropy_times_temperature
+            * joule_per_mol_to_hartree,
+            0.267978,
+        )
+        assert np.isclose(
+            thermochem_conformer2.qrrho_entropy_times_temperature
+            * joule_per_mol_to_hartree,
+            0.267251,
+        )
+        assert np.isclose(
+            thermochem_conformer1.gibbs_free_energy * joule_per_mol_to_hartree,
+            -2189.526775,
+        )
+        assert np.isclose(
+            thermochem_conformer2.gibbs_free_energy * joule_per_mol_to_hartree,
+            -2189.525401,
+        )
+        assert np.isclose(
+            thermochem_conformer1.qrrho_gibbs_free_energy
+            * joule_per_mol_to_hartree,
+            -2189.612264,
+        )
+        assert np.isclose(
+            thermochem_conformer2.qrrho_gibbs_free_energy
+            * joule_per_mol_to_hartree,
+            -2189.611579,
+        )
+
+        boltzmannthermochem2 = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=598.15,
+            concentration=0.5,
+            use_weighted_mass=False,
+            s_freq_cutoff=1000,
+            h_freq_cutoff=1000,
+            energy_type="gibbs",
+        )
+        boltzmannthermochem2.compute_boltzmann_averages()
+
+        # We got 0.5894337012657813
+        expected_weight_1 = np.exp(
+            -(
+                thermochem_conformer1.qrrho_gibbs_free_energy
+                - min(
+                    thermochem_conformer1.qrrho_gibbs_free_energy,
+                    thermochem_conformer2.qrrho_gibbs_free_energy,
+                )
+            )
+            * 1
+            / (8.314462145468951 * 598.15)
+        ) / (
+            np.exp(
+                -(
+                    thermochem_conformer1.qrrho_gibbs_free_energy
+                    - min(
+                        thermochem_conformer1.qrrho_gibbs_free_energy,
+                        thermochem_conformer2.qrrho_gibbs_free_energy,
+                    )
+                )
+                * 1
+                / (8.314462145468951 * 598.15)
+            )
+            + np.exp(
+                -(
+                    thermochem_conformer2.qrrho_gibbs_free_energy
+                    - min(
+                        thermochem_conformer1.qrrho_gibbs_free_energy,
+                        thermochem_conformer2.qrrho_gibbs_free_energy,
+                    )
+                )
+                * 1
+                / (8.314462145468951 * 598.15)
+            )
+        )
+
+        # We got 0.41056629873421874
+        expected_weight_2 = np.exp(
+            -(
+                thermochem_conformer2.qrrho_gibbs_free_energy
+                - min(
+                    thermochem_conformer1.qrrho_gibbs_free_energy,
+                    thermochem_conformer2.qrrho_gibbs_free_energy,
+                )
+            )
+            * 1
+            / (8.314462145468951 * 598.15)
+        ) / (
+            np.exp(
+                -(
+                    thermochem_conformer1.qrrho_gibbs_free_energy
+                    - min(
+                        thermochem_conformer1.qrrho_gibbs_free_energy,
+                        thermochem_conformer2.qrrho_gibbs_free_energy,
+                    )
+                )
+                * 1
+                / (8.314462145468951 * 598.15)
+            )
+            + np.exp(
+                -(
+                    thermochem_conformer2.qrrho_gibbs_free_energy
+                    - min(
+                        thermochem_conformer1.qrrho_gibbs_free_energy,
+                        thermochem_conformer2.qrrho_gibbs_free_energy,
+                    )
+                )
+                * 1
+                / (8.314462145468951 * 598.15)
+            )
+        )
+
+        # We got -5748877414.3860235 J/mol = -2189.6319235127357 Hartree
+        expected_boltzmann_electronic_energy = (
+            expected_weight_1 * thermochem_conformer1.electronic_energy
+            + expected_weight_2 * thermochem_conformer2.electronic_energy
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_electronic_energy,
+            expected_boltzmann_electronic_energy,
+            atol=1e-6,
+        )
+
+        # We got 758009.132385368 J/mol = 0.28871045161474446 Hartree
+        expected_boltzmann_zero_point_energy = (
+            expected_weight_1 * thermochem_conformer1.zero_point_energy
+            + expected_weight_2 * thermochem_conformer2.zero_point_energy
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_zero_point_energy,
+            expected_boltzmann_zero_point_energy,
+            atol=1e-6,
+        )
+
+        # We got -5747852664.229075 J/mol = -2189.2416167631673 Hartree
+        expected_boltzmann_enthalpy = (
+            expected_weight_1 * thermochem_conformer1.enthalpy
+            + expected_weight_2 * thermochem_conformer2.enthalpy
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_enthalpy,
+            expected_boltzmann_enthalpy,
+            atol=1e-6,
+        )
+
+        # We got -5748122268.356057 J/mol = -2189.3443035593186 Hartree
+        expected_boltzmann_qrrho_enthalpy = (
+            expected_weight_1 * thermochem_conformer1.qrrho_enthalpy
+            + expected_weight_2 * thermochem_conformer2.qrrho_enthalpy
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_qrrho_enthalpy,
+            expected_boltzmann_qrrho_enthalpy,
+            atol=1e-6,
+        )
+
+        # We got 747202.2326409034 J/mol = 0.2845943205914135 Hartree
+        expected_boltzmann_entropy_times_temperature = (
+            expected_weight_1 * thermochem_conformer1.entropy_times_temperature
+            + expected_weight_2
+            * thermochem_conformer2.entropy_times_temperature
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_entropy_times_temperature,
+            expected_boltzmann_entropy_times_temperature,
+            atol=1e-6,
+        )
+
+        # We got 702792.6079621073 J/mol = 0.267679586653171 Hartree
+        expected_boltzmann_qrrho_entropy_times_temperature = (
+            expected_weight_1
+            * thermochem_conformer1.qrrho_entropy_times_temperature
+            + expected_weight_2
+            * thermochem_conformer2.qrrho_entropy_times_temperature
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_qrrho_entropy_times_temperature,
+            expected_boltzmann_qrrho_entropy_times_temperature,
+            atol=1e-6,
+        )
+
+        # We got -5748599866.461717 J/mol = -2189.5262110837584 Hartree
+        expected_boltzmann_gibbs_free_energy = (
+            expected_weight_1 * thermochem_conformer1.gibbs_free_energy
+            + expected_weight_2 * thermochem_conformer2.gibbs_free_energy
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_gibbs_free_energy,
+            expected_boltzmann_gibbs_free_energy,
+            atol=1e-6,
+        )
+
+        # We got -5748825060.96402 J/mol = -2189.611983145972 Hartree
+        expected_boltzmann_qrrho_gibbs_free_energy = (
+            expected_weight_1 * thermochem_conformer1.qrrho_gibbs_free_energy
+            + expected_weight_2 * thermochem_conformer2.qrrho_gibbs_free_energy
+        )
+        assert np.isclose(
+            boltzmannthermochem2.boltzmann_qrrho_gibbs_free_energy,
+            expected_boltzmann_qrrho_gibbs_free_energy,
             atol=1e-6,
         )
