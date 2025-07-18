@@ -958,18 +958,26 @@ class Thermochemistry:
 
     def __str__(self):
         """String representation of the thermochemistry results."""
-        filename = getattr(self, 'filename', 'Unknown')
-        temperature = getattr(self, 'temperature', None)
-        concentration = getattr(self, 'concentration', None)
-        pressure = getattr(self, 'pressure', None)
-        use_weighted_mass = getattr(self, 'use_weighted_mass', False)
-        energy_units = getattr(self, 'energy_units', 'Unknown')
+        filename = getattr(self, "filename", "Unknown")
+        temperature = getattr(self, "temperature", None)
+        concentration = getattr(self, "concentration", None)
+        pressure = getattr(self, "pressure", None)
+        use_weighted_mass = getattr(self, "use_weighted_mass", False)
+        energy_units = getattr(self, "energy_units", "Unknown")
 
-        temperature_str = f"{temperature:.2f} K" if temperature is not None else "N/A"
-        concentration_str = f"{concentration:.1f} mol/L" if concentration is not None else "N/A"
+        temperature_str = (
+            f"{temperature:.2f} K" if temperature is not None else "N/A"
+        )
+        concentration_str = (
+            f"{concentration:.1f} mol/L"
+            if concentration is not None
+            else "N/A"
+        )
         pressure_str = f"{pressure:.1f} atm" if pressure is not None else "N/A"
         mass_weighted_str = (
-            "Most Abundant Masses" if not use_weighted_mass else "Natural Abundance Weighted Masses"
+            "Most Abundant Masses"
+            if not use_weighted_mass
+            else "Natural Abundance Weighted Masses"
         )
 
         return (
@@ -1248,6 +1256,16 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
             isinstance(f, str) and f.endswith((".log", ".out")) for f in files
         ):
             raise ValueError("All files must be .log or .out files.")
+
+        # Check that all files have the same molecular structure
+        molecules = [Molecule.from_filepath(f) for f in files]
+        if any(mol is None for mol in molecules):
+            raise ValueError("Could not parse molecule from one or more files")
+        formulae = {mol.empirical_formula for mol in molecules}
+        if len(formulae) > 1:
+            raise ValueError(
+                "All files must contain the same molecular structure"
+            )
 
         self.files = files
         self.energy_type = energy_type.lower()
