@@ -96,7 +96,7 @@ class FileConverter:
             logger.info(f"Converting file: {file}")
             if type == "log":
                 outfile = Gaussian16Output(filename=file)
-            elif type == ("com" or "gjf"):
+            elif type == "com" or type == "gjf":
                 outfile = Gaussian16Input(filename=file)
             elif type == "out":
                 outfile = ORCAOutput(filename=file)

@@ -17,6 +17,7 @@ class MolecularJobSettings:
         functional=None,
         dispersion=None,
         basis=None,
+        semiempirical=None,
         defgrid=None,
         charge=None,
         multiplicity=None,
@@ -42,6 +43,7 @@ class MolecularJobSettings:
         self.functional = functional
         self.dispersion = dispersion
         self.basis = basis
+        self.semiempirical = semiempirical
         self.defgrid = defgrid
         self.charge = charge
         self.multiplicity = multiplicity

@@ -43,6 +43,21 @@ def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "GaussianTests")
 
 
+# Gaussian folder for semiempirical calculations
+@pytest.fixture()
+def gaussian_semiempirical_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "semiempirical")
+
+
+@pytest.fixture()
+def gaussian_semiempirical_pm6_output_file(
+    gaussian_semiempirical_test_directory,
+):
+    return os.path.join(
+        gaussian_semiempirical_test_directory, "DBU_PM6_opt.log"
+    )
+
+
 # Gaussian output file from outputs folder
 @pytest.fixture()
 def outputs_test_directory(gaussian_test_directory):
@@ -446,6 +461,13 @@ def gaussian_written_opt_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
+def gaussian_written_pm6_opt_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_pm6_opt.com"
+    )
+
+
+@pytest.fixture()
 def gaussian_written_opt_file_with_route(gaussian_written_files_directory):
     return os.path.join(
         gaussian_written_files_directory, "gaussian_opt_with_route.com"
@@ -569,6 +591,50 @@ def qmmm_written_xyz_only_file(gaussian_written_files_directory):
     return os.path.join(
         gaussian_written_files_directory, "qmmm_written_xyz_only.xyz"
     )
+
+
+# Gaussian folder for thermochemistry analysis
+@pytest.fixture()
+def gaussian_thermochem_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "thermochem")
+
+
+@pytest.fixture()
+def gaussian_co2_pressure1p5_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure1p5_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure1p5.log"
+    )
+    return gaussian_co2_pressure1p5_outfile
+
+
+@pytest.fixture()
+def gaussian_co2_pressure3_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure3_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure3.log"
+    )
+    return gaussian_co2_pressure3_outfile
+
+
+# Gaussian folder for boltzmann weighting
+@pytest.fixture()
+def gaussian_boltzmann_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "boltzmann")
+
+
+@pytest.fixture()
+def gaussian_conformer1_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer1_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c1.log"
+    )
+    return gaussian_conformer1_outfile
+
+
+@pytest.fixture()
+def gaussian_conformer2_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer2_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c4.log"
+    )
+    return gaussian_conformer2_outfile
 
 
 # text path and associated files
@@ -1002,7 +1068,7 @@ def excel_file(io_test_directory):
 
 
 ## fixtures for mixins
-@pytest.fixture
+@pytest.fixture()
 def temp_text_file():
     with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
         tmp.write("Line1\nLine2\n")
@@ -1011,7 +1077,7 @@ def temp_text_file():
     os.remove(tmp_name)
 
 
-@pytest.fixture
+@pytest.fixture()
 def dummy_yaml_file():
     class DummyYAMLFile:
         def __init__(self):
@@ -1038,7 +1104,7 @@ def dummy_yaml_file():
     return DummyYAMLFile()
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_folder_with_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         file1 = os.path.join(tmpdir, "test1.txt")
@@ -1051,7 +1117,7 @@ def temp_folder_with_files():
 
 
 # pytest fixtures for Popen
-@pytest.fixture
+@pytest.fixture()
 def mock_popen(mocker):
     """Fixture to mock subprocess.Popen."""
     return mocker.patch("subprocess.Popen")
@@ -1085,8 +1151,13 @@ def tests_logger():
     os.environ.pop("TEST_MODE", None)
 
 
-@pytest.fixture
-def capture_log(caplog, tests_logger):
-    """Fixture to capture log messages."""
-    caplog.set_level(logging.INFO, logger="")  # Capture root logger
-    yield caplog
+# Use built-in caplog fixture for capturing log messages
+@pytest.fixture()
+def capture_log(caplog):
+    """
+    Fixture to capture log messages.
+
+    Captures messages from the root logger at DEBUG level by default.
+    """
+    caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
+    return caplog

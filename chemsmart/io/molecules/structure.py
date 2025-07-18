@@ -1381,7 +1381,7 @@ class Molecule:
 
         return AseAtomsAdaptor.get_molecule(atoms=self.to_ase())
 
-    def to_X_data(self):
+    def to_X_data(self, wbo=False):
         """Convert molecule object to X_data for ML models."""
         if self.positions is None:
             raise ValueError(
@@ -1400,6 +1400,11 @@ class Molecule:
         X = np.hstack(
             [energy_array.reshape(1, -1), positions_array]
         )  # Ensures (1, num_features)
+        if wbo:
+            # Add Wiberg bond orders if requested
+            bond_orders = np.array(self.bond_orders).flatten()
+            bond_orders = bond_orders.reshape(1, -1)
+            X = np.hstack([X, bond_orders])
 
         return X
 

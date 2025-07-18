@@ -59,6 +59,44 @@ class TestGaussianInputWriter:
         # job.run()
         # assert job.is_complete()
 
+    def test_write_semiempirical_opt_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        gaussian_written_pm6_opt_file,
+    ):
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.semiempirical = "PM6"
+        job = GaussianOptJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_pm6_opt",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+
+        assert isinstance(job, GaussianOptJob)
+        g16_writer = GaussianInputWriter(job=job)
+
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(tmpdir, "gaussian_pm6_opt.com")
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file, gaussian_written_pm6_opt_file, shallow=False
+        )  # writes input file as expected
+
+        # job run will result in the job being run and the output file copied back to run folder
+        # job.run()
+        # assert job.is_complete()
+
     def test_write_opt_job_with_route(
         self,
         tmpdir,

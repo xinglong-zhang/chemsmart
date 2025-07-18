@@ -346,7 +346,8 @@ def update_dict_with_existing_keys(dict1, dict2):
             dict1[k] = v
         else:
             raise ValueError(
-                f"Keyword `{k}` is not in list of keywords `{dict1.keys()}`\nPlease double check and rectify!"
+                f"Keyword `{k}` is not in list of keywords `{dict1.keys()}`\n"
+                f"Please double check and rectify!"
             )
     return dict1
 
