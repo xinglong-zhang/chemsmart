@@ -4,6 +4,7 @@ import click
 
 from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_jobtype_options,
+    click_gaussian_solvent_options,
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @gaussian.command("link", cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click_gaussian_solvent_options
 @click.option(
     "-st",
     "--stable",
@@ -45,6 +47,10 @@ def link(
     coordinates,
     step_size,
     num_steps,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
     route,
     **kwargs,
 ):
@@ -76,6 +82,13 @@ def link(
     # populate GaussianLinkJobSettings
     link_settings.stable = stable
     link_settings.guess = guess
+    link_settings.remove_solvent = remove_solvent
+    if solvent_model is not None:
+        link_settings.solvent_model = solvent_model
+    if solvent_id is not None:
+        link_settings.solvent_id = solvent_id
+    if solvent_options is not None:
+        link_settings.additional_solvent_options = solvent_options
 
     if route is not None:
         link_settings.link_route = route
