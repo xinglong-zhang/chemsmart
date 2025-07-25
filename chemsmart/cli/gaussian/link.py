@@ -82,9 +82,7 @@ def link(
     # populate GaussianLinkJobSettings
     link_settings.stable = stable
     link_settings.guess = guess
-
-    if remove_solvent:
-        link_settings.remove_solvent = remove_solvent
+    link_settings.remove_solvent = remove_solvent
     if solvent_model is not None:
         link_settings.solvent_model = solvent_model
     if solvent_id is not None:
