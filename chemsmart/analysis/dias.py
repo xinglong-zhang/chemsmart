@@ -639,7 +639,7 @@ class ORCADIASOutFolder(DIASOutputFolder):
         all_energies = []
         for file in list_of_files:
             oout = ORCAOutput(filename=file)
-            energy = oout.molecule.final_energy
+            energy = oout.molecule.energy
             # convert energy from Hartree (default unit) to kcal/mol
             energy *= units.Hartree  # convert Hartree to eV using ase
             energy /= units.kcal / units.mol

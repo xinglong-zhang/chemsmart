@@ -519,6 +519,10 @@ class ORCAOutput(ORCAFileMixin):
 
         # Extract all raw structure data
         orientations = self._get_all_orientations()
+        logger.debug(
+            f"Found {len(orientations)} orientations in the output file.\n"
+            f"These are: {orientations}"
+        )
         if not orientations:
             return []  # No structures found
 
@@ -604,6 +608,9 @@ class ORCAOutput(ORCAFileMixin):
                         break
                     pattern = re.compile(standard_coord_pattern)
                     if pattern.match(line_j):
+                        logger.debug(
+                            f"Found coordinate line: {line_j.strip()}"
+                        )
                         coordinate_lines.append(
                             [float(val) for val in line_j.split()[1:]]
                         )
@@ -681,6 +688,9 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def optimized_structure(self):
         if self.normal_termination:
+            logger.debug(
+                f"ORCA job terminated normally, returning the last structure from {self.all_structures}."
+            )
             return self.all_structures[-1]
         else:
             return self._get_optimized_final_structure()
