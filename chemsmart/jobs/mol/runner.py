@@ -690,26 +690,28 @@ class PyMOLAlignJobRunner(PyMOLVisualizationJobRunner):
 
         if isinstance(mol, list):
             mol_num = len(mol)
-            job.inputfile = f"{mol_num}_align.xyz"
+            job.inputs["inputfile"] = f"{mol_num}_align.xyz"
         else:
-            job.inputfile = "1_align.xyz"
+            job.inputs["inputfile"] = "1_align.xyz"
 
-        if not os.path.exists(job.inputfile):
+        inputfile = job.inputs["inputfile"]
+
+        if not os.path.exists(inputfile):
             if isinstance(mol, list):
                 if isinstance(mol[0], Molecule):
-                    logger.info(f"Writing list of molecules: {mol} to {job.inputfile}")
+                    logger.info(f"Writing list of molecules: {mol} to {inputfile}")
                     for m in mol:
-                        m.write(job.inputfile, format="xyz", mode="a")
+                        m.write(inputfile, format="xyz", mode="a")
                 else:
                     raise ValueError(f"Object {mol[0]} is not of Molecule type!")
             elif isinstance(mol, Molecule):
-                logger.info(f"Writing Molecule to {job.inputfile}.")
-                mol.write(job.inputfile, format="xyz", mode="w")
+                logger.info(f"Writing Molecule to {inputfile}.")
+                mol.write(inputfile, format="xyz", mode="w")
             else:
                 raise ValueError(f"Object {mol} is not of Molecule type!")
         else:
             logger.warning(
-                f"File {job.inputfile} already exists!\n"
+                f"File {inputfile} already exists!\n"
                 f"Will proceed to visualize this file instead!"
             )
 
