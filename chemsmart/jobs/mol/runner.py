@@ -680,3 +680,63 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         command += f"; save {quote_path(job.spin_basename)}.pse"
 
         return command
+
+#need revise
+class PyMOLAlignJobRunner(PyMOLVisualizationJobRunner):
+    JOBTYPES = ["pymol_align"]
+
+    def _write_input(self, job):
+        mol = job.molecule
+
+        if isinstance(mol, list):
+            mol_num = len(mol)
+            job.inputfile = f"{mol_num}_align.xyz"
+        else:
+            job.inputfile = "1_align.xyz"
+
+        if not os.path.exists(job.inputfile):
+            if isinstance(mol, list):
+                if isinstance(mol[0], Molecule):
+                    logger.info(f"Writing list of molecules: {mol} to {job.inputfile}")
+                    for m in mol:
+                        m.write(job.inputfile, format="xyz", mode="a")
+                else:
+                    raise ValueError(f"Object {mol[0]} is not of Molecule type!")
+            elif isinstance(mol, Molecule):
+                logger.info(f"Writing Molecule to {job.inputfile}.")
+                mol.write(job.inputfile, format="xyz", mode="w")
+            else:
+                raise ValueError(f"Object {mol} is not of Molecule type!")
+        else:
+            logger.warning(
+                f"File {job.inputfile} already exists!\n"
+                f"Will proceed to visualize this file instead!"
+            )
+
+    def _job_specific_commands(self, job, command):
+        command = self._hide_labels(job, command)
+        command = self._align_command(job, command)
+        return command
+
+    def _align_command(self, job, command):
+        load_cmds = []
+        mol = job.molecule
+        mol_num = len(mol)
+        for i in range(mol_num):
+            load_cmds.append(f'load {job.inputfile}, mol{i + 1}')
+        align_cmds = []
+        for i in range(2, mol_num + 1):
+            align_cmds.append(f'align mol{i}, mol1')
+        pymol_cmds = '; '.join(load_cmds + align_cmds) + ';'
+        command += f'; {pymol_cmds}'
+        return command
+
+    def _save_pse_command(self, job, command):
+        if isinstance(job.molecule, list):
+            n_mol = len(job.molecule)
+        else:
+            n_mol = 1
+        pse_filename = f"{n_mol}_align.pse"
+        pse_path = os.path.join(job.folder, pse_filename)
+        command += f"; save {quote_path(pse_path)}"
+        return command

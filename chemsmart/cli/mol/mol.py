@@ -18,6 +18,7 @@ def click_file_options(f):
         "-f",
         "--filename",
         type=str,
+        multiple=True,
         default=None,
         help="filename from which new Gaussian input is prepared.",
     )
@@ -226,13 +227,23 @@ def mol(
 
     # if filename is specified, read the file and obtain molecule
     if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
+        if filename:
+            if isinstance(filename, (list, tuple)) and len(filename) > 1:
+                molecules = []
+                for file in filename:
+                    mols = Molecule.from_filepath(
+                        filepath=file, index=":", return_list=True
+                    )
+                    assert mols is not None, f"Could not obtain molecule from {file}!"
+                    molecules.extend(mols)
+                logger.debug(f"Obtained molecules {molecules} from files {filename}")
+            else:
+                single_file = filename[0] if isinstance(filename, (list, tuple)) else filename
+                molecules = Molecule.from_filepath(
+                    filepath=single_file, index=":", return_list=True
+                )
+                assert molecules is not None, f"Could not obtain molecule from {single_file}!"
+                logger.debug(f"Obtained molecule {molecules} from {single_file}")
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:

@@ -7,6 +7,7 @@ from .movie import movie
 from .nci import nci
 from .spin import spin
 from .visualize import visualize
+from .align import align
 
 __all__ = [
     "irc",
@@ -16,4 +17,5 @@ __all__ = [
     "nci",
     "spin",
     "visualize",
+    "align",
 ]

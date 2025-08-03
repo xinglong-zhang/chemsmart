@@ -6,6 +6,7 @@ from .nci import PyMOLNCIJob
 from .runner import PyMOLJobRunner
 from .spin import PyMOLSpinJob
 from .visualize import PyMOLVisualizationJob
+from .align import PyMOLAlignJob
 
 jobs = PyMOLJob.subclasses()
 
@@ -18,4 +19,5 @@ __all__ = [
     "PyMOLNCIJob",
     "PyMOLSpinJob",
     "jobs",
+    "PyMOLAlignJob",
 ]
