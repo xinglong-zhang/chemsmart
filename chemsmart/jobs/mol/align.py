@@ -18,6 +18,3 @@ class PyMOLAlignJob(PyMOLJob):
             jobrunner=jobrunner,
             **kwargs,
         )
-
-        self.inputs = {}
-        self.outputs = {}

@@ -8,6 +8,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import get_list_from_string_range
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +41,7 @@ def click_file_options(f):
         "-i",
         "--index",
         type=str,
-        default="-1",
+        default=None,
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
     )
@@ -227,25 +228,15 @@ def mol(
 
     # if filename is specified, read the file and obtain molecule
     if filename:
-        single_file = filename[0] if isinstance(filename, (list, tuple)) else filename
-        if isinstance(filename, (list, tuple)) and len(filename) > 1:
-            molecules = []
-            for file in filename:
-                mols = Molecule.from_filepath(filepath=file, index=":", return_list=True)
-                assert mols is not None, f"Could not obtain molecule from {file}!"
-                molecules.extend(mols)
-            logger.debug(f"Obtained molecules {molecules} from files {filename}")
-        else:
-            molecules = Molecule.from_filepath(filepath=single_file, index=":", return_list=True)
-            assert molecules is not None, f"Could not obtain molecule from {single_file}!"
-            logger.debug(f"Obtained molecule {molecules} from {single_file}")
-        if label is not None and append_label is not None:
-            raise ValueError("Only provide either --label or --append-label, not both!")
-        if append_label is not None:
-            label = os.path.splitext(os.path.basename(single_file))[0]
-            label = f"{label}_{append_label}"
-        if label is None:
-            label = os.path.splitext(os.path.basename(single_file))[0]
+        molecules = []
+        for file in filename:
+            molecules += Molecule.from_filepath(
+                filepath=file,
+                index="-1",
+                return_list=True
+            )
+
+        logger.debug(f"Loaded {len(molecules)} molecules from {file}")
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -261,10 +252,21 @@ def mol(
             "Only give Gaussian input filename or name to be appended, but not both!"
         )
     if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{append_label}"
+        if isinstance(filename, (list, tuple)):
+            base_file = filename[0]
+        else:
+            base_file = filename
+
+        base_label = os.path.splitext(os.path.basename(base_file))[0]
+        label = f"{base_label}_{append_label}"
+
     if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if isinstance(filename, (list, tuple)):
+            base_file = filename[0]
+        else:
+            base_file = filename
+
+        label = os.path.splitext(os.path.basename(base_file))[0]
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 
@@ -295,7 +297,6 @@ def mol(
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
-
 
 @mol.result_callback()
 @click.pass_context

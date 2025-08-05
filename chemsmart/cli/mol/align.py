@@ -37,7 +37,9 @@ def align(
 
     # get molecule
     molecules = ctx.obj["molecules"]
-    logger.info(f"Aligning molecule(s): {molecules}.")
+    if not isinstance(molecules, list) or len(molecules) < 2:
+        raise click.BadParameter("Need at least two molecules")
+
 
     # get label for the job
     label = ctx.obj["label"]
