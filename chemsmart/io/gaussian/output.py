@@ -1498,10 +1498,6 @@ class Gaussian16Output(GaussianFileMixin):
         # TODO: to be implemented
         pass
 
-    @energies.setter
-    def energies(self, value):
-        self._energies = value
-
 
 class Gaussian16WBIOutput(Gaussian16Output):
     def __init__(self, filename):
