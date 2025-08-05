@@ -1559,6 +1559,15 @@ class Gaussian16WBIOutput(Gaussian16Output):
                         }
         return nao
 
+    def to_dataset(self, dataset_type="ase"):
+        if dataset_type == "ase":
+            self._assemble_to_ase_dataset()
+        elif dataset_type == "csv":
+            self._assemble_to_csv_dataset()
+
+    def _assemble_to_ase_dataset(self):
+        pass
+
     @cached_property
     def natural_population_analysis(self):
         """Parse the NBO natural population analysis."""
