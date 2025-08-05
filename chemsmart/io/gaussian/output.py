@@ -648,7 +648,7 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
         for line in self.contents:
-            match = re.match(scf_energy_pattern, line)
+            match = re.search(scf_energy_pattern, line)
             if match:
                 scf_energies.append(float(match[1]))
         return scf_energies
