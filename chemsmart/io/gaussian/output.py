@@ -183,11 +183,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Remove first structure if it's a link job
         job_type=None
-        for line in self.contents:
-            if "guess=mix" in line:
-                job_type = "link"
-        if job_type != "link":
-            # Clean duplicate structures at the end for jobs other than link jobs
+        if self.route_object.job_type != "link":
             clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
