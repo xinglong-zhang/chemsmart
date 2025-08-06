@@ -200,7 +200,6 @@ def click_pymol_save_options(f):
 
     return wrapper_common_options
 
-
 @click.group(cls=MyGroup)
 @click_file_options
 @click.pass_context
@@ -226,16 +225,15 @@ def mol(
             "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
         )
 
-    # if filename is specified, read the file and obtain molecule
+    # if filename is specified, read the file and obtain molecule. use -i ":" to visualize all conformers
     if filename:
         molecules = []
         for file in filename:
             molecules += Molecule.from_filepath(
                 filepath=file,
-                index="-1",
+                index="-1" if index is None else index,
                 return_list=True
             )
-
         logger.debug(f"Loaded {len(molecules)} molecules from {file}")
 
     # if pubchem is specified, obtain molecule from PubChem
