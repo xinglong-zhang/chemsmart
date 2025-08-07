@@ -2,6 +2,8 @@ from functools import cached_property
 
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.repattern import xyz_energy_pattern
+import re
 
 
 class XYZFile(FileMixin):
@@ -70,12 +72,19 @@ class XYZFile(FileMixin):
 
         # Ensures energy is assigned before returning a single molecule:
         if len(comments) != 0:
-            try:
-                for i, comment in enumerate(comments):
+            for i, comment in enumerate(comments):
+                try:
                     energy = float(comment)
+                except ValueError:
+                    #example case:
+                    # "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
+                    match = re.search(r"(-?\d+\.\d+)", comment)
+                    if match:
+                        energy = float(match.group(1))
+                    else:
+                        # No energy found, skip
+                        continue
                     molecules[i].energy = energy  # Assign energy
-            except ValueError:
-                pass  # Ignore if comment isn't a valid float
 
         if return_list:
             return molecules
