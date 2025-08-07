@@ -18,9 +18,8 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-j",
     "--job-type",
-    type=str,
-    help="Please choose from the following: "
-    "QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM",
+    type= click.Choice(['QMMM', 'QM/QM2', 'QM/QM2/MM', 'MOL-CRYSTAL-QMMM', 'IONIC-CRYSTAL-QMMM'], case_sensitive=False),
+    help="Please specify the job type you want to run.",
 )
 @click.option(
     "-qx",
@@ -316,6 +315,7 @@ def qmmm(
         settings=qmmm_settings,
         label=label,
         skip_completed=skip_completed,
+        jobrunner=jobrunner,
         # **ctx.obj["kwargs"],
         **kwargs,
     )

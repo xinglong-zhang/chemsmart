@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-j",
     "--jobtype",
-    type=str,
+    type=click.Choice(['sp', 'opt', 'freq', 'ts', 'irc'], case_sensitive=False),
     help="ONIOM supported job types, please choose from'sp''opt''freq''ts''irc'.",
 )
 @click.option(
@@ -135,7 +135,8 @@ logger = logging.getLogger(__name__)
     "-b",
     "--bonded-atoms",
     type=str,
-    help="List of tuples of the bonds to be cut, specified by two atomic indexes in each tuple.",
+    help="List of tuples of the bonds to be cut, specified by "
+         "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
 )
 @click.option(
     "-s",
@@ -172,10 +173,12 @@ def qmmm(
 ):
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
+    # get jobrunner for running Gaussian IRC jobs
+    jobrunner = ctx.obj["jobrunner"]
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
-    # print("Project settings:", ctx.obj["project_settings"].__dict__)
+    logger.info("Project settings:", ctx.obj["project_settings"].__dict__)
     # print("Job settings:", qmmm_settings.__dict__)
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
@@ -237,7 +240,7 @@ def qmmm(
         scale_factors = ast.literal_eval(scale_factors)
         molecule.scale_factors = scale_factors
 
-    print("Job settings:", qmmm_settings.__dict__)
+    logger.info("Job settings:", qmmm_settings.__dict__)
 
     from chemsmart.jobs.gaussian.qmmm import GaussianQMMMJob
 
@@ -245,5 +248,6 @@ def qmmm(
         molecule=molecule,
         settings=qmmm_settings,
         label=label,
+        jobrunner=jobrunner,
         **kwargs,
     )
