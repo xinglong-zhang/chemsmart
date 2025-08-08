@@ -189,12 +189,14 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
     )
     return gaussian_quintet_opt_outfile
 
+
 @pytest.fixture()
 def gaussian_link_outfile(gaussian_outputs_test_directory):
     gaussian_link_outfile = os.path.join(
         gaussian_outputs_test_directory, "intervening_n_Ap_A.log"
     )
     return gaussian_link_outfile
+
 
 # Gaussian output files for genecp
 @pytest.fixture()

@@ -182,7 +182,7 @@ class Gaussian16Output(GaussianFileMixin):
             return []  # No structures found
 
         # Remove first structure if it's a link job
-        job_type=None
+        job_type = None
         if self.route_object.job_type != "link":
             clean_duplicate_structure(orientations)
 
@@ -220,7 +220,7 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
-        num_structures= len(all_structures)
+        num_structures = len(all_structures)
         if job_type == "link":
             num_structures = num_structures - 1
 
@@ -233,9 +233,7 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug(
-            f"Total number of structures located: {num_structures}"
-        )
+        logger.debug(f"Total number of structures located: {num_structures}")
         return all_structures
 
     @cached_property

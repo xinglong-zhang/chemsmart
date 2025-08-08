@@ -1,9 +1,9 @@
+import re
 from functools import cached_property
 
 from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.utils import string2index_1based
 from chemsmart.utils.repattern import xyz_energy_pattern
-import re
+from chemsmart.utils.utils import string2index_1based
 
 
 class XYZFile(FileMixin):
@@ -76,7 +76,7 @@ class XYZFile(FileMixin):
                 try:
                     energy = float(comment)
                 except ValueError:
-                    #example case:
+                    # example case:
                     # "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
                     match = re.search(r"(-?\d+\.\d+)", comment)
                     if match:
