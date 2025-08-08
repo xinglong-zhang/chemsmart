@@ -172,6 +172,8 @@ class Gaussian16Input(GaussianFileMixin):
                 return charge, multiplicity
 
     def _get_gen_genecp_group(self):
+        if self.basis is None:  # this happens for semi-empirical calculations
+            return None
         if "gen" not in self.basis:
             return None
         if (
