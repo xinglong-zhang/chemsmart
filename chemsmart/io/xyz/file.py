@@ -73,6 +73,7 @@ class XYZFile(FileMixin):
         # Ensures energy is assigned before returning a single molecule:
         if len(comments) != 0:
             for i, comment in enumerate(comments):
+                energy = None
                 try:
                     energy = float(comment)
                 except ValueError:
@@ -84,6 +85,7 @@ class XYZFile(FileMixin):
                     else:
                         # No energy found, skip
                         continue
+                if energy:
                     molecules[i].energy = energy  # Assign energy
 
         if return_list:
