@@ -883,6 +883,11 @@ def structure_test_directory(test_data_directory):
 
 
 @pytest.fixture()
+def conformers_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "conformers")
+
+
+@pytest.fixture()
 def xyz_directory(structure_test_directory):
     return os.path.join(structure_test_directory, "xyz")
 

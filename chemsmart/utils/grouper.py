@@ -641,9 +641,6 @@ class StructureGrouperFactory:
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
             return groupers[strategy](
-                structures,
-                threshold=threshold,
-                num_procs=num_procs,
-                **kwargs
+                structures, threshold=threshold, num_procs=num_procs, **kwargs
             )
         raise ValueError(f"Unknown grouping strategy: {strategy}")

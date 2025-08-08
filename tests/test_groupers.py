@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -227,6 +229,75 @@ class TestGrouper:
         assert len(group_indices) == 1
         unique_structures = grouper6.unique()
         assert len(unique_structures) == 1
+
+    def test_rmsd_grouper_for_Ticatalysis_conformers(
+        self, conformers_test_directory
+    ):
+        xyz_files = sorted(
+            [
+                os.path.join(conformers_test_directory, f)
+                for f in os.listdir(conformers_test_directory)
+                if f.endswith(".xyz")
+            ]
+        )
+        molecules = []
+        for path in xyz_files:
+            mol = XYZFile(filename=path).get_molecules(return_list=False)
+            molecules.append(mol)
+
+        assert len(molecules) == 10
+
+        grouper1 = RMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+        )
+        groups, group_indices = grouper1.group()
+
+        assert len(groups) == 10
+        assert len(group_indices) == 10
+        unique_structures = grouper1.unique()
+        assert len(unique_structures) == 10
+
+        grouper2 = RMSDGrouper(
+            molecules,
+            threshold=1.0,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+        )
+        groups, group_indices = grouper2.group()
+
+        assert len(groups) == 7
+        assert len(group_indices) == 7
+        unique_structures = grouper2.unique()
+        assert len(unique_structures) == 7
+
+        grouper3 = RMSDGrouper(
+            molecules,
+            threshold=1.2,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+        )
+        groups, group_indices = grouper3.group()
+
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+        unique_structures = grouper3.unique()
+        assert len(unique_structures) == 2
+
+        grouper4 = RMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=True,
+        )
+        groups, group_indices = grouper4.group()
+
+        assert len(groups) == 5
+        assert len(group_indices) == 5
+        unique_structures = grouper4.unique()
+        assert len(unique_structures) == 5
 
     def test_formula_grouper(
         self, methanol_molecules, methanol_and_ethanol, conformers_from_rdkit
