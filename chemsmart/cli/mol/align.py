@@ -13,7 +13,7 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-@mol.command("align",cls=MyCommand)
+@mol.command("align", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
 @click.pass_context
@@ -39,7 +39,6 @@ def align(
     molecules = ctx.obj["molecules"]
     if not isinstance(molecules, list) or len(molecules) < 2:
         raise click.BadParameter("Need at least two molecules")
-
 
     # get label for the job
     label = ctx.obj["label"]

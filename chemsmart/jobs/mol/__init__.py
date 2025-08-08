@@ -1,3 +1,4 @@
+from .align import PyMOLAlignJob
 from .irc import PyMOLIRCMovieJob
 from .job import PyMOLJob
 from .mo import PyMOLMOJob
@@ -6,18 +7,17 @@ from .nci import PyMOLNCIJob
 from .runner import PyMOLJobRunner
 from .spin import PyMOLSpinJob
 from .visualize import PyMOLVisualizationJob
-from .align import PyMOLAlignJob
 
 jobs = PyMOLJob.subclasses()
 
 __all__ = [
+    "PyMOLAlignJob",
     "PyMOLIRCMovieJob",
-    "PyMOLVisualizationJob",
     "PyMOLJobRunner",
     "PyMOLMOJob",
     "PyMOLMovieJob",
     "PyMOLNCIJob",
     "PyMOLSpinJob",
+    "PyMOLVisualizationJob",
     "jobs",
-    "PyMOLAlignJob",
 ]

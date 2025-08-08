@@ -8,7 +8,6 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import get_list_from_string_range
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -200,6 +199,7 @@ def click_pymol_save_options(f):
 
     return wrapper_common_options
 
+
 @click.group(cls=MyGroup)
 @click_file_options
 @click.pass_context
@@ -232,7 +232,7 @@ def mol(
             molecules += Molecule.from_filepath(
                 filepath=file,
                 index="-1" if index is None else index,
-                return_list=True
+                return_list=True,
             )
         logger.debug(f"Loaded {len(molecules)} molecules from {file}")
 
@@ -295,6 +295,7 @@ def mol(
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
+
 
 @mol.result_callback()
 @click.pass_context

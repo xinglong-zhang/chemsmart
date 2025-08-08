@@ -2,6 +2,7 @@ import os.path
 
 from chemsmart.jobs.mol.job import PyMOLJob
 
+
 class PyMOLAlignJob(PyMOLJob):
     TYPE = "pymol_align"
 
@@ -9,9 +10,10 @@ class PyMOLAlignJob(PyMOLJob):
         self,
         molecule,
         label,
-        jobrunner = None,
+        jobrunner=None,
         **kwargs,
     ):
+        self.xyz_absolute_paths = []
         super().__init__(
             molecule=molecule,
             label=label,
