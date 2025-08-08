@@ -182,7 +182,6 @@ class Gaussian16Output(GaussianFileMixin):
             return []  # No structures found
 
         # Remove first structure if it's a link job
-        job_type = None
         if self.route_object.job_type != "link":
             clean_duplicate_structure(orientations)
 
@@ -221,7 +220,7 @@ class Gaussian16Output(GaussianFileMixin):
                 num_structures=num_structures_to_use,
             )
         num_structures = len(all_structures)
-        if job_type == "link":
+        if self.route_object.job_type == "link":
             num_structures = num_structures - 1
 
         # Filter optimized steps if required
