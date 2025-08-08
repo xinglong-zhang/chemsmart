@@ -5,7 +5,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-from abc import abstractmethod
 from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
@@ -718,7 +717,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                 logger.info(f"Writing molecule {i + 1} to {abs_xyz_path}")
                 m.write(xyz_path, format="xyz", mode="w")
         elif isinstance(mol, Molecule):
-            xyz_path = os.path.join(job.folder, f"alignmol1.xyz")
+            xyz_path = os.path.join(job.folder, "alignmol1.xyz")
             abs_xyz_path = os.path.abspath(xyz_path)
             job.xyz_absolute_paths.append(abs_xyz_path)
 

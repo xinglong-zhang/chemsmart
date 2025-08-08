@@ -1,4 +1,3 @@
-import os.path
 
 from chemsmart.jobs.mol.job import PyMOLJob
 
