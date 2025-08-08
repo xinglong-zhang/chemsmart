@@ -36,5 +36,5 @@ ORCA:
     LOCAL_RUN: False  # local run False to use parallel_command
     SCRATCH: True  # set scratch to True to run in scratch folder
     CONDA_ENV: |   # program-specific conda env
-        source ~/anaconda3/etc/profile.d/conda.sh
-        conda activate ~/anaconda3/envs/chemsmart
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
