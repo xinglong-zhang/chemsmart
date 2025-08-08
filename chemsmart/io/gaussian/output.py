@@ -5,6 +5,7 @@ from itertools import islice
 
 import numpy as np
 from ase import units
+from rdkit.Chem.MolKey.InchiInfo import all_stereo_re
 
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
@@ -45,6 +46,7 @@ class Gaussian16Output(GaussianFileMixin):
     """
 
     def __init__(self, filename, use_frozen=False, include_intermediate=False):
+        self._energies = None
         self.filename = filename
         self.use_frozen = use_frozen
         self.include_intermediate = include_intermediate
@@ -180,16 +182,10 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
-        # Clean duplicate structures at the end
-        clean_duplicate_structure(orientations)
-
         # Remove first structure if it's a link job
-        if self.job_type == "link" and len(orientations) > 1:
-            orientations, orientations_pbc = (
-                orientations[1:],
-                orientations_pbc[1:],
-            )
-            self.energies = self.energies[1:]
+        job_type = None
+        if self.route_object.job_type != "link":
+            clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
@@ -225,6 +221,9 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
+        num_structures = len(all_structures)
+        if job_type == "link":
+            num_structures = num_structures - 1
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
@@ -235,9 +234,7 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug(
-            f"Total number of structures located: {len(all_structures)}"
-        )
+        logger.debug(f"Total number of structures located: {num_structures}")
         return all_structures
 
     @cached_property
@@ -644,12 +641,12 @@ class Gaussian16Output(GaussianFileMixin):
 
         return masks
 
-    @cached_property
+    @property
     def scf_energies(self):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
         for line in self.contents:
-            match = re.match(scf_energy_pattern, line)
+            match = re.search(scf_energy_pattern, line)
             if match:
                 scf_energies.append(float(match[1]))
         return scf_energies
@@ -669,9 +666,9 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
         oniom_energies = []
         for line in self.contents:
-            oniom_match = re.match(oniom_energy_pattern, line)
-            if oniom_match:
-                oniom_energies.append(float(oniom_match[1]))
+            match = re.match(oniom_energy_pattern, line)
+            if match:
+                oniom_energies.append(float(match[1]))
         return oniom_energies
 
     @cached_property
@@ -689,6 +686,7 @@ class Gaussian16Output(GaussianFileMixin):
         return layer_energies
 
     @cached_property
+    @property
     def energies(self):
         """Return energies of the system."""
         if len(self.mp2_energies) == 0 and len(self.oniom_energies) == 0:
@@ -824,7 +822,7 @@ class Gaussian16Output(GaussianFileMixin):
         standard_orientations = []
         standard_orientations_pbc = []
         for i, line in enumerate(self.contents):
-            if line.startswith("Standard orientation:"):
+            if "Standard orientation:" in line:
                 standard_orientation = []
                 standard_orientation_pbc = []
                 for j_line in self.contents[i + 5 :]:
