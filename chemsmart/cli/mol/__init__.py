@@ -6,8 +6,8 @@ from .mol import (
 )
 from .movie import movie
 from .nci import nci
-from .spin import spin
 from .visualize import visualize
+from .spin import spin
 
 __all__ = [
     "align",
