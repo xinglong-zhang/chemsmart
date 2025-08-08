@@ -76,8 +76,9 @@ class XYZFile(FileMixin):
                 try:
                     energy = float(comment)
                 except ValueError:
-                    # example case:
+                    # will extract the first float number in the line. example case:
                     # "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
+                    # energy will be -25900.214629.
                     match = re.search(r"(-?\d+\.\d+)", comment)
                     if match:
                         energy = float(match.group(1))
