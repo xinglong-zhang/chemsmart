@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-j",
     "--jobtype",
-    type=click.Choice(['sp', 'opt', 'freq', 'ts', 'irc'], case_sensitive=False),
+    type=click.Choice(
+        ["sp", "opt", "freq", "ts", "irc"], case_sensitive=False
+    ),
     help="ONIOM supported job types, please choose from'sp''opt''freq''ts''irc'.",
 )
 @click.option(
@@ -136,7 +138,7 @@ logger = logging.getLogger(__name__)
     "--bonded-atoms",
     type=str,
     help="List of tuples of the bonds to be cut, specified by "
-         "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
+    "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
 )
 @click.option(
     "-s",
