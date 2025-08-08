@@ -5,8 +5,9 @@ from .mol import (
     mol,  # to avoid potential conflict with inbuilt pymol module, we use mol instead
 )
 from .movie import movie
-from .nci import nci
+
 from .visualize import visualize
+from .nci import nci
 from .spin import spin
 
 __all__ = [
