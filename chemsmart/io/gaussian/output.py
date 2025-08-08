@@ -5,7 +5,6 @@ from itertools import islice
 
 import numpy as np
 from ase import units
-from rdkit.Chem.MolKey.InchiInfo import all_stereo_re
 
 from chemsmart.io.molecules.structure import CoordinateBlock
 from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
