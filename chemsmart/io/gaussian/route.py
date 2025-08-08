@@ -138,7 +138,7 @@ class GaussianRoute:
 
     def get_freqeuncy(self):
         # get freq: T/F
-        return "freq " in self.route_string
+        return "freq" in self.route_string
 
     def get_numfreq(self):
         return "freq=numer" in self.route_string
