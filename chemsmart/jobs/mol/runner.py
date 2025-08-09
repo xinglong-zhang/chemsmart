@@ -695,13 +695,19 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
         self.job_basename = job.label
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_logfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.log")
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.log"
+            )
         )
         self.job_outputfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.out")
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.out"
+            )
         )
         self.job_errfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.err")
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.err"
+            )
         )
 
     def _write_input(self, job):
