@@ -14,6 +14,7 @@ from joblib import Parallel, delayed  # More efficient parallelization
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdMolHash
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
+from scipy.optimize import linear_sum_assignment  # Hungarian algorithm
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
@@ -73,10 +74,6 @@ class MoleculeGrouper(ABC):
 
 
 class RMSDGrouper(MoleculeGrouper):
-    """Group molecules based on RMSD (Root Mean Square Deviation) of atomic positions.
-    Effective for precise 3D comparisons, ideal in contexts like crystallography or drug
-    binding where exact spatial alignment is crucial.
-    """
 
     def __init__(
         self,
@@ -95,19 +92,52 @@ class RMSDGrouper(MoleculeGrouper):
             set(mol.chemical_symbols) for mol in molecules
         ]
 
-    def _get_heavy_atoms(self, mol: Molecule) -> Tuple[np.ndarray, List[str]]:
-        """Remove hydrogen atoms if ignore_hydrogens is enabled."""
-        if self.ignore_hydrogens:
-            non_h_indices = [
-                i for i, sym in enumerate(mol.chemical_symbols) if sym != "H"
-            ]
-            return mol.positions[non_h_indices], [
-                mol.chemical_symbols[i] for i in non_h_indices
-            ]
-        return (
-            mol.positions,
-            mol.chemical_symbols,
-        )  # Use all atoms if flag is False
+    def _get_heavy_atoms(self, mol):
+        heavy_indices = [i for i, s in enumerate(mol.symbols) if s != "H"]
+        positions = mol.positions[heavy_indices]
+        symbols = [mol.symbols[i] for i in heavy_indices]
+        return positions, symbols
+
+    def _calculate_rmsd(self, idx_pair):
+        i, j = idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        pos1, symbols1 = self._get_heavy_atoms(mol1)
+        pos2, symbols2 = self._get_heavy_atoms(mol2)
+
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
+            return np.inf
+
+        # get same element and use Hungarian algorithm
+        elements = sorted(set(symbols1))
+        matched_idx1 = []
+        matched_idx2 = []
+        for elem in elements:
+            idxs1 = [k for k, s in enumerate(symbols1) if s == elem]
+            idxs2 = [k for k, s in enumerate(symbols2) if s == elem]
+            dist_matrix = np.zeros((len(idxs1), len(idxs2)))
+            for a, idx1 in enumerate(idxs1):
+                for b, idx2 in enumerate(idxs2):
+                    dist_matrix[a, b] = np.sum((pos1[idx1] - pos2[idx2]) ** 2)
+            row_ind, col_ind = linear_sum_assignment(dist_matrix)
+            matched_idx1.extend([idxs1[r] for r in row_ind])
+            matched_idx2.extend([idxs2[c] for c in col_ind])
+
+        pos1_matched = pos1[matched_idx1]
+        pos2_matched = pos2[matched_idx2]
+
+        # align
+        if self.align_molecules:
+            pos1_matched, pos2_matched, _, _, _ = kabsch_align(
+                pos1_matched, pos2_matched
+            )
+
+        rmsd = np.sqrt(
+            np.mean(np.sum((pos1_matched - pos2_matched) ** 2, axis=1))
+        )
+        return rmsd
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group molecules by geometric similarity."""
@@ -138,26 +168,6 @@ class RMSDGrouper(MoleculeGrouper):
         ]
 
         return groups, index_groups
-
-    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
-        """Calculate RMSD between two molecules."""
-        i, j = idx_pair
-        mol1, mol2 = self.molecules[i], self.molecules[j]
-
-        pos1, symbols1 = self._get_heavy_atoms(mol1)
-        pos2, symbols2 = self._get_heavy_atoms(mol2)
-
-        if (
-            mol1.num_atoms != mol2.num_atoms
-            or self._chemical_symbol_sets[i] != self._chemical_symbol_sets[j]
-        ):
-            return np.inf
-
-        if self.align_molecules:
-            logger.debug("Aligning molecules using Kabsch algorithm.")
-            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
-
-        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
     def __repr__(self):
         return (
@@ -239,13 +249,41 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
         pos2 = np.array(shared_positions[j])
 
-        if pos1.shape != pos2.shape:
+        symbols1 = self.symbols_list[i]
+        symbols2 = self.symbols_list[j]
+
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
             return np.inf
 
-        if self.align_molecules:
-            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
+        matched_idx1 = []
+        matched_idx2 = []
 
-        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+        for elem in sorted(set(symbols1)):
+            idxs1 = [k for k, s in enumerate(symbols1) if s == elem]
+            idxs2 = [k for k, s in enumerate(symbols2) if s == elem]
+
+            dist_matrix = np.sum(
+                (pos1[idxs1, None, :] - pos2[None, idxs2, :]) ** 2, axis=2
+            )
+            row_ind, col_ind = linear_sum_assignment(dist_matrix)
+
+            matched_idx1.extend([idxs1[r] for r in row_ind])
+            matched_idx2.extend([idxs2[c] for c in col_ind])
+
+        pos1_matched = pos1[matched_idx1]
+        pos2_matched = pos2[matched_idx2]
+
+        if self.align_molecules:
+            pos1_matched, pos2_matched, _, _, _ = kabsch_align(
+                pos1_matched, pos2_matched
+            )
+
+        rmsd = np.sqrt(
+            np.mean(np.sum((pos1_matched - pos2_matched) ** 2, axis=1))
+        )
+        return rmsd
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
@@ -640,7 +678,15 @@ class StructureGrouperFactory:
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
-            return groupers[strategy](
-                structures, threshold=threshold, num_procs=num_procs, **kwargs
-            )
+            if strategy == "rmsd":
+                return groupers[strategy](
+                    structures,
+                    threshold=threshold,
+                    num_procs=num_procs,
+                    **kwargs,
+                )
+            else:
+                return groupers[strategy](
+                    structures, num_procs=num_procs, **kwargs
+                )
         raise ValueError(f"Unknown grouping strategy: {strategy}")
