@@ -193,7 +193,7 @@ class TestORCAInput:
         assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
 
         orca_inp = ORCAInput(filename=orca_input_nebts_file)
-        assert orca_inp.route_string == "! GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
         assert orca_inp.functional is None
         assert orca_inp.basis is None
         assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified

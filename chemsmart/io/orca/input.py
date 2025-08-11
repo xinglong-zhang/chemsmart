@@ -31,7 +31,7 @@ class ORCAInput(ORCAFileMixin):
                 route_string_lines.append(new_line)
 
         route_string = " ".join(route_string_lines)
-        return f"!{route_string}".lower()
+        return f"! {route_string}".lower()
 
     @property
     def route_object(self):
