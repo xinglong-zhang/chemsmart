@@ -1,7 +1,8 @@
 import logging
+import os
 import re
 
-from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.repattern import standard_coord_pattern
@@ -13,8 +14,12 @@ class ORCAInput(ORCAFileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-        cb = CoordinateBlock(coordinate_block=self.coordinate_lines)
-        self.cb = cb
+        try:
+            cb = CoordinateBlock(coordinate_block=self.coordinate_lines)
+            self.cb = cb
+        except ValueError as err:
+            logger.error(f"Error parsing coordinate block: {err}")
+            self.cb = None
 
     @property
     def route_string(self):
@@ -71,10 +76,31 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def molecule(self):
-        molecule = self.cb.molecule
-        # update charge and spin multiplicity
-        molecule.charge = self.charge
-        molecule.spin_multiplicity = self.multiplicity
+        molecule = None
+        try:
+            molecule = self.cb.molecule
+        except ValueError as err:
+            logger.debug(
+                f"Error creating molecule from coordinate block: {err}"
+            )
+            for line in self.contents:
+                if line.startswith("* xyzfile"):
+                    xyz_file = line.strip().split()[-1]
+                    xyz_filepath = os.path.join(
+                        self.filepath_directory, xyz_file
+                    )
+                    if os.path.exists(xyz_filepath):
+                        molecule = Molecule.from_filepath(
+                            filepath=xyz_filepath
+                        )
+                    else:
+                        raise FileNotFoundError(
+                            f"Coordinate file {xyz_filepath} not found."
+                        )
+            # update charge and spin multiplicity
+        if molecule:
+            molecule.charge = self.charge
+            molecule.spin_multiplicity = self.multiplicity
         return molecule
 
     @property
