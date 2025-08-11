@@ -161,6 +161,7 @@ class TestORCAInput:
 class TestORCAOutput:
     def test_read_water_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.version == "5.0.3"
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"

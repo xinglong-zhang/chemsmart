@@ -451,6 +451,7 @@ class TestGaussian16Output:
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.version == "G16RevB.01"
         assert g16_output.normal_termination
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116

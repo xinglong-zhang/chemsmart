@@ -1828,6 +1828,10 @@ class ORCAOutput(ORCAFileMixin):
                         return int(line_j_elements[-1])
         return None
 
+    @cached_property
+    def num_vib_frequencies(self):
+        return len(self.vibrational_frequencies)
+
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # *     THERMOCHEMISTRY      *
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
