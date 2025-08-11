@@ -31,7 +31,7 @@ class ORCAInput(ORCAFileMixin):
                 route_string_lines.append(new_line)
 
         route_string = " ".join(route_string_lines)
-        return f"! {route_string}".lower()
+        return f"!{route_string}".lower()
 
     @property
     def route_object(self):
@@ -85,7 +85,10 @@ class ORCAInput(ORCAFileMixin):
             )
             for line in self.contents:
                 if line.startswith("* xyzfile"):
-                    xyz_filepath = line.strip().split()[-1]
+                    xyz_file = line.strip().split()[-1]
+                    xyz_filepath = os.path.join(
+                        self.filepath_directory, xyz_file
+                    )
                     if os.path.exists(xyz_filepath):
                         molecule = Molecule.from_filepath(
                             filepath=xyz_filepath
