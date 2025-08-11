@@ -118,21 +118,22 @@ class ORCAJobRunner(JobRunner):
         if running in scratch."""
         from chemsmart.utils.repattern import xyz_filename_pattern
 
-        for line in open(job.inputfile, "r"):
-            match = re.search(xyz_filename_pattern, line)
-            if match:
-                xyz_file = match.group(1)
-                # copy to scratch if running in scratch
-                if self.scratch and self.scratch_dir:
-                    xyz_file_scratch = os.path.join(
-                        self.running_directory, xyz_file
-                    )
-                    copy(xyz_file, xyz_file_scratch)
-                    logger.info(
-                        f"Copied {xyz_file} to {self.running_directory}."
-                    )
-                else:
-                    raise ValueError(f"XYZ file {xyz_file} does not exist.")
+        with open(job.inputfile, "r") as f:
+            for line in f:
+                match = re.search(xyz_filename_pattern, line)
+                if match:
+                    xyz_file = match.group(1)
+                    # copy to scratch if running in scratch
+                    if self.scratch and self.scratch_dir:
+                        xyz_file_scratch = os.path.join(
+                            self.running_directory, xyz_file
+                        )
+                        copy(xyz_file, xyz_file_scratch)
+                        logger.info(
+                            f"Copied {xyz_file} to {self.running_directory}."
+                        )
+                    else:
+                        raise ValueError(f"XYZ file {xyz_file} does not exist.")
 
     def _write_input(self, job):
         from chemsmart.jobs.orca.writer import ORCAInputWriter
