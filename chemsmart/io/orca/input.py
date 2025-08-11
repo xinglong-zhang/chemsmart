@@ -76,6 +76,7 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def molecule(self):
+        molecule = None
         try:
             molecule = self.cb.molecule
         except ValueError as err:
@@ -94,6 +95,7 @@ class ORCAInput(ORCAFileMixin):
                             f"Coordinate file {xyz_filepath} not found."
                         )
             # update charge and spin multiplicity
+        if molecule:
             molecule.charge = self.charge
             molecule.spin_multiplicity = self.multiplicity
         return molecule
