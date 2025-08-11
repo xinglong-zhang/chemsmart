@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shlex
 import subprocess
 from contextlib import suppress
@@ -69,6 +70,7 @@ class ORCAJobRunner(JobRunner):
 
     def _prerun(self, job):
         self._assign_variables(job)
+        self._copy_over_xyz_files(job)
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output, and error files in scratch or not in scratch."""
@@ -110,6 +112,27 @@ class ORCAJobRunner(JobRunner):
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_gbwfile = os.path.abspath(job.gbwfile)
         self.job_errfile = os.path.abspath(job.errfile)
+
+    def _copy_over_xyz_files(self, job):
+        """Copy over xyz files from run directory to scratch directory,
+        if running in scratch."""
+        from chemsmart.utils.repattern import xyz_filename_pattern
+
+        for line in open(job.inputfile, "r"):
+            match = re.search(xyz_filename_pattern, line)
+            if match:
+                xyz_file = match.group(1)
+                # copy to scratch if running in scratch
+                if self.scratch and self.scratch_dir:
+                    xyz_file_scratch = os.path.join(
+                        self.running_directory, xyz_file
+                    )
+                    copy(xyz_file, xyz_file_scratch)
+                    logger.info(
+                        f"Copied {xyz_file} to {self.running_directory}."
+                    )
+                else:
+                    raise ValueError(f"XYZ file {xyz_file} does not exist.")
 
     def _write_input(self, job):
         from chemsmart.jobs.orca.writer import ORCAInputWriter
