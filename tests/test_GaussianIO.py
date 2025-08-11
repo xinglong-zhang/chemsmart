@@ -167,7 +167,7 @@ class TestRouteString:
         r3a = GaussianRoute(s3a)
         assert r3a.job_type == "opt"
         assert r3a.additional_opt_options_in_route == "recalcfc=5"
-        assert r3a.freq is False
+        assert r3a.freq is True
         assert r3a.numfreq is True
         assert r3a.solv is False
         assert r3a.functional == "pbepbe"
