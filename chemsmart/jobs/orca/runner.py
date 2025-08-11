@@ -123,6 +123,11 @@ class ORCAJobRunner(JobRunner):
                 match = re.search(xyz_filename_pattern, line)
                 if match:
                     xyz_file = match.group(1)
+                    if not os.path.exists(xyz_file):
+                        raise FileNotFoundError(
+                            f"XYZ file {xyz_file} does not exist."
+                        )
+
                     # copy to scratch if running in scratch
                     if self.scratch and self.scratch_dir:
                         xyz_file_scratch = os.path.join(
@@ -131,10 +136,6 @@ class ORCAJobRunner(JobRunner):
                         copy(xyz_file, xyz_file_scratch)
                         logger.info(
                             f"Copied {xyz_file} to {self.running_directory}."
-                        )
-                    else:
-                        raise ValueError(
-                            f"XYZ file {xyz_file} does not exist."
                         )
 
     def _write_input(self, job):
