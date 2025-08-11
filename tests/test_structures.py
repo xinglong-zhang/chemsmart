@@ -138,6 +138,7 @@ class TestStructures:
         assert len(molecule.chemical_symbols) == 71
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
         assert np.isclose(molecule.mass, 665.982, atol=1e-2)
+        assert molecule.energy == -126.2575508
 
         # test conversion to RDKit molecule
         rdkit_molecule = molecule.to_rdkit()

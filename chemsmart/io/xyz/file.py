@@ -2,8 +2,8 @@ import re
 from functools import cached_property
 
 from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.utils import string2index_1based
 from chemsmart.utils.repattern import energy_value_pattern
+from chemsmart.utils.utils import string2index_1based
 
 
 class XYZFile(FileMixin):
@@ -74,24 +74,23 @@ class XYZFile(FileMixin):
         if len(comments) != 0:
             value_list = []
             for i, comment in enumerate(comments):
-                energy = None
                 try:
                     energy = float(comment)
                 except ValueError:
                     # will extract the first float number in the line. example case:
                     # "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
                     # energy will be -25900.214629.
-                    match = re.search(energy_value_pattern, comment)
+                    match = re.findall(energy_value_pattern, comment)
                     if match:
-                        energy = float(match.group(1))
+                        for value in match:
+                            value_list.append(float(value))
                     else:
                         # No energy found, skip
                         continue
-                if energy:
-                    value_list.append(energy)
-                    if len(value_list) >= 1:
-                        molecules[i].energy = value_list[0]
-                        # Assign energy to the only or the first negative float number
+                if len(value_list) >= 1:
+                    energy = value_list[1]
+                    molecules[i].energy = energy
+                    # Assign energy to the only or the first negative float number
         if return_list:
             return molecules
         else:
