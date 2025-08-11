@@ -378,7 +378,7 @@ class TestThermochemistryCO2:
         )
 
         # S_t = R * [ln(q_t) + 1 + 3 / 2]
-        # R = 8.314462145468951 J mol^-1 K^-1 used by Gaussian16
+        # R = 8.314462145468951 J mol^-1 K^-1
         # using these constants, we got 155.94381435430543 J mol^-1 K^-1
         expected_translational_entropy = 8.314462145468951 * (
             np.log(expected_translational_partition_function) + 1 + 3 / 2
