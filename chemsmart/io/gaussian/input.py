@@ -121,19 +121,6 @@ class Gaussian16Input(GaussianFileMixin):
         ]
 
     @property
-    def partition(self):
-        """Get the partition string."""
-        partition = {}
-        for key, val in [
-            ("high level atoms", self.molecule.high_level_atoms),
-            ("medium level atoms", self.molecule.medium_level_atoms),
-            ("low level atoms", self.molecule.low_level_atoms),
-        ]:
-            if val is not None:
-                partition[key] = get_range_from_list(val)
-        return partition
-
-    @property
     def gen_genecp_group(self):
         """Block of strings in the input file specifying the gen/genecp group."""
         return self._get_gen_genecp_group()
@@ -311,3 +298,96 @@ class Gaussian16Input(GaussianFileMixin):
         if self.custom_solvent_group is not None:
             return "\n".join(self.custom_solvent_group)
         return None
+
+
+class Gaussian16QMMMInput(Gaussian16Input):
+    """This class has all the properties of Gaussian16Input but also additional ones
+    for Gaussian16QMMMInput."""
+
+    @property
+    def oniom_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return oniom_charge
+
+    @property
+    def real_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_charge["real_charge"])
+
+    @property
+    def int_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_charge["int_charge"])
+
+    @property
+    def model_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_charge["model_charge"])
+
+    @property
+    def oniom_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return oniom_multiplicity
+
+    @property
+    def real_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_multiplicity["real_multiplicity"])
+
+    @property
+    def int_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_multiplicity["int_multiplicity"])
+
+    @property
+    def model_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_multiplicity["model_multiplicity"])
+
+    @property
+    def partition(self):
+        """Get the partition string."""
+        partition = {}
+        for key, val in [
+            ("high level atoms", self.molecule.high_level_atoms),
+            ("medium level atoms", self.molecule.medium_level_atoms),
+            ("low level atoms", self.molecule.low_level_atoms),
+        ]:
+            if val is not None:
+                partition[key] = get_range_from_list(val)
+        return partition
+
+    def _get_oniom_charge_and_multiplicity(self):
+        line_elements = []
+        for line in self.contents:
+            line_elements = line.split()
+            if (
+                all(element.isdigit() for element in line_elements)
+                and len(line_elements) > 0
+            ):
+                break
+        charge_multiplicity_list = [
+            "real_charge",
+            "real_multiplicity",
+            "int_charge",
+            "int_multiplicity",
+            "model_charge",
+            "model_multiplicity",
+        ]
+        oniom_charge = {}
+        oniom_multiplicity = {}
+        full_line = 12
+        if len(self.partition) == 2:
+            charge_multiplicity_list = charge_multiplicity_list[0:1, 4:5]
+            full_line = 6
+        for j in range(0, int(full_line) - len(line_elements)):
+            line_elements.append("Not specified, will use default value.")
+        for charge in range(0, len(charge_multiplicity_list), 2):
+            oniom_charge[charge_multiplicity_list[charge]] = line_elements[
+                charge
+            ]
+        for multiplicity in range(1, len(charge_multiplicity_list), 2):
+            oniom_multiplicity[charge_multiplicity_list[multiplicity]] = (
+                line_elements[multiplicity]
+            )
+        return oniom_charge, oniom_multiplicity

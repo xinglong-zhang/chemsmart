@@ -5,7 +5,7 @@ from ase import units
 from ase.symbols import Symbols
 
 from chemsmart.io.gaussian.cube import GaussianCubeFile
-from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.io.gaussian.input import Gaussian16Input, Gaussian16QMMMInput
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
     Gaussian16OutputWithPBC,
@@ -251,18 +251,22 @@ class TestGaussian16Input:
         assert g16_frozen.additional_route_parameters is None
         assert g16_frozen.job_type == "opt"
 
-    def test_partition(self, gaussian_qmmm_inputfiles):
-        assert os.path.exists(gaussian_qmmm_inputfiles)
-        g16_oniom = Gaussian16Input(filename=gaussian_qmmm_inputfiles)
-        assert g16_oniom.molecule.symbols.formula == "CO2HCH3"
+    def test_partition(self, gaussian_qmmm_inputfile_2layer):
+        assert os.path.exists(gaussian_qmmm_inputfile_2layer)
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert g16_oniom.molecule.symbols.formula == "CH3CH3"
         assert g16_oniom.partition == {
-            "high level atoms": ["2-3"],
-            "medium level atoms": ["6-9"],
-            "low level atoms": ["4-5"],
+            "high level atoms": ["2-5"],
+            "medium level atoms": [],
+            "low level atoms": ["6-9"],
         }
 
     def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfile_3layer):
-        g16_oniom = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_3layer
+        )
         assert g16_oniom.oniom_charge == {
             "real_charge": "0",
             "int_charge": "0",
@@ -273,6 +277,12 @@ class TestGaussian16Input:
             "int_multiplicity": "1",
             "model_multiplicity": "1",
         }
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.int_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.real_multiplicity == 1
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)

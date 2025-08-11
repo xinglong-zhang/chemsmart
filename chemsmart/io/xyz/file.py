@@ -2,7 +2,6 @@ import re
 from functools import cached_property
 
 from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.repattern import xyz_energy_pattern
 from chemsmart.utils.utils import string2index_1based
 
 

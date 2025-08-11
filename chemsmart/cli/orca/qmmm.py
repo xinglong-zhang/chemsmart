@@ -252,6 +252,7 @@ def qmmm(
     """
     from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
+    jobrunner = ctx.obj["jobrunner"]
     project_settings = ctx.obj["project_settings"]
     qmmm_settings = project_settings.qmmm_settings()
 

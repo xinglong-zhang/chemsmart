@@ -16,9 +16,6 @@ from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.utils import cmp_with_ignore
-from tests.conftest import (
-    gaussian_yaml_settings_qmmm_project_name,
-)
 
 
 class TestGaussianInputWriter:

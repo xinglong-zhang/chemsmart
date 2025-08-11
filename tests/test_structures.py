@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.utils import cmp_with_ignore

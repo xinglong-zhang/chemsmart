@@ -3,7 +3,6 @@ import math
 import os
 import re
 from functools import cached_property
-from xml.sax.handler import property_dom_node
 
 import numpy as np
 from ase import units
@@ -2537,7 +2536,7 @@ class ORCAQMMMFile(ORCAOutput):
                 )
                 for atom in qm_atom_list:
                     qm_region.append(int(atom))
-            elif reading_qm_lines == True:
+            elif reading_qm_lines:
                 if "..." in line.split():
                     break
                 qm_atom_list = line.split()

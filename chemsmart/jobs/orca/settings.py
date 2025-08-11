@@ -809,7 +809,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 ), f"cECPs used for the boundary region for {job_type} job must be specified! "
                 assert (
                     self.n_unit_cell_atoms is None
-                ), f"The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
+                ), "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
 
     def _get_level_of_theory_string(self):
         """Get the level of theory string for QM and QM2.
@@ -959,7 +959,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             ), f"Force field file is missing for {self.jobtype} job!"
             qm_block["force_field"] = f'ORCAFFFilename "{self.mm_method}"'
 
-        if self.use_active_info_from_pbc == True:
+        if self.use_active_info_from_pbc:
             qm_block["fixed_atoms"] = "Use_Active_InfoFromPDB true"
         elif self.active_atoms:
             qm_block["fixed_atoms"] = (
@@ -981,7 +981,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             full_qm_block += f"{val}\n"
         if self._write_crystal_qmmm_subblock() is not None:
             full_qm_block += self._write_crystal_qmmm_subblock()
-        full_qm_block += f"end\n"
+        full_qm_block += "end\n"
         return full_qm_block
 
     def _write_crystal_qmmm_subblock(self):

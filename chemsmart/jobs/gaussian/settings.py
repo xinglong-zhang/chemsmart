@@ -880,7 +880,7 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         oniom_string = "# oniom"
         assert (
             self.jobtype is not None
-        ), f"Job type must be specified for ONIOM job!"
+        ), "Job type must be specified for ONIOM job!"
         jobtype = self.jobtype.lower()
         jobtype = self.jobtype
         high_level_of_theory = self.validate_and_assign_level(

@@ -237,7 +237,7 @@ class ORCAQMMMInput(ORCAInput):
     @property
     def qm2_charge(self):
         qm2_charge, _, qm2_layer = self._get_qmmm_charge_and_multiplicity()
-        assert qm2_layer == True, f"QM2 layer has not been specified!"
+        assert qm2_layer, "QM2 layer has not been specified!"
         return qm2_charge
 
     @property
@@ -245,15 +245,15 @@ class ORCAQMMMInput(ORCAInput):
         _, qm2_multiplicity, qm2_layer = (
             self._get_qmmm_charge_and_multiplicity()
         )
-        assert qm2_layer == True, f"QM2 region has not been specified!"
+        assert qm2_layer, "QM2 region has not been specified!"
         return qm2_multiplicity
 
     @property
     def qm_total_charge(self):
         total_charge, _, qm2_layer = self._get_qmmm_charge_and_multiplicity()
         assert (
-            qm2_layer == False
-        ), f"Only charge of QM and medium region will be specified!"
+            not qm2_layer
+        ), "Only charge of QM and medium region will be specified!"
         return total_charge
 
     @property
@@ -262,8 +262,8 @@ class ORCAQMMMInput(ORCAInput):
             self._get_qmmm_charge_and_multiplicity()
         )
         assert (
-            qm2_layer == False
-        ), f"Only multiplicity of QM and medium region will be specified!"
+            not qm2_layer
+        ), "Only multiplicity of QM and medium region will be specified!"
         return total_multiplicity
 
     def _get_active_atoms(self):
