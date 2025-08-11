@@ -76,10 +76,12 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def molecule(self):
-        if self.cb is not None:
+        try:
             molecule = self.cb.molecule
-        else:
-            logger.debug("Error creating molecule from coordinate block.")
+        except ValueError as err:
+            logger.debug(
+                f"Error creating molecule from coordinate block: {err}"
+            )
             for line in self.contents:
                 if line.startswith("* xyzfile"):
                     xyz_filepath = line.strip().split()[-1]

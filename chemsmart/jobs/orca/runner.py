@@ -133,7 +133,9 @@ class ORCAJobRunner(JobRunner):
                             f"Copied {xyz_file} to {self.running_directory}."
                         )
                     else:
-                        raise ValueError(f"XYZ file {xyz_file} does not exist.")
+                        raise ValueError(
+                            f"XYZ file {xyz_file} does not exist."
+                        )
 
     def _write_input(self, job):
         from chemsmart.jobs.orca.writer import ORCAInputWriter
