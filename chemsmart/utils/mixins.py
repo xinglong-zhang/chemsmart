@@ -1,8 +1,8 @@
 import inspect
 import os
 import re
-from functools import cached_property
 from datetime import datetime
+from functools import cached_property
 
 from ase import units
 
@@ -102,7 +102,9 @@ class GaussianFileMixin(FileMixin):
         if match:
             time_info = match.group(1)
             try:
-                return datetime.strptime(time_info, "%a %b %d %H:%M:%S %Y").strftime("%Y-%m-%d %H:%M:%S")
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 return None
         return None
@@ -333,14 +335,18 @@ class ORCAFileMixin(FileMixin):
 
     @property
     def date(self):
-        pattern = r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+        pattern = (
+            r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+        )
         for line in self.contents:
             if "Starting time:" in line:
                 match = re.search(pattern, line)
                 if match:
                     time_info = match.group(1)
                     try:
-                        return datetime.strptime(time_info, "%a %b %d %H:%M:%S %Y").strftime("%Y-%m-%d %H:%M:%S")
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
                     except ValueError:
                         continue
         return None

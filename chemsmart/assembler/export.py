@@ -1,9 +1,19 @@
 import json
 
+
 class DataExporter:
     def __init__(self, data, outputfile="database", keys=None):
         if keys is None:
-            keys = ["filename", "program", "version", "date", "functional", "basis_set", "chemical_formula", "energy"]
+            keys = [
+                "filename",
+                "program",
+                "version",
+                "date",
+                "functional",
+                "basis_set",
+                "chemical_formula",
+                "energy",
+            ]
         self.data = data
         self.outputfile = outputfile
         self.keys = keys
