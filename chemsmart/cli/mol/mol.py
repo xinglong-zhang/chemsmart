@@ -1,4 +1,5 @@
 import functools
+import glob
 import logging
 import os
 
@@ -21,6 +22,13 @@ def click_file_options(f):
         multiple=True,
         default=None,
         help="filename from which new Gaussian input is prepared.",
+    )
+    @click.option(
+        "-af",
+        "--add-allfiles",
+        type=str,
+        default=None,
+        help="Input file pattern, e.g. '*.xyz', '*.log', '*.gjf' (Only for align job).",
     )
     @click.option(
         "-l",
@@ -205,13 +213,20 @@ def click_pymol_save_options(f):
 @click.pass_context
 def mol(
     ctx,
+    add_allfiles,
     filename,
     label,
     append_label,
     index,
     pubchem,
 ):
-    # obtain molecule structure
+    if add_allfiles:
+        matched_files = glob.glob(add_allfiles)
+        if not matched_files:
+            logger.warning(f"No files matched pattern: {add_allfiles}")
+        else:
+            filename = matched_files
+
     if filename is None and pubchem is None:
         # this is fine for PyMOL IRC Movie Job
         logger.warning("[filename] or [pubchem] has not been specified!")
@@ -229,11 +244,14 @@ def mol(
     if filename:
         molecules = []
         for file in filename:
-            molecules += Molecule.from_filepath(
+            mols = Molecule.from_filepath(
                 filepath=file,
                 index="-1" if index is None else index,
                 return_list=True,
             )
+            for mol in mols:
+                mol.name = os.path.splitext(os.path.basename(file))[0]
+            molecules += mols
         logger.debug(f"Loaded {len(molecules)} molecules from {file}")
 
     # if pubchem is specified, obtain molecule from PubChem
