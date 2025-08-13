@@ -671,7 +671,7 @@ class Gaussian16Output(GaussianFileMixin):
         return oniom_energies
 
     @cached_property
-    def oniom_getting_layer_energies(self):
+    def oniom_layer_energies(self):
         """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
         layer_energies = {}
         for line in self.contents:
