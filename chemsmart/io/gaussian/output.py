@@ -348,6 +348,9 @@ class Gaussian16Output(GaussianFileMixin):
         return self._get_gen_genecp()
 
     def _get_gen_genecp(self):
+        if self.basis is None:
+            # this happens for semi-empirical calculations
+            return None
         if "gen" in self.basis:
             # return the string containing gen or genecp
             return self.basis

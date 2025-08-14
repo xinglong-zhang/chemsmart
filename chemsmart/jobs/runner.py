@@ -173,7 +173,7 @@ class JobRunner(RegistryMixin):
 
     def _update_os_environ(self, job):
         env = os.environ.copy()
-        env_vars = self.executable.env
+        env_vars = self.executable.env if self.executable else None
         if not env_vars:
             return env
         logger.debug(f"Environment variables to update: \n{env_vars}")
@@ -198,16 +198,18 @@ class JobRunner(RegistryMixin):
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
+        logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
 
         for runner in runners:
+            logger.debug(f"Checking runner: {runner} for job: {job}")
             runner_jobtypes = runner.JOBTYPES
             logger.debug(f"Runner jobtypes: {runner_jobtypes}")
 
             if runner_jobtypes is NotImplemented:
                 runner_jobtypes = []
 
-            if jobtype in runner_jobtypes and fake == runner.FAKE:
+            if jobtype in runner_jobtypes:
                 logger.info(f"Using job runner: {runner} for job: {job}")
 
                 # If scratch is None, use the runner's default scratch value
