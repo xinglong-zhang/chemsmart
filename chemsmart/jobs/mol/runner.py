@@ -301,6 +301,10 @@ class PyMOLJobRunner(JobRunner):
                 )
         return process
 
+
+class PyMOLVisualizationJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_visualization"]
+
     def _get_command(self, job):
         command = self._get_visualization_command(job)
         command = self._setup_style(job, command)
@@ -313,13 +317,6 @@ class PyMOLJobRunner(JobRunner):
         command = self._save_pse_command(job, command)
         command = self._quit_command(job, command)
         return command
-
-    def _job_specific_commands(self, job, command):
-        return command
-
-
-class PyMOLVisualizationJobRunner(PyMOLJobRunner):
-    JOBTYPES = ["pymol_visualization"]
 
     def _hide_labels(self, job, command):
         """Hide labels for NCI analysis."""
