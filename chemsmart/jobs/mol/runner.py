@@ -177,28 +177,18 @@ class PyMOLJobRunner(JobRunner):
 
     def _setup_style(self, job, command):
         # Handle the -d argument (PyMOL commands)
-        molnames = getattr(job, "mol_names", [self.job_basename])
         if job.style is None:
             # defaults to using zhang_group_pymol_style if not specified
             if os.path.exists("zhang_group_pymol_style.py"):
-                style_cmds = "; ".join(
-                    [f"pymol_style {name}" for name in molnames]
-                )
-                command += f' -d "{style_cmds}'
+                command += f' -d "pymol_style {self.job_basename}'
             else:
                 # no render style and no style file present
                 command += ' -d "'
         else:
             if job.style.lower() == "pymol":
-                style_cmds = "; ".join(
-                    [f"pymol_style {name}" for name in molnames]
-                )
-                command += f' -d "{style_cmds}'
+                command += f' -d "pymol_style {self.job_basename}'
             elif job.style.lower() == "cylview":
-                style_cmds = "; ".join(
-                    [f"cylview_style {name}" for name in molnames]
-                )
-                command += f' -d "{style_cmds}'
+                command += f' -d "cylview_style {self.job_basename}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
@@ -311,6 +301,10 @@ class PyMOLJobRunner(JobRunner):
                 )
         return process
 
+
+class PyMOLVisualizationJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_visualization"]
+
     def _get_command(self, job):
         command = self._get_visualization_command(job)
         command = self._setup_style(job, command)
@@ -323,13 +317,6 @@ class PyMOLJobRunner(JobRunner):
         command = self._save_pse_command(job, command)
         command = self._quit_command(job, command)
         return command
-
-    def _job_specific_commands(self, job, command):
-        return command
-
-
-class PyMOLVisualizationJobRunner(PyMOLJobRunner):
-    JOBTYPES = ["pymol_visualization"]
 
     def _hide_labels(self, job, command):
         """Hide labels for NCI analysis."""
@@ -692,103 +679,4 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         # Append the final PyMOL commands, quoting the output file path
         command += f"; save {quote_path(job.spin_basename)}.pse"
 
-        return command
-
-
-class PyMOLAlignJobRunner(PyMOLJobRunner):
-    JOBTYPES = ["pymol_align"]
-
-    def _assign_variables(self, job):
-        """Sets proper file paths for job input, output, and error files."""
-        super()._assign_variables(job)
-        self.job_logfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.log")
-        )
-        self.job_outputfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.out")
-        )
-        self.job_errfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.err")
-        )
-
-    def _write_input(self, job):
-        job.xyz_absolute_paths = []
-        job.mol_names = []
-        mol = job.molecule
-        mol_list = mol if isinstance(mol, list) else [mol]
-        for m in mol_list:
-            if not isinstance(m, Molecule):
-                raise ValueError(f"Object {m} is not of Molecule type!")
-            if not hasattr(m, "name"):
-                raise ValueError("Molecule object missing .name attribute!")
-            name = m.name
-            xyz_path = os.path.join(job.folder, f"{name}.xyz")
-            abs_xyz_path = os.path.abspath(xyz_path)
-            if os.path.exists(abs_xyz_path):
-                logger.info(f"File {abs_xyz_path} exists, skipping write.")
-            else:
-                m.write(abs_xyz_path, format="xyz", mode="w")
-                logger.info(f"Writing molecule {name} to {abs_xyz_path}")
-            job.xyz_absolute_paths.append(abs_xyz_path)
-            job.mol_names.append(name)
-
-    def _get_visualization_command(self, job):
-        exe = quote_path(self.executable)
-        xyz_paths = job.xyz_absolute_paths
-        if not xyz_paths:
-            raise ValueError(
-                "No XYZ files found. Ensure _write_input is called first."
-            )
-        first_mol = quote_path(xyz_paths[0])
-        load_cmds = [f"{quote_path(path)}" for path in xyz_paths[1:]]
-        command = f"{exe} {first_mol}"
-        if load_cmds:
-            command += f" {' '.join(load_cmds)}"
-
-        if job.pymol_script is None:
-            style_file_path = os.path.join(
-                job.folder, "zhang_group_pymol_style.py"
-            )
-            if os.path.exists(style_file_path):
-                job_pymol_script = style_file_path
-            else:
-                logger.info(
-                    "Using default zhang_group_pymol_style for rendering."
-                )
-                job_pymol_script = self._generate_visualization_style_script(
-                    job
-                )
-            if os.path.exists(job_pymol_script):
-                command += f" -r {quote_path(job_pymol_script)}"
-        else:
-            # using user-defined style file
-            assert os.path.exists(
-                job.pymol_script
-            ), f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
-            command += f" -r {quote_path(job.pymol_script)}"
-
-        if job.quiet_mode:
-            command += " -q"
-        if job.command_line_only:
-            command += " -c"
-        return command
-
-    def _job_specific_commands(self, job, command):
-        command = self._align_command(job, command)
-        return command
-
-    def _align_command(self, job, command):
-        molnames = job.mol_names
-        align_cmds = []
-        for i in range(1, len(molnames)):
-            align_cmds.append(f"align {molnames[i]}, {molnames[0]}")
-        pymol_cmds = "; ".join(align_cmds)
-        command += f"; {pymol_cmds}"
-        return command
-
-    def _save_pse_command(self, job, command):
-        n_mol = len(job.molecule)
-        pse_filename = f"{n_mol}molecules_align.pse"
-        pse_path = os.path.join(job.folder, pse_filename)
-        command += f"; save {quote_path(pse_path)}"
         return command

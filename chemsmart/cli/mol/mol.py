@@ -1,5 +1,4 @@
 import functools
-import glob
 import logging
 import os
 
@@ -19,16 +18,8 @@ def click_file_options(f):
         "-f",
         "--filename",
         type=str,
-        multiple=True,
         default=None,
         help="filename from which new Gaussian input is prepared.",
-    )
-    @click.option(
-        "-af",
-        "--add-allfiles",
-        type=str,
-        default=None,
-        help="Input file pattern, e.g. '*.xyz', '*.log', '*.gjf' (Only for align job).",
     )
     @click.option(
         "-l",
@@ -48,7 +39,7 @@ def click_file_options(f):
         "-i",
         "--index",
         type=str,
-        default=None,
+        default="-1",
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
     )
@@ -213,20 +204,13 @@ def click_pymol_save_options(f):
 @click.pass_context
 def mol(
     ctx,
-    add_allfiles,
     filename,
     label,
     append_label,
     index,
     pubchem,
 ):
-    if add_allfiles:
-        matched_files = glob.glob(add_allfiles)
-        if not matched_files:
-            logger.warning(f"No files matched pattern: {add_allfiles}")
-        else:
-            filename = matched_files
-
+    # obtain molecule structure
     if filename is None and pubchem is None:
         # this is fine for PyMOL IRC Movie Job
         logger.warning("[filename] or [pubchem] has not been specified!")
@@ -240,19 +224,15 @@ def mol(
             "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
         )
 
-    # if filename is specified, read the file and obtain molecule. use -i ":" to visualize all conformers
+    # if filename is specified, read the file and obtain molecule
     if filename:
-        molecules = []
-        for file in filename:
-            mols = Molecule.from_filepath(
-                filepath=file,
-                index="-1" if index is None else index,
-                return_list=True,
-            )
-            for mol in mols:
-                mol.name = os.path.splitext(os.path.basename(file))[0]
-            molecules += mols
-        logger.debug(f"Loaded {len(molecules)} molecules from {file}")
+        molecules = Molecule.from_filepath(
+            filepath=filename, index=":", return_list=True
+        )
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from {filename}!"
+        logger.debug(f"Obtained molecule {molecules} from {filename}")
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -268,21 +248,10 @@ def mol(
             "Only give Gaussian input filename or name to be appended, but not both!"
         )
     if append_label is not None:
-        if isinstance(filename, (list, tuple)):
-            base_file = filename[0]
-        else:
-            base_file = filename
-
-        base_label = os.path.splitext(os.path.basename(base_file))[0]
-        label = f"{base_label}_{append_label}"
-
+        label = os.path.splitext(os.path.basename(filename))[0]
+        label = f"{label}_{append_label}"
     if label is None and append_label is None:
-        if isinstance(filename, (list, tuple)):
-            base_file = filename[0]
-        else:
-            base_file = filename
-
-        label = os.path.splitext(os.path.basename(base_file))[0]
+        label = os.path.splitext(os.path.basename(filename))[0]
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 
