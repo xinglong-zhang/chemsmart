@@ -237,7 +237,7 @@ def read_molecular_job_yaml(filename, program="gaussian"):
                 all_project_configs[job], td_config
             )
 
-    # check if td settings exist (optional)
+    # check if qmmm settings exist (optional)
     if "qmmm" in project_config:
         qmmm_config = project_config["qmmm"]
         for job in qmmm_job:  # jobs using qmmm config
