@@ -690,6 +690,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output, and error files."""
+        super()._assign_variables(job)
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
         self.job_basename = job.label
@@ -773,62 +774,15 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             command += " -c"
         return command
 
-    def _setup_style(self, job, command):
-        # Handle the -d argument (PyMOL commands)
-        if job.style is None:
-            # defaults to using zhang_group_pymol_style if not specified
-            if os.path.exists("zhang_group_pymol_style.py"):
-                molnames = [
-                    f"alignmol{i + 1}" for i in range(len(job.molecule))
-                ]
-                style_cmds = "; ".join(
-                    [f"pymol_style {name}" for name in molnames]
-                )
-                command += f' -d "{style_cmds};'
-            else:
-                # no render style and no style file present
-                command += ' -d "'
-        else:
-            if job.style.lower() == "pymol":
-                molnames = [
-                    f"alignmol{i + 1}" for i in range(len(job.molecule))
-                ]
-                style_cmds = "; ".join(
-                    [f"pymol_style {name}" for name in molnames]
-                )
-                command += f' -d "{style_cmds};'
-            elif job.style.lower() == "cylview":
-                molnames = [
-                    f"alignmol{i + 1}" for i in range(len(job.molecule))
-                ]
-                style_cmds = "; ".join(
-                    [f"cylview_style {name}" for name in molnames]
-                )
-                command += f' -d "{style_cmds};'
-            else:
-                raise ValueError(f"The style {job.style} is not available!")
-        return command
-
     def _job_specific_commands(self, job, command):
         command = self._align_command(job, command)
         return command
 
     def _align_command(self, job, command):
-        mol = job.molecule
-        mol_num = len(mol)
+        molnames = job.mol_names
         align_cmds = []
-        for i in range(2, mol_num + 1):
-            align_cmds.append(f"align alignmol{i}, alignmol1")
-        pymol_cmds = "; ".join(align_cmds)
-        command += f"; {pymol_cmds}"
-        return command
-
-    def _save_pse_command(self, job, command):
-        n_mol = len(job.molecule)
-        pse_filename = f"{n_mol}molecules_align.pse"
-        pse_path = os.path.join(job.folder, pse_filename)
-        command += f"; save {quote_path(pse_path)}"
-        return command
+        for i in range(1, len(molnames)):
+            align_cmds.append(f"align {molnames[i]}, {molnames[0]}")
 
     def _create_process(self, job, command, env=None):
         process = super()._create_process(job, command, env)

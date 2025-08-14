@@ -33,6 +33,7 @@ def align(
 
     Example:
         chemsmart run mol -f a.log -f b.xyz -f c.gjf align
+        chemsmart run mol -af '*.log(*.xyz/*.gjf)' align
     """
 
     # get molecule
