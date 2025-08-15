@@ -2195,28 +2195,35 @@ class TestThermochemistryTemperature:
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.translational_internal_energy / (cal_to_joules * 1000),
+            thermochem_temperature330p15.translational_internal_energy
+            / (cal_to_joules * 1000),
             0.984,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.translational_heat_capacity / cal_to_joules,
+            thermochem_temperature330p15.translational_heat_capacity
+            / cal_to_joules,
             2.981,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.rotational_partition_function, 0.294516e03
+            thermochem_temperature330p15.rotational_partition_function,
+            0.294516e03,
         )
         assert np.isclose(
-            thermochem_temperature330p15.rotational_entropy / cal_to_joules, 13.285, atol=1e-3
+            thermochem_temperature330p15.rotational_entropy / cal_to_joules,
+            13.285,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.rotational_internal_energy / (cal_to_joules * 1000),
+            thermochem_temperature330p15.rotational_internal_energy
+            / (cal_to_joules * 1000),
             0.656,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.rotational_heat_capacity / cal_to_joules,
+            thermochem_temperature330p15.rotational_heat_capacity
+            / cal_to_joules,
             1.987,
             atol=1e-3,
         )
@@ -2229,26 +2236,33 @@ class TestThermochemistryTemperature:
             0.113334e01,
         )
         assert np.isclose(
-            thermochem_temperature330p15.vibrational_entropy / cal_to_joules, 0.987, atol=1e-3
+            thermochem_temperature330p15.vibrational_entropy / cal_to_joules,
+            0.987,
+            atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.vibrational_internal_energy / (cal_to_joules * 1000),
+            thermochem_temperature330p15.vibrational_internal_energy
+            / (cal_to_joules * 1000),
             7.588,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.vibrational_heat_capacity / cal_to_joules,
+            thermochem_temperature330p15.vibrational_heat_capacity
+            / cal_to_joules,
             2.306,
             atol=1e-3,
         )
-        assert np.isclose(thermochem_temperature330p15.total_partition_function, 0.493906e10)
+        assert np.isclose(
+            thermochem_temperature330p15.total_partition_function, 0.493906e10
+        )
         assert np.isclose(
             thermochem_temperature330p15.total_entropy / cal_to_joules,
             52.049,
             atol=1e-3,
         )
         assert np.isclose(
-            thermochem_temperature330p15.total_internal_energy / (cal_to_joules * 1000),
+            thermochem_temperature330p15.total_internal_energy
+            / (cal_to_joules * 1000),
             9.228,
             atol=1e-3,
         )
@@ -2258,8 +2272,9 @@ class TestThermochemistryTemperature:
             atol=1e-3,
         )
 
-
-    def test_thermochemistry_co2_temperature330p15_qrrho(self, gaussian_co2_temperature330p15_outfile):
+    def test_thermochemistry_co2_temperature330p15_qrrho(
+        self, gaussian_co2_temperature330p15_outfile
+    ):
         """Values from Goodvibes, as a reference:
                 goodvibes -t 330.15 --bav "conf" co2_temperature_330p15.log
         Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
@@ -2287,7 +2302,8 @@ class TestThermochemistryTemperature:
             atol=1e-6,
         )
         assert np.isclose(
-            qrrho_thermochem_temperature330p15.enthalpy / (hartree_to_joules * units._Nav),
+            qrrho_thermochem_temperature330p15.enthalpy
+            / (hartree_to_joules * units._Nav),
             -188.427901,
             atol=1e-6,
         )

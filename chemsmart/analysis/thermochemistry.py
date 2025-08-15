@@ -151,18 +151,9 @@ class Thermochemistry:
 
     @property
     def average_rotational_constant(self):
-        if self.molecule.is_monoatomic:
-            return None
-        if self.molecule.is_linear:
-            return units._hplanck / (8 * np.pi**2 * self.I[-1])
-
-        assert (
-            len(self.I) == 3
-        ), "Number of moments of inertia should be 3 for nonlinear molecules."
-        rotational_constants = [
-            units._hplanck / (8 * np.pi**2 * i) for i in self.I
-        ]
-        return sum(rotational_constants) / len(rotational_constants)
+        if self.use_weighted_mass:
+            return self.molecule.average_rotational_constant_weighted_mass
+        return self.molecule.average_rotational_constant_most_abundant_mass
 
     @property
     def rotational_symmetry_number(self):
