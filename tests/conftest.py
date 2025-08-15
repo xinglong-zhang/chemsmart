@@ -193,7 +193,7 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
 @pytest.fixture()
 def gaussian_link_outfile(gaussian_outputs_test_directory):
     gaussian_link_outfile = os.path.join(
-        gaussian_outputs_test_directory, "intervening_n_Ap_A.log"
+        gaussian_outputs_test_directory, "dna_link_sp.log"
     )
     return gaussian_link_outfile
 

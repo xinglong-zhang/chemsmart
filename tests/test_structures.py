@@ -144,6 +144,39 @@ class TestStructures:
         rdkit_molecule = molecule.to_rdkit()
         assert isinstance(rdkit_molecule, RDKitMolecule)
 
+    def test_read_molecule_energy_from_xyz_file(self, xyz_directory):
+        xtbopt_xyzfile = os.path.join(xyz_directory, "ts_xtbopt.xyz")
+        assert os.path.exists(xtbopt_xyzfile)
+        assert os.path.isfile(xtbopt_xyzfile)
+        xyz_file1 = XYZFile(filename=xtbopt_xyzfile)
+        assert xyz_file1.num_atoms == 508
+        molecule1 = xyz_file1.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule1, Molecule)
+        assert len(molecule1.chemical_symbols) == 508
+        assert molecule1.energy == -978.449085030052
+
+        chemsmart_generated_xyzfile = os.path.join(
+            xyz_directory, "frozen_coordinates_opt.xyz"
+        )
+        assert os.path.exists(chemsmart_generated_xyzfile)
+        assert os.path.isfile(chemsmart_generated_xyzfile)
+        xyz_file2 = XYZFile(filename=chemsmart_generated_xyzfile)
+        assert xyz_file2.num_atoms == 14
+        molecule2 = xyz_file2.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule2, Molecule)
+        assert len(molecule2.chemical_symbols) == 14
+        assert molecule2.energy == -804.614711
+
+        extended_xyzfile = os.path.join(xyz_directory, "crystal.extxyz")
+        assert os.path.exists(extended_xyzfile)
+        assert os.path.isfile(extended_xyzfile)
+        xyz_file3 = XYZFile(filename=extended_xyzfile)
+        assert xyz_file3.num_atoms == 1
+        molecule3 = xyz_file3.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule3, Molecule)
+        assert len(molecule3.chemical_symbols) == 1
+        assert molecule3.energy == -157.72725320
+
     def test_read_molecule_from_multiple_molecules_xyz_file(
         self, multiple_molecules_xyz_file
     ):

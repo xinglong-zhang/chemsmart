@@ -44,7 +44,6 @@ class Gaussian16Output(GaussianFileMixin):
     """
 
     def __init__(self, filename, use_frozen=False, include_intermediate=False):
-        self._energies = None
         self.filename = filename
         self.use_frozen = use_frozen
         self.include_intermediate = include_intermediate
@@ -219,8 +218,6 @@ class Gaussian16Output(GaussianFileMixin):
                 num_structures=num_structures_to_use,
             )
         num_structures = len(all_structures)
-        if self.route_object.job_type == "link":
-            num_structures = num_structures - 1
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
@@ -804,7 +801,7 @@ class Gaussian16Output(GaussianFileMixin):
         standard_orientations = []
         standard_orientations_pbc = []
         for i, line in enumerate(self.contents):
-            if "Standard orientation:" in line:
+            if line.startswith("Standard orientation:"):
                 standard_orientation = []
                 standard_orientation_pbc = []
                 for j_line in self.contents[i + 5 :]:
