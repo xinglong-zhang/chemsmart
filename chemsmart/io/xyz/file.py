@@ -73,21 +73,16 @@ class XYZFile(FileMixin):
         # Ensures energy is assigned before returning a single molecule:
         if len(comments) != 0:
             for i, comment in enumerate(comments):
-                try:
-                    energy = float(comment)
-                    molecules[i].energy = energy
-                except ValueError:
-                    # will extract the first float number in the line. example case:
-                    # "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
-                    # energy will be -25900.214629.
-                    match = re.findall(energy_value_pattern, comment)
-                    if len(match) >= 1:
-                        energy = float(match[0])
-                        molecules[i].energy = energy
-                        # Assign energy to the only or the first negative float number
-                    else:
-                        # No energy found, skip
-                        continue
+                # will extract the first float number in the line.
+                # example case 1: "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
+                # energy will be -25900.214629.
+                match = re.findall(energy_value_pattern, comment)
+                if match:
+                    molecules[i].energy = float(match[0])
+                    # Assign energy to the only or the first negative float number
+                else:
+                    # No energy found, skip
+                    continue
         if return_list:
             return molecules
         else:
