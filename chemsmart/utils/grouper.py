@@ -101,6 +101,20 @@ class RMSDGrouperSymmetric(MoleculeGrouper):
         - Molecules with symmetrical arrangements
         - Cases where atom ordering is inconsistent
         - High-accuracy structural comparisons
+
+    Guideline for threshold values:
+        Molecule type / context	                    Typical RMSD threshold for grouping
+        Small rigid molecules                        0.5–1.0 Å
+        (≤20 heavy atoms, little flexibility)	     – distinguishes small conformational changes clearly
+        
+        Flexible drug-like molecules                 1.0–2.0 Å
+        (rotatable bonds, ~20–50 heavy atoms)	     – allows grouping of conformers differing mainly in torsions
+
+        Large biomolecules or peptides	             2.0–3.0 Å for same fold; 
+                                                     ≥3 Å often indicates different conformations/folds
+                                                     
+        Coarse clustering for diverse sets	         2.0–4.0 Å 
+                                                     – groups into broad families rather than fine differences
     """
 
     def __init__(
