@@ -3,6 +3,12 @@ nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
 energy_value_pattern = r"(-?\d+\.\d+)"
+
+xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
+# \b ensures that the match ends right after xyz
+# and is not followed by something like: xyz1, xyzabc xyz_thing
+# It will match if .xyz is followed by: a space, a quote, end of line, punctuation
+
 normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
 frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
