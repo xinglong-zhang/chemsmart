@@ -78,7 +78,8 @@ class RMSDGrouperSymmetric(MoleculeGrouper):
 
     This version handles molecular symmetries by finding optimal atom correspondence
     using the Hungarian algorithm before alignment. 
-    References are as follows: http://dx.doi.org/10.1021/ci400534h, https://doi.org/10.1186/s13321-020-00455-2.
+    References are as follows: http://dx.doi.org/10.1021/ci400534h, 
+    https://doi.org/10.1186/s13321-020-00455-2.
     It's designed for scenarios where
     atom ordering might differ between conformers, such as CREST-generated structures
     or molecules with equivalent atoms in different arrangements.
