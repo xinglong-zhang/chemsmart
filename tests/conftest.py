@@ -686,6 +686,37 @@ def orca_inputs_directory(orca_test_directory):
 
 
 @pytest.fixture()
+def orca_inputs_xyz_directory(orca_inputs_directory):
+    """Returns the absolute path to the orca inputs that specifies xyz files."""
+    orca_inputs_xyz_directory = os.path.join(orca_inputs_directory, "xyz")
+    return os.path.abspath(orca_inputs_xyz_directory)
+
+
+@pytest.fixture()
+def orca_input_nebts_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "neb_TS_rot1.inp")
+
+
+@pytest.fixture()
+def orca_input_nebts_reactant_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "R-1a_opt.xyz")
+
+
+@pytest.fixture()
+def orca_input_nebts_product_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "S-1a_opt.xyz")
+
+
+@pytest.fixture()
+def orca_input_nebts_ts_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "TS_rot1.xyz")
+
+
+@pytest.fixture()
 def orca_dias_directory(orca_test_directory):
     orca_dias_directory = os.path.join(orca_test_directory, "dias")
     return os.path.abspath(orca_dias_directory)
