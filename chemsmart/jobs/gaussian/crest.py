@@ -1,4 +1,8 @@
-from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob, logger
+import logging
+
+from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+
+logger = logging.getLogger(__name__)
 
 
 class GaussianCrestJob(GaussianJob):
