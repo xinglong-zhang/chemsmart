@@ -73,7 +73,32 @@ class MoleculeGrouper(ABC):
         return [group[0] for group in groups]
 
 
-class RMSDGrouper(MoleculeGrouper):
+class RMSDGrouperSymmetric(MoleculeGrouper):
+    """Groups molecules based on RMSD (Root Mean Square Deviation) with symmetry consideration.
+
+    This version handles molecular symmetries by finding optimal atom correspondence
+    using the Hungarian algorithm before alignment. It's designed for scenarios where
+    atom ordering might differ between conformers, such as CREST-generated structures
+    or molecules with equivalent atoms in different arrangements.
+    Use "rsmd" or "rsmd_symmetric" to utilize this default RMSDGrouper.
+
+    Attributes:
+        threshold (float): RMSD threshold for grouping molecules (Å).
+        num_procs (int): Number of processes for parallel computation.
+        align_molecules (bool): Whether to perform Kabsch alignment.
+        ignore_hydrogens (bool): Whether to exclude hydrogen atoms from RMSD calculation.
+
+    Performance Notes:
+        - Hungarian algorithm is computationally expensive for large molecules
+        - Parallel processing recommended for multiple conformers
+        - Memory usage scales with O(n²) for pairwise comparisons
+
+    Best suited for:
+        - CREST conformer analysis
+        - Molecules with symmetrical arrangements
+        - Cases where atom ordering is inconsistent
+        - High-accuracy structural comparisons
+    """
 
     def __init__(
         self,
@@ -82,11 +107,13 @@ class RMSDGrouper(MoleculeGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
+        use_fallback: bool = True,  # Try direct alignment first, then Hungarian
     ):
         super().__init__(molecules, num_procs)
         self.threshold = threshold  # RMSD threshold for grouping
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
+        self.use_fallback = use_fallback
         # Cache sorted chemical symbols as sets for faster comparison
         self._chemical_symbol_sets = [
             set(mol.chemical_symbols) for mol in molecules
@@ -102,33 +129,58 @@ class RMSDGrouper(MoleculeGrouper):
         i, j = idx_pair
         mol1, mol2 = self.molecules[i], self.molecules[j]
 
-        pos1, symbols1 = self._get_heavy_atoms(mol1)
-        pos2, symbols2 = self._get_heavy_atoms(mol2)
+        if self.ignore_hydrogens:
+            pos1, symbols1 = self._get_heavy_atoms(mol1)
+            pos2, symbols2 = self._get_heavy_atoms(mol2)
+        else:
+            pos1, symbols1 = mol1.positions, list(mol1.symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.symbols)
 
         if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
             symbols2
         ):
             return np.inf
 
-        # get same element and use Hungarian algorithm
+        if (
+            self.use_fallback
+            and not self.ignore_hydrogens
+            and self.align_molecules
+        ):
+            _, _, _, _, rmsd_direct = kabsch_align(pos1, pos2)
+            # If RMSD is very small, the molecular ordering is likely correct
+            if (
+                rmsd_direct < 1e-6
+            ):  # Nearly zero, molecules are identical conformations
+                return rmsd_direct
+
+        # Use Hungarian algorithm for optimal atom matching
         elements = sorted(set(symbols1))
         matched_idx1 = []
         matched_idx2 = []
         for elem in elements:
             idxs1 = [k for k, s in enumerate(symbols1) if s == elem]
             idxs2 = [k for k, s in enumerate(symbols2) if s == elem]
-            dist_matrix = np.zeros((len(idxs1), len(idxs2)))
-            for a, idx1 in enumerate(idxs1):
-                for b, idx2 in enumerate(idxs2):
-                    dist_matrix[a, b] = np.sum((pos1[idx1] - pos2[idx2]) ** 2)
-            row_ind, col_ind = linear_sum_assignment(dist_matrix)
-            matched_idx1.extend([idxs1[r] for r in row_ind])
-            matched_idx2.extend([idxs2[c] for c in col_ind])
+
+            if len(idxs1) == 1 and len(idxs2) == 1:
+                # For single atoms, direct match
+                matched_idx1.extend(idxs1)
+                matched_idx2.extend(idxs2)
+            else:
+                # For multiple atoms of same type, use Hungarian algorithm
+                dist_matrix = np.zeros((len(idxs1), len(idxs2)))
+                for a, idx1 in enumerate(idxs1):
+                    for b, idx2 in enumerate(idxs2):
+                        dist_matrix[a, b] = np.sum(
+                            (pos1[idx1] - pos2[idx2]) ** 2
+                        )
+                row_ind, col_ind = linear_sum_assignment(dist_matrix)
+                matched_idx1.extend([idxs1[r] for r in row_ind])
+                matched_idx2.extend([idxs2[c] for c in col_ind])
 
         pos1_matched = pos1[matched_idx1]
         pos2_matched = pos2[matched_idx2]
 
-        # align
+        # Apply alignment if requested
         if self.align_molecules:
             pos1_matched, pos2_matched, _, _, _ = kabsch_align(
                 pos1_matched, pos2_matched
@@ -175,6 +227,102 @@ class RMSDGrouper(MoleculeGrouper):
             f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
             f"ignore_hydrogens={self.ignore_hydrogens})"
         )
+
+
+class RMSDGrouperSimple(RMSDGrouperSymmetric):
+    """Simple RMSD grouper without symmetry consideration for fast molecular comparison.
+
+    This lightweight version assumes atoms are in the same order and directly applies
+    Kabsch alignment without atom reordering. It's optimized for scenarios where
+    molecular conformations maintain consistent atom ordering, such as:
+    - Rotated/translated versions of the same molecule
+    - MD trajectory frames with preserved atom indices
+    - Molecules generated from the same starting structure
+    Use "rsmd_simple" to utilize this RMSDGrouper.
+
+    Best suited for:
+        - Molecular dynamics trajectory clustering
+        - Conformer screening with preserved atom order
+        - High-throughput virtual screening
+        - Cases where speed is prioritized over symmetry handling
+
+    Warning:
+        Although it is much faster than RMSDGrouperSymmetric，it will produce incorrect results
+        if atom ordering differs between conformers of the same molecule.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = 0.5,  # RMSD threshold for grouping
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
+    ):
+        # Initialize parent with symmetry disabled
+        super().__init__(
+            molecules=molecules,
+            threshold=threshold,
+            num_procs=num_procs,
+            align_molecules=align_molecules,
+            ignore_hydrogens=ignore_hydrogens,
+        )
+
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """Calculate RMSD between two molecules without atom reordering."""
+        i, j = idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        if self.ignore_hydrogens:
+            pos1, symbols1 = self._get_heavy_atoms(mol1)
+            pos2, symbols2 = self._get_heavy_atoms(mol2)
+        else:
+            pos1, symbols1 = mol1.positions, list(mol1.symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.symbols)
+
+        # Quick check for compatibility
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
+            return np.inf
+
+        # Direct alignment without atom reordering - assumes same atom ordering
+        if self.align_molecules:
+            _, _, _, _, rmsd = kabsch_align(pos1, pos2)
+            return rmsd
+        else:
+            # No alignment, direct RMSD calculation
+            return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules by geometric similarity."""
+        n = len(self.molecules)
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+
+        # Use map instead of imap_unordered for better parallelism
+        with multiprocessing.Pool(self.num_procs) as pool:
+            rmsd_values = pool.map(self._calculate_rmsd, indices)
+
+        # Build adjacency matrix
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            if rmsd < self.threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Use np.unique(labels) approach for better memory efficiency
+        unique_labels = np.unique(labels)
+        groups = [
+            [self.molecules[i] for i in np.where(labels == label)[0]]
+            for label in unique_labels
+        ]
+        index_groups = [
+            list(np.where(labels == label)[0]) for label in unique_labels
+        ]
+
+        return groups, index_groups
 
 
 class RMSDGrouperSharedMemory(MoleculeGrouper):
@@ -670,7 +818,9 @@ class StructureGrouperFactory:
         structures, strategy="rmsd", num_procs=1, threshold=5.0, **kwargs
     ):
         groupers = {
-            "rmsd": RMSDGrouper,
+            "rmsd": RMSDGrouperSymmetric,  # Use symmetric version as default
+            "rmsd_simple": RMSDGrouperSimple,  # Simple version without symmetry
+            "rmsd_symmetric": RMSDGrouperSymmetric,  # Explicit symmetric version
             "tanimoto": TanimotoSimilarityGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
@@ -678,7 +828,7 @@ class StructureGrouperFactory:
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
-            if strategy == "rmsd":
+            if strategy.startswith("rmsd"):
                 return groupers[strategy](
                     structures,
                     threshold=threshold,
