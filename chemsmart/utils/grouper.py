@@ -120,7 +120,7 @@ class RMSDGrouperSymmetric(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.5,  # RMSD threshold for grouping
+        threshold: float = 1.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
@@ -271,7 +271,7 @@ class RMSDGrouperSimple(RMSDGrouperSymmetric):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.5,  # RMSD threshold for grouping
+        threshold: float = 1.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
