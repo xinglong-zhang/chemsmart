@@ -88,6 +88,10 @@ orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
 # filename matches with reactant r1 or r2
 orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
+orca_date_pattern = (
+    r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+)
+
 
 # filename pattern for gaussian output files
 
@@ -103,3 +107,5 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 
 # filename matches with reactant r1 or r2
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+
+gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."

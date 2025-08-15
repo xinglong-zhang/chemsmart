@@ -67,6 +67,10 @@ class ORCAOutput(ORCAFileMixin):
     def forces(self):
         return self._get_forces_for_molecules()
 
+    @cached_property
+    def num_forces(self):
+        return len(self.forces)
+
     def _get_forces_for_molecules(self):
         """Obtain a list of cartesian forces.
         Each force is stored as a np array of shape (num_atoms, 3).

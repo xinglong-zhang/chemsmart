@@ -8,6 +8,7 @@ from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
 
 
 class FileMixin:
@@ -97,8 +98,7 @@ class GaussianFileMixin(FileMixin):
     @property
     def date(self):
         last_line = self.contents[-1]
-        pattern = r"Normal termination of Gaussian.* at (.+)\."
-        match = re.search(pattern, last_line)
+        match = re.search(gaussian_date_pattern, last_line)
         if match:
             time_info = match.group(1)
             try:
@@ -335,12 +335,9 @@ class ORCAFileMixin(FileMixin):
 
     @property
     def date(self):
-        pattern = (
-            r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
-        )
         for line in self.contents:
             if "Starting time:" in line:
-                match = re.search(pattern, line)
+                match = re.search(orca_date_pattern, line)
                 if match:
                     time_info = match.group(1)
                     try:
