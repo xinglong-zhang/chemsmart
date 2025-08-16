@@ -448,6 +448,51 @@ class TestMoleculeAdvanced:
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
 
+    def test_convert_ase_atoms_with_constraints_to_molecule(
+        self, constrained_atoms
+    ):
+        """Test conversion of ASE Atoms with constraints to Molecule."""
+        from chemsmart.io.molecules.atoms import AtomsChargeMultiplicity
+
+        mol = AtomsChargeMultiplicity.from_atoms(
+            constrained_atoms
+        ).to_molecule(charge=0, multiplicity=1)
+
+        assert isinstance(mol, Molecule)
+        assert np.all(mol.symbols == ["Ar", "Ar"])
+        assert mol.energy == 0.0
+        assert np.allclose(
+            mol.forces, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
+        )
+        assert np.allclose(
+            mol.velocities, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
+        )
+        assert mol.frozen_atoms == [0, -1]  # Frozen atoms should be 1-indexed
+        assert mol.charge == 0
+        assert mol.multiplicity == 1
+
+        # no charge and multiplicity specification
+        mol_no_charge_mult = AtomsChargeMultiplicity.from_atoms(
+            constrained_atoms
+        ).to_molecule()
+        assert isinstance(mol_no_charge_mult, Molecule)
+        assert np.all(mol_no_charge_mult.symbols == ["Ar", "Ar"])
+        assert mol_no_charge_mult.energy == 0.0
+        assert np.allclose(
+            mol_no_charge_mult.forces,
+            np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
+        )
+        assert np.allclose(
+            mol_no_charge_mult.velocities,
+            np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
+        )
+        assert mol_no_charge_mult.frozen_atoms == [
+            0,
+            -1,
+        ]  # Frozen atoms should be 1-indexed
+        assert mol_no_charge_mult.charge is None
+        assert mol_no_charge_mult.multiplicity is None
+
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""
         mol = Molecule(
