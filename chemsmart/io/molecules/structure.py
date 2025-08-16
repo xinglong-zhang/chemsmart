@@ -39,7 +39,7 @@ class Molecule:
         The charge of the molecule.
     multiplicity: integer
         The multiplicity of the molecule.
-    frozen_atoms: list of integers to freeze atoms in the molecule.
+    frozen_atoms: list of integers, one for each atom, indicating which atoms are frozen.
         Follows Gaussian input file format where -1 denotes frozen atoms
         and 0 denotes relaxed atoms.
     pbc_conditions: list of integers
@@ -584,7 +584,10 @@ class Molecule:
         from .atoms import AtomsChargeMultiplicity
 
         ase_atoms = ase_read(filepath, index=index, **kwargs)
+        logger.debug(f"Read ASE atoms: {ase_atoms}")
+
         if isinstance(ase_atoms, list):
+            logger.debug(f"Read {len(ase_atoms)} ASE atoms.")
             return [
                 AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
                 for atoms in ase_atoms
@@ -629,11 +632,10 @@ class Molecule:
 
     @classmethod
     def from_ase_atoms(cls, atoms):
-        return cls(
-            symbols=atoms.get_chemical_symbols(),
-            positions=atoms.get_positions(),
-            pbc_conditions=atoms.get_pbc(),
-        )
+        """Creates a Molecule instance from an ASE Atoms object."""
+        from .atoms import AtomsChargeMultiplicity
+
+        return AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
 
     @classmethod
     def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
@@ -789,7 +791,13 @@ class Molecule:
 
     def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
-        if self.pbc_conditions is not None:
+        if self.pbc_conditions is None or not any(self.pbc_conditions):
+            # this happens when self.pbc_conditions = [False, False, False]
+            # when the structure is read in from e.g., ASE database
+            logger.debug("No PBC conditions to write.")
+            return
+        else:
+            logger.debug(f"Writing PBC conditions: {self.pbc_conditions}")
             assert (
                 self.translation_vectors is not None
             ), "Translation vectors should not be None when PBC conditions are given!"
@@ -1188,6 +1196,11 @@ class Molecule:
             cell=self.translation_vectors,
             charge=self.charge,
             multiplicity=self.multiplicity,
+            frozen_atoms=self.frozen_atoms,
+            energy=self.energy,
+            forces=self.forces,
+            velocities=self.velocities,
+            info=self.info,
         )
 
     def to_pymatgen(self):
@@ -1271,7 +1284,7 @@ class CoordinateBlock:
 
     @property
     def constrained_atoms(self):
-        """Returns a list of contraints in Gaussian format where 0 means unconstrained
+        """Returns a list of constraints in Gaussian format where 0 means unconstrained
         and -1 means constrained."""
         return self._get_constraints()
 
