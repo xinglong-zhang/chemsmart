@@ -242,6 +242,9 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
 
     def adjust_to_0based(index):
         """Adjust a 1-based index to 0-based. Handles None gracefully."""
+        # raise error if index is 0, since requires 1-based indexing
+        if index == 0:
+            raise ValueError("Index cannot be 0 in 1-based indexing.")
         return index - 1 if index is not None else None
 
     # If it's not a slice, handle as a single integer or string

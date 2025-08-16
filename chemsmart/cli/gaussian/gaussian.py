@@ -395,21 +395,36 @@ def gaussian(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        logger.debug(f"Using molecule with index: {index}")
         try:
-            # try to get molecule using python style string indexing,
-            # but in 1-based
-            from chemsmart.utils.utils import string2index_1based
+            # Try numeric index
+            index_int = int(index)
+        except (TypeError, ValueError):
+            try:
+                from chemsmart.utils.utils import string2index_1based
 
-            index = string2index_1based(index)
-            molecules = molecules[index]
+                index_list = string2index_1based(index)
+                logger.debug(f"Using molecule with index slices: {index_list}")
+                molecules = molecules[index_list]
+                if not isinstance(molecules, list):
+                    molecules = [molecules]
+            except ValueError:
+                # Last resort: user-defined ranges
+                index_list = get_list_from_string_range(index)
+                logger.debug(f"Using molecule with indices: {index_list}")
+                molecules = [molecules[i - 1] for i in index_list]
+        else:
+            # Only runs if int() succeeded
+            if index_int < 1:
+                raise ValueError(
+                    f"Index {index_int} is out of range! Please provide a positive integer.\n"
+                    f"Available indices are from 1 to {len(molecules)}."
+                )
+            index0 = index_int - 1
+            molecules = molecules[index0]
+            logger.debug(f"Using molecule with index: {index_int}")
             if not isinstance(molecules, list):
                 molecules = [molecules]
-        except ValueError:
-            # except user defined indices such as s='[1-3,28-31,34-41]'
-            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+            logger.debug(f"Obtained molecule: {molecules}")
 
     logger.debug(f"Obtained molecules: {molecules}")
 

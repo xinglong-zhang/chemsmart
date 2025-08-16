@@ -19,7 +19,7 @@ from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
-from chemsmart.utils.utils import file_cache
+from chemsmart.utils.utils import file_cache, string2index_1based
 
 p = pt()
 
@@ -553,8 +553,11 @@ class Molecule:
         """Reads a file using ASE and returns a Molecule object."""
         from .atoms import AtomsChargeMultiplicity
 
+        # supplied index is 1-indexed, thus need to convert
+        index = string2index_1based(index)
+
         ase_atoms = ase_read(filepath, index=index, **kwargs)
-        logger.debug(f"Read ASE atoms: {ase_atoms}")
+        logger.debug(f"Read ASE atoms: {ase_atoms} at index {index}")
 
         if isinstance(ase_atoms, list):
             logger.debug(f"Read {len(ase_atoms)} ASE atoms.")
@@ -796,10 +799,10 @@ class Molecule:
         pass
 
     def __repr__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
     def __str__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
     @cached_property
     def distance_matrix(self):

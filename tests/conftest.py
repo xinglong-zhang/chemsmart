@@ -1095,6 +1095,15 @@ def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
 
 
+@pytest.fixture()
+def constrained_pbc_db_file(io_test_directory):
+    """Fixture of a .db file containing constrained PBC database
+    from heterogeneous catalysis."""
+    return os.path.join(
+        io_test_directory, "heterogenous_pbc_constraints_5images.db"
+    )
+
+
 ## fixtures for mixins
 @pytest.fixture()
 def temp_text_file():

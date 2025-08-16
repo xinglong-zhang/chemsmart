@@ -496,6 +496,122 @@ class TestMoleculeAdvanced:
         assert mol_no_charge_mult.charge is None
         assert mol_no_charge_mult.multiplicity is None
 
+    def test_molecule_from_db_with_pbc_and_constraints(
+        self, constrained_pbc_db_file
+    ):
+        """Test creation of Molecule from database with PBC and constraints."""
+        mol = Molecule.from_filepath(
+            constrained_pbc_db_file,
+            index="0",
+        )
+
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 96
+        assert mol.chemical_formula == "Co25Cu9Fe9Mo44Ni9"
+        assert np.all(mol.pbc_conditions == [True, True, True])
+        assert len(mol.translation_vectors) == 3
+        assert mol.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        # my_list = mol.frozen_atoms
+        # indices = [i for i, x in enumerate(my_list) if x == -1]
+        # print(indices)
+
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""
         mol = Molecule(
