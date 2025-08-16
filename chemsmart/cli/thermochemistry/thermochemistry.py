@@ -112,6 +112,14 @@ def click_thermochemistry_options(f):
         "thermochemistry results to this file.",
     )
     @click.option(
+        "-O",
+        "--overwrite",
+        is_flag=True,
+        default=False,
+        show_default=True,
+        help="Overwrite existing output files if they already exist.",
+    )
+    @click.option(
         "-i",
         "--check-imaginary-frequencies",
         is_flag=True,
@@ -145,6 +153,7 @@ def thermochemistry(
     weighted,
     energy_units,
     outputfile,
+    overwrite,
     check_imaginary_frequencies,
     skip_completed,
     **kwargs,
@@ -176,6 +185,7 @@ def thermochemistry(
         h_freq_cutoff=cutoff_enthalpy,
         energy_units=energy_units,
         outputfile=outputfile,
+        overwrite=overwrite,
         check_imaginary_frequencies=check_imaginary_frequencies,
     )
 

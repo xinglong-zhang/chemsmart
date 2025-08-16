@@ -114,9 +114,33 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
                 h_freq_cutoff=self.settings.h_freq_cutoff,
                 energy_units=self.settings.energy_units,
                 outputfile=self.settings.outputfile,
+                overwrite=self.settings.overwrite,
                 check_imaginary_frequencies=self.settings.check_imaginary_frequencies,
             )
-            thermochemistry.compute_boltzmann_averages()
+            (
+                structure,
+                electronic_energy,
+                zero_point_energy,
+                enthalpy,
+                qrrho_enthalpy,
+                entropy_times_temperature,
+                qrrho_entropy_times_temperature,
+                gibbs_free_energy,
+                qrrho_gibbs_free_energy,
+            ) = thermochemistry.compute_boltzmann_averages()
+            thermochemistry.log_results_to_file(
+                structure,
+                electronic_energy,
+                zero_point_energy,
+                enthalpy,
+                qrrho_enthalpy,
+                entropy_times_temperature,
+                qrrho_entropy_times_temperature,
+                gibbs_free_energy,
+                qrrho_gibbs_free_energy,
+                outputfile=self.settings.outputfile,
+                overwrite=self.settings.overwrite,
+            )
 
         except Exception as e:
             logger.error(f"Error processing {self.filename}: {e}")
