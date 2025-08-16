@@ -216,7 +216,7 @@ class TestStructures:
         assert first_mol.charge == 1
         assert first_mol.multiplicity == 1
         assert first_ase_atoms.charge == 1
-        assert first_ase_atoms.spin_multiplicity == 1
+        assert first_ase_atoms.multiplicity == 1
         first_py_structure = first_mol.to_pymatgen()
         last_py_structure = last_mol.to_pymatgen()
         assert isinstance(first_py_structure, PMGMolecule)
@@ -467,7 +467,10 @@ class TestMoleculeAdvanced:
         assert np.allclose(
             mol.velocities, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
         )
-        assert mol.frozen_atoms == [-1, 0]  # -1: frozen atom, 0: relaxed atom (Gaussian format)
+        assert mol.frozen_atoms == [
+            -1,
+            0,
+        ]  # -1: frozen atom, 0: relaxed atom (Gaussian format)
         assert mol.charge == 0
         assert mol.multiplicity == 1
 
@@ -487,8 +490,8 @@ class TestMoleculeAdvanced:
             np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
         )
         assert mol_no_charge_mult.frozen_atoms == [
-            0,
             -1,
+            0,
         ]  # Frozen atoms should be 1-indexed
         assert mol_no_charge_mult.charge is None
         assert mol_no_charge_mult.multiplicity is None

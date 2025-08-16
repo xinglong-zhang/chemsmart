@@ -605,7 +605,7 @@ class Molecule:
         """Creates a Molecule instance from an ASE Atoms object."""
         from .atoms import AtomsChargeMultiplicity
 
-        return AtomsChargeMultiplicity.from_atoms(atoms)
+        return AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
 
     @classmethod
     def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
