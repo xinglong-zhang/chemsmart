@@ -120,16 +120,32 @@ class AtomsChargeMultiplicity(Atoms):
         # TODO: may need to convert velocities from ASE Atoms to Molecule
         # although this is not used in the current implementation
 
+        # Check for valid calculator before calling get_potential_energy
+        if atoms.calc is not None:
+            try:
+                energy = atoms.get_potential_energy()
+                forces = atoms.get_forces()
+                velocities = atoms.get_velocities()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to obtain energy or forces from {atoms.calc}. "
+                    "Ensure that the Atoms object has a valid calculator."
+                ) from e
+        else:
+            energy = None
+            forces = None
+            velocities = None
+
         return cls(
             charge=charge,
             multiplicity=multiplicity,
             frozen_atoms=frozen_atoms,
-            energy=atoms.get_potential_energy(),
-            forces=atoms.get_forces(),
+            energy=energy,
+            forces=forces,
             symbols=atoms.get_chemical_symbols(),
             positions=atoms.get_positions(),
             pbc=atoms.get_pbc(),
             cell=atoms.get_cell(),  # translation vectors
-            velocities=atoms.get_velocities(),  # velocities
+            velocities=velocities,  # velocities
             info=atoms.info,
         )
