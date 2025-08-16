@@ -73,12 +73,82 @@ class MoleculeGrouper(ABC):
         return [group[0] for group in groups]
 
 
-class RMSDGrouperSymmetric(MoleculeGrouper):
+class RMSDGrouper(MoleculeGrouper):
+    """Base class for RMSD-based molecular grouping.
+
+    This abstract class provides common functionality for RMSD-based molecular grouping,
+    including threshold management, heavy atom filtering, and parallel processing setup.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = 1.5,  # RMSD threshold for grouping
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
+    ):
+        super().__init__(molecules, num_procs)
+        self.threshold = threshold
+        self.align_molecules = align_molecules
+        self.ignore_hydrogens = ignore_hydrogens
+
+    def _get_heavy_atoms(self, mol):
+        """Extract heavy atom positions and symbols."""
+        heavy_indices = [i for i, s in enumerate(mol.symbols) if s != "H"]
+        positions = mol.positions[heavy_indices]
+        symbols = [mol.symbols[i] for i in heavy_indices]
+        return positions, symbols
+
+    @abstractmethod
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """Calculate RMSD between two molecules. Must be implemented by subclasses."""
+        pass
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group molecules by geometric similarity using connected components."""
+        n = len(self.molecules)
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+
+        # Use map for better parallelism
+        with multiprocessing.Pool(self.num_procs) as pool:
+            rmsd_values = pool.map(self._calculate_rmsd, indices)
+
+        # Build adjacency matrix
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            if rmsd < self.threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Group molecules and indices
+        unique_labels = np.unique(labels)
+        groups = [
+            [self.molecules[i] for i in np.where(labels == label)[0]]
+            for label in unique_labels
+        ]
+        index_groups = [
+            list(np.where(labels == label)[0]) for label in unique_labels
+        ]
+
+        return groups, index_groups
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
+            f"ignore_hydrogens={self.ignore_hydrogens})"
+        )
+
+
+class RMSDGrouperSymmetric(RMSDGrouper):
     """Groups molecules based on RMSD (Root Mean Square Deviation) with symmetry consideration.
 
     This version handles molecular symmetries by finding optimal atom correspondence
-    using the Hungarian algorithm before alignment. 
-    References are as follows: http://dx.doi.org/10.1021/ci400534h, 
+    using the Hungarian algorithm before alignment.
+    References are as follows: http://dx.doi.org/10.1021/ci400534h,
     https://doi.org/10.1186/s13321-020-00455-2.
     It's designed for scenarios where
     atom ordering might differ between conformers, such as CREST-generated structures
@@ -106,14 +176,14 @@ class RMSDGrouperSymmetric(MoleculeGrouper):
         Molecule type / context	                    Typical RMSD threshold for grouping
         Small rigid molecules                        0.5–1.0 Å
         (≤20 heavy atoms, little flexibility)	     – distinguishes small conformational changes clearly
-        
+
         Flexible drug-like molecules                 1.0–2.0 Å
         (rotatable bonds, ~20–50 heavy atoms)	     – allows grouping of conformers differing mainly in torsions
 
-        Large biomolecules or peptides	             2.0–3.0 Å for same fold; 
+        Large biomolecules or peptides	             2.0–3.0 Å for same fold;
                                                      ≥3 Å often indicates different conformations/folds
-                                                     
-        Coarse clustering for diverse sets	         2.0–4.0 Å 
+
+        Coarse clustering for diverse sets	         2.0–4.0 Å
                                                      – groups into broad families rather than fine differences
     """
 
@@ -124,23 +194,16 @@ class RMSDGrouperSymmetric(MoleculeGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
-        use_fallback: bool = True,  # Try direct alignment first, then Hungarian
+        use_fallback: bool = True,
     ):
-        super().__init__(molecules, num_procs)
-        self.threshold = threshold  # RMSD threshold for grouping
-        self.align_molecules = align_molecules
-        self.ignore_hydrogens = ignore_hydrogens
+        super().__init__(
+            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+        )
         self.use_fallback = use_fallback
         # Cache sorted chemical symbols as sets for faster comparison
         self._chemical_symbol_sets = [
             set(mol.chemical_symbols) for mol in molecules
         ]
-
-    def _get_heavy_atoms(self, mol):
-        heavy_indices = [i for i, s in enumerate(mol.symbols) if s != "H"]
-        positions = mol.positions[heavy_indices]
-        symbols = [mol.symbols[i] for i in heavy_indices]
-        return positions, symbols
 
     def _calculate_rmsd(self, idx_pair):
         i, j = idx_pair
@@ -208,45 +271,8 @@ class RMSDGrouperSymmetric(MoleculeGrouper):
         )
         return rmsd
 
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules by geometric similarity."""
-        n = len(self.molecules)
-        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
 
-        # Use map instead of imap_unordered for better parallelism
-        with multiprocessing.Pool(self.num_procs) as pool:
-            rmsd_values = pool.map(self._calculate_rmsd, indices)
-
-        # Build adjacency matrix
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        # Find connected components
-        _, labels = connected_components(csr_matrix(adj_matrix))
-
-        # Use np.unique(labels) approach for better memory efficiency
-        unique_labels = np.unique(labels)
-        groups = [
-            [self.molecules[i] for i in np.where(labels == label)[0]]
-            for label in unique_labels
-        ]
-        index_groups = [
-            list(np.where(labels == label)[0]) for label in unique_labels
-        ]
-
-        return groups, index_groups
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(threshold={self.threshold}, "
-            f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
-            f"ignore_hydrogens={self.ignore_hydrogens})"
-        )
-
-
-class RMSDGrouperSimple(RMSDGrouperSymmetric):
+class RMSDGrouperSimple(RMSDGrouper):
     """Simple RMSD grouper without symmetry consideration for fast molecular comparison.
 
     This lightweight version assumes atoms are in the same order and directly applies
@@ -265,25 +291,8 @@ class RMSDGrouperSimple(RMSDGrouperSymmetric):
 
     Warning:
         Although it is much faster than RMSDGrouperSymmetric，it will produce incorrect results
-        if atom ordering differs between conformers of the same molecule.
+        for symmetric molecules or when conformers have mismatched atom ordering.
     """
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        threshold: float = 1.5,  # RMSD threshold for grouping
-        num_procs: int = 1,
-        align_molecules: bool = True,
-        ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
-    ):
-        # Initialize parent with symmetry disabled
-        super().__init__(
-            molecules=molecules,
-            threshold=threshold,
-            num_procs=num_procs,
-            align_molecules=align_molecules,
-            ignore_hydrogens=ignore_hydrogens,
-        )
 
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """Calculate RMSD between two molecules without atom reordering."""
@@ -311,55 +320,44 @@ class RMSDGrouperSimple(RMSDGrouperSymmetric):
             # No alignment, direct RMSD calculation
             return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group molecules by geometric similarity."""
-        n = len(self.molecules)
-        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
-
-        # Use map instead of imap_unordered for better parallelism
-        with multiprocessing.Pool(self.num_procs) as pool:
-            rmsd_values = pool.map(self._calculate_rmsd, indices)
-
-        # Build adjacency matrix
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        # Find connected components
-        _, labels = connected_components(csr_matrix(adj_matrix))
-
-        # Use np.unique(labels) approach for better memory efficiency
-        unique_labels = np.unique(labels)
-        groups = [
-            [self.molecules[i] for i in np.where(labels == label)[0]]
-            for label in unique_labels
-        ]
-        index_groups = [
-            list(np.where(labels == label)[0]) for label in unique_labels
-        ]
-
-        return groups, index_groups
-
 
 class RMSDGrouperSharedMemory(MoleculeGrouper):
-    """Group molecules based on RMSD using shared memory with minimal locking."""
+    """Group molecules based on RMSD using shared memory with minimal locking.
+    Uses symmetric RMSD grouper.
+
+    This implementation uses multiprocessing.RawArray for shared memory to minimize
+    locking overhead and improve parallel performance for large molecule sets.
+    """
 
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 3.5,  # RMSD threshold for grouping
+        threshold: float = 1.5,
         num_procs: int = 1,
         align_molecules: bool = True,
+        ignore_hydrogens: bool = False,
     ):
         super().__init__(molecules, num_procs)
         self.threshold = threshold
         self.align_molecules = align_molecules
+        self.ignore_hydrogens = ignore_hydrogens
+        # Store symbols list for each molecule
+        self.symbols_list = [list(mol.symbols) for mol in self.molecules]
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group molecules using shared memory with optimized parallelism."""
         n = len(self.molecules)
+        if n == 0:
+            return [], []
+
+        # Check if all molecules have the same number of atoms
         num_atoms = self.molecules[0].positions.shape[0]
+        if not all(
+            mol.positions.shape[0] == num_atoms for mol in self.molecules
+        ):
+            raise ValueError(
+                "All molecules must have the same number of atoms for shared memory approach"
+            )
 
         # 🧠 **1️⃣ Create Shared Memory (RawArray - Faster, Less Locking)**
         shared_pos = RawArray("d", n * num_atoms * 3)  # 'd' -> float64
@@ -378,7 +376,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         with multiprocessing.Pool(
             self.num_procs,
             initializer=self._init_worker,
-            initargs=(shared_pos, (n, num_atoms, 3)),
+            initargs=(shared_pos, (n, num_atoms, 3), self.symbols_list),
         ) as pool:
             rmsd_values = pool.map(self._calculate_rmsd, indices)
 
@@ -399,24 +397,35 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         return groups, index_groups
 
     @staticmethod
-    def _init_worker(shared_pos, pos_shape):
+    def _init_worker(shared_pos, pos_shape, symbols_list):
         """Worker process initializer to attach shared memory."""
-        global shared_positions
+        global shared_positions, shared_symbols_list
+        n, num_atoms, _ = pos_shape
         shared_positions = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            pos_shape
+            n, num_atoms, 3
         )
+        shared_symbols_list = symbols_list
 
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """Calculate RMSD efficiently using local copies of shared memory."""
         i, j = idx_pair
 
-        # Read from Shared Memory ONCE (No repeated locking)
-        pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
+        pos1 = np.array(shared_positions[i])
         pos2 = np.array(shared_positions[j])
 
-        symbols1 = self.symbols_list[i]
-        symbols2 = self.symbols_list[j]
+        symbols1 = shared_symbols_list[i]
+        symbols2 = shared_symbols_list[j]
 
+        # Apply hydrogen filtering if requested
+        if self.ignore_hydrogens:
+            heavy_indices1 = [k for k, s in enumerate(symbols1) if s != "H"]
+            heavy_indices2 = [k for k, s in enumerate(symbols2) if s != "H"]
+            pos1 = pos1[heavy_indices1]
+            pos2 = pos2[heavy_indices2]
+            symbols1 = [symbols1[k] for k in heavy_indices1]
+            symbols2 = [symbols2[k] for k in heavy_indices2]
+
+        # Quick compatibility check
         if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
             symbols2
         ):
@@ -429,13 +438,16 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             idxs1 = [k for k, s in enumerate(symbols1) if s == elem]
             idxs2 = [k for k, s in enumerate(symbols2) if s == elem]
 
-            dist_matrix = np.sum(
-                (pos1[idxs1, None, :] - pos2[None, idxs2, :]) ** 2, axis=2
-            )
-            row_ind, col_ind = linear_sum_assignment(dist_matrix)
-
-            matched_idx1.extend([idxs1[r] for r in row_ind])
-            matched_idx2.extend([idxs2[c] for c in col_ind])
+            if len(idxs1) == 1 and len(idxs2) == 1:
+                matched_idx1.extend(idxs1)
+                matched_idx2.extend(idxs2)
+            else:
+                dist_matrix = np.sum(
+                    (pos1[idxs1, None, :] - pos2[None, idxs2, :]) ** 2, axis=2
+                )
+                row_ind, col_ind = linear_sum_assignment(dist_matrix)
+                matched_idx1.extend([idxs1[r] for r in row_ind])
+                matched_idx2.extend([idxs2[c] for c in col_ind])
 
         pos1_matched = pos1[matched_idx1]
         pos2_matched = pos2[matched_idx2]
@@ -449,6 +461,13 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             np.mean(np.sum((pos1_matched - pos2_matched) ** 2, axis=1))
         )
         return rmsd
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
+            f"ignore_hydrogens={self.ignore_hydrogens})"
+        )
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
