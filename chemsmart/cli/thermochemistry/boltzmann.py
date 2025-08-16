@@ -2,6 +2,7 @@ import logging
 
 import click
 
+from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 
 from .thermochemistry import thermochemistry
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 @thermochemistry.command(cls=MyCommand)
 @click.pass_context
+@click_job_options
 @click.option(
     "-w",
     "--energy-type-for-weighting",
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 )
 def boltzmann(
     ctx,
+    skip_completed,
     energy_type_for_weighting="gibbs",
     outputfile=None,
 ):
@@ -37,6 +40,7 @@ def boltzmann(
         energy_type=energy_type_for_weighting,
         outputfile=outputfile,
         settings=job_settings.copy(),
+        skip_completed=skip_completed,
     )
 
     boltzmann_thermochemistry.compute_boltzmann_averages()
