@@ -109,9 +109,9 @@ class AtomsChargeMultiplicity(Atoms):
         if len(frozen_atoms) == 0:
             frozen_atoms = None
         else:
-            # convert the 1-indexed list to masks where 0 means frozen and -1 means not frozen
+            # convert the 1-indexed list to masks where -1 means frozen and 0 means not frozen
             frozen_atoms = [
-                0 if i + 1 in frozen_atoms else -1 for i in range(len(atoms))
+                -1 if i + 1 in frozen_atoms else 0 for i in range(len(atoms))
             ]
 
         # if no pbc, then should set translation vectors to None
