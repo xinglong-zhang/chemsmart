@@ -69,7 +69,7 @@ class TestGaussianJobs:
             filename=constrained_pbc_db_file,
             settings=settings,
             label="gaussian_pbc_constraint_opt",
-            index="0",  # assuming the first index is used
+            index="0",  # assuming the first index is used # this should cause error from the index conversion since we want 1-based
             jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianOptJob)
