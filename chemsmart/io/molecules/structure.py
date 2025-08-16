@@ -761,7 +761,7 @@ class Molecule:
 
     def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
-        if not any(self.pbc_conditions) or self.pbc_conditions is None:
+        if self.pbc_conditions is None or not any(self.pbc_conditions):
             # this happens when self.pbc_conditions = [False, False, False]
             # when the structure is read in from e.g., ASE database
             logger.debug("No PBC conditions to write.")
