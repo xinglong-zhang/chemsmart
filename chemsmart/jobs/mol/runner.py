@@ -201,7 +201,6 @@ class PyMOLJobRunner(JobRunner):
                 command += f' -d "{style_cmds}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
-
         return command
 
     def _setup_viewport(self, command):
@@ -691,7 +690,6 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _save_pse_command(self, job, command):
         # Append the final PyMOL commands, quoting the output file path
         command += f"; save {quote_path(job.spin_basename)}.pse"
-
         return command
 
 
@@ -702,13 +700,19 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
         """Sets proper file paths for job input, output, and error files."""
         super()._assign_variables(job)
         self.job_logfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.log")
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.log"
+            )
         )
         self.job_outputfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.out")
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.out"
+            )
         )
         self.job_errfile = os.path.abspath(
-            os.path.join(job.folder, f"{len(job.molecule)}molecules_align.err")
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.err"
+            )
         )
 
     def _write_input(self, job):
@@ -731,6 +735,23 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                 logger.info(f"Writing molecule {name} to {abs_xyz_path}")
             job.xyz_absolute_paths.append(abs_xyz_path)
             job.mol_names.append(name)
+
+    def _setup_style(self, job, command):
+        if job.style is None or job.style.lower() == "pymol":
+            molnames = job.mol_names
+            style_cmds = "; ".join(
+                [f"pymol_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        elif job.style.lower() == "cylview":
+            molnames = job.mol_names
+            style_cmds = "; ".join(
+                [f"cylview_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        else:
+            raise ValueError(f"The style {job.style} is not available!")
+        return command
 
     def _get_visualization_command(self, job):
         exe = quote_path(self.executable)
@@ -788,7 +809,7 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
 
     def _save_pse_command(self, job, command):
         n_mol = len(job.molecule)
-        pse_filename = f"{n_mol}molecules_align.pse"
+        pse_filename = f"alignment_{n_mol}molecules.pse"
         pse_path = os.path.join(job.folder, pse_filename)
         command += f"; save {quote_path(pse_path)}"
         return command

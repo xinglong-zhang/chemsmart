@@ -252,7 +252,10 @@ def mol(
             for mol in mols:
                 mol.name = os.path.splitext(os.path.basename(file))[0]
             molecules += mols
-        logger.debug(f"Loaded {len(molecules)} molecules from {file}")
+        logger.debug(
+            f"Loaded {len(molecules)} molecules from {len(filename)} file(s)"
+        )
+
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -284,7 +287,11 @@ def mol(
 
         label = os.path.splitext(os.path.basename(base_file))[0]
 
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+    # Only log if we have molecules
+    if "molecules" in locals():
+        logger.debug(
+            f"Obtained molecules: {molecules} before applying indices"
+        )
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list

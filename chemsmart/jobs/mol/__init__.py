@@ -13,11 +13,11 @@ jobs = PyMOLJob.subclasses()
 __all__ = [
     "PyMOLAlignJob",
     "PyMOLIRCMovieJob",
+    "PyMOLVisualizationJob",
     "PyMOLJobRunner",
     "PyMOLMOJob",
     "PyMOLMovieJob",
     "PyMOLNCIJob",
     "PyMOLSpinJob",
-    "PyMOLVisualizationJob",
     "jobs",
 ]
