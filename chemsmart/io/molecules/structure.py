@@ -346,10 +346,19 @@ class Molecule:
             for i in range(3)
         ]
 
-    def _compute_average_rotational_constant(self, moments_of_inertia):
+    @property
+    def average_rotational_constant_weighted_mass(self):
+        return self._compute_average_rotational_constant_weighted_mass
+
+    @property
+    def average_rotational_constant_most_abundant_mass(self):
+        return self._compute_average_rotational_constant_most_abundant_mass
+
+    @cached_property
+    def _compute_average_rotational_constant_weighted_mass(self):
         I_SI = [
             i * (units._amu * (units.Ang / units.m) ** 2)
-            for i in moments_of_inertia
+            for i in self.moments_of_inertia_weighted_mass
         ]
         if self.is_monoatomic:
             return None
@@ -364,17 +373,24 @@ class Molecule:
         ]
         return sum(rotational_constants) / len(rotational_constants)
 
-    @property
-    def average_rotational_constant_weighted_mass(self):
-        return self._compute_average_rotational_constant(
-            self.moments_of_inertia_weighted_mass
-        )
+    @cached_property
+    def _compute_average_rotational_constant_most_abundant_mass(self):
+        I_SI = [
+            i * (units._amu * (units.Ang / units.m) ** 2)
+            for i in self.moments_of_inertia_most_abundant_mass
+        ]
+        if self.is_monoatomic:
+            return None
+        if self.is_linear:
+            return units._hplanck / (8 * np.pi**2 * I_SI[-1])
 
-    @property
-    def average_rotational_constant_most_abundant_mass(self):
-        return self._compute_average_rotational_constant(
-            self.moments_of_inertia_most_abundant_mass
-        )
+        assert (
+            len(I_SI) == 3
+        ), "Number of moments of inertia should be 3 for nonlinear molecules."
+        rotational_constants = [
+            units._hplanck / (8 * np.pi**2 * i) for i in I_SI
+        ]
+        return sum(rotational_constants) / len(rotational_constants)
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
