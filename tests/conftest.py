@@ -11,6 +11,9 @@ from rdkit import Chem
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
+    PyMOLAlignJobRunner,
+    PyMOLIRCMovieJobRunner,
+    PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
@@ -978,6 +981,21 @@ def pymol_visualization_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_movie_jobrunner(pbs_server):
     return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_align_jobrunner(pbs_server):
+    return PyMOLAlignJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_ircmovie_jobrunner(pbs_server):
+    return PyMOLIRCMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_mo_jobrunner(pbs_server):
+    return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing
