@@ -429,10 +429,26 @@ class FakeGaussian:
             )  # not real values
             g.write(f" Standard basis: {self.input_object.basis} (5D, 7F)\n")
             g.write(f" NAtoms=    {self.num_atoms}\n")
-            g.write(
-                f" SCF Done:  E({self.spin}{self.input_object.functional.upper()}) =  "
-                f"-{1000 * random()}  A.U. after   14 cycles\n"
-            )  # dummy energy
+            if self.input_object.functional is not None:
+                g.write(
+                    f" SCF Done:  E({self.spin}{self.input_object.functional.upper()}) =  "
+                    f"-{1000 * random()}  A.U. after   14 cycles\n"
+                )  # dummy energy
+            elif self.input_object.semiempirical is not None:
+                g.write(
+                    f" SCF Done:  E({self.input_object.semiempirical}) =  "
+                    f"-{1000 * random()}  A.U. after   14 cycles\n"
+                )
+            elif self.input_object.ab_initio is not None:
+                g.write(
+                    f" SCF Done:  E({self.input_object.ab_initio}) =  "
+                    f"-{1000 * random()}  A.U. after   14 cycles\n"
+                )
+            else:
+                g.write(
+                    f" SCF Done:  E(Unknow Method) =  "
+                    f"-{1000 * random()}  A.U. after   14 cycles\n"
+                )
             g.write(" Mulliken charges:\n")
             g.write("               1\n")
             for i in range(self.num_atoms):

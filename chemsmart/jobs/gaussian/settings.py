@@ -386,7 +386,14 @@ class GaussianJobSettings(MolecularJobSettings):
                 raise ValueError(
                     "Error: Basis set is required for DFT methods."
                 )
-            route_string += f" {self.functional} {self.basis}"
+            if self._genecp_file_specified:
+                if "genecp" in open(self.gen_genecp_file, "r").read().lower():
+                    basis = "genecp"
+                else:
+                    basis = "gen"
+                route_string += f" {self.functional} {basis}"
+            else:
+                route_string += f" {self.functional} {self.basis}"
 
         elif self.ab_initio is not None and self.functional is not None:
             raise ValueError(
