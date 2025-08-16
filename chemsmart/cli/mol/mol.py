@@ -256,6 +256,7 @@ def mol(
             f"Loaded {len(molecules)} molecules from {len(filename)} file(s)"
         )
 
+
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
