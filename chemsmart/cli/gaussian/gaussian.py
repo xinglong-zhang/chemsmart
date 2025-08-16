@@ -178,7 +178,15 @@ def click_gaussian_grouper_options(f):
         "-g",
         "--grouping-strategy",
         type=click.Choice(
-            ["rmsd", "tanimoto", "isomorphism", "formula", "connectivity"],
+            [
+                "rmsd",
+                "rmsd_simple",
+                "rmsd_symmetric",
+                "tanimoto",
+                "isomorphism",
+                "formula",
+                "connectivity",
+            ],
             case_sensitive=False,
         ),
         default=None,
