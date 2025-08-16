@@ -84,6 +84,10 @@ class AtomsChargeMultiplicity(Atoms):
     @classmethod
     def from_atoms(cls, atoms, charge=None, multiplicity=None):
         """Create AtomsChargeMultiplicity from ASE Atoms."""
+        from ase.calculators.calculator import (
+            CalculatorError,
+            PropertyNotImplementedError,
+        )
         from ase.constraints import FixAtoms
 
         # check if the Atoms object has any constraints, if yes, convert to 1-indexed list
@@ -126,7 +130,7 @@ class AtomsChargeMultiplicity(Atoms):
                 energy = atoms.get_potential_energy()
                 forces = atoms.get_forces()
                 velocities = atoms.get_velocities()
-            except Exception as e:
+            except (CalculatorError, PropertyNotImplementedError) as e:
                 raise RuntimeError(
                     f"Failed to obtain energy or forces from {atoms.calc}. "
                     "Ensure that the Atoms object has a valid calculator."
