@@ -114,6 +114,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
                 h_freq_cutoff=self.settings.h_freq_cutoff,
                 energy_units=self.settings.energy_units,
                 outputfile=self.settings.outputfile,
+                overwrite=self.settings.overwrite,
                 check_imaginary_frequencies=self.settings.check_imaginary_frequencies,
             )
             (
