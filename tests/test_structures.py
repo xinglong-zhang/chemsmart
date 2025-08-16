@@ -467,7 +467,7 @@ class TestMoleculeAdvanced:
         assert np.allclose(
             mol.velocities, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
         )
-        assert mol.frozen_atoms == [0, -1]  # Frozen atoms should be 1-indexed
+        assert mol.frozen_atoms == [-1, 0]  # -1: frozen atom, 0: relaxed atom (Gaussian format)
         assert mol.charge == 0
         assert mol.multiplicity == 1
 
