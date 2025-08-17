@@ -154,9 +154,10 @@ def click_nciplot_settings_options(f):
         "--ranges",
         type=tuple,
         default=None,
-        help="Ranges for computing properties. A lower and upper bounds are required for every interval.\n"
-        "Interval limits should be written in different lines.\n"
-        "Number of ranges given should match the number of ranges specified in --number-of-ranges option.",
+        help="Ranges for computing properties. A lower and upper bounds "
+        "are required for every interval (one per line).\n "
+        "Number of ranges given should match the number of ranges "
+        "specified in --number-of-ranges option.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
