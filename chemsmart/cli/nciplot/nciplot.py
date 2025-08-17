@@ -39,85 +39,124 @@ def click_nciplot_settings_options(f):
         help="name to be appended to file for the job",
     )
     @click.option(
-        "-t", "--title", type=str, default=None, help="Gaussian job title."
+        "-r",
+        "--rthres",
+        type=float,
+        default=None,
+        help="r distance along a cubic box.",
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the molecule"
-    )
-    @click.option(
-        "-m",
-        "--multiplicity",
+        "--ligand-file-number",
         type=int,
         default=None,
-        help="multiplicity of the molecule",
+        help="Ligand file number, corresponds to the nth file of the input.",
     )
     @click.option(
-        "-x",
-        "--functional",
-        type=str,
+        "--ligand-radius",
+        type=float,
         default=None,
-        help="New functional to run.",
+        help="Radius of interaction from ligand file n.",
     )
     @click.option(
-        "-b", "--basis", type=str, default=None, help="New basis set to run."
-    )
-    @click.option(
-        "-s",
-        "--semiempirical",
-        type=str,
+        "-rp",
+        "--radius-positions",
+        type=tuple,
         default=None,
-        help="Semiempirical method to run.",
+        help="(x, y, z) positions around which interactions are represented.",
     )
     @click.option(
-        "-i",
-        "--index",
-        type=str,
+        "-rr",
+        "--radius-r",
+        type=float,
         default=None,
-        help="Index of molecules to use; 1-based indices. "
-        "Default to the last molecule structure. 1-based index.",
+        help="Radius from which interactions are represented.",
     )
     @click.option(
-        "-o",
-        "--additional-opt-options",
-        type=str,
+        "-i1",
+        "--intercut1",
+        type=float,
         default=None,
-        help="additional opt options",
+        help="Cutoff 1, r1, for intermolecularity.",
     )
     @click.option(
-        "-r",
-        "--additional-route-parameters",
-        type=str,
+        "-i2",
+        "--intercut2",
+        type=float,
         default=None,
-        help="additional route parameters",
+        help="Cutoff 2, r2, for intermolecularity.",
     )
     @click.option(
-        "-A",
-        "--append-additional-info",
-        type=str,
+        "--increments",
+        type=tuple,
         default=None,
-        help="additional information to be appended at the end of the "
-        "input file. E.g, scrf=read",
+        help="Increments along the x, y, z directions of the cube in Å. "
+        "The default is set to 0.1, 0.1, 0.1.",
     )
     @click.option(
-        "-C",
-        "--custom-solvent",
-        type=str,
+        "--fragment-label",
+        type=int,
         default=None,
-        help="additional information to be appended at the end of the "
-        "input file. E.g, scrf=read",
+        help="ifile label given by the input order.",
     )
     @click.option(
-        "-d",
-        "--dieze-tag",
-        type=str,
+        "--fragment-atoms",
+        type=tuple,
         default=None,
-        help="dieze tag for gaussian job; possible options include "
-        '"n", "p", "t" to get "#n", "#p", "#t", respectively',
+        help="Atoms for the fragment.",
     )
     @click.option(
-        "--forces/--no-forces",
+        "-cdd",
+        "--cutoff-density-dat",
+        type=float,
+        default=None,
+        help="Cutoff for density used in creating the dat file.",
+    )
+    @click.option(
+        "-cdr",
+        "--cutoff-rdg-dat",
+        type=float,
+        default=None,
+        help="Cutoff for RDG (reduced density gradient) used in creating the dat file.",
+    )
+    @click.option(
+        "-cdc",
+        "--cutoff-density-cube",
+        type=float,
+        default=None,
+        help="Cutoff for density used in creating the cube file.",
+    )
+    @click.option(
+        "-cdr",
+        "--cutoff-rdg-cube",
+        type=float,
+        default=None,
+        help="Cutoff for RDG (reduced density gradient) used in creating the cube file.",
+    )
+    @click.option(
+        "--dgrid-promolecular",
+        type=float,
+        default=None,
+        help="Grids for promolecular densities.",
+    )
+    @click.option(
+        "--integrate/--no-integrate",
+        type=bool,
         default=False,
-        help="Whether to calculate forces.",
+        help="Trigger the integration of properties.",
+    )
+    @click.option(
+        "--number-of-ranges",
+        type=int,
+        default=None,
+        help="Number of ranges to compute properties.",
+    )
+    @click.option(
+        "--ranges",
+        type=tuple,
+        default=None,
+        help="Ranges for computing properties. A lower and upper bounds are required for every interval.\n"
+        "Interval limits should be written in different lines.\n"
+        "Number of ranges given should match the number of ranges specified in --number-of-ranges option.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
