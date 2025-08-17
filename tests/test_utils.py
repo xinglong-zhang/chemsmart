@@ -129,6 +129,7 @@ class TestUtils:
         s5 = "2:3"  # standard python slicing
         s6 = "1"  # single string index
         s7 = "-1"  # single python last index
+        s8 = "0"  # this will raise an error, as 1-based indices are expected
         assert objects[convert_string_index_from_1_based_to_0_based(s1)] == [
             "a",
             "b",
@@ -154,6 +155,8 @@ class TestUtils:
         assert [objects[convert_string_index_from_1_based_to_0_based(s7)]] == [
             "h"
         ]
+        with pytest.raises(ValueError):
+            convert_string_index_from_1_based_to_0_based(s8)
 
     def test_iterative_compare_list_of_elements(self):
         list1 = [1, 2, 3, 4, 5]
