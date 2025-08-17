@@ -285,6 +285,46 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
             raise ValueError(f"Invalid slice input: {stridx}")
 
 
+def convert_string_index_from_1_based_to_0_based(
+    index: Union[str, int, slice],
+) -> Union[int, slice, list]:
+    """Convert a string index from 1-based (from user input) to 0-based indexing.
+    Handles single indices, slices, and negative indices.
+
+    Args:
+        index: A string representing an index or slice, e.g., "1", "2:5",
+        "3:10:2", "-1" or user-defined indices such as "1-2,5".
+
+    Returns:
+        An integer or slice or list adjusted for 0-based indexing.
+    """
+    try:
+        # Try numeric index
+        index_int = int(index)
+    except (TypeError, ValueError):
+        try:
+            index_list = string2index_1based(index)
+        except ValueError:
+            # Last resort: user-defined ranges
+            index_list = get_list_from_string_range(index)
+            # convert back to 0-based indexing
+            index_list = [i - 1 for i in index_list]
+    else:
+        # Only runs if int() succeeded
+        if index_int == 0:
+            raise ValueError(
+                f"Index {index_int} is out of range, as 1-indexing is used!\n "
+                f"Please provide a positive integer.\n"
+            )
+        elif index_int < 0:
+            # If negative index, return as is
+            return index_int
+        else:
+            # Convert to 0-based indexing
+            return index_int - 1  # Convert to 0-based indexing
+    return index_list
+
+
 def get_value_by_number(num, data):
     # Iterate through all keys in the dictionary
     for key in data.keys():

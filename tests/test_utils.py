@@ -9,6 +9,7 @@ from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.utils import (
     cmp_with_ignore,
     content_blocks_by_paragraph,
+    convert_string_index_from_1_based_to_0_based,
     get_list_from_string_range,
     is_float,
     iterative_compare,
@@ -116,6 +117,42 @@ class TestUtils:
             39,
             40,
             41,
+        ]
+
+    def test_get_indices_from_string(self):
+        """Test the conversion of string indices to a list of integers; 1-based indices."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        s1 = "1:3"  # standard python slicing
+        s2 = "1,2,4"
+        s3 = "1-3"  # user-defined slicing, 1-3 inclusive
+        s4 = "[1-3]"  # user-defined slicing, 1-3 inclusive
+        s5 = "2:3"  # standard python slicing
+        s6 = "1"  # single string index
+        s7 = "-1"  # single python last index
+        assert objects[convert_string_index_from_1_based_to_0_based(s1)] == [
+            "a",
+            "b",
+        ]
+        assert [
+            objects[i]
+            for i in convert_string_index_from_1_based_to_0_based(s2)
+        ] == ["a", "b", "d"]
+        assert [
+            objects[i]
+            for i in convert_string_index_from_1_based_to_0_based(s3)
+        ] == ["a", "b", "c"]
+        assert [
+            objects[i]
+            for i in convert_string_index_from_1_based_to_0_based(s4)
+        ] == ["a", "b", "c"]
+        assert objects[convert_string_index_from_1_based_to_0_based(s5)] == [
+            "b"
+        ]
+        assert [objects[convert_string_index_from_1_based_to_0_based(s6)]] == [
+            "a"
+        ]
+        assert [objects[convert_string_index_from_1_based_to_0_based(s7)]] == [
+            "h"
         ]
 
     def test_iterative_compare_list_of_elements(self):
