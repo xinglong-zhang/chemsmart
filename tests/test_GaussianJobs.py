@@ -1,6 +1,8 @@
 import os
 from filecmp import cmp
 
+import pytest
+
 from chemsmart.jobs.gaussian import (
     GaussianOptJob,
 )
@@ -69,7 +71,7 @@ class TestGaussianJobs:
             filename=constrained_pbc_db_file,
             settings=settings,
             label="gaussian_pbc_constraint_opt",
-            index="0",  # assuming the first index is used # this should cause error from the index conversion since we want 1-based
+            index="-1",
             jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianOptJob)
@@ -80,12 +82,50 @@ class TestGaussianJobs:
         # write input file
         g16_writer.write(target_directory=tmpdir)
         g16_file = os.path.join(tmpdir, "gaussian_pbc_constraint_opt.com")
-        print(g16_file)
         assert os.path.isfile(g16_file)
         # check that the written file has constraints and PBC conditions
-        # with open(g16_file) as f:
-        #     for line in f.readlines():
-        #         if line.split()[0] in
-        #             assert "fix" in line.lower()
-        #         if "pbc" in line.lower():
-        #             assert "pbc" in line.lower()
+        lines = open(g16_file).readlines()
+        for i in range(8):
+            assert (
+                " -1 " in lines[i + 8]
+            )  # 8 lines before the coordinates in Gaussian input file
+            # this structure has frozen atoms at these positions,
+            # see test_structure.py::TestMoleculeAdvanced::test_molecule_from_db_with_pbc_and_constraints.py
+            # mol object (last structure/image).
+
+        job2 = GaussianOptJob.from_filename(
+            filename=constrained_pbc_db_file,
+            settings=settings,
+            label="gaussian_pbc_constraint_opt2",
+            index="1",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert isinstance(job2, GaussianOptJob)
+        g16_writer = GaussianInputWriter(
+            job=job2,
+        )
+
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file2 = os.path.join(tmpdir, "gaussian_pbc_constraint_opt2.com")
+        assert os.path.isfile(g16_file2)
+
+        # check that the written file has constraints and PBC conditions
+        lines = open(g16_file2).readlines()
+        for i in range(7):
+            assert (
+                " -1 " in lines[i + 8]
+            )  # 8 lines before the coordinates in Gaussian input file
+            # this structure has frozen atoms at these positions,
+            # see test_structure.py::TestMoleculeAdvanced::test_molecule_from_db_with_pbc_and_constraints.py
+            # mol2 object (first structure/image).
+
+        # job3 will fail to be created because the index is not valid (1-indexed)
+        with pytest.raises(ValueError):
+            GaussianOptJob.from_filename(
+                filename=constrained_pbc_db_file,
+                settings=settings,
+                label="gaussian_pbc_constraint_opt3",
+                index="0",
+                jobrunner=gaussian_jobrunner_no_scratch,
+            )

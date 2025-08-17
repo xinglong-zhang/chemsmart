@@ -325,6 +325,31 @@ def convert_string_index_from_1_based_to_0_based(
     return index_list
 
 
+def return_objects_from_string_index(list_of_objects, index):
+    """Return a list of objects from a list of objects based on the given index.
+    The index can be a single integer, a slice, or a list of integers.
+    If the index is negative, it will return the last n objects.
+    If the index is a string, it will convert it to an integer or slice first.
+    Index is 1-based, so inputting 0 will raise an error.
+    """
+    # convert index from 1-based (user input) to 0-based (python code-needed)
+    index = convert_string_index_from_1_based_to_0_based(index)
+    if isinstance(index, list):
+        # if index is a list, use it to select objects
+        objects = [list_of_objects[i] for i in index]
+    elif isinstance(index, int):
+        # if index is a single integer, use it to select a single object
+        objects = list_of_objects[index]
+    else:
+        # index is a Slice
+        objects = list_of_objects[index]
+
+    # if not isinstance(objects, list):
+    #     objects = [objects]
+
+    return objects
+
+
 def get_value_by_number(num, data):
     # Iterate through all keys in the dictionary
     for key in data.keys():
