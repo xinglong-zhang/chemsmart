@@ -326,7 +326,7 @@ def convert_string_index_from_1_based_to_0_based(
 
 
 def return_objects_from_string_index(list_of_objects, index):
-    """Return a list of objects from a list of objects based on the given index.
+    """Return objects from a list of objects based on the given index.
     The index can be a single integer, a slice, or a list of integers.
     If the index is negative, it will return the last n objects.
     If the index is a string, it will convert it to an integer or slice first.
