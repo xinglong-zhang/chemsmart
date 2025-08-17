@@ -6,7 +6,9 @@ import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.utils import (
+    convert_string_index_from_1_based_to_0_based,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +369,7 @@ def orca(
         keywords += ("forces",)
 
     # obtain molecule structure
+    molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -407,8 +410,20 @@ def orca(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        # return list of molecules
-        molecules = molecules[string2index_1based(index)]
+        # convert index from 1-based (user input) to 0-based (python code-needed)
+        index = convert_string_index_from_1_based_to_0_based(index)
+        if isinstance(index, list):
+            # if index is a list, use it to select molecules
+            molecules = [molecules[i] for i in index]
+        elif isinstance(index, int):
+            # if index is a single integer, use it to select a single molecule
+            molecules = molecules[index]
+        else:
+            # index is a Slice
+            molecules = molecules[index]
+
+        if not isinstance(molecules, list):
+            molecules = [molecules]
 
     logger.debug(f"Obtained molecules: {molecules}")
 
