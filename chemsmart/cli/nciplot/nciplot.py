@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def click_nciplot_settings_options(f):
-    """Common click options for Gaussian Settings."""
+    """Common click options for NCIPLOT Job Settings."""
 
     @click.option(
         "-f",
@@ -198,13 +198,13 @@ def nciplot(
     # get project settings
     project_settings = NCIPLOTJobSettings.from_project(project)
 
-    # obtain Gaussian Settings from filenames, if supplied; otherwise return defaults
+    # obtain NCIPLOT Settings from filenames, if supplied; otherwise return defaults
 
     if filename is None:
         # for cases where filenames is not supplied, eg, get structure from pubchem
         job_settings = NCIPLOTJobSettings.default()
         logger.info(
-            f"No filenames is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filenames is supplied and NCIPLOT default settings are used:\n{job_settings.__dict__} "
         )
     elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
         # filenames supplied - we would want to use the settings from here and do not use any defaults!
@@ -212,10 +212,6 @@ def nciplot(
     # elif filenames.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
     else:
         job_settings = NCIPLOTJobSettings.default()
-    # else:
-    #     raise ValueError(
-    #         f"Unrecognised filetype {filenames} to obtain GaussianJobSettings"
-    #     )
 
     # Update keywords
     keywords = (
@@ -289,7 +285,7 @@ def nciplot(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give Gaussian input filenames or name to be be appended, but not both!"
+            "Only give NCIPLOT input filenames or name to be be appended, but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
@@ -323,7 +319,7 @@ def nciplot(
 
 @nciplot.result_callback()
 @click.pass_context
-def gaussian_process_pipeline(ctx, *args, **kwargs):
+def nciplot_process_pipeline(ctx, *args, **kwargs):
     kwargs.update({"subcommand": ctx.invoked_subcommand})
     ctx.obj[ctx.info_name] = kwargs
     return args[0]
