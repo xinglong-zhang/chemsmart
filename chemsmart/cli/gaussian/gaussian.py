@@ -402,6 +402,9 @@ def gaussian(
             list_of_objects=molecules, index=index
         )
 
+    if not isinstance(molecules, list):
+        molecules = [molecules]
+
     logger.debug(f"Obtained molecules: {molecules}")
 
     # store objects
