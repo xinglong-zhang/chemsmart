@@ -6,7 +6,9 @@ import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import (
+    convert_string_index_from_1_based_to_0_based,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -353,6 +355,7 @@ def gaussian(
         keywords += ("forces",)
 
     # obtain molecule structure
+    molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -369,7 +372,9 @@ def gaussian(
         assert (
             molecules is not None
         ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
+        logger.debug(
+            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+        )
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
@@ -390,41 +395,23 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
-
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        try:
-            # Try numeric index
-            index_int = int(index)
-        except (TypeError, ValueError):
-            try:
-                from chemsmart.utils.utils import string2index_1based
-
-                index_list = string2index_1based(index)
-                logger.debug(f"Using molecule with index slices: {index_list}")
-                molecules = molecules[index_list]
-                if not isinstance(molecules, list):
-                    molecules = [molecules]
-            except ValueError:
-                # Last resort: user-defined ranges
-                index_list = get_list_from_string_range(index)
-                logger.debug(f"Using molecule with indices: {index_list}")
-                molecules = [molecules[i - 1] for i in index_list]
+        # convert index from 1-based (user input) to 0-based (python code-needed)
+        index = convert_string_index_from_1_based_to_0_based(index)
+        if isinstance(index, list):
+            # if index is a list, use it to select molecules
+            molecules = [molecules[i] for i in index]
+        elif isinstance(index, int):
+            # if index is a single integer, use it to select a single molecule
+            molecules = molecules[index]
         else:
-            # Only runs if int() succeeded
-            if index_int < 1:
-                raise ValueError(
-                    f"Index {index_int} is out of range! Please provide a positive integer.\n"
-                    f"Available indices are from 1 to {len(molecules)}."
-                )
-            index0 = index_int - 1
-            molecules = molecules[index0]
-            logger.debug(f"Using molecule with index: {index_int}")
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-            logger.debug(f"Obtained molecule: {molecules}")
+            # index is a Slice
+            molecules = molecules[index]
+
+        if not isinstance(molecules, list):
+            molecules = [molecules]
 
     logger.debug(f"Obtained molecules: {molecules}")
 
