@@ -36,7 +36,7 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project opt settings with job settings from cli keywords from cli.orca.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
     opt_settings.invert_constraints = invert_constraints
 
