@@ -283,6 +283,7 @@ def gaussian(
     forces,
     pubchem,
 ):
+    """CLI for running Gaussian jobs using the chemsmart framework."""
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings

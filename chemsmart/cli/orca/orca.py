@@ -274,6 +274,7 @@ def orca(
     forces,
     pubchem,
 ):
+    """CLI for running ORCA jobs using the chemsmart framework."""
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings

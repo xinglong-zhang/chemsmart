@@ -192,6 +192,7 @@ def nciplot(
     forces,
     pubchem,
 ):
+    """CLI for running NCIPLOT jobs using the chemsmart framework."""
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 

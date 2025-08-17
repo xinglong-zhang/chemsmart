@@ -5,8 +5,8 @@ from typing import Type
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,10 @@ class NCIPLOTJob(Job):
         )
 
         if settings is not None and not isinstance(
-            settings, ThermochemistryJobSettings
+            settings, NCIPLOTJobSettings
         ):
             raise ValueError(
-                f"Settings must be instance of {ThermochemistryJobSettings} for {self}, but is {settings} instead!"
+                f"Settings must be instance of {NCIPLOTJobSettings} for {self}, but is {settings} instead!"
             )
 
         if molecule is not None and not isinstance(molecule, Molecule):
@@ -42,9 +42,7 @@ class NCIPLOTJob(Job):
 
         self.molecule = molecule.copy() if molecule is not None else None
         self.settings = (
-            settings.copy()
-            if settings is not None
-            else ThermochemistryJobSettings()
+            settings.copy() if settings is not None else NCIPLOTJobSettings()
         )
         self.filenames = filenames
 
@@ -58,8 +56,8 @@ class NCIPLOTJob(Job):
         self.label = label
 
     @classmethod
-    def settings_class(cls) -> Type[ThermochemistryJobSettings]:
-        return ThermochemistryJobSettings
+    def settings_class(cls) -> Type[NCIPLOTJobSettings]:
+        return NCIPLOTJobSettings
 
     @property
     def inputfile(self):
@@ -73,7 +71,7 @@ class NCIPLOTJob(Job):
 
     @property
     def errfile(self):
-        errfile = self.label + ".err"
+        errfile = self.label + "_nci.err"
         return os.path.join(self.folder, errfile)
 
     def _backup_files(self, **kwargs):
@@ -91,33 +89,39 @@ class NCIPLOTJob(Job):
     def _run(self, **kwargs):
         """Run the thermochemistry analysis job."""
         logger.info(
-            f"Running ThermochemistryJob {self} with jobrunner {self.jobrunner}"
+            f"Running NCIPLOTJob {self} with jobrunner {self.jobrunner}"
         )
         self.jobrunner.run(self, **kwargs)
 
     @classmethod
     def from_filename(
         cls,
-        filename,
+        filenames,
         settings=None,
         label=None,
         jobrunner=None,
         **kwargs,
     ):
         """Create a ThermochemistryJob from a Gaussian or ORCA output file."""
-        if not filename.endswith((".log", ".out")):
+        if not filenames.endswith(
+            (
+                ".wfn",
+                ".xyz",
+                ".wfx",
+            )
+        ):
             raise ValueError(
-                f"Unsupported file extension for '{filename}'. Only .log or .out files are accepted."
+                f"Unsupported file extension for '{filenames}'. Only .wfn or .xzy or .wfx files are accepted."
             )
 
-        logger.info(f"Reading molecule from file: {filename}.")
-        molecule = Molecule.from_filepath(filename)
+        logger.info(f"Reading molecule from file: {filenames}.")
+        molecule = Molecule.from_filepath(filenames)
 
         if settings is None:
-            settings = ThermochemistryJobSettings()
+            settings = NCIPLOTJobSettings()
 
         if label is None:
-            label = os.path.splitext(os.path.basename(filename))[0]
+            label = os.path.splitext(os.path.basename(filenames))[0]
 
         # Create jobrunner if not provided
         if jobrunner is None:
@@ -126,7 +130,7 @@ class NCIPLOTJob(Job):
                     molecule=molecule,
                     settings=settings,
                     label=label,
-                    filenames=filename,
+                    filenames=filenames,
                     jobrunner=None,
                     **kwargs,
                 ),
@@ -140,7 +144,7 @@ class NCIPLOTJob(Job):
             molecule=molecule,
             settings=settings,
             label=label,
-            filenames=filename,
+            filenames=filenames,
             jobrunner=jobrunner,
             **kwargs,
         )

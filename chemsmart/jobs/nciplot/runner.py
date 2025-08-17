@@ -1,21 +1,25 @@
 import logging
 import os
 from contextlib import suppress
+from functools import lru_cache
 from shutil import copy, rmtree
 
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.settings.executable import NCIPLOTExecutable
 
 logger = logging.getLogger(__name__)
 
 
-class ThermochemistryJobRunner(JobRunner):
-    """Job runner for thermochemistry analysis jobs."""
+class NCIPLOTJobRunner(JobRunner):
+    """Job runner for NCIPLOT jobs."""
 
-    JOBTYPES = ["thermochemistry", "boltzmann"]
+    PROGRAM = "NCIPLOT"
+    JOBTYPES = [
+        "nciplot",
+    ]
 
-    PROGRAM = "Thermochemistry"
     FAKE = False
-    SCRATCH = False  # Thermochemistry jobs are lightweight, so scratch is not typically needed
+    SCRATCH = True  # default to using scratch for NCIPLOT Jobs
 
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
@@ -33,6 +37,25 @@ class ThermochemistryJobRunner(JobRunner):
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
         logger.debug(f"Jobrunner fake mode: {self.fake}")
+
+    @property
+    @lru_cache(maxsize=12)
+    def executable(self):
+        """Executable class object for Gaussian."""
+        try:
+            logger.info(
+                f"Obtaining executable from server: {self.server.name}"
+            )
+            executable = NCIPLOTExecutable.from_servername(
+                servername=self.server.name
+            )
+            return executable
+        except FileNotFoundError as e:
+            logger.error(
+                f"No server file {self.server} is found: {e}\n"
+                f"Available servers are: {NCIPLOTExecutable.available_servers}"
+            )
+            raise
 
     def _prerun(self, job):
         """Prepare the job environment before running."""
