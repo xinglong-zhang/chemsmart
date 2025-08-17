@@ -4,6 +4,7 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import (
@@ -259,13 +260,7 @@ def click_gaussian_td_options(f):
 @click.group(cls=MyGroup)
 @click_gaussian_options
 @click_gaussian_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
-)
+@click_pubchem_options
 @click.pass_context
 def gaussian(
     ctx,

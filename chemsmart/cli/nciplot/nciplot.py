@@ -4,6 +4,7 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import (
@@ -168,15 +169,9 @@ def click_nciplot_settings_options(f):
 
 @click.group(cls=MyGroup)
 @click_nciplot_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
-)
+@click_pubchem_options
 @click.pass_context
-def gaussian(
+def nciplot(
     ctx,
     project,
     filename,
@@ -198,26 +193,25 @@ def gaussian(
     pubchem,
 ):
 
-    from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-    from chemsmart.settings.gaussian import GaussianProjectSettings
+    from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 
     # get project settings
-    project_settings = GaussianProjectSettings.from_project(project)
+    project_settings = NCIPLOTJobSettings.from_project(project)
 
     # obtain Gaussian Settings from filenames, if supplied; otherwise return defaults
 
     if filename is None:
         # for cases where filenames is not supplied, eg, get structure from pubchem
-        job_settings = GaussianJobSettings.default()
+        job_settings = NCIPLOTJobSettings.default()
         logger.info(
             f"No filenames is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
         )
     elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
         # filenames supplied - we would want to use the settings from here and do not use any defaults!
-        job_settings = GaussianJobSettings.from_filepath(filename)
+        job_settings = NCIPLOTJobSettings.from_filepath(filename)
     # elif filenames.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
     else:
-        job_settings = GaussianJobSettings.default()
+        job_settings = NCIPLOTJobSettings.default()
     # else:
     #     raise ValueError(
     #         f"Unrecognised filetype {filenames} to obtain GaussianJobSettings"
@@ -327,7 +321,7 @@ def gaussian(
     ctx.obj["filenames"] = filename
 
 
-@gaussian.result_callback()
+@nciplot.result_callback()
 @click.pass_context
 def gaussian_process_pipeline(ctx, *args, **kwargs):
     kwargs.update({"subcommand": ctx.invoked_subcommand})

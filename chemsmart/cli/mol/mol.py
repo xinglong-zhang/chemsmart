@@ -4,6 +4,7 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import get_list_from_string_range
@@ -42,13 +43,6 @@ def click_file_options(f):
         default="-1",
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
-    )
-    @click.option(
-        "-P",
-        "--pubchem",
-        type=str,
-        default=None,
-        help="Queries structure from PubChem using name, smiles, cid and conformer information.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -201,6 +195,7 @@ def click_pymol_save_options(f):
 
 @click.group(cls=MyGroup)
 @click_file_options
+@click_pubchem_options
 @click.pass_context
 def mol(
     ctx,
