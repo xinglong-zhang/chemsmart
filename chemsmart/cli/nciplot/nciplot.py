@@ -13,35 +13,23 @@ from chemsmart.utils.utils import (
 logger = logging.getLogger(__name__)
 
 
-def click_gaussian_options(f):
-    """Common click options for Gaussian jobs."""
-
-    @click.option(
-        "--project", "-p", type=str, default=None, help="Project settings."
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
-def click_gaussian_settings_options(f):
+def click_nciplot_settings_options(f):
     """Common click options for Gaussian Settings."""
 
     @click.option(
         "-f",
-        "--filename",
+        "--filenames",
         type=str,
+        multiple=True,
         default=None,
-        help="filename from which new Gaussian input is prepared.",
+        help="filenames from which new NCIPLOT input is prepared.",
     )
     @click.option(
         "-l",
         "--label",
         type=str,
         default=None,
-        help="write user input filename for the job (without extension)",
+        help="write user input filenames for the job (without extension)",
     )
     @click.option(
         "-a",
@@ -138,127 +126,8 @@ def click_gaussian_settings_options(f):
     return wrapper_common_options
 
 
-def click_gaussian_jobtype_options(f):
-    """Common click options for Gaussian link/crest jobs."""
-
-    @click.option(
-        "-j",
-        "--jobtype",
-        type=str,
-        default=None,
-        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
-    )
-    @click.option(
-        "-c",
-        "--coordinates",
-        default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
-    )
-    @click.option(
-        "-s",
-        "--step-size",
-        default=None,
-        help="Step size of coordinates to scan.",
-    )
-    @click.option(
-        "-n",
-        "--num-steps",
-        default=None,
-        help="Step size of coordinates to scan.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
-def click_gaussian_solvent_options(f):
-    """Common click solvent options for Gaussian jobs."""
-
-    @click.option(
-        "--remove-solvent/--no-remove-solvent",
-        "-r/ ",
-        type=bool,
-        default=False,
-        help="Whether to use solvent model in the job. Defaults to project settings.",
-    )
-    @click.option(
-        "-sm",
-        "--solvent-model",
-        type=str,
-        default=None,
-        help="Solvent model to be used for single point.",
-    )
-    @click.option(
-        "-si",
-        "--solvent-id",
-        type=str,
-        default=None,
-        help="Solvent ID to be used for single point.",
-    )
-    @click.option(
-        "-so",
-        "--solvent-options",
-        type=str,
-        default=None,
-        help="Additional solvent options in scrf=() route. "
-        "E.g., `iterative` in scrf=(smd,water,iterative) via"
-        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp -so iterative",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
-def click_gaussian_td_options(f):
-    @click.option(
-        "-s",
-        "--states",
-        type=click.Choice(
-            ["singlets", "triplets", "50-50"], case_sensitive=False
-        ),
-        default="singlets",
-        help="States for closed-shell singlet systems.\n"
-        'Options choice =["Singlets", "Triplets", "50-50"]',
-    )
-    @click.option(
-        "-r",
-        "--root",
-        type=int,
-        default=1,
-        help="Specifies the “state of interest”. The default is the first excited state (N=1).",
-    )
-    @click.option(
-        "-n",
-        "--nstates",
-        type=int,
-        default=3,
-        help="Solve for M states (the default is 3). "
-        "If 50-50, this gives the number of each type of state to solve "
-        "(i.e., 3 singlets and 3 triplets).",
-    )
-    @click.option(
-        "-e",
-        "--eqsolv",
-        type=str,
-        default=None,
-        help="Whether to perform equilibrium or non-equilibrium PCM solvation. "
-        "NonEqSolv is the default except for excited state opt and when "
-        "excited state density is requested (e.g., Density=Current or All).",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
-
-
 @click.group(cls=MyGroup)
-@click_gaussian_options
-@click_gaussian_settings_options
+@click_nciplot_settings_options
 @click.option(
     "-P",
     "--pubchem",
@@ -295,30 +164,30 @@ def gaussian(
     # get project settings
     project_settings = GaussianProjectSettings.from_project(project)
 
-    # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
+    # obtain Gaussian Settings from filenames, if supplied; otherwise return defaults
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filenames is not supplied, eg, get structure from pubchem
         job_settings = GaussianJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filenames is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
         )
     elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
+        # filenames supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
-    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
+    # elif filenames.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
     else:
         job_settings = GaussianJobSettings.default()
     # else:
     #     raise ValueError(
-    #         f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
+    #         f"Unrecognised filetype {filenames} to obtain GaussianJobSettings"
     #     )
 
     # Update keywords
     keywords = (
         "charge",
         "multiplicity",
-    )  # default keywords to merge filename charge and multiplicity
+    )  # default keywords to merge filenames charge and multiplicity
     if charge is not None:
         job_settings.charge = charge
     if multiplicity is not None:
@@ -358,11 +227,11 @@ def gaussian(
     molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
+            "[filenames] or [pubchem] has not been specified!\nPlease specify one of them!"
         )
     if filename and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filenames] and [pubchem] have been specified!\nPlease specify only one of them."
         )
 
     if filename:
@@ -386,7 +255,7 @@ def gaussian(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give Gaussian input filename or name to be be appended, but not both!"
+            "Only give Gaussian input filenames or name to be be appended, but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
@@ -415,7 +284,7 @@ def gaussian(
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
-    ctx.obj["filename"] = filename
+    ctx.obj["filenames"] = filename
 
 
 @gaussian.result_callback()
