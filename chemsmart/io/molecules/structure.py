@@ -1,5 +1,6 @@
 import ast
 import copy
+import inspect
 import logging
 import os
 import re
@@ -71,11 +72,6 @@ class Molecule:
         charge=None,
         multiplicity=None,
         frozen_atoms=None,
-        high_level_atoms=None,
-        medium_level_atoms=None,
-        low_level_atoms=None,
-        bonded_atoms=None,
-        scale_factors=None,
         pbc_conditions=None,
         translation_vectors=None,
         energy=None,
@@ -88,11 +84,6 @@ class Molecule:
         self.charge = charge
         self.multiplicity = multiplicity
         self.frozen_atoms = frozen_atoms
-        self.high_level_atoms = high_level_atoms
-        self.medium_level_atoms = medium_level_atoms
-        self.low_level_atoms = low_level_atoms
-        self.bonded_atoms = bonded_atoms
-        self.scale_factors = scale_factors
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self.energy = energy
@@ -377,91 +368,6 @@ class Molecule:
                 mode=mode, empirical=empirical
             )
 
-    @property
-    def partition_level_strings(self):
-        """Obtain the list of partition levels for the atoms in the system."""
-        return self._get_partition_level_strings()
-
-    def _get_partition_levels(self):
-        """Obtain the list of partition levels for the atoms in the system.
-        Returns:
-            list: List of partition levels as strings (H, M, L) for the atoms in the system.
-        """
-        # convert atom indices to lists if they are not already so
-        # for example high_level_atoms=[[18-28], [29-39], [40-50], [51-61], [62-72]],
-        # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
-        from chemsmart.utils.utils import get_list_from_string_range
-
-        if self.high_level_atoms is None:
-            raise ValueError("High level atoms should not be None!")
-        if not isinstance(self.high_level_atoms, list):
-            high_level_atoms = get_list_from_string_range(
-                self.high_level_atoms
-            )
-        else:
-            high_level_atoms = self.high_level_atoms
-        if self.medium_level_atoms:
-            if not isinstance(self.medium_level_atoms, list):
-                medium_level_atoms = get_list_from_string_range(
-                    self.medium_level_atoms
-                )
-            else:
-                medium_level_atoms = self.medium_level_atoms
-        else:
-            medium_level_atoms = []
-        if self.low_level_atoms is None:
-            # low level atoms not given
-            if len(high_level_atoms) != 0:
-                # set the rest of the atoms as low level atoms
-                default_layer = list(range(1, int(self.num_atoms) + 1))
-                low_level_atoms = list(
-                    set(default_layer)
-                    - set(medium_level_atoms)
-                    - set(high_level_atoms)
-                )
-            else:
-                # high level also not given
-                low_level_atoms = []
-        else:
-            if not isinstance(self.low_level_atoms, list):
-                low_level_atoms = get_list_from_string_range(
-                    self.low_level_atoms
-                )
-            else:
-                low_level_atoms = self.low_level_atoms
-
-            if len(high_level_atoms) != 0:
-                # check that low level atoms add up to the total number of atoms
-                if (
-                    len(low_level_atoms)
-                    + len(high_level_atoms)
-                    + len(medium_level_atoms)
-                    != self.num_atoms
-                ):
-                    raise ValueError(
-                        "The number of low + medium + high level atoms be equal to the number of atoms in the molecule!"
-                    )
-
-        return high_level_atoms, medium_level_atoms, low_level_atoms
-
-    def _get_partition_level_strings(self):
-        """Obtain the list of partition levels for the atoms in the system.
-        H = high, M = medium, L = low."""
-        high_level_atoms, medium_level_atoms, low_level_atoms = (
-            self._get_partition_levels()
-        )
-        partition_level_strings = []
-        for i in range(1, self.num_atoms + 1):
-            if i in high_level_atoms:
-                partition_level_strings.append("H")
-            elif i in medium_level_atoms:
-                partition_level_strings.append("M")
-            elif i in low_level_atoms:
-                partition_level_strings.append("L")
-        if len(partition_level_strings) == 0:
-            return None
-        return partition_level_strings
-
     def get_distance(self, idx1, idx2):
         """Calculate the distance between two points.
         Use 1-based indexing for idx1 and idx2."""
@@ -697,7 +603,7 @@ class Molecule:
                     f"Structure successfully created from pubchem with {attribute} = {identifier}"
                 )
                 if return_list:
-                    return [molecule]
+                    return molecule
                 return molecule
 
         logger.debug("Could not create structure from pubchem.")
@@ -1467,16 +1373,25 @@ class CoordinateBlock:
     def convert_coordinate_block_list_to_molecule(self):
         """Function to convert coordinate block supplied as text or as a list of lines into
         Molecule class."""
-        return Molecule(
-            symbols=self.symbols,
-            positions=self.positions,
-            frozen_atoms=self.constrained_atoms,
-            pbc_conditions=self.pbc_conditions,
-            translation_vectors=self.translation_vectors,
-            high_level_atoms=self.partitions[1],
-            medium_level_atoms=self.partitions[2],
-            low_level_atoms=self.partitions[3],
-        )
+        if not self.partitions:
+            return Molecule(
+                symbols=self.symbols,
+                positions=self.positions,
+                frozen_atoms=self.constrained_atoms,
+                pbc_conditions=self.pbc_conditions,
+                translation_vectors=self.translation_vectors,
+            )
+        else:
+            return QMMM(
+                symbols=self.symbols,
+                positions=self.positions,
+                frozen_atoms=self.constrained_atoms,
+                pbc_conditions=self.pbc_conditions,
+                translation_vectors=self.translation_vectors,
+                high_level_atoms=self.partitions[1],
+                medium_level_atoms=self.partitions[2],
+                low_level_atoms=self.partitions[3],
+            )
 
     def _get_symbols(self):
         symbols = []
@@ -1489,7 +1404,7 @@ class CoordinateBlock:
             # 6    6.000000  -12.064399   -0.057172   -0.099010
             # also not true for Gaussian QM/MM calculations where "H" or "L" is
             # indicated at the end of the line
-            if line_elements[0].isdigit():
+            if line_elements and line_elements[0].isdigit():
                 # skip the charge and multiplicity line of QM/MM coordinate block
                 continue
 
@@ -1730,11 +1645,51 @@ class SDFFile(FileMixin):
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
 
+
 class QMMM(Molecule):
     """
     Standardise QMMM-related objects subclass normal objects (settings, jobrunner, molecule, etc),
     without affecting the normal molecules.
     """
+
+    def __init__(
+        self,
+        molecule: Molecule = None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        bonded_atoms=None,
+        scale_factors=None,
+        **kwargs,
+    ):
+        if molecule is not None:
+            # inherit all parameters from the molecule object including class methods
+            sig = inspect.signature(Molecule.__init__)
+            valid_params = set(sig.parameters.keys()) - {"self"}
+
+            # Keep only attributes of molecule that are valid init params and override with any explicit kwargs if given
+            init_params = {
+                k: getattr(molecule, k)
+                for k in valid_params
+                if hasattr(molecule, k)
+            }
+            init_params.update(kwargs)
+
+            super().__init__(**init_params)
+        else:
+            # Otherwise, let QMMM behave like a Molecule itself
+            super().__init__(**kwargs)
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
+        self.scale_factors = scale_factors
+
+        def __getattr__(self, name):
+            # Forward any missing attribute to the underlying Molecule
+            if hasattr(self.molecule, name):
+                return getattr(self.molecule, name)
+            raise AttributeError(f"'QMMM' object has no attribute '{name}'")
 
     @property
     def partition_level_strings(self):
@@ -1792,10 +1747,10 @@ class QMMM(Molecule):
             if len(high_level_atoms) != 0:
                 # check that low level atoms add up to the total number of atoms
                 if (
-                        len(low_level_atoms)
-                        + len(high_level_atoms)
-                        + len(medium_level_atoms)
-                        != self.num_atoms
+                    len(low_level_atoms)
+                    + len(high_level_atoms)
+                    + len(medium_level_atoms)
+                    != self.num_atoms
                 ):
                     raise ValueError(
                         "The number of low + medium + high level atoms be equal to the number of atoms in the molecule!"
@@ -1821,7 +1776,7 @@ class QMMM(Molecule):
             return None
         return partition_level_strings
 
-    def _write_qmmm_gaussian_coordinates(self, f):
+    def _write_gaussian_coordinates(self, f):
 
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
@@ -1919,11 +1874,14 @@ class QMMM(Molecule):
 
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of an atom based on its integer index."""
-        atom_index = str(atom_index)
+        # if self.low_level_atoms is None:
+        #     _, _, low_level_atoms = self._get_partition_levels()
+        #     self.low_level_atoms = low_level_atoms
+        #     print(self.low_level_atoms)
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"
-            elif self.medium_level_atoms:
+            elif atom_index in self.medium_level_atoms:
                 if atom_index in self.medium_level_atoms:
                     return "M"
             else:
@@ -1931,4 +1889,3 @@ class QMMM(Molecule):
                 return "L"
         else:
             return None
-
