@@ -1874,10 +1874,6 @@ class QMMM(Molecule):
 
     def _determine_level_from_atom_index(self, atom_index):
         """Determine the partition level of an atom based on its integer index."""
-        # if self.low_level_atoms is None:
-        #     _, _, low_level_atoms = self._get_partition_levels()
-        #     self.low_level_atoms = low_level_atoms
-        #     print(self.low_level_atoms)
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"
