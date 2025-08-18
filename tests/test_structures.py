@@ -144,7 +144,12 @@ class TestStructures:
         rdkit_molecule = molecule.to_rdkit()
         assert isinstance(rdkit_molecule, RDKitMolecule)
 
-    def test_read_molecule_energy_from_xyz_file(self, xtb_optimized_xyz_file, chemsmart_generated_xyz_file, extended_xyz_file):
+    def test_read_molecule_energy_from_xyz_file(
+        self,
+        xtb_optimized_xyz_file,
+        chemsmart_generated_xyz_file,
+        extended_xyz_file,
+    ):
         assert os.path.exists(xtb_optimized_xyz_file)
         assert os.path.isfile(xtb_optimized_xyz_file)
         xyz_file1 = XYZFile(filename=xtb_optimized_xyz_file)
