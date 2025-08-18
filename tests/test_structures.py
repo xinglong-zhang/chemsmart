@@ -1,4 +1,5 @@
 import os
+from filecmp import cmp
 
 import networkx as nx
 import numpy as np
@@ -9,8 +10,10 @@ from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.io.molecules.structure import QMMM, CoordinateBlock, Molecule
+from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.cluster import is_pubchem_network_available
+from chemsmart.utils.utils import cmp_with_ignore
 
 
 class TestCoordinateBlock:
@@ -52,9 +55,10 @@ TV                -1.219952    2.133447    0.000000
             [2.475315, 0.000000, 0.000000],
             [-1.219952, 2.133447, 0.000000],
         ]
+        # assert cb.molecule.partition_level_strings is None
 
     def test_read_gaussian_cb_frozen_atoms(self):
-        coordinates_string = """
+        coordinates_string1 = """
 C        -1      -0.5448210000   -1.1694570000    0.0001270000
 C        -1       0.8378780000   -1.0476350000    0.0001900000
 C        -1       1.4329940000    0.2194290000    0.0001440000
@@ -70,10 +74,10 @@ O        0       3.6625230000   -0.6037690000   -0.0002940000
 H        0       3.3025560000    1.3842410000    0.0001510000
 Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 """
-        cb = CoordinateBlock(coordinate_block=coordinates_string)
-        assert cb.symbols.get_chemical_formula() == "C7H5ClO"
-        assert cb.molecule.empirical_formula == "C7H5ClO"
-        assert cb.molecule.frozen_atoms == [
+        cb1 = CoordinateBlock(coordinate_block=coordinates_string1)
+        assert cb1.symbols.get_chemical_formula() == "C7H5ClO"
+        assert cb1.molecule.empirical_formula == "C7H5ClO"
+        assert cb1.molecule.frozen_atoms == [
             -1,
             -1,
             -1,
@@ -89,6 +93,33 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
             0,
             0,
         ]
+        # assert cb1.molecule.partition_level_strings is None
+
+        coordinates_string2 = """ 
+  F     -1.041506214819     0.000000000000    -2.126109488809 M
+  F     -2.033681935634    -1.142892069126    -0.412218766901 M
+  F     -2.033681935634     1.142892069126    -0.412218766901 M
+  C     -1.299038105677     0.000000000000    -0.750000000000 M H 5
+  C      0.000000000000     0.000000000000     0.000000000000 H
+  H      0.000000000000     0.000000000000     1.100000000000 H
+  O      1.125833024920     0.000000000000    -0.650000000000 H
+ """
+        cb2 = CoordinateBlock(coordinate_block=coordinates_string2)
+        assert cb2.symbols.get_chemical_formula() == "C2HF3O"
+        assert cb2.molecule.empirical_formula == "C2HF3O"
+        assert cb2.molecule.partition_level_strings == [
+            "M",
+            "M",
+            "M",
+            "M",
+            "H",
+            "H",
+            "H",
+        ]
+        assert cb2.molecule.high_level_atoms == [5, 6, 7]
+        assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
+
+        # TODO:
 
 
 class TestStructures:
@@ -135,6 +166,7 @@ class TestStructures:
             single_molecule_xyz_file, return_list=False
         )
         assert isinstance(molecule, Molecule)
+        assert getattr(molecule, "partition_level_strings", None) is None
         assert len(molecule.chemical_symbols) == 71
         assert molecule.empirical_formula == "C37H25Cl3N3O3"
         assert np.isclose(molecule.mass, 665.982, atol=1e-2)
@@ -905,6 +937,111 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
             written_coordinates = g.read()
         assert os.path.exists(tmp_file)
         assert all([a == b for a, b in zip(coordinates, written_coordinates)])
+
+
+class TestQMMMinMolecule:
+    def test_atoms_in_levels_wrong_low_level(self, tmpdir):
+        methyl_3_hexane = QMMM(molecule=Molecule.from_pubchem("11507"))
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.low_level_atoms = [7, 8, 9]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+        with pytest.raises(ValueError):
+            methyl_3_hexane.partition_level_strings
+            # should raise error since high + medium + low is not equal to total number of atoms
+
+    def test_atoms_in_levels_default_low_level(
+        self, tmpdir, qmmm_written_xyz_file, qmmm_written_xyz_only_file
+    ):
+        methyl_3_hexane = QMMM(molecule=Molecule.from_pubchem("11507"))
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+
+        assert methyl_3_hexane.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "M",
+            "M",
+            "M",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        methyl_3_hexane.write(written_input, format="xyz", xyz_only=False)
+        assert cmp_with_ignore(
+            written_input, qmmm_written_xyz_file, ignore_string="tmp"
+        )  # writes input file as expected
+
+        written_input2 = os.path.join(tmpdir, "tmp_xyz_only.xyz")
+        methyl_3_hexane.write(written_input2, format="xyz", xyz_only=True)
+        assert cmp(
+            written_input2, qmmm_written_xyz_only_file, shallow=False
+        )  # writes input file as expected
+
+    def test_qmmm_atoms_handling(self, tmpdir):
+        """Test QM/MM atoms handling."""
+        mol = QMMM(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.00000000],
+                    [-3.88098484, -0.56804789, 0.00000000],
+                    [-5.16121212, 0.33672729, 0.00000000],
+                    [-1.93181817, -0.59090908, 0.00000000],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 3)],
+            scale_factors={(1, 3): [0.9, 0.8, 0.7]},
+        )
+
+        assert mol.high_level_atoms == [4]
+        assert mol.low_level_atoms == [1, 2]
+        assert mol.medium_level_atoms == [3]
+        assert mol.bonded_atoms == [(1, 3)]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+
+            expected_lines = [
+                "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
+                "H -3.8809848400 -0.5680478900 0.0000000000 L",
+                "H -5.1612121200 0.3367272900 0.0000000000 M",
+                "Cl -1.9318181700 -0.5909090800 0.0000000000 H",
+            ]
+
+            assert [" ".join(line.split()) for line in lines] == [
+                " ".join(line.split()) for line in expected_lines
+            ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
+        if os.path.exists("tmp.xyz"):
+            os.remove("tmp.xyz")
 
 
 class TestSDFFile:

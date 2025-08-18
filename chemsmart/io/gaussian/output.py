@@ -19,9 +19,10 @@ from chemsmart.utils.repattern import (
     nm_pattern,
     normal_mode_pattern,
     oniom_energy_pattern,
+    oniom_gridpoint_pattern,
     scf_energy_pattern,
 )
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.utils import get_range_from_list, string2index_1based
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class Gaussian16Output(GaussianFileMixin):
     """
 
     def __init__(self, filename, use_frozen=False, include_intermediate=False):
+        self._energies = None
         self.filename = filename
         self.use_frozen = use_frozen
         self.include_intermediate = include_intermediate
@@ -179,16 +181,10 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
-        # Clean duplicate structures at the end
-        clean_duplicate_structure(orientations)
-
         # Remove first structure if it's a link job
-        if self.job_type == "link" and len(orientations) > 1:
-            orientations, orientations_pbc = (
-                orientations[1:],
-                orientations_pbc[1:],
-            )
-            self.energies = self.energies[1:]
+        job_type = None
+        if self.route_object.job_type != "link":
+            clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
@@ -224,6 +220,9 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
+        num_structures = len(all_structures)
+        if job_type == "link":
+            num_structures = num_structures - 1
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
@@ -234,9 +233,7 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug(
-            f"Total number of structures located: {len(all_structures)}"
-        )
+        logger.debug(f"Total number of structures located: {num_structures}")
         return all_structures
 
     @cached_property
@@ -643,12 +640,12 @@ class Gaussian16Output(GaussianFileMixin):
 
         return masks
 
-    @cached_property
+    @property
     def scf_energies(self):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
         for line in self.contents:
-            match = re.match(scf_energy_pattern, line)
+            match = re.search(scf_energy_pattern, line)
             if match:
                 scf_energies.append(float(match[1]))
         return scf_energies
@@ -674,6 +671,21 @@ class Gaussian16Output(GaussianFileMixin):
         return oniom_energies
 
     @cached_property
+    def oniom_layer_energies(self):
+        """Obtain ONIOM energies from the Gaussian output file. Default units of Hartree."""
+        layer_energies = {}
+        for line in self.contents:
+            layer_match = re.match(oniom_gridpoint_pattern, line)
+            if layer_match:
+                formatted_layer = (
+                    f"{line.split()[3]}  {line.split()[4]}, "
+                    f"{line.split()[5]}  {line.split()[6]}"
+                )
+                layer_energies[formatted_layer] = float(line.split()[-1])
+        return layer_energies
+
+    @cached_property
+    @property
     def energies(self):
         """Return energies of the system."""
         if len(self.mp2_energies) == 0 and len(self.oniom_energies) == 0:
@@ -809,7 +821,7 @@ class Gaussian16Output(GaussianFileMixin):
         standard_orientations = []
         standard_orientations_pbc = []
         for i, line in enumerate(self.contents):
-            if line.startswith("Standard orientation:"):
+            if "Standard orientation:" in line:
                 standard_orientation = []
                 standard_orientation_pbc = []
                 for j_line in self.contents[i + 5 :]:
@@ -1494,6 +1506,114 @@ class Gaussian16Output(GaussianFileMixin):
         """
         # TODO: to be implemented
         pass
+
+    @cached_property
+    def oniom_partition(self):
+        """Obtain the atomic indices of each layer in the ONIOM calculation.
+        Returns:
+            indices of each layer as a dictionary"""
+        high_level = []
+        medium_level = []
+        low_level = []
+        for i, line in enumerate(self.contents):
+            if "Symbolic Z-matrix:" in line:
+                if "Charge" not in self.contents[i + 4]:
+                    for j_line in self.contents[i + 4 :]:
+                        if len(j_line) == 0:
+                            break
+                        if len(j_line) > 4:
+                            if (
+                                j_line.split()[1] == "-1"
+                                or j_line.split()[1] == "0"
+                            ):
+                                layer = str(j_line.split()[5])
+                            else:
+                                layer = str(j_line.split()[4])
+                            if layer == "H":
+                                high_level.append(i + 4)
+                            elif layer == "M":
+                                medium_level.append(i + 4)
+                            elif layer == "L":
+                                low_level.append(i + 4)
+                            i += 1
+                else:
+                    for j_line in self.contents[i + 7 :]:
+                        if len(j_line) == 0:
+                            break
+                        if len(j_line) > 4:
+                            if j_line.split()[1] == -1:
+                                layer = str(j_line.split()[5])
+                            else:
+                                layer = str(j_line.split()[4])
+                            if layer == "H":
+                                high_level.append(layer)
+                            elif layer == "M":
+                                medium_level.append(layer)
+                            elif layer == "L":
+                                low_level.append(layer)
+        partition = {}
+        for level_name, level_list in [
+            ("high level atoms", high_level),
+            ("medium level atoms", medium_level),
+            ("low level atoms", low_level),
+        ]:
+            if len(level_list) != 0:
+                partition[level_name] = get_range_from_list(level_list)
+        return partition
+
+    @cached_property
+    def oniom_cutting_bonds(self):
+        """Obtain the cutting bonds in the ONIOM calculation.
+        Returns:
+            cutting bonds as a dictionary"""
+        cutting_bonds = {}
+        for i, line in enumerate(self.contents):
+            if "Cut between" in line:
+                atom1 = int(self.contents[i].split()[5])
+                atom2 = int(self.contents[i].split()[8])
+                factor1 = float(self.contents[i].split()[10])
+                factor2 = float(self.contents[i].split()[11])
+                cutting_bonds[(atom1, atom2)] = (factor1, factor2)
+        return cutting_bonds
+
+    @cached_property
+    def oniom_get_charge_and_multiplicity(self):
+        """Obtain the charge and multiplicity of the system in the ONIOM calculation.
+        Returns:
+            charge and multiplicity as a dictionary"""
+        charge_multiplicity = {}
+        for line in self.contents:
+            if "Charge" in line and "low   level calculation on real" in line:
+                charge_multiplicity["low-level, real system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "med   level calculation on mid" in line:
+                charge_multiplicity["medium-level, mid system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "low   level calculation on mid" in line:
+                charge_multiplicity["low-level, mid system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "high  level calculation on model" in line:
+                charge_multiplicity["high-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "med   level calculation on model" in line:
+                charge_multiplicity["medium-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+            if "Charge" in line and "low   level calculation on model" in line:
+                charge_multiplicity["low-level, model system"] = (
+                    int(line.split()[2]),
+                    int(line.split()[5]),
+                )
+        return charge_multiplicity
 
 
 class Gaussian16WBIOutput(Gaussian16Output):

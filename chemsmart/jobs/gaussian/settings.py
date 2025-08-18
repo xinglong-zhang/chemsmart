@@ -31,7 +31,6 @@ class GaussianJobSettings(MolecularJobSettings):
         dieze_tag=None,
         solvent_model=None,
         solvent_id=None,
-        additional_solvent_options=None,
         additional_opt_options_in_route=None,
         additional_route_parameters=None,
         route_to_be_written=None,
@@ -73,9 +72,9 @@ class GaussianJobSettings(MolecularJobSettings):
         )
         self.chk = chk
         self.dieze_tag = dieze_tag
-        self.additional_solvent_options = additional_solvent_options
         self.additional_opt_options_in_route = additional_opt_options_in_route
         self.append_additional_info = append_additional_info
+        self._route_string = None
 
         if gen_genecp_file is not None and "~" in gen_genecp_file:
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
@@ -253,7 +252,6 @@ class GaussianJobSettings(MolecularJobSettings):
             dieze_tag=None,
             solvent_model=None,
             solvent_id=None,
-            additional_solvent_options=None,
             additional_opt_options_in_route=None,
             additional_route_parameters=None,
             route_to_be_written=None,
@@ -287,6 +285,10 @@ class GaussianJobSettings(MolecularJobSettings):
         logger.debug(f"Route for settings {self}: {route_string}")
         return route_string
 
+    @route_string.setter
+    def route_string(self, value):
+        self._route_string = value
+
     def _get_route_string_from_user_input(self):
         route_string = self.route_to_be_written
         if not route_string.startswith("#"):
@@ -315,13 +317,44 @@ class GaussianJobSettings(MolecularJobSettings):
 
     def _get_route_string_from_jobtype(self):
         route_string = ""
+
+        dieze_tag = self._get_dieze_tag()
+        route_string += dieze_tag
+
+        job_route = self._get_job_route()
+        route_string += job_route
+
+        freq_string = self._get_freq_string()
+        route_string += freq_string
+
+        level_of_theory_string = self._get_level_of_theory_string()
+        route_string += level_of_theory_string
+
+        force_string = self._get_force_string()
+        route_string += force_string
+
+        solvent_string = self._get_solvent_string()
+        route_string += solvent_string
+
+        additional_string = self._get_additional_string()
+        route_string += additional_string
+
+        return route_string
+
+    def _get_dieze_tag(self):
+        """Get dieze tag from job type."""
+        route_string = ""
         if self.dieze_tag is not None:
             route_string += (
                 f"#{self.dieze_tag}"  # e.g. dieze_tag='p' to get '#p'
             )
         else:
             route_string += "#"
+        return route_string
 
+    def _get_job_route(self):
+        """Get route corresponding to job type."""
+        route_string = ""
         # write opt with additional options e.g., maxstep, calcall etc
         if self.additional_opt_options_in_route is not None:
             if self.job_type == "opt":
@@ -335,13 +368,10 @@ class GaussianJobSettings(MolecularJobSettings):
                     route_string += f" opt=(ts,noeigentest,{self.additional_opt_options_in_route})"
             elif self.job_type == "modred":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = True
             elif self.job_type == "scan":
                 route_string += f" opt=(modredundant,{self.additional_opt_options_in_route})"
-                self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
         elif self.additional_opt_options_in_route is None:
             if self.job_type == "opt":
                 route_string += " opt"
@@ -349,19 +379,40 @@ class GaussianJobSettings(MolecularJobSettings):
                 route_string += " opt=(ts,calcfc,noeigentest)"
             elif self.job_type == "modred":
                 route_string += " opt=modredundant"
-                self.freq = True
             elif self.job_type == "scan":
                 route_string += " opt=modredundant"
-                self.freq = False
             elif self.job_type == "sp":
                 route_string += ""
-                self.freq = False  # turn off freq calculation for sp job
+        return route_string
 
+    def _set_freq_from_job_type(self):
+        """Set freq for different job type.
+        Some sensible defaults have been used here."""
+        if self.job_type in ["opt", "ts", "modred"]:
+            self.freq = True
+            self.numfreq = False
+        elif self.job_type in ["sp", "scan"]:
+            self.freq = False
+            self.numfreq = False
+
+    def _get_freq_string(self):
+        """Get freq string for route."""
+        route_string = ""
+        self._set_freq_from_job_type()
         # write frequency
         if self.freq and not self.numfreq:
             route_string += " freq"
         elif not self.freq and self.numfreq:
             route_string += " freq=numer"
+        elif self.freq and self.numfreq:
+            raise ValueError(
+                "Both freq and numfreq cannot be True at the same time!"
+            )
+        return route_string
+
+    def _get_level_of_theory_string(self):
+        """Get level of theory string for route."""
+        route_string = ""
 
         # Determine computational method
         if self.semiempirical is not None:
@@ -397,23 +448,39 @@ class GaussianJobSettings(MolecularJobSettings):
         else:
             raise ValueError("Error: No computational method provided.")
 
+        return route_string
+
+    def _get_force_string(self):
+        """Get force string for route."""
+        route_string = ""
         # write forces calculation
         if self.forces:
             route_string += " force"
+        return route_string
 
+    def _get_solvent_string(self):
+        """Get solvent string for route."""
+        route_string = ""
         if self.custom_solvent is not None:
             if self.solvent_model is None and self.solvent_id is None:
-                route_string += " scrf=(pcm,read"  # using pcm model as default
+                route_string += (
+                    " scrf=(pcm,read)"  # using pcm model as default
+                )
             else:
                 # Set default values if any of solvent_model or solvent_id are None
                 solvent_model = self.solvent_model or "pcm"
-                solvent_id = self.solvent_id or "generic,read"
-                route_string += f" scrf=({solvent_model},solvent={solvent_id}"
+                if self.solvent_id is None:
+                    solvent_id = "read"
+                elif self.solvent_id == "generic":
+                    solvent_id = "generic,read"
+                else:
+                    solvent_id = self.solvent_id
+                route_string += f" scrf=({solvent_model},solvent={solvent_id})"
         elif (
             self.solvent_model is not None and self.solvent_id is not None
         ):  # solvation is turned on
             route_string += (
-                f" scrf=({self.solvent_model},solvent={self.solvent_id}"
+                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
             )
         elif (self.solvent_model is not None and self.solvent_id is None) or (
             self.solvent_model is None and self.solvent_id is not None
@@ -423,11 +490,12 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Currently, solvent model is {self.solvent_model} and solvent id is {self.solvent_id}!"
             )
 
-        if "scrf" in route_string:
-            if self.additional_solvent_options is not None:
-                route_string += f",{self.additional_solvent_options})"
-            else:
-                route_string += ")"
+        return route_string
+
+    def _get_additional_string(self):
+        """Get additional info string for route.
+        Additional Route Parameters + job specific parameters."""
+        route_string = ""
 
         # write additional parameters for route
         if self.additional_route_parameters is not None:
@@ -658,3 +726,331 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
         route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
 
         return route_string
+
+
+class GaussianQMMMJobSettings(GaussianJobSettings):
+
+    def __init__(
+        self,
+        jobtype=None,
+        high_level_functional=None,
+        high_level_basis=None,
+        high_level_force_field=None,
+        medium_level_functional=None,
+        medium_level_basis=None,
+        medium_level_force_field=None,
+        low_level_functional=None,
+        low_level_basis=None,
+        low_level_force_field=None,
+        real_charge=None,
+        real_multiplicity=None,
+        int_charge=None,
+        int_multiplicity=None,
+        model_charge=None,
+        model_multiplicity=None,
+        high_level_atoms=None,
+        medium_level_atoms=None,
+        low_level_atoms=None,
+        bonded_atoms=None,
+        scale_factors=None,
+        **kwargs,
+    ):
+        """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
+        Args:
+            job_type: different calculations support by Gaussian ONIOM, including:
+                1.Single-point energy;
+                2.Geometry optimization;
+                3.Frequency analysis;
+                4.Transition state search (QST2/QST3)
+                5.IRC calculations
+            high_level_functional/medium_level_functional/low_level_functional: Functional for high/medium/low level of theory
+            high_level_basis/medium_level_basis/low_level_basis: Basis set for high/medium/low level of theory
+            high_level_force_field/medium_level_force_field/low_level_force_field: Force field for high/medium/low level of theory (if specified)
+            real_/int_/model_charge(int): Charge of real/intermediate/model system
+            real_/int_/model_charge_multiplicity(int): Multiplicity of real/intermediate/model system
+            high_level_atoms (list or string): List of high level atoms.
+            medium_level_atoms (list) : List of medium level atoms.
+            low_level_atoms (list): List of low level atoms.
+            bonded_atoms (list of tuples): List of bonded atoms.
+            scale_factors (dict) (optional):  A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom pair indices and the value is a list of scale factors for (low, medium, high).
+            **kwargs: Additional keyword arguments.
+
+            Information about scale factors:
+            The scale factors are used to scale the bond lengths between different layers.
+            For example, in a two-layer ONIOM calculation, if a C-C bond is cut between low and high layers, the
+            C atom from the low layer will be substituted by an H atom (link atom) when conducting the high-level
+            calculation. Instead of directly placing an H atom at the position of the C atom, the link atom (H)
+            needs to be aligned along with the bond vector of the original C-C bond.
+            Note that the bond distances of C-C and C-H bond are different. Both scale_factor1 and scale_factor2
+            can be set as 0.709, which represents the ratio of a standard C-C bond length (1.084 Å) to a standard
+            C-H bond length (1.528 Å). That is, a link atom (H) is placed at a distance of 0.709 times the bond
+            length of the original C-C bond for both low-level and high-level calculations.
+            If not specified, scale factors will be calculated by the ratio of covalent radiis. If only one scale
+            factor is specified, it will be used for all layers. If two scale factors are specified for a 3-layer
+            ONIOM calculation, both the high- and medium-layer will use the second scale factor.
+        """
+        super().__init__(**kwargs)
+        self.jobtype = jobtype
+        self.high_level_functional = high_level_functional
+        self.high_level_basis = high_level_basis
+        self.high_level_force_field = high_level_force_field
+        self.medium_level_functional = medium_level_functional
+        self.medium_level_basis = medium_level_basis
+        self.medium_level_force_field = medium_level_force_field
+        self.low_level_functional = low_level_functional
+        self.low_level_basis = low_level_basis
+        self.low_level_force_field = low_level_force_field
+        self.real_charge = real_charge
+        self.real_multiplicity = real_multiplicity
+        self.int_charge = int_charge
+        self.int_multiplicity = int_multiplicity
+        self.model_charge = model_charge
+        self.model_multiplicity = model_multiplicity
+        self.high_level_atoms = high_level_atoms
+        self.medium_level_atoms = medium_level_atoms
+        self.low_level_atoms = low_level_atoms
+        self.bonded_atoms = bonded_atoms
+        self.scale_factors = scale_factors
+        # If the user only specifies the parameters of two layers, the low-level layer will be omitted
+
+        # populate self.functional and self.basis so that
+        # it will not raise errors in parent class
+        self.functional = (
+            self.high_level_functional
+            or self.medium_level_functional
+            or self.low_level_functional
+        )
+        self.basis = (
+            self.high_level_basis
+            or self.medium_level_basis
+            or self.low_level_basis
+        )
+        self.title = "Gaussian QM/MM job"
+        self._route_string = self.get_qmmm_level_of_theory_string()
+
+        if self.real_charge and self.real_multiplicity:
+            # the charge and multiplicity of the real system equal to
+            # that of the low_level_charge and low_level_multiplicity
+            self.charge = self.real_charge
+            self.multiplicity = self.real_multiplicity
+
+    @property
+    def charge_and_multiplicity_string(self):
+        """Obtain charge and multiplicity string."""
+        return self._get_charge_and_multiplicity()
+
+    def validate_and_assign_level(
+        self, functional, basis, force_field, level_name
+    ):
+        """Validates functional and basis set for a given level
+        and returns formatted theory string.
+        Return level of theory if both functional and basis are specified,
+        or force field if both are not specified.
+        """
+
+        if functional and basis and force_field:
+            raise ValueError(
+                f"For {level_name} level of theory, one should specify only functional/basis or force field!"
+            )
+
+        if force_field:
+            assert functional is None and basis is None, (
+                f"Force field is given for {level_name} level of theory, "
+                f"thus no functional and basis should be given!"
+            )
+            level_of_theory = force_field
+        else:
+            # if force field is not given, then functional and basis can be given,
+            # so that level of theory takes functional and basis set
+            if functional and basis:
+                level_of_theory = f"{functional}/{basis}"
+            else:
+                # but functional and basis set can also not be given, in which case,
+                # all 3 are None and overall level of theory for that layer is None.
+                level_of_theory = None
+
+        logger.debug(
+            f"Obtained level of theory {level_of_theory} for {level_name} level."
+        )
+
+        return level_of_theory
+
+    def get_qmmm_level_of_theory_string(self):
+        """Get ONIOM level of theory for route string."""
+        oniom_string = "# oniom"
+        assert (
+            self.jobtype is not None
+        ), "Job type must be specified for ONIOM job!"
+        jobtype = self.jobtype.lower()
+        jobtype = self.jobtype
+        high_level_of_theory = self.validate_and_assign_level(
+            self.high_level_functional,
+            self.high_level_basis,
+            self.high_level_force_field,
+            level_name="high",
+        )
+
+        medium_level_of_theory = self.validate_and_assign_level(
+            self.medium_level_functional,
+            self.medium_level_basis,
+            self.medium_level_force_field,
+            level_name="medium",
+        )
+
+        low_level_of_theory = self.validate_and_assign_level(
+            self.low_level_functional,
+            self.low_level_basis,
+            self.low_level_force_field,
+            level_name="low",
+        )
+
+        if high_level_of_theory is not None:
+            oniom_string += f"({high_level_of_theory}"
+        if medium_level_of_theory is not None:
+            oniom_string += f":{medium_level_of_theory}"
+        if low_level_of_theory is not None:
+            oniom_string += f":{low_level_of_theory})"
+        if jobtype == "sp" or jobtype == "opt" or jobtype == "freq":
+            oniom_string += f" {jobtype}"
+        # oniom_string += f" {jobtype}"
+        return oniom_string
+
+    def _get_charge_and_multiplicity(self):
+        """Obtain charge and multiplicity string.
+        For two-layer ONIOM jobs, the format for this input line is:
+
+        chrg_real-low spin_real-low [chrg_model-high spin_model-high
+                                    [chrg_model-low spin_model-low [chrg_real-high spin_real-high]]]
+
+        Fourth pair applies only to ONIOM=SValue calculations.
+        When only a single value pair is specified, all levels will use those values.
+        If two pairs of values are included, then third pair defaults to same values as second pair.
+        If final pair is omitted for an S-value job, it defaults to values for the real system at low level.
+        For such two-layer ONIOM jobs, users are required to specify the charge and multiplicity of high-level
+         layer and low-level layer, instead high and medium level.
+
+        For 3-layers ONIOM, the format is:
+        cRealL sRealL [cIntM sIntM [cIntL sIntL [cModH sModH [cModM sModM [cModL sModL]]]]]
+        Real, Int=Intermediate system, and Mod=Model system, and second character
+        is one of: H, M and L for the High, Medium and Low levels).
+        """
+        assert (
+            self.real_charge is not None and self.real_multiplicity is not None
+        ), "Charge and multiplicity for the real system must be specified!"
+        real_low_charge = self.real_charge
+        real_low_multiplicity = self.real_multiplicity
+        int_med_charge = self.int_charge
+        int_med_multiplicity = self.int_multiplicity
+        int_low_charge = self.int_charge
+        int_low_multiplicity = self.int_multiplicity
+        model_high_charge = self.model_charge
+        model_high_multiplicity = self.model_multiplicity
+        model_med_charge = self.model_charge
+        model_med_multiplicity = self.model_multiplicity
+        model_low_charge = self.model_charge
+        model_low_multiplicity = self.model_multiplicity
+
+        # two-layer ONIOM model
+        if (
+            self.validate_and_assign_level(
+                self.medium_level_functional,
+                self.medium_level_basis,
+                self.medium_level_force_field,
+                level_name="medium",
+            )
+            is None
+            or self.validate_and_assign_level(
+                self.low_level_functional,
+                self.low_level_basis,
+                self.low_level_force_field,
+                level_name="low",
+            )
+            is None
+        ):
+            charge_and_multiplicity_list = [
+                real_low_charge,
+                real_low_multiplicity,
+                model_high_charge,
+                model_high_multiplicity,
+                model_low_charge,
+                model_low_multiplicity,
+            ]
+            if all(var is None for var in charge_and_multiplicity_list[2:]):
+                for i in range(2, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = real_low_charge
+                    charge_and_multiplicity_list[i + 1] = real_low_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[4:]):
+                for i in range(4, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = model_high_charge
+                    charge_and_multiplicity_list[i + 1] = (
+                        model_high_multiplicity
+                    )
+            elif all(var is not None for var in charge_and_multiplicity_list):
+                pass
+            else:
+                raise ValueError(
+                    "The charge and multiplicity of lower level-of-theory cannot override the higher ones!"
+                )
+            updated_list = []
+            for charge_and_multiplicity in charge_and_multiplicity_list:
+                updated_list.append(str(charge_and_multiplicity))
+            charge_and_multiplicity = " ".join(updated_list)
+        else:
+            # three-layer ONIOM model
+            charge_and_multiplicity_list = [
+                real_low_charge,
+                real_low_multiplicity,
+                int_med_charge,
+                int_med_multiplicity,
+                int_low_charge,
+                int_low_multiplicity,
+                model_high_charge,
+                model_high_multiplicity,
+                model_med_charge,
+                model_med_multiplicity,
+                model_low_charge,
+                model_low_multiplicity,
+            ]
+            # Defaults for missing charge / spin multiplicity pairs are taken from the next highest
+            # calculation level and / or system size.
+            if all(var is None for var in charge_and_multiplicity_list[2:]):
+                # only charge and multiplicity of real system is specified,
+                # so the charge and multiplicity of other systems will be the same as the real system
+                for i in range(2, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = real_low_charge
+                    charge_and_multiplicity_list[i + 1] = real_low_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[4:]):
+                # only charge and multiplicity of real system and that of intermediate layer,
+                # medium level-of-theory are specified, the charge and multiplicity of other
+                # systems will be the same as the intermediate layer
+                for i in range(4, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = int_med_charge
+                    charge_and_multiplicity_list[i + 1] = int_med_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[6:]):
+                # only charge and multiplicity of real system, intermediate layer, medium level-of-theory
+                # and intermediate layer, medium level-of-theory are specified, the charge and multiplicity of other
+                # systems will be the same as intermediate layer, medium level-of-theory,...
+                for i in range(6, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = int_med_charge
+                    charge_and_multiplicity_list[i + 1] = int_med_multiplicity
+            elif all(var is None for var in charge_and_multiplicity_list[8:]):
+                # the rest systems will follow the model system, high level-of-theory
+                for i in range(8, len(charge_and_multiplicity_list), 2):
+                    charge_and_multiplicity_list[i] = model_high_charge
+                    charge_and_multiplicity_list[i + 1] = (
+                        model_high_multiplicity
+                    )
+            elif all(var is None for var in charge_and_multiplicity_list[10:]):
+                charge_and_multiplicity_list[-2] = model_med_charge
+                charge_and_multiplicity_list[-1] = model_med_multiplicity
+            elif all(var is not None for var in charge_and_multiplicity_list):
+                pass
+            else:
+                raise ValueError(
+                    "The charge and multiplicity of lower level-of-theory cannot override the higher ones!"
+                )
+            updated_list = []
+            for charge_and_multiplicity in charge_and_multiplicity_list:
+                updated_list.append(str(charge_and_multiplicity))
+            charge_and_multiplicity = " ".join(updated_list)
+        return charge_and_multiplicity

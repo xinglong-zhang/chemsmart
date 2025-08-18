@@ -146,6 +146,27 @@ class TestConverter:
         assert mol.chemical_formula == "C19H12F3I2N3O"
         # assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
 
+    def test_convert_single_link_logfile_to_xyz(
+        self, tmpdir, gaussian_link_outfile
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "intervening_n_Ap_A.log")
+        print(tmp_path)
+        copy(gaussian_link_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 603
+        assert mol.chemical_formula == "C191H241Cu2N59O96P14"
+        assert mol.energy == -25900.214629
+
     def test_convert_single_comfile_to_xyz(
         self, tmpdir, gaussian_opt_inputfile
     ):

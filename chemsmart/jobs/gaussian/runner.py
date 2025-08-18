@@ -43,6 +43,7 @@ class GaussianJobRunner(JobRunner):
         "g16",
         "g16com",
         "g16link",
+        "g16qmmm",
     ]
 
     PROGRAM = "gaussian"

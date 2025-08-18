@@ -1,7 +1,10 @@
 import logging
 import os.path
 
-from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianLinkJobSettings,
+    GaussianQMMMJobSettings,
+)
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
@@ -38,7 +41,10 @@ class GaussianInputWriter(InputWriter):
         self._write_gaussian_header(f)
         self._write_route_section(f)
         self._write_gaussian_title(f)
-        self._write_charge_and_multiplicity(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._write_charge_and_multiplicity_qmmm(f)
+        else:
+            self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
         if not isinstance(self.settings, GaussianLinkJobSettings):
             self._append_modredundant(f)
@@ -69,6 +75,8 @@ class GaussianInputWriter(InputWriter):
     def _write_route_section(self, f):
         logger.debug("Writing route section.")
         route_string = self.settings.route_string
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            route_string = self.settings._route_string
         # if project settings has heavy elements but molecule has no heavy elements,
         # then replace the basis set with light elements basis
         if self.settings.heavy_elements_basis is not None:
@@ -111,13 +119,29 @@ class GaussianInputWriter(InputWriter):
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
-        f.write(f"{charge} {multiplicity}\n")
+        line = f"{charge} {multiplicity}\n"
+        f.write(line)
+
+    def _write_charge_and_multiplicity_qmmm(self, f):
+        logger.debug("Writing charge and multiplicity for QM/MM.")
+        line = f"{self.settings.charge_and_multiplicity_string}\n"
+        f.write(line)
 
     def _write_cartesian_coordinates(self, f):
         logger.debug(
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
+        # populate QM/MM partition to molecule object
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self.job.molecule.high_level_atoms = self.settings.high_level_atoms
+            if self.settings.medium_level_atoms is not None:
+                self.job.molecule.medium_level_atoms = (
+                    self.settings.medium_level_atoms
+                )
+            self.job.molecule.low_level_atoms = self.settings.low_level_atoms
+            self.job.molecule.bonded_atoms = self.settings.bonded_atoms
+
         self.job.molecule.write_coordinates(f, program="gaussian")
         f.write("\n")
 
