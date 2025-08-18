@@ -8,43 +8,67 @@ class NCIPLOTJobSettings:
 
     def __init__(
         self,
-        temperature=None,
-        concentration=None,
-        pressure=1.0,
-        use_weighted_mass=False,
-        alpha=4,
-        s_freq_cutoff=None,
-        h_freq_cutoff=None,
-        energy_units="hartree",
-        outputfile=None,
-        overwrite=False,
-        check_imaginary_frequencies=True,
+        filenames,
+        label,
+        rthres,
+        ligand_file_number,
+        ligand_radius,
+        radius_positions,
+        radius_r,
+        intercut1,
+        intercut2,
+        increments,
+        fragment_label,
+        fragment_atoms,
+        cutoff_density_dat,
+        cutoff_rdg_dat,
+        cutoff_density_cube,
+        cutoff_rdg_cube,
+        dgrid,
+        integrate,
+        ranges,
     ):
-        self.temperature = temperature
-        self.concentration = concentration
-        self.pressure = pressure
-        self.use_weighted_mass = use_weighted_mass
-        self.alpha = alpha
-        self.s_freq_cutoff = s_freq_cutoff
-        self.h_freq_cutoff = h_freq_cutoff
-        self.energy_units = energy_units.lower()
-        self.outputfile = outputfile
-        self.overwrite = overwrite
-        self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.filenames = filenames
+        self.label = label
+        self.rthres = rthres
+        self.ligand_file_number = ligand_file_number
+        self.ligand_radius = ligand_radius
+        self.radius_positions = radius_positions
+        self.radius_r = radius_r
+        self.intercut1 = intercut1
+        self.intercut2 = intercut2
+        self.increments = increments
+        self.fragment_label = fragment_label
+        self.fragment_atoms = fragment_atoms
+        self.cutoff_density_dat = cutoff_density_dat
+        self.cutoff_rdg_dat = cutoff_rdg_dat
+        self.cutoff_density_cube = cutoff_density_cube
+        self.cutoff_rdg_cube = cutoff_rdg_cube
+        self.dgrid = dgrid
+        self.integrate = integrate
+        self.ranges = ranges
 
     def copy(self):
         return NCIPLOTJobSettings(
-            temperature=self.temperature,
-            concentration=self.concentration,
-            pressure=self.pressure,
-            use_weighted_mass=self.use_weighted_mass,
-            alpha=self.alpha,
-            s_freq_cutoff=self.s_freq_cutoff,
-            h_freq_cutoff=self.h_freq_cutoff,
-            energy_units=self.energy_units,
-            outputfile=self.outputfile,
-            overwrite=self.overwrite,
-            check_imaginary_frequencies=self.check_imaginary_frequencies,
+            filenames=self.filenames,
+            label=self.label,
+            rthres=self.rthres,
+            ligand_file_number=self.ligand_file_number,
+            ligand_radius=self.ligand_radius,
+            radius_positions=self.radius_positions,
+            radius_r=self.radius_r,
+            intercut1=self.intercut1,
+            intercut2=self.intercut2,
+            increments=self.increments,
+            fragment_label=self.fragment_label,
+            fragment_atoms=self.fragment_atoms,
+            cutoff_density_dat=self.cutoff_density_dat,
+            cutoff_rdg_dat=self.cutoff_rdg_dat,
+            cutoff_density_cube=self.cutoff_density_cube,
+            cutoff_rdg_cube=self.cutoff_rdg_cube,
+            dgrid=self.dgrid,
+            integrate=self.integrate,
+            ranges=self.ranges,
         )
 
     @classmethod

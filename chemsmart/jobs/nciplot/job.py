@@ -2,11 +2,9 @@ import logging
 import os
 from typing import Type
 
-from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
-from chemsmart.jobs.runner import JobRunner
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +33,24 @@ class NCIPLOTJob(Job):
                 f"Settings must be instance of {NCIPLOTJobSettings} for {self}, but is {settings} instead!"
             )
 
+        # either filenames or molecule must be provided, but not both
+        print(filenames, molecule)
+        if filenames is not None and molecule is not None:
+            raise ValueError(
+                "Either filenames or molecule must be provided, but not both!"
+            )
+        elif filenames is None and molecule is None:
+            raise ValueError(
+                "Either filenames or molecule must be provided, but both are None!"
+            )
+
         if molecule is not None and not isinstance(molecule, Molecule):
             raise ValueError(
                 f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
             )
 
         self.molecule = molecule.copy() if molecule is not None else None
-        self.settings = (
-            settings.copy() if settings is not None else NCIPLOTJobSettings()
-        )
+        self.settings = settings.copy()
         self.filenames = filenames
 
         if label is None:
@@ -79,12 +86,12 @@ class NCIPLOTJob(Job):
         self.backup_file(self.outputfile, folder=folder, **kwargs)
 
     def _output(self):
-        if not os.path.exists(self.settings.outputfile):
+        if not os.path.exists(self.outputfile):
             return None
-        return os.path.abspath(self.settings.outputfile)
+        return os.path.abspath(self.outputfile)
 
     def _job_is_complete(self):
-        return os.path.exists(self.settings.outputfile)
+        return os.path.exists(self.outputfile)
 
     def _run(self, **kwargs):
         """Run the thermochemistry analysis job."""
@@ -92,119 +99,3 @@ class NCIPLOTJob(Job):
             f"Running NCIPLOTJob {self} with jobrunner {self.jobrunner}"
         )
         self.jobrunner.run(self, **kwargs)
-
-    @classmethod
-    def from_filename(
-        cls,
-        filenames,
-        settings=None,
-        label=None,
-        jobrunner=None,
-        **kwargs,
-    ):
-        """Create a ThermochemistryJob from a Gaussian or ORCA output file."""
-        if not filenames.endswith(
-            (
-                ".wfn",
-                ".xyz",
-                ".wfx",
-            )
-        ):
-            raise ValueError(
-                f"Unsupported file extension for '{filenames}'. Only .wfn or .xzy or .wfx files are accepted."
-            )
-
-        logger.info(f"Reading molecule from file: {filenames}.")
-        molecule = Molecule.from_filepath(filenames)
-
-        if settings is None:
-            settings = NCIPLOTJobSettings()
-
-        if label is None:
-            label = os.path.splitext(os.path.basename(filenames))[0]
-
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    filenames=filenames,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            filenames=filenames,
-            jobrunner=jobrunner,
-            **kwargs,
-        )
-
-    def compute_thermochemistry(self):
-        """Perform the thermochemistry calculation and save results."""
-        if not self.filenames:
-            raise ValueError(
-                "No input file provided for thermochemistry calculation."
-            )
-
-        if self.settings.outputfile is None:
-            self.settings.outputfile = self.outputfile
-
-        try:
-            thermochemistry = Thermochemistry(
-                filename=self.filenames,
-                temperature=self.settings.temperature,
-                concentration=self.settings.concentration,
-                pressure=self.settings.pressure,
-                use_weighted_mass=self.settings.use_weighted_mass,
-                alpha=self.settings.alpha,
-                s_freq_cutoff=self.settings.s_freq_cutoff,
-                h_freq_cutoff=self.settings.h_freq_cutoff,
-                energy_units=self.settings.energy_units,
-                outputfile=self.settings.outputfile,
-                overwrite=self.settings.overwrite,
-                check_imaginary_frequencies=self.settings.check_imaginary_frequencies,
-            )
-            (
-                structure,
-                electronic_energy,
-                zero_point_energy,
-                enthalpy,
-                qrrho_enthalpy,
-                entropy_times_temperature,
-                qrrho_entropy_times_temperature,
-                gibbs_free_energy,
-                qrrho_gibbs_free_energy,
-            ) = thermochemistry.compute_thermochemistry()
-            thermochemistry.log_results_to_file(
-                structure,
-                electronic_energy,
-                zero_point_energy,
-                enthalpy,
-                qrrho_enthalpy,
-                entropy_times_temperature,
-                qrrho_entropy_times_temperature,
-                gibbs_free_energy,
-                qrrho_gibbs_free_energy,
-                outputfile=self.settings.outputfile,
-                overwrite=self.settings.overwrite,
-            )
-
-        except Exception as e:
-            logger.error(f"Error processing {self.filenames}: {e}")
-            raise
-
-    def show_results(self):
-        with open(self.settings.outputfile, "r") as out:
-            print()
-            results = out.read()
-            print(results)

@@ -1,10 +1,10 @@
-from .job import ThermochemistryJob
-from .runner import ThermochemistryJobRunner
+from .job import NCIPLOTJob
+from .runner import NCIPLOTJobRunner
 
-jobs = ThermochemistryJob.subclasses()
+jobs = NCIPLOTJob.subclasses()
 
 __all__ = [
-    "ThermochemistryJob",
-    "ThermochemistryJobRunner",
+    "NCIPLOTJob",
+    "NCIPLOTJobRunner",
     "jobs",
 ]

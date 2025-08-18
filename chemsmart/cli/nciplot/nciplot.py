@@ -1,15 +1,12 @@
 import functools
 import logging
-import os
 
 import click
 
 from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import (
-    return_objects_from_string_index,
-)
+from chemsmart.jobs.nciplot.job import NCIPLOTJob
+from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +30,12 @@ def click_nciplot_settings_options(f):
         help="write user input filenames for the job (without extension)",
     )
     @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
-    @click.option(
         "-r",
         "--rthres",
         type=float,
         default=None,
-        help="r distance along a cubic box.",
+        help="r distance along a cubic box. This extends the grid to include a larger "
+        "region around the molecule for capturing NCIs that extend further out.",
     )
     @click.option(
         "--ligand-file-number",
@@ -61,9 +52,10 @@ def click_nciplot_settings_options(f):
     @click.option(
         "-rp",
         "--radius-positions",
-        type=tuple,
+        type=str,
         default=None,
-        help="(x, y, z) positions around which interactions are represented.",
+        help="Positions around which interactions are represented.\n"
+        "Accepts strings in the form of 'x,y,z' or as a tuple (x, y, z). ",
     )
     @click.option(
         "-rr",
@@ -88,10 +80,11 @@ def click_nciplot_settings_options(f):
     )
     @click.option(
         "--increments",
-        type=tuple,
+        type=str,
         default=None,
         help="Increments along the x, y, z directions of the cube in Å. "
-        "The default is set to 0.1, 0.1, 0.1.",
+        "The default is set to 0.1, 0.1, 0.1."
+        "Accepts strings in the form of 'x,y,z' or as a tuple (x, y, z).",
     )
     @click.option(
         "--fragment-label",
@@ -113,7 +106,7 @@ def click_nciplot_settings_options(f):
         help="Cutoff for density used in creating the dat file.",
     )
     @click.option(
-        "-cdr",
+        "-crd",
         "--cutoff-rdg-dat",
         type=float,
         default=None,
@@ -127,17 +120,21 @@ def click_nciplot_settings_options(f):
         help="Cutoff for density used in creating the cube file.",
     )
     @click.option(
-        "-cdr",
+        "-crc",
         "--cutoff-rdg-cube",
         type=float,
         default=None,
         help="Cutoff for RDG (reduced density gradient) used in creating the cube file.",
     )
     @click.option(
-        "--dgrid-promolecular",
-        type=float,
-        default=None,
-        help="Grids for promolecular densities.",
+        "--dgrid/--no-dgrid",
+        type=bool,
+        default=False,
+        help="Turn on Radial grids for promolecular densities. Default is exponential fits.\n"
+        "Exponential fits are available up to Z=18 (Ar); radial grids are available up to Pu (Z=94).\n "
+        "Defaults to exponential fits unless the molecule contains some atom with Z>18 "
+        "or there are charged atoms (cations). Using DGRID, only radial grids are used to "
+        "calculate promolecular densities. ",
     )
     @click.option(
         "--integrate/--no-integrate",
@@ -146,19 +143,11 @@ def click_nciplot_settings_options(f):
         help="Trigger the integration of properties.",
     )
     @click.option(
-        "--number-of-ranges",
-        type=int,
-        default=None,
-        help="Number of ranges to compute properties.",
-    )
-    @click.option(
         "--ranges",
-        type=tuple,
         default=None,
         help="Ranges for computing properties. A lower and upper bounds "
         "are required for every interval (one per line).\n "
-        "Number of ranges given should match the number of ranges "
-        "specified in --number-of-ranges option.",
+        "Example input: [[-0.1,-0.02],[-0.02,0.02],[0.02,0.1]]\n",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -167,160 +156,86 @@ def click_nciplot_settings_options(f):
     return wrapper_common_options
 
 
-@click.group(cls=MyGroup)
+@click.command(cls=MyCommand)
 @click_nciplot_settings_options
 @click_pubchem_options
 @click.pass_context
 def nciplot(
     ctx,
-    project,
-    filename,
+    filenames,
     label,
-    append_label,
-    title,
-    charge,
-    multiplicity,
-    functional,
-    basis,
-    semiempirical,
-    index,
-    additional_opt_options,
-    additional_route_parameters,
-    append_additional_info,
-    custom_solvent,
-    dieze_tag,
-    forces,
+    rthres,
+    ligand_file_number,
+    ligand_radius,
+    radius_positions,
+    radius_r,
+    intercut1,
+    intercut2,
+    increments,
+    fragment_label,
+    fragment_atoms,
+    cutoff_density_dat,
+    cutoff_rdg_dat,
+    cutoff_density_cube,
+    cutoff_rdg_cube,
+    dgrid,
+    integrate,
+    ranges,
     pubchem,
 ):
     """CLI for running NCIPLOT jobs using the chemsmart framework."""
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 
-    # get project settings
-    project_settings = NCIPLOTJobSettings.from_project(project)
+    # update NCIPLOT job settings using values from CLI
+    if len(filenames) == 0:
+        filenames = None
 
-    # obtain NCIPLOT Settings from filenames, if supplied; otherwise return defaults
+    job_settings = NCIPLOTJobSettings(
+        filenames=filenames,
+        label=label,
+        rthres=rthres,
+        ligand_file_number=ligand_file_number,
+        ligand_radius=ligand_radius,
+        radius_positions=radius_positions,
+        radius_r=radius_r,
+        intercut1=intercut1,
+        intercut2=intercut2,
+        increments=increments,
+        fragment_label=fragment_label,
+        fragment_atoms=fragment_atoms,
+        cutoff_density_dat=cutoff_density_dat,
+        cutoff_rdg_dat=cutoff_rdg_dat,
+        cutoff_density_cube=cutoff_density_cube,
+        cutoff_rdg_cube=cutoff_rdg_cube,
+        dgrid=dgrid,
+        integrate=integrate,
+        ranges=ranges,
+    )
+    print(f"NCIPLOT job settings: {job_settings.__dict__}")
+    print(type(job_settings))
 
-    if filename is None:
-        # for cases where filenames is not supplied, eg, get structure from pubchem
-        job_settings = NCIPLOTJobSettings.default()
-        logger.info(
-            f"No filenames is supplied and NCIPLOT default settings are used:\n{job_settings.__dict__} "
-        )
-    elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
-        # filenames supplied - we would want to use the settings from here and do not use any defaults!
-        job_settings = NCIPLOTJobSettings.from_filepath(filename)
-    # elif filenames.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
-    else:
-        job_settings = NCIPLOTJobSettings.default()
-
-    # Update keywords
-    keywords = (
-        "charge",
-        "multiplicity",
-    )  # default keywords to merge filenames charge and multiplicity
-    if charge is not None:
-        job_settings.charge = charge
-    if multiplicity is not None:
-        job_settings.multiplicity = multiplicity
-    if functional is not None:
-        job_settings.functional = functional
-        keywords += ("functional",)  # update keywords
-    if basis is not None:
-        job_settings.basis = basis
-        keywords += ("basis",)
-    if semiempirical is not None:
-        job_settings.semiempirical = semiempirical
-        keywords += ("semiempirical",)
-    if additional_opt_options is not None:
-        job_settings.additional_opt_options_in_route = additional_opt_options
-        keywords += ("additional_opt_options_in_route",)
-    if additional_route_parameters is not None:
-        job_settings.additional_route_parameters = additional_route_parameters
-        keywords += ("additional_route_parameters",)
-    if append_additional_info is not None:
-        job_settings.append_additional_info = append_additional_info
-        keywords += ("append_additional_info",)
-    if custom_solvent is not None:
-        job_settings.custom_solvent = custom_solvent
-        keywords += ("custom_solvent",)
-    if title is not None:
-        job_settings.title = title
-        keywords += ("title",)
-    if dieze_tag is not None:
-        job_settings.dieze_tag = dieze_tag
-        keywords += ("dieze_tag",)
-    if forces:
-        job_settings.forces = forces
-        keywords += ("forces",)
-
-    # obtain molecule structure
-    molecules = None
-    if filename is None and pubchem is None:
-        raise ValueError(
-            "[filenames] or [pubchem] has not been specified!\nPlease specify one of them!"
-        )
-    if filename and pubchem:
-        raise ValueError(
-            "Both [filenames] and [pubchem] have been specified!\nPlease specify only one of them."
-        )
-
-    if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(
-            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
-        )
+    logger.info(f"Obtained NCIPLOT job settings: {job_settings.__dict__}")
 
     if pubchem:
-        molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
+        molecule = Molecule.from_pubchem(identifier=pubchem, return_list=False)
         assert (
-            molecules is not None
+            molecule is not None
         ), f"Could not obtain molecule from PubChem {pubchem}!"
-        logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
-
-    # update labels
-    if label is not None and append_label is not None:
-        raise ValueError(
-            "Only give NCIPLOT input filenames or name to be be appended, but not both!"
-        )
-    if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{append_label}"
-    if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{ctx.invoked_subcommand}"
-
-    # if user has specified an index to use to access particular structure
-    # then return that structure as a list
-    if index is not None:
-        molecules = return_objects_from_string_index(
-            list_of_objects=molecules, index=index
-        )
-
-    if not isinstance(molecules, list):
-        molecules = [molecules]
-
-    logger.debug(f"Obtained molecules: {molecules}")
+        logger.debug(f"Obtained molecule {molecule} from PubChem {pubchem}")
 
     # store objects
-    ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
-    ctx.obj["keywords"] = keywords
-    ctx.obj["molecules"] = (
-        molecules  # molecules as a list, as some jobs requires all structures to be used
+    ctx.obj["molecule"] = (
+        molecule  # molecules as a list, as some jobs requires all structures to be used
     )
     ctx.obj["label"] = label
-    ctx.obj["filenames"] = filename
+    ctx.obj["filenames"] = filenames
 
-
-@nciplot.result_callback()
-@click.pass_context
-def nciplot_process_pipeline(ctx, *args, **kwargs):
-    kwargs.update({"subcommand": ctx.invoked_subcommand})
-    ctx.obj[ctx.info_name] = kwargs
-    return args[0]
+    return NCIPLOTJob(
+        filenames=filenames,  # accepts multiple files
+        molecule=molecule,
+        settings=job_settings,
+        label=label,
+        jobrunner=None,
+    )
