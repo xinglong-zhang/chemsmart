@@ -126,7 +126,8 @@ class NCIPLOTJobRunner(JobRunner):
             return 1  # Return 1 to indicate failure
 
     def _run(self, process, **kwargs):
-        """Run the thermochemistry job."""
+        """Run the NCIPLOT job."""
+        # TODO
         pass
 
     def _get_executable(self):
