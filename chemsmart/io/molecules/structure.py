@@ -359,7 +359,7 @@ class Molecule:
         I_SI = [
             i * (units._amu * (units.Ang / units.m) ** 2)
             for i in self.moments_of_inertia_weighted_mass
-        ]
+        ]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
         if self.is_monoatomic:
             return None
         if self.is_linear:
@@ -378,7 +378,7 @@ class Molecule:
         I_SI = [
             i * (units._amu * (units.Ang / units.m) ** 2)
             for i in self.moments_of_inertia_most_abundant_mass
-        ]
+        ]  # convert the unit of moments of inertia from amu Å^2 to kg m^2
         if self.is_monoatomic:
             return None
         if self.is_linear:
@@ -391,6 +391,42 @@ class Molecule:
             units._hplanck / (8 * np.pi**2 * i) for i in I_SI
         ]
         return sum(rotational_constants) / len(rotational_constants)
+
+    def get_mass(self, use_weighted_mass=False):
+        """Get molecular mass with specified mass type.
+        Args:
+            use_weighted_mass: If True, use natural abundance weighted masses;
+                             otherwise, use most abundant masses.
+        Returns:
+            float: Molecular mass in amu
+        """
+        if use_weighted_mass:
+            return self.natural_abundance_weighted_mass
+        return self.most_abundant_mass
+
+    def get_moments_of_inertia(self, use_weighted_mass=False):
+        """Get moments of inertia with specified mass type.
+        Args:
+            use_weighted_mass: If True, use natural abundance weighted masses;
+                             otherwise, use most abundant masses.
+        Returns:
+            list: Moments of inertia along principal axes in amu Å²
+        """
+        if use_weighted_mass:
+            return self.moments_of_inertia_weighted_mass
+        return self.moments_of_inertia_most_abundant_mass
+
+    def get_average_rotational_constant(self, use_weighted_mass=False):
+        """Get average rotational constant with specified mass type.
+        Args:
+            use_weighted_mass: If True, use natural abundance weighted masses;
+                             otherwise, use most abundant masses.
+        Returns:
+            float or None: Average rotational constant in Hz, or None for monoatomic molecules
+        """
+        if use_weighted_mass:
+            return self.average_rotational_constant_weighted_mass
+        return self.average_rotational_constant_most_abundant_mass
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         if self.symbols is not None:
