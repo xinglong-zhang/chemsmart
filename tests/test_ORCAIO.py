@@ -8,7 +8,7 @@ from ase import units
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.input import ORCAInput, ORCAQMMMInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput, ORCAQMMMFile
+from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput, ORCAQMMMOutput
 from chemsmart.io.orca.route import ORCARoute
 
 
@@ -1835,7 +1835,7 @@ class TestORCAEngrad:
 
 class TestORCAQMMM:
     def test_read_qmmm_output(self, orca_two_layer_qmmmm_output_file):
-        orca_qmmm1 = ORCAQMMMFile(filename=orca_two_layer_qmmmm_output_file)
+        orca_qmmm1 = ORCAQMMMOutput(filename=orca_two_layer_qmmmm_output_file)
         assert orca_qmmm1.multiscale_model == "QM1/QM2"
         assert orca_qmmm1.qm2_method == "XTB2"
         assert orca_qmmm1.total_charge == 0

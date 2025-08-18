@@ -1881,9 +1881,8 @@ class QMMM(Molecule):
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"
-            elif atom_index in self.medium_level_atoms:
-                if atom_index in self.medium_level_atoms:
-                    return "M"
+            elif self.medium_level_atoms and atom_index in self.medium_level_atoms:
+                return "M"
             else:
                 # if high level atoms is given, then low level atoms will be needed
                 return "L"
