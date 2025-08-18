@@ -6,7 +6,9 @@ import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import (
+    return_objects_from_string_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -353,6 +355,7 @@ def gaussian(
         keywords += ("forces",)
 
     # obtain molecule structure
+    molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -369,7 +372,9 @@ def gaussian(
         assert (
             molecules is not None
         ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
+        logger.debug(
+            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+        )
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
@@ -390,26 +395,15 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
-
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        logger.debug(f"Using molecule with index: {index}")
-        try:
-            # try to get molecule using python style string indexing,
-            # but in 1-based
-            from chemsmart.utils.utils import string2index_1based
+        molecules = return_objects_from_string_index(
+            list_of_objects=molecules, index=index
+        )
 
-            index = string2index_1based(index)
-            molecules = molecules[index]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-        except ValueError:
-            # except user defined indices such as s='[1-3,28-31,34-41]'
-            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+    if not isinstance(molecules, list):
+        molecules = [molecules]
 
     logger.debug(f"Obtained molecules: {molecules}")
 

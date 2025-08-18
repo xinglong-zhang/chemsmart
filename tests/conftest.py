@@ -1027,6 +1027,38 @@ def methanol_molecules():
 
 
 @pytest.fixture()
+def constrained_atoms():
+    """Fixture to create a simple Ar2 dimer with constraints."""
+    from ase import Atoms
+    from ase.calculators.lj import LennardJones
+    from ase.constraints import FixAtoms, FixBondLength
+
+    # Simple Ar2 dimer with a reasonable separation
+    r0 = 3.5  # Å
+    atoms = Atoms(
+        "Ar2", positions=[(0.0, 0.0, 0.0), (r0, 0.0, 0.0)], pbc=False
+    )
+
+    # Light-weight calculator for tests
+    atoms.calc = LennardJones()  # defaults are fine for unit tests
+
+    # Constraints:
+    #  - Fix the first atom in space
+    #  - Keep the Ar–Ar bond length fixed at its initial value
+    constraints = [
+        FixAtoms(indices=[0]),
+        FixBondLength(0, 1),
+    ]
+    # set the constraints on the Atoms object
+    atoms.set_constraint(constraint=constraints)
+
+    # set velocity
+    atoms.set_velocities([[0, 0, 0], [0, 0, 0]])  # Set zero velocities
+
+    return atoms
+
+
+@pytest.fixture()
 def methanol_and_ethanol():
     # molecules for testing
     # methanol
@@ -1084,6 +1116,15 @@ def io_test_directory(test_data_directory):
 @pytest.fixture()
 def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
+
+
+@pytest.fixture()
+def constrained_pbc_db_file(io_test_directory):
+    """Fixture of a .db file containing constrained PBC database
+    from heterogeneous catalysis."""
+    return os.path.join(
+        io_test_directory, "heterogenous_pbc_constraints_5images.db"
+    )
 
 
 ## fixtures for mixins
