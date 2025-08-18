@@ -872,87 +872,87 @@ class Molecule:
             line = f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}"
             if self.frozen_atoms is not None:
                 line = f"{s:6} {self.frozen_atoms[i]:5} {x:15.10f} {y:15.10f} {z:15.10f}"
-            if self.partition_level_strings is not None:
-                line += f" {self.partition_level_strings[i]}"
-
-            if self.bonded_atoms is not None:
-                # Handle QM link atoms and bonded-to atoms
-                if not isinstance(self.bonded_atoms, list):
-                    self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
-                for atom1, atom2 in self.bonded_atoms:
-                    atom1_level = self._determine_level_from_atom_index(atom1)
-                    atom2_level = self._determine_level_from_atom_index(atom2)
-                    if (
-                        (atom1_level == atom2_level == "H")
-                        or (atom1_level == atom2_level == "M")
-                        or (atom1_level == atom2_level == "L")
-                    ):
-                        raise ValueError(
-                            f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
-                        )
-                    elif atom1_level == "H" and (
-                        atom2_level == "M" or atom2_level == "L"
-                    ):
-                        if (i + 1) == atom2:
-                            line += f" H {atom1}"
-                    elif atom1_level == "M" and atom2_level == "L":
-                        if (i + 1) == atom2:
-                            line += f" H {atom1}"
-                    elif (
-                        atom1_level == "M" or atom1_level == "L"
-                    ) and atom2_level == "H":
-                        # lower level line will get the link atom (Hydrogen)
-                        if (i + 1) == atom1:
-                            line += f" H {atom2}"
-                    elif atom1_level == "L" and atom2_level == "M":
-                        if (i + 1) == atom1:
-                            line += f" H {atom2}"
-
-            if self.scale_factors is not None:
-                logger.warning(
-                    "WARNING: Please be advised that you know what you are doing,"
-                    " as you are overriding Gaussian defaults for determining"
-                    "scale factors.\n Please specify scale factors for each required"
-                    "bonded atoms."
-                )
-                for (
-                    atom1,
-                    atom2,
-                ), scale_factors in self.scale_factors.items():
-                    atom1_level = self._determine_level_from_atom_index(atom1)
-                    atom2_level = self._determine_level_from_atom_index(atom2)
-                    if not isinstance(scale_factors, list):
-                        raise ValueError(
-                            "Scale factors should be a list for each atom pair!"
-                        )
-                    if (
-                        atom1_level == atom2_level == "H"
-                        or atom1_level == atom2_level == "M"
-                        or atom1_level == atom2_level == "L"
-                    ):
-                        raise ValueError(
-                            f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
-                        )
-                    elif atom1_level == "H" and (
-                        atom2_level == "M" or atom2_level == "L"
-                    ):
-                        if (i + 1) == atom2:
-                            for scale_factor in scale_factors:
-                                line += f" {float(scale_factor)}"
-                    elif atom1_level == "M" and atom2_level == "L":
-                        if (i + 1) == atom2:
-                            for scale_factor in scale_factors:
-                                line += f" {float(scale_factor)}"
-                    elif (
-                        atom1_level == "M" or atom1_level == "L"
-                    ) and atom2_level == "H":
-                        if (i + 1) == atom1:
-                            for scale_factor in scale_factors:
-                                line += f" {float(scale_factor)}"
-                    elif atom1_level == "L" and atom2_level == "M":
-                        if (i + 1) == atom1:
-                            for scale_factor in scale_factors:
-                                line += f" {float(scale_factor)}"
+            # if self.partition_level_strings is not None:
+            #     line += f" {self.partition_level_strings[i]}"
+            #
+            # if self.bonded_atoms is not None:
+            #     # Handle QM link atoms and bonded-to atoms
+            #     if not isinstance(self.bonded_atoms, list):
+            #         self.bonded_atoms = ast.literal_eval(self.bonded_atoms)
+            #     for atom1, atom2 in self.bonded_atoms:
+            #         atom1_level = self._determine_level_from_atom_index(atom1)
+            #         atom2_level = self._determine_level_from_atom_index(atom2)
+            #         if (
+            #             (atom1_level == atom2_level == "H")
+            #             or (atom1_level == atom2_level == "M")
+            #             or (atom1_level == atom2_level == "L")
+            #         ):
+            #             raise ValueError(
+            #                 f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+            #             )
+            #         elif atom1_level == "H" and (
+            #             atom2_level == "M" or atom2_level == "L"
+            #         ):
+            #             if (i + 1) == atom2:
+            #                 line += f" H {atom1}"
+            #         elif atom1_level == "M" and atom2_level == "L":
+            #             if (i + 1) == atom2:
+            #                 line += f" H {atom1}"
+            #         elif (
+            #             atom1_level == "M" or atom1_level == "L"
+            #         ) and atom2_level == "H":
+            #             # lower level line will get the link atom (Hydrogen)
+            #             if (i + 1) == atom1:
+            #                 line += f" H {atom2}"
+            #         elif atom1_level == "L" and atom2_level == "M":
+            #             if (i + 1) == atom1:
+            #                 line += f" H {atom2}"
+            #
+            # if self.scale_factors is not None:
+            #     logger.warning(
+            #         "WARNING: Please be advised that you know what you are doing,"
+            #         " as you are overriding Gaussian defaults for determining"
+            #         "scale factors.\n Please specify scale factors for each required"
+            #         "bonded atoms."
+            #     )
+            #     for (
+            #         atom1,
+            #         atom2,
+            #     ), scale_factors in self.scale_factors.items():
+            #         atom1_level = self._determine_level_from_atom_index(atom1)
+            #         atom2_level = self._determine_level_from_atom_index(atom2)
+            #         if not isinstance(scale_factors, list):
+            #             raise ValueError(
+            #                 "Scale factors should be a list for each atom pair!"
+            #             )
+            #         if (
+            #             atom1_level == atom2_level == "H"
+            #             or atom1_level == atom2_level == "M"
+            #             or atom1_level == atom2_level == "L"
+            #         ):
+            #             raise ValueError(
+            #                 f"Both atoms in a bond: ({atom1},{atom2}) cannot be at the same level!"
+            #             )
+            #         elif atom1_level == "H" and (
+            #             atom2_level == "M" or atom2_level == "L"
+            #         ):
+            #             if (i + 1) == atom2:
+            #                 for scale_factor in scale_factors:
+            #                     line += f" {float(scale_factor)}"
+            #         elif atom1_level == "M" and atom2_level == "L":
+            #             if (i + 1) == atom2:
+            #                 for scale_factor in scale_factors:
+            #                     line += f" {float(scale_factor)}"
+            #         elif (
+            #             atom1_level == "M" or atom1_level == "L"
+            #         ) and atom2_level == "H":
+            #             if (i + 1) == atom1:
+            #                 for scale_factor in scale_factors:
+            #                     line += f" {float(scale_factor)}"
+            #         elif atom1_level == "L" and atom2_level == "M":
+            #             if (i + 1) == atom1:
+            #                 for scale_factor in scale_factors:
+            #                     line += f" {float(scale_factor)}"
             f.write(line + "\n")
         return f
 
@@ -1741,11 +1741,6 @@ class QMMM(Molecule):
         """Obtain the list of partition levels for the atoms in the system."""
         return self._get_partition_level_strings()
 
-    @property
-    def partition_level_strings(self):
-        """Obtain the list of partition levels for the atoms in the system."""
-        return self._get_partition_level_strings()
-
     def _get_partition_levels(self):
         """Obtain the list of partition levels for the atoms in the system.
         Returns:
@@ -1936,67 +1931,4 @@ class QMMM(Molecule):
                 return "L"
         else:
             return None
-
-    def _get_partitions(self):
-        partitions = []
-        high_level_atoms = []
-        medium_level_atoms = []
-        low_level_atoms = []
-        i = 1
-        for line in self.coordinate_block:
-            if line.startswith(
-                "TV"
-            ):  # cases where PBC system occurs in Gaussian
-                continue
-
-            line_elements = line.strip().split()
-            if (
-                len(line_elements) < 4 or len(line_elements) == 0
-            ):  # skip lines that do not contain coordinates
-                continue
-            if len(line_elements) > 5 and all(
-                line_elements[i]
-                .strip()
-                .replace(".", "", 1)
-                .replace("-", "", 1)
-                .isdigit()
-                for i in range(2, 5)
-            ):
-                # happens in cube file and frozen atoms case
-                if line_elements[5] == "H":
-                    high_level_atoms.append(i)
-                    partitions.append("H")
-                elif line_elements[5] == "M":
-                    medium_level_atoms.append(i)
-                    partitions.append("M")
-                elif line_elements[5] == "L":
-                    low_level_atoms.append(i)
-                    partitions.append("L")
-                i += 1
-            elif len(line_elements) > 4 and all(
-                line_elements[i]
-                .strip()
-                .replace(".", "", 1)
-                .replace("-", "", 1)
-                .isdigit()
-                for i in range(1, 4)
-            ):
-                if line_elements[4].strip() == "H":
-                    high_level_atoms.append(i)
-                    partitions.append("H")
-                elif line_elements[4].strip() == "M":
-                    medium_level_atoms.append(i)
-                    partitions.append("M")
-                elif line_elements[4] == "L":
-                    low_level_atoms.append(i)
-                    partitions.append("L")
-                i += 1
-            # else:
-            #     raise ValueError(f"Partition level not found in the coordinate block: {self.coordinate_block}!")
-        return (
-            partitions,
-            high_level_atoms,
-            medium_level_atoms,
-            low_level_atoms,
-        )
 
