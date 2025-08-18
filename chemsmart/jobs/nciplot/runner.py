@@ -24,7 +24,7 @@ class NCIPLOTJobRunner(JobRunner):
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
-        """Initialize the ThermochemistryJobRunner."""
+        """Initialize the NCIPLOTJobRunner."""
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -109,19 +109,17 @@ class NCIPLOTJobRunner(JobRunner):
             copy(job.inputfile, self.job_inputfile)
 
     def _get_command(self, job):
-        """No external command is needed for thermochemistry jobs."""
+        """No external command is needed for NCIPLOT jobs."""
         return None
 
     def _create_process(self, job, command, env):
-        """Run the thermochemistry calculation directly."""
+        """Run the NCIPLOT calculation directly."""
         try:
             job.compute_thermochemistry()
             return 0  # Return 0 to indicate success
         except Exception as e:
             with open(self.job_errfile, "w") as err:
-                err.write(
-                    f"Error during thermochemistry calculation: {str(e)}\n"
-                )
+                err.write(f"Error during NCIPLOT calculation: {str(e)}\n")
             logger.error(f"Error processing job {job.label}: {str(e)}")
             return 1  # Return 1 to indicate failure
 
@@ -131,7 +129,7 @@ class NCIPLOTJobRunner(JobRunner):
         pass
 
     def _get_executable(self):
-        """No external executable is needed for thermochemistry jobs."""
+        """No external executable is needed for NCIPLOT jobs."""
         return None
 
     def _postrun(self, job):
