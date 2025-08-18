@@ -150,8 +150,7 @@ class TestConverter:
         self, tmpdir, gaussian_link_outfile
     ):
         # copy file to tmpdir
-        tmp_path = os.path.join(tmpdir, "dna_link_sp..log")
-        print(tmp_path)
+        tmp_path = os.path.join(tmpdir, "dna_link_sp.log")
         copy(gaussian_link_outfile, tmp_path)
         assert os.path.exists(tmp_path)
         file_converter = FileConverter(

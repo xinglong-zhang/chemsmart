@@ -935,6 +935,18 @@ def single_molecule_xyz_file(xyz_directory):
 def multiple_molecules_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_conformers.xyz")
 
+@pytest.fixture()
+def xtb_optimized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "ts_xtbopt.xyz")
+
+@pytest.fixture()
+def chemsmart_generated_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "frozen_coordinates_opt.xyz")
+
+@pytest.fixture()
+def extended_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crystal.extxyz")
+
 
 @pytest.fixture()
 def utils_test_directory(test_data_directory):
