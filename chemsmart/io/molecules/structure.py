@@ -19,7 +19,7 @@ from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
-from chemsmart.utils.utils import file_cache
+from chemsmart.utils.utils import file_cache, string2index_1based
 
 p = pt()
 
@@ -39,7 +39,7 @@ class Molecule:
         The charge of the molecule.
     multiplicity: integer
         The multiplicity of the molecule.
-    frozen_atoms: list of integers to freeze atoms in the molecule.
+    frozen_atoms: list of integers, one for each atom, indicating which atoms are frozen.
         Follows Gaussian input file format where -1 denotes frozen atoms
         and 0 denotes relaxed atoms.
     pbc_conditions: list of integers
@@ -553,8 +553,14 @@ class Molecule:
         """Reads a file using ASE and returns a Molecule object."""
         from .atoms import AtomsChargeMultiplicity
 
+        # supplied index is 1-indexed, thus need to convert
+        index = string2index_1based(index)
+
         ase_atoms = ase_read(filepath, index=index, **kwargs)
+        logger.debug(f"Read ASE atoms: {ase_atoms} at index {index}")
+
         if isinstance(ase_atoms, list):
+            logger.debug(f"Read {len(ase_atoms)} ASE atoms.")
             return [
                 AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
                 for atoms in ase_atoms
@@ -599,11 +605,10 @@ class Molecule:
 
     @classmethod
     def from_ase_atoms(cls, atoms):
-        return cls(
-            symbols=atoms.get_chemical_symbols(),
-            positions=atoms.get_positions(),
-            pbc_conditions=atoms.get_pbc(),
-        )
+        """Creates a Molecule instance from an ASE Atoms object."""
+        from .atoms import AtomsChargeMultiplicity
+
+        return AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
 
     @classmethod
     def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
@@ -759,7 +764,13 @@ class Molecule:
 
     def _write_gaussian_pbc_coordinates(self, f):
         """Write the coordinates of the molecule with PBC conditions to a file."""
-        if self.pbc_conditions is not None:
+        if self.pbc_conditions is None or not any(self.pbc_conditions):
+            # this happens when self.pbc_conditions = [False, False, False]
+            # when the structure is read in from e.g., ASE database
+            logger.debug("No PBC conditions to write.")
+            return
+        else:
+            logger.debug(f"Writing PBC conditions: {self.pbc_conditions}")
             assert (
                 self.translation_vectors is not None
             ), "Translation vectors should not be None when PBC conditions are given!"
@@ -788,10 +799,10 @@ class Molecule:
         pass
 
     def __repr__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
     def __str__(self):
-        return f"{self.__class__.__name__}<{self.empirical_formula},{self.energy}>"
+        return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
     @cached_property
     def distance_matrix(self):
@@ -1158,6 +1169,11 @@ class Molecule:
             cell=self.translation_vectors,
             charge=self.charge,
             multiplicity=self.multiplicity,
+            frozen_atoms=self.frozen_atoms,
+            energy=self.energy,
+            forces=self.forces,
+            velocities=self.velocities,
+            info=self.info,
         )
 
     def to_pymatgen(self):
@@ -1241,7 +1257,7 @@ class CoordinateBlock:
 
     @property
     def constrained_atoms(self):
-        """Returns a list of contraints in Gaussian format where 0 means unconstrained
+        """Returns a list of constraints in Gaussian format where 0 means unconstrained
         and -1 means constrained."""
         return self._get_constraints()
 
