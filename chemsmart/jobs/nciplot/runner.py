@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 from contextlib import suppress
+from datetime import datetime
 from functools import lru_cache
 from shutil import copy, rmtree
 
@@ -161,3 +162,72 @@ class NCIPLOTJobRunner(JobRunner):
                 rmtree(self.running_directory)
 
             self._remove_err_files(job)
+
+
+class FakeNCIPLOT:
+    def __init__(self, file_to_run):
+        if not os.path.exists(file_to_run):
+            raise FileNotFoundError(f"File {file_to_run} not found.")
+        self.file_to_run = file_to_run
+
+    @property
+    def file_folder(self):
+        return os.path.dirname(self.file_to_run)
+
+    @property
+    def filename(self):
+        return os.path.basename(self.file_to_run)
+
+    @property
+    def input_filepath(self):
+        return self.file_to_run
+
+    @property
+    def output_filepath(self):
+        output_file = self.filename.split(".")[0] + ".nciout"
+        return os.path.join(self.file_folder, output_file)
+
+    def run(self):
+        with open(self.output_filepath, "w") as g:
+            g.write(
+                """# ----------------- NCIPLOT ------------------------
+ # --- PLOTTING NON COVALENT INTERACTION REGIONS ----
+ # ---             E.R. Johnson                  ----
+ # ---          J. Contreras-Garcia              ----
+ # ----------    Duke University         ------------
+ #                                                   
+ # ---             A. de la Roza                  ---
+ # --------- University of California Merced --------
+ #                                                   
+ # ---               R. A. Boto                   ---
+ # ---                 C. Quan                     --
+ # --------  Université Pierre et Marie Curie -------
+ # --------------------------------------------------
+ # ---              Please cite                  ----
+ # --J. Am. Chem. Soc., 2010, 132 (18), pp 6498–6506-
+ # --------------------------------------------------
+ # --------------------------------------------------
+ # ---     Contributions for the wfn properties  ----
+ # ---      from H. L. Schmider are acknowledged  ---
+ # --------------------------------------------------
+ # --------------------------------------------------
+ # ---     Contributions for the wfx reader      ----
+ # ---      from Dave Arias are acknowledged      ---
+ # --------------------------------------------------
+ # --------------------------------------------------
+ # ---     Contributions for the integration --------
+ # ---      algorithms from Erna Wieduwilt    --------
+ # ---             are acknowledged           --------
+ # ---------------------------------------------------
+ #"""
+            )
+            g.write(f" # Start -- {datetime.now()}\n")
+            g.write(
+                """-----------------------------------------------------
+      INPUT INFORMATION:
+-----------------------------------------------------"""
+            )
+            for line in open(self.input_filepath, "r"):
+                g.write(line)
+            g.write("\n")
+            g.write(f"End -- {datetime.now()}\n")
