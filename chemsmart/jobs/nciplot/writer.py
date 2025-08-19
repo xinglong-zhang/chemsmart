@@ -158,7 +158,6 @@ class NCIPLOTInputWriter(InputWriter):
         if increments is not None:
             logger.debug("Writing increments section.")
             increments_line = "INCREMENTS "
-            increments.replace("(", "")
             increments = increments.replace("(", "")
             increments = increments.replace(")", "")
             incr = increments.split(",")
