@@ -307,7 +307,7 @@ def nciplot(ctx, folder):
     Replaces '~/bin/nciplot' with the specified folder in YAML files.
 
     Examples:
-        chemsmart config gaussian --folder <NCIPLOTFOLDER>
+        chemsmart config nciplot --folder <NCIPLOTFOLDER>
     """
     cfg = ctx.obj["cfg"]
     if "~" in folder:
