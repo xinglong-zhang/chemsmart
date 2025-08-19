@@ -179,7 +179,10 @@ def nciplot(
     pubchem,
     **kwargs,
 ):
-    """CLI for running NCIPLOT jobs using the chemsmart framework."""
+    """CLI for running NCIPLOT jobs using the chemsmart framework.
+    Example usage:
+    chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test--fragments "{1: [1,4,5], 2: [3,4,5]}"
+    """
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 
@@ -189,6 +192,9 @@ def nciplot(
 
     if fragments is not None:
         fragments = ast.literal_eval(fragments)
+
+    if ranges is not None:
+        ranges = ast.literal_eval(ranges)
 
     job_settings = NCIPLOTJobSettings(
         filenames=filenames,

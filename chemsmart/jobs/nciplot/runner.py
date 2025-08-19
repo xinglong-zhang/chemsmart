@@ -164,6 +164,31 @@ class NCIPLOTJobRunner(JobRunner):
             self._remove_err_files(job)
 
 
+class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
+    # creates job runner process
+    # combines information about server and program
+    FAKE = True
+
+    def __init__(
+        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
+    ):
+        super().__init__(
+            server=server,
+            scratch=scratch,
+            scratch_dir=scratch_dir,
+            fake=fake,
+            **kwargs,
+        )
+
+    def run(self, job, **kwargs):
+        job.label = job.label + "_fake"  # append fake to label
+        self._prerun(job=job)
+        self._write_input(job=job)
+        returncode = FakeNCIPLOT(self.job_inputfile).run()
+        self._postrun(job=job)
+        return returncode
+
+
 class FakeNCIPLOT:
     def __init__(self, file_to_run):
         if not os.path.exists(file_to_run):

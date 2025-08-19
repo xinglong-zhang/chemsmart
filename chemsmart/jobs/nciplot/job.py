@@ -54,12 +54,13 @@ class NCIPLOTJob(Job):
         self.filenames = filenames
 
         if label is None:
-            if filenames is not None:
-                label = os.path.splitext(os.path.basename(filenames))[0]
-            elif molecule is not None:
-                label = molecule.get_chemical_formula(empirical=True)
+            if self.settings.label is not None:
+                label = self.settings.label
             else:
-                label = "nciplot_job"
+                if molecule is not None:
+                    label = molecule.get_chemical_formula(empirical=True)
+                else:
+                    label = "nciplot_job"
         self.label = label
 
     @classmethod

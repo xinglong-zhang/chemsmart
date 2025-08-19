@@ -25,7 +25,7 @@ class NCIPLOTJobSettings:
         cutoff_rdg_cube,
         dgrid,
         integrate,
-        ranges,
+        ranges,  # list of lists
     ):
         self.filenames = filenames
         self.label = label

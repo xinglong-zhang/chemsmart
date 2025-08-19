@@ -1,4 +1,3 @@
-import ast
 import logging
 import os.path
 
@@ -51,12 +50,13 @@ class NCIPLOTInputWriter(InputWriter):
         else:
             logger.debug(f"Number of files: {number_of_files}")
             f.write(f"{number_of_files}\n")
+            logger.debug(f"Filenames: {self.job.filenames}")
             for file in self.job.filenames:
+                logger.debug(f"Writing filename: {file}")
                 if not os.path.exists(file):
                     raise FileNotFoundError(
-                        f"File {file} does not exist. Please check the file path."
+                        f"File {os.path.abspath(file)} does not exist. Please check the file path."
                     )
-                logger.debug(f"Writing filename: {file}")
                 f.write(f"{file}\n")
 
     def _write_rthres(self, f):
@@ -89,8 +89,9 @@ class NCIPLOTInputWriter(InputWriter):
         if radius_positions is not None and radius_r is not None:
             logger.debug("Writing radius section.")
             radius_line = "RADIUS "
-            radius_positions.replace("(", "")
-            radius_positions.replace(")", "")
+            radius_positions = radius_positions.replace("(", "")
+            radius_positions = radius_positions.replace(")", "")
+            logger.debug(f"radius_positions: {radius_positions}")
             coords = radius_positions.split(",")
             if len(coords) != 3:
                 raise ValueError(
@@ -340,7 +341,6 @@ class NCIPLOTInputWriter(InputWriter):
         """Write the RANGES section for the input file."""
         ranges = self.settings.ranges
         if ranges is not None:
-            ranges = ast.ast.literal_eval(ranges)
             number_of_ranges = len(ranges)
             logger.debug("Writing RANGES section.")
             f.write(f"RANGE {number_of_ranges}\n")
