@@ -125,6 +125,13 @@ configure:        ## Run chemsmart configuration interactively.
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
 		$(ECHO) "Skipping ORCA configuration."; \
+	fi; \
+	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder; \
+	if [ -n "$$nciplot_folder" ]; then \
+		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
+	else \
+		$(ECHO) "Skipping NCIPLOT configuration."; \
 	fi
 
 .PHONY: show

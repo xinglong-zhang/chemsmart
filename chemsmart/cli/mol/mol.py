@@ -205,6 +205,10 @@ def mol(
     index,
     pubchem,
 ):
+    """CLI for running PYMOL visualization jobs using the chemsmart framework.
+    Example usage:
+    chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
+    """
     # obtain molecule structure
     if filename is None and pubchem is None:
         # this is fine for PyMOL IRC Movie Job

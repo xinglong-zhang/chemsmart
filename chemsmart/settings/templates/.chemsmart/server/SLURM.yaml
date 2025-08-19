@@ -38,3 +38,16 @@ ORCA:
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate ~/miniconda3/envs/chemsmart
+
+NCIPLOT:
+    EXEFOLDER: ~/bin/nciplot
+    LOCAL_RUN: False  # local run True to use serial_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: |
+        module purge
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+        export NCIPLOT_HOME=~/bin/nciplot

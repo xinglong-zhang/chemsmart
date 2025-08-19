@@ -260,7 +260,7 @@ def gaussian(ctx, folder):
         g16_folder = os.path.expanduser(folder)
         assert os.path.exists(
             os.path.abspath(g16_folder)
-        ), f"Folder not found: {g16_folder}"
+        ), f"Gaussian folder not found: {g16_folder}"
     logger.info(f"Configuring Gaussian with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/bin/g16", folder)
 
@@ -275,26 +275,54 @@ def gaussian(ctx, folder):
     help="Path to the ORCA folder.",
 )
 def orca(ctx, folder):
-    """Configures paths to g16 folder.
+    """Configures paths to ORCA folder.
 
-    Replaces '~/bin/g16' with the specified folder in YAML files.
+    Replaces '~/bin/orca' with the specified folder in YAML files.
 
     Examples:
-        chemsmart config gaussian --folder <G16FOLDER>
+        chemsmart config orca --folder <ORCAFOLDER>
     """
     cfg = ctx.obj["cfg"]
     if "~" in folder:
         orca_folder = os.path.expanduser(folder)
         assert os.path.exists(
             os.path.abspath(orca_folder)
-        ), f"Folder not found: {orca_folder}"
-    logger.info(f"Configuring Gaussian with folder: {folder}")
+        ), f"ORCA folder not found: {orca_folder}"
+    logger.info(f"Configuring ORCA with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/bin/orca_6_0_0", folder)
+
+
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=True,
+    help="Path to the NCIPLOT folder.",
+)
+def nciplot(ctx, folder):
+    """Configures paths to NCIPLOT folder.
+
+    Replaces '~/bin/nciplot' with the specified folder in YAML files.
+
+    Examples:
+        chemsmart config gaussian --folder <NCIPLOTFOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+    if "~" in folder:
+        nciplot_folder = os.path.expanduser(folder)
+        assert os.path.exists(
+            os.path.abspath(nciplot_folder)
+        ), f"NCIPLOT folder not found: {nciplot_folder}"
+    logger.info(f"Configuring NCIPLOT with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
+config.add_command(nciplot)
 
 if __name__ == "__main__":
     config()
