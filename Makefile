@@ -162,8 +162,16 @@ lint:             ## Run linters (ruff).
 
 # === Testing ===
 
+.PHONY: coverage-clean
+coverage-clean:   ## Remove any stale coverage files prior to running tests.
+ifeq ($(OS),Windows)
+	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
+else
+	-@rm -f .coverage .coverage.* 2>/dev/null
+endif
+
 .PHONY: test
-test: lint        ## Run tests and generate coverage report.
+test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
 	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
 	$(ENV_PREFIX)coverage combine || true  # Add this to handle empty data gracefully
 	$(ENV_PREFIX)coverage xml
