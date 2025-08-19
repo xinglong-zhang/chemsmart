@@ -43,22 +43,31 @@ class NCIPLOTInputWriter(InputWriter):
 
     def _write_filenames(self, f):
         logger.debug("Writing NCIPLOT input files.")
-        number_of_files = len(self.job.filenames)
-        if number_of_files == 0:
-            raise ValueError(
-                "No filenames provided for NCIPLOT job. Please provide at least one file."
-            )
+        if self.job.filenames is None:
+            # this is the case when the job is created from PubChem
+            logger.debug("No filenames provided for NCIPLOT job.")
+            assert os.path.exists(
+                f"{self.job.label}.xyz"
+            ), f"{self.job.label}.xyz created from PubChem is required. "
+            f.write("1\n")
+            f.write(f"{self.job.label}.xyz\n")
         else:
-            logger.debug(f"Number of files: {number_of_files}")
-            f.write(f"{number_of_files}\n")
-            logger.debug(f"Filenames: {self.job.filenames}")
-            for file in self.job.filenames:
-                logger.debug(f"Writing filename: {file}")
-                if not os.path.exists(file):
-                    raise FileNotFoundError(
-                        f"File {os.path.abspath(file)} does not exist. Please check the file path."
-                    )
-                f.write(f"{file}\n")
+            number_of_files = len(self.job.filenames)
+            if number_of_files == 0:
+                raise ValueError(
+                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                )
+            else:
+                logger.debug(f"Number of files: {number_of_files}")
+                f.write(f"{number_of_files}\n")
+                logger.debug(f"Filenames: {self.job.filenames}")
+                for file in self.job.filenames:
+                    logger.debug(f"Writing filename: {file}")
+                    if not os.path.exists(file):
+                        raise FileNotFoundError(
+                            f"File {os.path.abspath(file)} does not exist. Please check the file path."
+                        )
+                    f.write(f"{file}\n")
 
     def _write_rthres(self, f):
         """Write the rthres section for the input file."""
@@ -270,19 +279,33 @@ class NCIPLOTInputWriter(InputWriter):
 
         # Determine default values based on input file type
         density = ""
-        if len(self.settings.filenames) == 0:
-            raise ValueError(
-                "No filenames provided for NCIPLOT job. Please provide at least one file."
+        if self.settings.filenames is None:
+            logger.debug(
+                "No filenames provided for NCIPLOT job."
+                "Job likely generated from PubChem structure.\n"
+                "Promolecular NCIPLOT job will be created."
             )
+            density = "promolecular"
         else:
-            logger.debug(f"Number of files: {len(self.settings.filenames)}")
-            first_filename = self.settings.filenames[0]
-            if first_filename.endswith(".xyz"):
-                density = "promolecular"
-            elif first_filename.endswith(".wfn") or first_filename.endswith(
-                ".wfx"
-            ):
-                density = "SCF"
+            logger.debug(
+                "Filenames provided for NCIPLOT job."
+                "Determining density type based on file extension."
+            )
+            if len(self.settings.filenames) == 0:
+                raise ValueError(
+                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                )
+            else:
+                logger.debug(
+                    f"Number of files: {len(self.settings.filenames)}"
+                )
+                first_filename = self.settings.filenames[0]
+                if first_filename.endswith(".xyz"):
+                    density = "promolecular"
+                elif first_filename.endswith(
+                    ".wfn"
+                ) or first_filename.endswith(".wfx"):
+                    density = "SCF"
 
         if density == "promolecular":
             default_density = 0.07  # Promolecular default for r1

@@ -237,6 +237,16 @@ def nciplot(
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecule} from PubChem {pubchem}")
 
+        assert (
+            filenames is None
+        ), "Cannot provide both filenames and PubChem identifier!"
+        assert (
+            label is not None
+        ), "Label for file is required since creating molecule from PubChem!"
+
+        # write the molecule to a temporary .xyz file
+        molecule.write_xyz(filename=f"{label}.xyz", mode="w")
+
     # store objects
     ctx.obj["job_settings"] = job_settings
     ctx.obj["molecule"] = (
