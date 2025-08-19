@@ -1,5 +1,8 @@
+import glob
 import logging
 import os
+import shlex
+import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from shutil import copy, rmtree
@@ -49,6 +52,7 @@ class NCIPLOTJobRunner(JobRunner):
             executable = NCIPLOTExecutable.from_servername(
                 servername=self.server.name
             )
+            logger.debug(f"Executable obtained: {executable}")
             return executable
         except FileNotFoundError as e:
             logger.error(
@@ -80,16 +84,13 @@ class NCIPLOTJobRunner(JobRunner):
         self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
 
-        job_inputfile = os.path.basename(job.inputfile)
-        scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+        scratch_job_inputfile = os.path.join(scratch_job_dir, job.inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_outfile = job.label + ".dat"
-        scratch_job_outfile = os.path.join(scratch_job_dir, job_outfile)
+        scratch_job_outfile = os.path.join(scratch_job_dir, job.outputfile)
         self.job_outputfile = os.path.abspath(scratch_job_outfile)
 
-        job_errfile = job.label + ".err"
-        scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
+        scratch_job_errfile = os.path.join(scratch_job_dir, job.errfile)
         self.job_errfile = os.path.abspath(scratch_job_errfile)
 
     def _set_up_variables_in_job_directory(self, job):
@@ -101,52 +102,62 @@ class NCIPLOTJobRunner(JobRunner):
         self.job_errfile = os.path.abspath(job.errfile)
 
     def _write_input(self, job):
-        """Copy the input file to the running directory if using scratch."""
-        if self.scratch and self.job_inputfile != job.inputfile:
-            logger.info(
-                f"Copying input file {job.inputfile} to {self.job_inputfile}"
-            )
-            copy(job.inputfile, self.job_inputfile)
+        """Write the input file for NCIPLOT job."""
+        from chemsmart.jobs.nciplot.writer import NCIPLOTInputWriter
+
+        input_writer = NCIPLOTInputWriter(job=job)
+        input_writer.write(target_directory=self.running_directory)
 
     def _get_command(self, job):
-        """No external command is needed for NCIPLOT jobs."""
-        return None
+        """Get execution command for NCIPLOT jobs."""
+        exe = self._get_executable()
+        command = f"{exe} {self.job_inputfile} {self.job_outputfile}"
+        return command
 
     def _create_process(self, job, command, env):
         """Run the NCIPLOT calculation directly."""
-        try:
-            job.compute_thermochemistry()
-            return 0  # Return 0 to indicate success
-        except Exception as e:
-            with open(self.job_errfile, "w") as err:
-                err.write(f"Error during NCIPLOT calculation: {str(e)}\n")
-            logger.error(f"Error processing job {job.label}: {str(e)}")
-            return 1  # Return 1 to indicate failure
-
-    def _run(self, process, **kwargs):
-        """Run the NCIPLOT job."""
-        # TODO
-        pass
+        with (
+            open(self.job_outputfile, "w") as out,
+            open(self.job_errfile, "w") as err,
+        ):
+            logger.info(
+                f"Command executed: {command}\n"
+                f"Writing output file to: {self.job_outputfile}\n"
+                f"And err file to: {self.job_errfile}"
+            )
+            logger.debug(f"Environments for running: {self.executable.env}")
+            return subprocess.Popen(
+                shlex.split(command),
+                stdout=out,
+                stderr=err,
+                env=env,
+                cwd=self.running_directory,
+            )
 
     def _get_executable(self):
-        """No external executable is needed for NCIPLOT jobs."""
-        return None
+        """Get executable for NCIPLOT."""
+        exe = self.executable.get_executable()
+        logger.info(f"Gaussian executable: {exe}")
+        return exe
 
     def _postrun(self, job):
         """Handle post-run tasks, such as copying files from scratch and cleanup."""
         if self.scratch:
-            # Copy output and error files to job folder
-            for file in [self.job_outputfile, self.job_errfile]:
-                if not os.path.exists(file):
-                    logger.info(f"Copying file {file} to {job.folder}")
+            # if job was run in scratch, copy files to job folder except files starting with Gau-
+            for file in glob(f"{self.running_directory}/{job.label}*"):
+                if not file.endswith(".tmp"):
+                    logger.info(
+                        f"Copying file {file} from {self.running_directory} to {job.folder}"
+                    )
                     copy(file, job.folder)
 
-            # Clean up scratch directory
-            if os.path.exists(self.running_directory):
+        if job.is_complete():
+            # if job is completed, remove scratch directory and submit_script
+            # and log.info and log.err files
+            if self.scratch:
                 logger.info(
-                    f"Removing scratch directory: {self.running_directory}"
+                    f"Removing scratch directory: {self.running_directory}."
                 )
                 rmtree(self.running_directory)
 
-        if job.is_complete():
             self._remove_err_files(job)
