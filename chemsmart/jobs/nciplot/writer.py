@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class NCIPLOTInputWriter(InputWriter):
-    """Class that writes Gaussian input files for a job."""
+    """Class that writes NCIPLOT input files for a job."""
 
     def write(self, **kwargs):
         self._write(**kwargs)
