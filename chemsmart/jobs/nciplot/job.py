@@ -34,7 +34,7 @@ class NCIPLOTJob(Job):
             )
 
         # either filenames or molecule must be provided, but not both
-        print(filenames, molecule)
+        logger.debug(f"filenames: {filenames}, molecule: {molecule}")
         if filenames is not None and molecule is not None:
             raise ValueError(
                 "Either filenames or molecule must be provided, but not both!"
