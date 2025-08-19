@@ -212,13 +212,16 @@ def nciplot(
         filenames = None
 
     if fragments is not None:
-        fragments = ast.literal_eval(fragments)
-
-    if ranges is not None:
         try:
             fragments = ast.literal_eval(fragments)
         except (ValueError, SyntaxError) as e:
             raise click.BadParameter(f"Invalid format for --fragments: {e}")
+
+    if ranges is not None:
+        try:
+            ranges = ast.literal_eval(ranges)
+        except (ValueError, SyntaxError) as e:
+            raise click.BadParameter(f"Invalid format for --ranges: {e}")
 
     job_settings = NCIPLOTJobSettings(
         rthres=rthres,
