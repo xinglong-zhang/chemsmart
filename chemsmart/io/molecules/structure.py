@@ -496,12 +496,13 @@ class Molecule:
         from chemsmart.io.gaussian.input import Gaussian16Input
 
         try:
-
             g16_input = Gaussian16Input(filename=filepath)
             return g16_input.molecule
-        except ValueError:
-            g16_input = Gaussian16Input(filename=filepath)
-            return g16_input.molecule
+        except ValueError as e:
+            # log the error or raise a more specific exception
+            raise ValueError(
+                f"Failed to read Gaussian input file {filepath}: {str(e)}"
+            ) from e
 
     @staticmethod
     @file_cache()
