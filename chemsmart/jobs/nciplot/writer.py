@@ -159,7 +159,8 @@ class NCIPLOTInputWriter(InputWriter):
             logger.debug("Writing increments section.")
             increments_line = "INCREMENTS "
             increments.replace("(", "")
-            increments.replace(")", "")
+            increments = increments.replace("(", "")
+            increments = increments.replace(")", "")
             incr = increments.split(",")
 
             for i in incr:
