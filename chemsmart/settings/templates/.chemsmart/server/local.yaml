@@ -51,4 +51,3 @@ NCIPLOT:
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export NCIPLOT_HOME=~/bin/nciplot
-
