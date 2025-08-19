@@ -129,3 +129,15 @@ class ORCAExecutable(Executable):
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "orca")
             return executable_path
+
+
+class NCIPLOTExecutable(Executable):
+    PROGRAM = "NCIPLOT"
+
+    def __init__(self, executable_folder=None, **kwargs):
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        if self.executable_folder is not None:
+            executable_path = os.path.join(self.executable_folder, "nciplot")
+            return executable_path
