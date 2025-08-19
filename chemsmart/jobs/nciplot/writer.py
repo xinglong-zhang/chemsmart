@@ -21,10 +21,11 @@ class NCIPLOTInputWriter(InputWriter):
             folder = self.job.folder
         job_inputfile = os.path.join(folder, f"{self.job.label}.nci")
         logger.debug(f"Writing NCIPLOT input file: {job_inputfile}")
-        f = open(job_inputfile, "w")
-        self._write_all(f)
-        logger.info(f"Finished writing NCIPLOT input file: {job_inputfile}")
-        f.close()
+        with open(job_inputfile, "w") as f:
+            self._write_all(f)
+            logger.info(
+                f"Finished writing NCIPLOT input file: {job_inputfile}"
+            )
 
     def _write_all(self, f):
         self._write_filenames(f)
