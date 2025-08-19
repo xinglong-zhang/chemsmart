@@ -1,3 +1,4 @@
+import ast
 import functools
 import logging
 
@@ -87,16 +88,10 @@ def click_nciplot_settings_options(f):
         "Accepts strings in the form of 'x,y,z' or as a tuple (x, y, z).",
     )
     @click.option(
-        "--fragment-label",
-        type=int,
+        "--fragments",
+        type=str,
         default=None,
-        help="ifile label given by the input order.",
-    )
-    @click.option(
-        "--fragment-atoms",
-        type=tuple,
-        default=None,
-        help="Atoms for the fragment.",
+        help="Fragments in a dictionary-type string.\n E.g., {1: [1, 2, 3], 2: [4, 5, 6]}",
     )
     @click.option(
         "-cdd",
@@ -173,8 +168,7 @@ def nciplot(
     intercut1,
     intercut2,
     increments,
-    fragment_label,
-    fragment_atoms,
+    fragments,
     cutoff_density_dat,
     cutoff_rdg_dat,
     cutoff_density_cube,
@@ -193,6 +187,9 @@ def nciplot(
     if len(filenames) == 0:
         filenames = None
 
+    if fragments is not None:
+        fragments = ast.literal_eval(fragments)
+
     job_settings = NCIPLOTJobSettings(
         filenames=filenames,
         label=label,
@@ -204,8 +201,7 @@ def nciplot(
         intercut1=intercut1,
         intercut2=intercut2,
         increments=increments,
-        fragment_label=fragment_label,
-        fragment_atoms=fragment_atoms,
+        fragments=fragments,
         cutoff_density_dat=cutoff_density_dat,
         cutoff_rdg_dat=cutoff_rdg_dat,
         cutoff_density_cube=cutoff_density_cube,
@@ -214,9 +210,6 @@ def nciplot(
         integrate=integrate,
         ranges=ranges,
     )
-    print(f"NCIPLOT job settings: {job_settings.__dict__}")
-    print(type(job_settings))
-
     logger.info(f"Obtained NCIPLOT job settings: {job_settings.__dict__}")
 
     molecule = None

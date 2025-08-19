@@ -163,30 +163,7 @@ class NCIPLOTInputWriter(InputWriter):
             logger.debug("No increments section written, increments is None.")
 
     def _write_fragments(self, f):
-        """Write the fragments section for the input file."""
-        # fragment_label = self.settings.fragment_label
-        # fragment_atoms = self.settings.fragment_atoms
-        # if fragment_label is not None and fragment_atoms is not None:
-        #     logger.debug("Writing fragments section.")
-        #     f.write(f"FRAGMENTS {fragment_label} {fragment_atoms}\n")
-        # elif fragment_label is not None or fragment_atoms is not None:
-        #     raise ValueError(
-        #         "Both fragment_label and fragment_atoms must be provided or both must be None."
-        #     )
-        # else:
-        #     logger.debug("No fragments section written, both values are None.")
-        # no clear examples/tutorials on how these are used, although we have some example from AI:
-        # 2
-        # ligand.xyz
-        # protein.xyz
-        # INTERMOLECULAR
-        # FRAGMENT 1 1 2 3 4
-        # FRAGMENT 2 10 11 12 13 14
-        # INTERCUT 1.0 0.8
-        # CUTOFFS 0.2 1.0
-        # ISORDG 0.3
-        # OUTPUT 3
-        # we may implement this at a later stage when needed.
+        """Write the fragments section for the input file.
         # FROM NCIPLOT README: https://github.com/aoterodelaroza/nciplot/blob/master/README
         # By default, the fragments to which INTERMOLECULAR applies are the
         # molecules defined in input. This behavior can be modified using the
@@ -223,7 +200,29 @@ class NCIPLOTInputWriter(InputWriter):
         #
         # This way, only the points close to the selected fragments are
         # considered for plotting.
-        pass
+        ifile atom1, atom2, ..., atomn.
+        Defining fragments from the .xyz files. ifile is the file label given
+        by the input order and atom n is the atomic label in ifile"""
+        fragments = self.settings.fragments
+        if fragments is not None:
+            logger.debug("Writing fragments section.")
+            f.write("FRAGMENTS\n")
+            # Ensure fragments is a dictionary
+            if isinstance(fragments, dict):
+                for key, value in fragments.items():
+                    if isinstance(value, (list, tuple)):
+                        # Convert each value to a string of space-separated atoms
+                        atom_string = " ".join(map(str, value))
+                        f.write(f"  {key} {atom_string}\n")
+                    else:
+                        raise ValueError(
+                            f"Fragment {key} must be a list or tuple of atoms."
+                        )
+                f.write("END\n")
+            else:
+                raise ValueError("Fragments must be a dictionary.")
+        else:
+            logger.debug("No fragments section written, fragments is None.")
 
     def _write_cutoffs(self, f):
         """Write the cutoffs section for the input file."""

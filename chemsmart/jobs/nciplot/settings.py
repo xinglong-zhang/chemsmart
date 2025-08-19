@@ -18,8 +18,7 @@ class NCIPLOTJobSettings:
         intercut1,
         intercut2,
         increments,
-        fragment_label,
-        fragment_atoms,
+        fragments,  # dictionary
         cutoff_density_dat,
         cutoff_rdg_dat,
         cutoff_density_cube,
@@ -38,8 +37,7 @@ class NCIPLOTJobSettings:
         self.intercut1 = intercut1
         self.intercut2 = intercut2
         self.increments = increments
-        self.fragment_label = fragment_label
-        self.fragment_atoms = fragment_atoms
+        self.fragments = fragments
         self.cutoff_density_dat = cutoff_density_dat
         self.cutoff_rdg_dat = cutoff_rdg_dat
         self.cutoff_density_cube = cutoff_density_cube
@@ -60,8 +58,7 @@ class NCIPLOTJobSettings:
             intercut1=self.intercut1,
             intercut2=self.intercut2,
             increments=self.increments,
-            fragment_label=self.fragment_label,
-            fragment_atoms=self.fragment_atoms,
+            fragments=self.fragments,
             cutoff_density_dat=self.cutoff_density_dat,
             cutoff_rdg_dat=self.cutoff_rdg_dat,
             cutoff_density_cube=self.cutoff_density_cube,
