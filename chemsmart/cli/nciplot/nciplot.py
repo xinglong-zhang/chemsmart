@@ -144,6 +144,15 @@ def click_nciplot_settings_options(f):
         "are required for every interval (one per line).\n "
         "Example input: [[-0.1,-0.02],[-0.02,0.02],[0.02,0.1]]\n",
     )
+    @click.option(
+        "--grid-quality",
+        type=click.Choice(
+            ["coarse", "fine", "ultrafine"], case_sensitive=False
+        ),
+        default=None,
+        help="Quality of the grid used for NCIPLOT calculations.\n "
+        "Options are 'coarse', 'fine', or 'ultrafine'. ",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -176,6 +185,7 @@ def nciplot(
     dgrid,
     integrate,
     ranges,
+    grid_quality,
     pubchem,
     **kwargs,
 ):
@@ -215,6 +225,7 @@ def nciplot(
         dgrid=dgrid,
         integrate=integrate,
         ranges=ranges,
+        grid_quality=grid_quality,
     )
     logger.info(f"Obtained NCIPLOT job settings: {job_settings.__dict__}")
 

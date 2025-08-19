@@ -39,6 +39,7 @@ class NCIPLOTInputWriter(InputWriter):
         self._write_dgrid(f)
         self._write_integrate(f)
         self._write_ranges(f)
+        self._write_grid_quality(f)
 
     def _write_filenames(self, f):
         logger.debug("Writing NCIPLOT input files.")
@@ -361,3 +362,12 @@ class NCIPLOTInputWriter(InputWriter):
                     )
         else:
             logger.debug("No RANGES section written, both values are None.")
+
+    def _write_grid_quality(self, f):
+        """Write the GRID QUALITY section for the input file."""
+        grid_quality = self.settings.grid_quality
+        if grid_quality is not None:
+            logger.debug("Writing GRID QUALITY section.")
+            f.write(f"{grid_quality.upper()}\n")
+        else:
+            logger.debug("No GRID QUALITY is given, default grids are used.")

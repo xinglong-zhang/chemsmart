@@ -50,6 +50,7 @@ class TestNCIPLOTInputWriter:
             dgrid=True,
             integrate=True,
             ranges=[[-0.1, -0.02], [-0.02, 0.02], [0.02, 0.1]],
+            grid_quality="coarse",
         )
 
         # copy file to tmpdir
@@ -94,6 +95,7 @@ class TestNCIPLOTInputWriter:
         assert lines[17] == "-0.1 -0.02\n"
         assert lines[18] == "-0.02 0.02\n"
         assert lines[19] == "0.02 0.1\n"
+        assert lines[20] == "COARSE\n"
 
     def test_write_nci_for_two_files(
         self,
@@ -120,6 +122,7 @@ class TestNCIPLOTInputWriter:
             dgrid=True,
             integrate=True,
             ranges=[[-0.1, -0.02], [-0.02, 0.02], [0.02, 0.1]],
+            grid_quality="ultrafine",
         )
 
         # copy file to tmpdir
@@ -172,6 +175,7 @@ class TestNCIPLOTInputWriter:
         assert lines[18] == "-0.1 -0.02\n"
         assert lines[19] == "-0.02 0.02\n"
         assert lines[20] == "0.02 0.1\n"
+        assert lines[21] == "ULTRAFINE\n"
 
         # job run will result in the job being run and the output file copied back to run folder
         # job.run()

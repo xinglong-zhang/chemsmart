@@ -26,6 +26,7 @@ class NCIPLOTJobSettings:
         dgrid,
         integrate,
         ranges,  # list of lists
+        grid_quality,
     ):
         self.filenames = filenames
         self.label = label
@@ -45,6 +46,7 @@ class NCIPLOTJobSettings:
         self.dgrid = dgrid
         self.integrate = integrate
         self.ranges = ranges
+        self.grid_quality = grid_quality
 
     def copy(self):
         return NCIPLOTJobSettings(
@@ -66,6 +68,7 @@ class NCIPLOTJobSettings:
             dgrid=self.dgrid,
             integrate=self.integrate,
             ranges=self.ranges,
+            grid_quality=self.grid_quality,
         )
 
     @classmethod
