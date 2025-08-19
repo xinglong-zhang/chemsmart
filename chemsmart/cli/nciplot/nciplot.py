@@ -12,8 +12,8 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-def click_nciplot_settings_options(f):
-    """Common click options for NCIPLOT Job Settings."""
+def click_nciplot_job_options(f):
+    """Common click options for NCIPLOT Job."""
 
     @click.option(
         "-f",
@@ -21,15 +21,25 @@ def click_nciplot_settings_options(f):
         type=str,
         multiple=True,
         default=None,
-        help="filenames from which new NCIPLOT input is prepared.",
+        help="Input files for the NCIPLOT job. Can be specified multiple times.",
     )
     @click.option(
         "-l",
         "--label",
         type=str,
         default=None,
-        help="write user input filenames for the job (without extension)",
+        help="Label for the NCIPLOT job, used to name output files.",
     )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_nciplot_settings_options(f):
+    """Common click options for NCIPLOT Job Settings."""
+
     @click.option(
         "-r",
         "--rthres",
@@ -162,6 +172,7 @@ def click_nciplot_settings_options(f):
 
 @click.command(cls=MyCommand)
 @click_job_options
+@click_nciplot_job_options
 @click_nciplot_settings_options
 @click_pubchem_options
 @click.pass_context
@@ -207,8 +218,6 @@ def nciplot(
         ranges = ast.literal_eval(ranges)
 
     job_settings = NCIPLOTJobSettings(
-        filenames=filenames,
-        label=label,
         rthres=rthres,
         ligand_file_number=ligand_file_number,
         ligand_radius=ligand_radius,
@@ -243,17 +252,31 @@ def nciplot(
         assert (
             label is not None
         ), "Label for file is required since creating molecule from PubChem!"
-
-        # write the molecule to a temporary .xyz file
-        molecule.write_xyz(filename=f"{label}.xyz", mode="w")
-
-    # store objects
-    ctx.obj["job_settings"] = job_settings
-    ctx.obj["molecule"] = (
-        molecule  # molecules as a list, as some jobs requires all structures to be used
-    )
-    ctx.obj["label"] = label
-    ctx.obj["filenames"] = filenames
+    else:
+        if filenames is None:
+            raise ValueError(
+                "Must provide at least one input file using -f option."
+            )
+        else:
+            if not isinstance(filenames, (list, tuple)):
+                raise TypeError(
+                    f"Expected filenames to be a list or tuple, got {type(filenames).__name__}"
+                )
+            if len(filenames) == 0:
+                raise ValueError(
+                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                )
+            elif len(filenames) == 1:
+                label = filenames[0].split(".")[0] if label is None else label
+            else:
+                # add filenames together
+                label = (
+                    "_and_".join(
+                        [filename.split(".")[0] for filename in filenames]
+                    )
+                    if label is None
+                    else label
+                )
 
     return NCIPLOTJob(
         filenames=filenames,  # accepts multiple files

@@ -43,24 +43,32 @@ class NCIPLOTJob(Job):
             raise ValueError(
                 "Either filenames or molecule must be provided, but both are None!"
             )
+        elif filenames is not None and molecule is None:
+            if len(filenames) == 0:
+                raise ValueError(
+                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                )
+            elif len(filenames) == 1:
+                label = filenames[0].split(".")[0] if label is None else label
+            else:
+                # add filenames together
+                label = (
+                    "_and_".join(
+                        [filename.split(".")[0] for filename in filenames]
+                    )
+                    if label is None
+                    else label
+                )
 
-        if molecule is not None and not isinstance(molecule, Molecule):
-            raise ValueError(
-                f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
-            )
+        elif molecule is not None and filenames is None:
+            if not isinstance(molecule, Molecule):
+                raise ValueError(
+                    f"Molecule must be instance of Molecule for {self}, but is {molecule} instead!"
+                )
 
         self.molecule = molecule.copy() if molecule is not None else None
         self.settings = settings.copy()
         self.filenames = filenames
-
-        if label is None:
-            if self.settings.label is not None:
-                label = self.settings.label
-            else:
-                if molecule is not None:
-                    label = molecule.get_chemical_formula(empirical=True)
-                else:
-                    label = "nciplot_job"
         self.label = label
 
     @classmethod

@@ -65,6 +65,7 @@ class NCIPLOTJobRunner(JobRunner):
     def _prerun(self, job):
         """Prepare the job environment before running."""
         self._assign_variables(job)
+        self._write_xyz_from_pubchem(job)
 
     def _assign_variables(self, job):
         """Set up file paths for input, output, and error files."""
@@ -101,6 +102,19 @@ class NCIPLOTJobRunner(JobRunner):
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_outputfile = os.path.abspath(job.outputfile)
         self.job_errfile = os.path.abspath(job.errfile)
+
+    def _write_xyz_from_pubchem(self, job):
+        """Write the molecule to an XYZ file if it is provided."""
+        if job.molecule is not None:
+            xyz_filepath = os.path.join(
+                self.running_directory, f"{job.label}.xyz"
+            )
+            job.molecule.write_xyz(filename=xyz_filepath, mode="w")
+            logger.info(f"Wrote molecule to {xyz_filepath}")
+        else:
+            assert (
+                job.filenames is not None
+            ), "No molecule provided and no filenames specified for NCIPLOT job."
 
     def _write_input(self, job):
         """Write the input file for NCIPLOT job."""

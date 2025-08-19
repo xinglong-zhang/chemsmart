@@ -8,8 +8,6 @@ class NCIPLOTJobSettings:
 
     def __init__(
         self,
-        filenames,
-        label,
         rthres,
         ligand_file_number,
         ligand_radius,
@@ -28,8 +26,6 @@ class NCIPLOTJobSettings:
         ranges,  # list of lists
         grid_quality,
     ):
-        self.filenames = filenames
-        self.label = label
         self.rthres = rthres
         self.ligand_file_number = ligand_file_number
         self.ligand_radius = ligand_radius
@@ -50,8 +46,6 @@ class NCIPLOTJobSettings:
 
     def copy(self):
         return NCIPLOTJobSettings(
-            filenames=self.filenames,
-            label=self.label,
             rthres=self.rthres,
             ligand_file_number=self.ligand_file_number,
             ligand_radius=self.ligand_radius,

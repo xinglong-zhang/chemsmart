@@ -14,8 +14,6 @@ class TestNCIPLOTInputWriter:
         nciplot_jobrunner_no_scratch,
     ):
         job_settings = NCIPLOTJobSettings(
-            filenames=single_molecule_xyz_file,
-            label="nci_single_file",
             rthres=10.0,
             ligand_file_number=1,
             ligand_radius=1.0,
@@ -53,8 +51,8 @@ class TestNCIPLOTInputWriter:
         # write input file
         nciplot_writer.write(target_directory=tmpdir)
 
-        # if no job label, then filename takes settings label
-        nci_file = os.path.join(tmpdir, "nci_single_file.nci")
+        # if no job label, then base filename is used
+        nci_file = os.path.join(tmpdir, "single_molecule.nci")
         assert os.path.exists(nci_file)
         lines = open(nci_file, "r").readlines()
         assert lines[0] == "1\n"
@@ -86,8 +84,6 @@ class TestNCIPLOTInputWriter:
         nciplot_jobrunner_no_scratch,
     ):
         job_settings = NCIPLOTJobSettings(
-            filenames=single_molecule_xyz_file,
-            label="nciplot_input",
             rthres=10.0,
             ligand_file_number=1,
             ligand_radius=1.0,

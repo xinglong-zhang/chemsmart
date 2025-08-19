@@ -46,9 +46,6 @@ class NCIPLOTInputWriter(InputWriter):
         if self.job.filenames is None:
             # this is the case when the job is created from PubChem
             logger.debug("No filenames provided for NCIPLOT job.")
-            assert os.path.exists(
-                f"{self.job.label}.xyz"
-            ), f"{self.job.label}.xyz created from PubChem is required. "
             f.write("1\n")
             f.write(f"{self.job.label}.xyz\n")
         else:
@@ -279,7 +276,7 @@ class NCIPLOTInputWriter(InputWriter):
 
         # Determine default values based on input file type
         density = ""
-        if self.settings.filenames is None:
+        if self.job.filenames is None:
             logger.debug(
                 "No filenames provided for NCIPLOT job."
                 "Job likely generated from PubChem structure.\n"
@@ -288,22 +285,20 @@ class NCIPLOTInputWriter(InputWriter):
             density = "promolecular"
         else:
             logger.debug(
-                f"Filenames provided: {self.settings.filenames} for NCIPLOT job."
+                f"Filenames provided: {self.job.filenames} for NCIPLOT job."
                 "Determining density type based on file extension."
             )
-            if not isinstance(self.settings.filenames, (list, tuple)):
+            if not isinstance(self.job.filenames, (list, tuple)):
                 raise TypeError(
-                    f"Expected self.settings.filenames to be a list or tuple, got {type(self.settings.filenames).__name__}"
+                    f"Expected self.job.filenames to be a list or tuple, got {type(self.job.filenames).__name__}"
                 )
-            if len(self.settings.filenames) == 0:
+            if len(self.job.filenames) == 0:
                 raise ValueError(
                     "No filenames provided for NCIPLOT job. Please provide at least one file."
                 )
             else:
-                logger.debug(
-                    f"Number of files: {len(self.settings.filenames)}"
-                )
-                first_filename = self.settings.filenames[0]
+                logger.debug(f"Number of files: {len(self.job.filenames)}")
+                first_filename = self.job.filenames[0]
                 if first_filename.endswith(".xyz"):
                     density = "promolecular"
                 elif first_filename.endswith(
