@@ -288,9 +288,13 @@ class NCIPLOTInputWriter(InputWriter):
             density = "promolecular"
         else:
             logger.debug(
-                "Filenames provided for NCIPLOT job."
+                f"Filenames provided: {self.settings.filenames} for NCIPLOT job."
                 "Determining density type based on file extension."
             )
+            if not isinstance(self.settings.filenames, (list, tuple)):
+                raise TypeError(
+                    f"Expected self.settings.filenames to be a list or tuple, got {type(self.settings.filenames).__name__}"
+                )
             if len(self.settings.filenames) == 0:
                 raise ValueError(
                     "No filenames provided for NCIPLOT job. Please provide at least one file."

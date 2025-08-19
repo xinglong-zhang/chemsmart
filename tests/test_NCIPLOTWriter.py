@@ -1,27 +1,9 @@
 import os
-
-# from filecmp import cmp
 from shutil import copy
 
-#
-# from chemsmart.io.gaussian.output import Gaussian16Output
-# from chemsmart.io.molecules.structure import Molecule
-# from chemsmart.jobs.gaussian import (
-#     GaussianModredJob,
-#     GaussianOptJob,
-#     GaussianScanJob,
-#     GaussianSinglePointJob,
-#     GaussianTSJob,
-# )
-# from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-# from chemsmart.jobs.gaussian.writer import GaussianInputWriter
-# from chemsmart.jobs.nciplot import NCIPLOTJob
 from chemsmart.jobs.nciplot import NCIPLOTJob
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from chemsmart.jobs.nciplot.writer import NCIPLOTInputWriter
-
-# from chemsmart.settings.gaussian import GaussianProjectSettings
-# from chemsmart.utils.utils import cmp_with_ignore
 
 
 class TestNCIPLOTInputWriter:
@@ -142,8 +124,6 @@ class TestNCIPLOTInputWriter:
             label="nci_two_files",
             jobrunner=nciplot_jobrunner_no_scratch,
         )
-        # print(job.filenames)
-        # print(type(job.filenames))
         nciplot_writer = NCIPLOTInputWriter(job=job)
 
         # write input file
