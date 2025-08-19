@@ -73,6 +73,9 @@ class NCIPLOTJobRunner(JobRunner):
         self.job_errfile = job.errfile
 
         if self.scratch and self.scratch_dir:
+            logger.debug(
+                f"Setting up job in scratch directory: {self.scratch_dir}"
+            )
             self._set_up_variables_in_scratch(job)
         else:
             self._set_up_variables_in_job_directory(job)
@@ -88,20 +91,26 @@ class NCIPLOTJobRunner(JobRunner):
 
         scratch_job_inputfile = os.path.join(scratch_job_dir, job.inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
+        logger.debug(f"Job input file in scratch: {self.job_inputfile}")
 
         scratch_job_outfile = os.path.join(scratch_job_dir, job.outputfile)
         self.job_outputfile = os.path.abspath(scratch_job_outfile)
+        logger.debug(f"Job output file in scratch: {self.job_outputfile}")
 
         scratch_job_errfile = os.path.join(scratch_job_dir, job.errfile)
         self.job_errfile = os.path.abspath(scratch_job_errfile)
+        logger.debug(f"Job error file in scratch: {self.job_errfile}")
 
     def _set_up_variables_in_job_directory(self, job):
         """Set up file paths in the job's directory."""
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
         self.job_inputfile = os.path.abspath(job.inputfile)
+        logger.debug(f"Job input file in folder: {self.job_inputfile}")
         self.job_outputfile = os.path.abspath(job.outputfile)
+        logger.debug(f"Job output file in folder: {self.job_outputfile}")
         self.job_errfile = os.path.abspath(job.errfile)
+        logger.debug(f"Job error file in folder: {self.job_errfile}")
 
     def _write_xyz_from_pubchem(self, job):
         """Write the molecule to an XYZ file if it is provided."""
