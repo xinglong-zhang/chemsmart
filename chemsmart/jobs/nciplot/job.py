@@ -68,17 +68,17 @@ class NCIPLOTJob(Job):
 
     @property
     def inputfile(self):
-        inputfile = self.label + "_nci.nci"
+        inputfile = self.label + ".nci"
         return os.path.join(self.folder, inputfile)
 
     @property
     def outputfile(self):
-        outputfile = self.label + "_nci.out"
+        outputfile = self.label + ".nciout"
         return os.path.join(self.folder, outputfile)
 
     @property
     def errfile(self):
-        errfile = self.label + "_nci.err"
+        errfile = self.label + ".ncierr"
         return os.path.join(self.folder, errfile)
 
     def _backup_files(self, **kwargs):

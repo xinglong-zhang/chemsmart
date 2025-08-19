@@ -1,4 +1,3 @@
-import glob
 import logging
 import os
 import shlex
@@ -6,6 +5,7 @@ import subprocess
 from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
+from glob import glob
 from shutil import copy, rmtree
 
 from chemsmart.jobs.runner import JobRunner
@@ -45,7 +45,7 @@ class NCIPLOTJobRunner(JobRunner):
     @property
     @lru_cache(maxsize=12)
     def executable(self):
-        """Executable class object for Gaussian."""
+        """Executable class object for NCIPLOT."""
         try:
             logger.info(
                 f"Obtaining executable from server: {self.server.name}"
@@ -138,7 +138,7 @@ class NCIPLOTJobRunner(JobRunner):
     def _get_executable(self):
         """Get executable for NCIPLOT."""
         exe = self.executable.get_executable()
-        logger.info(f"Gaussian executable: {exe}")
+        logger.info(f"NCIPLOT executable: {exe}")
         return exe
 
     def _postrun(self, job):

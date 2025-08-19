@@ -59,15 +59,6 @@ class NCIPLOTInputWriter(InputWriter):
                 logger.debug(f"Writing filename: {file}")
                 f.write(f"{file}\n")
 
-        if self.settings.chk:
-            logger.debug(f"Writing chk file: {self.job.label}.chk")
-            f.write(f"%chk={self.job.label}.chk\n")
-        num_cores = self.jobrunner.num_cores if not None else 12
-        mem_gb = self.jobrunner.mem_gb if not None else 16
-        logger.debug(f"Writing nprocshared={num_cores} and mem={mem_gb}GB.")
-        f.write(f"%nprocshared={num_cores}\n")
-        f.write(f"%mem={mem_gb}GB\n")
-
     def _write_rthres(self, f):
         """Write the rthres section for the input file."""
         rthres = self.settings.rthres
@@ -266,12 +257,11 @@ class NCIPLOTInputWriter(InputWriter):
                 "No CUTOFFS section written, both CUTOFFS values are None."
             )
 
-    def _write_cutplot(self, f, input_files):
+    def _write_cutplot(self, f):
         """Write the CUTPLOT section for the input file.
 
         Args:
             f: File object to write to.
-            input_files: List of input file paths to determine the calculation type
             (promolecular or SCF).
         """
         cutoff_density_cube = self.settings.cutoff_density_cube
@@ -279,24 +269,19 @@ class NCIPLOTInputWriter(InputWriter):
 
         # Determine default values based on input file type
         density = ""
-        if isinstance(self.settings.filenames, list):
-            if self.settings.filenames[0].endswith(".xyz"):
-                density = "promolecular"
-            elif self.settings.filenames[0].endswith(
-                ".wfn"
-            ) or self.settings.filenames[0].endswith(".wfx"):
-                density = "SCF"
-        elif isinstance(self.settings.filenames, str):
-            if self.settings.filenames.endswith(".xyz"):
-                density = "promolecular"
-            elif self.settings.filenames.endswith(
-                ".wfn"
-            ) or self.settings.filenames.endswith(".wfx"):
-                density = "SCF"
-        else:
+        if len(self.settings.filenames) == 0:
             raise ValueError(
-                "Unsupported input file type. Expected a list or string of filenames."
+                "No filenames provided for NCIPLOT job. Please provide at least one file."
             )
+        else:
+            logger.debug(f"Number of files: {len(self.settings.filenames)}")
+            first_filename = self.settings.filenames[0]
+            if first_filename.endswith(".xyz"):
+                density = "promolecular"
+            elif first_filename.endswith(".wfn") or first_filename.endswith(
+                ".wfx"
+            ):
+                density = "SCF"
 
         if density == "promolecular":
             default_density = 0.07  # Promolecular default for r1

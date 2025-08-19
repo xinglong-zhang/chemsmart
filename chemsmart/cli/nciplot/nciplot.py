@@ -3,7 +3,7 @@ import logging
 
 import click
 
-from chemsmart.cli.job import click_pubchem_options
+from chemsmart.cli.job import click_job_options, click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.utils.cli import MyCommand
@@ -157,6 +157,7 @@ def click_nciplot_settings_options(f):
 
 
 @click.command(cls=MyCommand)
+@click_job_options
 @click_nciplot_settings_options
 @click_pubchem_options
 @click.pass_context
@@ -182,6 +183,7 @@ def nciplot(
     integrate,
     ranges,
     pubchem,
+    **kwargs,
 ):
     """CLI for running NCIPLOT jobs using the chemsmart framework."""
 
@@ -217,6 +219,7 @@ def nciplot(
 
     logger.info(f"Obtained NCIPLOT job settings: {job_settings.__dict__}")
 
+    molecule = None
     if pubchem:
         molecule = Molecule.from_pubchem(identifier=pubchem, return_list=False)
         assert (
@@ -238,4 +241,5 @@ def nciplot(
         settings=job_settings,
         label=label,
         jobrunner=None,
+        **kwargs,
     )
