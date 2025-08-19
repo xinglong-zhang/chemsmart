@@ -23,7 +23,7 @@ def sp(ctx, **kwargs):
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project sp settings with job settings from cli keywords from cli.orca.py subcommands
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
 
     check_charge_and_multiplicity(sp_settings)
