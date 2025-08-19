@@ -70,9 +70,6 @@ class NCIPLOTJobRunner(JobRunner):
 
     def _assign_variables(self, job):
         """Set up file paths for input, output, and error files."""
-        self.job_outputfile = job.outputfile
-        self.job_errfile = job.errfile
-
         if self.scratch and self.scratch_dir:
             logger.debug(
                 f"Setting up job in scratch directory: {self.scratch_dir}"
@@ -86,18 +83,16 @@ class NCIPLOTJobRunner(JobRunner):
             self.running_directory = job.folder
 
         logger.debug(f"Running directory: {self.running_directory}")
-
-        logger.debug(f"Running directory: {self.running_directory}")
         self.job_inputfile = os.path.join(
             self.running_directory, job.inputfile
         )
-        logger.debug(f"Job input file in folder: {self.job_inputfile}")
+        logger.debug(f"Job input file: {self.job_inputfile}")
         self.job_outputfile = os.path.join(
             self.running_directory, job.outputfile
         )
-        logger.debug(f"Job output file in folder: {self.job_outputfile}")
+        logger.debug(f"Job output file: {self.job_outputfile}")
         self.job_errfile = os.path.join(self.running_directory, job.errfile)
-        logger.debug(f"Job error file in folder: {self.job_errfile}")
+        logger.debug(f"Job error file: {self.job_errfile}")
 
     def _write_xyz_from_pubchem(self, job):
         """Write the molecule to an XYZ file if it is provided."""
