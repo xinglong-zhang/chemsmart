@@ -186,7 +186,7 @@ class NCIPLOTJobRunner(JobRunner):
         """Handle post-run tasks, such as copying files from scratch and cleanup."""
         if self.scratch:
             # if job was run in scratch, copy files to job folder except files starting with Gau-
-            for file in glob(f"{self.running_directory}/{job.label}*"):
+            for file in glob(f"{self.running_directory}/*"):
                 if not file.endswith(".tmp"):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
