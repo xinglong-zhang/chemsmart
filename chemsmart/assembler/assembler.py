@@ -94,7 +94,6 @@ class BaseAssembler:
             "frozen_atoms": mol.frozen_atoms,
             "energy": mol.energy,
             "forces": mol.forces,
-            "pbc_forces": mol.pbc_forces,
         }
         return molecule_info
 

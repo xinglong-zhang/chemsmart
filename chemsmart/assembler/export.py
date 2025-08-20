@@ -1,3 +1,4 @@
+import csv
 import json
 
 
@@ -25,9 +26,16 @@ class DataExporter:
             filtered.append(entry)
         return filtered
 
-    def _to_json(self):
+    def to_json(self):
         filtered = self._filter_data()
         db = {str(i): row for i, row in enumerate(filtered, 1)}
 
         with open(self.outputfile + ".json", "w") as f:
             json.dump(db, f, indent=4)
+
+    def to_csv(self):
+        filtered = self._filter_data()
+        with open(self.outputfile + ".csv", "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=self.keys)
+            writer.writeheader()
+            writer.writerows(filtered)
