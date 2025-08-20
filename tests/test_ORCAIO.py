@@ -1,5 +1,6 @@
 import math
 import os
+from shutil import copy
 
 import numpy as np
 import pytest
@@ -155,12 +156,59 @@ class TestORCAInput:
             match="Your input file specifies solvent but solvent is not in quotes, "
             "thus, your input file is not valid to run for ORCA!",
         ):
-            orca_inp.solvent_id  # noqa: B018
+            orca_inp.solvent_id
+
+    def test_orca_input_with_xyz_files_specified(
+        self,
+        tmpdir,
+        orca_input_nebts_file,
+        orca_input_nebts_reactant_xyz_file,
+        orca_input_nebts_product_xyz_file,
+        orca_input_nebts_ts_xyz_file,
+    ):
+        # copy all files to tmpdir
+        orca_input_nebts_file_tmp = os.path.join(
+            tmpdir, "orca_input_nebts.inp"
+        )
+        orca_input_nebts_reactant_xyz_file_tmp = os.path.join(
+            tmpdir, "reactant.xyz"
+        )
+        orca_input_nebts_product_xyz_file_tmp = os.path.join(
+            tmpdir, "product.xyz"
+        )
+        orca_input_nebts_ts_xyz_file_tmp = os.path.join(tmpdir, "ts.xyz")
+        copy(orca_input_nebts_file, orca_input_nebts_file_tmp)
+        copy(
+            orca_input_nebts_reactant_xyz_file,
+            orca_input_nebts_reactant_xyz_file_tmp,
+        )
+        copy(
+            orca_input_nebts_product_xyz_file,
+            orca_input_nebts_product_xyz_file_tmp,
+        )
+        copy(orca_input_nebts_ts_xyz_file, orca_input_nebts_ts_xyz_file_tmp)
+        assert os.path.exists(orca_input_nebts_file_tmp)
+        assert os.path.exists(orca_input_nebts_reactant_xyz_file_tmp)
+        assert os.path.exists(orca_input_nebts_product_xyz_file_tmp)
+        assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
+
+        orca_inp = ORCAInput(filename=orca_input_nebts_file)
+        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.functional is None
+        assert orca_inp.basis is None
+        assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
+        assert orca_inp.charge == 0
+        assert orca_inp.multiplicity == 1
+        assert orca_inp.molecule.num_atoms == 40
+        assert isinstance(orca_inp.molecule, Molecule)
+        assert orca_inp.molecule.empirical_formula == "C23H15NO"
 
 
 class TestORCAOutput:
     def test_read_water_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.version == "5.0.3"
+        assert orca_out.date is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"

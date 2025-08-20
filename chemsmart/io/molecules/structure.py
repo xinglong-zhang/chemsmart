@@ -145,6 +145,17 @@ class Molecule:
         )
 
     @property
+    def elements(self):
+        return list(set(self.symbols))
+
+    @property
+    def element_counts(self):
+        counts = {}
+        for s in self.symbols:
+            counts[s] = counts.get(s, 0) + 1
+        return counts
+
+    @property
     def mass(self):
         return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
 

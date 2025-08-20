@@ -1,12 +1,14 @@
 import inspect
 import os
 import re
+from datetime import datetime
 from functools import cached_property
 
 from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.utils.repattern import gaussian_date_pattern, orca_date_pattern
 
 
 class FileMixin:
@@ -78,6 +80,34 @@ class FileMixin:
 
 class GaussianFileMixin(FileMixin):
     """Mixin class for Gaussian files."""
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for i, line in enumerate(self.contents):
+            if "******************************************" in line:
+                next_line = self.contents[i + 1]
+                if "Gaussian" in next_line:
+                    version_line = next_line
+                    version = version_line.split()[2].split("-")[1]
+                    return version
+        return None
+
+    @property
+    def date(self):
+        last_line = self.contents[-1]
+        match = re.search(gaussian_date_pattern, last_line)
+        if match:
+            time_info = match.group(1)
+            try:
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
 
     def _get_chk(self):
         for line in self.contents:
@@ -292,6 +322,32 @@ class GaussianFileMixin(FileMixin):
 class ORCAFileMixin(FileMixin):
     """Mixin class for ORCA files."""
 
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "Program Version" in line:
+                version = line.split()[2]
+                return version
+        return None
+
+    @property
+    def date(self):
+        for line in self.contents:
+            if "Starting time:" in line:
+                match = re.search(orca_date_pattern, line)
+                if match:
+                    time_info = match.group(1)
+                    try:
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
     @cached_property
     def contents_string(self):
         return "\n".join(self.contents)
@@ -325,6 +381,10 @@ class ORCAFileMixin(FileMixin):
                         c_idx = l_elem.index("density")
                         return l_elem[c_idx + 1]
         return None
+
+    @property
+    def solvent_on(self):
+        return self.solvent_model is not None and self.solvent_id is not None
 
     @property
     def solvent_model(self):

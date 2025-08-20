@@ -2,6 +2,12 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+
+xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
+# \b ensures that the match ends right after xyz
+# and is not followed by something like: xyz1, xyzabc xyz_thing
+# It will match if .xyz is followed by: a space, a quote, end of line, punctuation
+
 normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
 frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
@@ -88,6 +94,10 @@ orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
 # filename matches with reactant r1 or r2
 orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
+orca_date_pattern = (
+    r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+)
+
 
 # filename pattern for gaussian output files
 
@@ -103,3 +113,5 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 
 # filename matches with reactant r1 or r2
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+
+gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."
