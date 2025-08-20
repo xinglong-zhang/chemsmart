@@ -66,7 +66,7 @@ class NCIPLOTJobRunner(JobRunner):
     def _prerun(self, job):
         """Prepare the job environment before running."""
         self._assign_variables(job)
-        self._write_xyz_from_pubchem(job)
+        self._prepare_files(job)
 
     def _assign_variables(self, job):
         """Set up file paths for input, output, and error files."""
@@ -113,18 +113,31 @@ class NCIPLOTJobRunner(JobRunner):
         self.job_errfile = os.path.abspath(job.errfile)
         logger.debug(f"Job error file in folder: {self.job_errfile}")
 
-    def _write_xyz_from_pubchem(self, job):
-        """Write the molecule to an XYZ file if it is provided."""
+    def _prepare_files(self, job):
+        """Prepare input files and write the input for the NCIPLOT job."""
+        # Ensure running directory exists
         if job.molecule is not None:
-            xyz_filepath = os.path.join(
-                self.running_directory, f"{job.label}.xyz"
-            )
-            job.molecule.write_xyz(filename=xyz_filepath, mode="w")
-            logger.info(f"Wrote molecule to {xyz_filepath}")
+            self._write_xyz_from_pubchem(job)
         else:
             assert (
                 job.filenames is not None
             ), "No molecule provided and no filenames specified for NCIPLOT job."
+            self._copy_input_files(job)
+
+    def _copy_input_files(self, job):
+        """Copy input files to the running directory."""
+        for filename in job.filenames:
+            if not os.path.exists(filename):
+                raise FileNotFoundError(
+                    f"File {filename} does not exist for NCIPLOT job."
+                )
+            copy(filename, self.running_directory)
+
+    def _write_xyz_from_pubchem(self, job):
+        """Write the molecule to an XYZ file if it is provided."""
+        xyz_filepath = os.path.join(self.running_directory, f"{job.label}.xyz")
+        job.molecule.write_xyz(filename=xyz_filepath, mode="w")
+        logger.info(f"Wrote molecule to {xyz_filepath}")
 
     def _write_input(self, job):
         """Write the input file for NCIPLOT job."""
