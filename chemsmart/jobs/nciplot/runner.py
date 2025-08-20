@@ -74,25 +74,44 @@ class NCIPLOTJobRunner(JobRunner):
             logger.debug(
                 f"Setting up job in scratch directory: {self.scratch_dir}"
             )
-            scratch_job_dir = os.path.join(self.scratch_dir, job.label)
-            if not os.path.exists(scratch_job_dir):
-                with suppress(FileExistsError):
-                    os.makedirs(scratch_job_dir)
-            self.running_directory = scratch_job_dir
+            self._set_up_variables_in_scratch(job)
         else:
-            self.running_directory = job.folder
+            self._set_up_variables_in_job_directory(job)
 
+    def _set_up_variables_in_scratch(self, job):
+        """Set up file paths in a scratch directory."""
+        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        if not os.path.exists(scratch_job_dir):
+            with suppress(FileExistsError):
+                os.makedirs(scratch_job_dir)
+        self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
-        self.job_inputfile = os.path.join(
-            self.running_directory, job.inputfile
-        )
-        logger.debug(f"Job input file: {self.job_inputfile}")
-        self.job_outputfile = os.path.join(
-            self.running_directory, job.outputfile
-        )
-        logger.debug(f"Job output file: {self.job_outputfile}")
-        self.job_errfile = os.path.join(self.running_directory, job.errfile)
-        logger.debug(f"Job error file: {self.job_errfile}")
+
+        job_inputfile = job.label + ".nci"
+        scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
+        self.job_inputfile = os.path.abspath(scratch_job_inputfile)
+        logger.debug(f"Job input file in scratch: {self.job_inputfile}")
+
+        job_outputfile = job.label + ".nciout"
+        scratch_job_outfile = os.path.join(scratch_job_dir, job_outputfile)
+        self.job_outputfile = os.path.abspath(scratch_job_outfile)
+        logger.debug(f"Job output file in scratch: {self.job_outputfile}")
+
+        job_errfile = job.label + ".ncierr"
+        scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
+        self.job_errfile = os.path.abspath(scratch_job_errfile)
+        logger.debug(f"Job error file in scratch: {self.job_errfile}")
+
+    def _set_up_variables_in_job_directory(self, job):
+        """Set up file paths in the job's directory."""
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        logger.debug(f"Job input file in folder: {self.job_inputfile}")
+        self.job_outputfile = os.path.abspath(job.outputfile)
+        logger.debug(f"Job output file in folder: {self.job_outputfile}")
+        self.job_errfile = os.path.abspath(job.errfile)
+        logger.debug(f"Job error file in folder: {self.job_errfile}")
 
     def _write_xyz_from_pubchem(self, job):
         """Write the molecule to an XYZ file if it is provided."""
