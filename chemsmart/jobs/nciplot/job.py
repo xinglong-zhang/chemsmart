@@ -100,7 +100,15 @@ class NCIPLOTJob(Job):
         return os.path.abspath(self.outputfile)
 
     def _job_is_complete(self):
-        return os.path.exists(self.outputfile)
+        """Check if the job is complete by checking the output file."""
+        file_exists = os.path.exists(self.outputfile)
+        end_in_last_line_of_file = False
+        if file_exists:
+            with open(self.outputfile) as f:
+                lines = f.readlines()
+                if lines:
+                    end_in_last_line_of_file = lines[-1].startswith("End")
+        return file_exists and end_in_last_line_of_file
 
     def _run(self, **kwargs):
         """Run the thermochemistry analysis job."""

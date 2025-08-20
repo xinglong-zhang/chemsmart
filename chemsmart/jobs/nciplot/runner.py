@@ -6,7 +6,7 @@ from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
 from glob import glob
-from shutil import copy, rmtree
+from shutil import SameFileError, copy, rmtree
 
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import NCIPLOTExecutable
@@ -29,6 +29,7 @@ class NCIPLOTJobRunner(JobRunner):
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
         """Initialize the NCIPLOTJobRunner."""
+        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -65,14 +66,14 @@ class NCIPLOTJobRunner(JobRunner):
     def _prerun(self, job):
         """Prepare the job environment before running."""
         self._assign_variables(job)
-        self._write_xyz_from_pubchem(job)
+        self._prepare_files(job)
 
     def _assign_variables(self, job):
         """Set up file paths for input, output, and error files."""
-        self.job_outputfile = job.outputfile
-        self.job_errfile = job.errfile
-
         if self.scratch and self.scratch_dir:
+            logger.debug(
+                f"Setting up job in scratch directory: {self.scratch_dir}"
+            )
             self._set_up_variables_in_scratch(job)
         else:
             self._set_up_variables_in_job_directory(job)
@@ -86,35 +87,61 @@ class NCIPLOTJobRunner(JobRunner):
         self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
 
-        scratch_job_inputfile = os.path.join(scratch_job_dir, job.inputfile)
+        job_inputfile = job.label + ".nci"
+        scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
+        logger.debug(f"Job input file in scratch: {self.job_inputfile}")
 
-        scratch_job_outfile = os.path.join(scratch_job_dir, job.outputfile)
+        job_outputfile = job.label + ".nciout"
+        scratch_job_outfile = os.path.join(scratch_job_dir, job_outputfile)
         self.job_outputfile = os.path.abspath(scratch_job_outfile)
+        logger.debug(f"Job output file in scratch: {self.job_outputfile}")
 
-        scratch_job_errfile = os.path.join(scratch_job_dir, job.errfile)
+        job_errfile = job.label + ".ncierr"
+        scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
         self.job_errfile = os.path.abspath(scratch_job_errfile)
+        logger.debug(f"Job error file in scratch: {self.job_errfile}")
 
     def _set_up_variables_in_job_directory(self, job):
         """Set up file paths in the job's directory."""
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
         self.job_inputfile = os.path.abspath(job.inputfile)
+        logger.debug(f"Job input file in folder: {self.job_inputfile}")
         self.job_outputfile = os.path.abspath(job.outputfile)
+        logger.debug(f"Job output file in folder: {self.job_outputfile}")
         self.job_errfile = os.path.abspath(job.errfile)
+        logger.debug(f"Job error file in folder: {self.job_errfile}")
 
-    def _write_xyz_from_pubchem(self, job):
-        """Write the molecule to an XYZ file if it is provided."""
+    def _prepare_files(self, job):
+        """Prepare input files and write the input for the NCIPLOT job."""
+        # Ensure running directory exists
         if job.molecule is not None:
-            xyz_filepath = os.path.join(
-                self.running_directory, f"{job.label}.xyz"
-            )
-            job.molecule.write_xyz(filename=xyz_filepath, mode="w")
-            logger.info(f"Wrote molecule to {xyz_filepath}")
+            self._write_xyz_from_pubchem(job)
         else:
             assert (
                 job.filenames is not None
             ), "No molecule provided and no filenames specified for NCIPLOT job."
+            self._copy_input_files(job)
+
+    def _copy_input_files(self, job):
+        """Copy input files to the running directory."""
+        for filename in job.filenames:
+            if not os.path.exists(filename):
+                raise FileNotFoundError(
+                    f"File {filename} does not exist for NCIPLOT job."
+                )
+            with suppress(SameFileError):
+                logger.info(
+                    f"Copying file {filename} to {self.running_directory}"
+                )
+                copy(filename, self.running_directory)
+
+    def _write_xyz_from_pubchem(self, job):
+        """Write the molecule to an XYZ file if it is provided."""
+        xyz_filepath = os.path.join(self.running_directory, f"{job.label}.xyz")
+        job.molecule.write_xyz(filename=xyz_filepath, mode="w")
+        logger.info(f"Wrote molecule to {xyz_filepath}")
 
     def _write_input(self, job):
         """Write the input file for NCIPLOT job."""
@@ -126,7 +153,7 @@ class NCIPLOTJobRunner(JobRunner):
     def _get_command(self, job):
         """Get execution command for NCIPLOT jobs."""
         exe = self._get_executable()
-        command = f"{exe} {self.job_inputfile} {self.job_outputfile}"
+        command = f"{exe} {self.job_inputfile}"  # without output, so direct output to stdout
         return command
 
     def _create_process(self, job, command, env):
@@ -159,12 +186,14 @@ class NCIPLOTJobRunner(JobRunner):
         """Handle post-run tasks, such as copying files from scratch and cleanup."""
         if self.scratch:
             # if job was run in scratch, copy files to job folder except files starting with Gau-
-            for file in glob(f"{self.running_directory}/{job.label}*"):
+            for file in glob(f"{self.running_directory}/*"):
                 if not file.endswith(".tmp"):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    copy(file, job.folder)
+                    with suppress(SameFileError):
+                        # Copy file to job folder
+                        copy(file, job.folder)
 
         if job.is_complete():
             # if job is completed, remove scratch directory and submit_script
