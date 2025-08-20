@@ -6,7 +6,7 @@ from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
 from glob import glob
-from shutil import copy, rmtree
+from shutil import SameFileError, copy, rmtree
 
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import NCIPLOTExecutable
@@ -131,7 +131,11 @@ class NCIPLOTJobRunner(JobRunner):
                 raise FileNotFoundError(
                     f"File {filename} does not exist for NCIPLOT job."
                 )
-            copy(filename, self.running_directory)
+            with suppress(SameFileError):
+                logger.info(
+                    f"Copying file {filename} to {self.running_directory}"
+                )
+                copy(filename, self.running_directory)
 
     def _write_xyz_from_pubchem(self, job):
         """Write the molecule to an XYZ file if it is provided."""
@@ -187,7 +191,9 @@ class NCIPLOTJobRunner(JobRunner):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    copy(file, job.folder)
+                    with suppress(SameFileError):
+                        # Copy file to job folder
+                        copy(file, job.folder)
 
         if job.is_complete():
             # if job is completed, remove scratch directory and submit_script
