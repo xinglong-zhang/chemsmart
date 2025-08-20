@@ -153,7 +153,7 @@ class NCIPLOTJobRunner(JobRunner):
     def _get_command(self, job):
         """Get execution command for NCIPLOT jobs."""
         exe = self._get_executable()
-        command = f"{exe} {self.job_inputfile} {self.job_outputfile}"
+        command = f"{exe} {self.job_inputfile}"  # without output, so direct output to stdout
         return command
 
     def _create_process(self, job, command, env):
