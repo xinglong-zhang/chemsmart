@@ -71,13 +71,19 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def charge(self):
-        charge, _ = self._get_charge_and_multiplicity()
-        return charge
+        try:
+            charge, _ = self._get_charge_and_multiplicity()
+            return charge
+        except (TypeError, ValueError):
+            return None
 
     @property
     def multiplicity(self):
-        _, multiplicity = self._get_charge_and_multiplicity()
-        return multiplicity
+        try:
+            _, multiplicity = self._get_charge_and_multiplicity()
+            return multiplicity
+        except (TypeError, ValueError):
+            return None
 
     @property
     def oniom_charge(self):

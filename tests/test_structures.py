@@ -10,7 +10,11 @@ from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import QMMM, CoordinateBlock, Molecule
+from chemsmart.io.molecules.structure import (
+    CoordinateBlock,
+    Molecule,
+    QMMMMolecule,
+)
 from chemsmart.io.xyz.file import XYZFile
 from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.utils import cmp_with_ignore
@@ -941,7 +945,7 @@ TV       4.8477468928    0.1714181332    0.5112729831"""
 
 class TestQMMMinMolecule:
     def test_atoms_in_levels_wrong_low_level(self, tmpdir):
-        methyl_3_hexane = QMMM(molecule=Molecule.from_pubchem("11507"))
+        methyl_3_hexane = QMMMMolecule(molecule=Molecule.from_pubchem("11507"))
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.low_level_atoms = [7, 8, 9]
@@ -955,7 +959,7 @@ class TestQMMMinMolecule:
     def test_atoms_in_levels_default_low_level(
         self, tmpdir, qmmm_written_xyz_file, qmmm_written_xyz_only_file
     ):
-        methyl_3_hexane = QMMM(molecule=Molecule.from_pubchem("11507"))
+        methyl_3_hexane = QMMMMolecule(molecule=Molecule.from_pubchem("11507"))
         methyl_3_hexane.high_level_atoms = [1, 2, 3]
         methyl_3_hexane.medium_level_atoms = [4, 5, 6]
         methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
@@ -1002,7 +1006,7 @@ class TestQMMMinMolecule:
 
     def test_qmmm_atoms_handling(self, tmpdir):
         """Test QM/MM atoms handling."""
-        mol = QMMM(
+        mol = QMMMMolecule(
             symbols=["O", "H", "H", "Cl"],
             positions=np.array(
                 [

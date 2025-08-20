@@ -1,3 +1,4 @@
+
 %chk=CH3CH3.chk
 # oniom(mp2/6-31g:hf/6-31g) geom=connectivity
 

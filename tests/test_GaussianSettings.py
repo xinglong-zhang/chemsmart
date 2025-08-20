@@ -1,8 +1,7 @@
-
 import pytest
 
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.io.molecules.structure import Molecule, QMMM
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.jobs.gaussian.settings import (
     GaussianJobSettings,
     GaussianQMMMJobSettings,
@@ -243,9 +242,9 @@ class TestGaussianQMMMJobSettings:
         )
 
     def test_qmmm_settings_for_atoms(self, gaussian_inputs_test_directory):
-        mol1 = QMMM(molecule=Molecule.from_pubchem("81184"))
+        mol1 = QMMMMolecule(molecule=Molecule.from_pubchem("81184"))
 
-        settings1 = QMMM(
+        settings1 = QMMMMolecule(
             symbols=mol1.symbols,
             positions=mol1.positions,
             high_level_atoms=[1, 2, 3, 8, 9, 10],

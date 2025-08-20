@@ -512,12 +512,13 @@ class Molecule:
         from chemsmart.io.gaussian.input import Gaussian16Input
 
         try:
-
             g16_input = Gaussian16Input(filename=filepath)
             return g16_input.molecule
-        except ValueError:
-            g16_input = Gaussian16Input(filename=filepath)
-            return g16_input.molecule
+        except ValueError as e:
+            # log the error or raise a more specific exception
+            raise ValueError(
+                f"Failed to read Gaussian input file {filepath}: {str(e)}"
+            ) from e
 
     @staticmethod
     @file_cache()
@@ -1382,7 +1383,7 @@ class CoordinateBlock:
                 translation_vectors=self.translation_vectors,
             )
         else:
-            return QMMM(
+            return QMMMMolecule(
                 symbols=self.symbols,
                 positions=self.positions,
                 frozen_atoms=self.constrained_atoms,
@@ -1646,7 +1647,7 @@ class SDFFile(FileMixin):
         )
 
 
-class QMMM(Molecule):
+class QMMMMolecule(Molecule):
     """
     Standardise QMMM-related objects subclass normal objects (settings, jobrunner, molecule, etc),
     without affecting the normal molecules.
@@ -1658,6 +1659,8 @@ class QMMM(Molecule):
         high_level_atoms=None,
         medium_level_atoms=None,
         low_level_atoms=None,
+        real_charge=None,
+        real_multiplicity=None,
         bonded_atoms=None,
         scale_factors=None,
         **kwargs,
@@ -1684,6 +1687,13 @@ class QMMM(Molecule):
         self.low_level_atoms = low_level_atoms
         self.bonded_atoms = bonded_atoms
         self.scale_factors = scale_factors
+        self.real_charge = real_charge
+        self.real_multiplicity = real_multiplicity
+        if self.real_charge and self.real_multiplicity:
+            # the charge and multiplicity of the real system equal to
+            # that of the low_level_charge and low_level_multiplicity
+            self.charge = self.real_charge
+            self.multiplicity = self.real_multiplicity
 
         def __getattr__(self, name):
             # Forward any missing attribute to the underlying Molecule
@@ -1877,7 +1887,10 @@ class QMMM(Molecule):
         if self.high_level_atoms is not None:
             if atom_index in self.high_level_atoms:
                 return "H"
-            elif self.medium_level_atoms and atom_index in self.medium_level_atoms:
+            elif (
+                self.medium_level_atoms
+                and atom_index in self.medium_level_atoms
+            ):
                 return "M"
             else:
                 # if high level atoms is given, then low level atoms will be needed
