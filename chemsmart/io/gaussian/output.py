@@ -179,39 +179,15 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
-        # Clean duplicate structures at the end
-        clean_duplicate_structure(orientations)
-
         # Remove first structure if it's a link job
-        if self.job_type == "link" and len(orientations) > 1:
-            orientations, orientations_pbc = (
-                orientations[1:],
-                orientations_pbc[1:],
-            )
-            self.energies = self.energies[1:]
+        if self.job_type != "link":
+            clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
         # Handle normal termination
+        num_structures_to_use = self._get_num_structures_to_use()
         if self.normal_termination:
-            all_structures = create_molecule_list(
-                orientations,
-                orientations_pbc,
-                self.energies,
-                self.forces,
-                self.symbols,
-                self.charge,
-                self.multiplicity,
-                frozen_atoms,
-                self.list_of_pbc_conditions,
-            )
-        else:
-            # Handle abnormal termination
-            num_structures_to_use = min(
-                len(orientations),
-                len(self.energies),
-                len(self.forces),
-            )
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
@@ -224,6 +200,21 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
+        else:
+            # Handle abnormal termination
+            all_structures = create_molecule_list(
+                orientations,
+                orientations_pbc,
+                self.energies,
+                self.forces,
+                self.symbols,
+                self.charge,
+                self.multiplicity,
+                frozen_atoms,
+                self.list_of_pbc_conditions,
+                num_structures=num_structures_to_use,
+            )
+        num_structures = len(all_structures)
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
@@ -234,10 +225,20 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug(
-            f"Total number of structures located: {len(all_structures)}"
-        )
+        logger.debug(f"Total number of structures located: {num_structures}")
         return all_structures
+
+    def _get_num_structures_to_use(self):
+        num_structures_to_use = []
+        if self.standard_orientations:
+            num_structures_to_use.append(len(self.standard_orientations))
+        if self.energies:
+            num_structures_to_use.append(len(self.energies))
+        if self.forces:
+            if self.job_type == "link":
+                self.forces.insert(0, None)
+            num_structures_to_use.append(len(self.forces))
+        return min(num_structures_to_use)
 
     @cached_property
     def optimized_structure(self):
@@ -643,12 +644,12 @@ class Gaussian16Output(GaussianFileMixin):
 
         return masks
 
-    @cached_property
+    @property
     def scf_energies(self):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
         for line in self.contents:
-            match = re.match(scf_energy_pattern, line)
+            match = re.search(scf_energy_pattern, line)
             if match:
                 scf_energies.append(float(match[1]))
         return scf_energies
@@ -673,7 +674,7 @@ class Gaussian16Output(GaussianFileMixin):
                 oniom_energies.append(float(match[1]))
         return oniom_energies
 
-    @cached_property
+    @property
     def energies(self):
         """Return energies of the system."""
         if len(self.mp2_energies) == 0 and len(self.oniom_energies) == 0:

@@ -2,6 +2,7 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+energy_value_pattern = r"(-?\d+\.\d+)"
 
 xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
 # \b ensures that the match ends right after xyz
@@ -15,6 +16,7 @@ frozen_coordinates_pattern = (
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
+xyz_energy_pattern = r"Energy\(Hartree\):\s*(-?\d+\.\d+)"
 
 # standard coordinate pattern with (symbol x y z)
 standard_coord_pattern = (
