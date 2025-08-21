@@ -180,12 +180,13 @@ class Gaussian16Output(GaussianFileMixin):
             return []  # No structures found
 
         # Remove first structure if it's a link job
-        if self.route_object.job_type != "link":
+        if self.job_type != "link":
             clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
         # Handle normal termination
+        num_structures_to_use = self._get_num_structures_to_use()
         if self.normal_termination:
             all_structures = create_molecule_list(
                 orientations,
@@ -197,14 +198,10 @@ class Gaussian16Output(GaussianFileMixin):
                 self.multiplicity,
                 frozen_atoms,
                 self.list_of_pbc_conditions,
+                num_structures=num_structures_to_use,
             )
         else:
             # Handle abnormal termination
-            num_structures_to_use = min(
-                len(orientations),
-                len(self.energies),
-                len(self.forces),
-            )
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
@@ -230,6 +227,18 @@ class Gaussian16Output(GaussianFileMixin):
 
         logger.debug(f"Total number of structures located: {num_structures}")
         return all_structures
+
+    def _get_num_structures_to_use(self):
+        num_structures_to_use = []
+        if self.standard_orientations:
+            num_structures_to_use.append(len(self.standard_orientations))
+        if self.energies:
+            num_structures_to_use.append(len(self.energies))
+        if self.forces:
+            if self.job_type == "link":
+                self.forces.insert(0, None)
+            num_structures_to_use.append(len(self.forces))
+        return min(num_structures_to_use)
 
     @cached_property
     def optimized_structure(self):
