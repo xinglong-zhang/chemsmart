@@ -29,7 +29,7 @@ def scan(ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs):
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from cli.orca.py subcommands
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(scan_settings)
 

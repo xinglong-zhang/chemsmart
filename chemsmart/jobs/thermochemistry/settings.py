@@ -17,6 +17,7 @@ class ThermochemistryJobSettings:
         h_freq_cutoff=None,
         energy_units="hartree",
         outputfile=None,
+        overwrite=False,
         check_imaginary_frequencies=True,
     ):
         self.temperature = temperature
@@ -28,6 +29,7 @@ class ThermochemistryJobSettings:
         self.h_freq_cutoff = h_freq_cutoff
         self.energy_units = energy_units.lower()
         self.outputfile = outputfile
+        self.overwrite = overwrite
         self.check_imaginary_frequencies = check_imaginary_frequencies
 
     def copy(self):
@@ -41,6 +43,7 @@ class ThermochemistryJobSettings:
             h_freq_cutoff=self.h_freq_cutoff,
             energy_units=self.energy_units,
             outputfile=self.outputfile,
+            overwrite=self.overwrite,
             check_imaginary_frequencies=self.check_imaginary_frequencies,
         )
 

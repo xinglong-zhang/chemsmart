@@ -247,7 +247,7 @@ class PyMOLJobRunner(JobRunner):
 
     def _add_ray_command(self, job, command):
         if job.trace:
-            command += "; ray"
+            command += "; ray 6000, 6000"  # High resolution ray tracing
 
         return command
 
