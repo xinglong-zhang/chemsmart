@@ -31,7 +31,7 @@ def modred(
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from cli.orca.py subcommands
     modred_settings = modred_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(modred_settings)
 

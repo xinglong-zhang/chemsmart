@@ -3,7 +3,11 @@ import logging
 from abc import abstractmethod
 from typing import Optional
 
-from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
+from chemsmart.settings.executable import (
+    GaussianExecutable,
+    NCIPLOTExecutable,
+    ORCAExecutable,
+)
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -109,6 +113,9 @@ class Submitter(RegistryMixin):
             executable = GaussianExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "orca":
             executable = ORCAExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "nciplot":
+            executable = NCIPLOTExecutable.from_servername(self.server.name)
+
         else:
             # Need to add programs here to be supported for other types of programs
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")

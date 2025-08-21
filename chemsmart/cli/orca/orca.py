@@ -4,6 +4,7 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import (
@@ -242,13 +243,7 @@ def click_orca_jobtype_options(f):
 @click.group(cls=MyGroup)
 @click_orca_options
 @click_orca_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
-)
+@click_pubchem_options
 @click.pass_context
 def orca(
     ctx,
@@ -279,6 +274,7 @@ def orca(
     forces,
     pubchem,
 ):
+    """CLI for running ORCA jobs using the chemsmart framework."""
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
