@@ -9,6 +9,7 @@ import numpy as np
 from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
+from pymatgen.symmetry.analyzer import PointGroupAnalyzer
 from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
@@ -257,6 +258,26 @@ class Molecule:
                     self.positions - reconstructed, axis=1
                 ).max()
                 return error < 1e-2
+
+    @property
+    def point_group(self):
+        """Determine the point group of the molecule using pymatgen."""
+        if self.is_monoatomic:
+            return "Kh".upper()
+        pmg_mol = self.to_pymatgen()
+        point_group = str(PointGroupAnalyzer(pmg_mol).get_pointgroup()).upper()
+        return point_group
+
+    @property
+    def rotational_symmetry_number(self):
+        """Determine the rotational symmetry number of the molecule using pymatgen."""
+        if self.is_monoatomic:
+            return 1
+        pmg_mol = self.to_pymatgen()
+        symmetry_number = PointGroupAnalyzer(
+            pmg_mol
+        ).get_rotational_symmetry_number()
+        return symmetry_number
 
     @property
     def moments_of_inertia_tensor(self):

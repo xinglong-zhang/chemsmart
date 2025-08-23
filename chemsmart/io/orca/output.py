@@ -1643,6 +1643,24 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
+    def point_group(self):
+        """Obtain the point group from the output file."""
+        for i, line_i in enumerate(self.contents):
+            if line_i == "ENTHALPY":
+                for line_j in self.contents[i:]:
+                    if (
+                        "Point Group:" in line_j
+                        and "Symmetry Number:" in line_j
+                    ):
+                        point_group = (
+                            line_j.split(":")[1].split(",")[0].strip()
+                        )
+                        if point_group == "D(inf)h":
+                            point_group = "D*h"
+                        return point_group.upper()
+        return None
+
+    @property
     def rotational_constants_in_wavenumbers(self):
         """Rotational constants in wavenumbers."""
         all_rotational_constants_in_wavenumbers = []

@@ -501,6 +501,8 @@ class TestORCAOutput:
             np.array([0.0, -2.056815, 0.0]),
             rtol=1e-4,
         )
+        assert orca_out.rotational_symmetry_number == 2
+        assert orca_out.point_group == "C2V"
         assert orca_out.rotational_constants_in_wavenumbers == [
             26.416987,
             14.661432,

@@ -1463,6 +1463,13 @@ class Gaussian16Output(GaussianFileMixin):
                 return int(line.split()[-1].split(".")[0])
 
     @cached_property
+    def point_group(self):
+        """Obtain the point group from the output file."""
+        for line in self.contents:
+            if "Full point group" in line:
+                return line.split()[3]
+
+    @cached_property
     def rotational_temperatures(self):
         """Rotational temperatures in Kelvin, as a list."""
         rot_temps = []
