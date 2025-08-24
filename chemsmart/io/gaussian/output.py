@@ -304,8 +304,9 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_route(self):
         lines = self.contents
+        routes = []
         for i, line in enumerate(lines):
-            if line.startswith("#"):
+            if line.startswith("#") and lines[i - 1].startswith("------"):
                 if lines[i + 1].startswith("------"):
                     # route string in a single line
                     route = line.lower()
@@ -323,9 +324,9 @@ class Gaussian16Output(GaussianFileMixin):
                     route += lines[i + 1].lower()
                     route += lines[i + 2].lower()
                 else:
-                    route = None
-                return route
-        return None
+                    continue
+                routes.append(route)
+        return " ".join(routes) if routes else None
 
     def _get_modredundant_group(self):
         if "modred" in self.route_string:
