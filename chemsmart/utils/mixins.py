@@ -110,6 +110,13 @@ class GaussianFileMixin(FileMixin):
         raise NotImplementedError("Subclasses must implement `_get_route`.")
 
     @property
+    def is_link(self):
+        for line in self.contents:
+            if line.startswith("#") and "stable=opt" in line:
+                return True
+        return False
+
+    @property
     def modred(self):
         return self._get_modredundant_conditions()
 

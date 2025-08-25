@@ -202,6 +202,12 @@ class TestRouteString:
         assert r4d.solvent_id == "toluene"
         assert r4d.additional_solvent_options == "iterative"
 
+        s4e = "# opt=(recalcfc=5) freq mn15 def2svp\n scrf=(cpcm,iterative,solvent=toluene)"
+        r4e = GaussianRoute(s4e)
+        assert r4e.solvent_model == "cpcm"
+        assert r4e.solvent_id == "toluene"
+        assert r4e.additional_solvent_options == "iterative"
+
 
 class TestGaussian16Input:
     def test_read_gaussian_input(self, gaussian_opt_inputfile):
@@ -327,6 +333,24 @@ class TestGaussian16Input:
         assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
         assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
         assert g16_genecp.molecule.frozen_atoms is None
+
+    def test_read_gaussian_link_opt_input(self, gaussian_link_opt_input):
+        assert os.path.exists(gaussian_link_opt_input)
+        g16_link_opt = Gaussian16Input(filename=gaussian_link_opt_input)
+        assert g16_link_opt.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_opt.is_link
+        assert (
+            g16_link_opt.route_string
+            == "# opt freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_opt.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_opt.additional_opt_options_in_route is None
+        assert g16_link_opt.job_type == "opt"
+        assert g16_link_opt.functional == "um062x"
+        assert g16_link_opt.basis == "def2svp"
+        assert g16_link_opt.molecule.frozen_atoms is None
 
     def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
@@ -1393,8 +1417,11 @@ class TestGaussian16Output:
         assert g16_pm6.functional is None
         assert g16_pm6.basis is None
         assert g16_pm6.job_type == "opt"
+        assert g16_pm6.route_string == "# opt freq pm6"
         assert g16_pm6.freq
-        assert g16_pm6.semiempirical == "PM6"
+        assert (
+            g16_pm6.semiempirical == "PM6"
+        )  # changed to upper case in route_object.semiempirical
 
 
 class TestGaussianWBIOutput:
