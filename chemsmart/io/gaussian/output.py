@@ -305,7 +305,9 @@ class Gaussian16Output(GaussianFileMixin):
     def _get_route(self):
         lines = self.contents
         for i, line in enumerate(lines):
-            if line.startswith("#"):
+            if line.startswith("#") and "stable=opt" in line:
+                continue
+            elif line.startswith("#"):
                 if lines[i + 1].startswith("------"):
                     # route string in a single line
                     route = line.lower()
@@ -1081,10 +1083,6 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def homo_energy(self):
         if self.multiplicity == 1:
-            assert (
-                self.beta_occ_eigenvalues is None
-                and self.beta_virtual_eigenvalues is None
-            )
             return self.alpha_occ_eigenvalues[-1]
 
     @cached_property
@@ -1116,10 +1114,6 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def lumo_energy(self):
         if self.multiplicity == 1:
-            assert (
-                self.beta_occ_eigenvalues is None
-                and self.beta_virtual_eigenvalues is None
-            )
             return self.alpha_virtual_eigenvalues[0]
 
     @cached_property

@@ -166,6 +166,41 @@ def gaussian_link_ts_input(gaussian_link_inputs_test_directory):
     )
 
 
+# Gaussian output files for link jobs
+@pytest.fixture()
+def gaussian_link_outputs_test_directory(gaussian_outputs_test_directory):
+    gaussian_link_outputs_test_directory = os.path.join(
+        gaussian_outputs_test_directory, "link"
+    )
+    return gaussian_link_outputs_test_directory
+
+
+@pytest.fixture()
+def gaussian_link_opt_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_ts_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_ts_link.log",
+    )
+    return gaussian_link_ts_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_sp_link.log",
+    )
+
+
 @pytest.fixture()
 def gaussian_link_sp_input(gaussian_link_inputs_test_directory):
     return os.path.join(
