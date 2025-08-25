@@ -607,6 +607,8 @@ class TestGaussian16Output:
             g16_link_opt.route_string
             == "# opt freq um062x def2svp geom=check guess=read"
         )
+        assert g16_link_opt.is_link
+        assert g16_link_opt.job_type == "opt"
         assert g16_link_opt.normal_termination
         assert g16_link_opt.tddft_transitions == []
         assert len(g16_link_opt.alpha_occ_eigenvalues) == 8
@@ -641,7 +643,102 @@ class TestGaussian16Output:
             g16_link_opt.beta_virtual_eigenvalues[-1]
             == 3.87784 * units.Hartree
         )
-        assert g16_link_opt.fmo_gap == 0.3016 * units.Hartree
+        assert np.isclose(
+            g16_link_opt.fmo_gap, 0.3016 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_ts_output_file(
+        self, gaussian_link_ts_outputfile
+    ):
+        assert os.path.exists(gaussian_link_ts_outputfile)
+        g16_link_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
+        assert not g16_link_ts.normal_termination  # Error termination
+        assert (
+            g16_link_ts.route_string
+            == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
+        )
+        assert g16_link_ts.is_link
+        assert g16_link_ts.job_type == "ts"
+        assert len(g16_link_ts.vibrational_frequencies) == 0
+        assert (
+            g16_link_ts.num_vib_modes == g16_link_ts.num_vib_frequencies == 0
+        )
+        assert len(g16_link_ts.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_ts.alpha_occ_eigenvalues[0] == -19.78334 * units.Hartree
+        )
+        assert (
+            g16_link_ts.alpha_occ_eigenvalues[-1] == -0.38325 * units.Hartree
+        )
+        assert len(g16_link_ts.alpha_virtual_eigenvalues) == 20
+        assert (
+            g16_link_ts.alpha_virtual_eigenvalues[0]
+            == -0.08312 * units.Hartree
+        )
+        assert (
+            g16_link_ts.alpha_virtual_eigenvalues[-1]
+            == 3.85967 * units.Hartree
+        )
+        assert len(g16_link_ts.beta_occ_eigenvalues) == 8
+        assert g16_link_ts.beta_occ_eigenvalues[0] == -19.78334 * units.Hartree
+        assert g16_link_ts.beta_occ_eigenvalues[-1] == -0.38325 * units.Hartree
+        assert len(g16_link_ts.beta_virtual_eigenvalues) == 20
+        assert (
+            g16_link_ts.beta_virtual_eigenvalues[0] == -0.08312 * units.Hartree
+        )
+        assert (
+            g16_link_ts.beta_virtual_eigenvalues[-1] == 3.85967 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_ts.fmo_gap, 0.30013 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_sp_output_file(
+        self, gaussian_link_sp_outputfile
+    ):
+        assert os.path.exists(gaussian_link_sp_outputfile)
+        g16_link_sp = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert g16_link_sp.normal_termination
+        assert (
+            g16_link_sp.route_string
+            == "# um062x def2tzvp scrf=(smd,solvent=chloroform) geom=check guess=read"
+        )
+        assert g16_link_sp.is_link
+        assert g16_link_sp.job_type == "sp"
+        assert len(g16_link_sp.vibrational_frequencies) == 0
+        assert (
+            g16_link_sp.num_vib_modes == g16_link_sp.num_vib_frequencies == 0
+        )
+        assert len(g16_link_sp.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_sp.alpha_occ_eigenvalues[0] == -19.78515 * units.Hartree
+        )
+        assert (
+            g16_link_sp.alpha_occ_eigenvalues[-1] == -0.38742 * units.Hartree
+        )
+        assert len(g16_link_sp.alpha_virtual_eigenvalues) == 54
+        assert (
+            g16_link_sp.alpha_virtual_eigenvalues[0]
+            == -0.08907 * units.Hartree
+        )
+        assert (
+            g16_link_sp.alpha_virtual_eigenvalues[-1]
+            == 43.63078 * units.Hartree
+        )
+        assert len(g16_link_sp.beta_occ_eigenvalues) == 8
+        assert g16_link_sp.beta_occ_eigenvalues[0] == -19.78515 * units.Hartree
+        assert g16_link_sp.beta_occ_eigenvalues[-1] == -0.38742 * units.Hartree
+        assert len(g16_link_sp.beta_virtual_eigenvalues) == 54
+        assert (
+            g16_link_sp.beta_virtual_eigenvalues[0] == -0.08907 * units.Hartree
+        )
+        assert (
+            g16_link_sp.beta_virtual_eigenvalues[-1]
+            == 43.63078 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_sp.fmo_gap, 0.29835 * units.Hartree, atol=1e-5
+        )
 
     def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
         assert os.path.exists(gaussian_ts_genecp_outfile)
