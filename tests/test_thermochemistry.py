@@ -95,6 +95,15 @@ class TestThermochemistry:
             atol=1e-4,
         )  # [0.0078, 0.00354, 0.00256]
 
+        # test rotational symmetry number from molecule same as from Gaussian output
+        assert np.isclose(
+            mol.rotational_symmetry_number,
+            g16_output.rotational_symmetry_number,
+        )
+
+        # test point group from molecule same as from Gaussian output
+        assert g16_output.point_group == mol.point_group
+
         expected_E = (
             -1864.040180
         )  # in Hartree, from Gaussian output last SCF Done value:
@@ -334,7 +343,12 @@ class TestThermochemistryCO2:
         assert np.isclose(
             mol.moments_of_inertia_most_abundant_mass[-1], 43.27306478437749
         )  # use_weighted_mass=False
-        assert g16_output.rotational_symmetry_number == 2
+        assert (
+            g16_output.rotational_symmetry_number
+            == mol.rotational_symmetry_number
+            == 2
+        )
+        assert g16_output.point_group == mol.point_group == "D*H"
         assert g16_output.rotational_temperatures == [0.56050]
         assert g16_output.rotational_constants_in_Hz == [11.678834 * 1e9]
         assert g16_output.vibrational_frequencies == [
@@ -781,6 +795,8 @@ class TestThermochemistryCO2:
         )  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 44.01)
         assert orca_out.rotational_symmetry_number == 1
+        assert mol.rotational_symmetry_number == 2
+        assert orca_out.point_group == mol.point_group == "D*H"
         assert orca_out.rotational_constants_in_wavenumbers == [
             0.000000,
             0.394105,
@@ -1574,7 +1590,12 @@ class TestThermochemistryHe:
             mol.natural_abundance_weighted_mass, 4.002602
         )  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 4.0)
-        assert orca_out.rotational_symmetry_number == 1
+        assert (
+            orca_out.rotational_symmetry_number
+            == mol.rotational_symmetry_number
+            == 1
+        )
+        assert orca_out.point_group == mol.point_group == "KH"
         assert orca_out.rotational_constants_in_wavenumbers == [
             0,
             0,
@@ -1703,7 +1724,12 @@ class TestThermochemistryH2O:
             mol.moments_of_inertia_most_abundant_mass,
             [0.62549096, 1.15863644, 1.7841274],
         )  # use_weighted_mass=False
-        assert g16_output.rotational_symmetry_number == 2
+        assert (
+            g16_output.rotational_symmetry_number
+            == mol.rotational_symmetry_number
+            == 2
+        )
+        assert g16_output.point_group == mol.point_group == "C2V"
         assert g16_output.rotational_temperatures == [
             38.77653,
             20.93353,
@@ -1870,7 +1896,12 @@ class TestThermochemistryH2O:
             mol.natural_abundance_weighted_mass, 18.015286432429832
         )  # use_weighted_mass=True
         assert np.isclose(orca_out.mass, 18.02)
-        assert orca_out.rotational_symmetry_number == 2
+        assert (
+            orca_out.rotational_symmetry_number
+            == mol.rotational_symmetry_number
+            == 2
+        )
+        assert orca_out.point_group == mol.point_group == "C2V"
         assert orca_out.rotational_constants_in_wavenumbers == [
             26.416987,
             14.661432,
@@ -2145,6 +2176,194 @@ class TestThermochemistryPressure:
         )
 
 
+class TestThermochemistryTemperature:
+
+    def test_thermochemistry_co2_temperature330p15(
+        self, gaussian_co2_temperature330p15_outfile
+    ):
+        """Values from Gaussian output
+        Temperature   330.150 Kelvin.  Pressure   1.00000 Atm.
+                            E (Thermal)             CV                S
+                             KCal/Mol        Cal/Mol-Kelvin    Cal/Mol-Kelvin
+        Total                    9.228              7.274             52.049
+        Electronic               0.000              0.000              0.000
+        Translational            0.984              2.981             37.777
+        Rotational               0.656              1.987             13.285
+        Vibrational              7.588              2.306              0.987
+        Vibration     1          1.043              1.065              0.477
+        Vibration     2          1.043              1.065              0.477
+                              Q            Log10(Q)             Ln(Q)
+        Total Bot       0.679863D+05          4.832421         11.127062
+        Total V=0       0.493906D+10          9.693644         22.320440
+        Vib (Bot)       0.156005D-04         -4.806861        -11.068207
+        Vib (Bot)    1  0.259496D+00         -0.585870         -1.349015
+        Vib (Bot)    2  0.259496D+00         -0.585870         -1.349015
+        Vib (V=0)       0.113334D+01          0.054362          0.125172
+        Vib (V=0)    1  0.106333D+01          0.026667          0.061403
+        Vib (V=0)    2  0.106333D+01          0.026667          0.061403
+        Electronic      0.100000D+01          0.000000          0.000000
+        Translational   0.147970D+08          7.170174         16.509935
+        Rotational      0.294516D+03          2.469109          5.685334
+        """
+        assert os.path.exists(gaussian_co2_temperature330p15_outfile)
+        g16_output_temperature330p15 = Gaussian16Output(
+            filename=gaussian_co2_temperature330p15_outfile
+        )
+        assert g16_output_temperature330p15.normal_termination
+        thermochem_temperature330p15 = Thermochemistry(
+            filename=gaussian_co2_temperature330p15_outfile,
+            temperature=330.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.translational_partition_function,
+            0.147970e08,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.translational_entropy / cal_to_joules,
+            37.777,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.translational_internal_energy
+            / (cal_to_joules * 1000),
+            0.984,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.translational_heat_capacity
+            / cal_to_joules,
+            2.981,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.rotational_partition_function,
+            0.294516e03,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.rotational_entropy / cal_to_joules,
+            13.285,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.rotational_internal_energy
+            / (cal_to_joules * 1000),
+            0.656,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.rotational_heat_capacity
+            / cal_to_joules,
+            1.987,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.vibrational_partition_function_bot,
+            0.156005e-04,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.vibrational_partition_function_v0,
+            0.113334e01,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.vibrational_entropy / cal_to_joules,
+            0.987,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.vibrational_internal_energy
+            / (cal_to_joules * 1000),
+            7.588,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.vibrational_heat_capacity
+            / cal_to_joules,
+            2.306,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.total_partition_function, 0.493906e10
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.total_entropy / cal_to_joules,
+            52.049,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.total_internal_energy
+            / (cal_to_joules * 1000),
+            9.228,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            thermochem_temperature330p15.total_heat_capacity / cal_to_joules,
+            7.274,
+            atol=1e-3,
+        )
+
+    def test_thermochemistry_co2_temperature330p15_qrrho(
+        self, gaussian_co2_temperature330p15_outfile
+    ):
+        """Values from Goodvibes, as a reference:
+                goodvibes -t 330.15 --bav "conf" co2_temperature_330p15.log
+        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+           ********************************************************************************************************************************
+        o  co2_temperature_330p15                    -188.443652   0.011703   -188.427901   0.027384   0.027385   -188.455285   -188.455286
+           ********************************************************************************************************************************
+        """
+        qrrho_thermochem_temperature330p15 = Thermochemistry(
+            filename=gaussian_co2_temperature330p15_outfile,
+            temperature=330.15,
+            pressure=1.0,
+            use_weighted_mass=False,
+            s_freq_cutoff=100,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.electronic_energy
+            / (hartree_to_joules * units._Nav),
+            -188.443652,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.zero_point_energy
+            / (hartree_to_joules * units._Nav),
+            0.011703,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.enthalpy
+            / (hartree_to_joules * units._Nav),
+            -188.427901,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.027384,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.027385,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -188.455285,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_temperature330p15.qrrho_gibbs_free_energy_qs
+            / (hartree_to_joules * units._Nav),
+            -188.455286,
+            atol=1e-6,
+        )
+
+
 class TestBoltzmannWeightedAverage:
 
     def test_thermochemistry_boltzmann_electronic(
@@ -2160,10 +2379,20 @@ class TestBoltzmannWeightedAverage:
         g16_output_conformer2 = Gaussian16Output(
             filename=gaussian_conformer2_outfile
         )
+        mol_conformer1 = g16_output_conformer1.molecule
+        mol_conformer2 = g16_output_conformer2.molecule
         assert g16_output_conformer1.normal_termination
         assert g16_output_conformer2.normal_termination
         assert np.isclose(g16_output_conformer1.energies[-1], -2189.63187379)
         assert np.isclose(g16_output_conformer2.energies[-1], -2189.63199488)
+        assert g16_output_conformer1.rotational_symmetry_number == 1
+        assert g16_output_conformer2.rotational_symmetry_number == 1
+        assert g16_output_conformer1.point_group == "C1"
+        assert g16_output_conformer2.point_group == "C1"
+        assert mol_conformer1.rotational_symmetry_number == 2
+        assert mol_conformer2.rotational_symmetry_number == 2
+        assert mol_conformer1.point_group == "C2"
+        assert mol_conformer2.point_group == "C2"
         boltzmannthermochem_electronic = BoltzmannAverageThermochemistry(
             files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
             temperature=298.15,

@@ -583,6 +583,14 @@ def gaussian_co2_pressure1p5_outfile(gaussian_thermochem_test_directory):
 
 
 @pytest.fixture()
+def gaussian_co2_temperature330p15_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_temperature330p15_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_temperature_330p15.log"
+    )
+    return gaussian_co2_temperature330p15_outfile
+
+
+@pytest.fixture()
 def gaussian_co2_pressure3_outfile(gaussian_thermochem_test_directory):
     gaussian_co2_pressure3_outfile = os.path.join(
         gaussian_thermochem_test_directory, "co2_pressure3.log"

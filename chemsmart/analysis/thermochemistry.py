@@ -86,9 +86,9 @@ class Thermochemistry:
         self.I = [
             i * (units._amu * (units.Ang / units.m) ** 2)
             for i in self.moments_of_inertia
-        ]
+        ]  # convert the unit of moments of inertia from amu Ang^2 to kg m^2
 
-        # convert the unit of moments of inertia from amu Ang^2 to kg m^2
+        # Calculate effective moment of inertia in kg m^2 from average rotational constant in Hz
         self.Bav = (
             (units._hplanck / self.average_rotational_constant)
             if self.average_rotational_constant
@@ -134,9 +134,7 @@ class Thermochemistry:
     @property
     def mass(self):
         """Obtain the molecular mass."""
-        if self.use_weighted_mass:
-            return self.molecule.natural_abundance_weighted_mass
-        return self.molecule.most_abundant_mass
+        return self.molecule.get_mass(self.use_weighted_mass)
 
     @property
     def moments_of_inertia(self):
@@ -144,24 +142,14 @@ class Thermochemistry:
         Direct calculation from molecular structure, since sometimes Gaussian
         output does not print it properly (prints as ***** if values too large)
         """
-        if self.use_weighted_mass:
-            return self.molecule.moments_of_inertia_weighted_mass
-        return self.molecule.moments_of_inertia_most_abundant_mass
+        return self.molecule.get_moments_of_inertia(self.use_weighted_mass)
 
     @property
     def average_rotational_constant(self):
-        if self.molecule.is_monoatomic:
-            return None
-        if self.molecule.is_linear:
-            return units._hplanck / (8 * np.pi**2 * self.I[-1])
-
-        assert (
-            len(self.I) == 3
-        ), "Number of moments of inertia should be 3 for nonlinear molecules."
-        rotational_constants = [
-            units._hplanck / (8 * np.pi**2 * i) for i in self.I
-        ]
-        return sum(rotational_constants) / len(rotational_constants)
+        """Obtain the average rotational constant."""
+        return self.molecule.get_average_rotational_constant(
+            self.use_weighted_mass
+        )
 
     @property
     def rotational_symmetry_number(self):
