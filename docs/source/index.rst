@@ -29,10 +29,59 @@ Welcome to chemsmart’s documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials
+   :caption: Set up your Project
 
-   tutorials_setupserverconfigurationonthecluster
-   tutorials_setuptheprojectsettings
+   project_setupserverconfigurationonthecluster
+   project_setuptheprojectsettings
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for chemsmart
+
+   tutorials_chemsmart
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for Gaussian Jobs
+
+   gaussian_generalCLIforallgaussianjobs
+   gaussian_submitconformationalsamplingdynamicsjobs
+   gaussian_submitstructureoptimizationjobs
+   gaussian_submittransitionstatesearchjobs
+   gaussian_submitelectronicstructurepropertiesanalysesjobs
+   gaussian_submitotherjobs
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for ORCA Jobs
+
+   orca_generalCLIforallorcajobs
+   orca_submitstructureoptimizationjobs
+   orca_submittransitionstatesearchjobs
+   orca_subotherjobs
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for Pymol Jobs
+
+   mol_generalCLIforallmoljobs
+   mol_runbasicvisualizationjobs
+   mol_runreactionanalysisjobs
+   mol_runelectronicstructureanalysisjobs
+   mol_runInteractionanalysisjobs
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for ThermoChem Jobs
+
+   thermochemistry_runthermochemistryjobs
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: old
+
    tutorials_submitageometryoptimizationjobusinggaussian
    tutorials_SubmitaTransitionStateandReactionPathwayAnalysisJobUsingGaussian
    tutorials_SubmitaEnergyandThermodynamicAnalysisJobUsingGaussian
