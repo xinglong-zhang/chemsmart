@@ -100,6 +100,10 @@ class GaussianFileMixin(FileMixin):
         return nproc
 
     @property
+    def freq(self):
+        return self.route_object.freq
+
+    @property
     def route_string(self):
         """Route string for Gaussian file.
         Returned by individual subclasses."""
