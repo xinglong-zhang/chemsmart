@@ -131,23 +131,13 @@ class ORCAExecutable(Executable):
             return executable_path
 
 
-class XTBExecutable(Executable):
-    PROGRAM = "XTB"
+class NCIPLOTExecutable(Executable):
+    PROGRAM = "NCIPLOT"
 
     def __init__(self, executable_folder=None, **kwargs):
         super().__init__(executable_folder=executable_folder, **kwargs)
 
     def get_executable(self):
         if self.executable_folder is not None:
-            executable_path = os.path.join(self.executable_folder, "xtb")
+            executable_path = os.path.join(self.executable_folder, "nciplot")
             return executable_path
-        else:
-            # by default, for xtb, we will use xtb from conda environment
-            from chemsmart.utils.utils import run_command
-
-            xtb_path = run_command(["which", "xtb"])
-            if not os.path.exists(xtb_path):
-                raise FileNotFoundError(
-                    f"XTB not found: {xtb_path}. Please install xtb!"
-                )
-            return xtb_path

@@ -4,9 +4,12 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.utils import (
+    return_objects_from_string_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,13 @@ def click_gaussian_settings_options(f):
     )
     @click.option(
         "-b", "--basis", type=str, default=None, help="New basis set to run."
+    )
+    @click.option(
+        "-s",
+        "--semiempirical",
+        type=str,
+        default=None,
+        help="Semiempirical method to run.",
     )
     @click.option(
         "-i",
@@ -193,7 +203,9 @@ def click_gaussian_solvent_options(f):
         "--solvent-options",
         type=str,
         default=None,
-        help="Additional solvent options in scrf=() route.",
+        help="Additional solvent options in scrf=() route. "
+        "E.g., `iterative` in scrf=(smd,water,iterative) via"
+        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp -so iterative",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -248,13 +260,7 @@ def click_gaussian_td_options(f):
 @click.group(cls=MyGroup)
 @click_gaussian_options
 @click_gaussian_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
-)
+@click_pubchem_options
 @click.pass_context
 def gaussian(
     ctx,
@@ -267,6 +273,7 @@ def gaussian(
     multiplicity,
     functional,
     basis,
+    semiempirical,
     index,
     additional_opt_options,
     additional_route_parameters,
@@ -276,6 +283,7 @@ def gaussian(
     forces,
     pubchem,
 ):
+    """CLI for running Gaussian jobs using the chemsmart framework."""
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -291,7 +299,7 @@ def gaussian(
         logger.info(
             f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
         )
-    elif filename.endswith((".com", ".inp", ".out", ".log")):
+    elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
@@ -317,6 +325,9 @@ def gaussian(
     if basis is not None:
         job_settings.basis = basis
         keywords += ("basis",)
+    if semiempirical is not None:
+        job_settings.semiempirical = semiempirical
+        keywords += ("semiempirical",)
     if additional_opt_options is not None:
         job_settings.additional_opt_options_in_route = additional_opt_options
         keywords += ("additional_opt_options_in_route",)
@@ -340,6 +351,7 @@ def gaussian(
         keywords += ("forces",)
 
     # obtain molecule structure
+    molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -356,7 +368,9 @@ def gaussian(
         assert (
             molecules is not None
         ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
+        logger.debug(
+            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+        )
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
@@ -377,26 +391,15 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
-
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        logger.debug(f"Using molecule with index: {index}")
-        try:
-            # try to get molecule using python style string indexing,
-            # but in 1-based
-            from chemsmart.utils.utils import string2index_1based
+        molecules = return_objects_from_string_index(
+            list_of_objects=molecules, index=index
+        )
 
-            index = string2index_1based(index)
-            molecules = molecules[index]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-        except ValueError:
-            # except user defined indices such as s='[1-3,28-31,34-41]'
-            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+    if not isinstance(molecules, list):
+        molecules = [molecules]
 
     logger.debug(f"Obtained molecules: {molecules}")
 

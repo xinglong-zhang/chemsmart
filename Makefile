@@ -98,7 +98,7 @@ virtualenv:  ## Create a virtual environment using virtualenv.
 
 .PHONY: install
 install:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[test]
+	$(ENV_PREFIX)pip install -e .[test,dev]  # install dependencies in dev too
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit
@@ -125,6 +125,13 @@ configure:        ## Run chemsmart configuration interactively.
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
 		$(ECHO) "Skipping ORCA configuration."; \
+	fi; \
+	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder; \
+	if [ -n "$$nciplot_folder" ]; then \
+		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
+	else \
+		$(ECHO) "Skipping NCIPLOT configuration."; \
 	fi
 
 .PHONY: show
@@ -162,12 +169,20 @@ lint:             ## Run linters (ruff).
 
 # === Testing ===
 
+.PHONY: coverage-clean
+coverage-clean:   ## Remove any stale coverage files prior to running tests.
+ifeq ($(OS),Windows)
+	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
+else
+	-@rm -f .coverage .coverage.* 2>/dev/null
+endif
+
 .PHONY: test
-test: lint        ## Run tests and generate coverage report.
+test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
 	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
-	$(ENV_PREFIX)coverage combine || true  # Add this to handle empty data gracefully
-	$(ENV_PREFIX)coverage xml
-	$(ENV_PREFIX)coverage html
+	-$(ENV_PREFIX)coverage combine  # Portable error ignoring: - so a bad shard cannot fail the job 
+	-$(ENV_PREFIX)coverage xml
+	-$(ENV_PREFIX)coverage html
 
 # === Cleanup ===
 

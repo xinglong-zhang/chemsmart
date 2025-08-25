@@ -19,6 +19,7 @@ class GaussianJobSettings(MolecularJobSettings):
         ab_initio=None,
         functional=None,
         basis=None,
+        semiempirical=None,
         charge=None,
         multiplicity=None,
         chk=True,
@@ -48,6 +49,7 @@ class GaussianJobSettings(MolecularJobSettings):
             ab_initio=ab_initio,
             functional=functional,
             basis=basis,
+            semiempirical=semiempirical,
             charge=charge,
             multiplicity=multiplicity,
             freq=freq,
@@ -202,6 +204,7 @@ class GaussianJobSettings(MolecularJobSettings):
             ab_initio=None,
             functional=None,
             basis=None,
+            semiempirical=None,
             charge=None,
             multiplicity=None,
             chk=True,
@@ -322,24 +325,39 @@ class GaussianJobSettings(MolecularJobSettings):
         elif not self.freq and self.numfreq:
             route_string += " freq=numer"
 
-        # write functional and basis
-        if self.basis is None:
-            raise ValueError("Warning: Basis is missing!")
-        if self.ab_initio is not None and self.functional is None:
-            method = self.ab_initio
-        elif self.ab_initio is None and self.functional is not None:
-            method = self.functional
+        # Determine computational method
+        if self.semiempirical is not None:
+            # Semiempirical methods do not require a basis set
+            if self.basis is not None:
+                logger.info(
+                    "Warning: Basis set provided but not required for semiempirical methods."
+                )
+            route_string += f" {self.semiempirical}"
+
+        elif self.ab_initio is not None and self.functional is None:
+            # Ab initio method requires a basis set
+            if self.basis is None:
+                raise ValueError(
+                    "Error: Basis set is required for ab initio methods."
+                )
+            route_string += f" {self.ab_initio} {self.basis}"
+
+        elif self.functional is not None and self.ab_initio is None:
+            # DFT method requires a basis set
+            if self.basis is None:
+                raise ValueError(
+                    "Error: Basis set is required for DFT methods."
+                )
+            route_string += f" {self.functional} {self.basis}"
+
         elif self.ab_initio is not None and self.functional is not None:
             raise ValueError(
-                "Warning: Both ab initio and DFT functional are provided!"
-            )
-        else:
-            raise ValueError(
-                "Warning: Both ab initio and DFT functional are missing!"
+                "Error: Both ab initio and DFT functional provided.\n"
+                "Specify only one."
             )
 
-        # write basis set
-        route_string += f" {method} {self.basis}"
+        else:
+            raise ValueError("Error: No computational method provided.")
 
         # write forces calculation
         if self.forces:

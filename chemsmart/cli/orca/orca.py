@@ -4,9 +4,12 @@ import os
 
 import click
 
+from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.utils import (
+    return_objects_from_string_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -240,13 +243,7 @@ def click_orca_jobtype_options(f):
 @click.group(cls=MyGroup)
 @click_orca_options
 @click_orca_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
-)
+@click_pubchem_options
 @click.pass_context
 def orca(
     ctx,
@@ -277,6 +274,7 @@ def orca(
     forces,
     pubchem,
 ):
+    """CLI for running ORCA jobs using the chemsmart framework."""
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
@@ -367,6 +365,7 @@ def orca(
         keywords += ("forces",)
 
     # obtain molecule structure
+    molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
@@ -407,8 +406,12 @@ def orca(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
     if index is not None:
-        # return list of molecules
-        molecules = molecules[string2index_1based(index)]
+        molecules = return_objects_from_string_index(
+            list_of_objects=molecules, index=index
+        )
+
+    if not isinstance(molecules, list):
+        molecules = [molecules]
 
     logger.debug(f"Obtained molecules: {molecules}")
 

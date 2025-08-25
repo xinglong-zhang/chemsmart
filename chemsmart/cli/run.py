@@ -74,6 +74,7 @@ def run(
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
     """Process the job returned by subcommands."""
+    logger.debug(f"Processing pipeline with args: {args}, kwargs: {kwargs}")
     # will give the following error if without **kwargs:
     # TypeError: process_pipeline() got an unexpected keyword argument 'stream'
 
@@ -84,6 +85,15 @@ def process_pipeline(ctx, *args, **kwargs):
     # Get the job
     job = args[0]
     logger.debug(f"Job to be run: {job}")
+
+    # Handle None return (e.g., from post-processing subcommands like boltzmann)
+    if job is None:
+        logger.debug(
+            "No job to process (None returned). Skipping job execution."
+        )
+        return None
+
+    # Handle list of jobs
     if isinstance(job, list) and len(job) == 1:
         job = job[0]
 
