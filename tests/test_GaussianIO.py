@@ -352,6 +352,42 @@ class TestGaussian16Input:
         assert g16_link_opt.basis == "def2svp"
         assert g16_link_opt.molecule.frozen_atoms is None
 
+    def test_read_gaussian_link_ts_input(self, gaussian_link_ts_input):
+        assert os.path.exists(gaussian_link_ts_input)
+        g16_link_ts = Gaussian16Input(filename=gaussian_link_ts_input)
+        assert g16_link_ts.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_ts.is_link
+        assert (
+            g16_link_ts.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_ts.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_ts.additional_opt_options_in_route is None
+        assert g16_link_ts.job_type == "ts"
+        assert g16_link_ts.functional == "um062x"
+        assert g16_link_ts.basis == "def2svp"
+        assert g16_link_ts.molecule.frozen_atoms is None
+
+    def test_read_gausssian_link_sp_input(self, gaussian_link_sp_input):
+        assert os.path.exists(gaussian_link_sp_input)
+        g16_link_sp = Gaussian16Input(filename=gaussian_link_sp_input)
+        assert g16_link_sp.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_sp.is_link
+        assert (
+            g16_link_sp.route_string
+            == "# um062x def2tzvp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_sp.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_sp.additional_opt_options_in_route is None
+        assert g16_link_sp.job_type == "sp"
+        assert g16_link_sp.functional == "um062x"
+        assert g16_link_sp.basis == "def2tzvp"
+        assert g16_link_sp.molecule.frozen_atoms is None
+
     def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
         g16_pbc_1d = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)

@@ -142,31 +142,6 @@ class Gaussian16Input(GaussianFileMixin):
     def constrained_atoms(self, value):
         self.constrained_atoms = value
 
-    # def _get_route(self):
-    #     """Obtain route string that may span over multiple lines
-    #     and convert route to lower case."""
-    #     route_strings = []
-    #     for line in self.contents:
-    #         concatenated_string = ""
-    #         found_hash = False
-    #         if line.startswith("#"):
-    #             concatenated_string += (
-    #                 line.strip()
-    #             )  # Remove the '#' and any leading/trailing whitespace
-    #             found_hash = True
-    #         elif found_hash:
-    #             concatenated_string += (
-    #                 " " + line.strip()
-    #             )  # Concatenate with a space separator
-    #             route_strings.append(concatenated_string)
-    #         else:
-    #             continue
-    #
-    #     if self.is_link:
-    #         return route_strings[-1]
-    #
-    #     return " ".join(route_strings)
-
     def _get_route(self):
         """Obtain route strings that may span multiple lines starting with '#',
         end a block on a blank line (or a non-# line), and convert to lower case.
