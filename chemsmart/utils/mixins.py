@@ -201,10 +201,6 @@ class GaussianFileMixin(FileMixin):
         return self._get_chk()
 
     @property
-    def freq(self):
-        return self.route_object.freq
-
-    @property
     def numfreq(self):
         return self.route_object.numfreq
 

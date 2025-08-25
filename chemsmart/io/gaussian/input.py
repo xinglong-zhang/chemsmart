@@ -51,6 +51,10 @@ class Gaussian16Input(GaussianFileMixin):
         return False
 
     @property
+    def freq(self):
+        return self.route_object.freq
+
+    @property
     def translation_vectors(self):
         return self.coordinate_block.translation_vectors
 

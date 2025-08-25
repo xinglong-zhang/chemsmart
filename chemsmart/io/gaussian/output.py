@@ -64,6 +64,14 @@ class Gaussian16Output(GaussianFileMixin):
         return False
 
     @property
+    def freq(self):
+        """Check if the job is a frequency calculation."""
+        for line in self.contents:
+            if line.startswith(" Frequencies --"):
+                return True
+        return False
+
+    @property
     def heavy_elements(self):
         """TODO"""
         return None
