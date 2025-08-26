@@ -302,3 +302,23 @@ class TestConverter:
             assert len(lines) == 16
             assert lines[0] == "14\n"
         # assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
+
+    def test_convert_single_sp_log_file_to_xyz(
+        self, gaussian_benzene_opt_outfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "benzene_sp.log")
+        copy(gaussian_benzene_opt_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 12
+        assert mol.chemical_formula == "C6H6"
+        assert mol.energy == -231.977725
