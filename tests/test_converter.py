@@ -322,3 +322,24 @@ class TestConverter:
         assert mol.num_atoms == 12
         assert mol.chemical_formula == "C6H6"
         assert mol.energy == -231.977725
+
+    def test_convert_single_opt_log_file_to_xyz(
+        self, gaussian_acetone_opt_outfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "benzene_opt.log")
+        copy(gaussian_acetone_opt_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        print(mol.num_atoms, mol.chemical_formula, mol.energy)
+        assert mol.num_atoms == 10
+        assert mol.chemical_formula == "C3H6O"
+        assert mol.energy == -192.919416
