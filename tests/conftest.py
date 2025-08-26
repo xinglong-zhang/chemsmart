@@ -146,6 +146,68 @@ def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     )
 
 
+# Gaussian input files for link jobs
+@pytest.fixture()
+def gaussian_link_inputs_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "link")
+
+
+@pytest.fixture()
+def gaussian_link_opt_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_opt_input_opt_link.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_link_ts_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_ts_input_ts_link.com"
+    )
+
+
+# Gaussian output files for link jobs
+@pytest.fixture()
+def gaussian_link_outputs_test_directory(gaussian_outputs_test_directory):
+    gaussian_link_outputs_test_directory = os.path.join(
+        gaussian_outputs_test_directory, "link"
+    )
+    return gaussian_link_outputs_test_directory
+
+
+@pytest.fixture()
+def gaussian_link_opt_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_ts_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_ts_link.log",
+    )
+    return gaussian_link_ts_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_sp_link.log",
+    )
+
+
+@pytest.fixture()
+def gaussian_link_sp_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_sp_input_sp_link.com"
+    )
+
+
 @pytest.fixture()
 def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
     return os.path.join(gaussian_inputs_test_directory, "qmmm")
