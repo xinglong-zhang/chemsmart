@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_gaussian_jobtype_options
 @click.option(
-    "-n",
+    "-N",
     "--num-confs-to-run",
     type=int,
     default=None,

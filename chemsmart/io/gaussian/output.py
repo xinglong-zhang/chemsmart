@@ -188,7 +188,7 @@ class Gaussian16Output(GaussianFileMixin):
                 orientations[1:],
                 orientations_pbc[1:],
             )
-            self.energies_in_eV = self.energies_in_eV[1:]
+            self.energies = self.energies[1:]
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
@@ -197,8 +197,8 @@ class Gaussian16Output(GaussianFileMixin):
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies_in_eV,
-                self.forces_in_eV_per_angstrom,
+                self.energies,
+                self.forces,
                 self.symbols,
                 self.charge,
                 self.multiplicity,
@@ -209,14 +209,14 @@ class Gaussian16Output(GaussianFileMixin):
             # Handle abnormal termination
             num_structures_to_use = min(
                 len(orientations),
-                len(self.energies_in_eV),
-                len(self.forces_in_eV_per_angstrom),
+                len(self.energies),
+                len(self.forces),
             )
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies_in_eV,
-                self.forces_in_eV_per_angstrom,
+                self.energies,
+                self.forces,
                 self.symbols,
                 self.charge,
                 self.multiplicity,
@@ -348,6 +348,9 @@ class Gaussian16Output(GaussianFileMixin):
         return self._get_gen_genecp()
 
     def _get_gen_genecp(self):
+        if self.basis is None:
+            # this happens for semi-empirical calculations
+            return None
         if "gen" in self.basis:
             # return the string containing gen or genecp
             return self.basis
@@ -744,7 +747,7 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def num_forces(self):
-        return len(self.forces_in_eV_per_angstrom)
+        return len(self.forces)
 
     @cached_property
     def input_orientations(self):

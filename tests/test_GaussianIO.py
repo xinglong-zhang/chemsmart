@@ -123,6 +123,18 @@ class TestRouteString:
         assert r1.solvent_id == "water"
         # TODO: fix nonstandard functional/basis (very rare cases such as this)
 
+    def test_read_route_semiempirical(self):
+        s1 = "# opt freq PM6"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+        assert r1.ab_initio is None
+        assert r1.semiempirical == "PM6"
+        assert r1.solv is False
+        assert r1.dieze_tag is None
+        assert r1.additional_opt_options_in_route is None
+        assert r1.additional_route_parameters is None
+
     def test_read_route_string_opt_options(self):
         s2a = "# opt=(recalcfc=5) freq mn15 def2svp"
         r2a = GaussianRoute(s2a)
@@ -155,7 +167,7 @@ class TestRouteString:
         r3a = GaussianRoute(s3a)
         assert r3a.job_type == "opt"
         assert r3a.additional_opt_options_in_route == "recalcfc=5"
-        assert r3a.freq is False
+        assert r3a.freq is True
         assert r3a.numfreq is True
         assert r3a.solv is False
         assert r3a.functional == "pbepbe"
@@ -1007,10 +1019,7 @@ class TestGaussian16Output:
             0,
             0,
         ]
-        assert (
-            g16_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_frozen.optimized_structure.energy == -804.614710796
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
         assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
         assert np.allclose(
@@ -1112,10 +1121,7 @@ class TestGaussian16Output:
         # since use_frozen is False, this is not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
-        assert (
-            g16_hide_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_hide_frozen.optimized_structure.energy == -804.614710796
         assert (
             g16_hide_frozen.num_vib_modes
             == g16_hide_frozen.num_vib_frequencies
@@ -1374,6 +1380,22 @@ class TestGaussian16Output:
             g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
         )
 
+    def test_normal_termination_semiempirical_pm6_output_file(
+        self, gaussian_semiempirical_pm6_output_file
+    ):
+        g16_pm6 = Gaussian16Output(
+            filename=gaussian_semiempirical_pm6_output_file
+        )
+        assert g16_pm6.normal_termination
+        assert g16_pm6.molecule.num_atoms == 27
+        assert g16_pm6.molecule.empirical_formula == "C9H16N2"
+        assert g16_pm6.ab_initio is None
+        assert g16_pm6.functional is None
+        assert g16_pm6.basis is None
+        assert g16_pm6.job_type == "opt"
+        assert g16_pm6.freq
+        assert g16_pm6.semiempirical == "PM6"
+
 
 class TestGaussianWBIOutput:
     def test_normal_termination_with_forces_and_frequencies(
@@ -1522,7 +1544,7 @@ class TestGaussianPBCOutputFile:
 
         assert np.isclose(
             g16_pbc_2d.last_structure.energy,
-            -76.1490641879 * units.Hartree,
+            -76.1490641879,
             rtol=1e-5,
         )
         assert np.allclose(
@@ -1532,9 +1554,7 @@ class TestGaussianPBCOutputFile:
                     [0.000015884, 0.000006763, 0.000000000],
                     [-0.000015884, -0.000006763, -0.000000000],
                 ]
-            )
-            * units.Hartree
-            / units.Bohr,
+            ),
             rtol=1e-5,
         )
 

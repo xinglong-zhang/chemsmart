@@ -30,7 +30,7 @@ help:             ## Show the help menu.
 	@if [ "$(OS)" = "Windows" ]; then \
 		type $(MAKEFILE_LIST) | findstr /R "^[a-zA-Z_-]*:.*## " | for /F "tokens=1,2 delims=##" %%a in ('more') do @echo %%a                    %%b; \
 	else \
-		grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'; \
+		grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf="\033[36m%-15s\033[0m %s\n", $$1, $$2}'; \
 	fi
 
 # === Environment Setup ===
@@ -98,8 +98,13 @@ virtualenv:  ## Create a virtual environment using virtualenv.
 
 .PHONY: install
 install:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[test]
+	$(ENV_PREFIX)pip install -e .[test,dev]  # install dependencies in dev too
 	$(ENV_PREFIX)pip install types-PyYAML
+
+.PHONY: pre-commit
+pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
+	$(ENV_PREFIX)pre-commit install
+	@echo Pre-commit hooks installed. They will run automatically on each commit.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
@@ -120,6 +125,13 @@ configure:        ## Run chemsmart configuration interactively.
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config orca --folder "$$orca_folder"; \
 	else \
 		$(ECHO) "Skipping ORCA configuration."; \
+	fi; \
+	read -p "Enter the path to the NCIPLOT folder (or press Enter to skip): " nciplot_folder; \
+	if [ -n "$$nciplot_folder" ]; then \
+		$(ECHO) "Configuring NCIPLOT with folder: $$nciplot_folder"; \
+		$(ENV_PREFIX)python $(CHEMSMART_PATH) config nciplot --folder "$$nciplot_folder"; \
+	else \
+		$(ECHO) "Skipping NCIPLOT configuration."; \
 	fi
 
 .PHONY: show
@@ -157,12 +169,20 @@ lint:             ## Run linters (ruff).
 
 # === Testing ===
 
+.PHONY: coverage-clean
+coverage-clean:   ## Remove any stale coverage files prior to running tests.
+ifeq ($(OS),Windows)
+	-@for /R . %%f in (.coverage*) do @$(RM) "%%f" 2>$(NULL)
+else
+	-@rm -f .coverage .coverage.* 2>/dev/null
+endif
+
 .PHONY: test
-test: lint        ## Run tests and generate coverage report.
+test: lint coverage-clean ## Run tests and generate coverage report (robust to corrupt shards).
 	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart --cov-branch -l --tb=short --maxfail=1 tests/
-	$(ENV_PREFIX)coverage combine || true  # Add this to handle empty data gracefully
-	$(ENV_PREFIX)coverage xml
-	$(ENV_PREFIX)coverage html
+	-$(ENV_PREFIX)coverage combine  # Portable error ignoring: - so a bad shard cannot fail the job 
+	-$(ENV_PREFIX)coverage xml
+	-$(ENV_PREFIX)coverage html
 
 # === Cleanup ===
 

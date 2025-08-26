@@ -216,7 +216,7 @@ class TestStructures:
         assert first_mol.charge == 1
         assert first_mol.multiplicity == 1
         assert first_ase_atoms.charge == 1
-        assert first_ase_atoms.spin_multiplicity == 1
+        assert first_ase_atoms.multiplicity == 1
         first_py_structure = first_mol.to_pymatgen()
         last_py_structure = last_mol.to_pymatgen()
         assert isinstance(first_py_structure, PMGMolecule)
@@ -447,6 +447,347 @@ class TestMoleculeAdvanced:
 
         assert mol.frozen_atoms == [-1, 0]
         assert not mol.is_chiral
+
+    def test_convert_ase_atoms_with_constraints_to_molecule(
+        self, constrained_atoms
+    ):
+        """Test conversion of ASE Atoms with constraints to Molecule."""
+        from chemsmart.io.molecules.atoms import AtomsChargeMultiplicity
+
+        mol = AtomsChargeMultiplicity.from_atoms(
+            constrained_atoms
+        ).to_molecule(charge=0, multiplicity=1)
+
+        assert isinstance(mol, Molecule)
+        assert np.all(mol.symbols == ["Ar", "Ar"])
+        assert mol.energy == 0.0
+        assert np.allclose(
+            mol.forces, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
+        )
+        assert np.allclose(
+            mol.velocities, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
+        )
+        assert mol.frozen_atoms == [
+            -1,
+            0,
+        ]  # -1: frozen atom, 0: relaxed atom (Gaussian format)
+        assert mol.charge == 0
+        assert mol.multiplicity == 1
+
+        # no charge and multiplicity specification
+        mol_no_charge_mult = AtomsChargeMultiplicity.from_atoms(
+            constrained_atoms
+        ).to_molecule()
+        assert isinstance(mol_no_charge_mult, Molecule)
+        assert np.all(mol_no_charge_mult.symbols == ["Ar", "Ar"])
+        assert mol_no_charge_mult.energy == 0.0
+        assert np.allclose(
+            mol_no_charge_mult.forces,
+            np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
+        )
+        assert np.allclose(
+            mol_no_charge_mult.velocities,
+            np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
+        )
+        assert mol_no_charge_mult.frozen_atoms == [
+            -1,
+            0,
+        ]  # Frozen atoms should be 1-indexed
+        assert mol_no_charge_mult.charge is None
+        assert mol_no_charge_mult.multiplicity is None
+
+    def test_molecule_from_db_with_pbc_and_constraints(
+        self, constrained_pbc_db_file
+    ):
+        """Test creation of Molecule from database with PBC and constraints."""
+        mol = Molecule.from_filepath(
+            constrained_pbc_db_file,
+            index="-1",
+        )
+
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 96
+        assert mol.chemical_formula == "Co25Cu9Fe9Mo44Ni9"
+        assert np.all(mol.pbc_conditions == [True, True, True])
+        assert len(mol.translation_vectors) == 3
+        assert mol.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        my_list = mol.frozen_atoms
+        indices = [i for i, x in enumerate(my_list) if x == -1]
+        assert indices == [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            34,
+            35,
+            36,
+            37,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            87,
+            88,
+            89,
+            90,
+        ]
+
+        mol2 = Molecule.from_filepath(
+            constrained_pbc_db_file,
+            index="-5",
+        )
+        assert isinstance(mol2, Molecule)
+        assert mol2.num_atoms == 96
+        assert mol2.chemical_formula == "Co25Cu9Fe9Mo44Ni9"
+        assert np.all(mol2.pbc_conditions == [True, True, True])
+        assert len(mol2.translation_vectors) == 3
+        assert mol2.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        my_list = mol2.frozen_atoms
+        indices = [i for i, x in enumerate(my_list) if x == -1]
+        assert indices == [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            25,
+            26,
+            27,
+            28,
+            34,
+            35,
+            36,
+            37,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            87,
+            88,
+            89,
+        ]
 
     def test_pbc_handling(self):
         """Test periodic boundary conditions handling."""

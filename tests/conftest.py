@@ -1,9 +1,11 @@
+import logging
 import os
 import tempfile
 
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
@@ -12,6 +14,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
+from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
@@ -38,6 +41,21 @@ def test_data_directory():
 @pytest.fixture()
 def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "GaussianTests")
+
+
+# Gaussian folder for semiempirical calculations
+@pytest.fixture()
+def gaussian_semiempirical_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "semiempirical")
+
+
+@pytest.fixture()
+def gaussian_semiempirical_pm6_output_file(
+    gaussian_semiempirical_test_directory,
+):
+    return os.path.join(
+        gaussian_semiempirical_test_directory, "DBU_PM6_opt.log"
+    )
 
 
 # Gaussian output file from outputs folder
@@ -431,6 +449,13 @@ def gaussian_written_opt_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
+def gaussian_written_pm6_opt_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_pm6_opt.com"
+    )
+
+
+@pytest.fixture()
 def gaussian_written_opt_file_with_route(gaussian_written_files_directory):
     return os.path.join(
         gaussian_written_files_directory, "gaussian_opt_with_route.com"
@@ -544,6 +569,50 @@ def qmmm_written_xyz_only_file(gaussian_written_files_directory):
     )
 
 
+# Gaussian folder for thermochemistry analysis
+@pytest.fixture()
+def gaussian_thermochem_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "thermochem")
+
+
+@pytest.fixture()
+def gaussian_co2_pressure1p5_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure1p5_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure1p5.log"
+    )
+    return gaussian_co2_pressure1p5_outfile
+
+
+@pytest.fixture()
+def gaussian_co2_pressure3_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure3_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure3.log"
+    )
+    return gaussian_co2_pressure3_outfile
+
+
+# Gaussian folder for boltzmann weighting
+@pytest.fixture()
+def gaussian_boltzmann_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "boltzmann")
+
+
+@pytest.fixture()
+def gaussian_conformer1_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer1_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c1.log"
+    )
+    return gaussian_conformer1_outfile
+
+
+@pytest.fixture()
+def gaussian_conformer2_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer2_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c4.log"
+    )
+    return gaussian_conformer2_outfile
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):
@@ -607,6 +676,37 @@ def sdf_file(test_data_directory):
 def orca_inputs_directory(orca_test_directory):
     orca_inputs_directory = os.path.join(orca_test_directory, "inputs")
     return os.path.abspath(orca_inputs_directory)
+
+
+@pytest.fixture()
+def orca_inputs_xyz_directory(orca_inputs_directory):
+    """Returns the absolute path to the orca inputs that specifies xyz files."""
+    orca_inputs_xyz_directory = os.path.join(orca_inputs_directory, "xyz")
+    return os.path.abspath(orca_inputs_xyz_directory)
+
+
+@pytest.fixture()
+def orca_input_nebts_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "neb_TS_rot1.inp")
+
+
+@pytest.fixture()
+def orca_input_nebts_reactant_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "R-1a_opt.xyz")
+
+
+@pytest.fixture()
+def orca_input_nebts_product_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "S-1a_opt.xyz")
+
+
+@pytest.fixture()
+def orca_input_nebts_ts_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "TS_rot1.xyz")
 
 
 @pytest.fixture()
@@ -881,6 +981,18 @@ def pymol_movie_jobrunner(pbs_server):
     return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
 
 
+@pytest.fixture()
+def nciplot_jobrunner_no_scratch(pbs_server):
+    return FakeNCIPLOTJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def nciplot_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeNCIPLOTJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
 ## conformers for testing
 @pytest.fixture()
 def methanol_molecules():
@@ -902,6 +1014,38 @@ def methanol_molecules():
     methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
 
     return methanol_molecules
+
+
+@pytest.fixture()
+def constrained_atoms():
+    """Fixture to create a simple Ar2 dimer with constraints."""
+    from ase import Atoms
+    from ase.calculators.lj import LennardJones
+    from ase.constraints import FixAtoms, FixBondLength
+
+    # Simple Ar2 dimer with a reasonable separation
+    r0 = 3.5  # Å
+    atoms = Atoms(
+        "Ar2", positions=[(0.0, 0.0, 0.0), (r0, 0.0, 0.0)], pbc=False
+    )
+
+    # Light-weight calculator for tests
+    atoms.calc = LennardJones()  # defaults are fine for unit tests
+
+    # Constraints:
+    #  - Fix the first atom in space
+    #  - Keep the Ar–Ar bond length fixed at its initial value
+    constraints = [
+        FixAtoms(indices=[0]),
+        FixBondLength(0, 1),
+    ]
+    # set the constraints on the Atoms object
+    atoms.set_constraint(constraint=constraints)
+
+    # set velocity
+    atoms.set_velocities([[0, 0, 0], [0, 0, 0]])  # Set zero velocities
+
+    return atoms
 
 
 @pytest.fixture()
@@ -964,8 +1108,17 @@ def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
 
 
+@pytest.fixture()
+def constrained_pbc_db_file(io_test_directory):
+    """Fixture of a .db file containing constrained PBC database
+    from heterogeneous catalysis."""
+    return os.path.join(
+        io_test_directory, "heterogenous_pbc_constraints_5images.db"
+    )
+
+
 ## fixtures for mixins
-@pytest.fixture
+@pytest.fixture()
 def temp_text_file():
     with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
         tmp.write("Line1\nLine2\n")
@@ -974,7 +1127,7 @@ def temp_text_file():
     os.remove(tmp_name)
 
 
-@pytest.fixture
+@pytest.fixture()
 def dummy_yaml_file():
     class DummyYAMLFile:
         def __init__(self):
@@ -1001,7 +1154,7 @@ def dummy_yaml_file():
     return DummyYAMLFile()
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_folder_with_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         file1 = os.path.join(tmpdir, "test1.txt")
@@ -1014,14 +1167,47 @@ def temp_folder_with_files():
 
 
 # pytest fixtures for Popen
-@pytest.fixture
+@pytest.fixture()
 def mock_popen(mocker):
     """Fixture to mock subprocess.Popen."""
     return mocker.patch("subprocess.Popen")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
+def session_mocker(pytestconfig):
+    """Session-scoped mocker fixture for patching during the test session."""
+    from unittest.mock import MagicMock
+
+    mocker = MockerFixture(pytestconfig)
+    mock = MagicMock()
+    mocker.patch = mock.patch
+    mocker.patch.object = mock.patch.object
+    yield mocker
+    mocker.resetall()
+
+
+@pytest.fixture(scope="session")
+def tests_logger():
+    """Fixture to configure the root logger for tests."""
+    logger = logging.getLogger()  # Root logger
+    logger.setLevel(logging.INFO)
+    logger.handlers = []  # Clear handlers to avoid conflicts
+    logger.propagate = True
+    # Set environment variable to signal test mode
+    os.environ["TEST_MODE"] = "1"
+    yield logger
+    # Clean up
+    logger.handlers = []
+    os.environ.pop("TEST_MODE", None)
+
+
+# Use built-in caplog fixture for capturing log messages
+@pytest.fixture()
 def capture_log(caplog):
-    """Fixture to capture log messages."""
-    caplog.set_level("INFO")
+    """
+    Fixture to capture log messages.
+
+    Captures messages from the root logger at DEBUG level by default.
+    """
+    caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog

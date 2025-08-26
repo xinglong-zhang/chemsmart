@@ -15,6 +15,8 @@ class TestGaussianDiasRegexPatterns:
             pattern.match("test_p123_data.log") is not None
         ), "Should match: test_p123_data.log"
         assert pattern.match("test_p123_data.log").groups() == (
+            None,
+            None,
             "123",
             "data",
         ), "Correct groups for test_p123_data.log"
@@ -22,6 +24,8 @@ class TestGaussianDiasRegexPatterns:
             pattern.match("test_p123.log") is not None
         ), "Should match: test_p123.log"
         assert pattern.match("test_p123.log").groups() == (
+            None,
+            None,
             "123",
             None,
         ), "Correct groups for test_p123.log"
@@ -34,6 +38,12 @@ class TestGaussianDiasRegexPatterns:
         assert (
             pattern.match("test_p123_.log") is None
         ), "Should not match: test_p123_.log"
+        assert (
+            pattern.match("NiRRBenz_c2_scan_p16_ts_dias_p1_f1.log") is None
+        ), "Should not match: NiRRBenz_c2_scan_p16_ts_dias_p1_f1.log"
+        assert (
+            pattern.match("NiRRBenz_c2_scan_p16_ts_dias_p1_f2.log") is None
+        ), "Should not match: NiRRBenz_c2_scan_p16_ts_dias_p1_f2.log"
 
     def test_point_with_fragment1_matches(self):
         pattern = re.compile(gaussian_dias_filename_point_with_fragment1)

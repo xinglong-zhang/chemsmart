@@ -2,6 +2,12 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+
+xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
+# \b ensures that the match ends right after xyz
+# and is not followed by something like: xyz1, xyzabc xyz_thing
+# It will match if .xyz is followed by: a space, a quote, end of line, punctuation
+
 normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
 frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
@@ -92,9 +98,8 @@ orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 # filename pattern for gaussian output files
 
 # filename matches with point pxx but not with fragment fx
-gaussian_dias_filename_point_without_fragment = (
-    r".*_p(\d+)(?:_(?!f\d)(.+))?\.log"
-)
+# matches from the word "dias" onwards
+gaussian_dias_filename_point_without_fragment = r"(?:.*dias_p(\d+)(?:_((?:(?!f\d).)+))?\.log)|(?:.*_p(\d+)(?:_((?:(?!f\d).)+))?\.log)"
 
 # filename matches with point pxx and fragment f1
 gaussian_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.log"

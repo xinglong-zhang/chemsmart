@@ -25,6 +25,16 @@ class GaussianRefs:
         "mn15",
     ]
     g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
+    g_semiempirical = [
+        "AM1",
+        "PM3",
+        "PM6",
+        "PM7",
+        "CNDO",
+        "INDO",
+        "MNDO",
+        "MINDO3",
+    ]
     g_solvation_models = [
         "smd",
         "cpcm",
@@ -73,6 +83,10 @@ class GaussianRefs:
     @property
     def gaussian_basis_sets(self):
         return self.g_bases
+
+    @property
+    def gaussian_semiempirical_methods(self):
+        return self.g_semiempirical
 
     @property
     def gaussian_solvation_models(self):
@@ -148,6 +162,7 @@ gaussian_ref = GaussianRefs()
 GAUSSIAN_AB_INITIO = gaussian_ref.gaussian_ab_initio
 GAUSSIAN_FUNCTIONALS = gaussian_ref.gaussian_dft_fuctionals
 GAUSSIAN_BASES = gaussian_ref.gaussian_basis_sets
+GAUSSIAN_SEMIEMPIRICAL = gaussian_ref.gaussian_semiempirical_methods
 GAUSSIAN_SOLVATION_MODELS = gaussian_ref.gaussian_solvation_models
 GAUSSIAN_ADDITIONAL_OPT_OPTIONS = gaussian_ref.gaussian_additional_opt_options
 GAUSSIAN_DIEZE_TAGS = gaussian_ref.gaussian_dieze_tags
