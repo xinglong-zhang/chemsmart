@@ -10,27 +10,45 @@ Single Point Jobs
 
 Run single point energy calculations on optimized geometries.
 
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] sp [SUBCMD_OPTIONS]
+
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic single point calculation**:
+**Basic single point calculation**:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p sp_calc -f optimized.log sp
+        chemsmart sub -s shared gaussian -p sp_calc -f optimized.log sp
 
-* **Single point with solvent settings**:
+**Single point with solvent settings**:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p sp_solvent -f molecule.log sp -sm smd -si water
+        chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -so iterative
 
-DI-AS Jobs
+*   For single-point job that user wants to test which uses different solvent model and id from that specified in ``<project>``, one can do:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -sm <user_solvent_model> -si <user_solvent_id>
+
+    to specify a different solvent model ``<user_solvent_model>`` and solvent ``<user_solvent_id>``.
+
+
+DI-AS Analysis
 ----------
 
 Run Distortion-Interaction/Activation-Strain analysis for reaction mechanisms.
 
-DI-AS Specific Options
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] dias [SUBCMD_OPTIONS]
+
+
+DI-AS Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: DI-AS Job Options
@@ -68,28 +86,23 @@ DI-AS Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic DI-AS analysis on IRC**:
+**Basic DI-AS analysis on IRC**:
+
+*   For example to run DI-AS job for fragment 1 with atoms numbered from 5-17 at every 10 steps along the irc.log file:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p dias_analysis -f irc_output.log dias -i "1-10"
+        chemsmart sub -s shared gaussian -p test -f irc.log dias -i 5-17 -n 10
 
-* **DI-AS analysis with solvent**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p dias_solv -f irc_output.log dias -i "1-15" -s -n 5
-
-* **DI-AS analysis on transition state**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p dias_ts -f ts_optimized.log dias -i "1-12" -m ts
 
 RESP Jobs
 ---------
 
 Run RESP (Restrained Electrostatic Potential) charge fitting calculations.
+
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] resp
 
 Basic Usage
 ^^^^^^^^^^^
@@ -102,10 +115,15 @@ Basic Usage
 
 **Note**: This creates an input file with fixed route for RESP job: ``HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)``
 
+
 NCI Jobs
 --------
 
 Run Non-Covalent Interaction analysis for intermolecular interactions.
+
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] nci
 
 Basic Usage
 ^^^^^^^^^^^
@@ -116,10 +134,15 @@ Basic Usage
 
         chemsmart sub gaussian -p nci_analysis -f complex.xyz nci
 
+
 TD-DFT Jobs
 -----------
 
 Run time-dependent DFT calculations for excited state properties.
+
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] td [SUBCMD_OPTIONS]
 
 TD-DFT Specific Options
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -165,6 +188,7 @@ Basic Usage
 
         chemsmart sub gaussian -p td_mixed -f molecule.xyz td -s 50-50 -n 4
 
+
 WBI Jobs
 --------
 
@@ -179,9 +203,7 @@ Basic Usage
 
         chemsmart sub gaussian -p wbi_analysis -f molecule.xyz wbi
 
-* **WBI with NBO analysis**:
+Examples
+^^^^^^^^
 
-    .. code-block:: console
-
-        chemsmart sub gaussian -p nbo_wbi -f optimized.log wbi
-
+!add!

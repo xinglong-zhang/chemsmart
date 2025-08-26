@@ -36,7 +36,7 @@ Welcome to chemsmart’s documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for chemsmart
+   :caption: Tutorials for Chemsmart
 
    tutorials_chemsmart
 
@@ -58,7 +58,7 @@ Welcome to chemsmart’s documentation!
    orca_generalCLIforallorcajobs
    orca_submitstructureoptimizationjobs
    orca_submittransitionstatesearchjobs
-   orca_subotherjobs
+   orca_submitorcadirectInput
 
 .. toctree::
    :maxdepth: 2
@@ -82,14 +82,8 @@ Welcome to chemsmart’s documentation!
    :maxdepth: 2
    :caption: old
 
-   tutorials_submitageometryoptimizationjobusinggaussian
-   tutorials_SubmitaTransitionStateandReactionPathwayAnalysisJobUsingGaussian
    tutorials_SubmitaEnergyandThermodynamicAnalysisJobUsingGaussian
    tutorials_SubmitaElectronicStructureAnalysisJobUsingGaussian
-   tutorials_SubmitaGaussianMultiscaleONIOMcalculations
-   tutorials_SubmitCustomJobSubmissionUsingGaussian
-   tutorials_UseGeneralCLIOptionsforAllJobs
-   tutorials_ORCA
 
 
 Indices and tables

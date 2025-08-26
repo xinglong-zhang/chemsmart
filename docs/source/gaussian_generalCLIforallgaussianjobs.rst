@@ -12,7 +12,7 @@ The basic command structure for Gaussian jobs is:
 
 .. code-block:: console
 
-    chemsmart run/sub [GENERAL_OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCOMMAND> [SUBCOMMAND_OPTIONS] [SOLVENT_OPTIONS]
+    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS] [SOLVENT_OPTIONS]
 
 GAUSSIAN_OPTIONS
 ^^^^^^^^^^^^^^^^
@@ -27,13 +27,13 @@ Works for all Gaussian jobs
      - Description
    * - ``-p, --project``
      - string
-     - Project settings (required)
+     - Project settings
    * - ``-f, --filename``
      - string
-     - Filename from which new Gaussian input is prepared (required)
+     - Filename from which new Gaussian input is prepared
    * - ``-l, --label``
      - string
-     - Write user input filename for the job (without extension). Will overwrite your original filename
+     - Write user input filename for the job (without extension)
    * - ``-a, --append-label``
      - string
      - Name to be appended to file for the job. Will append name to current filename
@@ -43,6 +43,53 @@ Works for all Gaussian jobs
    * - ``-P, --pubchem``
      - string
      - Queries structure from PubChem using name, smiles, cid and conformer information
+
+.. note::
+
+    | ``-p`` is followed by the one of the projects specified in ``~/.chemsmart/project/*.yaml`` files, without ``.yaml`` extension.
+    | ``-f`` is followed by an input file the user wishes to run job on. Note that this input file can be any format, such as ``.xyz``, Gaussian ``.com``, ``.gjf`` or ``.log`` file or ORCA ``.inp`` or ``.out`` file.
+
+
+**Specify Name of the File**
+
+*   Users can specify the name of the file to be created for the job, without file extension, they want to run by using the option ``-l``, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -l custom_job_name opt
+
+    will create input file named ``custom_job_name.com`` instead of the default ``test_opt.com``.
+
+**Append String to Input File Name**
+
+*   Users can also simply append a string to the base name of the filename supplied, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -a append_string ts
+
+    will create input file named ``test_append_string.com`` instead of the default ``test_ts.com``.
+
+**Select the Particular Structure in file**
+
+*   If one has more than one structure in the supplied file for input preparation, one can select the particular structure to perform job on by using the ``-i/--index`` option, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt
+
+    will take the 5th structure (1-indexed, as in chemsmart) from ase database file, ``small.db``, to create the input file for geometry optimization.
+
+
+**Get molecule from pubchem directly**
+
+*   Users can also get the molecule structure directly from PubChem using name, smiles, cid and conformer information, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -P 962 -l water sp
+
+    will create input file named ``water.com`` for single point calculation of water.
 
 
 .. list-table:: Molecular Properties Options
@@ -62,6 +109,37 @@ Works for all Gaussian jobs
      - string
      - Gaussian job title
 
+.. notice::
+
+    If there is no charge or multiplicity information in input files, users need to specify them via ``-c <charge> -m <multiplicity>``.
+
+**Modify Charge and Multiplicity**
+
+*   Users can also modify the charge and multiplicity from the CLI, e.g.:
+
+    Modify the charge in ``test.com`` to charge of +1 in the newly created input file ``test_charge.com`` via:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -c 1 -a charge opt
+
+    Modify the multiplicity in ``test.com`` to multiplicity of 3 in the newly created input file ``test_multiplicity.com`` via:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -m 3 -a multiplicity opt
+
+    Modify the charge to +1 and multiplicity to 2 in the newly created input ``file test_charge_multiplicity.com`` via:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -c 1 -m 2 -l test_charge_multiplicity opt
+
+.. tip::
+
+    This can be useful when, e.g., using optimized structure of a neutral closed-shell (charge 0, multiplicity 1) system to run a charged radical ion (e.g., charge +1 and multiplicity 2 in radical cation).
+
+
 .. list-table:: Method and Basis Set Options
    :header-rows: 1
    :widths: 30 15 55
@@ -77,7 +155,33 @@ Works for all Gaussian jobs
      - New basis set to run
    * - ``-s, --semiempirical``
      - string
-     - Semiempirical method to run. Overwrite the -p yaml
+     - Semiempirical method to run.
+
+**Modify the Functional and Basis**
+
+*   Users can also modify the functional and basis from the CLI to differ from those in project settings, e.g.:
+
+    Modify the functional to ``b3lyp`` in the newly created input file ``test_functional.com`` via:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -x b3lyp -a functional opt
+
+    Modify the basis to ``6-31G*`` in the newly created input file ``test_basis.com`` via:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -b "6-31G*" -a basis opt
+
+**Use semiempirical method to run ts**
+
+*   Users can also use semiempirical method to run ts search, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -s pm6 ts
+
+    will use pm6 instead of the -p yaml.
 
 .. list-table:: Route and Calculation Options
    :header-rows: 1
@@ -105,6 +209,26 @@ Works for all Gaussian jobs
      - bool
      - Whether to calculate forces (default=False)
 
+**Specify Additional Optimization Options**
+
+*   Users can also specify additional optimization options for opt=() in the route, for example,
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com -o maxstep=8,maxsize=12 -a opt_options opt
+
+    will create ``opt=(maxstep=8,maxsize=12)`` as part of the route in the newly created input file ``test_opt_options.com``.
+
+**Add in Additional Route Parameters**
+
+*   Users can also add in additional parameters used in the route, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f test.com --r nosymm -a route_params opt
+
+    will add in ``nosymm`` as part of the route in the newly created input file ``test_route_params.com``.
+
 
 SOLVENT-OPTIONS for Gaussian Jobs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -130,7 +254,8 @@ Please set solvent parameters at the end when needed.
      - string
      - Additional solvent options in scrf=() route. default=None. E.g., iterative in scrf=(smd,water,iterative)
 
-SUBCOMMAND for Different Gaussian Jobs
+
+SUBCMD for Different Gaussian Jobs
 ^^^^^^^^^^^^^^^^
 
 .. list-table:: Conformational Sampling & Dynamics
@@ -154,8 +279,6 @@ SUBCOMMAND for Different Gaussian Jobs
      - for optimization calculation for Gaussian
    * - ``crestopt``
      - for CREST-optimization calculation for Gaussian
-   * - ``modred``
-     - for running Gaussian modred jobs
 
 .. list-table:: Transition State Search
    :header-rows: 1
@@ -165,6 +288,8 @@ SUBCOMMAND for Different Gaussian Jobs
      - Description
    * - ``ts``
      - for transition state calculation for Gaussian
+   * - ``modred``
+     - for running Gaussian modred jobs
    * - ``irc``
      - for running Gaussian IRC jobs
    * - ``scan``
@@ -217,4 +342,3 @@ For specific calculation types, see the detailed tutorials:
 *   Submit Electronic Structure Properties & Analyses Jobs
 
 *   Submit Other Jobs
-

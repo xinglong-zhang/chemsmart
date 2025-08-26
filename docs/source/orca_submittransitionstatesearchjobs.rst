@@ -10,9 +10,11 @@ Transition State Search
 
 Transition state (TS) search is used to locate saddle points on the potential energy surface that correspond to transition states in chemical reactions.
 
-Run "chemsmart sub [GENERAL_OPTIONS] orca [ORCA_OPTIONS] ts [OPTIONS]" to perform transition state search.
+.. code-block:: console
 
-TS-Specific Options
+    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] ts [SUBCMD_OPTIONS]
+
+TS-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Hessian Options
@@ -65,29 +67,42 @@ TS-Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic transition state search**:
+**Basic transition state search**:
 
     .. code-block:: console
 
         chemsmart sub orca -p project_name -f input.xyz ts
 
-* **TS search with existing Hessian**:
+**TS search with existing Hessian**:
 
     .. code-block:: console
 
         chemsmart sub orca -p ts_hess -f molecule.xyz ts -i -f hessian.hess
 
-* **TS search with numerical Hessian**:
+**TS search with numerical Hessian**:
 
     .. code-block:: console
 
         chemsmart sub orca -p ts_numhess -f molecule.xyz ts --numhess
 
-* **ScanTS mode with full scan**:
+**ScanTS mode with full scan**:
 
     .. code-block:: console
 
         chemsmart sub orca -p scan_ts -f molecule.xyz ts -ts scants -fs
+
+
+Modred jobs
+----------------------
+
+Modred-Specific OPTIONS
+^^^^^^^^^^^^^^^^^^^^
+Jobtype mission
+
+Basic Usage
+^^^^^^^^^^^
+Whats the Difference
+TODO
 
 
 Intrinsic Reaction Coordinate (IRC)
@@ -97,7 +112,7 @@ IRC calculations trace the minimum energy pathway from a transition state to rea
 
 Run "chemsmart sub [GENERAL_OPTIONS] orca [ORCA_OPTIONS] irc [OPTIONS]" to perform IRC calculations.
 
-IRC-Specific Options
+IRC-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: General IRC Options
@@ -173,7 +188,7 @@ IRC-Specific Options
    * - ``--do-sd-corr/--no-do-sd-corr``
      - flag
      - Do SD correction to 1st step (default=False)
-   * - ``--scale-displ-sd-corr <float>``
+   * - ``--scale-displ-sd-corr``
      - float
      - Scaling factor for scaling the correction step to the SD step (default=None)
    * - ``--sd-corr-parabolicfit/--no-sd-corr-parabolicfit``
@@ -187,48 +202,48 @@ IRC-Specific Options
    * - Option
      - Type
      - Description
-   * - ``--tolrmsg <float>``
+   * - ``--tolrmsg``
      - float
      - Tolerance for RMS gradient (a.u.). Default 5.e-4 (default=None)
-   * - ``--tolmaxg <float>``
+   * - ``--tolmaxg``
      - float
      - Tolerance for maximum gradient (a.u.). Default 2.e-3 (default=None)
    * - ``-M, --monitor-internals/--no-monitor-internals``
      - flag
      - Monitor internals to print out up to three internal coordinates (default=False)
-   * - ``-I, --internal-modred <string>``
+   * - ``-I, --internal-modred``
      - string
      - Internal modred. Up to three internal coordinates can be defined and values printed (default=None)
-   * - ``--follow-coordtype <string>``
+   * - ``--follow-coordtype``
      - string
      - Follow coordinate type. Default cartesian. The only option (default=None)
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic IRC calculation**:
+**Basic IRC calculation**:
 
     .. code-block:: console
 
         chemsmart sub orca -p project_name -f ts_structure.xyz irc
 
-* **IRC in both directions**:
+**IRC in both directions**:
 
     .. code-block:: console
 
         chemsmart sub orca -p irc_both -f ts.xyz irc -d both
 
-* **IRC with existing Hessian**:
+**IRC with existing Hessian**:
 
     .. code-block:: console
 
         chemsmart sub orca -p irc_hess -f ts.xyz irc -i read -f hessian.hess
 
-* **IRC with monitoring internal coordinates**:
+**IRC with monitoring internal coordinates**:
 
     .. code-block:: console
 
-        chemsmart sub orca -p irc_monitor -f ts.xyz irc -M -I "B 1 2, A 1 2 3"
+        chemsmart sub orca -p irc_monitor -f ts.xyz irc -M -I [[1,2,3,4],[2,3,4,5]]
 
 
 Coordinate Scanning
@@ -236,9 +251,11 @@ Coordinate Scanning
 
 Coordinate scanning performs a systematic exploration of the potential energy surface by varying specific coordinates.
 
-Run "chemsmart sub [GENERAL_OPTIONS] orca [ORCA_OPTIONS] scan [OPTIONS]" to perform coordinate scanning.
+.. code-block:: console
 
-Scan-Specific Options
+    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] scan [SUBCMD_OPTIONS]
+
+Scan-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Scan Job Options (Required)
@@ -248,39 +265,34 @@ Scan-Specific Options
    * - Option
      - Type
      - Description
-   * - ``-j, --jobtype <string>``
+   * - ``-j, --jobtype``
      - string
      - ORCA job type. Options: opt, ts, modred, scan, sp (default=None)
-   * - ``-c, --coordinates <string>``
+   * - ``-c, --coordinates``
      - string
      - List of coordinates to be fixed for modred or scan job. 1-indexed (default=None)
-   * - ``-x, --dist-start <string>``
+   * - ``-x, --dist-start``
      - string
      - Starting distance to scan, in Angstroms (default=None)
-   * - ``-y, --dist-end <string>``
+   * - ``-y, --dist-end``
      - string
      - Ending distance to scan, in Angstroms (default=None)
-   * - ``-n, --num-steps <string>``
+   * - ``-n, --num-steps``
      - string
      - Number of steps for coordinate scanning (default=None)
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic distance scan**:
+**Basic distance scan**:
 
     .. code-block:: console
 
-        chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c "B 1 2" -x 1.0 -y 3.0 -n 20
+        chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c [[1,2]] -x 1.0 -y 3.0 -n 20
 
-* **Bond optimization with constrained distance**:
-
-    .. code-block:: console
-
-        chemsmart sub orca -p modred_opt -f molecule.xyz scan -j modred -c "B 1 2"
-
-* **Single point calculations along scan**:
+**Bond optimization with constrained distance**:
 
     .. code-block:: console
 
-        chemsmart sub orca -p sp_scan -f molecule.xyz scan -j sp -c "B 1 2" -x 1.5 -y 2.5 -n 10
+        chemsmart sub orca -p modred_opt -f molecule.xyz scan -j modred -c [[1,2]]
+

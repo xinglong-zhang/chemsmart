@@ -12,7 +12,11 @@ The basic command structure for ORCA jobs is:
 
 .. code-block:: console
 
-    chemsmart run/sub [GENERAL_OPTIONS] orca [ORCA_OPTIONS] <SUBCOMMAND> [SUBCOMMAND_OPTIONS]
+    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
+
+.. tip::
+
+    Apart from some differences in certain parameters, the logic of using ORCA is largely similar to that of Gaussian.
 
 ORCA_OPTIONS
 ^^^^^^^^^^^^
@@ -152,10 +156,10 @@ Works for all ORCA jobs
      - string
      - Additional route parameters (default=None)
 
-SUBCOMMANDS for Different ORCA Jobs
+SUBCMD for Different ORCA Jobs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. list-table:: Structure Optimization
+.. list-table:: Structure Optimization and Singlet Point Jobs
    :header-rows: 1
    :widths: 15 85
 
@@ -163,8 +167,8 @@ SUBCOMMANDS for Different ORCA Jobs
      - Description
    * - ``opt``
      - CLI for optimization calculation for ORCA
-   * - ``modred``
-     - CLI for running ORCA modred jobs
+   * - ``sp``
+     - CLI for single point calculation for ORCA
 
 .. list-table:: Transition State Search
    :header-rows: 1
@@ -174,19 +178,20 @@ SUBCOMMANDS for Different ORCA Jobs
      - Description
    * - ``ts``
      - CLI for transition state calculation for ORCA
+   * - ``modred``
+     - CLI for running ORCA modred jobs
    * - ``irc``
      - CLI for running ORCA IRC jobs
    * - ``scan``
      - CLI for running ORCA scan jobs
 
-.. list-table:: Other Jobs
+.. list-table:: Direct Input File Execution
    :header-rows: 1
    :widths: 15 85
 
    * - Subcommand
      - Description
-   * - ``sp``
-     - CLI for single point calculation for ORCA
+
    * - ``inp``
      - Run an ORCA input job as it is
 
@@ -195,6 +200,8 @@ Next Steps
 
 For specific calculation types, see the detailed tutorials:
 
-* **Structure Optimization**: Geometry optimization best practices for ORCA
-* **Transition State Search**: Finding and characterizing transition states with ORCA
-* **Other Jobs**
+*   Submit Structure Optimization and Singlet Point Jobs
+
+*   Submit Transition State Search Jobs
+
+*   Submit Direct Input File ORCA Jobs

@@ -10,7 +10,11 @@ Visualization Jobs
 
 Create static PyMOL visualizations and interactive session files.
 
-Visualization Specific Options
+.. code-block:: console
+
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize [SUBCMD_OPTIONS]
+
+Visualization-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Visualization Job Options
@@ -20,7 +24,7 @@ Visualization Specific Options
    * - Option
      - Type
      - Description
-   * - ``-f, --file <string>``
+   * - ``-f, --file``
      - string
      - PyMOL file script or style. If not specified, defaults to use zhang_group_pymol_style.py (default=None)
    * - ``-s, --style``
@@ -46,60 +50,56 @@ Visualization Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic molecular visualization**:
+**Basic molecular visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f molecule.xyz visualize
 
-* **Quiet mode visualization**:
+**Quiet mode visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f calculation.log visualize -q
 
-* **Visualization with coordinate labeling**:
+**Visualization with coordinate labeling**
 
     .. code-block:: console
 
-        chemsmart run mol -f structure.xyz visualize -c "1,2,3"
+        chemsmart run mol -f structure.xyz visualize -c [[1,2,3]]
 
-* **Command line only mode**:
+**Visualization using custom style or script file**
 
     .. code-block:: console
 
-        chemsmart run mol -f molecule.log visualize --command-line-only
+        chemsmart run mol -f molecule.log visualize -f custom_style.py
+
+Examples
+^^^^^^^^
+
 
 Movie Jobs
 ----------
 
 Generate rotating movie animations of molecular structures.
 
-Movie Specific Options
+.. code-block:: console
+
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] movie [SUBCMD_OPTIONS]
+
+Movie-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Movie jobs inherit all options from visualization jobs and use the same parameters.
 
-tips: Specific OPTIONS are inherited from visualization jobs
-
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic rotating movie**:
+**Basic rotating movie**
 
     .. code-block:: console
 
         chemsmart run mol -f molecule.xyz movie
 
-* **Quiet mode movie generation**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f optimized.log movie -q
-
-* **Movie with coordinate labels**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f structure.log movie -c "1,2,5,10"
-
+Examples
+^^^^^^^^

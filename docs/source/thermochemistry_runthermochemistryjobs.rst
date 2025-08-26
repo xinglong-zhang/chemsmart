@@ -12,16 +12,20 @@ The basic command structure for thermochemistry jobs is:
 
 .. code-block:: console
 
-    chemsmart run [GENERAL_OPTIONS] thermochemistry [THERMO_OPTIONS]
-    chemsmart run thermochemistry [THERMO OPTIONS] boltzmann [SUBCOMMANDS]”
+    chemsmart run [OPTIONS] thermochemistry [THERMO_OPTIONS]
+
+.. code-block:: console
+
+    chemsmart run thermochemistry [THERMO_OPTIONS] boltzmann [SUB_OPTIONS]”
 
 Thermochemistry Analysis Jobs
 -----------------------------
 
 Run comprehensive thermochemistry analysis on frequency calculation outputs.
 
-THERMO_OPTIONS for all thermo jobs
+THERMO_OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Works for all thermochemistry jobs
 
 .. list-table:: Thermochemistry Job Options
    :header-rows: 1
@@ -30,7 +34,7 @@ THERMO_OPTIONS for all thermo jobs
    * - Option
      - Type
      - Description
-   * - ``-o, --outputfile <string>``
+   * - ``-o, --outputfile``
      - string
      - Output file to save the thermochemistry results. Defaults to file_basename.dat (default=None)
    * - ``-O, --overwrite``
@@ -47,13 +51,13 @@ THERMO_OPTIONS for all thermo jobs
    * - Option
      - Type
      - Description
-   * - ``-t, --temperature <float>``
+   * - ``-t, --temperature``
      - float
      - Temperature in Kelvin (default=None)
-   * - ``-p, --pressure <float>``
+   * - ``-p, --pressure``
      - float
      - Pressure in atm (default=None)
-   * - ``-c, --concentration <float>``
+   * - ``-c, --concentration``
      - float
      - Concentration in mol/L (default=None)
 
@@ -64,13 +68,13 @@ THERMO_OPTIONS for all thermo jobs
    * - Option
      - Type
      - Description
-   * - ``-cs, --cutoff-entropy <float>``
+   * - ``-cs, --cutoff-entropy``
      - float
      - Cutoff frequency for entropy in wavenumbers (default=None)
-   * - ``-ch, --cutoff-enthalpy <float>``
+   * - ``-ch, --cutoff-enthalpy``
      - float
      - Cutoff frequency for enthalpy in wavenumbers (default=None)
-   * - ``-a, --alpha <int>``
+   * - ``-a, --alpha``
      - int
      - Interpolator exponent used in the quasi-RRHO approximation (default=4)
 
@@ -95,7 +99,7 @@ THERMO_OPTIONS for all thermo jobs
    * - Option
      - Type
      - Description
-   * - ``-o, --outputfile <string>``
+   * - ``-o, --outputfile``
      - string
      - Output file to save the thermochemistry results. Defaults to file_basename.dat (default=None)
    * - ``-O, --overwrite``
@@ -108,23 +112,27 @@ THERMO_OPTIONS for all thermo jobs
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic thermochemistry analysis**:
+**Basic thermochemistry analysis**
 
     .. code-block:: console
 
         chemsmart run thermochemistry -p thermo_analysis -f freq_output.log analysis
 
-* **Thermochemistry with custom output file**:
+**Thermochemistry with custom output file**
 
     .. code-block:: console
 
         chemsmart run thermochemistry -p thermo_custom -f molecule_freq.log analysis -o custom_results.dat
 
-* **Thermochemistry with overwrite option**:
+**Thermochemistry with overwrite option**
 
     .. code-block:: console
 
         chemsmart run thermochemistry -p thermo_overwrite -f calculation.log analysis -O
+
+Examples
+^^^^^^^^
+
 
 Boltzmann Weighted Averaging Jobs
 ----------------------------------
@@ -141,3 +149,10 @@ Run Boltzmann weighted averaging for thermochemistry jobs with multiple conforme
    * - ``-w, --energy-type-for-weighting``
      - string
      - Type of energy to use for Boltzmann weighting. Options: gibbs, electronic (default="gibbs")
+
+Basic Usage
+^^^^^^^^^^^
+
+
+Examples
+^^^^^^^^

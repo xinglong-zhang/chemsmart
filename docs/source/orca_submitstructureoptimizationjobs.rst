@@ -10,9 +10,12 @@ Structure Optimization
 
 Geometry optimization is used to find the minimum energy structure of a molecule by adjusting atomic positions until forces are minimized.
 
-Run "chemsmart sub [GENERAL_OPTIONS] orca [ORCA_OPTIONS] opt [OPTIONS]" to perform structure optimization.
+.. code-block:: console
 
-Optimization-Specific Options
+    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] opt [SUBCMD_OPTIONS]
+
+
+Opt-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Structure Optimization Options
@@ -22,43 +25,45 @@ Optimization-Specific Options
    * - Option
      - Type
      - Description
-   * - ``-f, --freeze-atoms <string>``
+   * - ``-f, --freeze-atoms``
      - string
      - Indices of atoms to freeze for constrained optimization. 1-indexed (default=None)
    * - ``-i, --invert-constraints/--no-invert-constraints``
-     - flag
+     - bool
      - Invert the constraints for frozen atoms in optimization (default=False)
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic geometry optimization**:
+**Basic geometry optimization**:
 
     .. code-block:: console
 
         chemsmart sub orca -p project_name -f input.xyz opt
 
-* **Optimization with frozen atoms**:
+**Optimization with inverted constraints**:
 
     .. code-block:: console
 
-        chemsmart sub orca -p constrained_opt -f molecule.xyz opt -f "1,2,3"
+        chemsmart sub orca -p inverted_opt -f molecule.xyz opt -f 1,2,3 -i
 
-* **Optimization with inverted constraints**:
+
+Single Point Calculations
+-------------------------
+
+Single point calculations compute the energy and properties of a molecule at a fixed geometry without optimization.
+
+.. code-block:: console
+
+    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] sp [SUBCMD_OPTIONS]
+
+Basic Usage
+^^^^^^^^^^^
+
+**Basic single point calculation**:
 
     .. code-block:: console
 
-        chemsmart sub orca -p inverted_opt -f molecule.xyz opt -f "1,2,3" -i
-
-* **Optimization with specific method and basis set**:
-
-    .. code-block:: console
-
-        chemsmart sub orca -p dft_opt -f molecule.xyz -x B3LYP -b def2-TZVP opt
+        chemsmart sub orca -p project_name -f input.xyz sp
 
 
-Modred jobs
-----------------------
-
-Jobtype mission
-Whats the Difference

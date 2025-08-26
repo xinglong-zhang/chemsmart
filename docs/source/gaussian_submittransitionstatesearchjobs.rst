@@ -10,27 +10,17 @@ Transition State Optimization
 
 Run transition state optimization to find saddle points on the potential energy surface.
 
-Basic Usage
-^^^^^^^^^^^
+.. code-block:: console
 
-* **Basic transition state optimization**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p ts_search -f guess_structure.xyz ts
-
-* **Transition state with specific charge and multiplicity**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p ts_opt -f ts_guess.xyz -c 0 -m 1 ts
-
-Transition State Search with Frozen Atoms
-------------------------------------------
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts
 
 Run transition state optimization with specific atoms frozen to constrain the search.
 
-Frozen Atom Options for TS
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts -f <atom_indices_to_freeze>
+
+TS-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: TS Frozen Atom Options
@@ -47,20 +37,60 @@ Frozen Atom Options for TS
 Basic Usage
 ^^^^^^^^^^^
 
-* **TS optimization with frozen atoms**:
+**Transition state with specific charge and multiplicity**:
+
+    .. code-block:: console
+
+        chemsmart sub gaussian -p ts_opt -f ts_guess.xyz -c 0 -m 1 ts
+
+
+**TS optimization with frozen atoms**:
 
     .. code-block:: console
 
         chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f "1 2 3"
 
-* **Example freezing specific atom indices during TS search**:
+
+Modified Redundant Coordinate (Modred) Jobs
+--------------------------------------------
+
+Run modified redundant coordinate optimization for constrained geometry optimization and transition state searches using the ``modred`` command.
+
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] modred -c <list_of_coords_to_constraint>
+
+Modred-Specific Options
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table:: Modred Job Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Option
+     - Type
+     - Description
+   * - ``-c, --coordinates``
+     - string
+     - List of coordinates to be fixed for modred job (1-based indexing)
+
+Basic Usage
+^^^^^^^^^^^^^^
+
+**Defining Coordinate Constraints**
+
+*   to submit a modredundant job with constraints on bond between atom 4 and atom 17 and on bond between atom 9 and atom 10, do:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p frozen_ts -f complex.xyz ts -f "5-10 15 20"
+        chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17],[9,10]]
 
-modred ts
----------
+
+Examples
+^^^^^^^^^^
+
+Eg chemsmart sub -s SLURM gaussian -p ti -f I_6m_ts_guess3_new.gjf -c 0 -m 2 modred -c [[85,100],[100,101],[101,89],[89,90],[90,88],[88,85]]
+
 
 
 Intrinsic Reaction Coordinate (IRC) Calculations
@@ -68,7 +98,12 @@ Intrinsic Reaction Coordinate (IRC) Calculations
 
 Run IRC calculations to follow the reaction path from a transition state.
 
-IRC-Specific Options
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] irc [SUBCMD_OPTIONS]
+
+
+IRC-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: IRC Job Options
@@ -103,15 +138,27 @@ IRC-Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
+**Basic IRC calculation**:
+
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p test -f irc.xyz irc
+
 
 Potential Energy Surface Scanning
 ----------------------------------
 
 Run coordinate scanning to explore potential energy surfaces and locate transition states.
 
-Scanning coordinates, step size and number of steps of scan required!
+.. code-block:: console
 
-Scan-Specific Options
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] scan [SUBCMD_OPTIONS]
+
+.. notice::
+
+    Scanning coordinates, step size and number of steps are required!
+
+Scan-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Scan Job Options
@@ -134,20 +181,11 @@ Scan-Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic coordinate scan**:
+**Basic coordinate scan**:
+
+*   For example, to submit the PES scan job with along bond between atom 4 and atom 17 for 10 steps with 0.1Å increment per step:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c "[[2,3]]" -s 0.1 -n 15
+        chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 15
 
-* **Multi-coordinate scan**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p multi_scan -f complex.xyz scan -c "[[2,3],[6,7]]" -s 0.1 -n 10
-
-* **Bond distance scan example**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p bond_scan -f reactant.xyz scan -c "[[1,2]]" -s 0.05 -n 20

@@ -10,7 +10,11 @@ NCI Jobs
 
 Generate non-covalent interaction (NCI) plots for analyzing intermolecular and intramolecular interactions.
 
-NCI Specific Options
+.. code-block:: console
+
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] nci [SUBCMD_OPTIONS]
+
+NCI-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: NCI Job Options
@@ -20,10 +24,10 @@ NCI Specific Options
    * - Option
      - Type
      - Description
-   * - ``-i, --isosurface <float>``
+   * - ``-i, --isosurface``
      - float
      - Isosurface value for NCI plot (default=0.5)
-   * - ``-r, --color-range <float>``
+   * - ``-r, --color-range``
      - float
      - Ramp range for NCI plot (default=1.0)
    * - ``-b, --binary``
@@ -33,42 +37,32 @@ NCI Specific Options
      - bool
      - Plot NCI plots with intermediate range colors (default=False)
 
-**Note**: NCI jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering options.
+.. note::
+
+    NCI jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering options.
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic NCI plot**:
+**Basic NCI plot**
 
     .. code-block:: console
 
         chemsmart run mol -f complex.xyz nci
 
-* **NCI plot with custom isosurface value**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f interaction.log nci -i 0.3
-
-* **NCI plot with custom color range**:
+**NCI plot with custom color range**
 
     .. code-block:: console
 
         chemsmart run mol -f complex.xyz nci -r 1.5
 
-* **Binary color NCI plot**:
+**Binary color NCI plot**
 
     .. code-block:: console
 
         chemsmart run mol -f hydrogen_bond.xyz nci -b
 
-* **Intermediate range colors NCI plot**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f weak_interaction.xyz nci --intermediate
-
-* **High-quality NCI plot with ray tracing**:
+**High-quality NCI plot with ray tracing**
 
     .. code-block:: console
 

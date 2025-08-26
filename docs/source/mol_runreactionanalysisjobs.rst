@@ -10,7 +10,11 @@ IRC Jobs
 
 Generate automatic PyMOL IRC movies and trajectory visualizations for reaction pathway analysis.
 
-IRC Specific Options
+.. code-block:: console
+
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] irc [SUBCMD_OPTIONS]
+
+IRC-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: IRC Job Options
@@ -20,55 +24,37 @@ IRC Specific Options
    * - Option
      - Type
      - Description
-   * - ``-r, --reactant <string>``
+   * - ``-r, --reactant``
      - string
      - IRC file leading to the reactant side (default=None)
-   * - ``-p, --product <string>``
+   * - ``-p, --product``
      - string
      - IRC file leading to the product side (default=None)
-   * - ``-a, --all <string>``
+   * - ``-a, --all``
      - string
      - File containing all structures in the IRC, from full IRC run (default=None)
 
-**Note**: IRC jobs also inherit all options from visualization jobs.
+.. note::
+
+    IRC jobs also inherit all options from visualization jobs.
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic IRC trajectory visualization**:
+**Basic IRC trajectory visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f irc_output.log irc
 
-* **IRC with separate reactant and product files**:
+**IRC with separate reactant and product files**
 
     .. code-block:: console
 
-        chemsmart run mol -f ts_structure.xyz irc -r reactant.log -p product.log
+        chemsmart run mol -f ts_structure.xyz irc -r reactant.log
 
-* **IRC from complete trajectory file**:
+**IRC from complete trajectory file**
 
     .. code-block:: console
 
         chemsmart run mol -f transition_state.xyz irc -a full_irc_trajectory.log
-
-* **High-quality IRC movie with ray tracing**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f irc_data.log irc -t
-
-* **IRC visualization with custom style**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f reaction_path.log irc -s cylview -v
-
-Usage Examples
---------------
-
-Complete Reaction Analysis Workflow
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-?

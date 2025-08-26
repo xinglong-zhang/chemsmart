@@ -12,7 +12,7 @@ The basic command structure for Mol jobs is:
 
 .. code-block:: console
 
-    chemsmart run [GENERAL_OPTIONS] mol [MOL_OPTIONS] <SUBCOMMAND> [SUBCOMMAND_OPTIONS]
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
 
 MOL_OPTIONS
 ^^^^^^^^^^^
@@ -25,26 +25,26 @@ Works for all Mol jobs
    * - Option
      - Type
      - Description
-   * - ``-f, --filename <string>``
+   * - ``-f, --filename``
      - string
      - Filename from which new Gaussian input is prepared (required)
-   * - ``-l, --label <string>``
+   * - ``-l, --label``
      - string
      - Write user input filename for the job (without extension). Will overwrite your original filename (default=None)
-   * - ``-a, --append-label <string>``
+   * - ``-a, --append-label``
      - string
      - Name to be appended to file for the job. Will append name to current filename (default=None)
-   * - ``-i, --index <string>``
+   * - ``-i, --index``
      - string
      - Index of molecules to use; 1-based indices. Default to the last molecule structure (default="-1")
-   * - ``--pubchem <string>``
+   * - ``--pubchem``
      - string
      - Get molecule structure from PubChem database using identifier (default=None)
    * - ``-o, --overwrite``
      - bool
      - Overwrite existing files (default=False)
 
-SUBCOMMANDS for Different Mol Jobs
+SUBCMD for Different Mol Jobs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Basic Visualization
@@ -93,7 +93,10 @@ Next Steps
 
 For specific visualization types, see the detailed tutorials:
 
-* **Basic Visualization**: Standard molecular structure visualization and movie generation
-* **Electronic Structure Analysis**: Molecular orbital and spin density visualization
-* **Reaction Analysis**: IRC trajectory and transition state visualization
-* **Interaction Analysis**: Non-covalent interaction (NCI) analysis and visualization
+*   Run Basic Visualization Jobs
+
+*   Run Reaction Analysis Jobs
+
+*   Run Electronic Structure Analysis Jobs
+
+*   Run Interaction Analysis Jobs

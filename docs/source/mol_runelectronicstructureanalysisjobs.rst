@@ -10,7 +10,11 @@ Molecular Orbital (MO) Jobs
 
 Generate molecular orbital visualizations for frontier orbitals and other electronic states.
 
-MO Specific Options
+.. code-block:: console
+
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] mo [SUBCMD_OPTIONS]
+
+MO-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: MO Job Options
@@ -20,7 +24,7 @@ MO Specific Options
    * - Option
      - Type
      - Description
-   * - ``-n, --number <int>``
+   * - ``-n, --number``
      - int
      - Molecular Orbital number to be visualized (e.g., 31 will visualize MO #31) (default=None)
    * - ``-h, --homo``
@@ -30,77 +34,70 @@ MO Specific Options
      - bool
      - Plot the lowest unoccupied molecular orbital (LUMO) (default=False)
 
-**Note**: MO jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering options.
+.. note::
+
+    MO jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering options.
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic molecular orbital visualization**:
+**Basic molecular orbital visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f calculation.log mo
 
-* **HOMO visualization**:
+**HOMO visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f molecule.log mo -h
 
-* **LUMO visualization**:
+**LUMO visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f molecule.log mo -l
 
-* **Both HOMO and LUMO**:
+**Specific orbital visualization**
 
     .. code-block:: console
 
-        chemsmart run mol -f molecule.log mo -h -l
+        chemsmart run mol -f molecule.log mo -n 5
 
-* **High-quality MO visualization with ray tracing**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f calculation.log mo -h -t -s pymol
 
 Spin Density Jobs
 -----------------
 
 Generate spin density visualizations for open-shell systems and radical species.
 
-**Important**: 2 files are needed in one folder (log and chk files)
+.. code-block:: console
 
-Spin Density Specific Options
+    chemsmart run [OPTIONS] mol [MOL_OPTIONS] mo [SUBCMD_OPTIONS]
+
+.. note::
+
+    2 files are needed in one folder (log and chk files)
+
+Spin-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Note**: Spin density jobs inherit all options from visualization jobs including styling, ray tracing, and surface rendering options.
+Spin density jobs inherit all options from visualization jobs including styling, ray tracing, and surface rendering options.
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic spin density visualization**:
+* **Basic spin density visualization**
 
     .. code-block:: console
 
         chemsmart run mol -f radical_calculation.log spin
 
-* **High-quality spin density with ray tracing**:
+* **High-quality spin density with ray tracing**
 
     .. code-block:: console
 
         chemsmart run mol -f radical.log spin -t
 
-* **Spin density with custom style**:
 
-    .. code-block:: console
-
-        chemsmart run mol -f open_shell.log spin -s cylview
-
-* **Quiet mode spin density**:
-
-    .. code-block:: console
-
-        chemsmart run mol -f radical_system.log spin -q
 

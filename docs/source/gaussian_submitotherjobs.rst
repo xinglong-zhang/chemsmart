@@ -10,7 +10,11 @@ Link Jobs
 
 Run multi-step Gaussian calculations with linked job steps.
 
-Link Job Specific Options
+.. code-block:: console
+
+    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] link [SUBCMD_OPTIONS]
+
+Link Job Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Link Job Options
@@ -36,38 +40,29 @@ Link Job Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
-* **Basic link job**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p link_calc -f molecule.xyz link
-
 * **Link job with specific job type**:
 
     .. code-block:: console
 
         chemsmart sub gaussian -p link_opt -f molecule.xyz link -j opt
 
-* **Link job with stability test**:
 
-    .. code-block:: console
+Examples
+^^^^^^^^
 
-        chemsmart sub gaussian -p link_stable -f molecule.xyz link -st opt
+Kc8 project opt    and DNA project sp
 
-* **Link job with custom guess and route**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p link_custom -f molecule.xyz link -g core -r "scf=tight"
-
-**Example applications**: Kc8 project and DNA project workflows
 
 Custom User Jobs
 ----------------
 
-Run user-defined Gaussian calculations with custom route specifications.
+Generally, if a user wants to run job that is currently not present in our package, one can run custom job
 
-Custom Job Specific Options
+.. code-block:: console
+
+    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] userjob [SUBCMD_OPTIONS]
+
+Custom Job Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Custom Job Options
@@ -87,42 +82,34 @@ Custom Job Specific Options
 Basic Usage
 ^^^^^^^^^^^
 
-* **Custom job with user-defined route**:
+**Custom job with user-defined route**:
+
+*   to create an input file named ``user_defined_job.com`` with user-specified route ``mnr functional/basis solvent`` etc and ``B 1 2 F\nA 1 2 3 F`` at the end of the input file after the specification of coordinates, run
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p custom_calc -f molecule.xyz userjob -r "B3LYP/6-31G(d) opt freq"
+        chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob -r 'mnr functional/basis solvent etc' -a 'B 1 2 F\nA 1 2 3 F'
 
-* **Custom job with additional information**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p custom_detailed -f molecule.xyz userjob -r "MP2/cc-pVDZ" -a "Additional basis set information"
-
-* **Advanced custom route example**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p advanced_custom -f complex.xyz userjob -r "wB97XD/6-311++G(d,p) scrf=(smd,solvent=water) opt"
 
 Direct Input File Execution
 ----------------------------
 
-Run Gaussian input files (.com or .gjf) directly without modifications.
+If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly without modifications.
+
+.. code-block:: console
+
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] com
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Run .com file directly**:
+**Direct execution of Gaussian input file**:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -f input_file.com com
+        chemsmart sub -s share gaussian -p test -f input_file.com com
 
-* **Run .gjf file directly**:
-
+    or for input file with .gjf extension
     .. code-block:: console
 
-        chemsmart sub gaussian -f calculation.gjf com
-
-**Note**: This method uses the input file exactly as provided, without any modifications from ChemSmart.
+        chemsmart sub -s share gaussian -p test -f input_file.gjf com

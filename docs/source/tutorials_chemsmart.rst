@@ -10,18 +10,18 @@ Basic Command Structure
 
 Chemsmart offers two main execution modes:
 
-**Local execution**: Use ``chemsmart run`` to execute tasks on current terminal.
-**HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
+| **Local execution**: Use ``chemsmart run`` to execute tasks on current terminal.
+| **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
 
 * The basic command structure is:
 
     .. code-block:: console
 
-        chemsmart run/sub [GENERAL_OPTIONS] <COMMAND> [COMMAND_OPTIONS] <SUBCOMMAND> [SUBCOMMAND_OPTIONS]
+        chemsmart run/sub [OPTIONS] <CMD> [CMD_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
 
 
-GENERAL_OPTIONS for all jobs
+OPTIONS for All Chemsmart Jobs
 ^^^^^^^^^^^^^^^^
 
 .. list-table:: Server and Resource Options
@@ -43,6 +43,10 @@ GENERAL_OPTIONS for all jobs
    * - ``-m, --mem-gb``
      - int
      - Memory in GBs
+
+.. note::
+    ``-s`` is followed by the one of the servers specified in ``~/.chemsmart/server/*.yaml`` files, without ``.yaml`` extension
+
 
 .. list-table:: Execution Control Options
    :header-rows: 1
@@ -75,7 +79,7 @@ GENERAL_OPTIONS for all jobs
      - bool
      - Turns on logging to stdout (default=False)
 
-Specific OPTIONS for “chemsmart sub”
+''chemsmart sub''-Specific Options
 ^^^^^^^^^^^^^^^^
 
 .. list-table::
@@ -101,7 +105,7 @@ Specific OPTIONS for “chemsmart sub”
      - bool
      - Print the command generated (default=False)
 
-COMMAND for jobs
+COMMAND for Jobs
 ^^^^^^^^^^^^^^^^
 
 *   use ``gaussian`` to run/sub a gaussian job
