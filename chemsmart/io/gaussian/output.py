@@ -180,7 +180,14 @@ class Gaussian16Output(GaussianFileMixin):
             return []  # No structures found
 
         # Remove first structure if it's a link job
-        if self.job_type != "link":
+        if getattr(self, "is_link", False):
+            orientations.pop(0)
+            if self.job_type == "sp":
+                energies = self.energies[2:]
+            elif self.job_type == "opt" or self.job_type == "ts":
+                energies = self.energies[1:]
+        else:
+            energies = self.energies
             clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
@@ -191,7 +198,7 @@ class Gaussian16Output(GaussianFileMixin):
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies,
+                energies,
                 self.forces,
                 self.symbols,
                 self.charge,
@@ -205,7 +212,7 @@ class Gaussian16Output(GaussianFileMixin):
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies,
+                energies,
                 self.forces,
                 self.symbols,
                 self.charge,
