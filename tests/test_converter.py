@@ -327,8 +327,46 @@ class TestConverter:
         self, gaussian_acetone_opt_outfile, tmpdir
     ):
         # copy file to tmpdir
-        tmp_path = os.path.join(tmpdir, "benzene_opt.log")
+        tmp_path = os.path.join(tmpdir, "acetone_opt.log")
         copy(gaussian_acetone_opt_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 10
+        assert mol.chemical_formula == "C3H6O"
+        assert mol.energy == -192.919416
+
+    def test_convert_single_wbi_log_file_to_xyz(self, wbi_outputfile, tmpdir):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "TS_5coord_XIII_wbi.log")
+        copy(wbi_outputfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 128
+        assert mol.chemical_formula == "C51H63NNiO9P2Si"
+        assert mol.energy == -5189.249707
+
+    def test_convert_single_failed_modred_log_file_to_xyz(
+        self, gaussian_failed_modred_outfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "cage_free_failed_modred.log")
+        copy(gaussian_failed_modred_outfile, tmp_path)
         assert os.path.exists(tmp_path)
         file_converter = FileConverter(
             filename=tmp_path, output_filetype="xyz"
@@ -341,5 +379,26 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         print(mol.num_atoms, mol.chemical_formula, mol.energy)
         assert mol.num_atoms == 10
-        assert mol.chemical_formula == "C3H6O"
-        assert mol.energy == -192.919416
+        assert mol.chemical_formula == "C3H4O3"
+        assert mol.energy == -341.883317
+
+    def test_convert_single_failed_oniom_log_file_to_xyz(
+        self, gaussian_oniom_outputfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "cation_failed_scan.log")
+        copy(gaussian_oniom_outputfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        print(mol.num_atoms, mol.chemical_formula, mol.energy)
+        assert mol.num_atoms == 483
+        assert mol.chemical_formula == "C155H180CuN53O82P12"
+        assert mol.energy == -5300.535128
