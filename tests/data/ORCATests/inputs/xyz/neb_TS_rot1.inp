@@ -1,8 +1,0 @@
-! GFN2-xTB NEB-TS Freq
-%NEB
-  NImages 8
-  NEB_END_XYZFILE "R-1a_opt.xyz"
-  NEB_TS_XYZFILE "TS_rot1.xyz"
-  PREOPT_ENDS TRUE
-END
-* xyzfile 0 1 S-1a_opt.xyz

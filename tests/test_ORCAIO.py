@@ -8,7 +8,7 @@ from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.input import ORCAInput, ORCANEBInput
+from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAEngradFile, ORCANEBFile, ORCAOutput
 from chemsmart.io.orca.route import ORCARoute
 
@@ -1807,4 +1807,4 @@ class TestORCANEB:
         assert orca_neb.ts_rms_force == 0.00034
         assert orca_neb.ts_max_abs_force == 0.00543
         assert orca_neb.ts_energy == -219.09056
-        assert orca_neb.preopt_ends == True
+        assert orca_neb.preopt_ends

@@ -619,6 +619,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
     def __init__(
         self,
+        semiempirical=None,
         jobtype=None,
         nimages=None,
         ending_xyzfile=None,
@@ -647,7 +648,10 @@ class ORCANEBJobSettings(ORCAJobSettings):
         return self._get_neb_route_string()
 
     def _get_neb_route_string(self):
-        return f"! {self._get_level_of_theory} {self.jobtype}"
+        if self.semiempirical:
+            return f"! {self.semiempirical} {self.jobtype}"
+        else:
+            return f"! {self._get_level_of_theory()} {self.jobtype}"
 
     @property
     def neb_block(self):

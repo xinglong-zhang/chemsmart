@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
+    ORCANEBJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -99,6 +100,9 @@ class ORCAProjectSettings(RegistryMixin):
     def neb_settings(self):
         """ORCA default settings for NEB job."""
         settings = self.main_settings().copy()
+        settings = ORCANEBJobSettings(
+            **settings.__dict__
+        )  # convert settings to ORCANEBJobSettings
         settings.job_type = "neb"
         settings.freq = False
         return settings
@@ -269,7 +273,11 @@ class YamlORCAProjectSettingsBuilder:
 
     def _project_settings_for_job(self, job_type):
         # Define a dictionary to map job_type to corresponding settings class
-        settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
+        settings_mapping = {
+            "irc": ORCAIRCJobSettings,
+            "ts": ORCATSJobSettings,
+            "neb": ORCANEBJobSettings,
+        }
 
         try:
             job_type_config = self._read_config().get(job_type)
@@ -277,6 +285,12 @@ class YamlORCAProjectSettingsBuilder:
                 return settings_mapping.get(
                     job_type, ORCAJobSettings
                 ).from_dict(job_type_config)
+            else:
+                # The current block is for neb jobs as  self._read_config().get(job_type) return None.
+                # todo: needs to be unified this with other job types.
+                return settings_mapping.get(
+                    job_type, ORCAJobSettings
+                ).default()
         except KeyError as e:
             raise RuntimeError(
                 f"ORCA settings for job {job_type} cannot be found!\n"

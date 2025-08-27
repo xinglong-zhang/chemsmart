@@ -1,6 +1,16 @@
+# Default ORCA settings for calculations
+gas:
+  functional: m062x  # quotes required for string with spaces
+  basis: def2-svp
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: cyclohexane
 #template for ORCA NEB calculation
 neb:
-level_of_theory: xTB
-jobtype: NEB
-nimages: 8
-preopt_ends: False
+  semiempirical: xTB
+  jobtype: NEB
+  nimages: 8
+  preopt_ends: False

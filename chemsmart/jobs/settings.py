@@ -171,7 +171,8 @@ def read_molecular_job_yaml(filename, program="gaussian"):
     ]
     sp_job = ["sp"]
     td_job = ["td"]
-    all_jobs = gas_phase_jobs + sp_job + td_job
+    neb_job = ["neb"]
+    all_jobs = gas_phase_jobs + sp_job + td_job + neb_job
 
     # read in project config
     with open(filename) as f:

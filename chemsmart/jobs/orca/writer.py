@@ -465,13 +465,26 @@ class ORCAInputWriter(InputWriter):
             for key in neb_specific_keys
         ):
             return
-
+        neb_specific_keys = sorted(neb_specific_keys)
         # write neb block if any option value is not None:
         f.write("%NEB\n")
+
         for key in neb_specific_keys:
             value = getattr(self.settings, key)
             if value is None:
                 continue
+            if key == "nimages":
+                f.write(f"{key.upper()} {value}\n")
+            if key == "ending_xyzfile":
+                f.write(f"NEB_END_XYZFILE '{value}'\n")
+            if key == "starting_xyz":
+                pass
+            if key == "intermediate_xyzfile":
+                f.write(f"NEB_TS_XYZFILE '{value}'\n")
+            if key == "preopt_ends":
+                if value:
+                    f.write("PREOPT_ENDS True\n")
+        f.write("end\n")
 
     def _write_constrained_atoms(self, f):
         """Write constraints on atoms in a molecule, if specified via frozen_atoms."""

@@ -5,7 +5,7 @@ import re
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.utils.mixins import ORCAFileMixin
-from chemsmart.utils.repattern import standard_coord_pattern
+from chemsmart.utils.repattern import standard_coord_pattern, xyz_filename_pattern
 
 logger = logging.getLogger(__name__)
 
