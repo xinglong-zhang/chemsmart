@@ -180,8 +180,8 @@ class NCIPLOTJobRunner(JobRunner):
                     )
             except Exception as e:
                 raise ValueError(
-                    f"Could not convert file {filename} to .xyz format. Error: {e}"
-                    f"Unsupported file format for NCIPLOT: {filename}. "
+                    f"Could not convert file {filename} to .xyz format. Error: {e}\n"
+                    f"Unsupported file format for NCIPLOT: {filename}.\n"
                     f"Supported formats are .xyz, .wfn, .wfx"
                 )
 
