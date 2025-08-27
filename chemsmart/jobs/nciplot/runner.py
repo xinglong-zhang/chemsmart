@@ -8,6 +8,7 @@ from functools import lru_cache
 from glob import glob
 from shutil import SameFileError, copy, rmtree
 
+from chemsmart.io.converter import FileConverter
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import NCIPLOTExecutable
 
@@ -157,8 +158,6 @@ class NCIPLOTJobRunner(JobRunner):
                 )
             try:
                 # convert file types to .xyz
-                from chemsmart.io.converter import FileConverter
-
                 converter = FileConverter(
                     filename=filename,
                     output_filetype="xyz",

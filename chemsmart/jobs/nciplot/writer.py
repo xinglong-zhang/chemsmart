@@ -74,9 +74,10 @@ class NCIPLOTInputWriter(InputWriter):
                     else:
                         file_path = self.job.folder
                         logger.info(f"Running in job directory: {file_path}")
-                    if not os.path.exists(os.path.join(file_path, file)):
+                    full_path = os.path.join(file_path, file)
+                    if not os.path.exists(full_path):
                         raise FileNotFoundError(
-                            f"File {os.path.abspath(file)} does not exist. Please check the file path."
+                            f"File {os.path.abspath(full_path)} does not exist. Please check the file path."
                         )
                     f.write(f"{file}\n")
 
