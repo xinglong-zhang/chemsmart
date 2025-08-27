@@ -132,7 +132,7 @@ class NCIPLOTJobRunner(JobRunner):
                     "No filenames provided for NCIPLOT job. Please provide at least one file."
                 )
             else:
-                if job.filenames[0].endswith((".wfn", ".wfx", ".xyz")):
+                if all(f.endswith((".wfn", ".wfx", ".xyz")) for f in job.filenames):
                     self._copy_input_files(job)
                 else:
                     self._write_xyz_from_input_files(job)
