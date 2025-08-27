@@ -66,7 +66,7 @@ class NCIPLOTInputWriter(InputWriter):
                     if self.jobrunner.scratch:
                         file_path = os.path.join(
                             self.jobrunner.scratch_dir,
-                            os.path.basename(file.rstrip(".xyz")),
+                            os.path.splitext(os.path.basename(file))[0],
                         )
                         logger.info(
                             f"Running in scratch directory: {file_path}"
