@@ -60,10 +60,24 @@ class NCIPLOTInputWriter(InputWriter):
                 f.write(f"{number_of_files}\n")
                 logger.debug(f"Filenames: {self.job.filenames}")
                 for file in self.job.filenames:
+                    if not file.endswith((".xyz", ".wfn", ".wfx")):
+                        file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
                     logger.debug(f"Writing filename: {file}")
-                    if not os.path.exists(file):
+                    if self.jobrunner.scratch:
+                        file_path = os.path.join(
+                            self.jobrunner.scratch_dir,
+                            os.path.splitext(os.path.basename(file))[0],
+                        )
+                        logger.info(
+                            f"Running in scratch directory: {file_path}"
+                        )
+                    else:
+                        file_path = self.job.folder
+                        logger.info(f"Running in job directory: {file_path}")
+                    full_path = os.path.join(file_path, file)
+                    if not os.path.exists(full_path):
                         raise FileNotFoundError(
-                            f"File {os.path.abspath(file)} does not exist. Please check the file path."
+                            f"File {os.path.abspath(full_path)} does not exist. Please check the file path."
                         )
                     f.write(f"{file}\n")
 

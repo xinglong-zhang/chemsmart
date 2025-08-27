@@ -258,6 +258,8 @@ def nciplot(
         assert (
             label is not None
         ), "Label for file is required since creating molecule from PubChem!"
+        if not label.endswith("promolecular"):
+            label = f"{label}_promolecular"
     else:
         if filenames is None:
             raise ValueError(
@@ -274,6 +276,11 @@ def nciplot(
                 )
             elif len(filenames) == 1:
                 label = filenames[0].split(".")[0] if label is None else label
+                if not filenames[0].endswith((".wfn", ".wfx")):
+                    if label is not None and not label.endswith(
+                        "promolecular"
+                    ):
+                        label = f"{label}_promolecular"
             else:
                 # add filenames together
                 label = (

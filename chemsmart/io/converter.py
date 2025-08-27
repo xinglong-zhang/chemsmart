@@ -57,6 +57,9 @@ class FileConverter:
                 self.type = self.filename.split(".")[-1]
                 logger.info(f"Converting file: {self.filename}")
                 self._convert_single_file(self.filename, self.output_filetype)
+                logger.info(
+                    f"File converted from {self.filename} to .{self.output_filetype}"
+                )
             else:
                 raise ValueError(
                     "Either directory or filename must be specified."

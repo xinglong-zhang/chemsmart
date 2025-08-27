@@ -8,6 +8,7 @@ from functools import lru_cache
 from glob import glob
 from shutil import SameFileError, copy, rmtree
 
+from chemsmart.io.converter import FileConverter
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import NCIPLOTExecutable
 
@@ -122,7 +123,21 @@ class NCIPLOTJobRunner(JobRunner):
             assert (
                 job.filenames is not None
             ), "No molecule provided and no filenames specified for NCIPLOT job."
-            self._copy_input_files(job)
+            if not isinstance(job.filenames, (list, tuple)):
+                raise TypeError(
+                    f"Expected filenames to be a list or tuple, got {type(job.filenames).__name__}"
+                )
+            if len(job.filenames) == 0:
+                raise ValueError(
+                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                )
+            else:
+                if all(
+                    f.endswith((".wfn", ".wfx", ".xyz")) for f in job.filenames
+                ):
+                    self._copy_input_files(job)
+                else:
+                    self._write_xyz_from_input_files(job)
 
     def _copy_input_files(self, job):
         """Copy input files to the running directory."""
@@ -136,6 +151,40 @@ class NCIPLOTJobRunner(JobRunner):
                     f"Copying file {filename} to {self.running_directory}"
                 )
                 copy(filename, self.running_directory)
+
+    def _write_xyz_from_input_files(self, job):
+        for filename in job.filenames:
+            if not os.path.exists(filename):
+                raise FileNotFoundError(
+                    f"File {filename} does not exist for NCIPLOT job."
+                )
+            try:
+                # convert file types to .xyz
+                converter = FileConverter(
+                    filename=filename,
+                    output_filetype="xyz",
+                )
+                converter.convert_files()
+                with suppress(SameFileError):
+                    # copy the converted .xyz file to running directory
+                    xyz_file = filename.rsplit(".", 1)[0] + ".xyz"
+                    xyz_promolecular_file = (
+                        filename.rsplit(".", 1)[0] + "_promolecular.xyz"
+                    )
+                    xyz_promolecular_filepath = os.path.join(
+                        self.running_directory,
+                        os.path.basename(xyz_promolecular_file),
+                    )
+                    copy(xyz_file, xyz_promolecular_filepath)
+                    logger.info(
+                        f"Copied file {xyz_file} to {xyz_promolecular_filepath}"
+                    )
+            except Exception as e:
+                raise ValueError(
+                    f"Could not convert file {filename} to .xyz format. Error: {e}\n"
+                    f"Unsupported file format for NCIPLOT: {filename}.\n"
+                    f"Supported formats are .xyz, .wfn, .wfx"
+                )
 
     def _write_xyz_from_pubchem(self, job):
         """Write the molecule to an XYZ file if it is provided."""
