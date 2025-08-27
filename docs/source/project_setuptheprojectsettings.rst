@@ -64,3 +64,7 @@ Chemsmart allows user to execute projects either locally or on a cluster. Users 
     This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-SVP method and run single point with solvent correction using DLPNO-CCSD(T)/CBS with cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene), for example. Again, users can customize different settings in different ``~/.chemsmart/orca/*project_settings*.yaml`` files to adapt to different project requirements.
 
 *   One also need to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in scratch folder), one may do ``ls -s /path/to/scratch/ ~/scratch``.
+
+.. note::
+
+    If ``freq: False`` is not set in the project settings, frequency calculation will be performed by default for all geometry optimization jobs.

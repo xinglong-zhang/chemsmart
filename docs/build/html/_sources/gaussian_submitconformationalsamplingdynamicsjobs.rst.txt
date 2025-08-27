@@ -5,16 +5,10 @@ Submit Conformational Sampling & Dynamics Jobs
 
 ChemSmart provides powerful tools for conformational sampling and molecular dynamics calculations using Gaussian. This section covers CREST conformational searches and trajectory analysis workflows.
 
-CREST/CREST-link jobs
+CREST jobs
 ---------------------
 
-CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy conformers.
-
-.. code-block:: console
-
-    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] crest [SUBCMD_OPTIONS]
-
-CREST-link jobs allow you to run additional Gaussian calculations on the generated conformers.
+CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy conformers. In chemsmart, the crest job allow you to combine the crest program with gaussian.
 
 .. code-block:: console
 
@@ -30,29 +24,21 @@ CREST-Specific OPTIONS
    * - Option
      - Type
      - Description
+   * - ``-j, --jobtype``
+     - string
+     - Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]
    * - ``-N, --num-confs-to-run``
      - int
      - Number of conformers to optimize
-   * - ``-j, --jobtype``
-     - string
-     - Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp", "grouper"]
+
+.. warning::
+
+    Jobtype must be provided for Crest and Link job!
 
 Basic Usage
 ^^^^^^^^^^^
 
-**Basic CREST job**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p project_name -f input.xyz crest
-
-**CREST with specific number of conformers**:
-
-    .. code-block:: console
-
-        chemsmart sub gaussian -p conformers -f molecule.xyz crest -N 10
-
-**CREST-link jobs**:
+**Basic CREST-Gaussian jobs**
 
 *   To run opt or modred or ts conformers from CREST run output, do:
 
@@ -82,7 +68,19 @@ Basic Usage
 Examples
 ^^^^^^^^^^^
 
-!need to add example here!
+**Use CREST-opt job for 10 conformers**
+
+*   use crest_conformers.xyz file to run the opt job for 10 conformers from the lowest energy conformer:
+
+    .. code-block:: console
+
+        chemsmart sub gaussian -p ti -f crest_conformers.xyz -l RR_T4_from_lowest -c 0 -m 1 crest -j opt -N 10
+
+    Output files will be saved as *RR_T4_from_lowest_opt_c1* to *RR_T4_from_lowest_opt_c10*.
+
+.. note::
+
+    If the job terminates before ``<n_conformers_to_opt>`` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all ``<n_conformers_to_opt>`` are optimized. Charge and multiplicity need to be specified.
 
 
 Trajectory/Traj-link Analysis
@@ -92,11 +90,7 @@ Trajectory analysis allows you to process molecular dynamics trajectories and ex
 
 .. code-block:: console
 
-    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] traj [SUBCMD_OPTIONS]
-
-.. note::
-
-    Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file.
+    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] traj -j <jobtype> [SUBCMD_OPTIONS]
 
 Trajectory-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -108,6 +102,9 @@ Trajectory-Specific OPTIONS
    * - Option
      - Type
      - Description
+   * - ``-j, --jobtype``
+     - string
+     - Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]
    * - ``-N, --num-structures-to-run``
      - int
      - Number of structures from the list of unique structures to run the job on
@@ -118,28 +115,27 @@ Trajectory-Specific OPTIONS
 Basic Usage
 ^^^^^^^^^^^
 
-**Basic trajectory analysis**:
+**Basic trajectory analysis**
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p trajectory -f trajectory.xyz -c 0 -m 1 traj
+        chemsmart sub gaussian -p trajectory -f trajectory.xyz -c 0 -m 1 traj -j opt
 
-**Trajectory analysis with specific number of structures**:
+.. note::
+
+    The traj job will use rmsd grouper strategy as default.
+
+
+**Trajectory analysis with specific proportion of structures**
+
+*   to consider the last 30% of the structures in md.traj trajectory file:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p traj_analysis -f md_output.xyz -c 0 -m 1 traj -N 50
-
-**Trajectory analysis with specific proportion of structures and sequential grouping**:
-
-*   to consider the last 20% of the structures in md.traj trajectory file, then uses sequential grouper to group those structures into unique structures and run the 10 lowest energy structures from the list of unique structures found by the grouper:
-
-    .. code-block:: console
-
-        chemsmart sub -s shared gaussian -p test -f imd.traj traj -x 0.2 -N 10 -g rmsd
+        chemsmart sub gaussian -p traj_analysis -f md.traj -c 0 -m 1 traj -j opt -x 0.3
 
 
-Additional grouper option for crest/traj jobs
+Additional Grouper Option for crest/traj Jobs
 -------------------
 Process the results of the crest/traj task further using multiple molecular similarity-based grouping strategies.
 
@@ -170,13 +166,30 @@ Grouper-Specific OPTIONS
      - int
      - Number of processors to use for grouper (Default=1)
 
+Basic Usage
+^^^^^^^^^^^
+**Basic grouping for crest job**
 
-chemsmart sub -s small gaussian -p test -f 1.traj -c 1 -m 1 traj -j opt -x 0.2 -n 10 -g rmsd
+    .. code-block:: console
 
+        chemsmart sub gaussian -p test -f crest_conformers.xyz -c 0 -m 1 crest -j opt -g rmsd -t 1 -p 4
+
+**basic grouping for traj job**
+
+    .. code-block:: console
+
+        chemsmart sub gaussian -p traj_test -f trajectory.xyz -c 0 -m 1 traj -j opt -x 0.5 -g tanimoto
 
 Examples
 ^^^^^^^^^^^
 
-chemsmart run gaussian -p test -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4
+**Use rmsd Grouper for crest job**
 
-!need to add example here!
+*   To run crest job in local and save the output files with "grouped" label, tight threshold is used:
+
+    .. code-block:: console
+
+        chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4
+
+    Output files will be saved as *grouped_opt_c1.com, grouped_opt_c1.log, ..., grouped_opt_cN.com, grouped_opt_cN.log*
+

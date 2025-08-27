@@ -78,14 +78,6 @@ Welcome to chemsmart’s documentation!
    thermochemistry_runthermochemistryjobs
 
 
-.. toctree::
-   :maxdepth: 2
-   :caption: old
-
-   tutorials_SubmitaEnergyandThermodynamicAnalysisJobUsingGaussian
-   tutorials_SubmitaElectronicStructureAnalysisJobUsingGaussian
-
-
 Indices and tables
 ==================
 

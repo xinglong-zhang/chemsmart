@@ -12,13 +12,7 @@ Run transition state optimization to find saddle points on the potential energy 
 
 .. code-block:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts
-
-Run transition state optimization with specific atoms frozen to constrain the search.
-
-.. code-block:: console
-
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts -f <atom_indices_to_freeze>
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts [SUBCMD_OPTIONS]
 
 TS-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -30,25 +24,36 @@ TS-Specific OPTIONS
    * - Option
      - Type
      - Description
-   * - ``-f, --freeze-atoms <string>``
+   * - ``-f, --freeze-atoms``
      - string
      - Indices of atoms to freeze for constrained optimization
 
 Basic Usage
 ^^^^^^^^^^^
 
-**Transition state with specific charge and multiplicity**:
+**Transition state with specific charge and multiplicity**
 
     .. code-block:: console
 
         chemsmart sub gaussian -p ts_opt -f ts_guess.xyz -c 0 -m 1 ts
 
 
-**TS optimization with frozen atoms**:
+**TS optimization with frozen atoms**
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f "1 2 3"
+        chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f 2,5,8
+
+Examples
+^^^^^^^^^^
+
+**Use semiempirical method for pre-TS**
+
+    .. code-block:: console
+
+        chemsmart sub -s SLURM gaussian -p ti -f radical_opening_ts2.gjf -c 0 -m 2 -s PM6 ts
+
+    Can search ts in pm6 level first.
 
 
 Modified Redundant Coordinate (Modred) Jobs
@@ -58,9 +63,9 @@ Run modified redundant coordinate optimization for constrained geometry optimiza
 
 .. code-block:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] modred -c <list_of_coords_to_constraint>
+        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] modred [SUBCMD_OPTIONS]
 
-Modred-Specific Options
+Modred-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. list-table:: Modred Job Options
@@ -83,14 +88,19 @@ Basic Usage
 
     .. code-block:: console
 
-        chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17],[9,10]]
+        chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17]]
 
 
 Examples
 ^^^^^^^^^^
 
-Eg chemsmart sub -s SLURM gaussian -p ti -f I_6m_ts_guess3_new.gjf -c 0 -m 2 modred -c [[85,100],[100,101],[101,89],[89,90],[90,88],[88,85]]
+**Modred optimization**
 
+*   The structure can be optimized while keeping the bonds involved in the transition state fixed：
+
+    .. code-block:: console
+
+        chemsmart sub -s SLURM gaussian -p ti -f I_6m_ts_guess3_new.gjf -c 0 -m 2 modred -c [[85,100],[100,101],[101,89],[89,90],[90,88],[88,85]]
 
 
 Intrinsic Reaction Coordinate (IRC) Calculations
@@ -101,7 +111,6 @@ Run IRC calculations to follow the reaction path from a transition state.
 .. code-block:: console
 
         chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] irc [SUBCMD_OPTIONS]
-
 
 IRC-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^
@@ -156,7 +165,7 @@ Run coordinate scanning to explore potential energy surfaces and locate transiti
 
 .. notice::
 
-    Scanning coordinates, step size and number of steps are required!
+    Scanning coordinates, step size and number of steps are all required!
 
 Scan-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^
@@ -181,11 +190,11 @@ Scan-Specific OPTIONS
 Basic Usage
 ^^^^^^^^^^^
 
-**Basic coordinate scan**:
+**Basic coordinate scan**
 
-*   For example, to submit the PES scan job with along bond between atom 4 and atom 17 for 10 steps with 0.1Å increment per step:
+*   For example, to submit the PES scan job with along bond between atom 2 and atom 3 for 10 steps with 0.1Å increment per step:
 
     .. code-block:: console
 
-        chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 15
+        chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10
 

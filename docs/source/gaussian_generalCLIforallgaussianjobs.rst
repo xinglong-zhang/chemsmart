@@ -12,7 +12,7 @@ The basic command structure for Gaussian jobs is:
 
 .. code-block:: console
 
-    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS] [SOLVENT_OPTIONS]
+    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
 
 GAUSSIAN_OPTIONS
 ^^^^^^^^^^^^^^^^
@@ -27,7 +27,7 @@ Works for all Gaussian jobs
      - Description
    * - ``-p, --project``
      - string
-     - Project settings
+     - Choose the project settings
    * - ``-f, --filename``
      - string
      - Filename from which new Gaussian input is prepared
@@ -40,6 +40,9 @@ Works for all Gaussian jobs
    * - ``-i, --index``
      - string
      - Index of molecules to use; 1-based indices. Default to the last molecule structure (-1)
+   * - ``-t, --title``
+     - string
+     - Gaussian job title
    * - ``-P, --pubchem``
      - string
      - Queries structure from PubChem using name, smiles, cid and conformer information
@@ -80,6 +83,10 @@ Works for all Gaussian jobs
 
     will take the 5th structure (1-indexed, as in chemsmart) from ase database file, ``small.db``, to create the input file for geometry optimization.
 
+.. Warning::
+
+    1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.
+
 
 **Get molecule from pubchem directly**
 
@@ -87,9 +94,9 @@ Works for all Gaussian jobs
 
     .. code-block:: console
 
-        chemsmart sub -s shared gaussian -p test -P 962 -l water sp
+        chemsmart sub -s shared gaussian -p test -P 962 -c 0 -m 1 -l water opt
 
-    will create input file named ``water.com`` for single point calculation of water.
+    will create input file named ``water.com`` for optimization calculation of water.
 
 
 .. list-table:: Molecular Properties Options
@@ -105,13 +112,10 @@ Works for all Gaussian jobs
    * - ``-m, --multiplicity``
      - int
      - Multiplicity of the molecule
-   * - ``-t, --title``
-     - string
-     - Gaussian job title
 
-.. notice::
+.. warning::::
 
-    If there is no charge or multiplicity information in input files, users need to specify them via ``-c <charge> -m <multiplicity>``.
+    If there is no charge or multiplicity information in input files, users must specify them via ``-c <charge> -m <multiplicity>``.
 
 **Modify Charge and Multiplicity**
 
@@ -129,11 +133,11 @@ Works for all Gaussian jobs
 
         chemsmart sub -s shared gaussian -p test -f test.com -m 3 -a multiplicity opt
 
-    Modify the charge to +1 and multiplicity to 2 in the newly created input ``file test_charge_multiplicity.com`` via:
+    Modify the charge to -1 and multiplicity to 2 in the newly created input ``file test_charge_multiplicity.com`` via:
 
     .. code-block:: console
 
-        chemsmart sub -s shared gaussian -p test -f test.com -c 1 -m 2 -l test_charge_multiplicity opt
+        chemsmart sub -s shared gaussian -p test -f test.com -c -1 -m 2 -l test_charge_multiplicity opt
 
 .. tip::
 
@@ -177,11 +181,13 @@ Works for all Gaussian jobs
 
 *   Users can also use semiempirical method to run ts search, e.g.:
 
+    Modify the method to ``pm6`` in the newly created input file ``test_pm6.com`` via:
+
     .. code-block:: console
 
-        chemsmart sub -s shared gaussian -p test -f test.com -s pm6 ts
+        chemsmart sub -s shared gaussian -p test -f test.com -s pm6 -a pm6 ts
 
-    will use pm6 instead of the -p yaml.
+    will use pm6 instead of the functional and basis in ``-p test``.
 
 .. list-table:: Route and Calculation Options
    :header-rows: 1
@@ -204,10 +210,11 @@ Works for all Gaussian jobs
      - Additional information to be appended at the end of the input file. E.g., scrf=read
    * - ``-d, --dieze-tag``
      - string
-     - Dieze tag for gaussian job; possible options include "n", "p", "t" to get "#n", "#p", "#t", respectively
+     - Dieze tag for gaussian job. possible options include "n", "p", "t" to get "#n", "#p", "#t", respectively
    * - ``--forces/--no-forces``
      - bool
      - Whether to calculate forces (default=False)
+
 
 **Specify Additional Optimization Options**
 
@@ -229,30 +236,6 @@ Works for all Gaussian jobs
 
     will add in ``nosymm`` as part of the route in the newly created input file ``test_route_params.com``.
 
-
-SOLVENT-OPTIONS for Gaussian Jobs
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Please set solvent parameters at the end when needed.
-
-.. list-table:: Solvent Model Options
-   :header-rows: 1
-   :widths: 35 15 50
-
-   * - Option
-     - Type
-     - Description
-   * - ``--remove-solvent/--no-remove-solvent``
-     - bool
-     - Whether to use solvent model in the job. Defaults to project settings
-   * - ``-sm, --solvent-model <string>``
-     - string
-     - Solvent model to be used for single point (default = none, use project settings)
-   * - ``-si, --solvent-id <string>``
-     - string
-     - Solvent ID to be used for single point (default = none, use project settings)
-   * - ``-so, --solvent-options <string>``
-     - string
-     - Additional solvent options in scrf=() route. default=None. E.g., iterative in scrf=(smd,water,iterative)
 
 
 SUBCMD for Different Gaussian Jobs
@@ -321,11 +304,11 @@ SUBCMD for Different Gaussian Jobs
    * - Subcommand
      - Description
    * - ``com``
-     - CLI for running Gaussian input file as is
+     - for running Gaussian input file as is
    * - ``link``
-     - CLI for Gaussian link jobs
+     - for Gaussian link jobs
    * - ``userjob``
-     - CLI for running Gaussian custom jobs
+     - for running Gaussian custom jobs
 
 
 Next Steps

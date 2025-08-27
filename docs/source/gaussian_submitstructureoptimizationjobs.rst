@@ -19,7 +19,7 @@ Run constrained optimization with specific atoms frozen in place using the ``opt
 
 .. code-block:: console
 
-    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt -f <atom_indices_to_freeze>
+    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt [SUBCMD_OPTIONS]
 
 Opt-Specific OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -38,28 +38,39 @@ Opt-Specific OPTIONS
 Basic Usage
 ^^^^^^^^^^^
 
-**Basic geometry optimization**:
+**Basic geometry optimization**
 
     .. code-block:: console
 
         chemsmart sub gaussian -p project_name -f input.gjf -c 0 -m 1 opt
 
-**Constrained optimization with frozen atoms**:
+**Constrained optimization with frozen atoms**
 
-*   to submit the geometry optimization job with atoms numbered 1 to 10 frozen, one can do
+*   To submit the geometry optimization job with atoms frozen, one can do
 
     .. code-block:: console
 
         chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-10
 
-.. Warning::
+    and
 
-    1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.
+    .. code-block:: console
+
+        chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-3,5,7
+
 
 Examples
 ^^^^^^^^
 
-!need to add!
+**optimize structure directly from a Gaussian optimization output file with different charge and multiplicity**
+
+*   After a Gaussian optimization job is done, one can use the output file from the previous optimization job to run a new optimization with different charge and multiplicity, e.g.:
+
+    .. code-block:: console
+
+        chemsmart sub -s SLURM gaussian -p project1 -f k_atom_opt.log -c 1 -m 1 -l k_cation_opt opt
+
+    ``-c`` and ``-m`` will override the charge and multiplicity in the original Gaussian log file (from K_atom to K_cation).
 
 
 CREST Optimization Jobs
@@ -100,10 +111,6 @@ Basic Usage
     .. code-block:: console
 
         chemsmart sub gaussian -p crest_opt -f molecule.xyz crestopt -n 10
-
-.. note::
-
-    If the job terminates before ``<n_conformers_to_opt>`` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all ``<n_conformers_to_opt>`` are optimized. Charge and multiplicity need to be specified.
 
 
 

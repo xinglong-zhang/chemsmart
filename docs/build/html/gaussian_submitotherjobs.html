@@ -159,19 +159,19 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span></code></p></td>
 <td><p>string</p></td>
 <td><p>Gaussian job type. Options: [“opt”, “ts”, “modred”, “scan”, “sp”]</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-st,</span> <span class="pre">--stable</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-st,</span> <span class="pre">--stable</span></code></p></td>
 <td><p>string</p></td>
-<td><p>Gaussian stability test options (default=”opt”)</p></td>
+<td><p>Gaussian stability test options (default=opt)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-g,</span> <span class="pre">--guess</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-g,</span> <span class="pre">--guess</span></code></p></td>
 <td><p>string</p></td>
-<td><p>Gaussian guess options (default=”mix”)</p></td>
+<td><p>Gaussian guess options (default=mix)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-r,</span> <span class="pre">--route</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-r,</span> <span class="pre">--route</span></code></p></td>
 <td><p>string</p></td>
 <td><p>Route for link section (default=None)</p></td>
 </tr>
@@ -180,19 +180,37 @@
 </section>
 <section id="basic-usage">
 <h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
-<ul>
-<li><p><strong>Link job with specific job type</strong>:</p>
+<p><strong>Link job with optimization job type</strong></p>
 <blockquote>
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p link_opt -f molecule.xyz link -j opt</span>
 </pre></div>
 </div>
 </div></blockquote>
-</li>
-</ul>
+<p><strong>Link job with single point job type</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p project -f 1_opt.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative</span>
+</pre></div>
+</div>
+</div></blockquote>
 </section>
 <section id="examples">
 <h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
-<p>Kc8 project opt    and DNA project sp</p>
+<p><strong>Use link job for optimization of singlet openshell structure</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s SLURM gaussian -p kc -f dimer.gjf -c 0 -m 1 link -j opt</span>
+</pre></div>
+</div>
+<p>When using linkjob, the workflow will change to:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">...</span>
+<span class="gp"># </span>um062x<span class="w"> </span>def2svp<span class="w"> </span><span class="nv">stable</span><span class="o">=</span>opt<span class="w"> </span><span class="nv">guess</span><span class="o">=</span>mix
+<span class="go">...</span>
+<span class="gp"># </span>opt<span class="w"> </span>freq<span class="w"> </span>um062x<span class="w"> </span>def2svp<span class="w"> </span><span class="nv">geom</span><span class="o">=</span>check<span class="w"> </span><span class="nv">guess</span><span class="o">=</span><span class="nb">read</span>
+<span class="go">...</span>
+<span class="gp">#</span>N<span class="w"> </span><span class="nv">Geom</span><span class="o">=</span>AllCheck<span class="w"> </span><span class="nv">Guess</span><span class="o">=</span>TCheck<span class="w"> </span><span class="nv">SCRF</span><span class="o">=</span>Check<span class="w"> </span>GenChk<span class="w"> </span>UM062X/def2SVP<span class="w"> </span>Freq
+<span class="go">...</span>
+</pre></div>
+</div>
+</div></blockquote>
 </section>
 </section>
 <section id="custom-user-jobs">
@@ -217,11 +235,11 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-r,</span> <span class="pre">--route</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-r,</span> <span class="pre">--route</span></code></p></td>
 <td><p>string</p></td>
 <td><p>User-defined route for Gaussian calculation (required)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-a,</span> <span class="pre">--append-info</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-a,</span> <span class="pre">--append-info</span></code></p></td>
 <td><p>string</p></td>
 <td><p>Information to be appended at the end of the file (default=None)</p></td>
 </tr>
@@ -259,6 +277,14 @@
 <div><p>chemsmart sub -s share gaussian -p test -f input_file.gjf com</p>
 </div></blockquote>
 </div></blockquote>
+<p><strong>Some modifications to the input file</strong>:</p>
+<ul>
+<li><p>to change charge and multiplicity of the input file, one can do：</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s share gaussian -p test -f input_file.com -c 1 -m 2 com</span>
+</pre></div>
+</div>
+</li>
+</ul>
 </section>
 </section>
 </section>

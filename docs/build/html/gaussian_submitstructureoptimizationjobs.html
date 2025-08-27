@@ -140,7 +140,7 @@
 </pre></div>
 </div>
 <p>Run constrained optimization with specific atoms frozen in place using the <code class="docutils literal notranslate"><span class="pre">opt</span></code> command with frozen atom options (such as <a class="reference external" href="https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it">https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it</a>).</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt -f &lt;atom_indices_to_freeze&gt;</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
 <section id="opt-specific-options">
@@ -168,28 +168,36 @@
 </section>
 <section id="basic-usage">
 <h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
-<p><strong>Basic geometry optimization</strong>:</p>
+<p><strong>Basic geometry optimization</strong></p>
 <blockquote>
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p project_name -f input.gjf -c 0 -m 1 opt</span>
 </pre></div>
 </div>
 </div></blockquote>
-<p><strong>Constrained optimization with frozen atoms</strong>:</p>
+<p><strong>Constrained optimization with frozen atoms</strong></p>
 <ul>
-<li><p>to submit the geometry optimization job with atoms numbered 1 to 10 frozen, one can do</p>
+<li><p>To submit the geometry optimization job with atoms frozen, one can do</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-10</span>
+</pre></div>
+</div>
+<p>and</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-3,5,7</span>
 </pre></div>
 </div>
 </li>
 </ul>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.</p>
-</div>
 </section>
 <section id="examples">
 <h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
-<p>!need to add!</p>
+<p><strong>optimize structure directly from a Gaussian optimization output file with different charge and multiplicity</strong></p>
+<ul>
+<li><p>After a Gaussian optimization job is done, one can use the output file from the previous optimization job to run a new optimization with different charge and multiplicity, e.g.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s SLURM gaussian -p project1 -f k_atom_opt.log -c 1 -m 1 -l k_cation_opt opt</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">-c</span></code> and <code class="docutils literal notranslate"><span class="pre">-m</span></code> will override the charge and multiplicity in the original Gaussian log file (from K_atom to K_cation).</p>
+</li>
+</ul>
 </section>
 </section>
 <section id="crest-optimization-jobs">
@@ -235,10 +243,6 @@
 </pre></div>
 </div>
 </div></blockquote>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need to be specified.</p>
-</div>
 </section>
 </section>
 </section>

@@ -72,22 +72,23 @@
 <li class="toctree-l2"><a class="reference internal" href="#transition-state-optimization">Transition State Optimization</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#ts-specific-options">TS-Specific OPTIONS</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#modified-redundant-coordinate-modred-jobs">Modified Redundant Coordinate (Modred) Jobs</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#modred-specific-options">Modred-Specific Options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#modred-specific-options">Modred-Specific OPTIONS</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#id1">Basic Usage</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Examples</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#intrinsic-reaction-coordinate-irc-calculations">Intrinsic Reaction Coordinate (IRC) Calculations</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#irc-specific-options">IRC-Specific OPTIONS</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id2">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Basic Usage</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#potential-energy-surface-scanning">Potential Energy Surface Scanning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#scan-specific-options">Scan-Specific OPTIONS</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id3">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id4">Basic Usage</a></li>
 </ul>
 </li>
 </ul>
@@ -146,17 +147,13 @@
 <section id="transition-state-optimization">
 <h2>Transition State Optimization<a class="headerlink" href="#transition-state-optimization" title="Link to this heading"></a></h2>
 <p>Run transition state optimization to find saddle points on the potential energy surface.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts</span>
-</pre></div>
-</div>
-<p>Run transition state optimization with specific atoms frozen to constrain the search.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts -f &lt;atom_indices_to_freeze&gt;</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] ts [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
 <section id="ts-specific-options">
 <h3>TS-Specific OPTIONS<a class="headerlink" href="#ts-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id4">
-<caption><span class="caption-text">TS Frozen Atom Options</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id5">
+<caption><span class="caption-text">TS Frozen Atom Options</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -169,7 +166,7 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f,</span> <span class="pre">--freeze-atoms</span> <span class="pre">&lt;string&gt;</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f,</span> <span class="pre">--freeze-atoms</span></code></p></td>
 <td><p>string</p></td>
 <td><p>Indices of atoms to freeze for constrained optimization</p></td>
 </tr>
@@ -178,30 +175,40 @@
 </section>
 <section id="basic-usage">
 <h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
-<p><strong>Transition state with specific charge and multiplicity</strong>:</p>
+<p><strong>Transition state with specific charge and multiplicity</strong></p>
 <blockquote>
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p ts_opt -f ts_guess.xyz -c 0 -m 1 ts</span>
 </pre></div>
 </div>
 </div></blockquote>
-<p><strong>TS optimization with frozen atoms</strong>:</p>
+<p><strong>TS optimization with frozen atoms</strong></p>
 <blockquote>
-<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f &quot;1 2 3&quot;</span>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f 2,5,8</span>
 </pre></div>
 </div>
+</div></blockquote>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
+<p><strong>Use semiempirical method for pre-TS</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s SLURM gaussian -p ti -f radical_opening_ts2.gjf -c 0 -m 2 -s PM6 ts</span>
+</pre></div>
+</div>
+<p>Can search ts in pm6 level first.</p>
 </div></blockquote>
 </section>
 </section>
 <section id="modified-redundant-coordinate-modred-jobs">
 <h2>Modified Redundant Coordinate (Modred) Jobs<a class="headerlink" href="#modified-redundant-coordinate-modred-jobs" title="Link to this heading"></a></h2>
 <p>Run modified redundant coordinate optimization for constrained geometry optimization and transition state searches using the <code class="docutils literal notranslate"><span class="pre">modred</span></code> command.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] modred -c &lt;list_of_coords_to_constraint&gt;</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] modred [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
 <section id="modred-specific-options">
-<h3>Modred-Specific Options<a class="headerlink" href="#modred-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id5">
-<caption><span class="caption-text">Modred Job Options</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<h3>Modred-Specific OPTIONS<a class="headerlink" href="#modred-specific-options" title="Link to this heading"></a></h3>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Modred Job Options</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -226,15 +233,22 @@
 <p><strong>Defining Coordinate Constraints</strong></p>
 <ul>
 <li><p>to submit a modredundant job with constraints on bond between atom 4 and atom 17 and on bond between atom 9 and atom 10, do:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17],[9,10]]</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17]]</span>
 </pre></div>
 </div>
 </li>
 </ul>
 </section>
-<section id="examples">
-<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
-<p>Eg chemsmart sub -s SLURM gaussian -p ti -f I_6m_ts_guess3_new.gjf -c 0 -m 2 modred -c [[85,100],[100,101],[101,89],[89,90],[90,88],[88,85]]</p>
+<section id="id2">
+<h3>Examples<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<p><strong>Modred optimization</strong></p>
+<ul>
+<li><p>The structure can be optimized while keeping the bonds involved in the transition state fixed：</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s SLURM gaussian -p ti -f I_6m_ts_guess3_new.gjf -c 0 -m 2 modred -c [[85,100],[100,101],[101,89],[89,90],[90,88],[88,85]]</span>
+</pre></div>
+</div>
+</li>
+</ul>
 </section>
 </section>
 <section id="intrinsic-reaction-coordinate-irc-calculations">
@@ -245,8 +259,8 @@
 </div>
 <section id="irc-specific-options">
 <h3>IRC-Specific OPTIONS<a class="headerlink" href="#irc-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id6">
-<caption><span class="caption-text">IRC Job Options</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id7">
+<caption><span class="caption-text">IRC Job Options</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -273,7 +287,7 @@
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-rs,</span> <span class="pre">--recalc-step</span></code></p></td>
 <td><p>int</p></td>
-<td><p>Compute the Hessian analytically every N predictor steps or every <a href="#id8"><span class="problematic" id="id9">|N|</span></a> corrector steps if N&lt;0 (default=6)</p></td>
+<td><p>Compute the Hessian analytically every N predictor steps or every <a href="#id9"><span class="problematic" id="id10">|N|</span></a> corrector steps if N&lt;0 (default=6)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--maxpoints</span></code></p></td>
 <td><p>int</p></td>
@@ -290,8 +304,8 @@
 </tbody>
 </table>
 </section>
-<section id="id2">
-<h3>Basic Usage<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<section id="id3">
+<h3>Basic Usage<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
 <p><strong>Basic IRC calculation</strong>:</p>
 <blockquote>
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f irc.xyz irc</span>
@@ -308,8 +322,8 @@
 </div>
 <section id="scan-specific-options">
 <h3>Scan-Specific OPTIONS<a class="headerlink" href="#scan-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id7">
-<caption><span class="caption-text">Scan Job Options</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id8">
+<caption><span class="caption-text">Scan Job Options</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -337,12 +351,12 @@
 </tbody>
 </table>
 </section>
-<section id="id3">
-<h3>Basic Usage<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
-<p><strong>Basic coordinate scan</strong>:</p>
+<section id="id4">
+<h3>Basic Usage<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
+<p><strong>Basic coordinate scan</strong></p>
 <ul>
-<li><p>For example, to submit the PES scan job with along bond between atom 4 and atom 17 for 10 steps with 0.1Å increment per step:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 15</span>
+<li><p>For example, to submit the PES scan job with along bond between atom 2 and atom 3 for 10 steps with 0.1Å increment per step:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10</span>
 </pre></div>
 </div>
 </li>

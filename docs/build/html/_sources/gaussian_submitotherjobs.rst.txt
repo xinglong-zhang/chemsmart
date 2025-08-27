@@ -24,34 +24,54 @@ Link Job Specific OPTIONS
    * - Option
      - Type
      - Description
-   * - ``-j, --jobtype <string>``
+   * - ``-j, --jobtype``
      - string
      - Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]
-   * - ``-st, --stable <string>``
+   * - ``-st, --stable``
      - string
-     - Gaussian stability test options (default="opt")
-   * - ``-g, --guess <string>``
+     - Gaussian stability test options (default=opt)
+   * - ``-g, --guess``
      - string
-     - Gaussian guess options (default="mix")
-   * - ``-r, --route <string>``
+     - Gaussian guess options (default=mix)
+   * - ``-r, --route``
      - string
      - Route for link section (default=None)
 
 Basic Usage
 ^^^^^^^^^^^
 
-* **Link job with specific job type**:
+**Link job with optimization job type**
 
     .. code-block:: console
 
         chemsmart sub gaussian -p link_opt -f molecule.xyz link -j opt
 
+**Link job with single point job type**
+
+    .. code-block:: console
+
+        chemsmart sub gaussian -p project -f 1_opt.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative
 
 Examples
 ^^^^^^^^
 
-Kc8 project opt    and DNA project sp
+**Use link job for optimization of singlet openshell structure**
 
+    .. code-block:: console
+
+        chemsmart sub -s SLURM gaussian -p kc -f dimer.gjf -c 0 -m 1 link -j opt
+
+    When using linkjob, the workflow will change to:
+
+    .. code-block:: console
+
+        ...
+        # um062x def2svp stable=opt guess=mix
+        ...
+        # opt freq um062x def2svp geom=check guess=read
+        ...
+        #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
+        ...
 
 Custom User Jobs
 ----------------
@@ -72,10 +92,10 @@ Custom Job Specific OPTIONS
    * - Option
      - Type
      - Description
-   * - ``-r, --route <string>``
+   * - ``-r, --route``
      - string
      - User-defined route for Gaussian calculation (required)
-   * - ``-a, --append-info <string>``
+   * - ``-a, --append-info``
      - string
      - Information to be appended at the end of the file (default=None)
 
@@ -113,3 +133,11 @@ Basic Usage
     .. code-block:: console
 
         chemsmart sub -s share gaussian -p test -f input_file.gjf com
+
+**Some modifications to the input file**:
+
+*   to change charge and multiplicity of the input file, one can do：
+
+    .. code-block:: console
+
+        chemsmart sub -s share gaussian -p test -f input_file.com -c 1 -m 2 com

@@ -67,7 +67,7 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="gaussian_generalCLIforallgaussianjobs.html">General CLI Options for All Gaussian Jobs</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Submit Conformational Sampling &amp; Dynamics Jobs</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#crest-crest-link-jobs">CREST/CREST-link jobs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#crest-jobs">CREST jobs</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#crest-specific-options">CREST-Specific OPTIONS</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
@@ -78,9 +78,10 @@
 <li class="toctree-l3"><a class="reference internal" href="#id1">Basic Usage</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#additional-grouper-option-for-crest-traj-jobs">Additional grouper option for crest/traj jobs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#additional-grouper-option-for-crest-traj-jobs">Additional Grouper Option for crest/traj Jobs</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#grouper-specific-options">Grouper-Specific OPTIONS</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id2">Examples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Examples</a></li>
 </ul>
 </li>
 </ul>
@@ -138,20 +139,16 @@
 <section id="submit-conformational-sampling-dynamics-jobs">
 <h1>Submit Conformational Sampling &amp; Dynamics Jobs<a class="headerlink" href="#submit-conformational-sampling-dynamics-jobs" title="Link to this heading"></a></h1>
 <p>ChemSmart provides powerful tools for conformational sampling and molecular dynamics calculations using Gaussian. This section covers CREST conformational searches and trajectory analysis workflows.</p>
-<section id="crest-crest-link-jobs">
-<h2>CREST/CREST-link jobs<a class="headerlink" href="#crest-crest-link-jobs" title="Link to this heading"></a></h2>
-<p>CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy conformers.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] crest [SUBCMD_OPTIONS]</span>
-</pre></div>
-</div>
-<p>CREST-link jobs allow you to run additional Gaussian calculations on the generated conformers.</p>
+<section id="crest-jobs">
+<h2>CREST jobs<a class="headerlink" href="#crest-jobs" title="Link to this heading"></a></h2>
+<p>CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy conformers. In chemsmart, the crest job allow you to combine the crest program with gaussian.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] crest -j &lt;jobtype&gt; [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
 <section id="crest-specific-options">
 <h3>CREST-Specific OPTIONS<a class="headerlink" href="#crest-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id3">
-<caption><span class="caption-text">CREST Job Options</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">CREST Job Options</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -164,32 +161,24 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--num-confs-to-run</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Gaussian job type. Options: [“opt”, “ts”, “modred”, “scan”, “sp”]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--num-confs-to-run</span></code></p></td>
 <td><p>int</p></td>
 <td><p>Number of conformers to optimize</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span></code></p></td>
-<td><p>string</p></td>
-<td><p>Gaussian job type. Options: [“opt”, “ts”, “modred”, “scan”, “sp”, “grouper”]</p></td>
-</tr>
 </tbody>
 </table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Jobtype must be provided for Crest and Link job!</p>
+</div>
 </section>
 <section id="basic-usage">
 <h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
-<p><strong>Basic CREST job</strong>:</p>
-<blockquote>
-<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p project_name -f input.xyz crest</span>
-</pre></div>
-</div>
-</div></blockquote>
-<p><strong>CREST with specific number of conformers</strong>:</p>
-<blockquote>
-<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p conformers -f molecule.xyz crest -N 10</span>
-</pre></div>
-</div>
-</div></blockquote>
-<p><strong>CREST-link jobs</strong>:</p>
+<p><strong>Basic CREST-Gaussian jobs</strong></p>
 <ul>
 <li><p>To run opt or modred or ts conformers from CREST run output, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test-f &lt;input_file&gt; -c 1 -m 1 crest -j opt</span>
@@ -213,23 +202,31 @@
 </section>
 <section id="examples">
 <h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
-<p>!need to add example here!</p>
+<p><strong>Use CREST-opt job for 10 conformers</strong></p>
+<ul>
+<li><p>use crest_conformers.xyz file to run the opt job for 10 conformers from the lowest energy conformer:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p ti -f crest_conformers.xyz -l RR_T4_from_lowest -c 0 -m 1 crest -j opt -N 10</span>
+</pre></div>
+</div>
+<p>Output files will be saved as <em>RR_T4_from_lowest_opt_c1</em> to <em>RR_T4_from_lowest_opt_c10</em>.</p>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need to be specified.</p>
+</div>
 </section>
 </section>
 <section id="trajectory-traj-link-analysis">
 <h2>Trajectory/Traj-link Analysis<a class="headerlink" href="#trajectory-traj-link-analysis" title="Link to this heading"></a></h2>
 <p>Trajectory analysis allows you to process molecular dynamics trajectories and extract specific structures for further analysis.</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] traj [SUBCMD_OPTIONS]</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] traj -j &lt;jobtype&gt; [SUBCMD_OPTIONS]</span>
 </pre></div>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file.</p>
 </div>
 <section id="trajectory-specific-options">
 <h3>Trajectory-Specific OPTIONS<a class="headerlink" href="#trajectory-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id4">
-<caption><span class="caption-text">Trajectory Job Options</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id5">
+<caption><span class="caption-text">Trajectory Job Options</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -242,11 +239,15 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--num-structures-to-run</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Gaussian job type. Options: [“opt”, “ts”, “modred”, “scan”, “sp”]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--num-structures-to-run</span></code></p></td>
 <td><p>int</p></td>
 <td><p>Number of structures from the list of unique structures to run the job on</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-x,</span> <span class="pre">--proportion-structures-to-use</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-x,</span> <span class="pre">--proportion-structures-to-use</span></code></p></td>
 <td><p>float</p></td>
 <td><p>Proportion of structures from the end of trajectory to use. Values ranges from 0.0 &lt; x &lt;= 1.0. Defaults to 0.1 (last 10% of structures)</p></td>
 </tr>
@@ -255,22 +256,20 @@
 </section>
 <section id="id1">
 <h3>Basic Usage<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
-<p><strong>Basic trajectory analysis</strong>:</p>
+<p><strong>Basic trajectory analysis</strong></p>
 <blockquote>
-<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p trajectory -f trajectory.xyz -c 0 -m 1 traj</span>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p trajectory -f trajectory.xyz -c 0 -m 1 traj -j opt</span>
 </pre></div>
 </div>
 </div></blockquote>
-<p><strong>Trajectory analysis with specific number of structures</strong>:</p>
-<blockquote>
-<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p traj_analysis -f md_output.xyz -c 0 -m 1 traj -N 50</span>
-</pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The traj job will use rmsd grouper strategy as default.</p>
 </div>
-</div></blockquote>
-<p><strong>Trajectory analysis with specific proportion of structures and sequential grouping</strong>:</p>
+<p><strong>Trajectory analysis with specific proportion of structures</strong></p>
 <ul>
-<li><p>to consider the last 20% of the structures in md.traj trajectory file, then uses sequential grouper to group those structures into unique structures and run the 10 lowest energy structures from the list of unique structures found by the grouper:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f imd.traj traj -x 0.2 -N 10 -g rmsd</span>
+<li><p>to consider the last 30% of the structures in md.traj trajectory file:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p traj_analysis -f md.traj -c 0 -m 1 traj -j opt -x 0.3</span>
 </pre></div>
 </div>
 </li>
@@ -278,15 +277,15 @@
 </section>
 </section>
 <section id="additional-grouper-option-for-crest-traj-jobs">
-<h2>Additional grouper option for crest/traj jobs<a class="headerlink" href="#additional-grouper-option-for-crest-traj-jobs" title="Link to this heading"></a></h2>
+<h2>Additional Grouper Option for crest/traj Jobs<a class="headerlink" href="#additional-grouper-option-for-crest-traj-jobs" title="Link to this heading"></a></h2>
 <p>Process the results of the crest/traj task further using multiple molecular similarity-based grouping strategies.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian [GAUSSIAN OPTIONS] crest/traj -g &lt;&gt; [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
 <section id="grouper-specific-options">
 <h3>Grouper-Specific OPTIONS<a class="headerlink" href="#grouper-specific-options" title="Link to this heading"></a></h3>
-<table class="docutils align-default" id="id5">
-<caption><span class="caption-text">Grouper Job Options</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Grouper Job Options</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
 <colgroup>
 <col style="width: 30.0%" />
 <col style="width: 15.0%" />
@@ -317,12 +316,33 @@
 </tr>
 </tbody>
 </table>
-<p>chemsmart sub -s small gaussian -p test -f 1.traj -c 1 -m 1 traj -j opt -x 0.2 -n 10 -g rmsd</p>
 </section>
 <section id="id2">
-<h3>Examples<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
-<p>chemsmart run gaussian -p test -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4</p>
-<p>!need to add example here!</p>
+<h3>Basic Usage<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<p><strong>Basic grouping for crest job</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p test -f crest_conformers.xyz -c 0 -m 1 crest -j opt -g rmsd -t 1 -p 4</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p><strong>basic grouping for traj job</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p traj_test -f trajectory.xyz -c 0 -m 1 traj -j opt -x 0.5 -g tanimoto</span>
+</pre></div>
+</div>
+</div></blockquote>
+</section>
+<section id="id3">
+<h3>Examples<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
+<p><strong>Use rmsd Grouper for crest job</strong></p>
+<ul>
+<li><p>To run crest job in local and save the output files with “grouped” label, tight threshold is used:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4</span>
+</pre></div>
+</div>
+<p>Output files will be saved as <em>grouped_opt_c1.com, grouped_opt_c1.log, …, grouped_opt_cN.com, grouped_opt_cN.log</em></p>
+</li>
+</ul>
 </section>
 </section>
 </section>
