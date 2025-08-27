@@ -61,24 +61,20 @@ class NCIPLOTInputWriter(InputWriter):
                 logger.debug(f"Filenames: {self.job.filenames}")
                 for file in self.job.filenames:
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
-                        try:
-                            # convert file types to .xyz
-                            from chemsmart.io.converter import FileConverter
-
-                            converter = FileConverter(
-                                filename=file,
-                                output_filetype="xyz",
-                            )
-                            converter.convert_files()
-                        except Exception as e:
-                            raise ValueError(
-                                f"Could not convert file {file} to .xyz format. Error: {e}"
-                                f"Unsupported file format for NCIPLOT: {file}. "
-                                f"Supported formats are .xyz, .wfn, .wfx"
-                            )
-                        file = file.rsplit(".", 1)[0] + ".xyz"
+                        file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
                     logger.debug(f"Writing filename: {file}")
-                    if not os.path.exists(file):
+                    if self.jobrunner.scratch:
+                        file_path = os.path.join(
+                            self.jobrunner.scratch_dir,
+                            os.path.basename(file.rstrip(".xyz")),
+                        )
+                        logger.info(
+                            f"Running in scratch directory: {file_path}"
+                        )
+                    else:
+                        file_path = self.job.folder
+                        logger.info(f"Running in job directory: {file_path}")
+                    if not os.path.exists(os.path.join(file_path, file)):
                         raise FileNotFoundError(
                             f"File {os.path.abspath(file)} does not exist. Please check the file path."
                         )
