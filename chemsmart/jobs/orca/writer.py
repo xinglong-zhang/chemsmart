@@ -454,6 +454,24 @@ class ORCAInputWriter(InputWriter):
         END
         * xyzfile 0 1 R-INT1-Si_opt.xyz
         """
+        neb_settings_keys = self.settings.__dict__.keys()
+        from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+        parent_settings_keys = ORCAJobSettings().__dict__.keys()
+        neb_specific_keys = set(neb_settings_keys) - set(parent_settings_keys)
+
+        if not any(
+            getattr(self.settings, key) is not None
+            for key in neb_specific_keys
+        ):
+            return
+
+        # write neb block if any option value is not None:
+        f.write("%NEB\n")
+        for key in neb_specific_keys:
+            value = getattr(self.settings, key)
+            if value is None:
+                continue
 
     def _write_constrained_atoms(self, f):
         """Write constraints on atoms in a molecule, if specified via frozen_atoms."""
