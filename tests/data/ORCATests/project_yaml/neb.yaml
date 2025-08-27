@@ -1,0 +1,6 @@
+#template for ORCA NEB calculation
+neb:
+level_of_theory: xTB
+jobtype: NEB
+nimages: 8
+preopt_ends: False

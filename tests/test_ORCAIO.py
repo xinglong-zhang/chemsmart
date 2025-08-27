@@ -8,8 +8,8 @@ from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
-from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.input import ORCAInput, ORCANEBInput
+from chemsmart.io.orca.output import ORCAEngradFile, ORCANEBFile, ORCAOutput
 from chemsmart.io.orca.route import ORCARoute
 
 
@@ -1786,3 +1786,25 @@ class TestORCAEngrad:
         assert np.allclose(
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
+
+
+class TestORCANEB:
+    def test_read_neb_output(self, orca_neb_output_file):
+        orca_neb = ORCANEBFile(filename=orca_neb_output_file)
+        assert orca_neb.nimages == 10
+        assert orca_neb.natoms == 148
+        assert orca_neb.ci_converged is True
+        assert orca_neb.ts_converged is True
+        assert orca_neb.ci == "Climbing Image:  image 4."
+        assert orca_neb.ci_energy == -219.0833212
+        assert (
+            orca_neb.reactant.empirical_formula
+            == orca_neb.reactant.empirical_formula
+            == "C72H68NO6P"
+        )
+        assert orca_neb.ci_max_abs_force == 0.001963
+        assert orca_neb.ts_delta_energy == 4.02
+        assert orca_neb.ts_rms_force == 0.00034
+        assert orca_neb.ts_max_abs_force == 0.00543
+        assert orca_neb.ts_energy == -219.09056
+        assert orca_neb.preopt_ends == True

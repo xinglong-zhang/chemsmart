@@ -1,6 +1,7 @@
 from .inp import inp
 from .irc import irc
 from .modred import modred
+from .neb import neb
 from .opt import opt
 from .orca import orca
 from .scan import scan
@@ -16,4 +17,5 @@ __all__ = [
     "scan",
     "sp",
     "ts",
+    "neb",
 ]

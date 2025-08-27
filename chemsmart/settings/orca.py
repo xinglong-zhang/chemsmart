@@ -96,6 +96,13 @@ class ORCAProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def neb_settings(self):
+        """ORCA default settings for NEB job."""
+        settings = self.main_settings().copy()
+        settings.job_type = "neb"
+        settings.freq = False
+        return settings
+
     @classmethod
     def from_project(cls, project):
         """Get project settings based on project name."""
@@ -173,6 +180,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        neb_settings,
     ):
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -183,6 +191,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._neb_settings = neb_settings
 
     def opt_settings(self):
         return self._opt_settings
@@ -211,6 +220,9 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def wbi_settings(self):
         return self._wbi_settings
 
+    def neb_settings(self):
+        return self._neb_settings
+
     @classmethod
     def from_yaml(cls, filename):
         builder = YamlORCAProjectSettingsBuilder(filename=filename)
@@ -231,6 +243,7 @@ class YamlORCAProjectSettingsBuilder:
         sp_settings = self._project_settings_for_job(job_type="sp")
         td_settings = self._project_settings_for_job(job_type="td")
         wbi_settings = self._project_settings_for_job(job_type="wbi")
+        neb_settings = self._project_settings_for_job(job_type="neb")
 
         project_settings = YamlORCAProjectSettings(
             opt_settings=opt_settings,
@@ -242,6 +255,7 @@ class YamlORCAProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            neb_settings=neb_settings,
         )
 
         name = self._parse_project_name()

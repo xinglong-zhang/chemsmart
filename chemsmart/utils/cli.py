@@ -266,6 +266,8 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.wbi_settings()
     elif jobtype.lower() == "nci":
         settings = project_settings.nci_settings()
+    elif jobtype.lower() == "neb":
+        settings = project_settings.neb_settings()
 
     if coordinates is not None:
         modred_info = ast.literal_eval(coordinates)

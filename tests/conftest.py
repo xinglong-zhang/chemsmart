@@ -833,6 +833,11 @@ def orca_fixed_dihedral(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_neb_output_file(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "neb_R-TS1-Si.out")
+
+
+@pytest.fixture()
 def orca_errors_directory(orca_test_directory):
     orca_errors_directory = os.path.join(orca_test_directory, "error_files")
     return os.path.abspath(orca_errors_directory)
