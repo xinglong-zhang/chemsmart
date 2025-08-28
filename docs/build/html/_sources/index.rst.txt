@@ -21,10 +21,10 @@ Welcome to chemsmart’s documentation!
    :maxdepth: 2
    :caption: Installation
 
-   installation_installationforLinuxandMacOS
-   installation_installationforWindowsUsingGitBash
-   installation_installationforWindowsUsingUbuntu
-   installation_installationforHPCCluster
+   installation_installationforlinuxandmacos
+   installation_installationforwindowsusinggitbash
+   installation_installationforwindowsusingubuntu
+   installation_installationforhpccluster
    installation_testinstallation
 
 .. toctree::
@@ -44,7 +44,7 @@ Welcome to chemsmart’s documentation!
    :maxdepth: 2
    :caption: Tutorials for Gaussian Jobs
 
-   gaussian_generalCLIforallgaussianjobs
+   gaussian_generalcliforallgaussianjobs
    gaussian_submitconformationalsamplingdynamicsjobs
    gaussian_submitstructureoptimizationjobs
    gaussian_submittransitionstatesearchjobs
@@ -55,10 +55,10 @@ Welcome to chemsmart’s documentation!
    :maxdepth: 2
    :caption: Tutorials for ORCA Jobs
 
-   orca_generalCLIforallorcajobs
+   orca_generalcliforallorcajobs
    orca_submitstructureoptimizationjobs
    orca_submittransitionstatesearchjobs
-   orca_submitorcadirectInput
+   orca_submitorcadirectinput
 
 .. toctree::
    :maxdepth: 2
@@ -70,7 +70,7 @@ Welcome to chemsmart’s documentation!
    :maxdepth: 2
    :caption: Tutorials for PyMOL Jobs
 
-   mol_generalCLIforallmoljobs
+   mol_generalcliforallmoljobs
    mol_runbasicvisualizationjobs
    mol_runreactionanalysisjobs
    mol_runelectronicstructureanalysisjobs
