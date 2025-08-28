@@ -185,18 +185,10 @@ test: lint coverage-clean ## Run tests and generate coverage report (robust to c
 	-$(ENV_PREFIX)coverage html
 
 # === Docs ===
-.PHONY: docs-clean docs-fmt docs-lint docs
+.PHONY: docs-clean docs-lint docs-fmt docs
 
 docs-clean: ## Clean documentation artifacts.
 	$(MAKE) -C docs clean
-
-# Format all .rst files in docs/source using rstfmt
-docs-fmt: ## Auto-format reStructuredText with rstfmt.
-	@echo "==> Installing rstfmt (if needed)..."
-	$(ENV_PREFIX)pip install -q rstfmt
-	@echo "==> Running rstfmt..."
-	# Format recursively; --in-place edits files
-	$(ENV_PREFIX)rstfmt --in-place --line-length 200 docs/source
 
 docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
 	@echo "==> Installing doc linting tools (if needed)..."
@@ -205,6 +197,14 @@ docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running rstcheck..."
 	$(ENV_PREFIX)rstcheck docs/source/**/*.rst
+
+# Format all .rst files in docs/source using rstfmt
+docs-fmt: ## Auto-format reStructuredText with rstfmt.
+	@echo "==> Installing rstfmt (if needed)..."
+	$(ENV_PREFIX)pip install -q rstfmt
+	@echo "==> Running rstfmt..."
+	# Format recursively; --in-place edits files
+	$(ENV_PREFIX)rstfmt --in-place --line-length 120 docs/source
 
 docs: ## Build documentation (HTML).
 	$(MAKE) -C docs html

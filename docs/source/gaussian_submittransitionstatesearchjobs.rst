@@ -163,7 +163,7 @@ Run coordinate scanning to explore potential energy surfaces and locate transiti
 
         chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] scan [SUBCMD_OPTIONS]
 
-.. notice::
+.. note::
 
     Scanning coordinates, step size and number of steps are all required!
 

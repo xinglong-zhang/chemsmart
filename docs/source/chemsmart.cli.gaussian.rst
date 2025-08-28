@@ -108,10 +108,10 @@ chemsmart.cli.gaussian.resp module
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.gaussian.saopt module
+chemsmart.cli.gaussian.traj module
 -----------------------------------
 
-.. automodule:: chemsmart.cli.gaussian.saopt
+.. automodule:: chemsmart.cli.gaussian.traj
    :members:
    :undoc-members:
    :show-inheritance:

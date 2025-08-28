@@ -22,3 +22,13 @@ repos:
         files: ''
         pass_filenames: false
         always_run: true 
+  - repo: https://github.com/pycqa/doc8
+    rev: 0.11.2
+    hooks:
+      - id: doc8
+        args: [--max-line-length=120]
+
+  - repo: https://github.com/myint/rstcheck
+    rev: v6.2.0
+    hooks:
+      - id: rstcheck
