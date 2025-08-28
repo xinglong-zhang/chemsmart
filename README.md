@@ -498,3 +498,22 @@ to find out more.
 ## Development
 
 Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
+
+## 📖 Citations
+
+If you use **CHEMSMART** in your work, please kindly cite:  
+[https://arxiv.org/abs/2508.20042](https://arxiv.org/abs/2508.20042)
+
+### BibTeX
+
+```bibtex
+@misc{zhang2025chemsmartchemistrysimulationmodeling,
+  title        = {CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit for High-Efficiency Computational Chemistry Workflows},
+  author       = {Xinglong Zhang and Huiwen Tan and Jingyi Liu and Zihan Li and Lewen Wang and Benjamin W. J. Chen},
+  year         = {2025},
+  eprint       = {2508.20042},
+  archivePrefix= {arXiv},
+  primaryClass = {physics.chem-ph},
+  url          = {https://arxiv.org/abs/2508.20042}
+}
+
