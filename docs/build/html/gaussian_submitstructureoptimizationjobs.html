@@ -1,0 +1,289 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit Structure Optimization Jobs &mdash; chemsmart 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Submit Transition State Search Jobs" href="gaussian_submittransitionstatesearchjobs.html" />
+    <link rel="prev" title="Submit Conformational Sampling &amp; Dynamics Jobs" href="gaussian_submitconformationalsamplingdynamicsjobs.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chemsmart
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforLinuxandMacOS.html">Installation for Linux and MacOS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforWindowsUsingGitBash.html">Installation for Windows Using Git Bash</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforWindowsUsingUbuntu.html">Installation for Windows Using Ubuntu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforHPCCluster.html">Installation for HPC Cluster</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_testinstallation.html">Test Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Set up your Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="project_setupserverconfigurationonthecluster.html">Set up the Server Configuration on the Cluster</a></li>
+<li class="toctree-l1"><a class="reference internal" href="project_setuptheprojectsettings.html">Set up the Project Settings</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for Chemsmart</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_chemsmart.html">Chemsmart Command Line Interface Tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for Gaussian Jobs</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="gaussian_generalCLIforallgaussianjobs.html">General CLI Options for All Gaussian Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submitconformationalsamplingdynamicsjobs.html">Submit Conformational Sampling &amp; Dynamics Jobs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Submit Structure Optimization Jobs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#geometry-optimization">Geometry Optimization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#opt-specific-options">Opt-Specific OPTIONS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#crest-optimization-jobs">CREST Optimization Jobs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#crestopt-specific-options">CRESTOPT-Specific OPTIONS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Basic Usage</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submittransitionstatesearchjobs.html">Submit Transition State Search Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submitelectronicstructurepropertiesanalysesjobs.html">Submit Electronic Structure Properties &amp; Analyses Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submitotherjobs.html">Submit Other Gaussian Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for ORCA Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="orca_generalCLIforallorcajobs.html">General CLI Options for All ORCA Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orca_submitstructureoptimizationjobs.html">Submit Structure Optimization Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orca_submittransitionstatesearchjobs.html">Submit Transition State Search Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orca_submitorcadirectInput.html">Submit Other ORCA Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for ThermoChem Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="thermochemistry_runthermochemistryjobs.html">Run Thermochemistry Analysis Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for PyMOL Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="mol_generalCLIforallmoljobs.html">General CLI Options for All Mol Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runbasicvisualizationjobs.html">Run Basic Visualization Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runreactionanalysisjobs.html">Run Reaction Analysis Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runelectronicstructureanalysisjobs.html">Run Electronic Structure Analysis Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runInteractionanalysisjobs.html">Run Interaction Analysis Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for NCIPLOT Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="nciplot_runnciplotjobs.html">nciplot Tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for Auxiliary Scripts</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="scripts_overview.html">Chemsmart scripts Tutorial</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chemsmart</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Submit Structure Optimization Jobs</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/gaussian_submitstructureoptimizationjobs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+<section id="submit-structure-optimization-jobs">
+<h1>Submit Structure Optimization Jobs<a class="headerlink" href="#submit-structure-optimization-jobs" title="Link to this heading"></a></h1>
+<p>ChemSmart provides comprehensive structure optimization capabilities using Gaussian. This section covers basic geometry optimization, constrained optimization with frozen atoms, modified redundant coordinate optimization, and CREST optimization workflows.</p>
+<section id="geometry-optimization">
+<h2>Geometry Optimization<a class="headerlink" href="#geometry-optimization" title="Link to this heading"></a></h2>
+<p>Run basic geometry optimization to find the minimum energy structure using the <code class="docutils literal notranslate"><span class="pre">opt</span></code> command.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt</span>
+</pre></div>
+</div>
+<p>Run constrained optimization with specific atoms frozen in place using the <code class="docutils literal notranslate"><span class="pre">opt</span></code> command with frozen atom options (such as <a class="reference external" href="https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it">https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it</a>).</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt [SUBCMD_OPTIONS]</span>
+</pre></div>
+</div>
+<section id="opt-specific-options">
+<h3>Opt-Specific OPTIONS<a class="headerlink" href="#opt-specific-options" title="Link to this heading"></a></h3>
+<table class="docutils align-default" id="id2">
+<caption><span class="caption-text">Frozen Atom Options</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 15.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f,</span> <span class="pre">--freeze-atoms</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Indices of atoms to freeze for constrained optimization (1-based indexing)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="basic-usage">
+<h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
+<p><strong>Basic geometry optimization</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p project_name -f input.gjf -c 0 -m 1 opt</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p><strong>Constrained optimization with frozen atoms</strong></p>
+<ul>
+<li><p>To submit the geometry optimization job with atoms frozen, one can do</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-10</span>
+</pre></div>
+</div>
+<p>and</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-3,5,7</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
+<p><strong>optimize structure directly from a Gaussian optimization output file with different charge and multiplicity</strong></p>
+<ul>
+<li><p>After a Gaussian optimization job is done, one can use the output file from the previous optimization job to run a new optimization with different charge and multiplicity, e.g.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s SLURM gaussian -p project1 -f k_atom_opt.log -c 1 -m 1 -l k_cation_opt opt</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">-c</span></code> and <code class="docutils literal notranslate"><span class="pre">-m</span></code> will override the charge and multiplicity in the original Gaussian log file (from K_atom to K_cation).</p>
+</li>
+</ul>
+</section>
+</section>
+<section id="crest-optimization-jobs">
+<h2>CREST Optimization Jobs<a class="headerlink" href="#crest-optimization-jobs" title="Link to this heading"></a></h2>
+<p>Run CREST-based optimization on multiple conformers using the <code class="docutils literal notranslate"><span class="pre">crestopt</span></code> command.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] crestopt [SUBCMD_OPTIONS]</span>
+</pre></div>
+</div>
+<section id="crestopt-specific-options">
+<h3>CRESTOPT-Specific OPTIONS<a class="headerlink" href="#crestopt-specific-options" title="Link to this heading"></a></h3>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">CREST Optimization Options</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 15.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-n,</span> <span class="pre">--num-confs-to-opt</span></code></p></td>
+<td><p>int</p></td>
+<td><p>Number of conformers to optimize from the CREST ensemble</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id1">
+<h3>Basic Usage<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<p><strong>CREST Optimization for all conformers</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p crest_optimization -f conformers.xyz crestopt</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p><strong>with specific number of conformers</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p crest_opt -f molecule.xyz crestopt -n 10</span>
+</pre></div>
+</div>
+</div></blockquote>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="gaussian_submitconformationalsamplingdynamicsjobs.html" class="btn btn-neutral float-left" title="Submit Conformational Sampling &amp; Dynamics Jobs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="gaussian_submittransitionstatesearchjobs.html" class="btn btn-neutral float-right" title="Submit Transition State Search Jobs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Xinglong Zhang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

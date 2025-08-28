@@ -1,0 +1,389 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit Conformational Sampling &amp; Dynamics Jobs &mdash; chemsmart 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Submit Structure Optimization Jobs" href="gaussian_submitstructureoptimizationjobs.html" />
+    <link rel="prev" title="General CLI Options for All Gaussian Jobs" href="gaussian_generalCLIforallgaussianjobs.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            chemsmart
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforLinuxandMacOS.html">Installation for Linux and MacOS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforWindowsUsingGitBash.html">Installation for Windows Using Git Bash</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforWindowsUsingUbuntu.html">Installation for Windows Using Ubuntu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_installationforHPCCluster.html">Installation for HPC Cluster</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_testinstallation.html">Test Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Set up your Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="project_setupserverconfigurationonthecluster.html">Set up the Server Configuration on the Cluster</a></li>
+<li class="toctree-l1"><a class="reference internal" href="project_setuptheprojectsettings.html">Set up the Project Settings</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for Chemsmart</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorials_chemsmart.html">Chemsmart Command Line Interface Tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for Gaussian Jobs</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="gaussian_generalCLIforallgaussianjobs.html">General CLI Options for All Gaussian Jobs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Submit Conformational Sampling &amp; Dynamics Jobs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#crest-jobs">CREST jobs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#crest-specific-options">CREST-Specific OPTIONS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#trajectory-traj-link-analysis">Trajectory/Traj-link Analysis</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#trajectory-specific-options">Trajectory-Specific OPTIONS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Basic Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#additional-grouper-option-for-crest-traj-jobs">Additional Grouper Option for crest/traj Jobs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#grouper-specific-options">Grouper-Specific OPTIONS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Examples</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submitstructureoptimizationjobs.html">Submit Structure Optimization Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submittransitionstatesearchjobs.html">Submit Transition State Search Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submitelectronicstructurepropertiesanalysesjobs.html">Submit Electronic Structure Properties &amp; Analyses Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gaussian_submitotherjobs.html">Submit Other Gaussian Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for ORCA Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="orca_generalCLIforallorcajobs.html">General CLI Options for All ORCA Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orca_submitstructureoptimizationjobs.html">Submit Structure Optimization Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orca_submittransitionstatesearchjobs.html">Submit Transition State Search Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="orca_submitorcadirectInput.html">Submit Other ORCA Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for ThermoChem Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="thermochemistry_runthermochemistryjobs.html">Run Thermochemistry Analysis Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for PyMOL Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="mol_generalCLIforallmoljobs.html">General CLI Options for All Mol Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runbasicvisualizationjobs.html">Run Basic Visualization Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runreactionanalysisjobs.html">Run Reaction Analysis Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runelectronicstructureanalysisjobs.html">Run Electronic Structure Analysis Jobs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mol_runInteractionanalysisjobs.html">Run Interaction Analysis Jobs</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for NCIPLOT Jobs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="nciplot_runnciplotjobs.html">nciplot Tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials for Auxiliary Scripts</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="scripts_overview.html">Chemsmart scripts Tutorial</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">chemsmart</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Submit Conformational Sampling &amp; Dynamics Jobs</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/gaussian_submitconformationalsamplingdynamicsjobs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+<section id="submit-conformational-sampling-dynamics-jobs">
+<h1>Submit Conformational Sampling &amp; Dynamics Jobs<a class="headerlink" href="#submit-conformational-sampling-dynamics-jobs" title="Link to this heading"></a></h1>
+<p>ChemSmart provides powerful tools for conformational sampling and molecular dynamics calculations using Gaussian. This section covers CREST conformational searches and trajectory analysis workflows.</p>
+<section id="crest-jobs">
+<h2>CREST jobs<a class="headerlink" href="#crest-jobs" title="Link to this heading"></a></h2>
+<p>CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy conformers. In chemsmart, the crest job allow you to combine the crest program with gaussian.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] crest -j &lt;jobtype&gt; [SUBCMD_OPTIONS]</span>
+</pre></div>
+</div>
+<section id="crest-specific-options">
+<h3>CREST-Specific OPTIONS<a class="headerlink" href="#crest-specific-options" title="Link to this heading"></a></h3>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">CREST Job Options</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 15.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Gaussian job type. Options: [“opt”, “ts”, “modred”, “scan”, “sp”]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--num-confs-to-run</span></code></p></td>
+<td><p>int</p></td>
+<td><p>Number of conformers to optimize</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Jobtype must be provided for Crest and Link job!</p>
+</div>
+</section>
+<section id="basic-usage">
+<h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h3>
+<p><strong>Basic CREST-Gaussian jobs</strong></p>
+<ul>
+<li><p>To run opt or modred or ts conformers from CREST run output, do:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test-f &lt;input_file&gt; -c 1 -m 1 crest -j opt</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f &lt;input_file&gt; -c 0 -m 2 crest -j modred -c [1,4]</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f &lt;input_file&gt; -c 0 -m 1 crest -j ts</span>
+</pre></div>
+</div>
+<p>respectively</p>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Typically, the <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code> is a list of all conformers obtained by CREST program and named <code class="docutils literal notranslate"><span class="pre">crest_conformers.xyz</span></code>.</p>
+</div>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
+<p><strong>Use CREST-opt job for 10 conformers</strong></p>
+<ul>
+<li><p>use crest_conformers.xyz file to run the opt job for 10 conformers from the lowest energy conformer:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p ti -f crest_conformers.xyz -l RR_T4_from_lowest -c 0 -m 1 crest -j opt -N 10</span>
+</pre></div>
+</div>
+<p>Output files will be saved as <em>RR_T4_from_lowest_opt_c1</em> to <em>RR_T4_from_lowest_opt_c10</em>.</p>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need to be specified.</p>
+</div>
+</section>
+</section>
+<section id="trajectory-traj-link-analysis">
+<h2>Trajectory/Traj-link Analysis<a class="headerlink" href="#trajectory-traj-link-analysis" title="Link to this heading"></a></h2>
+<p>Trajectory analysis allows you to process molecular dynamics trajectories and extract specific structures for further analysis.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] traj -j &lt;jobtype&gt; [SUBCMD_OPTIONS]</span>
+</pre></div>
+</div>
+<section id="trajectory-specific-options">
+<h3>Trajectory-Specific OPTIONS<a class="headerlink" href="#trajectory-specific-options" title="Link to this heading"></a></h3>
+<table class="docutils align-default" id="id5">
+<caption><span class="caption-text">Trajectory Job Options</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 15.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-j,</span> <span class="pre">--jobtype</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Gaussian job type. Options: [“opt”, “ts”, “modred”, “scan”, “sp”]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--num-structures-to-run</span></code></p></td>
+<td><p>int</p></td>
+<td><p>Number of structures from the list of unique structures to run the job on</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-x,</span> <span class="pre">--proportion-structures-to-use</span></code></p></td>
+<td><p>float</p></td>
+<td><p>Proportion of structures from the end of trajectory to use. Values ranges from 0.0 &lt; x &lt;= 1.0. Defaults to 0.1 (last 10% of structures)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id1">
+<h3>Basic Usage<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<p><strong>Basic trajectory analysis</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p trajectory -f trajectory.xyz -c 0 -m 1 traj -j opt</span>
+</pre></div>
+</div>
+</div></blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The traj job will use rmsd grouper strategy as default.</p>
+</div>
+<p><strong>Trajectory analysis with specific proportion of structures</strong></p>
+<ul>
+<li><p>to consider the last 30% of the structures in md.traj trajectory file:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p traj_analysis -f md.traj -c 0 -m 1 traj -j opt -x 0.3</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+</section>
+<section id="additional-grouper-option-for-crest-traj-jobs">
+<h2>Additional Grouper Option for crest/traj Jobs<a class="headerlink" href="#additional-grouper-option-for-crest-traj-jobs" title="Link to this heading"></a></h2>
+<p>Process the results of the crest/traj task further using multiple molecular similarity-based grouping strategies.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian [GAUSSIAN OPTIONS] crest/traj -g &lt;&gt; [SUBCMD_OPTIONS]</span>
+</pre></div>
+</div>
+<section id="grouper-specific-options">
+<h3>Grouper-Specific OPTIONS<a class="headerlink" href="#grouper-specific-options" title="Link to this heading"></a></h3>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Grouper Job Options</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 15.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-g,</span> <span class="pre">--grouping-strategy</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Grouping strategy to use for grouping. Options: “rmsd”, “tanimoto”, “formula”, “isomorphism”, “connectivity” (default = “rmsd”)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-i,</span> <span class="pre">--ignore-hydrogens</span></code></p></td>
+<td><p>bool</p></td>
+<td><p>Ignore H atoms in the grouping (Default = False)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-t,</span> <span class="pre">--threshold</span></code></p></td>
+<td><p>float</p></td>
+<td><p>Threshold value for grouping (Default = 0.5 for rmsd, 0.9 for tanimoto)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--num-procs</span></code></p></td>
+<td><p>int</p></td>
+<td><p>Number of processors to use for grouper (Default=1)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id2">
+<h3>Basic Usage<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<p><strong>Basic grouping for crest job</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p test -f crest_conformers.xyz -c 0 -m 1 crest -j opt -g rmsd -t 1 -p 4</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p><strong>basic grouping for traj job</strong></p>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p traj_test -f trajectory.xyz -c 0 -m 1 traj -j opt -x 0.5 -g tanimoto</span>
+</pre></div>
+</div>
+</div></blockquote>
+</section>
+<section id="id3">
+<h3>Examples<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
+<p><strong>Use rmsd Grouper for crest job</strong></p>
+<ul>
+<li><p>To run crest job in local and save the output files with “grouped” label, tight threshold is used:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4</span>
+</pre></div>
+</div>
+<p>Output files will be saved as <em>grouped_opt_c1.com, grouped_opt_c1.log, …, grouped_opt_cN.com, grouped_opt_cN.log</em></p>
+</li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="gaussian_generalCLIforallgaussianjobs.html" class="btn btn-neutral float-left" title="General CLI Options for All Gaussian Jobs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="gaussian_submitstructureoptimizationjobs.html" class="btn btn-neutral float-right" title="Submit Structure Optimization Jobs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Xinglong Zhang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
