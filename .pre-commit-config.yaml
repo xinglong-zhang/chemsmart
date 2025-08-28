@@ -22,22 +22,21 @@ repos:
         files: ''
         pass_filenames: false
         always_run: true 
-
-  - repo: https://github.com/pycqa/doc8
-    rev: 0.11.2
-    hooks:
-      - id: doc8
-        args: [--max-line-length=120]
-
-  - repo: https://github.com/myint/rstcheck
-    rev: v6.2.0
-    hooks:
-      - id: rstcheck
-
-
-  - repo: https://github.com/dzhu/rstfmt
-    rev: v0.0.14
-    hooks:
-      - id: rstfmt
-        args: ["-w", "120"]
+      - id: make-docs-lint
+        name: Run make docs-lint
+        entry: make docs-lint
+        language: system
+        always_run: true  # Run even if no files are staged
+      - id: make-docs-fmt
+        name: Run make docs fmt
+        entry: make docs-fmt
+        language: system
+        always_run: true  
+      - id: make-docs-clean
+        name: Run make docs clean
+        entry: make docs-clean
+        language: system
+        files: ''
+        pass_filenames: false
+        always_run: true 
 
