@@ -653,7 +653,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         return masks
 
-    @property
+    @cached_property
     def scf_energies(self):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
