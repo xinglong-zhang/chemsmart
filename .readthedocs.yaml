@@ -9,6 +9,14 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.10"
+  jobs:
+    build:
+      html:
+        # Create the output dir RTD will publish
+        - mkdir -p "$READTHEDOCS_OUTPUT/html/"
+        # Copy your already-built HTML into it
+        - cp -a docs/build/html/. "$READTHEDOCS_OUTPUT/html/"
+
 
 
 sphinx:
