@@ -49,7 +49,13 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 
 # Cross-links to Python stdlib
-intersphinx_mapping = {"python": ("https://docs.python.org/3", {})}
+intersphinx_mapping = {
+    "python": (
+        "https://docs.python.org/3",
+        None,
+    ),  # let Sphinx find objects.inv
+}
+
 
 # If heavy optional deps cause import errors on RTD, mock them here:
 autodoc_mock_imports = [

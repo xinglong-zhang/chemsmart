@@ -1,127 +1,251 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="prev" title="Installation" href="Installation.html" />
+
+    <!-- Generated with Sphinx 8.1.3 and Furo 2025.07.19 -->
+        <title>Tutorials - chemsmart 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=25af2a20" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
 
 
-<!DOCTYPE html>
-<html class="writer-html5" lang="en" data-content_root="./">
-<head>
-  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tutorials &mdash; chemsmart 0.1.0 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
-
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
   
-      <script src="_static/jquery.js?v=5d32c60e"></script>
-      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=01f34227"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Installation" href="Installation.html" /> 
-</head>
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #2b2b2b;
+  --color-code-foreground: #f8f8f2;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #2b2b2b;
+  --color-code-foreground: #f8f8f2;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
 
-<body class="wy-body-for-nav"> 
-  <div class="wy-grid-for-nav">
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
-      <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
 
-          
-          
-          <a href="index.html" class="icon icon-home">
-            chemsmart
-          </a>
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <ul class="current">
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">chemsmart 0.1.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">chemsmart 0.1.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="Introduction.html">Introduction</a></li>
 <li class="toctree-l1"><a class="reference internal" href="Installation.html">Installation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorials</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-set-up-the-server-configuration-on-the-cluster">How to Set up the Server Configuration on the Cluster</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-set-up-the-project-settings">How to Set up the Project Settings</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-submit-a-geometry-optimization-job-using-gaussian">How to Submit a Geometry Optimization Job Using Gaussian</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#basic-geometry-optimization">Basic Geometry Optimization</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#geometry-optimization-job-with-frozen-atoms">Geometry Optimization Job with Frozen Atoms</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#optimize-a-fixed-number-of-lowest-energy-conformers">Optimize a Fixed Number of Lowest Energy Conformers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#optimize-unique-structure-from-an-md-trajectory-file">Optimize Unique Structure from an MD Trajectory File</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#optimize-a-fixed-number-of-lowest-energy-structures">Optimize a Fixed Number of Lowest Energy Structures</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#run-opt-or-modred-or-ts-conformers-from-crest-run-output">run opt or modred or ts conformers from CREST run output</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-submit-a-transition-state-and-reaction-pathway-analysis-job-using-gaussian">How to Submit a Transition State and Reaction Pathway Analysis Job Using Gaussian</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#transition-state-modredundant">Transition State Modredundant</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#transition-state-search">Transition State Search</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#intrinsic-reaction-coordinate-irc">Intrinsic Reaction Coordinate (IRC)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#relaxed-potential-energy-surface-pes-scan">Relaxed Potential Energy Surface (PES) Scan</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-submit-a-energy-and-thermodynamic-analysis-job-using-gaussian">How to Submit a Energy and Thermodynamic Analysis Job Using Gaussian</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#single-point-job">Single Point Job</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#distortion-interaction-activation-strain-di-as">Distortion-Interaction/Activation-Strain (DI-AS)</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-submit-a-electronic-structure-analysis-job-using-gaussian">How to Submit a Electronic Structure Analysis Job Using Gaussian</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#resp-charges-fitting">RESP Charges Fitting</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#non-covalent-interaction-job">Non-covalent Interaction Job</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-submit-custom-job-submission-using-gaussian">How to Submit Custom Job Submission Using Gaussian</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#run-a-job-with-pre-prepared-gaussian-input-file-directly">Run a Job with Pre-prepared Gaussian Input File Directly</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#run-a-custom-job">Run a Custom Job</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-use-general-cli-options-for-all-jobs">How to Use General CLI Options for All Jobs</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#specify-name-of-the-file">Specify Name of the File</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#append-string-to-input-file-name">Append String to Input File Name</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#modify-the-charge-and-multiplicity">Modify the Charge and Multiplicity</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#modify-the-functional-and-basis">Modify the Functional and Basis</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#specify-additional-optimization-options">Specify Additional Optimization Options</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#add-in-additional-parameters">Add in Additional Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#select-the-particular-structure-in-file">Select the Particular Structure in file</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#how-to-submit-jobs-using-orca">How to Submit Jobs Using ORCA</a></li>
-</ul>
-</li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Tutorials</a></li>
 </ul>
 
-        </div>
-      </div>
-    </nav>
-
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">chemsmart</a>
-      </nav>
-
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="Page navigation">
-  <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Tutorials</li>
-      <li class="wy-breadcrumbs-aside">
-            <a href="_sources/Tutorials.rst.txt" rel="nofollow"> View page source</a>
-      </li>
-  </ul>
-  <hr/>
 </div>
-          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-             
-  <section id="tutorials">
-<h1>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading"></a></h1>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="_sources/Tutorials.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="tutorials">
+<h1>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading">¶</a></h1>
 <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
 <section id="how-to-set-up-the-server-configuration-on-the-cluster">
-<h2>How to Set up the Server Configuration on the Cluster<a class="headerlink" href="#how-to-set-up-the-server-configuration-on-the-cluster" title="Link to this heading"></a></h2>
+<h2>How to Set up the Server Configuration on the Cluster<a class="headerlink" href="#how-to-set-up-the-server-configuration-on-the-cluster" title="Link to this heading">¶</a></h2>
 <p>Once the user has completed the installation, the server configuration on the cluster can be customized by modifying corresponding files.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -187,7 +311,7 @@
 </ul>
 </section>
 <section id="how-to-set-up-the-project-settings">
-<h2>How to Set up the Project Settings<a class="headerlink" href="#how-to-set-up-the-project-settings" title="Link to this heading"></a></h2>
+<h2>How to Set up the Project Settings<a class="headerlink" href="#how-to-set-up-the-project-settings" title="Link to this heading">¶</a></h2>
 <p>Chemsmart allows user to execute projects either locally or on a cluster. Users can refer to the following examples to configure projects as required.</p>
 <ul>
 <li><p>The <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/gaussian/</span></code> directory contains files related to gaussian project settings, which contain DFT functional and basis set etc, that is required to write the input file for running a gaussian job. For example, we can specify a test project settings in <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/gaussian/test.yaml</span></code> with the following information:</p>
@@ -256,10 +380,10 @@
 </ul>
 </section>
 <section id="how-to-submit-a-geometry-optimization-job-using-gaussian">
-<h2>How to Submit a Geometry Optimization Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-geometry-optimization-job-using-gaussian" title="Link to this heading"></a></h2>
+<h2>How to Submit a Geometry Optimization Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-geometry-optimization-job-using-gaussian" title="Link to this heading">¶</a></h2>
 <p>With setup completed, one is able to run different Gaussian jobs via command-line interface (CLI).</p>
 <section id="basic-geometry-optimization">
-<h3>Basic Geometry Optimization<a class="headerlink" href="#basic-geometry-optimization" title="Link to this heading"></a></h3>
+<h3>Basic Geometry Optimization<a class="headerlink" href="#basic-geometry-optimization" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit (and run) a geometry optimization job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; opt</span>
@@ -270,7 +394,7 @@
 </ul>
 </section>
 <section id="geometry-optimization-job-with-frozen-atoms">
-<h3>Geometry Optimization Job with Frozen Atoms<a class="headerlink" href="#geometry-optimization-job-with-frozen-atoms" title="Link to this heading"></a></h3>
+<h3>Geometry Optimization Job with Frozen Atoms<a class="headerlink" href="#geometry-optimization-job-with-frozen-atoms" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>If one wants to submit geometry optimization with frozen atoms in the molecule (such as <a class="reference external" href="https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it">https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it</a>), one can do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; opt -f &lt;indices_of_atoms_to_freeze&gt;</span>
@@ -288,7 +412,7 @@
 </div>
 </section>
 <section id="optimize-a-fixed-number-of-lowest-energy-conformers">
-<h3>Optimize a Fixed Number of Lowest Energy Conformers<a class="headerlink" href="#optimize-a-fixed-number-of-lowest-energy-conformers" title="Link to this heading"></a></h3>
+<h3>Optimize a Fixed Number of Lowest Energy Conformers<a class="headerlink" href="#optimize-a-fixed-number-of-lowest-energy-conformers" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To optimize a fixed number of lowest energy conformers, <code class="docutils literal notranslate"><span class="pre">n_conformers_to_opt</span></code>, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; crest -j opt -n &lt;n_conformers_to_opt&gt;</span>
@@ -302,7 +426,7 @@
 </div>
 </section>
 <section id="optimize-unique-structure-from-an-md-trajectory-file">
-<h3>Optimize Unique Structure from an MD Trajectory File<a class="headerlink" href="#optimize-unique-structure-from-an-md-trajectory-file" title="Link to this heading"></a></h3>
+<h3>Optimize Unique Structure from an MD Trajectory File<a class="headerlink" href="#optimize-unique-structure-from-an-md-trajectory-file" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To optimize unique structure from an MD trajectory file, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; saopt</span>
@@ -316,7 +440,7 @@
 </div>
 </section>
 <section id="optimize-a-fixed-number-of-lowest-energy-structures">
-<h3>Optimize a Fixed Number of Lowest Energy Structures<a class="headerlink" href="#optimize-a-fixed-number-of-lowest-energy-structures" title="Link to this heading"></a></h3>
+<h3>Optimize a Fixed Number of Lowest Energy Structures<a class="headerlink" href="#optimize-a-fixed-number-of-lowest-energy-structures" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To optimize a fixed number of lowest energy structures, <code class="docutils literal notranslate"><span class="pre">&lt;num_structures_to_opt&gt;</span></code>, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; saopt -n &lt;n_conformers_to_opt&gt;</span>
@@ -336,7 +460,7 @@
 </ul>
 </section>
 <section id="run-opt-or-modred-or-ts-conformers-from-crest-run-output">
-<h3>run opt or modred or ts conformers from CREST run output<a class="headerlink" href="#run-opt-or-modred-or-ts-conformers-from-crest-run-output" title="Link to this heading"></a></h3>
+<h3>run opt or modred or ts conformers from CREST run output<a class="headerlink" href="#run-opt-or-modred-or-ts-conformers-from-crest-run-output" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To run opt or modred or ts conformers from CREST run output, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; -c &lt;system_charge&gt; -m &lt;system_multiplicity&gt; crest -j opt</span>
@@ -360,9 +484,9 @@
 </section>
 </section>
 <section id="how-to-submit-a-transition-state-and-reaction-pathway-analysis-job-using-gaussian">
-<h2>How to Submit a Transition State and Reaction Pathway Analysis Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-transition-state-and-reaction-pathway-analysis-job-using-gaussian" title="Link to this heading"></a></h2>
+<h2>How to Submit a Transition State and Reaction Pathway Analysis Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-transition-state-and-reaction-pathway-analysis-job-using-gaussian" title="Link to this heading">¶</a></h2>
 <section id="transition-state-modredundant">
-<h3>Transition State Modredundant<a class="headerlink" href="#transition-state-modredundant" title="Link to this heading"></a></h3>
+<h3>Transition State Modredundant<a class="headerlink" href="#transition-state-modredundant" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit transition state modredundant job (frozen coordinates optimization), do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; modred -c &lt;list_of_coords_to_constraint&gt;</span>
@@ -376,7 +500,7 @@
 </ul>
 </section>
 <section id="transition-state-search">
-<h3>Transition State Search<a class="headerlink" href="#transition-state-search" title="Link to this heading"></a></h3>
+<h3>Transition State Search<a class="headerlink" href="#transition-state-search" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit transition state search job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; ts</span>
@@ -386,7 +510,7 @@
 </ul>
 </section>
 <section id="intrinsic-reaction-coordinate-irc">
-<h3>Intrinsic Reaction Coordinate (IRC)<a class="headerlink" href="#intrinsic-reaction-coordinate-irc" title="Link to this heading"></a></h3>
+<h3>Intrinsic Reaction Coordinate (IRC)<a class="headerlink" href="#intrinsic-reaction-coordinate-irc" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit intrinsic reaction coordinate (IRC) job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; irc</span>
@@ -396,7 +520,7 @@
 </ul>
 </section>
 <section id="relaxed-potential-energy-surface-pes-scan">
-<h3>Relaxed Potential Energy Surface (PES) Scan<a class="headerlink" href="#relaxed-potential-energy-surface-pes-scan" title="Link to this heading"></a></h3>
+<h3>Relaxed Potential Energy Surface (PES) Scan<a class="headerlink" href="#relaxed-potential-energy-surface-pes-scan" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit relaxed potential energy surface (PES) scan, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; scan -c &lt;list_of_coords_to_constraint&gt; -s &lt;scan_step_size&gt; -n &lt;num_scan_steps&gt;</span>
@@ -412,9 +536,9 @@
 </section>
 </section>
 <section id="how-to-submit-a-energy-and-thermodynamic-analysis-job-using-gaussian">
-<h2>How to Submit a Energy and Thermodynamic Analysis Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-energy-and-thermodynamic-analysis-job-using-gaussian" title="Link to this heading"></a></h2>
+<h2>How to Submit a Energy and Thermodynamic Analysis Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-energy-and-thermodynamic-analysis-job-using-gaussian" title="Link to this heading">¶</a></h2>
 <section id="single-point-job">
-<h3>Single Point Job<a class="headerlink" href="#single-point-job" title="Link to this heading"></a></h3>
+<h3>Single Point Job<a class="headerlink" href="#single-point-job" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit single point job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; sp</span>
@@ -429,7 +553,7 @@
 </ul>
 </section>
 <section id="distortion-interaction-activation-strain-di-as">
-<h3>Distortion-Interaction/Activation-Strain (DI-AS)<a class="headerlink" href="#distortion-interaction-activation-strain-di-as" title="Link to this heading"></a></h3>
+<h3>Distortion-Interaction/Activation-Strain (DI-AS)<a class="headerlink" href="#distortion-interaction-activation-strain-di-as" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To run distortion-interaction/activation-strain (DI-AS) job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;irc_output_file_for_dias&gt; dias -i &lt;indices_of_any_one_fragment&gt; -n &lt;number_of_every_n_step_along_irc_to_run&gt;</span>
@@ -444,9 +568,9 @@
 </section>
 </section>
 <section id="how-to-submit-a-electronic-structure-analysis-job-using-gaussian">
-<h2>How to Submit a Electronic Structure Analysis Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-electronic-structure-analysis-job-using-gaussian" title="Link to this heading"></a></h2>
+<h2>How to Submit a Electronic Structure Analysis Job Using Gaussian<a class="headerlink" href="#how-to-submit-a-electronic-structure-analysis-job-using-gaussian" title="Link to this heading">¶</a></h2>
 <section id="resp-charges-fitting">
-<h3>RESP Charges Fitting<a class="headerlink" href="#resp-charges-fitting" title="Link to this heading"></a></h3>
+<h3>RESP Charges Fitting<a class="headerlink" href="#resp-charges-fitting" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit RESP charges fitting job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; resp</span>
@@ -461,7 +585,7 @@
 </div>
 </section>
 <section id="non-covalent-interaction-job">
-<h3>Non-covalent Interaction Job<a class="headerlink" href="#non-covalent-interaction-job" title="Link to this heading"></a></h3>
+<h3>Non-covalent Interaction Job<a class="headerlink" href="#non-covalent-interaction-job" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>To submit non-covalent interaction job, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;project&gt; -f &lt;input_file&gt; nci</span>
@@ -472,9 +596,9 @@
 </section>
 </section>
 <section id="how-to-submit-custom-job-submission-using-gaussian">
-<h2>How to Submit Custom Job Submission Using Gaussian<a class="headerlink" href="#how-to-submit-custom-job-submission-using-gaussian" title="Link to this heading"></a></h2>
+<h2>How to Submit Custom Job Submission Using Gaussian<a class="headerlink" href="#how-to-submit-custom-job-submission-using-gaussian" title="Link to this heading">¶</a></h2>
 <section id="run-a-job-with-pre-prepared-gaussian-input-file-directly">
-<h3>Run a Job with Pre-prepared Gaussian Input File Directly<a class="headerlink" href="#run-a-job-with-pre-prepared-gaussian-input-file-directly" title="Link to this heading"></a></h3>
+<h3>Run a Job with Pre-prepared Gaussian Input File Directly<a class="headerlink" href="#run-a-job-with-pre-prepared-gaussian-input-file-directly" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly using:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;any_project_settings&gt; -f &lt;input_file&gt; com</span>
@@ -484,7 +608,7 @@
 </ul>
 </section>
 <section id="run-a-custom-job">
-<h3>Run a Custom Job<a class="headerlink" href="#run-a-custom-job" title="Link to this heading"></a></h3>
+<h3>Run a Custom Job<a class="headerlink" href="#run-a-custom-job" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Generally, if a user wants to run job that is currently not present in our package, one can run custom job using:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s &lt;server_name&gt; gaussian -p &lt;any_project_settings&gt; -f &lt;input_file&gt; userjob -r &lt;user_defined_gaussian_route&gt; -a &lt;appending_information_as_string_at_the_end_of_input_file_after_coordinates_specification&gt;</span>
@@ -499,9 +623,9 @@
 </section>
 </section>
 <section id="how-to-use-general-cli-options-for-all-jobs">
-<h2>How to Use General CLI Options for All Jobs<a class="headerlink" href="#how-to-use-general-cli-options-for-all-jobs" title="Link to this heading"></a></h2>
+<h2>How to Use General CLI Options for All Jobs<a class="headerlink" href="#how-to-use-general-cli-options-for-all-jobs" title="Link to this heading">¶</a></h2>
 <section id="specify-name-of-the-file">
-<h3>Specify Name of the File<a class="headerlink" href="#specify-name-of-the-file" title="Link to this heading"></a></h3>
+<h3>Specify Name of the File<a class="headerlink" href="#specify-name-of-the-file" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Users can specify the name of the file to be created for the job, without file extension, they want to run by using the option <code class="docutils literal notranslate"><span class="pre">-l</span></code>, e.g.:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -l custom_job_name opt</span>
@@ -512,7 +636,7 @@
 </ul>
 </section>
 <section id="append-string-to-input-file-name">
-<h3>Append String to Input File Name<a class="headerlink" href="#append-string-to-input-file-name" title="Link to this heading"></a></h3>
+<h3>Append String to Input File Name<a class="headerlink" href="#append-string-to-input-file-name" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Users can also simply append a string to the base name of the filename supplied, e.g.:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -a append_string ts</span>
@@ -523,7 +647,7 @@
 </ul>
 </section>
 <section id="modify-the-charge-and-multiplicity">
-<h3>Modify the Charge and Multiplicity<a class="headerlink" href="#modify-the-charge-and-multiplicity" title="Link to this heading"></a></h3>
+<h3>Modify the Charge and Multiplicity<a class="headerlink" href="#modify-the-charge-and-multiplicity" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Users can also modify the charge and multiplicity from the CLI, e.g.:</p>
 <p>Modify the charge in <code class="docutils literal notranslate"><span class="pre">test.com</span></code> to charge of +1 in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_charge.com</span></code> via:</p>
@@ -546,7 +670,7 @@
 </div>
 </section>
 <section id="modify-the-functional-and-basis">
-<h3>Modify the Functional and Basis<a class="headerlink" href="#modify-the-functional-and-basis" title="Link to this heading"></a></h3>
+<h3>Modify the Functional and Basis<a class="headerlink" href="#modify-the-functional-and-basis" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Users can also modify the functional and basis from the CLI to differ from those in project settings, e.g.:</p>
 <p>Modify the functional to <code class="docutils literal notranslate"><span class="pre">b3lyp</span></code> in the newly created input file <code class="docutils literal notranslate"><span class="pre">test_functional.com</span></code> via:</p>
@@ -561,7 +685,7 @@
 </ul>
 </section>
 <section id="specify-additional-optimization-options">
-<h3>Specify Additional Optimization Options<a class="headerlink" href="#specify-additional-optimization-options" title="Link to this heading"></a></h3>
+<h3>Specify Additional Optimization Options<a class="headerlink" href="#specify-additional-optimization-options" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Users can also specify additional optimization options for opt=() in the route, for example,</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -o maxstep=8,maxsize=12 -a opt_options opt</span>
@@ -572,7 +696,7 @@
 </ul>
 </section>
 <section id="add-in-additional-parameters">
-<h3>Add in Additional Parameters<a class="headerlink" href="#add-in-additional-parameters" title="Link to this heading"></a></h3>
+<h3>Add in Additional Parameters<a class="headerlink" href="#add-in-additional-parameters" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>Users can also add in additional parameters used in the route, e.g.:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com --r nosymm -a route_params opt</span>
@@ -583,7 +707,7 @@
 </ul>
 </section>
 <section id="select-the-particular-structure-in-file">
-<h3>Select the Particular Structure in file<a class="headerlink" href="#select-the-particular-structure-in-file" title="Link to this heading"></a></h3>
+<h3>Select the Particular Structure in file<a class="headerlink" href="#select-the-particular-structure-in-file" title="Link to this heading">¶</a></h3>
 <ul>
 <li><p>If one has more than one structure in the supplied file for input preparation, one can select the particular structure to perform job on by using the <code class="docutils literal notranslate"><span class="pre">-i/--index</span></code> option, e.g.:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt</span>
@@ -595,7 +719,7 @@
 </section>
 </section>
 <section id="how-to-submit-jobs-using-orca">
-<h2>How to Submit Jobs Using ORCA<a class="headerlink" href="#how-to-submit-jobs-using-orca" title="Link to this heading"></a></h2>
+<h2>How to Submit Jobs Using ORCA<a class="headerlink" href="#how-to-submit-jobs-using-orca" title="Link to this heading">¶</a></h2>
 <p>Similar commands exists for ORCA job submssions.</p>
 <ul>
 <li><p>One can run</p>
@@ -610,34 +734,112 @@
 </section>
 </section>
 
-
-           </div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          <a class="prev-page" href="Installation.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Installation</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Xinglong Zhang
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="Installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
     </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Tutorials</a><ul>
+<li><a class="reference internal" href="#how-to-set-up-the-server-configuration-on-the-cluster">How to Set up the Server Configuration on the Cluster</a></li>
+<li><a class="reference internal" href="#how-to-set-up-the-project-settings">How to Set up the Project Settings</a></li>
+<li><a class="reference internal" href="#how-to-submit-a-geometry-optimization-job-using-gaussian">How to Submit a Geometry Optimization Job Using Gaussian</a><ul>
+<li><a class="reference internal" href="#basic-geometry-optimization">Basic Geometry Optimization</a></li>
+<li><a class="reference internal" href="#geometry-optimization-job-with-frozen-atoms">Geometry Optimization Job with Frozen Atoms</a></li>
+<li><a class="reference internal" href="#optimize-a-fixed-number-of-lowest-energy-conformers">Optimize a Fixed Number of Lowest Energy Conformers</a></li>
+<li><a class="reference internal" href="#optimize-unique-structure-from-an-md-trajectory-file">Optimize Unique Structure from an MD Trajectory File</a></li>
+<li><a class="reference internal" href="#optimize-a-fixed-number-of-lowest-energy-structures">Optimize a Fixed Number of Lowest Energy Structures</a></li>
+<li><a class="reference internal" href="#run-opt-or-modred-or-ts-conformers-from-crest-run-output">run opt or modred or ts conformers from CREST run output</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-to-submit-a-transition-state-and-reaction-pathway-analysis-job-using-gaussian">How to Submit a Transition State and Reaction Pathway Analysis Job Using Gaussian</a><ul>
+<li><a class="reference internal" href="#transition-state-modredundant">Transition State Modredundant</a></li>
+<li><a class="reference internal" href="#transition-state-search">Transition State Search</a></li>
+<li><a class="reference internal" href="#intrinsic-reaction-coordinate-irc">Intrinsic Reaction Coordinate (IRC)</a></li>
+<li><a class="reference internal" href="#relaxed-potential-energy-surface-pes-scan">Relaxed Potential Energy Surface (PES) Scan</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-to-submit-a-energy-and-thermodynamic-analysis-job-using-gaussian">How to Submit a Energy and Thermodynamic Analysis Job Using Gaussian</a><ul>
+<li><a class="reference internal" href="#single-point-job">Single Point Job</a></li>
+<li><a class="reference internal" href="#distortion-interaction-activation-strain-di-as">Distortion-Interaction/Activation-Strain (DI-AS)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-to-submit-a-electronic-structure-analysis-job-using-gaussian">How to Submit a Electronic Structure Analysis Job Using Gaussian</a><ul>
+<li><a class="reference internal" href="#resp-charges-fitting">RESP Charges Fitting</a></li>
+<li><a class="reference internal" href="#non-covalent-interaction-job">Non-covalent Interaction Job</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-to-submit-custom-job-submission-using-gaussian">How to Submit Custom Job Submission Using Gaussian</a><ul>
+<li><a class="reference internal" href="#run-a-job-with-pre-prepared-gaussian-input-file-directly">Run a Job with Pre-prepared Gaussian Input File Directly</a></li>
+<li><a class="reference internal" href="#run-a-custom-job">Run a Custom Job</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-to-use-general-cli-options-for-all-jobs">How to Use General CLI Options for All Jobs</a><ul>
+<li><a class="reference internal" href="#specify-name-of-the-file">Specify Name of the File</a></li>
+<li><a class="reference internal" href="#append-string-to-input-file-name">Append String to Input File Name</a></li>
+<li><a class="reference internal" href="#modify-the-charge-and-multiplicity">Modify the Charge and Multiplicity</a></li>
+<li><a class="reference internal" href="#modify-the-functional-and-basis">Modify the Functional and Basis</a></li>
+<li><a class="reference internal" href="#specify-additional-optimization-options">Specify Additional Optimization Options</a></li>
+<li><a class="reference internal" href="#add-in-additional-parameters">Add in Additional Parameters</a></li>
+<li><a class="reference internal" href="#select-the-particular-structure-in-file">Select the Particular Structure in file</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-to-submit-jobs-using-orca">How to Submit Jobs Using ORCA</a></li>
+</ul>
+</li>
+</ul>
 
-  <hr/>
-
-  <div role="contentinfo">
-    <p>&#169; Copyright 2025, Xinglong Zhang.</p>
-  </div>
-
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
-
-</footer>
+          </div>
         </div>
       </div>
-    </section>
+      
+      
+    </aside>
   </div>
-  <script>
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script> 
-
-</body>
+</div><script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
 </html>
