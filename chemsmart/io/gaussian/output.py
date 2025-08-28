@@ -179,13 +179,26 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
+        num_structures_to_use = min(
+            len(orientations),
+            len(self.energies) if self.energies is not None else 0,
+            len(self.forces) if self.forces is not None else 0,
+        )
         # Remove first structure if it's a link job
-        if getattr(self, "is_link", False):
-            orientations.pop(0)
+        if self.is_link:
             if self.job_type == "sp":
-                energies = self.energies[2:]
-            elif self.job_type == "opt" or self.job_type == "ts":
+                orientations = [orientations[-1]]
+                energies = [self.energies[-1]]
+            # Remove the duplicate structure of the optimization section if it's a successful link opt job
+            elif self.job_type == "opt":
+                orientations = orientations[1:]
+                if self.normal_termination:
+                    orientations.pop(-2)
                 energies = self.energies[1:]
+            else:
+                orientations = orientations[1:]
+                energies = self.energies[1:]
+
         else:
             energies = self.energies
             clean_duplicate_structure(orientations)
@@ -193,7 +206,6 @@ class Gaussian16Output(GaussianFileMixin):
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
         # Handle normal termination
-        num_structures_to_use = self._get_num_structures_to_use()
         if self.normal_termination:
             all_structures = create_molecule_list(
                 orientations,
@@ -205,7 +217,6 @@ class Gaussian16Output(GaussianFileMixin):
                 self.multiplicity,
                 frozen_atoms,
                 self.list_of_pbc_conditions,
-                num_structures=num_structures_to_use,
             )
         else:
             # Handle abnormal termination
@@ -221,7 +232,6 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
-        num_structures = len(all_structures)
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
@@ -232,20 +242,10 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug(f"Total number of structures located: {num_structures}")
+        logger.debug(
+            f"Total number of structures located: {len(all_structures)}"
+        )
         return all_structures
-
-    def _get_num_structures_to_use(self):
-        num_structures_to_use = []
-        if self.standard_orientations:
-            num_structures_to_use.append(len(self.standard_orientations))
-        if self.energies:
-            num_structures_to_use.append(len(self.energies))
-        if self.forces:
-            if self.job_type == "link":
-                self.forces.insert(0, None)
-            num_structures_to_use.append(len(self.forces))
-        return min(num_structures_to_use)
 
     @cached_property
     def optimized_structure(self):

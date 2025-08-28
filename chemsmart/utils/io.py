@@ -19,7 +19,6 @@ def create_molecule_list(
 ):
     """Helper function to create Molecule objects."""
     num_structures = num_structures or len(orientations)
-    print(energies, num_structures)
 
     return [
         Molecule(

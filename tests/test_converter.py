@@ -160,7 +160,7 @@ class TestConverter:
         assert mol.chemical_formula == "C19H12F3I2N3O"
         # assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
 
-    def test_convert_single_link__opt_logfile_to_com(
+    def test_convert_single_link_opt_logfile_to_com(
         self, tmpdir, gaussian_link_opt_outputfile
     ):
         # copy file to tmpdir
