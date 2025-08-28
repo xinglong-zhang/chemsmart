@@ -62,7 +62,13 @@ Welcome to chemsmart’s documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for Pymol Jobs
+   :caption: Tutorials for ThermoChem Jobs
+
+   thermochemistry_runthermochemistryjobs
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for PyMOL Jobs
 
    mol_generalCLIforallmoljobs
    mol_runbasicvisualizationjobs
@@ -70,13 +76,17 @@ Welcome to chemsmart’s documentation!
    mol_runelectronicstructureanalysisjobs
    mol_runInteractionanalysisjobs
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials for NCIPLOT Jobs
+
+   nciplot_runnciplotjobs
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for ThermoChem Jobs
+   :caption: Tutorials for Auxiliary Scripts
 
-   thermochemistry_runthermochemistryjobs
-
+   scripts_overview
 
 Indices and tables
 ==================
