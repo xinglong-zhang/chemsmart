@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Submit Conformational Sampling &amp; Dynamics Jobs &mdash; chemsmart 0.1.0 documentation</title>
+  <title>Submit Conformational Sampling &amp; Dynamics Jobs &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -143,13 +143,16 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
+contact our team if you have questions or feedback.</p>
 <section id="submit-conformational-sampling-dynamics-jobs">
 <h1>Submit Conformational Sampling &amp; Dynamics Jobs<a class="headerlink" href="#submit-conformational-sampling-dynamics-jobs" title="Link to this heading"></a></h1>
-<p>ChemSmart provides powerful tools for conformational sampling and molecular dynamics calculations using Gaussian. This section covers CREST conformational searches and trajectory analysis workflows.</p>
+<p>ChemSmart provides powerful tools for conformational sampling and molecular dynamics calculations using Gaussian. This
+section covers CREST conformational searches and trajectory analysis workflows.</p>
 <section id="crest-jobs">
 <h2>CREST jobs<a class="headerlink" href="#crest-jobs" title="Link to this heading"></a></h2>
-<p>CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy conformers. In chemsmart, the crest job allow you to combine the crest program with gaussian.</p>
+<p>CREST (Conformer-Rotamer Ensemble Sampling Tool) is used for systematic conformational searches to find low-energy
+conformers. In chemsmart, the crest job allow you to combine the crest program with gaussian.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] crest -j &lt;jobtype&gt; [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
@@ -205,7 +208,8 @@
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Typically, the <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code> is a list of all conformers obtained by CREST program and named <code class="docutils literal notranslate"><span class="pre">crest_conformers.xyz</span></code>.</p>
+<p>Typically, the <code class="docutils literal notranslate"><span class="pre">&lt;input_file&gt;</span></code> is a list of all conformers obtained by CREST program and named
+<code class="docutils literal notranslate"><span class="pre">crest_conformers.xyz</span></code>.</p>
 </div>
 </section>
 <section id="examples">
@@ -221,13 +225,16 @@
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need to be specified.</p>
+<p>If the job terminates before <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are all optimized, perhaps due to walltime limit, resubmitting
+the job will continue crest opt job until all <code class="docutils literal notranslate"><span class="pre">&lt;n_conformers_to_opt&gt;</span></code> are optimized. Charge and multiplicity need
+to be specified.</p>
 </div>
 </section>
 </section>
 <section id="trajectory-traj-link-analysis">
 <h2>Trajectory/Traj-link Analysis<a class="headerlink" href="#trajectory-traj-link-analysis" title="Link to this heading"></a></h2>
-<p>Trajectory analysis allows you to process molecular dynamics trajectories and extract specific structures for further analysis.</p>
+<p>Trajectory analysis allows you to process molecular dynamics trajectories and extract specific structures for further
+analysis.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] traj -j &lt;jobtype&gt; [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
@@ -257,7 +264,8 @@
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-x,</span> <span class="pre">--proportion-structures-to-use</span></code></p></td>
 <td><p>float</p></td>
-<td><p>Proportion of structures from the end of trajectory to use. Values ranges from 0.0 &lt; x &lt;= 1.0. Defaults to 0.1 (last 10% of structures)</p></td>
+<td><p>Proportion of structures from the end of trajectory to use. Values ranges from 0.0 &lt; x &lt;= 1.0. Defaults to 0.1
+(last 10% of structures)</p></td>
 </tr>
 </tbody>
 </table>
@@ -308,7 +316,8 @@
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-g,</span> <span class="pre">--grouping-strategy</span></code></p></td>
 <td><p>string</p></td>
-<td><p>Grouping strategy to use for grouping. Options: “rmsd”, “tanimoto”, “formula”, “isomorphism”, “connectivity” (default = “rmsd”)</p></td>
+<td><p>Grouping strategy to use for grouping. Options: “rmsd”, “tanimoto”, “formula”, “isomorphism”, “connectivity”
+(default = “rmsd”)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-i,</span> <span class="pre">--ignore-hydrogens</span></code></p></td>
 <td><p>bool</p></td>

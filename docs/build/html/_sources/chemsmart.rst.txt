@@ -1,8 +1,10 @@
-chemsmart package
-=================
+###################
+ chemsmart package
+###################
 
-Subpackages
------------
+*************
+ Subpackages
+*************
 
 .. toctree::
    :maxdepth: 4
@@ -10,8 +12,9 @@ Subpackages
    chemsmart.cli
    chemsmart.settings
 
-Module contents
----------------
+*****************
+ Module contents
+*****************
 
 .. automodule:: chemsmart
    :members:

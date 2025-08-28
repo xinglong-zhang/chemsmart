@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Submit Transition State Search Jobs &mdash; chemsmart 0.1.0 documentation</title>
+  <title>Submit Transition State Search Jobs &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -148,10 +148,12 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
+contact our team if you have questions or feedback.</p>
 <section id="submit-transition-state-search-jobs">
 <h1>Submit Transition State Search Jobs<a class="headerlink" href="#submit-transition-state-search-jobs" title="Link to this heading"></a></h1>
-<p>ChemSmart provides comprehensive transition state search capabilities using Gaussian. This section covers transition state optimization, IRC calculations, and potential energy surface scanning.</p>
+<p>ChemSmart provides comprehensive transition state search capabilities using Gaussian. This section covers transition
+state optimization, IRC calculations, and potential energy surface scanning.</p>
 <section id="transition-state-optimization">
 <h2>Transition State Optimization<a class="headerlink" href="#transition-state-optimization" title="Link to this heading"></a></h2>
 <p>Run transition state optimization to find saddle points on the potential energy surface.</p>
@@ -209,7 +211,8 @@
 </section>
 <section id="modified-redundant-coordinate-modred-jobs">
 <h2>Modified Redundant Coordinate (Modred) Jobs<a class="headerlink" href="#modified-redundant-coordinate-modred-jobs" title="Link to this heading"></a></h2>
-<p>Run modified redundant coordinate optimization for constrained geometry optimization and transition state searches using the <code class="docutils literal notranslate"><span class="pre">modred</span></code> command.</p>
+<p>Run modified redundant coordinate optimization for constrained geometry optimization and transition state searches using
+the <code class="docutils literal notranslate"><span class="pre">modred</span></code> command.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] modred [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
@@ -240,7 +243,8 @@
 <h3>Basic Usage<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
 <p><strong>Defining Coordinate Constraints</strong></p>
 <ul>
-<li><p>to submit a modredundant job with constraints on bond between atom 4 and atom 17 and on bond between atom 9 and atom 10, do:</p>
+<li><p>to submit a modredundant job with constraints on bond between atom 4 and atom 17 and on bond between atom 9 and atom
+10, do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17]]</span>
 </pre></div>
 </div>
@@ -328,6 +332,10 @@
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] scan [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Scanning coordinates, step size and number of steps are all required!</p>
+</div>
 <section id="scan-specific-options">
 <h3>Scan-Specific OPTIONS<a class="headerlink" href="#scan-specific-options" title="Link to this heading"></a></h3>
 <table class="docutils align-default" id="id8">
@@ -363,7 +371,8 @@
 <h3>Basic Usage<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
 <p><strong>Basic coordinate scan</strong></p>
 <ul>
-<li><p>For example, to submit the PES scan job with along bond between atom 2 and atom 3 for 10 steps with 0.1Å increment per step:</p>
+<li><p>For example, to submit the PES scan job with along bond between atom 2 and atom 3 for 10 steps with 0.1Å increment
+per step:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10</span>
 </pre></div>
 </div>

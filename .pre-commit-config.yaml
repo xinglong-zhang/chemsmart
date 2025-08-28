@@ -22,6 +22,7 @@ repos:
         files: ''
         pass_filenames: false
         always_run: true 
+
   - repo: https://github.com/pycqa/doc8
     rev: 0.11.2
     hooks:
@@ -32,3 +33,11 @@ repos:
     rev: v6.2.0
     hooks:
       - id: rstcheck
+
+
+  - repo: https://github.com/dzhu/rstfmt
+    rev: v0.0.14
+    hooks:
+      - id: rstfmt
+        args: ["-w", "120"]
+

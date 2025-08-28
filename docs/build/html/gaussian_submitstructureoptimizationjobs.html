@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Submit Structure Optimization Jobs &mdash; chemsmart 0.1.0 documentation</title>
+  <title>Submit Structure Optimization Jobs &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -137,17 +137,21 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
+contact our team if you have questions or feedback.</p>
 <section id="submit-structure-optimization-jobs">
 <h1>Submit Structure Optimization Jobs<a class="headerlink" href="#submit-structure-optimization-jobs" title="Link to this heading"></a></h1>
-<p>ChemSmart provides comprehensive structure optimization capabilities using Gaussian. This section covers basic geometry optimization, constrained optimization with frozen atoms, modified redundant coordinate optimization, and CREST optimization workflows.</p>
+<p>ChemSmart provides comprehensive structure optimization capabilities using Gaussian. This section covers basic geometry
+optimization, constrained optimization with frozen atoms, modified redundant coordinate optimization, and CREST
+optimization workflows.</p>
 <section id="geometry-optimization">
 <h2>Geometry Optimization<a class="headerlink" href="#geometry-optimization" title="Link to this heading"></a></h2>
 <p>Run basic geometry optimization to find the minimum energy structure using the <code class="docutils literal notranslate"><span class="pre">opt</span></code> command.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt</span>
 </pre></div>
 </div>
-<p>Run constrained optimization with specific atoms frozen in place using the <code class="docutils literal notranslate"><span class="pre">opt</span></code> command with frozen atom options (such as <a class="reference external" href="https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it">https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it</a>).</p>
+<p>Run constrained optimization with specific atoms frozen in place using the <code class="docutils literal notranslate"><span class="pre">opt</span></code> command with frozen atom options
+(such as <a class="reference external" href="https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it">https://www.researchgate.net/post/Freezing-atoms-in-gaussian-how-to-do-it</a>).</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] opt [SUBCMD_OPTIONS]</span>
 </pre></div>
 </div>
@@ -199,11 +203,13 @@
 <h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
 <p><strong>optimize structure directly from a Gaussian optimization output file with different charge and multiplicity</strong></p>
 <ul>
-<li><p>After a Gaussian optimization job is done, one can use the output file from the previous optimization job to run a new optimization with different charge and multiplicity, e.g.:</p>
+<li><p>After a Gaussian optimization job is done, one can use the output file from the previous optimization job to run a
+new optimization with different charge and multiplicity, e.g.:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s SLURM gaussian -p project1 -f k_atom_opt.log -c 1 -m 1 -l k_cation_opt opt</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">-c</span></code> and <code class="docutils literal notranslate"><span class="pre">-m</span></code> will override the charge and multiplicity in the original Gaussian log file (from K_atom to K_cation).</p>
+<p><code class="docutils literal notranslate"><span class="pre">-c</span></code> and <code class="docutils literal notranslate"><span class="pre">-m</span></code> will override the charge and multiplicity in the original Gaussian log file (from K_atom to
+K_cation).</p>
 </li>
 </ul>
 </section>

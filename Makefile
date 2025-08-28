@@ -204,7 +204,7 @@ docs-fmt: ## Auto-format reStructuredText with rstfmt.
 	$(ENV_PREFIX)pip install -q rstfmt
 	@echo "==> Running rstfmt..."
 	# Format recursively; --in-place edits files
-	$(ENV_PREFIX)rstfmt --in-place --line-length 120 docs/source
+	$(ENV_PREFIX)rstfmt -w 120 docs/source
 
 docs: ## Build documentation (HTML).
 	$(MAKE) -C docs html

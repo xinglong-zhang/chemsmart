@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Submit Electronic Structure Properties &amp; Analyses Jobs &mdash; chemsmart 0.1.0 documentation</title>
+  <title>Submit Electronic Structure Properties &amp; Analyses Jobs &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -155,10 +155,12 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
+contact our team if you have questions or feedback.</p>
 <section id="submit-electronic-structure-properties-analyses-jobs">
 <h1>Submit Electronic Structure Properties &amp; Analyses Jobs<a class="headerlink" href="#submit-electronic-structure-properties-analyses-jobs" title="Link to this heading"></a></h1>
-<p>ChemSmart provides comprehensive electronic structure analysis capabilities using Gaussian. This section covers single point calculations, excited state properties, bond analysis, and molecular interaction studies.</p>
+<p>ChemSmart provides comprehensive electronic structure analysis capabilities using Gaussian. This section covers single
+point calculations, excited state properties, bond analysis, and molecular interaction studies.</p>
 <section id="single-point-jobs">
 <h2>Single Point Jobs<a class="headerlink" href="#single-point-jobs" title="Link to this heading"></a></h2>
 <p>Run single point energy calculations on optimized geometries.</p>
@@ -216,7 +218,8 @@
 </div>
 </div></blockquote>
 <ul>
-<li><p>For single-point job that user wants to test which uses different solvent model and id from that specified in <code class="docutils literal notranslate"><span class="pre">&lt;project&gt;</span></code>, one can do:</p>
+<li><p>For single-point job that user wants to test which uses different solvent model and id from that specified in
+<code class="docutils literal notranslate"><span class="pre">&lt;project&gt;</span></code>, one can do:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -sm cpcm -si toluene</span>
 </pre></div>
 </div>
@@ -232,7 +235,8 @@
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s cu gaussian -p project1 -f ethanol_opt.log -c 0 -m 1 sp --remove-solvent</span>
 </pre></div>
 </div>
-<p>output file will be named as <code class="docutils literal notranslate"><span class="pre">ethanol_opt_gas_phase.log</span></code> and use no solvent model. Except from this command, the output file will be named as <code class="docutils literal notranslate"><span class="pre">ethanol_opt_&lt;solv</span> <span class="pre">model&gt;_&lt;solv</span> <span class="pre">id&gt;.log</span></code></p>
+<p>output file will be named as <code class="docutils literal notranslate"><span class="pre">ethanol_opt_gas_phase.log</span></code> and use no solvent model. Except from this command, the
+output file will be named as <code class="docutils literal notranslate"><span class="pre">ethanol_opt_&lt;solv</span> <span class="pre">model&gt;_&lt;solv</span> <span class="pre">id&gt;.log</span></code></p>
 </li>
 </ul>
 </section>
@@ -325,7 +329,8 @@
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This command will create an input file with fixed route for RESP job: <code class="docutils literal notranslate"><span class="pre">HF/6-31+G(d)</span> <span class="pre">SCF=Tight</span> <span class="pre">Pop=MK</span> <span class="pre">IOp(6/33=2,6/41=10,6/42=17,6/50=1)</span></code></p>
+<p>This command will create an input file with fixed route for RESP job: <code class="docutils literal notranslate"><span class="pre">HF/6-31+G(d)</span> <span class="pre">SCF=Tight</span> <span class="pre">Pop=MK</span>
+<span class="pre">IOp(6/33=2,6/41=10,6/42=17,6/50=1)</span></code></p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">------------------------------------------------------------------</span>
 <span class="gp"># </span>HF/6-31+G<span class="o">(</span>d<span class="o">)</span><span class="w"> </span><span class="nv">SCF</span><span class="o">=</span>Tight<span class="w"> </span><span class="nv">Pop</span><span class="o">=</span>MK<span class="w"> </span>IOp<span class="o">(</span><span class="m">6</span>/33<span class="o">=</span><span class="m">2</span>,6/41<span class="o">=</span><span class="m">10</span>,6/42<span class="o">=</span><span class="m">17</span>,6/50<span class="o">=</span><span class="m">1</span><span class="o">)</span>
 <span class="go">------------------------------------------------------------------</span>

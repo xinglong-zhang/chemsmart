@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Submit Other Gaussian Jobs &mdash; chemsmart 0.1.0 documentation</title>
+  <title>Submit Other Gaussian Jobs &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -141,10 +141,12 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
+contact our team if you have questions or feedback.</p>
 <section id="submit-other-gaussian-jobs">
 <h1>Submit Other Gaussian Jobs<a class="headerlink" href="#submit-other-gaussian-jobs" title="Link to this heading"></a></h1>
-<p>ChemSmart provides additional Gaussian job capabilities including multi-step link jobs, custom user-defined calculations, and direct execution of Gaussian input files.</p>
+<p>ChemSmart provides additional Gaussian job capabilities including multi-step link jobs, custom user-defined
+calculations, and direct execution of Gaussian input files.</p>
 <section id="link-jobs">
 <h2>Link Jobs<a class="headerlink" href="#link-jobs" title="Link to this heading"></a></h2>
 <p>Run multi-step Gaussian calculations with linked job steps.</p>
@@ -258,7 +260,8 @@
 <h3>Basic Usage<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
 <p><strong>Custom job with user-defined route</strong>:</p>
 <ul>
-<li><p>to create an input file named <code class="docutils literal notranslate"><span class="pre">user_defined_job.com</span></code> with user-specified route <code class="docutils literal notranslate"><span class="pre">mnr</span> <span class="pre">functional/basis</span> <span class="pre">solvent</span></code> etc and <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">F\nA</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">3</span> <span class="pre">F</span></code> at the end of the input file after the specification of coordinates, run</p>
+<li><p>to create an input file named <code class="docutils literal notranslate"><span class="pre">user_defined_job.com</span></code> with user-specified route <code class="docutils literal notranslate"><span class="pre">mnr</span> <span class="pre">functional/basis</span> <span class="pre">solvent</span></code> etc
+and <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">F\nA</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">3</span> <span class="pre">F</span></code> at the end of the input file after the specification of coordinates, run</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob -r &#39;mnr functional/basis solvent etc&#39; -a &#39;B 1 2 F\nA 1 2 3 F&#39;</span>
 </pre></div>
 </div>
@@ -268,7 +271,8 @@
 </section>
 <section id="direct-input-file-execution">
 <h2>Direct Input File Execution<a class="headerlink" href="#direct-input-file-execution" title="Link to this heading"></a></h2>
-<p>If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly without modifications.</p>
+<p>If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly without
+modifications.</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] com</span>
 </pre></div>
 </div>
@@ -279,8 +283,7 @@
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">chemsmart sub -s share gaussian -p test -f input_file.com com</span>
 </pre></div>
 </div>
-<p>or for input file with .gjf extension
-.. code-block:: console</p>
+<p>or for input file with .gjf extension .. code-block:: console</p>
 <blockquote>
 <div><p>chemsmart sub -s share gaussian -p test -f input_file.gjf com</p>
 </div></blockquote>

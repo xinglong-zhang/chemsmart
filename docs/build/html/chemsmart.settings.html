@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>chemsmart.settings package &mdash; chemsmart 0.1.0 documentation</title>
+  <title>chemsmart.settings package &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -131,13 +131,13 @@
 <span id="chemsmart-settings-executable-module"></span><h2>chemsmart.settings.executable module<a class="headerlink" href="#module-chemsmart.settings.executable" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.Executable">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">Executable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_run</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conda_env</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modules</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scripts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">envars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.Executable" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">Executable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_run</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conda_env</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modules</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scripts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">envars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#Executable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.Executable" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryMixin</span></code></p>
 <p>Abstract base class for obtaining program executable.
 Given program type, the executable will be specified in server.yaml file.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.Executable.PROGRAM">
-<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#chemsmart.settings.executable.Executable.PROGRAM" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#chemsmart.settings.executable.Executable.PROGRAM" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -152,7 +152,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.Executable.from_servername">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_servername</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">servername</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.Executable.from_servername" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_servername</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">servername</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#Executable.from_servername"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.Executable.from_servername" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -164,48 +164,48 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.GaussianExecutable">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">GaussianExecutable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.GaussianExecutable" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">GaussianExecutable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#GaussianExecutable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.GaussianExecutable" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.executable.Executable" title="chemsmart.settings.executable.Executable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Executable</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.GaussianExecutable.PROGRAM">
-<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'GAUSSIAN'</span></em><a class="headerlink" href="#chemsmart.settings.executable.GaussianExecutable.PROGRAM" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'GAUSSIAN'</span></em><a class="headerlink" href="#chemsmart.settings.executable.GaussianExecutable.PROGRAM" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.GaussianExecutable.get_executable">
-<span class="sig-name descname"><span class="pre">get_executable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.GaussianExecutable.get_executable" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_executable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#GaussianExecutable.get_executable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.GaussianExecutable.get_executable" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.NCIPLOTExecutable">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">NCIPLOTExecutable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.NCIPLOTExecutable" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">NCIPLOTExecutable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#NCIPLOTExecutable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.NCIPLOTExecutable" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.executable.Executable" title="chemsmart.settings.executable.Executable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Executable</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.NCIPLOTExecutable.PROGRAM">
-<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'NCIPLOT'</span></em><a class="headerlink" href="#chemsmart.settings.executable.NCIPLOTExecutable.PROGRAM" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'NCIPLOT'</span></em><a class="headerlink" href="#chemsmart.settings.executable.NCIPLOTExecutable.PROGRAM" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.NCIPLOTExecutable.get_executable">
-<span class="sig-name descname"><span class="pre">get_executable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.NCIPLOTExecutable.get_executable" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_executable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#NCIPLOTExecutable.get_executable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.NCIPLOTExecutable.get_executable" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.ORCAExecutable">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">ORCAExecutable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.ORCAExecutable" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.executable.</span></span><span class="sig-name descname"><span class="pre">ORCAExecutable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">executable_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#ORCAExecutable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.ORCAExecutable" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.executable.Executable" title="chemsmart.settings.executable.Executable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Executable</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.ORCAExecutable.PROGRAM">
-<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ORCA'</span></em><a class="headerlink" href="#chemsmart.settings.executable.ORCAExecutable.PROGRAM" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">PROGRAM</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ORCA'</span></em><a class="headerlink" href="#chemsmart.settings.executable.ORCAExecutable.PROGRAM" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.executable.ORCAExecutable.get_executable">
-<span class="sig-name descname"><span class="pre">get_executable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.executable.ORCAExecutable.get_executable" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_executable</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/executable.html#ORCAExecutable.get_executable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.executable.ORCAExecutable.get_executable" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -215,7 +215,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 <span id="chemsmart-settings-gaussian-module"></span><h2>chemsmart.settings.gaussian module<a class="headerlink" href="#module-chemsmart.settings.gaussian" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">GaussianProjectSettings</span></span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">GaussianProjectSettings</span></span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryMixin</span></code></p>
 <p>Most general Gaussian settings class with key defaults.</p>
 <dl class="py attribute">
@@ -225,7 +225,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.from_project">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_project</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.from_project" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_project</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.from_project"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.from_project" title="Link to this definition"></a></dt>
 <dd><p>Get project settings based on project name.</p>
 </dd></dl>
 
@@ -236,7 +236,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.irc_settings">
-<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.irc_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.irc_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.irc_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for irc job.</p>
 </dd></dl>
 
@@ -247,31 +247,31 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.main_settings">
-<span class="sig-name descname"><span class="pre">main_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.main_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">main_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.main_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.main_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian main settings with key default values.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.modred_settings">
-<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.modred_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.modred_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.modred_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for modred job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.nci_settings">
-<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.nci_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.nci_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.nci_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for nci job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.opt_settings">
-<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.opt_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.opt_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.opt_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for opt job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.scan_settings">
-<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.scan_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.scan_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.scan_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for scan job.</p>
 </dd></dl>
 
@@ -282,19 +282,19 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.sp_settings">
-<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.sp_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.sp_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.sp_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for sp job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.ts_settings">
-<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.ts_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.ts_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.ts_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for ts job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettings.wbi_settings">
-<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettings.wbi_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for WBI job.</p>
 </dd></dl>
 
@@ -302,8 +302,8 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettingsManager">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">GaussianProjectSettingsManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettingsManager" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">GaussianProjectSettingsManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettingsManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettingsManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Manages Gaussian project settings specified in the form of yaml files in a folder.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -312,14 +312,14 @@ Given program type, the executable will be specified in server.yaml file.</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.GaussianProjectSettingsManager.create">
-<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettingsManager.create" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#GaussianProjectSettingsManager.create"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.GaussianProjectSettingsManager.create" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">YamlGaussianProjectSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">opt_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modred_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ts_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">irc_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scan_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nci_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sp_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">td_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wbi_settings</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">YamlGaussianProjectSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">opt_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modred_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ts_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">irc_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scan_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nci_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sp_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">td_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wbi_settings</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.gaussian.GaussianProjectSettings" title="chemsmart.settings.gaussian.GaussianProjectSettings"><code class="xref py py-class docutils literal notranslate"><span class="pre">GaussianProjectSettings</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.PROJECT_NAME">
@@ -328,59 +328,59 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.from_yaml">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.from_yaml" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.from_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.from_yaml" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.irc_settings">
-<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.irc_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.irc_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.irc_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for irc job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.modred_settings">
-<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.modred_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.modred_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.modred_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for modred job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.nci_settings">
-<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.nci_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.nci_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.nci_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for nci job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.opt_settings">
-<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.opt_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.opt_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.opt_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for opt job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.scan_settings">
-<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.scan_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.scan_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.scan_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for scan job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.sp_settings">
-<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.sp_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.sp_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.sp_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for sp job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.td_settings">
-<span class="sig-name descname"><span class="pre">td_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.td_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">td_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.td_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.td_settings" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.ts_settings">
-<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.ts_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.ts_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.ts_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for ts job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettings.wbi_settings">
-<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettings.wbi_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
 <dd><p>Gaussian default settings for WBI job.</p>
 </dd></dl>
 
@@ -388,11 +388,11 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettingsBuilder">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">YamlGaussianProjectSettingsBuilder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettingsBuilder" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.gaussian.</span></span><span class="sig-name descname"><span class="pre">YamlGaussianProjectSettingsBuilder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettingsBuilder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettingsBuilder" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.gaussian.YamlGaussianProjectSettingsBuilder.build">
-<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettingsBuilder.build" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/gaussian.html#YamlGaussianProjectSettingsBuilder.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.gaussian.YamlGaussianProjectSettingsBuilder.build" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -402,7 +402,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 <span id="chemsmart-settings-orca-module"></span><h2>chemsmart.settings.orca module<a class="headerlink" href="#module-chemsmart.settings.orca" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">ORCAProjectSettings</span></span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">ORCAProjectSettings</span></span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryMixin</span></code></p>
 <p>Most general ORCA settings class with key defaults.</p>
 <dl class="py attribute">
@@ -412,7 +412,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.from_project">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_project</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.from_project" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_project</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.from_project"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.from_project" title="Link to this definition"></a></dt>
 <dd><p>Get project settings based on project name.</p>
 </dd></dl>
 
@@ -423,7 +423,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.irc_settings">
-<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.irc_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.irc_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.irc_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for irc job.</p>
 </dd></dl>
 
@@ -434,31 +434,31 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.main_settings">
-<span class="sig-name descname"><span class="pre">main_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.main_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">main_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.main_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.main_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA main settings with key default values.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.modred_settings">
-<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.modred_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.modred_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.modred_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for modred job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.nci_settings">
-<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.nci_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.nci_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.nci_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for nci job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.opt_settings">
-<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.opt_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.opt_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.opt_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for opt job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.scan_settings">
-<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.scan_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.scan_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.scan_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for scan job.</p>
 </dd></dl>
 
@@ -469,19 +469,19 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.sp_settings">
-<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.sp_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.sp_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.sp_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for sp job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.ts_settings">
-<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.ts_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.ts_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.ts_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for ts job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettings.wbi_settings">
-<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettings.wbi_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for WBI job.</p>
 </dd></dl>
 
@@ -489,8 +489,8 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettingsManager">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">ORCAProjectSettingsManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettingsManager" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">ORCAProjectSettingsManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettingsManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettingsManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Manages ORCA project settings specified in the form of yaml files in a folder.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -499,14 +499,14 @@ Given program type, the executable will be specified in server.yaml file.</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.ORCAProjectSettingsManager.create">
-<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettingsManager.create" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#ORCAProjectSettingsManager.create"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.ORCAProjectSettingsManager.create" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">YamlORCAProjectSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">opt_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modred_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ts_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">irc_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scan_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nci_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sp_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">td_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wbi_settings</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">YamlORCAProjectSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">opt_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modred_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ts_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">irc_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scan_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nci_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sp_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">td_settings</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wbi_settings</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.orca.ORCAProjectSettings" title="chemsmart.settings.orca.ORCAProjectSettings"><code class="xref py py-class docutils literal notranslate"><span class="pre">ORCAProjectSettings</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.PROJECT_NAME">
@@ -515,59 +515,59 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.from_yaml">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.from_yaml" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.from_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.from_yaml" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.irc_settings">
-<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.irc_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">irc_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.irc_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.irc_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for irc job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.modred_settings">
-<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.modred_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">modred_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.modred_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.modred_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for modred job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.nci_settings">
-<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.nci_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">nci_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.nci_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.nci_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for nci job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.opt_settings">
-<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.opt_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">opt_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.opt_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.opt_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for opt job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.scan_settings">
-<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.scan_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">scan_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.scan_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.scan_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for scan job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.sp_settings">
-<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.sp_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">sp_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.sp_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.sp_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for sp job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.td_settings">
-<span class="sig-name descname"><span class="pre">td_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.td_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">td_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.td_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.td_settings" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.ts_settings">
-<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.ts_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">ts_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.ts_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.ts_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for ts job.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettings.wbi_settings">
-<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">wbi_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettings.wbi_settings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettings.wbi_settings" title="Link to this definition"></a></dt>
 <dd><p>ORCA default settings for WBI job.</p>
 </dd></dl>
 
@@ -575,11 +575,11 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettingsBuilder">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">YamlORCAProjectSettingsBuilder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettingsBuilder" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.orca.</span></span><span class="sig-name descname"><span class="pre">YamlORCAProjectSettingsBuilder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettingsBuilder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettingsBuilder" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.orca.YamlORCAProjectSettingsBuilder.build">
-<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettingsBuilder.build" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/orca.html#YamlORCAProjectSettingsBuilder.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.orca.YamlORCAProjectSettingsBuilder.build" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -589,7 +589,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 <span id="chemsmart-settings-server-module"></span><h2>chemsmart.settings.server module<a class="headerlink" href="#module-chemsmart.settings.server" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.LSFServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">LSFServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.LSFServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">LSFServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#LSFServer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.LSFServer" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.server.YamlServerSettings" title="chemsmart.settings.server.YamlServerSettings"><code class="xref py py-class docutils literal notranslate"><span class="pre">YamlServerSettings</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.server.LSFServer.NAME">
@@ -605,7 +605,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.PBSServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">PBSServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.PBSServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">PBSServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#PBSServer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.PBSServer" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.server.YamlServerSettings" title="chemsmart.settings.server.YamlServerSettings"><code class="xref py py-class docutils literal notranslate"><span class="pre">YamlServerSettings</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.server.PBSServer.NAME">
@@ -621,7 +621,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.SGE_Server">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">SGE_Server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.SGE_Server" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">SGE_Server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#SGE_Server"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.SGE_Server" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.server.YamlServerSettings" title="chemsmart.settings.server.YamlServerSettings"><code class="xref py py-class docutils literal notranslate"><span class="pre">YamlServerSettings</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.server.SGE_Server.NAME">
@@ -637,7 +637,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.SLURMServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">SLURMServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.SLURMServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">SLURMServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#SLURMServer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.SLURMServer" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.server.YamlServerSettings" title="chemsmart.settings.server.YamlServerSettings"><code class="xref py py-class docutils literal notranslate"><span class="pre">YamlServerSettings</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.server.SLURMServer.NAME">
@@ -653,23 +653,23 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">Server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">Server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryMixin</span></code></p>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.current">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">current</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.current" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">current</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.current"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.current" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.detect_server_scheduler">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">detect_server_scheduler</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.detect_server_scheduler" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">detect_server_scheduler</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.detect_server_scheduler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.detect_server_scheduler" title="Link to this definition"></a></dt>
 <dd><p>Detect the server’s job scheduler system.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The detected scheduler type (e.g., SLURM, PBS, LSF, SGE, HTCondor).</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>str</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -681,12 +681,12 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.from_dict">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.from_dict" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.from_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.from_dict" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.from_scheduler_type">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_scheduler_type</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.from_scheduler_type" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_scheduler_type</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.from_scheduler_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.from_scheduler_type" title="Link to this definition"></a></dt>
 <dd><p>Create a Server instance based on the detected scheduler type.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -700,18 +700,18 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.from_servername">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_servername</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">servername</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.from_servername" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_servername</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">servername</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.from_servername"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.from_servername" title="Link to this definition"></a></dt>
 <dd><p>Obtain server details from server name.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.from_yaml">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.from_yaml" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.from_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.from_yaml" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.get_submitter">
-<span class="sig-name descname"><span class="pre">get_submitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.get_submitter" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_submitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.get_submitter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.get_submitter" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -746,7 +746,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.register">
-<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.register" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.register" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -766,10 +766,12 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.Server.submit">
-<span class="sig-name descname"><span class="pre">submit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cli_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.Server.submit" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">submit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cli_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#Server.submit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.Server.submit" title="Link to this definition"></a></dt>
 <dd><p>Class method to submit job on the Server.
+:type job: 
 :param job: Job to be submitted.
 :type job: Job
+:type test: 
 :param test: If True, the job will not be submitted and
 :type test: bool
 :param only run script and submit_script will be written.:</p>
@@ -789,8 +791,8 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.ServerSettingsManager">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">ServerSettingsManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.ServerSettingsManager" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">ServerSettingsManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#ServerSettingsManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.ServerSettingsManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Manages server settings specified in the form of yaml files in a folder.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -799,14 +801,14 @@ Given program type, the executable will be specified in server.yaml file.</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.ServerSettingsManager.create">
-<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.ServerSettingsManager.create" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#ServerSettingsManager.create"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.ServerSettingsManager.create" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.server.YamlServerSettings">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">YamlServerSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.YamlServerSettings" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.server.</span></span><span class="sig-name descname"><span class="pre">YamlServerSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#YamlServerSettings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.YamlServerSettings" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.server.Server" title="chemsmart.settings.server.Server"><code class="xref py py-class docutils literal notranslate"><span class="pre">Server</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.server.YamlServerSettings.NAME">
@@ -815,12 +817,12 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.YamlServerSettings.from_yaml">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.YamlServerSettings.from_yaml" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#YamlServerSettings.from_yaml"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.YamlServerSettings.from_yaml" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.server.YamlServerSettings.register">
-<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.server.YamlServerSettings.register" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/server.html#YamlServerSettings.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.server.YamlServerSettings.register" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -830,67 +832,67 @@ Given program type, the executable will be specified in server.yaml file.</p>
 <span id="chemsmart-settings-submitters-module"></span><h2>chemsmart.settings.submitters module<a class="headerlink" href="#module-chemsmart.settings.submitters" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.FUGAKUSubmitter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">FUGAKUSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'FUGAKU'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.FUGAKUSubmitter" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">FUGAKUSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'FUGAKU'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#FUGAKUSubmitter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.FUGAKUSubmitter" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.submitters.Submitter" title="chemsmart.settings.submitters.Submitter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Submitter</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.FUGAKUSubmitter.NAME">
-<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FUGAKU'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.FUGAKUSubmitter.NAME" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FUGAKU'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.FUGAKUSubmitter.NAME" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.PBSSubmitter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">PBSSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'PBS'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.PBSSubmitter" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">PBSSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'PBS'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#PBSSubmitter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.PBSSubmitter" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.submitters.Submitter" title="chemsmart.settings.submitters.Submitter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Submitter</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.PBSSubmitter.NAME">
-<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'PBS'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.PBSSubmitter.NAME" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'PBS'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.PBSSubmitter.NAME" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.RunScript">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">RunScript</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cli_args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.RunScript" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">RunScript</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cli_args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#RunScript"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.RunScript" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.RunScript.write">
-<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.RunScript.write" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#RunScript.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.RunScript.write" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.SLFSubmitter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">SLFSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SLF'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.SLFSubmitter" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">SLFSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SLF'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#SLFSubmitter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.SLFSubmitter" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.submitters.Submitter" title="chemsmart.settings.submitters.Submitter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Submitter</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.SLFSubmitter.NAME">
-<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SLF'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.SLFSubmitter.NAME" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SLF'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.SLFSubmitter.NAME" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.SLURMSubmitter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">SLURMSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SLURM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.SLURMSubmitter" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">SLURMSubmitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SLURM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#SLURMSubmitter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.SLURMSubmitter" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#chemsmart.settings.submitters.Submitter" title="chemsmart.settings.submitters.Submitter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Submitter</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.SLURMSubmitter.NAME">
-<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SLURM'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.SLURMSubmitter.NAME" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SLURM'</span></em><a class="headerlink" href="#chemsmart.settings.submitters.SLURMSubmitter.NAME" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.Submitter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">Submitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.Submitter" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.submitters.</span></span><span class="sig-name descname"><span class="pre">Submitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#Submitter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.Submitter" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryMixin</span></code></p>
 <p>Abstract base class for job submission.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.Submitter.NAME">
-<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.NAME" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">NAME</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.NAME" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -900,12 +902,12 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.Submitter.from_dict">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.from_dict" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#Submitter.from_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.from_dict" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.Submitter.from_scheduler_type">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_scheduler_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scheduler_type</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.from_scheduler_type" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_scheduler_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scheduler_type</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#Submitter.from_scheduler_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.from_scheduler_type" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -927,7 +929,7 @@ Given program type, the executable will be specified in server.yaml file.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="chemsmart.settings.submitters.Submitter.write">
-<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cli_args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.write" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cli_args</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/chemsmart/settings/submitters.html#Submitter.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.submitters.Submitter.write" title="Link to this definition"></a></dt>
 <dd><p>Write the submission script for the job.</p>
 </dd></dl>
 
@@ -938,11 +940,11 @@ Given program type, the executable will be specified in server.yaml file.</p>
 <span id="chemsmart-settings-user-module"></span><h2>chemsmart.settings.user module<a class="headerlink" href="#module-chemsmart.settings.user" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="chemsmart.settings.user.ChemsmartUserSettings">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.user.</span></span><span class="sig-name descname"><span class="pre">ChemsmartUserSettings</span></span><a class="headerlink" href="#chemsmart.settings.user.ChemsmartUserSettings" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">chemsmart.settings.user.</span></span><span class="sig-name descname"><span class="pre">ChemsmartUserSettings</span></span><a class="reference internal" href="_modules/chemsmart/settings/user.html#ChemsmartUserSettings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#chemsmart.settings.user.ChemsmartUserSettings" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR">
-<span class="sig-name descname"><span class="pre">USER_CONFIG_DIR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'/Users/zihanli/.chemsmart'</span></em><a class="headerlink" href="#chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">USER_CONFIG_DIR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'/Users/xinglongzhang/.chemsmart'</span></em><a class="headerlink" href="#chemsmart.settings.user.ChemsmartUserSettings.USER_CONFIG_DIR" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">

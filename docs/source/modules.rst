@@ -1,5 +1,6 @@
-chemsmart
-=========
+###########
+ chemsmart
+###########
 
 .. toctree::
    :maxdepth: 4

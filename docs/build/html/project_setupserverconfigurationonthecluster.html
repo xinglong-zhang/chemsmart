@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Set up the Server Configuration on the Cluster &mdash; chemsmart 0.1.0 documentation</title>
+  <title>Set up the Server Configuration on the Cluster &mdash; chemsmart 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -124,16 +124,22 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to contact our team if you have questions or feedback.</p>
+  <p>Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
+contact our team if you have questions or feedback.</p>
 <section id="set-up-the-server-configuration-on-the-cluster">
 <h1>Set up the Server Configuration on the Cluster<a class="headerlink" href="#set-up-the-server-configuration-on-the-cluster" title="Link to this heading"></a></h1>
-<p>Once the user has completed the installation, the server configuration on the cluster can be customized by modifying corresponding files.</p>
+<p>Once the user has completed the installation, the server configuration on the cluster can be customized by modifying
+corresponding files.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>A user can modify the contents in <code class="docutils literal notranslate"><span class="pre">~/.chemsmart</span></code> files freely without affecting or needing to know the <code class="docutils literal notranslate"><span class="pre">chemsmart</span></code> source code.</p>
+<p>A user can modify the contents in <code class="docutils literal notranslate"><span class="pre">~/.chemsmart</span></code> files freely without affecting or needing to know the
+<code class="docutils literal notranslate"><span class="pre">chemsmart</span></code> source code.</p>
 </div>
 <ul>
-<li><p>The <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/usersettings.yaml</span></code> file contains informations such as project number or account number that are required in a typical submission script that specifies the account for use at some HPC servers. It can also contain options specifying user’s email to inform user of the job start and job end once a job is submitted. If more features are needed, please submit a request via <cite>Issues</cite>. A typical <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/usersettings.yaml</span></code> file looks like this:</p>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/usersettings.yaml</span></code> file contains informations such as project number or account number that are
+required in a typical submission script that specifies the account for use at some HPC servers. It can also contain
+options specifying user’s email to inform user of the job start and job end once a job is submitted. If more features
+are needed, please submit a request via <cite>Issues</cite>. A typical <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/usersettings.yaml</span></code> file looks like this:</p>
 <blockquote>
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">PROJECT: 1234567  # alias ACCOUNT FOR SLURM</span>
 <span class="go">EMAIL: abc@gmail.com</span>
@@ -141,7 +147,9 @@
 </div>
 </div></blockquote>
 </li>
-<li><p>The <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/server/</span></code> directory contains files related to server setup for a particular HPC cluster that the user is using. For example, we can specify a SLURM based server setting as <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/server/shared.yaml</span></code> with the following information:</p>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/server/</span></code> directory contains files related to server setup for a particular HPC cluster that the
+user is using. For example, we can specify a SLURM based server setting as <code class="docutils literal notranslate"><span class="pre">~/.chemsmart/server/shared.yaml</span></code> with
+the following information:</p>
 <blockquote>
 <div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">SERVER:</span>
 <span class="go">    SCHEDULER: SLURM</span>
@@ -187,7 +195,8 @@
 </pre></div>
 </div>
 </div></blockquote>
-<p>This file can be customized by user for different submission systems. This file contains the server configuration information that is needed for chemsmart to automatically write the submission script for each job.</p>
+<p>This file can be customized by user for different submission systems. This file contains the server configuration
+information that is needed for chemsmart to automatically write the submission script for each job.</p>
 </li>
 </ul>
 </section>
