@@ -3,14 +3,10 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-<<<<<<< HEAD
 Welcome to chemsmart’s documentation!
 =======================
 
 
-=======
-chemsmart User documentation
-=======================
 
 >>>>>>> 49a1af2 (rst change)
 .. toctree::
@@ -18,12 +14,7 @@ chemsmart User documentation
 
    Introduction
    Installation
-<<<<<<< HEAD
    Tutorials
-=======
-   tutorials
->>>>>>> 49a1af2 (rst change)
-
 
 Indices and tables
 ==================
