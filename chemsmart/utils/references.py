@@ -31,6 +31,11 @@ grimme_quasi_rrho_entropy_ref = (
     + "     REF: Grimme, S. J. Chem. Phys. 2011, 134, 064114\n\n"
 )
 
+truhlar_quasi_rrho_entropy_ref = (
+    "   - Truhlar's quasi-RRHO entropy:\n"
+    + "     REF: Ribeiro, R. F.; Marenich, A. V.; Cramer, C. J; Truhlar, D. G. J. Phys. Chem. B 2011, 115, 14556–14562\n\n"
+)
+
 head_gordon_quasi_rrho_enthalpy_ref = (
     "   - Head-Gordon's quasi-RRHO enthalpy:\n"
     + "     REF: Li, Y.; Gomes, J.; Sharada, S. M.; Bell, A. T.; Head-Gordon, M. J. Phys. Chem. C 2015, 119, 1840-1850\n\n"

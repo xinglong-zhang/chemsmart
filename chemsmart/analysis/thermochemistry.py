@@ -19,6 +19,7 @@ from chemsmart.utils.references import (
     head_gordon_damping_function_ref,
     head_gordon_quasi_rrho_enthalpy_ref,
     qrrho_header,
+    truhlar_quasi_rrho_entropy_ref,
 )
 
 logger = logging.getLogger(__name__)
@@ -1123,8 +1124,10 @@ class Thermochemistry:
             if self.h_freq_cutoff or self.s_freq_cutoff:
                 header += qrrho_header
                 header += head_gordon_damping_function_ref
-            if self.s_freq_cutoff:
+            if self.s_freq_cutoff and self.entropy_method == "grimme":
                 header += grimme_quasi_rrho_entropy_ref
+            if self.s_freq_cutoff and self.entropy_method == "truhlar":
+                header += truhlar_quasi_rrho_entropy_ref
             if self.h_freq_cutoff:
                 header += head_gordon_quasi_rrho_enthalpy_ref
             header += "\n"
