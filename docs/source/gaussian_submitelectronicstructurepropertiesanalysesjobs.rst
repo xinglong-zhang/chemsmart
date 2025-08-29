@@ -47,8 +47,8 @@ Please set solvent parameters at the end when needed.
       -  string
       -  Additional solvent options in scrf=() route. default=None. E.g., iterative in scrf=(smd,water,iterative)
 
-Basic Usage
-===========
+SP Basic Usage
+==============
 
 **Basic single point calculation**:
 
@@ -71,8 +71,8 @@ Basic Usage
 
    to specify a different solvent model ``<user_solvent_model>`` and solvent ``<user_solvent_id>``.
 
-Examples
-========
+SP Examples
+===========
 
 **Run sp job in gas**
 
@@ -138,8 +138,8 @@ DI-AS Specific OPTIONS
       -  int
       -  Multiplicity of fragment 2 (default=None)
 
-Basic Usage
-===========
+DI-AS Basic Usage
+=================
 
 **Basic DI-AS analysis on IRC**
 
@@ -159,8 +159,8 @@ Run RESP (Restrained Electrostatic Potential) charge fitting calculations.
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] resp
 
-Basic Usage
-===========
+RESP Basic Usage
+================
 
 -  **Basic RESP calculation**
 
@@ -189,8 +189,8 @@ Run Non-Covalent Interaction analysis for intermolecular interactions.
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] nci
 
-Basic Usage
-===========
+NCI Basic Usage
+===============
 
 -  **Basic NCI calculation**:
 
@@ -235,8 +235,8 @@ TD-DFT Specific Options
       -  string
       -  Whether to perform equilibrium or non-equilibrium PCM solvation (default=None)
 
-Basic Usage
-===========
+TD-DFT Basic Usage
+==================
 
 **Basic TD-DFT calculation**
 
@@ -262,8 +262,8 @@ Basic Usage
 
 Run Wiberg Bond Index calculations for bond analysis.
 
-Basic Usage
-===========
+WBI Basic Usage
+===============
 
 **Basic WBI calculation**
 
@@ -271,8 +271,8 @@ Basic Usage
 
       chemsmart sub gaussian -p wbi_analysis -f opt.log wbi
 
-Examples
-========
+WBI Examples
+============
 
 **Using wbi command for NBO analysis**
 

@@ -38,8 +38,8 @@ Opt-Specific OPTIONS
       -  bool
       -  Invert the constraints for frozen atoms in optimization (default=False)
 
-Basic Usage
-===========
+Opt Basic Usage
+===============
 
 **Basic geometry optimization**:
 
@@ -63,8 +63,8 @@ Single point calculations compute the energy and properties of a molecule at a f
 
    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] sp [SUBCMD_OPTIONS]
 
-Basic Usage
-===========
+SP Basic Usage
+==============
 
 **Basic single point calculation**:
 

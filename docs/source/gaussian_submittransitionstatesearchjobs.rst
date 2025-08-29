@@ -33,8 +33,8 @@ TS-Specific OPTIONS
       -  string
       -  Indices of atoms to freeze for constrained optimization
 
-Basic Usage
-===========
+TS Basic Usage
+==============
 
 **Transition state with specific charge and multiplicity**
 
@@ -48,8 +48,8 @@ Basic Usage
 
       chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f 2,5,8
 
-Examples
-========
+TS Examples
+===========
 
 **Use semiempirical method for pre-TS**
 
@@ -85,8 +85,8 @@ Modred-Specific OPTIONS
       -  string
       -  List of coordinates to be fixed for modred job (1-based indexing)
 
-Basic Usage
-===========
+Modred Basic Usage
+==================
 
 **Defining Coordinate Constraints**
 
@@ -97,8 +97,8 @@ Basic Usage
 
       chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17]]
 
-Examples
-========
+Modred Examples
+===============
 
 **Modred optimization**
 
@@ -157,8 +157,8 @@ IRC-Specific OPTIONS
       -  int
       -  Step size along reaction path, in units of 0.01 Bohr (default=20)
 
-Basic Usage
-===========
+IRC Basic Usage
+===============
 
 **Basic IRC calculation**:
 
@@ -203,8 +203,8 @@ Scan-Specific OPTIONS
       -  int
       -  Number of steps to scan (default=None)
 
-Basic Usage
-===========
+Scan Basic Usage
+================
 
 **Basic coordinate scan**
 

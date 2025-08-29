@@ -57,8 +57,8 @@ Visualization-Specific OPTIONS
       -  string
       -  List of coordinates (bonds, angles and dihedrals) for labelling. 1-indexed (default=None)
 
-Basic Usage
-===========
+Visualization Basic Usage
+=========================
 
 **Basic molecular visualization**
 
@@ -84,8 +84,8 @@ Basic Usage
 
       chemsmart run mol -f molecule.log visualize -f custom_style.py
 
-Examples
-========
+Visualization Examples
+======================
 
 ************
  Movie Jobs
@@ -102,8 +102,8 @@ Movie-Specific OPTIONS
 
 Movie jobs inherit all options from visualization jobs and use the same parameters.
 
-Basic Usage
-===========
+Movie Basic Usage
+=================
 
 **Basic rotating movie**
 
@@ -111,5 +111,5 @@ Basic Usage
 
       chemsmart run mol -f molecule.xyz movie
 
-Examples
-========
+Movie Examples
+==============
