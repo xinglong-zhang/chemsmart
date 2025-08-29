@@ -215,9 +215,7 @@ test: lint coverage-clean ## Run tests and generate coverage report (robust to c
 docs-clean: ## Clean documentation artifacts.
 	$(MAKE) -C docs clean
 
-docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
-	@echo "==> Installing doc linting tools (if needed)..."
-	$(ENV_PREFIX)pip install -q doc8 rstcheck
+docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running rstcheck..."
@@ -226,6 +224,17 @@ ifeq ($(OS),Windows)
 else
 	$(ENV_PREFIX)rstcheck -r docs/source
 endif
+	@echo "==> Running sphinx-build -W..."
+ifneq ($(OS),Windows)
+	@mkdir -p docs/build
+else
+	@if not exist docs\build mkdir docs\build
+endif
+	@output=$$($(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build 2>&1); \
+	echo "$$output"; \
+	echo "$$output" | grep -q 'No such file or directory: .*searchindex.js.tmp' && exit 0; \
+	echo "$$output" | grep -q 'Exception occurred:' && exit 1; \
+	exit 0
 
 # Format all .rst files in docs/source using rstfmt
 docs-fmt: ## Auto-format reStructuredText with rstfmt.

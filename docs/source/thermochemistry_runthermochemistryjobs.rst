@@ -171,8 +171,8 @@ Run Boltzmann weighted averaging for thermochemistry jobs with multiple conforme
       -  string
       -  Type of energy to use for Boltzmann weighting. Options: gibbs, electronic (default="gibbs")
 
-Basic Usage
-===========
+Boltzmann Basic Usage
+=====================
 
-Examples
-========
+Boltzmann Examples
+==================

@@ -45,8 +45,8 @@ IRC-Specific OPTIONS
 
    IRC jobs also inherit all options from visualization jobs.
 
-Basic Usage
-===========
+IRC Basic Usage
+===============
 
 **Basic IRC trajectory visualization**
 

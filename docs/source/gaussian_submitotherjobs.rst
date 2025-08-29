@@ -45,8 +45,8 @@ Link Job Specific OPTIONS
       -  string
       -  Route for link section (default=None)
 
-Basic Usage
-===========
+Link Basic Usage
+================
 
 **Link job with optimization job type**
 
@@ -60,8 +60,8 @@ Basic Usage
 
       chemsmart sub gaussian -p project -f 1_opt.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative
 
-Examples
-========
+Link Examples
+=============
 
 **Use link job for optimization of singlet openshell structure**
 
@@ -110,8 +110,8 @@ Custom Job Specific OPTIONS
       -  string
       -  Information to be appended at the end of the file (default=None)
 
-Basic Usage
-===========
+Custom Job Basic Usage
+======================
 
 **Custom job with user-defined route**:
 

@@ -9,3 +9,10 @@ dependencies:
   - pip
   - pip:
       - -e .[test,dev]  # Install both test and dev dependencies
+      - rstfmt
+      - sphinx
+      - myst-parser
+      - sphinx_rtd_theme
+      - sphinx-autodoc-typehints
+      - doc8
+      - rstcheck
