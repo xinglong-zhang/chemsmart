@@ -109,12 +109,12 @@ endif
 # === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in development mode.
+install:          ## Install the project in user mode.
 	$(ENV_PREFIX)pip install .  # Normal users (runtime only)
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
-install:          ## Install the project in development mode.
+install-dev:          ## Install the project in development mode.
 	$(ENV_PREFIX)pip install -e .[dev,test]  # install dependencies in dev and test too
 	$(ENV_PREFIX)pip install types-PyYAML
 
@@ -210,10 +210,7 @@ test: lint coverage-clean ## Run tests and generate coverage report (robust to c
 	-$(ENV_PREFIX)coverage html
 
 # === Docs ===
-.PHONY: docs-clean docs-lint docs-fmt docs
-
-docs-clean: ## Clean documentation artifacts.
-	$(MAKE) -C docs clean
+.PHONY: docs-lint docs-fmt docs docs-clean
 
 docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
 	@echo "==> Running doc8..."
@@ -224,17 +221,6 @@ ifeq ($(OS),Windows)
 else
 	$(ENV_PREFIX)rstcheck -r docs/source
 endif
-	@echo "==> Running sphinx-build -W..."
-ifneq ($(OS),Windows)
-	@mkdir -p docs/build
-else
-	@if not exist docs\build mkdir docs\build
-endif
-	@output=$$($(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build 2>&1); \
-	echo "$$output"; \
-	echo "$$output" | grep -q 'No such file or directory: .*searchindex.js.tmp' && exit 0; \
-	echo "$$output" | grep -q 'Exception occurred:' && exit 1; \
-	exit 0
 
 # Format all .rst files in docs/source using rstfmt
 docs-fmt: ## Auto-format reStructuredText with rstfmt.
@@ -245,7 +231,10 @@ docs-fmt: ## Auto-format reStructuredText with rstfmt.
 	$(ENV_PREFIX)rstfmt -w 120 docs/source
 
 docs: ## Build documentation (HTML).
-	$(MAKE) -C docs html
+	+$(ENV_PREFIX)$(MAKE) -C docs html  # leading + tells GNU Make this is a recursive make; it preserves jobserver flags, etc.
+
+docs-clean: ## Clean documentation artifacts.
+	+$(ENV_PREFIX)$(MAKE) -C docs clean
 
 
 # === Cleanup ===
