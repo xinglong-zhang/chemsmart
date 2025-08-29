@@ -93,7 +93,7 @@
    :maxdepth: 2
    :caption: API Reference
 
-   modules
+   modules1
 
 ####################
  Indices and tables

@@ -224,6 +224,15 @@ else
 	@if not exist docs\build mkdir docs\build
 endif
 	@echo "==> Running sphinx-build -W..."
+	@output_and_code="$$( $(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build 2>&1; echo EXITCODE=$$? )"; \
+	code=$$(echo "$$output_and_code" | grep EXITCODE= | cut -d= -f2); \
+	echo "$$output_and_code"; \
+	if echo "$$output_and_code" | grep -q 'No such file or directory: .*searchindex.js.tmp' && [ "$$code" -eq 1 ]; then \
+		exit 0; \
+	else \
+		exit "$$code"; \
+	fi
+	@echo "==> Running sphinx-build -W..."
 	$(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build || \
 	grep -q 'No such file or directory: .*searchindex.js.tmp' <<< "$$(cat docs/build/.sphinx-build.log 2>/dev/null || true)" && true
 
