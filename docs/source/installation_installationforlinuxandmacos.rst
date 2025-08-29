@@ -66,6 +66,13 @@ https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
 
       make install
 
+-  For developers, one needs to install additional packages and dependencies (dev, test, docs targets in pyproject.toml)
+   required for ``chemsmart`` package via：
+
+   .. code:: console
+
+      make install-dev
+
 ********************
  Make Configuration
 ********************
