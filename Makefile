@@ -110,7 +110,12 @@ endif
 
 .PHONY: install
 install:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[test,dev]  # install dependencies in dev too
+	$(ENV_PREFIX)pip install .  # Normal users (runtime only)
+	$(ENV_PREFIX)pip install types-PyYAML
+
+.PHONY: install-dev
+install:          ## Install the project in development mode.
+	$(ENV_PREFIX)pip install -e .[dev,test]  # install dependencies in dev and test too
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit

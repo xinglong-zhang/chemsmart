@@ -1,59 +1,68 @@
-chemsmart.settings package
-==========================
+############################
+ chemsmart.settings package
+############################
 
-Submodules
-----------
+************
+ Submodules
+************
 
-chemsmart.settings.executable module
-------------------------------------
+**************************************
+ chemsmart.settings.executable module
+**************************************
 
 .. automodule:: chemsmart.settings.executable
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.settings.gaussian module
-----------------------------------
+************************************
+ chemsmart.settings.gaussian module
+************************************
 
 .. automodule:: chemsmart.settings.gaussian
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.settings.orca module
-------------------------------
+********************************
+ chemsmart.settings.orca module
+********************************
 
 .. automodule:: chemsmart.settings.orca
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.settings.server module
---------------------------------
+**********************************
+ chemsmart.settings.server module
+**********************************
 
 .. automodule:: chemsmart.settings.server
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.settings.submitters module
-------------------------------------
+**************************************
+ chemsmart.settings.submitters module
+**************************************
 
 .. automodule:: chemsmart.settings.submitters
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.settings.user module
-------------------------------
+********************************
+ chemsmart.settings.user module
+********************************
 
 .. automodule:: chemsmart.settings.user
    :members:
    :undoc-members:
    :show-inheritance:
 
-Module contents
----------------
+*****************
+ Module contents
+*****************
 
 .. automodule:: chemsmart.settings
    :members:
