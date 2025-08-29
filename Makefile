@@ -224,11 +224,8 @@ else
 	@if not exist docs\build mkdir docs\build
 endif
 	@echo "==> Running sphinx-build -W..."
-	@output=$$($(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build 2>&1); \
-	echo "$$output"; \
-	echo "$$output" | grep -q 'No such file or directory: .*searchindex.js.tmp' && exit 0; \
-	echo "$$output" | grep -q 'Exception occurred:' && exit 1; \
-	exit 0
+	$(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build || \
+	grep -q 'No such file or directory: .*searchindex.js.tmp' <<< "$$(cat docs/build/.sphinx-build.log 2>/dev/null || true)" && true
 
 # Format all .rst files in docs/source using rstfmt
 docs-fmt: ## Auto-format reStructuredText with rstfmt.
