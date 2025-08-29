@@ -51,6 +51,13 @@ make install
 ```
 which installs the packages and dependencies required for `chemsmart` package.
 
+For developers, one may run
+
+```bash
+make install
+```
+which installs additoinal packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing `chemsmart` package.
+
 Next, run
 ```bash
 make configure

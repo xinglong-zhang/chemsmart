@@ -70,6 +70,13 @@ It is recommended that Windows users set up chemsmart using a Bash-based termina
 
       make install
 
+-  For developers, one needs to install additional packages and dependencies (dev, test, docs targets in pyproject.toml)
+   required for ``chemsmart`` package via：
+
+   .. code:: console
+
+      make install-dev
+
 ********************
  Make Configuration
 ********************
