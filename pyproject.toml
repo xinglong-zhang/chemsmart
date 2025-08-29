@@ -37,7 +37,6 @@ dependencies = [
     "tenacity>=9.1.2",
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
-    "scikit_learn>=1.7.0",
     "pytest_mock>=3.14.0",
 ]
 
@@ -55,7 +54,13 @@ dev = [
     "black",
     "isort",
     "gitchangelog",
-    "mkdocs",
+]
+docs = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+    "sphinx-rtd-theme",
+    "rstfmt",
 ]
 
 [project.urls]
@@ -94,8 +99,4 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
-
-[tool.mkdocs]
-site_name = "chemsmart"
-theme = "readthedocs"
 

@@ -1,262 +1,283 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to contact our team if you have questions or feedback.
+Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
+contact our team if you have questions or feedback.
 
-Submit Electronic Structure Properties & Analyses Jobs
-======================================================
+########################################################
+ Submit Electronic Structure Properties & Analyses Jobs
+########################################################
 
-ChemSmart provides comprehensive electronic structure analysis capabilities using Gaussian. This section covers single point calculations, excited state properties, bond analysis, and molecular interaction studies.
+ChemSmart provides comprehensive electronic structure analysis capabilities using Gaussian. This section covers single
+point calculations, excited state properties, bond analysis, and molecular interaction studies.
 
-Single Point Jobs
------------------
+*******************
+ Single Point Jobs
+*******************
 
 Run single point energy calculations on optimized geometries.
 
-.. code-block:: console
+.. code:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] sp [SUBCMD_OPTIONS]
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] sp [SUBCMD_OPTIONS]
 
 SP-Specific OPTIONS
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+===================
+
 Please set solvent parameters at the end when needed.
 
 .. list-table:: Solvent Model Options
    :header-rows: 1
    :widths: 35 15 50
 
-   * - Option
-     - Type
-     - Description
-   * - ``--remove-solvent/--no-remove-solvent``
-     - bool
-     - Whether to use solvent model in the job. Defaults to project settings
-   * - ``-sm, --solvent-model``
-     - string
-     - Solvent model to be used for single point (default = none, use project settings)
-   * - ``-si, --solvent-id``
-     - string
-     - Solvent ID to be used for single point (default = none, use project settings)
-   * - ``-so, --solvent-options``
-     - string
-     - Additional solvent options in scrf=() route. default=None. E.g., iterative in scrf=(smd,water,iterative)
+   -  -  Option
+      -  Type
+      -  Description
 
-Basic Usage
-^^^^^^^^^^^
+   -  -  ``--remove-solvent/--no-remove-solvent``
+      -  bool
+      -  Whether to use solvent model in the job. Defaults to project settings
+
+   -  -  ``-sm, --solvent-model``
+      -  string
+      -  Solvent model to be used for single point (default = none, use project settings)
+
+   -  -  ``-si, --solvent-id``
+      -  string
+      -  Solvent ID to be used for single point (default = none, use project settings)
+
+   -  -  ``-so, --solvent-options``
+      -  string
+      -  Additional solvent options in scrf=() route. default=None. E.g., iterative in scrf=(smd,water,iterative)
+
+SP Basic Usage
+==============
 
 **Basic single point calculation**:
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub -s shared gaussian -p sp_calc -f optimized.log sp
+      chemsmart sub -s shared gaussian -p sp_calc -f optimized.log sp
 
 **Single point with solvent settings**:
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -so iterative
+      chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -so iterative
 
-*   For single-point job that user wants to test which uses different solvent model and id from that specified in ``<project>``, one can do:
+-  For single-point job that user wants to test which uses different solvent model and id from that specified in
+   ``<project>``, one can do:
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -sm cpcm -si toluene
+      chemsmart sub -s shared gaussian -p sp_solvent -f molecule.log sp -sm cpcm -si toluene
 
-    to specify a different solvent model ``<user_solvent_model>`` and solvent ``<user_solvent_id>``.
+   to specify a different solvent model ``<user_solvent_model>`` and solvent ``<user_solvent_id>``.
 
-Examples
-^^^^^^^^
+SP Examples
+===========
 
 **Run sp job in gas**
 
-*   To run sp job in gas, one can do:
+-  To run sp job in gas, one can do:
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub -s cu gaussian -p project1 -f ethanol_opt.log -c 0 -m 1 sp --remove-solvent
+      chemsmart sub -s cu gaussian -p project1 -f ethanol_opt.log -c 0 -m 1 sp --remove-solvent
 
-    output file will be named as ``ethanol_opt_gas_phase.log`` and use no solvent model. Except from this command, the output file will be named as ``ethanol_opt_<solv model>_<solv id>.log``
+   output file will be named as ``ethanol_opt_gas_phase.log`` and use no solvent model. Except from this command, the
+   output file will be named as ``ethanol_opt_<solv model>_<solv id>.log``
 
-
-DI-AS Analysis
-----------
+****************
+ DI-AS Analysis
+****************
 
 Run Distortion-Interaction/Activation-Strain analysis for reaction mechanisms.
 
-.. code-block:: console
+.. code:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] dias [SUBCMD_OPTIONS]
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] dias [SUBCMD_OPTIONS]
 
 DI-AS Specific OPTIONS
-^^^^^^^^^^^^^^^^^^^^^
+======================
 
 .. list-table:: DI-AS Job Options
    :header-rows: 1
    :widths: 30 15 55
 
-   * - Option
-     - Type
-     - Description
-   * - ``-i, --fragment-indices``
-     - string
-     - Indices of one fragment for DI-AS analysis (required)
-   * - ``-n, --every-n-points``
-     - int
-     - Every nth points along the IRC file to prepare for DI-AS analysis (default=3)
-   * - ``-s, --solv/--no-solv``
-     - bool
-     - Turn on/off solvent for DI-AS job calculations (default=False)
-   * - ``-m, --mode``
-     - string
-     - Mode of DI-AS analysis. Options: irc, ts (default=irc)
-   * - ``-c1, --charge-of-fragment1``
-     - int
-     - Charge of fragment 1 (default=None)
-   * - ``-m1, --multiplicity-of-fragment1``
-     - int
-     - Multiplicity of fragment 1 (default=None)
-   * - ``-c2, --charge-of-fragment2``
-     - int
-     - Charge of fragment 2 (default=None)
-   * - ``-m2, --multiplicity-of-fragment2``
-     - int
-     - Multiplicity of fragment 2 (default=None)
+   -  -  Option
+      -  Type
+      -  Description
 
-Basic Usage
-^^^^^^^^^^^
+   -  -  ``-i, --fragment-indices``
+      -  string
+      -  Indices of one fragment for DI-AS analysis (required)
+
+   -  -  ``-n, --every-n-points``
+      -  int
+      -  Every nth points along the IRC file to prepare for DI-AS analysis (default=3)
+
+   -  -  ``-s, --solv/--no-solv``
+      -  bool
+      -  Turn on/off solvent for DI-AS job calculations (default=False)
+
+   -  -  ``-m, --mode``
+      -  string
+      -  Mode of DI-AS analysis. Options: irc, ts (default=irc)
+
+   -  -  ``-c1, --charge-of-fragment1``
+      -  int
+      -  Charge of fragment 1 (default=None)
+
+   -  -  ``-m1, --multiplicity-of-fragment1``
+      -  int
+      -  Multiplicity of fragment 1 (default=None)
+
+   -  -  ``-c2, --charge-of-fragment2``
+      -  int
+      -  Charge of fragment 2 (default=None)
+
+   -  -  ``-m2, --multiplicity-of-fragment2``
+      -  int
+      -  Multiplicity of fragment 2 (default=None)
+
+DI-AS Basic Usage
+=================
 
 **Basic DI-AS analysis on IRC**
 
-*   For example to run DI-AS job for fragment 1 with atoms numbered from 5-17 at every 10 steps along the irc.log file:
+-  For example to run DI-AS job for fragment 1 with atoms numbered from 5-17 at every 10 steps along the irc.log file:
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub -s shared gaussian -p test -f irc.log dias -i 5-17 -n 10
+      chemsmart sub -s shared gaussian -p test -f irc.log dias -i 5-17 -n 10
 
-
-RESP Jobs
----------
+***********
+ RESP Jobs
+***********
 
 Run RESP (Restrained Electrostatic Potential) charge fitting calculations.
 
-.. code-block:: console
+.. code:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] resp
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] resp
 
-Basic Usage
-^^^^^^^^^^^
+RESP Basic Usage
+================
 
-* **Basic RESP calculation**
+-  **Basic RESP calculation**
 
-    .. code-block:: console
+      .. code:: console
 
-        chemsmart sub -s shared gaussian -p resp -f molecule.xyz resp
+         chemsmart sub -s shared gaussian -p resp -f molecule.xyz resp
 
 .. note::
 
-    This command will create an input file with fixed route for RESP job: ``HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)``
+   This command will create an input file with fixed route for RESP job: ``HF/6-31+G(d) SCF=Tight Pop=MK
+   IOp(6/33=2,6/41=10,6/42=17,6/50=1)``
 
-    .. code-block:: console
+   .. code:: console
 
-        ------------------------------------------------------------------
-        # HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)
-        ------------------------------------------------------------------
+      ------------------------------------------------------------------
+      # HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)
+      ------------------------------------------------------------------
 
-
-NCI Jobs
---------
+**********
+ NCI Jobs
+**********
 
 Run Non-Covalent Interaction analysis for intermolecular interactions.
 
-.. code-block:: console
+.. code:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] nci
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] nci
 
-Basic Usage
-^^^^^^^^^^^
+NCI Basic Usage
+===============
 
-* **Basic NCI calculation**:
+-  **Basic NCI calculation**:
 
-    .. code-block:: console
+      .. code:: console
 
-        chemsmart sub gaussian -p nci_analysis -f complex.xyz nci
+         chemsmart sub gaussian -p nci_analysis -f complex.xyz nci
 
-
-TD-DFT Jobs
------------
+*************
+ TD-DFT Jobs
+*************
 
 Run time-dependent DFT calculations for excited state properties.
 
-.. code-block:: console
+.. code:: console
 
-        chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] td [SUBCMD_OPTIONS]
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] td [SUBCMD_OPTIONS]
 
 TD-DFT Specific Options
-^^^^^^^^^^^^^^^^^^^^^^^
+=======================
 
 .. list-table:: TD-DFT Job Options
    :header-rows: 1
    :widths: 30 15 55
 
-   * - Option
-     - Type
-     - Description
-   * - ``-s, --states``
-     - string
-     - States for closed-shell singlet systems. Options: 'singlets', 'triplets', '50-50' (default=singlets)
-   * - ``-r, --root``
-     - int
-     - Specifies the "state of interest". The default is the first excited state (N=1) (default=1)
-   * - ``-n, --nstates``
-     - int
-     - Solve for M states. If 50-50, this gives the number of each type of state to solve (default=3)
-   * - ``-e, --eqsolv``
-     - string
-     - Whether to perform equilibrium or non-equilibrium PCM solvation (default=None)
+   -  -  Option
+      -  Type
+      -  Description
 
-Basic Usage
-^^^^^^^^^^^
+   -  -  ``-s, --states``
+      -  string
+      -  States for closed-shell singlet systems. Options: 'singlets', 'triplets', '50-50' (default=singlets)
+
+   -  -  ``-r, --root``
+      -  int
+      -  Specifies the "state of interest". The default is the first excited state (N=1) (default=1)
+
+   -  -  ``-n, --nstates``
+      -  int
+      -  Solve for M states. If 50-50, this gives the number of each type of state to solve (default=3)
+
+   -  -  ``-e, --eqsolv``
+      -  string
+      -  Whether to perform equilibrium or non-equilibrium PCM solvation (default=None)
+
+TD-DFT Basic Usage
+==================
 
 **Basic TD-DFT calculation**
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub gaussian -p td_calc -f molecule.xyz td
+      chemsmart sub gaussian -p td_calc -f molecule.xyz td
 
 **TD-DFT with specific states**
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub gaussian -p td_triplets -f molecule.xyz td -s triplets -n 5
+      chemsmart sub gaussian -p td_triplets -f molecule.xyz td -s triplets -n 5
 
 **TD-DFT with 50-50 singlet-triplet mix**
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub gaussian -p td_mixed -f molecule.xyz td -s 50-50 -n 4
+      chemsmart sub gaussian -p td_mixed -f molecule.xyz td -s 50-50 -n 4
 
-
-WBI Jobs
---------
+**********
+ WBI Jobs
+**********
 
 Run Wiberg Bond Index calculations for bond analysis.
 
-Basic Usage
-^^^^^^^^^^^
+WBI Basic Usage
+===============
 
 **Basic WBI calculation**
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub gaussian -p wbi_analysis -f opt.log wbi
+      chemsmart sub gaussian -p wbi_analysis -f opt.log wbi
 
-Examples
-^^^^^^^^
+WBI Examples
+============
 
 **Using wbi command for NBO analysis**
 
-    .. code-block:: console
+   .. code:: console
 
-        chemsmart sub -s cu gaussian -p project -f complex1_opt.log wbi
+      chemsmart sub -s cu gaussian -p project -f complex1_opt.log wbi
 
-    Add keyword ``pop=nboread`` to gaussian for NBO3.1 software analysis.
-
-
-
+   Add keyword ``pop=nboread`` to gaussian for NBO3.1 software analysis.
