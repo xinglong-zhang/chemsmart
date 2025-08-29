@@ -189,14 +189,18 @@ class Gaussian16Output(GaussianFileMixin):
             if self.job_type == "sp":
                 orientations = [orientations[-1]]
                 energies = [self.energies[-1]]
+                orientations_pbc = [orientations_pbc[-1]]
             # Remove the duplicate structure of the optimization section if it's a successful link opt job
             elif self.job_type == "opt":
                 orientations = orientations[1:]
+                orientations_pbc = orientations_pbc[1:]
                 if self.normal_termination:
                     orientations.pop(-2)
+                    orientations_pbc.pop(-2)
                 energies = self.energies[1:]
             else:
                 orientations = orientations[1:]
+                orientations_pbc = orientations_pbc[1:]
                 energies = self.energies[1:]
 
         else:
