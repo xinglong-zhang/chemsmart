@@ -115,7 +115,7 @@ install:          ## Install the project in user mode.
 
 .PHONY: install-dev
 install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[dev,test]  # install dependencies in dev and test too
+	$(ENV_PREFIX)pip install -e .[dev,test,docs]  # install dependencies in dev, test and docs in pyproject.toml
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit

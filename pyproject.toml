@@ -55,6 +55,13 @@ dev = [
     "isort",
     "gitchangelog",
 ]
+docs = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+    "sphinx-rtd-theme",
+    "rstfmt",
+]
 
 [project.urls]
 ##"Documentation" = "https://documentation_url"

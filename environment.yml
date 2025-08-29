@@ -8,11 +8,4 @@ dependencies:
   - ffmpeg=7.1.1  # movie support for pymol
   - pip
   - pip:
-      - -e .[test,dev]  # Install both test and dev dependencies
-      - rstfmt
-      - sphinx
-      - myst-parser
-      - sphinx_rtd_theme
-      - sphinx-autodoc-typehints
-      - doc8
-      - rstcheck
+      - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml
