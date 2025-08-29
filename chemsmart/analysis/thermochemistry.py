@@ -50,6 +50,7 @@ class Thermochemistry:
         use_weighted_mass=False,
         alpha=4,
         s_freq_cutoff=None,
+        entropy_method=None,
         h_freq_cutoff=None,
         energy_units="hartree",
         check_imaginary_frequencies=True,
@@ -74,6 +75,7 @@ class Thermochemistry:
         self.s_freq_cutoff = (
             s_freq_cutoff * units._c * 1e2 if s_freq_cutoff else None
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
+        self.entropy_method = entropy_method
         self.h_freq_cutoff = (
             h_freq_cutoff * units._c * 1e2 if h_freq_cutoff else None
         )  # convert the unit of cutoff frequency from cm^-1 to Hz
@@ -656,22 +658,39 @@ class Thermochemistry:
     @property
     def qrrho_vibrational_entropy(self):
         """Obtain the vibrational entropy with quasi-RRHO approximation, in J mol^-1 K^-1.
-        Formula:
+        Grimme's Formula:
             S^qrrho_v = Σ(w(v_K) * S^rrho_v,K + (1 - w(v_K)) * S_R,K)
+        Truhlar's Formula:
+            S^qrrho_v = ΣS^rrho_v,K if v_k > v_cutoff
+                      = ΣS^rrho_v,cutoff if v_k <= v_cutoff
         """
         if self.s_freq_cutoff is None or self.v is None:
             return None
         vib_entropy = []
-        assert len(self.v) == len(self.entropy_damping_function), (
-            f"The length of vibrational frequencies and damping function must be equal.\n"
-            f"The damping function is {self.entropy_damping_function}.\n"
-        )
-        for j in range(0, len(self.v)):
-            vib_entropy.append(
-                self.entropy_damping_function[j] * self.rrho_entropy[j]
-                + (1 - self.entropy_damping_function[j])
-                * self.free_rotor_entropy[j]
+        if self.entropy_method == "grimme":
+            assert len(self.v) == len(self.entropy_damping_function), (
+                f"The length of vibrational frequencies and damping function must be equal.\n"
+                f"The damping function is {self.entropy_damping_function}.\n"
             )
+            for j in range(0, len(self.v)):
+                vib_entropy.append(
+                    self.entropy_damping_function[j] * self.rrho_entropy[j]
+                    + (1 - self.entropy_damping_function[j])
+                    * self.free_rotor_entropy[j]
+                )
+        elif self.entropy_method == "truhlar":
+            v_cutoff = self.s_freq_cutoff
+            theta_cutoff = units._hplanck * v_cutoff / units._k
+            rrho_entropy_cutoff = R * (
+                (theta_cutoff / self.T) / (math.exp(theta_cutoff / self.T) - 1)
+                - np.log(1 - math.exp(-theta_cutoff / self.T))
+            )
+            for j in range(0, len(self.v)):
+                vib_entropy.append(
+                    self.rrho_entropy[j]
+                    if self.v[j] > v_cutoff
+                    else rrho_entropy_cutoff
+                )
         return sum(vib_entropy)
 
     @property
@@ -691,7 +710,7 @@ class Thermochemistry:
 
     @property
     def qrrho_vibrational_internal_energy(self):
-        """Obtain the vibrational internal energy with quasi-RRHO approximation, in J mol^-1.
+        """Obtain the vibrational internal energy with Head-Gordon's quasi-RRHO approximation, in J mol^-1.
         Formula:
             E^qrrho_v = Σ(w(v_K) * E^rrho_v,K + (1 - w(v_K)) * 1/2 * R * T)
         """

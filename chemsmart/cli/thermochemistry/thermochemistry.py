@@ -36,12 +36,20 @@ def click_thermochemistry_options(f):
         help="Gaussian or ORCA output files for parsing thermochemistry.",
     )
     @click.option(
-        "-cs",
-        "--cutoff-entropy",
+        "-csg",
+        "--cutoff-entropy-grimme",
         default=None,
         type=float,
         show_default=True,
-        help="Cutoff frequency for entropy in wavenumbers",
+        help="Cutoff frequency for entropy in wavenumbers, using Grimme's quasi-RRHO method.",
+    )
+    @click.option(
+        "-cst",
+        "--cutoff-entropy-truhlar",
+        default=None,
+        type=float,
+        show_default=True,
+        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's quasi-RRHO method.",
     )
     @click.option(
         "-ch",
@@ -49,7 +57,7 @@ def click_thermochemistry_options(f):
         default=None,
         type=float,
         show_default=True,
-        help="Cutoff frequency for enthalpy in wavenumbers",
+        help="Cutoff frequency for enthalpy in wavenumbers, using Head-Gordon's quasi-RRHO method.",
     )
     @click.option(
         "-c",
@@ -57,7 +65,7 @@ def click_thermochemistry_options(f):
         default=None,
         type=float,
         show_default=True,
-        help="Concentration in mol/L",
+        help="Concentration in mol/L.",
     )
     @click.option(
         "-p",
@@ -144,7 +152,8 @@ def thermochemistry(
     directory,
     filetype,
     filenames,
-    cutoff_entropy,
+    cutoff_entropy_grimme,
+    cutoff_entropy_truhlar,
     cutoff_enthalpy,
     concentration,
     pressure,
@@ -173,6 +182,21 @@ def thermochemistry(
         )
     if directory and not filetype:
         raise ValueError("Must specify --filetype when using --directory.")
+    if cutoff_entropy_grimme and cutoff_entropy_truhlar:
+        raise ValueError(
+            "Cannot specify both --cutoff-entropy-grimme and --cutoff-entropy-truhlar. Please choose one."
+        )
+
+    # choose entropy cutoff
+    if cutoff_entropy_grimme is not None:
+        cutoff_entropy = cutoff_entropy_grimme
+        entropy_method = "grimme"
+    elif cutoff_entropy_truhlar is not None:
+        cutoff_entropy = cutoff_entropy_truhlar
+        entropy_method = "truhlar"
+    else:
+        cutoff_entropy = None
+        entropy_method = None
 
     # Create job settings
     job_settings = ThermochemistryJobSettings(
@@ -182,6 +206,7 @@ def thermochemistry(
         use_weighted_mass=weighted,
         alpha=alpha,
         s_freq_cutoff=cutoff_entropy,
+        entropy_method=entropy_method,
         h_freq_cutoff=cutoff_enthalpy,
         energy_units=energy_units,
         outputfile=outputfile,
