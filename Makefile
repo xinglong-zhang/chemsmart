@@ -218,6 +218,11 @@ docs-clean: ## Clean documentation artifacts.
 docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
+ifeq ($(OS),Windows)
+	@if not exist docs\build mkdir docs\build
+else
+	@mkdir -p docs/build
+endif
 	@echo "==> Running sphinx-build -W..."
 	$(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build
 
