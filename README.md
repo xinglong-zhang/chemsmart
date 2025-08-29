@@ -192,7 +192,7 @@ source ~/.bashrc
 
 to effect the changes.
 
----
+<!-- ---
 Once `make configure` is done, one can optionally run 
 ```bash
 make fmt
@@ -215,7 +215,7 @@ Finally one can clean up by running
 
 ```bash
 make clean
-```
+``` -->
 
 ## Testing Installations
 
