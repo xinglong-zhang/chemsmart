@@ -215,17 +215,15 @@ test: lint coverage-clean ## Run tests and generate coverage report (robust to c
 docs-clean: ## Clean documentation artifacts.
 	$(MAKE) -C docs clean
 
-docs-lint: docs-clean ## Lint docs with doc8 and Sphinx (warnings as errors)
+docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 ifeq ($(OS),Windows)
 	@if not exist docs\build mkdir docs\build
-	@dir docs\build
-	@if not exist docs\build (echo ERROR: docs\build not created! && exit 1)
+	chmod -R u+rwx docs\build
 else
 	@mkdir -p docs/build
-	@ls -ld docs/build
-	@test -w docs/build || (echo "ERROR: docs/build is not writable!" && exit 1)
+	chmod -R u+rwx docs/build
 endif
 	@echo "==> Running sphinx-build -W..."
 	$(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build
