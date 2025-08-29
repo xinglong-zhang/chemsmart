@@ -89,7 +89,11 @@
 
    scripts_overview
 
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
 
+   modules
 
 ####################
  Indices and tables
