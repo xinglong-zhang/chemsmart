@@ -815,6 +815,7 @@ class TestThermochemistryCO2:
             use_weighted_mass=False,
             h_freq_cutoff=100,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
 
         # when arguments are not specified, the quasi-rrho calculation use
@@ -1184,6 +1185,7 @@ class TestThermochemistryCO2:
             use_weighted_mass=False,
             h_freq_cutoff=100,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         # In Goodvibes, if no concentration is specified, the default pressure is 1 atmosphere.
         assert np.isclose(
@@ -1268,6 +1270,7 @@ class TestThermochemistryCO2:
             use_weighted_mass=False,
             h_freq_cutoff=100,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         assert np.isclose(
             qrrho_thermochem_co2_2.electronic_energy
@@ -1323,6 +1326,7 @@ class TestThermochemistryCO2:
             temperature=298.15,
             concentration=1.0,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         # the cutoff frequency for both entropy and enthalpy is specified as 1000 cm^-1
@@ -1601,6 +1605,7 @@ class TestThermochemistryHe:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         assert np.isclose(
@@ -1902,6 +1907,7 @@ class TestThermochemistryH2O:
             temperature=1298.15,
             concentration=2.0,
             s_freq_cutoff=500,
+            entropy_method="grimme",
             h_freq_cutoff=500,
         )
         vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
@@ -2238,6 +2244,7 @@ class TestBoltzmannWeightedAverage:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         thermochem_conformer2 = Thermochemistry(
@@ -2246,6 +2253,7 @@ class TestBoltzmannWeightedAverage:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         """Values from Goodvibes, as a reference:
@@ -2333,6 +2341,7 @@ class TestBoltzmannWeightedAverage:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
             energy_type="gibbs",
         )
@@ -2516,6 +2525,7 @@ class TestBoltzmannWeightedAverage:
             concentration=1.0,
             use_weighted_mass=False,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         thermochem2_conformer2 = Thermochemistry(
             filename=gaussian_conformer2_outfile,
@@ -2523,6 +2533,7 @@ class TestBoltzmannWeightedAverage:
             concentration=1.0,
             use_weighted_mass=False,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         """Values from Goodvibes, as a reference:
                 goodvibes --fs 100 -c 1.0 -t 298.15 --qs grimme --bav "conf" udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
@@ -2607,6 +2618,7 @@ class TestBoltzmannWeightedAverage:
             concentration=1.0,
             use_weighted_mass=False,
             s_freq_cutoff=100,
+            entropy_method="grimme",
             energy_type="gibbs",
         )
         boltzmannthermochem_gibbs2.compute_boltzmann_averages()
