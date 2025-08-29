@@ -202,6 +202,36 @@ def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_dna_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_outfile = os.path.join(
+        gaussian_link_outputs_test_directory, "dna_link_sp.log"
+    )
+    return gaussian_link_outfile
+
+
+@pytest.fixture()
+def gaussian_dppeFeCl2_link_opt_outputfile(
+    gaussian_link_outputs_test_directory,
+):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "dppeFeCl2_opt_quintet_link_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_dppeFeCl2_link_opt_failed_outputfile(
+    gaussian_link_outputs_test_directory,
+):
+    gaussian_link_failed_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
+    )
+    return gaussian_link_failed_outfile
+
+
+@pytest.fixture()
 def gaussian_link_sp_input(gaussian_link_inputs_test_directory):
     return os.path.join(
         gaussian_link_inputs_test_directory, "link_sp_input_sp_link.com"
@@ -989,6 +1019,21 @@ def single_molecule_xyz_file(xyz_directory):
 @pytest.fixture()
 def multiple_molecules_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_conformers.xyz")
+
+
+@pytest.fixture()
+def xtb_optimized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "ts_xtbopt.xyz")
+
+
+@pytest.fixture()
+def chemsmart_generated_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "frozen_coordinates_opt.xyz")
+
+
+@pytest.fixture()
+def extended_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crystal.extxyz")
 
 
 @pytest.fixture()
