@@ -143,7 +143,7 @@ IRC-Specific OPTIONS
 
    -  -  ``-rs, --recalc-step``
       -  int
-      -  Compute the Hessian analytically every N predictor steps or every |N| corrector steps if N<0 (default=6)
+      -  Compute the Hessian analytically every N predictor steps or every N corrector steps if N<0 (default=6)
 
    -  -  ``-p, --maxpoints``
       -  int
