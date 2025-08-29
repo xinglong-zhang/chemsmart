@@ -6,11 +6,12 @@ dependencies:
   - python=3.10
   - pymol-open-source=3.1.0
   - ffmpeg=7.1.1  # movie support for pymol
-  - sphinx
-  - myst-parser
-  - sphinx_rtd_theme
-  - sphinx-autodoc-typehints
-  - doc8
   - pip
   - pip:
       - -e .[test,dev]  # Install both test and dev dependencies
+      - rstfmt
+      - sphinx
+      - myst-parser
+      - sphinx_rtd_theme
+      - sphinx-autodoc-typehints
+      - doc8
