@@ -216,8 +216,9 @@ docs-clean: ## Clean documentation artifacts.
 	$(MAKE) -C docs clean
 
 docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
+	@echo "==> Installing doc8, sphinx, and all doc extensions..."
+	$(ENV_PREFIX)pip install -q doc8 sphinx myst_parser sphinx_rtd_theme sphinx-autodoc-typehints
 	@echo "==> Running doc8..."
-	$(ENV_PREFIX)pip install -q doc8 sphinx
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running sphinx-build -W..."
 	$(ENV_PREFIX)sphinx-build -W -b html docs/source docs/build
