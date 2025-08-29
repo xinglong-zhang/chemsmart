@@ -222,7 +222,8 @@ BOLTZMANN_OPTIONS
      - Description
    * - ``-w, --energy-type-for-weighting``
      - string
-     - | Specifies the weighting scheme for Boltzmann averaging based on the type of energy.
+     - | Specifies the weighting scheme for Boltzmann averaging based on the type of
+       | energy.
        | Options include ``gibbs`` (default) and ``electronic``.
    * - ``-S, --skip-completed / -R, --no-skip-completed``
      - bool
