@@ -100,6 +100,10 @@ class GaussianFileMixin(FileMixin):
         return nproc
 
     @property
+    def freq(self):
+        return self.route_object.freq
+
+    @property
     def route_string(self):
         """Route string for Gaussian file.
         Returned by individual subclasses."""
@@ -108,6 +112,13 @@ class GaussianFileMixin(FileMixin):
     def _get_route(self):
         """Default implementation. Subclasses must override this method."""
         raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def is_link(self):
+        for line in self.contents:
+            if line.startswith("#") and "stable=opt" in line:
+                return True
+        return False
 
     @property
     def modred(self):
@@ -199,10 +210,6 @@ class GaussianFileMixin(FileMixin):
     @property
     def chk(self):
         return self._get_chk()
-
-    @property
-    def freq(self):
-        return self.route_object.freq
 
     @property
     def numfreq(self):
