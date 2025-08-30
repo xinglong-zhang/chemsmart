@@ -42,8 +42,9 @@ CREST-Specific OPTIONS
 
    Jobtype must be provided for Crest and Link job!
 
-Basic Usage
-===========
+=======
+Crest Basic Usage
+=================
 
 **Basic CREST-Gaussian jobs**
 
@@ -72,8 +73,9 @@ Basic Usage
    Typically, the ``<input_file>`` is a list of all conformers obtained by CREST program and named
    ``crest_conformers.xyz``.
 
-Examples
-========
+=======
+Crest Examples
+==============
 
 **Use CREST-opt job for 10 conformers**
 
@@ -112,6 +114,7 @@ Trajectory-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+=======
 
    -  -  ``-j, --jobtype``
       -  string
@@ -126,8 +129,8 @@ Trajectory-Specific OPTIONS
       -  Proportion of structures from the end of trajectory to use. Values ranges from 0.0 < x <= 1.0. Defaults to 0.1
          (last 10% of structures)
 
-Basic Usage
-===========
+Trajectory Basic Usage
+======================
 
 **Basic trajectory analysis**
 
@@ -185,8 +188,10 @@ Grouper-Specific OPTIONS
       -  int
       -  Number of processors to use for grouper (Default=1)
 
-Basic Usage
-===========
+=======
+
+Grouper Basic Usage
+===================
 
 **Basic grouping for crest job**
 
@@ -200,8 +205,9 @@ Basic Usage
 
       chemsmart sub gaussian -p traj_test -f trajectory.xyz -c 0 -m 1 traj -j opt -x 0.5 -g tanimoto
 
-Examples
-========
+=======
+Grouper Examples
+================
 
 **Use rmsd Grouper for crest job**
 

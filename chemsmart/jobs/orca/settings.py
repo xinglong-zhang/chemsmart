@@ -5,9 +5,8 @@ import re
 
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
-from chemsmart.utils.utils import (
-    get_prepend_string_list_from_modred_free_format,
-)
+from chemsmart.utils.utils import \
+    get_prepend_string_list_from_modred_free_format
 
 logger = logging.getLogger(__name__)
 

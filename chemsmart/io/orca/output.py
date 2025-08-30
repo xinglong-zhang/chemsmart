@@ -8,20 +8,15 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.io import (
-    clean_duplicate_structure,
-    create_molecule_list,
-    increment_numbers,
-)
+from chemsmart.utils.io import (clean_duplicate_structure,
+                                create_molecule_list, increment_numbers)
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.repattern import (
-    orca_constrained_coordinates_pattern,
-    orca_frozen_atoms_output_pattern,
-    orca_input_coordinate_in_output,
-    orca_nproc_used_line_pattern,
-    standard_coord_pattern,
-)
+from chemsmart.utils.repattern import (orca_constrained_coordinates_pattern,
+                                       orca_frozen_atoms_output_pattern,
+                                       orca_input_coordinate_in_output,
+                                       orca_nproc_used_line_pattern,
+                                       standard_coord_pattern)
 from chemsmart.utils.utils import is_float, string2index_1based
 
 p = PeriodicTable()

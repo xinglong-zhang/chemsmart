@@ -4,9 +4,8 @@ import os.path
 from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCATSJobSettings
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.io import remove_keyword
-from chemsmart.utils.utils import (
-    get_prepend_string_list_from_modred_free_format,
-)
+from chemsmart.utils.utils import \
+    get_prepend_string_list_from_modred_free_format
 
 logger = logging.getLogger(__name__)
 

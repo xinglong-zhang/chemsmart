@@ -12,12 +12,8 @@ import requests
 from ase.data.pubchem import analyze_input, base_url
 from requests.exceptions import HTTPError as RequestsHTTPError
 from requests.exceptions import RequestException, Timeout
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_exponential)
 
 from chemsmart.io.molecules.structure import Molecule
 

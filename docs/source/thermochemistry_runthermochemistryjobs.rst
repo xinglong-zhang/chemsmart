@@ -5,6 +5,7 @@ contact our team if you have questions or feedback.
  Run Thermochemistry Analysis Jobs
 ###################################
 
+<<<<<<< HEAD
 *******************************
  Thermochemistry Analysis Jobs
 *******************************
@@ -12,12 +13,21 @@ contact our team if you have questions or feedback.
 In CHEMSMART, the ``thermochemistry`` command currently supports parsing output files from **Gaussian** and **ORCA**,
 enabling users to recalculate and apply corrections to thermochemical properties such as enthalpy, entropy, and Gibbs
 free energy based on quantum chemical results.
+=======
+ChemSmart provides comprehensive thermochemistry analysis capabilities for calculating thermodynamic properties,
+Boltzmann weighting, and statistical mechanics data from quantum chemistry calculations.
+
+*************************
+ Basic Command Structure
+*************************
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 USAGE
 =====
 
 .. code:: console
 
+<<<<<<< HEAD
    chemsmart run thermochemistry [-d path/to/directory] [-t log|out] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
                                  [-ch h_freq_cutoff] [-c concentration] [-p pressure] [-w]
@@ -26,6 +36,24 @@ USAGE
 
 THERMO_OPTIONS
 ==============
+=======
+   chemsmart run [OPTIONS] thermochemistry [THERMO_OPTIONS]
+
+.. code:: console
+
+   chemsmart run thermochemistry [THERMO_OPTIONS] boltzmann [SUB_OPTIONS]”
+
+*******************************
+ Thermochemistry Analysis Jobs
+*******************************
+
+Run comprehensive thermochemistry analysis on frequency calculation outputs.
+
+THERMO_OPTIONS
+==============
+
+Works for all thermochemistry jobs
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 .. list-table::
    :header-rows: 1
@@ -34,6 +62,21 @@ THERMO_OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
+=======
+
+   -  -  ``-o, --outputfile``
+      -  string
+      -  Output file to save the thermochemistry results. Defaults to file_basename.dat (default=None)
+
+   -  -  ``-O, --overwrite``
+      -  bool
+      -  Overwrite existing output files if they already exist (default=False)
+
+   -  -  ``-i, --check-imaginary-frequencies``
+      -  bool
+      -  Check for imaginary frequencies in the calculations (default=True)
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
    -  -  ``-d, --directory``
       -  string
@@ -262,44 +305,157 @@ BOLTZMANN_OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
+=======
+
+   -  -  ``-t, --temperature``
+      -  float
+      -  Temperature in Kelvin (default=None)
+
+   -  -  ``-p, --pressure``
+      -  float
+      -  Pressure in atm (default=None)
+
+   -  -  ``-c, --concentration``
+      -  float
+      -  Concentration in mol/L (default=None)
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
    -  -  ``-w, --energy-type-for-weighting``
 
+<<<<<<< HEAD
       -  string
+=======
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-cs, --cutoff-entropy``
+      -  float
+      -  Cutoff frequency for entropy in wavenumbers (default=None)
+
+   -  -  ``-ch, --cutoff-enthalpy``
+      -  float
+      -  Cutoff frequency for enthalpy in wavenumbers (default=None)
+
+   -  -  ``-a, --alpha``
+      -  int
+      -  Interpolator exponent used in the quasi-RRHO approximation (default=4)
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
       -  |  Specifies the weighting scheme for Boltzmann averaging based on the type of
          |  energy.
          |  Options include ``gibbs`` (default) and ``electronic``.
 
+<<<<<<< HEAD
    -  -  ``-S, --skip-completed / -R, --no-skip-completed``
+=======
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-w, --weighted``
+      -  bool
+      -  Use natural abundance weighted masses (True) or use most abundant masses (False) (default=False)
+
+   -  -  ``-u, --energy-units``
+      -  string
+      -  Units of energetic values. Options: hartree, eV, kcal/mol, kJ/mol (default="hartree")
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
       -  bool
 
+<<<<<<< HEAD
       -  |  Controls how completed jobs are handled.
          |  ``-R`` forces rerun completed Boltzmann jobs, ``-S`` skips completed jobs.
          |  By default, ``-S`` is enabled.
 
 EXAMPLES
 ========
+=======
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-o, --outputfile``
+      -  string
+      -  Output file to save the thermochemistry results. Defaults to file_basename.dat (default=None)
+
+   -  -  ``-O, --overwrite``
+      -  bool
+      -  Overwrite existing output files if they already exist (default=False)
+
+   -  -  ``-i, --check-imaginary-frequencies``
+      -  bool
+      -  Check for imaginary frequencies in the calculations (default=True)
+
+Basic Usage
+===========
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Boltzmann-weighted averaging for two conformers**
 
+<<<<<<< HEAD
 .. code:: console
 
    chemsmart run thermochemistry -T 298.15 -f conformer1.log -f conformer2.log boltzmann -w electronic
+=======
+   .. code:: console
+
+      chemsmart run thermochemistry -p thermo_analysis -f freq_output.log analysis
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 Perform thermochemical analysis for ``conformer1.log`` and ``conformer2.log``, followed by Boltzmann-weighted averaging
 using electronic energies.
 
+<<<<<<< HEAD
 Results will be saved to ``thermochemistry_job_boltzmann.dat``.
 
 **Boltzmann-weighted averaging for batch directory calculation**
+=======
+   .. code:: console
+
+      chemsmart run thermochemistry -p thermo_custom -f molecule_freq.log analysis -o custom_results.dat
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 .. code:: console
 
+<<<<<<< HEAD
    chemsmart run thermochemistry -T 298.15 -d </path/to/directory> -t out boltzmann
 
 Perform thermochemical calculations for all ``.out`` files in the directory and apply Boltzmann-weighted average using
 Gibbs free energies.
 
 Results will be saved to ``thermochemistry_job_boltzmann.dat``.
+=======
+   .. code:: console
+
+      chemsmart run thermochemistry -p thermo_overwrite -f calculation.log analysis -O
+
+Examples
+========
+
+***********************************
+ Boltzmann Weighted Averaging Jobs
+***********************************
+
+Run Boltzmann weighted averaging for thermochemistry jobs with multiple conformers.
+
+.. list-table:: Boltzmann Weighting Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-w, --energy-type-for-weighting``
+      -  string
+      -  Type of energy to use for Boltzmann weighting. Options: gibbs, electronic (default="gibbs")
+
+Boltzmann Basic Usage
+=====================
+
+Boltzmann Examples
+==================
+>>>>>>> 8a3e0a1 (Docs setup (#263))

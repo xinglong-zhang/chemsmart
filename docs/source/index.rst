@@ -89,10 +89,23 @@
 
    scripts_overview
 
+<<<<<<< HEAD
 ####################
  Indices and tables
 ####################
 
+=======
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   modules
+
+####################
+ Indices and tables
+####################
+
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 -  :ref:`genindex`
 -  :ref:`modindex`
 -  :ref:`search`

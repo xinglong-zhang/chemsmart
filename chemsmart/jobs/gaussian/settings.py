@@ -200,10 +200,8 @@ class GaussianJobSettings(MolecularJobSettings):
             filename (str): file path of the .log file to be supplied.
         """
         log_path = os.path.abspath(filename)
-        from chemsmart.io.gaussian.output import (
-            Gaussian16Output,
-            Gaussian16OutputWithPBC,
-        )
+        from chemsmart.io.gaussian.output import (Gaussian16Output,
+                                                  Gaussian16OutputWithPBC)
 
         logger.info(f"Return Settings object from logfile: {log_path}")
         try:

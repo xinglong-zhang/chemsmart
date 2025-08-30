@@ -19,8 +19,7 @@ from chemsmart.utils.repattern import (
     orca_dias_filename_point_with_fragment1,
     orca_dias_filename_point_with_fragment2,
     orca_dias_filename_point_without_fragment,
-    orca_dias_filename_with_reactant,
-)
+    orca_dias_filename_with_reactant)
 
 logger = logging.getLogger(__name__)
 

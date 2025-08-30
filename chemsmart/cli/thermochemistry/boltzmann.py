@@ -31,9 +31,8 @@ def boltzmann(
     jobs = ctx.obj.get("jobs", [])
     files = ctx.obj.get("filenames", [])
     job_settings = ctx.obj.get("job_settings", {})
-    from chemsmart.jobs.thermochemistry.boltzmann import (
-        BoltzmannAverageThermochemistryJob,
-    )
+    from chemsmart.jobs.thermochemistry.boltzmann import \
+        BoltzmannAverageThermochemistryJob
 
     boltzmann_thermochemistry = BoltzmannAverageThermochemistryJob(
         files=files,

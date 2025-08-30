@@ -54,6 +54,16 @@ dev = [
     "black",
     "isort",
     "gitchangelog",
+<<<<<<< HEAD
+=======
+]
+docs = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+    "sphinx-rtd-theme",
+    "rstfmt",
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 ]
 
 [project.urls]

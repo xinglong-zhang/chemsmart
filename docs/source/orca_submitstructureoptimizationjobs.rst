@@ -29,6 +29,7 @@ Opt-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-f, --freeze-atoms``
       -  string
@@ -40,6 +41,19 @@ Opt-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-f, --freeze-atoms``
+      -  string
+      -  Indices of atoms to freeze for constrained optimization. 1-indexed (default=None)
+
+   -  -  ``-i, --invert-constraints/--no-invert-constraints``
+      -  bool
+      -  Invert the constraints for frozen atoms in optimization (default=False)
+
+Opt Basic Usage
+===============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic geometry optimization**:
 
@@ -63,8 +77,13 @@ Single point calculations compute the energy and properties of a molecule at a f
 
    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] sp [SUBCMD_OPTIONS]
 
+<<<<<<< HEAD
 Basic Usage
 ===========
+=======
+SP Basic Usage
+==============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic single point calculation**:
 

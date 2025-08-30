@@ -4,11 +4,8 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.mol.mol import (
-    click_pymol_save_options,
-    click_pymol_visualization_options,
-    mol,
-)
+from chemsmart.cli.mol.mol import (click_pymol_save_options,
+                                   click_pymol_visualization_options, mol)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)

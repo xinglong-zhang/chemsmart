@@ -1,16 +1,12 @@
 import logging
 
-from chemsmart.io.orca import (
-    ORCA_ALL_AB_INITIO,
-    ORCA_ALL_AUXILIARY_BASIS_SETS,
-    ORCA_ALL_BASIS_SETS,
-    ORCA_ALL_DISPERSION_CORRECTIONS,
-    ORCA_ALL_EXTRAPOLATION_BASIS_SETS,
-    ORCA_ALL_FUNCTIONALS,
-    ORCA_ALL_JOB_TYPES,
-    ORCA_ALL_SCF_ALGORITHMS,
-    ORCA_SCF_CONVERGENCE,
-)
+from chemsmart.io.orca import (ORCA_ALL_AB_INITIO,
+                               ORCA_ALL_AUXILIARY_BASIS_SETS,
+                               ORCA_ALL_BASIS_SETS,
+                               ORCA_ALL_DISPERSION_CORRECTIONS,
+                               ORCA_ALL_EXTRAPOLATION_BASIS_SETS,
+                               ORCA_ALL_FUNCTIONALS, ORCA_ALL_JOB_TYPES,
+                               ORCA_ALL_SCF_ALGORITHMS, ORCA_SCF_CONVERGENCE)
 
 logger = logging.getLogger(__name__)
 

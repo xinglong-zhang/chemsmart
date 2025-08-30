@@ -2,13 +2,8 @@ import os
 from filecmp import cmp
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.orca import (
-    ORCAModredJob,
-    ORCAOptJob,
-    ORCAScanJob,
-    ORCASinglePointJob,
-    ORCATSJob,
-)
+from chemsmart.jobs.orca import (ORCAModredJob, ORCAOptJob, ORCAScanJob,
+                                 ORCASinglePointJob, ORCATSJob)
 from chemsmart.jobs.orca.writer import ORCAInputWriter
 from chemsmart.settings.orca import ORCAJobSettings, ORCAProjectSettings
 

@@ -3,11 +3,8 @@ import logging
 from abc import abstractmethod
 from typing import Optional
 
-from chemsmart.settings.executable import (
-    GaussianExecutable,
-    NCIPLOTExecutable,
-    ORCAExecutable,
-)
+from chemsmart.settings.executable import (GaussianExecutable,
+                                           NCIPLOTExecutable, ORCAExecutable)
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 

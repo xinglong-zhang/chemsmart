@@ -6,11 +6,9 @@ from ase.symbols import Symbols
 
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.gaussian.output import (
-    Gaussian16Output,
-    Gaussian16OutputWithPBC,
-    Gaussian16WBIOutput,
-)
+from chemsmart.io.gaussian.output import (Gaussian16Output,
+                                          Gaussian16OutputWithPBC,
+                                          Gaussian16WBIOutput)
 from chemsmart.io.gaussian.route import GaussianRoute
 
 

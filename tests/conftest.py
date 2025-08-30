@@ -10,10 +10,8 @@ from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
-from chemsmart.jobs.mol.runner import (
-    PyMOLMovieJobRunner,
-    PyMOLVisualizationJobRunner,
-)
+from chemsmart.jobs.mol.runner import (PyMOLMovieJobRunner,
+                                       PyMOLVisualizationJobRunner)
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server

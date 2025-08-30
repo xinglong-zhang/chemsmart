@@ -49,10 +49,8 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     # Set atoms to freeze
 
-    from chemsmart.utils.utils import (
-        convert_list_to_gaussian_frozen_list,
-        get_list_from_string_range,
-    )
+    from chemsmart.utils.utils import (convert_list_to_gaussian_frozen_list,
+                                       get_list_from_string_range)
 
     if freeze_atoms is not None:
         frozen_atoms_list = get_list_from_string_range(freeze_atoms)

@@ -12,10 +12,7 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import (
-    get_prepend_string_list_from_modred_free_format,
-    quote_path,
-    run_command,
-)
+    get_prepend_string_list_from_modred_free_format, quote_path, run_command)
 
 pt = PeriodicTable()
 

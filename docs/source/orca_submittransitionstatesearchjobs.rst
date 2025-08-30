@@ -66,6 +66,7 @@ TS-Specific OPTIONS
    -  -  ``-t, --trust-radius <float>``
       -  float
       -  Trust radius for TS optimization (default=None)
+<<<<<<< HEAD
 
    -  -  ``-ts, --tssearch-type <string>``
       -  string
@@ -80,6 +81,22 @@ state search through scanning
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-ts, --tssearch-type <string>``
+      -  string
+      -  Type of TS search to perform. Options: optts, scants (default="optts")
+
+   -  -  ``-fs, --full-scan/--no-full-scan``
+      -  flag
+      -  Option to perform a full scan (default=False)
+
+**Search Modes:** - **OptTS mode (optts)**: Direct transition state optimization - **ScanTS mode (scants)**: Transition
+state search through scanning
+
+TS Basic Usage
+==============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic transition state search**:
 
@@ -114,8 +131,13 @@ Modred-Specific OPTIONS
 
 Jobtype mission
 
+<<<<<<< HEAD
 Basic Usage
 ===========
+=======
+Modred Basic Usage
+==================
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 Whats the Difference TODO
 
@@ -233,6 +255,7 @@ IRC-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``--tolrmsg``
       -  float
@@ -256,6 +279,31 @@ IRC-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``--tolrmsg``
+      -  float
+      -  Tolerance for RMS gradient (a.u.). Default 5.e-4 (default=None)
+
+   -  -  ``--tolmaxg``
+      -  float
+      -  Tolerance for maximum gradient (a.u.). Default 2.e-3 (default=None)
+
+   -  -  ``-M, --monitor-internals/--no-monitor-internals``
+      -  flag
+      -  Monitor internals to print out up to three internal coordinates (default=False)
+
+   -  -  ``-I, --internal-modred``
+      -  string
+      -  Internal modred. Up to three internal coordinates can be defined and values printed (default=None)
+
+   -  -  ``--follow-coordtype``
+      -  string
+      -  Follow coordinate type. Default cartesian. The only option (default=None)
+
+IRC Basic Usage
+===============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic IRC calculation**:
 
@@ -301,6 +349,7 @@ Scan-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-j, --jobtype``
       -  string
@@ -324,6 +373,31 @@ Scan-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-j, --jobtype``
+      -  string
+      -  ORCA job type. Options: opt, ts, modred, scan, sp (default=None)
+
+   -  -  ``-c, --coordinates``
+      -  string
+      -  List of coordinates to be fixed for modred or scan job. 1-indexed (default=None)
+
+   -  -  ``-x, --dist-start``
+      -  string
+      -  Starting distance to scan, in Angstroms (default=None)
+
+   -  -  ``-y, --dist-end``
+      -  string
+      -  Ending distance to scan, in Angstroms (default=None)
+
+   -  -  ``-n, --num-steps``
+      -  string
+      -  Number of steps for coordinate scanning (default=None)
+
+Scan Basic Usage
+================
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic distance scan**:
 

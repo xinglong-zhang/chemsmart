@@ -46,8 +46,13 @@ MO-Specific OPTIONS
    MO jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering
    options.
 
+<<<<<<< HEAD
 Basic Usage
 ===========
+=======
+MO Basic Usage
+==============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic molecular orbital visualization**
 
@@ -93,8 +98,13 @@ Spin-Specific OPTIONS
 Spin density jobs inherit all options from visualization jobs including styling, ray tracing, and surface rendering
 options.
 
+<<<<<<< HEAD
 Basic Usage
 ===========
+=======
+Spin Basic Usage
+================
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 -  **Basic spin density visualization**
 

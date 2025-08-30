@@ -36,6 +36,7 @@ Opt-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-f, --freeze-atoms``
       -  string
@@ -43,6 +44,15 @@ Opt-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-f, --freeze-atoms``
+      -  string
+      -  Indices of atoms to freeze for constrained optimization (1-based indexing)
+
+Opt Basic Usage
+===============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic geometry optimization**
 
@@ -61,11 +71,19 @@ Basic Usage
    and
 
    .. code:: console
+<<<<<<< HEAD
 
       chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-3,5,7
 
 Examples
 ========
+=======
+
+      chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-3,5,7
+
+Opt Examples
+============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **optimize structure directly from a Gaussian optimization output file with different charge and multiplicity**
 
@@ -104,8 +122,13 @@ CRESTOPT-Specific OPTIONS
       -  int
       -  Number of conformers to optimize from the CREST ensemble
 
+<<<<<<< HEAD
 Basic Usage
 ===========
+=======
+CRESTOPT Basic Usage
+====================
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **CREST Optimization for all conformers**
 

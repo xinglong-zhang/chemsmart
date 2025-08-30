@@ -7,17 +7,10 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.utils import (
-    cmp_with_ignore,
-    content_blocks_by_paragraph,
-    convert_string_index_from_1_based_to_0_based,
-    get_list_from_string_range,
-    is_float,
-    iterative_compare,
-    naturally_sorted,
-    run_command,
-    str_indices_range_to_list,
-    string2index_1based,
-)
+    cmp_with_ignore, content_blocks_by_paragraph,
+    convert_string_index_from_1_based_to_0_based, get_list_from_string_range,
+    is_float, iterative_compare, naturally_sorted, run_command,
+    str_indices_range_to_list, string2index_1based)
 
 
 class TestUtils:

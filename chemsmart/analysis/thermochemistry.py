@@ -8,19 +8,13 @@ from ase import units
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.constants import (
-    R,
-    atm_to_pa,
-    energy_conversion,
-    hartree_to_joules,
-)
-from chemsmart.utils.references import (
-    grimme_quasi_rrho_entropy_ref,
-    head_gordon_damping_function_ref,
-    head_gordon_quasi_rrho_enthalpy_ref,
-    qrrho_header,
-    truhlar_quasi_rrho_entropy_ref,
-)
+from chemsmart.utils.constants import (R, atm_to_pa, energy_conversion,
+                                       hartree_to_joules)
+from chemsmart.utils.references import (grimme_quasi_rrho_entropy_ref,
+                                        head_gordon_damping_function_ref,
+                                        head_gordon_quasi_rrho_enthalpy_ref,
+                                        qrrho_header,
+                                        truhlar_quasi_rrho_entropy_ref)
 
 logger = logging.getLogger(__name__)
 

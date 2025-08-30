@@ -28,6 +28,7 @@ TS-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-f, --freeze-atoms``
       -  string
@@ -35,6 +36,15 @@ TS-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-f, --freeze-atoms``
+      -  string
+      -  Indices of atoms to freeze for constrained optimization
+
+TS Basic Usage
+==============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Transition state with specific charge and multiplicity**
 
@@ -48,8 +58,13 @@ Basic Usage
 
       chemsmart sub gaussian -p constrained_ts -f ts_guess.xyz ts -f 2,5,8
 
+<<<<<<< HEAD
 Examples
 ========
+=======
+TS Examples
+===========
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Use semiempirical method for pre-TS**
 
@@ -80,6 +95,7 @@ Modred-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-c, --coordinates``
       -  string
@@ -87,6 +103,15 @@ Modred-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-c, --coordinates``
+      -  string
+      -  List of coordinates to be fixed for modred job (1-based indexing)
+
+Modred Basic Usage
+==================
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Defining Coordinate Constraints**
 
@@ -94,11 +119,19 @@ Basic Usage
    10, do:
 
    .. code:: console
+<<<<<<< HEAD
 
       chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17]]
 
 Examples
 ========
+=======
+
+      chemsmart sub -s shared gaussian -p test -f input.com modred -c [[4,17]]
+
+Modred Examples
+===============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Modred optimization**
 
@@ -128,6 +161,7 @@ IRC-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-fl, --flat-irc/--no-flat-irc``
       -  bool
@@ -159,6 +193,39 @@ IRC-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-fl, --flat-irc/--no-flat-irc``
+      -  bool
+      -  Whether to run flat IRC or not (default=False)
+
+   -  -  ``-pt, --predictor``
+      -  string
+      -  Type of predictors used for IRC. Options: LQA, HPC, EulerPC, DVV, Euler (default=none)
+
+   -  -  ``-rc, --recorrect``
+      -  string
+      -  Recorrection step of HPC and EulerPC IRCs. Options: Never, Always, Test (default=none)
+
+   -  -  ``-rs, --recalc-step``
+      -  int
+      -  Compute the Hessian analytically every N predictor steps or every N corrector steps if N<0 (default=6)
+
+   -  -  ``-p, --maxpoints``
+      -  int
+      -  Number of points along reaction path to examine (default=512)
+
+   -  -  ``-c, --maxcycles``
+      -  int
+      -  Maximum number of steps along IRC to run (default=128)
+
+   -  -  ``-s, --stepsize``
+      -  int
+      -  Step size along reaction path, in units of 0.01 Bohr (default=20)
+
+IRC Basic Usage
+===============
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic IRC calculation**:
 
@@ -190,6 +257,7 @@ Scan-Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
+<<<<<<< HEAD
 
    -  -  ``-c, --coordinates``
       -  string
@@ -205,6 +273,23 @@ Scan-Specific OPTIONS
 
 Basic Usage
 ===========
+=======
+
+   -  -  ``-c, --coordinates``
+      -  string
+      -  List of coordinates to be fixed for scan job. 1-indexed (default=None)
+
+   -  -  ``-s, --step-size``
+      -  float
+      -  Step size of coordinates to scan (default=None)
+
+   -  -  ``-n, --num-steps``
+      -  int
+      -  Number of steps to scan (default=None)
+
+Scan Basic Usage
+================
+>>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic coordinate scan**
 
