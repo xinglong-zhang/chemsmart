@@ -78,8 +78,8 @@ TS-Specific OPTIONS
 **Search Modes:** - **OptTS mode (optts)**: Direct transition state optimization - **ScanTS mode (scants)**: Transition
 state search through scanning
 
-Basic Usage
-===========
+TS Basic Usage
+==============
 
 **Basic transition state search**:
 
@@ -114,8 +114,8 @@ Modred-Specific OPTIONS
 
 Jobtype mission
 
-Basic Usage
-===========
+Modred Basic Usage
+==================
 
 Whats the Difference TODO
 
@@ -254,8 +254,8 @@ IRC-Specific OPTIONS
       -  string
       -  Follow coordinate type. Default cartesian. The only option (default=None)
 
-Basic Usage
-===========
+IRC Basic Usage
+===============
 
 **Basic IRC calculation**:
 
@@ -322,8 +322,8 @@ Scan-Specific OPTIONS
       -  string
       -  Number of steps for coordinate scanning (default=None)
 
-Basic Usage
-===========
+Scan Basic Usage
+================
 
 **Basic distance scan**:
 

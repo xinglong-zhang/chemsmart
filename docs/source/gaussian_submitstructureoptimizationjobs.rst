@@ -41,8 +41,8 @@ Opt-Specific OPTIONS
       -  string
       -  Indices of atoms to freeze for constrained optimization (1-based indexing)
 
-Basic Usage
-===========
+Opt Basic Usage
+===============
 
 **Basic geometry optimization**
 
@@ -64,8 +64,8 @@ Basic Usage
 
       chemsmart sub -s shared gaussian -p frozen_opt -f input.com opt -f 1-3,5,7
 
-Examples
-========
+Opt Examples
+============
 
 **optimize structure directly from a Gaussian optimization output file with different charge and multiplicity**
 
@@ -104,8 +104,8 @@ CRESTOPT-Specific OPTIONS
       -  int
       -  Number of conformers to optimize from the CREST ensemble
 
-Basic Usage
-===========
+CRESTOPT Basic Usage
+====================
 
 **CREST Optimization for all conformers**
 

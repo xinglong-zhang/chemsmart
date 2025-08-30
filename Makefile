@@ -109,13 +109,13 @@ endif
 # === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in development mode.
+install:          ## Install the project in user mode.
 	$(ENV_PREFIX)pip install .  # Normal users (runtime only)
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: install-dev
-install:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[dev,test]  # install dependencies in dev and test too
+install-dev:          ## Install the project in development mode.
+	$(ENV_PREFIX)pip install -e .[dev,test,docs]  # install dependencies in dev, test and docs in pyproject.toml
 	$(ENV_PREFIX)pip install types-PyYAML
 
 .PHONY: pre-commit
@@ -210,14 +210,9 @@ test: lint coverage-clean ## Run tests and generate coverage report (robust to c
 	-$(ENV_PREFIX)coverage html
 
 # === Docs ===
-.PHONY: docs-clean docs-lint docs-fmt docs
+.PHONY: docs-lint docs-fmt docs docs-clean
 
-docs-clean: ## Clean documentation artifacts.
-	$(MAKE) -C docs clean
-
-docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
-	@echo "==> Installing doc linting tools (if needed)..."
-	$(ENV_PREFIX)pip install -q doc8 rstcheck
+docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running rstcheck..."
@@ -236,7 +231,10 @@ docs-fmt: ## Auto-format reStructuredText with rstfmt.
 	$(ENV_PREFIX)rstfmt -w 120 docs/source
 
 docs: ## Build documentation (HTML).
-	$(MAKE) -C docs html
+	+$(ENV_PREFIX)$(MAKE) -C docs html  # leading + tells GNU Make this is a recursive make; it preserves jobserver flags, etc.
+
+docs-clean: ## Clean documentation artifacts.
+	+$(ENV_PREFIX)$(MAKE) -C docs clean
 
 
 # === Cleanup ===
