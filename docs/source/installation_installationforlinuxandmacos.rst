@@ -66,6 +66,13 @@ https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
 
       make install
 
+-  For developers, one needs to install additional packages and dependencies (dev, test, docs targets in pyproject.toml)
+   required for ``chemsmart`` package via：
+
+   .. code:: console
+
+      make install-dev
+
 ********************
  Make Configuration
 ********************
@@ -98,28 +105,41 @@ https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
 
    to effect the changes.
 
--  Once ``make configure`` is done, one can optionally run
+..
+   -  Once ``make configure`` is done, one can optionally run
 
+..
    .. code:: console
 
-      make fmt
+..
+   make fmt
 
+..
    and
 
+..
    .. code:: console
 
-      make lint
+..
+   make lint
 
+..
    to format and lint the codes (this should have been handled by the developers). Also optionally, one can run
 
+..
    .. code:: console
 
-      make test
+..
+   make test
 
+..
    to make sure that all tests in chemsmart pass.
 
--  Finally one can clean up by running
+..
+   -  Finally one can clean up by running
 
+..
    .. code:: console
 
-      make clean
+..
+   make clean

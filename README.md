@@ -51,6 +51,13 @@ make install
 ```
 which installs the packages and dependencies required for `chemsmart` package.
 
+For developers, one may run
+
+```bash
+make install-dev
+```
+which installs additoinal packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing `chemsmart` package.
+
 Next, run
 ```bash
 make configure
@@ -185,7 +192,7 @@ source ~/.bashrc
 
 to effect the changes.
 
----
+<!-- ---
 Once `make configure` is done, one can optionally run 
 ```bash
 make fmt
@@ -208,7 +215,7 @@ Finally one can clean up by running
 
 ```bash
 make clean
-```
+``` -->
 
 ## Testing Installations
 
