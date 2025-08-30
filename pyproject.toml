@@ -61,9 +61,9 @@ docs = [
     "myst-parser",
     "sphinx-autodoc-typehints",
     "sphinx-rtd-theme",
-    "rstfmt",
     "doc8",
     "rstcheck",
+    "rstfmt",
 ]
 
 [project.urls]
