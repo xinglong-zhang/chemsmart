@@ -104,3 +104,4 @@ https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
       source ~/.bashrc
 
    to effect the changes.
+
