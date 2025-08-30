@@ -54,12 +54,15 @@ dev = [
     "black",
     "isort",
     "gitchangelog",
+    "types-PyYAML",
 ]
 docs = [
     "sphinx",
     "myst-parser",
     "sphinx-autodoc-typehints",
     "sphinx-rtd-theme",
+    "doc8",
+    "rstcheck",
     "rstfmt",
 ]
 

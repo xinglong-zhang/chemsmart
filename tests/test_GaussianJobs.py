@@ -3,9 +3,7 @@ from filecmp import cmp
 
 import pytest
 
-from chemsmart.jobs.gaussian import (
-    GaussianOptJob,
-)
+from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
 

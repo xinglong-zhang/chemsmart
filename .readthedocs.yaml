@@ -16,9 +16,11 @@ sphinx:
 # Optionally, but recommended,
 # declare the Python requirements required to build your documentation
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
+# Tell RTD to install your package via pyproject.toml (PEP 517/518)
 python:
   install:
     - method: pip
       path: .
-    - requirements: docs/requirements.txt
+      extra_requirements:
+        - docs   # uses docs extra in pyproject.toml
         
