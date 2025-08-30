@@ -18,7 +18,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath("../.."))
 
 project = "chemsmart"
-author = "Xinglong Zhang"
+author = "Zhang Lab"
 copyright = f"{datetime.now():%Y}, {author}"
 release = "0.1.0"
 
