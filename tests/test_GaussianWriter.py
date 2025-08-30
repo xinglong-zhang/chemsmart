@@ -4,9 +4,13 @@ from shutil import copy
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.gaussian import (GaussianModredJob, GaussianOptJob,
-                                     GaussianScanJob, GaussianSinglePointJob,
-                                     GaussianTSJob)
+from chemsmart.jobs.gaussian import (
+    GaussianModredJob,
+    GaussianOptJob,
+    GaussianScanJob,
+    GaussianSinglePointJob,
+    GaussianTSJob,
+)
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings

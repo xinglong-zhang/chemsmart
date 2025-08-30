@@ -32,35 +32,6 @@ Visualization-Specific OPTIONS
    -  -  ``-f, --file``
       -  string
       -  PyMOL file script or style. If not specified, defaults to use zhang_group_pymol_style.py (default=None)
-<<<<<<< HEAD
-
-   -  -  ``-s, --style``
-      -  string
-      -  PyMOL render style. Options: pymol, cylview (default=None)
-
-   -  -  ``-t, --trace/--no-trace``
-      -  bool
-      -  PyMOL options to ray trace or not (default=True)
-
-   -  -  ``-v, --vdw``
-      -  bool
-      -  Add Van der Waals surface (default=False)
-
-   -  -  ``-q, --quiet/--no-quiet``
-      -  bool
-      -  Run PyMOL in quiet mode (default=False)
-
-   -  -  ``--command-line-only/--no-command-line-only``
-      -  bool
-      -  Run PyMOL in command line only (default=True)
-
-   -  -  ``-c, --coordinates <string>``
-      -  string
-      -  List of coordinates (bonds, angles and dihedrals) for labelling. 1-indexed (default=None)
-
-Basic Usage
-===========
-=======
 
    -  -  ``-s, --style``
       -  string
@@ -88,7 +59,6 @@ Basic Usage
 
 Visualization Basic Usage
 =========================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic molecular visualization**
 
@@ -114,13 +84,8 @@ Visualization Basic Usage
 
       chemsmart run mol -f molecule.log visualize -f custom_style.py
 
-<<<<<<< HEAD
-Examples
-========
-=======
 Visualization Examples
 ======================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 ************
  Movie Jobs
@@ -137,13 +102,8 @@ Movie-Specific OPTIONS
 
 Movie jobs inherit all options from visualization jobs and use the same parameters.
 
-<<<<<<< HEAD
-Basic Usage
-===========
-=======
 Movie Basic Usage
 =================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic rotating movie**
 
@@ -151,10 +111,5 @@ Movie Basic Usage
 
       chemsmart run mol -f molecule.xyz movie
 
-<<<<<<< HEAD
-Examples
-========
-=======
 Movie Examples
 ==============
->>>>>>> 8a3e0a1 (Docs setup (#263))

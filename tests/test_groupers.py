@@ -2,10 +2,14 @@ import numpy as np
 import pytest
 
 from chemsmart.io.xyz.file import XYZFile
-from chemsmart.utils.grouper import (ConnectivityGrouper, FormulaGrouper,
-                                     RDKitIsomorphismGrouper, RMSDGrouper,
-                                     StructureGrouperFactory,
-                                     TanimotoSimilarityGrouper)
+from chemsmart.utils.grouper import (
+    ConnectivityGrouper,
+    FormulaGrouper,
+    RDKitIsomorphismGrouper,
+    RMSDGrouper,
+    StructureGrouperFactory,
+    TanimotoSimilarityGrouper,
+)
 from chemsmart.utils.utils import kabsch_align
 
 

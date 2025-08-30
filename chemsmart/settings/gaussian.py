@@ -1,9 +1,11 @@
 import logging
 import os
 
-from chemsmart.jobs.gaussian.settings import (GaussianIRCJobSettings,
-                                              GaussianJobSettings,
-                                              GaussianTDDFTJobSettings)
+from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
+    GaussianJobSettings,
+    GaussianTDDFTJobSettings,
+)
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 

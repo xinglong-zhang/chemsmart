@@ -5,15 +5,20 @@ import pytest
 from ase import units
 
 from chemsmart.analysis.thermochemistry import (
-    BoltzmannAverageThermochemistry, Thermochemistry)
+    BoltzmannAverageThermochemistry,
+    Thermochemistry,
+)
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.cluster import is_pubchem_network_available
-from chemsmart.utils.constants import (cal_to_joules, hartree_to_joules,
-                                       joule_per_mol_to_hartree)
+from chemsmart.utils.constants import (
+    cal_to_joules,
+    hartree_to_joules,
+    joule_per_mol_to_hartree,
+)
 
 
 class TestThermochemistry:

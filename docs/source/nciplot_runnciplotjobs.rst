@@ -2,9 +2,5 @@ Welcome to the tutorials! We're thrilled to have you here. Please go through the
 contact our team if you have questions or feedback.
 
 ##################
-<<<<<<< HEAD
- nciplot Tutorial
-=======
  NCIPLOT Tutorial
->>>>>>> 8a3e0a1 (Docs setup (#263))
 ##################

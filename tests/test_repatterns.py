@@ -4,7 +4,8 @@ from chemsmart.utils.repattern import (
     gaussian_dias_filename_point_with_fragment1,
     gaussian_dias_filename_point_with_fragment2,
     gaussian_dias_filename_point_without_fragment,
-    gaussian_dias_filename_with_reactant)
+    gaussian_dias_filename_with_reactant,
+)
 
 
 class TestGaussianDiasRegexPatterns:

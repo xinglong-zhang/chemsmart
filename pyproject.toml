@@ -54,16 +54,16 @@ dev = [
     "black",
     "isort",
     "gitchangelog",
-<<<<<<< HEAD
-=======
+    "types-PyYAML",
 ]
 docs = [
     "sphinx",
     "myst-parser",
     "sphinx-autodoc-typehints",
     "sphinx-rtd-theme",
+    "doc8",
+    "rstcheck",
     "rstfmt",
->>>>>>> 8a3e0a1 (Docs setup (#263))
 ]
 
 [project.urls]

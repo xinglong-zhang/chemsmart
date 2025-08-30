@@ -212,7 +212,7 @@ test: lint coverage-clean ## Run tests and generate coverage report (robust to c
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean
 
-docs-lint: ## Lint docs with doc8 and Sphinx (warnings as errors)
+docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
 	@echo "==> Running doc8..."
 	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
 	@echo "==> Running rstcheck..."
@@ -224,8 +224,6 @@ endif
 
 # Format all .rst files in docs/source using rstfmt
 docs-fmt: ## Auto-format reStructuredText with rstfmt.
-	@echo "==> Installing rstfmt (if needed)..."
-	$(ENV_PREFIX)pip install -q rstfmt
 	@echo "==> Running rstfmt..."
 	# Format recursively; --in-place edits files
 	$(ENV_PREFIX)rstfmt -w 120 docs/source

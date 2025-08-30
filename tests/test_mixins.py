@@ -1,7 +1,12 @@
 import os
 
-from chemsmart.utils.mixins import (FileMixin, FolderMixin, GaussianFileMixin,
-                                    ORCAFileMixin, RegistryMixin)
+from chemsmart.utils.mixins import (
+    FileMixin,
+    FolderMixin,
+    GaussianFileMixin,
+    ORCAFileMixin,
+    RegistryMixin,
+)
 
 
 class DummyFile(FileMixin):

@@ -2,9 +2,13 @@ import numpy as np
 import pytest
 from ase import units
 
-from chemsmart.utils.constants import (amu_to_kg, bohr_to_meter,
-                                       energy_conversion, hartree_to_joules,
-                                       joule_per_mol_to_eV)
+from chemsmart.utils.constants import (
+    amu_to_kg,
+    bohr_to_meter,
+    energy_conversion,
+    hartree_to_joules,
+    joule_per_mol_to_eV,
+)
 
 # Define conversion factors for reference (in J/mol)
 HARTREE_TO_J_MOL = hartree_to_joules * units._Nav  # ~2625.499639 kJ/mol

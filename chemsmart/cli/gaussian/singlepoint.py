@@ -2,8 +2,10 @@ import logging
 
 import click
 
-from chemsmart.cli.gaussian.gaussian import (click_gaussian_solvent_options,
-                                             gaussian)
+from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_solvent_options,
+    gaussian,
+)
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity

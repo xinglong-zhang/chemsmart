@@ -98,8 +98,9 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
             self.settings.outputfile = self.outputfile
 
         try:
-            from chemsmart.analysis.thermochemistry import \
-                BoltzmannAverageThermochemistry
+            from chemsmart.analysis.thermochemistry import (
+                BoltzmannAverageThermochemistry,
+            )
 
             thermochemistry = BoltzmannAverageThermochemistry(
                 files=self.files,

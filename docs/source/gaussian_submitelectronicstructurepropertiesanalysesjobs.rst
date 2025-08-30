@@ -30,27 +30,6 @@ Please set solvent parameters at the end when needed.
    -  -  Option
       -  Type
       -  Description
-<<<<<<< HEAD
-
-   -  -  ``--remove-solvent/--no-remove-solvent``
-      -  bool
-      -  Whether to use solvent model in the job. Defaults to project settings
-
-   -  -  ``-sm, --solvent-model``
-      -  string
-      -  Solvent model to be used for single point (default = none, use project settings)
-
-   -  -  ``-si, --solvent-id``
-      -  string
-      -  Solvent ID to be used for single point (default = none, use project settings)
-
-   -  -  ``-so, --solvent-options``
-      -  string
-      -  Additional solvent options in scrf=() route. default=None. E.g., iterative in scrf=(smd,water,iterative)
-
-Basic Usage
-===========
-=======
 
    -  -  ``--remove-solvent/--no-remove-solvent``
       -  bool
@@ -70,7 +49,6 @@ Basic Usage
 
 SP Basic Usage
 ==============
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic single point calculation**:
 
@@ -93,13 +71,8 @@ SP Basic Usage
 
    to specify a different solvent model ``<user_solvent_model>`` and solvent ``<user_solvent_id>``.
 
-<<<<<<< HEAD
-Examples
-========
-=======
 SP Examples
 ===========
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Run sp job in gas**
 
@@ -132,43 +105,6 @@ DI-AS Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
-<<<<<<< HEAD
-
-   -  -  ``-i, --fragment-indices``
-      -  string
-      -  Indices of one fragment for DI-AS analysis (required)
-
-   -  -  ``-n, --every-n-points``
-      -  int
-      -  Every nth points along the IRC file to prepare for DI-AS analysis (default=3)
-
-   -  -  ``-s, --solv/--no-solv``
-      -  bool
-      -  Turn on/off solvent for DI-AS job calculations (default=False)
-
-   -  -  ``-m, --mode``
-      -  string
-      -  Mode of DI-AS analysis. Options: irc, ts (default=irc)
-
-   -  -  ``-c1, --charge-of-fragment1``
-      -  int
-      -  Charge of fragment 1 (default=None)
-
-   -  -  ``-m1, --multiplicity-of-fragment1``
-      -  int
-      -  Multiplicity of fragment 1 (default=None)
-
-   -  -  ``-c2, --charge-of-fragment2``
-      -  int
-      -  Charge of fragment 2 (default=None)
-
-   -  -  ``-m2, --multiplicity-of-fragment2``
-      -  int
-      -  Multiplicity of fragment 2 (default=None)
-
-Basic Usage
-===========
-=======
 
    -  -  ``-i, --fragment-indices``
       -  string
@@ -204,7 +140,6 @@ Basic Usage
 
 DI-AS Basic Usage
 =================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic DI-AS analysis on IRC**
 
@@ -224,13 +159,8 @@ Run RESP (Restrained Electrostatic Potential) charge fitting calculations.
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] resp
 
-<<<<<<< HEAD
-Basic Usage
-===========
-=======
 RESP Basic Usage
 ================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 -  **Basic RESP calculation**
 
@@ -259,13 +189,8 @@ Run Non-Covalent Interaction analysis for intermolecular interactions.
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] nci
 
-<<<<<<< HEAD
-Basic Usage
-===========
-=======
 NCI Basic Usage
 ===============
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 -  **Basic NCI calculation**:
 
@@ -293,27 +218,6 @@ TD-DFT Specific Options
    -  -  Option
       -  Type
       -  Description
-<<<<<<< HEAD
-
-   -  -  ``-s, --states``
-      -  string
-      -  States for closed-shell singlet systems. Options: 'singlets', 'triplets', '50-50' (default=singlets)
-
-   -  -  ``-r, --root``
-      -  int
-      -  Specifies the "state of interest". The default is the first excited state (N=1) (default=1)
-
-   -  -  ``-n, --nstates``
-      -  int
-      -  Solve for M states. If 50-50, this gives the number of each type of state to solve (default=3)
-
-   -  -  ``-e, --eqsolv``
-      -  string
-      -  Whether to perform equilibrium or non-equilibrium PCM solvation (default=None)
-
-Basic Usage
-===========
-=======
 
    -  -  ``-s, --states``
       -  string
@@ -333,7 +237,6 @@ Basic Usage
 
 TD-DFT Basic Usage
 ==================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic TD-DFT calculation**
 
@@ -359,13 +262,8 @@ TD-DFT Basic Usage
 
 Run Wiberg Bond Index calculations for bond analysis.
 
-<<<<<<< HEAD
-Basic Usage
-===========
-=======
 WBI Basic Usage
 ===============
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic WBI calculation**
 
@@ -373,13 +271,8 @@ WBI Basic Usage
 
       chemsmart sub gaussian -p wbi_analysis -f opt.log wbi
 
-<<<<<<< HEAD
-Examples
-========
-=======
 WBI Examples
 ============
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Using wbi command for NBO analysis**
 

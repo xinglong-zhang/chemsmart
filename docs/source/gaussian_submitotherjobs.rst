@@ -28,27 +28,6 @@ Link Job Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
-<<<<<<< HEAD
-
-   -  -  ``-j, --jobtype``
-      -  string
-      -  Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]
-
-   -  -  ``-st, --stable``
-      -  string
-      -  Gaussian stability test options (default=opt)
-
-   -  -  ``-g, --guess``
-      -  string
-      -  Gaussian guess options (default=mix)
-
-   -  -  ``-r, --route``
-      -  string
-      -  Route for link section (default=None)
-
-Basic Usage
-===========
-=======
 
    -  -  ``-j, --jobtype``
       -  string
@@ -68,7 +47,6 @@ Basic Usage
 
 Link Basic Usage
 ================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Link job with optimization job type**
 
@@ -82,13 +60,8 @@ Link Basic Usage
 
       chemsmart sub gaussian -p project -f 1_opt.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative
 
-<<<<<<< HEAD
-Examples
-========
-=======
 Link Examples
 =============
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Use link job for optimization of singlet openshell structure**
 
@@ -128,19 +101,6 @@ Custom Job Specific OPTIONS
    -  -  Option
       -  Type
       -  Description
-<<<<<<< HEAD
-
-   -  -  ``-r, --route``
-      -  string
-      -  User-defined route for Gaussian calculation (required)
-
-   -  -  ``-a, --append-info``
-      -  string
-      -  Information to be appended at the end of the file (default=None)
-
-Basic Usage
-===========
-=======
 
    -  -  ``-r, --route``
       -  string
@@ -152,7 +112,6 @@ Basic Usage
 
 Custom Job Basic Usage
 ======================
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Custom job with user-defined route**:
 

@@ -84,8 +84,10 @@ class AtomsChargeMultiplicity(Atoms):
     @classmethod
     def from_atoms(cls, atoms, charge=None, multiplicity=None):
         """Create AtomsChargeMultiplicity from ASE Atoms."""
-        from ase.calculators.calculator import (CalculatorError,
-                                                PropertyNotImplementedError)
+        from ase.calculators.calculator import (
+            CalculatorError,
+            PropertyNotImplementedError,
+        )
         from ase.constraints import FixAtoms
 
         # check if the Atoms object has any constraints, if yes, convert to 1-indexed list

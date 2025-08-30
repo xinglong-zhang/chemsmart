@@ -50,13 +50,8 @@ NCI-Specific OPTIONS
    NCI jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering
    options.
 
-<<<<<<< HEAD
-Basic Usage
-===========
-=======
 NCI Basic Usage
 ===============
->>>>>>> 8a3e0a1 (Docs setup (#263))
 
 **Basic NCI plot**
 
