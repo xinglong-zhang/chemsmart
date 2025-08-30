@@ -302,7 +302,8 @@ Perform thermochemical calculations for all ``.out`` files in the directory and 
 Gibbs free energies.
 
 Results will be saved to ``thermochemistry_job_boltzmann.dat``.
-=======
+===============================================================
+
 Boltzmann Basic Usage
 =====================
 
