@@ -116,4 +116,3 @@ It is recommended that Windows users set up chemsmart using a Bash-based termina
       source ~/.zshrc
 
    to effect the changes.
-
