@@ -20,14 +20,6 @@ class TestConverter:
         )
         copytree(gaussian_outputs_test_directory, tmp_log_folder)
 
-        # # remove link folder in tmp_log_folder if exists
-        # link_folder = os.path.join(tmp_log_folder, "link")
-        # if os.path.exists(link_folder):
-        #     rmtree(link_folder)
-        # ###### DONE: when the test for link jobs are fixed, this should be
-        # ###### removed and the test should pass for link jobs too
-        # ###### TESTS with link jobs also passed
-
         file_converter = FileConverter(
             directory=tmp_log_folder, type="log", output_filetype="xyz"
         )
