@@ -1,8 +1,10 @@
-chemsmart.cli package
-=====================
+#######################
+ chemsmart.cli package
+#######################
 
-Subpackages
------------
+*************
+ Subpackages
+*************
 
 .. toctree::
    :maxdepth: 4
@@ -11,83 +13,94 @@ Subpackages
    chemsmart.cli.mol
    chemsmart.cli.orca
 
-Submodules
-----------
+************
+ Submodules
+************
 
-chemsmart.cli.config module
----------------------------
+*****************************
+ chemsmart.cli.config module
+*****************************
 
 .. automodule:: chemsmart.cli.config
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.job module
-------------------------
+**************************
+ chemsmart.cli.job module
+**************************
 
 .. automodule:: chemsmart.cli.job
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.jobrunner module
-------------------------------
+********************************
+ chemsmart.cli.jobrunner module
+********************************
 
 .. automodule:: chemsmart.cli.jobrunner
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.logger module
----------------------------
+*****************************
+ chemsmart.cli.logger module
+*****************************
 
 .. automodule:: chemsmart.cli.logger
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.main module
--------------------------
+***************************
+ chemsmart.cli.main module
+***************************
 
 .. automodule:: chemsmart.cli.main
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.run module
-------------------------
+**************************
+ chemsmart.cli.run module
+**************************
 
 .. automodule:: chemsmart.cli.run
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.sub module
-------------------------
+**************************
+ chemsmart.cli.sub module
+**************************
 
 .. automodule:: chemsmart.cli.sub
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.subcommands module
---------------------------------
+**********************************
+ chemsmart.cli.subcommands module
+**********************************
 
 .. automodule:: chemsmart.cli.subcommands
    :members:
    :undoc-members:
    :show-inheritance:
 
-chemsmart.cli.update module
----------------------------
+*****************************
+ chemsmart.cli.update module
+*****************************
 
 .. automodule:: chemsmart.cli.update
    :members:
    :undoc-members:
    :show-inheritance:
 
-Module contents
----------------
+*****************
+ Module contents
+*****************
 
 .. automodule:: chemsmart.cli
    :members:

@@ -7,9 +7,7 @@ import click
 from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import (
-    return_objects_from_string_index,
-)
+from chemsmart.utils.utils import return_objects_from_string_index
 
 logger = logging.getLogger(__name__)
 
