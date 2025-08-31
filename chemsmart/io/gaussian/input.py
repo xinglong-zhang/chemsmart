@@ -172,7 +172,7 @@ class Gaussian16Input(GaussianFileMixin):
         if current_block:
             route_strings.append(" ".join(current_block).lower())
 
-        if getattr(self, "is_link", False) and route_strings:
+        if self.is_link and route_strings:
             return route_strings[-1]
 
         return " ".join(route_strings)
