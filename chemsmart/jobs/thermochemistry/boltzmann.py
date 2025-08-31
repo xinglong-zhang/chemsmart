@@ -111,6 +111,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
                 use_weighted_mass=self.settings.use_weighted_mass,
                 alpha=self.settings.alpha,
                 s_freq_cutoff=self.settings.s_freq_cutoff,
+                entropy_method=self.settings.entropy_method,
                 h_freq_cutoff=self.settings.h_freq_cutoff,
                 energy_units=self.settings.energy_units,
                 outputfile=self.settings.outputfile,
