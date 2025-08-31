@@ -1,6 +1,8 @@
 import os.path
 from shutil import copy, copytree, rmtree
 
+import numpy as np
+
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
 from chemsmart.io.molecules.structure import Molecule
@@ -157,7 +159,7 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 40
         assert mol.chemical_formula == "C19H12F3I2N3O"
-        # assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
+        assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
 
     def test_convert_single_link_opt_logfile_to_com(
         self, tmpdir, gaussian_link_opt_outputfile
