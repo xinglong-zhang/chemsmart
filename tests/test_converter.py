@@ -96,7 +96,6 @@ class TestConverter:
         # check all .com files have been converted to .xyz files
         g16_folder = GaussianComFolder(folder=tmp_com_folder)
         all_comfiles = g16_folder.all_com_files
-        print(all_comfiles)
         for file in all_comfiles:
             assert os.path.exists(file.replace(".com", ".xyz"))
 
@@ -397,7 +396,6 @@ class TestConverter:
         assert os.path.exists(tmp_path.replace(".log", ".xyz"))
         mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
         assert isinstance(mol, Molecule)
-        print(mol.num_atoms, mol.chemical_formula, mol.energy)
         assert mol.num_atoms == 483
         assert mol.chemical_formula == "C155H180CuN53O82P12"
         assert mol.energy == -5300.535128
