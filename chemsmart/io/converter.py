@@ -8,8 +8,8 @@ from chemsmart.io.molecules.structure import SDFFile
 from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.xyz.file import XYZFile
 from chemsmart.io.xyz.folder import XYZFolder
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.logger import create_logger
 from chemsmart.utils.mixins import BaseFolder
 
