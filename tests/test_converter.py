@@ -377,7 +377,6 @@ class TestConverter:
         assert os.path.exists(tmp_path.replace(".log", ".xyz"))
         mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
         assert isinstance(mol, Molecule)
-        print(mol.num_atoms, mol.chemical_formula, mol.energy)
         assert mol.num_atoms == 10
         assert mol.chemical_formula == "C3H4O3"
         assert mol.energy == -341.883317
