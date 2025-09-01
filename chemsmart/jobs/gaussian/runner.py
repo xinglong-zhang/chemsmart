@@ -183,7 +183,12 @@ class GaussianJobRunner(JobRunner):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    copy(file, job.folder)
+                    try:
+                        copy(file, job.folder)
+                    except Exception as e:
+                        logger.error(
+                            f"File {file} cannot be copied to job folder {job.folder}: {e}"
+                        )
 
         if job.is_complete():
             # if job is completed, remove scratch directory and submit_script
