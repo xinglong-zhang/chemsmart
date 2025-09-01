@@ -38,6 +38,8 @@ ORCA:
     CONDA_ENV: |   # program-specific conda env
         source ~/miniconda3/etc/profile.d/conda.sh
         conda activate ~/miniconda3/envs/chemsmart
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot

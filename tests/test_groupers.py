@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from chemsmart.io.xyz.file import XYZFile
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.grouper import (
     ConnectivityGrouper,
     FormulaGrouper,

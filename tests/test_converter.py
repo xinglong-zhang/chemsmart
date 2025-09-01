@@ -1,5 +1,7 @@
 import os.path
-from shutil import copy, copytree
+from shutil import copy, copytree, rmtree
+
+import numpy as np
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import GaussianComFolder, GaussianLogFolder
@@ -17,6 +19,13 @@ class TestConverter:
             tmpdir, "gaussian_outputs_test_directory"
         )
         copytree(gaussian_outputs_test_directory, tmp_log_folder)
+
+        # remove link folder in tmp_log_folder if exists
+        link_folder = os.path.join(tmp_log_folder, "link")
+        if os.path.exists(link_folder):
+            rmtree(link_folder)
+        ###### TODO: when the test for link jobs are fixed, this should be
+        ###### removed and the test should pass for link jobs too
 
         file_converter = FileConverter(
             directory=tmp_log_folder, type="log", output_filetype="xyz"
@@ -47,6 +56,13 @@ class TestConverter:
             tmpdir, "gaussian_outputs_test_directory"
         )
         copytree(gaussian_outputs_test_directory, tmp_log_folder)
+
+        # remove link folder in tmp_log_folder if exists
+        link_folder = os.path.join(tmp_log_folder, "link")
+        if os.path.exists(link_folder):
+            rmtree(link_folder)
+        ###### TODO: when the test for link jobs are fixed, this should be
+        ###### removed and the test should pass for link jobs too
 
         file_converter = FileConverter(
             directory=tmp_log_folder, type="log", output_filetype="com"
@@ -82,7 +98,6 @@ class TestConverter:
         # check all .com files have been converted to .xyz files
         g16_folder = GaussianComFolder(folder=tmp_com_folder)
         all_comfiles = g16_folder.all_com_files
-        print(all_comfiles)
         for file in all_comfiles:
             assert os.path.exists(file.replace(".com", ".xyz"))
 
@@ -144,7 +159,125 @@ class TestConverter:
         assert isinstance(mol, Molecule)
         assert mol.num_atoms == 40
         assert mol.chemical_formula == "C19H12F3I2N3O"
-        # assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
+        assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
+
+    def test_convert_single_link_opt_logfile_to_com(
+        self, tmpdir, gaussian_link_opt_outputfile
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "gaussian_singlet_opt.log")
+        copy(gaussian_link_opt_outputfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="com"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".com"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".com"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 2
+        assert mol.chemical_formula == "O2"
+
+    def test_convert_single_link_sp_logfile_to_xyz(
+        self, tmpdir, gaussian_dna_link_sp_outputfile
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "dna_link_sp.log")
+        copy(gaussian_dna_link_sp_outputfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 603
+        assert mol.chemical_formula == "C191H241Cu2N59O96P14"
+        assert mol.energy == -25900.214629
+
+    def test_convert_single_link_opt_logfile_to_xyz(
+        self,
+        tmpdir,
+        gaussian_dppeFeCl2_link_opt_outputfile,
+        gaussian_dppeFeCl2_link_opt_failed_outputfile,
+    ):
+        # copy file to tmpdir
+        tmp_path_normal_termination = os.path.join(
+            tmpdir, "dppeFeCl2_opt_quintet_link_opt_link.log"
+        )
+        copy(
+            gaussian_dppeFeCl2_link_opt_outputfile, tmp_path_normal_termination
+        )
+        assert os.path.exists(tmp_path_normal_termination)
+        file_converter = FileConverter(
+            filename=tmp_path_normal_termination, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+        assert os.path.exists(
+            tmp_path_normal_termination.replace(".log", ".xyz")
+        )
+        mol = Molecule.from_filepath(
+            tmp_path_normal_termination.replace(".log", ".xyz")
+        )
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 55
+        assert mol.chemical_formula == "C26H24Cl2FeP2"
+        assert mol.energy == -3869.013518
+
+        tmp_path_error_termination = os.path.join(
+            tmpdir,
+            "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
+        )
+        copy(
+            gaussian_dppeFeCl2_link_opt_failed_outputfile,
+            tmp_path_error_termination,
+        )
+        assert os.path.exists(tmp_path_error_termination)
+        file_converter = FileConverter(
+            filename=tmp_path_error_termination, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+        assert os.path.exists(
+            tmp_path_error_termination.replace(".log", ".xyz")
+        )
+        mol = Molecule.from_filepath(
+            tmp_path_error_termination.replace(".log", ".xyz")
+        )
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 72
+        assert mol.chemical_formula == "C34H29Cl2FeNO3P2"
+        assert mol.energy == -4456.134472
+
+    def test_convert_single_link_ts_logfile_to_xyz(
+        self, tmpdir, gaussian_link_ts_outputfile
+    ):  # copy file to tmpdir
+        tmp_path_ts_error_termination = os.path.join(
+            tmpdir, "dppeFeCl2_opt_quintet_link_opt_link.log"
+        )
+        copy(gaussian_link_ts_outputfile, tmp_path_ts_error_termination)
+        assert os.path.exists(tmp_path_ts_error_termination)
+        file_converter = FileConverter(
+            filename=tmp_path_ts_error_termination, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+        assert os.path.exists(
+            tmp_path_ts_error_termination.replace(".log", ".xyz")
+        )
+        mol = Molecule.from_filepath(
+            tmp_path_ts_error_termination.replace(".log", ".xyz")
+        )
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 2
+        assert mol.chemical_formula == "O2"
+        assert mol.energy == -150.116584
 
     def test_convert_single_comfile_to_xyz(
         self, tmpdir, gaussian_opt_inputfile
@@ -170,3 +303,101 @@ class TestConverter:
             assert len(lines) == 16
             assert lines[0] == "14\n"
         # assert np.isclose(mol.mass, 609.128, rtol=1e-4)  # in thermo branch
+
+    def test_convert_single_sp_log_file_to_xyz(
+        self, gaussian_benzene_opt_outfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "benzene_sp.log")
+        copy(gaussian_benzene_opt_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 12
+        assert mol.chemical_formula == "C6H6"
+        assert mol.energy == -231.977725
+
+    def test_convert_single_opt_log_file_to_xyz(
+        self, gaussian_acetone_opt_outfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "acetone_opt.log")
+        copy(gaussian_acetone_opt_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 10
+        assert mol.chemical_formula == "C3H6O"
+        assert mol.energy == -192.919416
+
+    def test_convert_single_wbi_log_file_to_xyz(self, wbi_outputfile, tmpdir):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "TS_5coord_XIII_wbi.log")
+        copy(wbi_outputfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 128
+        assert mol.chemical_formula == "C51H63NNiO9P2Si"
+        assert mol.energy == -5189.249707
+
+    def test_convert_single_failed_modred_log_file_to_xyz(
+        self, gaussian_failed_modred_outfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "cage_free_failed_modred.log")
+        copy(gaussian_failed_modred_outfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 10
+        assert mol.chemical_formula == "C3H4O3"
+        assert mol.energy == -341.883317
+
+    def test_convert_single_failed_oniom_log_file_to_xyz(
+        self, gaussian_oniom_outputfile, tmpdir
+    ):
+        # copy file to tmpdir
+        tmp_path = os.path.join(tmpdir, "cation_failed_scan.log")
+        copy(gaussian_oniom_outputfile, tmp_path)
+        assert os.path.exists(tmp_path)
+        file_converter = FileConverter(
+            filename=tmp_path, output_filetype="xyz"
+        )
+
+        file_converter.convert_files()
+
+        assert os.path.exists(tmp_path.replace(".log", ".xyz"))
+        mol = Molecule.from_filepath(tmp_path.replace(".log", ".xyz"))
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 483
+        assert mol.chemical_formula == "C155H180CuN53O82P12"
+        assert mol.energy == -5300.535128
