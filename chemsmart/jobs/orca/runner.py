@@ -6,7 +6,7 @@ import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
-from shutil import SameFileError, copy, rmtree
+from shutil import copy, rmtree
 
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
@@ -70,9 +70,7 @@ class ORCAJobRunner(JobRunner):
 
     def _prerun(self, job):
         self._assign_variables(job)
-        if os.path.exists(job.inputfile):
-            logger.info(f"Input file {job.inputfile} exists.")
-            self._copy_over_xyz_files(job)
+        self._copy_over_xyz_files(job)
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output, and error files in scratch or not in scratch."""
@@ -184,8 +182,7 @@ class ORCAJobRunner(JobRunner):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    with suppress(SameFileError):
-                        copy(file, job.folder)
+                    copy(file, job.folder)
 
         if job.is_complete():
             # if job is completed, remove scratch directory
