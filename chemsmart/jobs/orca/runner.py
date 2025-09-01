@@ -195,16 +195,15 @@ class ORCAJobRunner(JobRunner):
             # if job was run in scratch, copy files to job folder except files containing .tmp
             for file in glob(f"{self.running_directory}/{job.label}*"):
                 if not file.endswith((".tmp", ".tmp.*")):
-                    if not os.path.exists(file):
-                        logger.info(
-                            f"Copying file {file} from {self.running_directory} to {job.folder}"
+                    logger.info(
+                        f"Copying file {file} from {self.running_directory} to {job.folder}"
+                    )
+                    try:
+                        copy(file, job.folder)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to copy file {file} to {job.folder}: {e}"
                         )
-                        try:
-                            copy(file, job.folder)
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to copy file {file} to {job.folder}: {e}"
-                            )
 
         if job.is_complete():
             # # if job is completed, remove scratch directory
