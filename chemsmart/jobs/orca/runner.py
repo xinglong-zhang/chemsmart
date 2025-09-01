@@ -191,6 +191,7 @@ class ORCAJobRunner(JobRunner):
     def _postrun(self, job):
         logger.debug(f"Scratch: {self.scratch}")
         if self.scratch:
+            logger.debug(f"Running directory: {self.running_directory}")
             # if job was run in scratch, copy files to job folder except files containing .tmp
             for file in glob(f"{self.running_directory}/{job.label}*"):
                 if not file.endswith((".tmp", ".tmp.*")):
