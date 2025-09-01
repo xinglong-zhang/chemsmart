@@ -193,12 +193,23 @@ class JobRunner(RegistryMixin):
         return env
 
     def run(self, job, **kwargs):
+        logger.debug(f"Running job {job} with runner {self}")
+        logger.debug(f"Prerunning job: {job}")
         self._prerun(job)
+        logger.debug(f"Writing input for job: {job}")
         self._write_input(job)
+        logger.debug(f"Obtaining command for job: {job}")
         command = self._get_command(job)
+        logger.debug(f"Command obtained for job {job}: {command}")
+        logger.debug(f"Obtaining environment for job: {job}")
         env = self._update_os_environ(job)
+        logger.debug(f"Environment obtained for job {job}: {env}")
+        logger.debug(f"Creating process for job: {job}")
         process = self._create_process(job, command=command, env=env)
+        logger.debug(f"Process created for job {job}: {process}")
+        logger.debug(f"Running process for job: {job}")
         self._run(process, **kwargs)
+        logger.debug(f"Postrunning job: {job}")
         self._postrun(job)
 
     def copy(self):
