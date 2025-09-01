@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy, rmtree
+from shutil import copy
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -183,16 +183,21 @@ class GaussianJobRunner(JobRunner):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    copy(file, job.folder)
+                    try:
+                        copy(file, job.folder)
+                    except Exception as e:
+                        logger.error(
+                            f"File {file} cannot be copied to job folder {job.folder}: {e}"
+                        )
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
-            if self.scratch:
-                logger.info(
-                    f"Removing scratch directory: {self.running_directory}."
-                )
-                rmtree(self.running_directory)
+            # # if job is completed, remove scratch directory and submit_script
+            # # and log.info and log.err files
+            # if self.scratch:
+            #     logger.info(
+            #         f"Removing scratch directory: {self.running_directory}."
+            #     )
+            #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
 
