@@ -6,7 +6,7 @@ import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
-from shutil import copy
+from shutil import copy, rmtree
 
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
@@ -206,10 +206,11 @@ class ORCAJobRunner(JobRunner):
                             )
 
         if job.is_complete():
-            # logger.info(
-            #     f"Removing scratch directory: {self.running_directory}."
-            # )
-            # # rmtree(self.running_directory)
+            if self.scratch:
+                logger.info(
+                    f"Removing scratch directory: {self.running_directory}."
+                )
+                rmtree(self.running_directory)
 
             self._remove_err_files(job)
 
