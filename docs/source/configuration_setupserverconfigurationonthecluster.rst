@@ -1,27 +1,14 @@
-Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
-contact our team if you have questions or feedback.
+Thank you for downloading and using chemsmart. Please confirm the operating system you are using and follow the
+corresponding configuration steps.
 
-################################################
- Set up the Server Configuration on the Cluster
-################################################
+If you encounter any problems, please feel free to contact us.
 
-Once the user has completed the installation, the server configuration on the cluster can be customized by modifying
-corresponding files.
+#######################################
+ Set up the Server Settings on Cluster
+#######################################
 
-.. note::
-
-   A user can modify the contents in ``~/.chemsmart`` files freely without affecting or needing to know the
-   ``chemsmart`` source code.
-
--  The ``~/.chemsmart/usersettings.yaml`` file contains informations such as project number or account number that are
-   required in a typical submission script that specifies the account for use at some HPC servers. It can also contain
-   options specifying user's email to inform user of the job start and job end once a job is submitted. If more features
-   are needed, please submit a request via `Issues`. A typical ``~/.chemsmart/usersettings.yaml`` file looks like this:
-
-      .. code:: console
-
-         PROJECT: 1234567  # alias ACCOUNT FOR SLURM
-         EMAIL: abc@gmail.com
+Once the user has completed the configuration of chemsmart, the server configuration on the cluster can be customized by
+modifying corresponding files.
 
 -  The ``~/.chemsmart/server/`` directory contains files related to server setup for a particular HPC cluster that the
    user is using. For example, we can specify a SLURM based server setting as ``~/.chemsmart/server/shared.yaml`` with
