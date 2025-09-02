@@ -24,8 +24,6 @@ class GaussianJobRunner(JobRunner):
     # combines information about server and program
     JOBTYPES = [
         "g16crest",
-        "g16crestopt",
-        "g16crestts",
         "g16job",
         "g16dias",
         "g16opt",
