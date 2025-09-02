@@ -72,35 +72,3 @@ https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html.
    .. code:: console
 
       make install-dev
-
-********************
- Make Configuration
-********************
-
--  Next, one can run:
-
-   .. code:: console
-
-      make configure
-
-   to sets up the user-specific directory ``~/.chemsmart`` automatically. You will be prompt to enter the paths to g16
-   and ORCA software, which will then be added automatically. The correct ``conda`` path for the user will also be
-   updated.
-
-   **The configuration also adds the environment variables for chemsmart to the user ``~/.bashrc`` file.**
-
-.. warning::
-
-   ``make configure`` would set up ``~/.chemsmart`` mostly correctly, a user should check the contents in
-   ``~/.chemsmart`` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g.,
-   modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one
-   may copy e.g., ``~/.chemsmart/server/SLURM.yaml`` to your own customised server ``~/.chemsmart/server/custom.yaml``
-   and modify it accordingly, such that the submission becomes ``chemsmart sub -s custom <other commands>``.
-
--  The ``make configure`` will also add the required paths to the user ``~/.bashrc`` file. User may need to do
-
-   .. code:: console
-
-      source ~/.bashrc
-
-   to effect the changes.

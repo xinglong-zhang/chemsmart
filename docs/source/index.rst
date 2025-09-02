@@ -26,14 +26,16 @@
    installation_installationforwindowsusinggitbash
    installation_installationforwindowsusingubuntu
    installation_installationforhpccluster
-   installation_testinstallation
 
 .. toctree::
    :maxdepth: 2
-   :caption: Set up your Project
+   :caption: Configuration
 
-   project_setupserverconfigurationonthecluster
-   project_setuptheprojectsettings
+   configuration_makeconfiguration
+   configuration_test
+   configuration_setupusersettings
+   configuration_setupserverconfigurationonthecluster
+   configuration_setuptheprojectsettings
 
 .. toctree::
    :maxdepth: 2
