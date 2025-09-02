@@ -15,7 +15,7 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
-from chemsmart.io.xyz.file import XYZFile
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt

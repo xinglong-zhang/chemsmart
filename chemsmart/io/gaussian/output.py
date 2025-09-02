@@ -179,16 +179,33 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
-        # Clean duplicate structures at the end
-        clean_duplicate_structure(orientations)
-
+        num_structures_to_use = min(
+            len(orientations),
+            len(self.energies) if self.energies is not None else 0,
+            len(self.forces) if self.forces is not None else 0,
+        )
         # Remove first structure if it's a link job
-        if self.job_type == "link" and len(orientations) > 1:
-            orientations, orientations_pbc = (
-                orientations[1:],
-                orientations_pbc[1:],
-            )
-            self.energies = self.energies[1:]
+        if self.is_link:
+            if self.job_type == "sp":
+                orientations = [orientations[-1]]
+                energies = [self.energies[-1]]
+                orientations_pbc = [orientations_pbc[-1]]
+            # Remove the duplicate structure of the optimization section if it's a successful link opt job
+            elif self.job_type == "opt":
+                orientations = orientations[1:]
+                orientations_pbc = orientations_pbc[1:]
+                if self.normal_termination:
+                    orientations.pop(-2)
+                    orientations_pbc.pop(-2)
+                energies = self.energies[1:]
+            else:
+                orientations = orientations[1:]
+                orientations_pbc = orientations_pbc[1:]
+                energies = self.energies[1:]
+
+        else:
+            energies = self.energies
+            clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
@@ -197,7 +214,7 @@ class Gaussian16Output(GaussianFileMixin):
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies,
+                energies,
                 self.forces,
                 self.symbols,
                 self.charge,
@@ -207,15 +224,10 @@ class Gaussian16Output(GaussianFileMixin):
             )
         else:
             # Handle abnormal termination
-            num_structures_to_use = min(
-                len(orientations),
-                len(self.energies),
-                len(self.forces),
-            )
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies,
+                energies,
                 self.forces,
                 self.symbols,
                 self.charge,
@@ -305,7 +317,9 @@ class Gaussian16Output(GaussianFileMixin):
     def _get_route(self):
         lines = self.contents
         for i, line in enumerate(lines):
-            if line.startswith("#"):
+            if line.startswith("#") and "stable=opt" in line:
+                continue
+            elif line.startswith("#"):
                 if lines[i + 1].startswith("------"):
                     # route string in a single line
                     route = line.lower()
@@ -648,7 +662,7 @@ class Gaussian16Output(GaussianFileMixin):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
         for line in self.contents:
-            match = re.match(scf_energy_pattern, line)
+            match = re.search(scf_energy_pattern, line)
             if match:
                 scf_energies.append(float(match[1]))
         return scf_energies
@@ -1081,10 +1095,6 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def homo_energy(self):
         if self.multiplicity == 1:
-            assert (
-                self.beta_occ_eigenvalues is None
-                and self.beta_virtual_eigenvalues is None
-            )
             return self.alpha_occ_eigenvalues[-1]
 
     @cached_property
@@ -1116,10 +1126,6 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def lumo_energy(self):
         if self.multiplicity == 1:
-            assert (
-                self.beta_occ_eigenvalues is None
-                and self.beta_virtual_eigenvalues is None
-            )
             return self.alpha_virtual_eigenvalues[0]
 
     @cached_property

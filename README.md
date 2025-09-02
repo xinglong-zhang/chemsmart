@@ -508,8 +508,12 @@ Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
 
 ## 📖 Citations
 
-If you use **CHEMSMART** in your work, please kindly cite:  
-[https://arxiv.org/abs/2508.20042](https://arxiv.org/abs/2508.20042)
+If you use **CHEMSMART** in your work, please kindly cite: [https://arxiv.org/abs/2508.20042](https://arxiv.org/abs/2508.20042)
+
+### Plain Text (ACS Style)
+
+Zhang, X.; Tan, H.; Liu, J.; Li, Z.; Wang, L.; Chen, B. W. J. CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit for High-Efficiency Computational Chemistry Workflows. arXiv 2025, arXiv:2508.20042. https://doi.org/10.48550/arXiv.2508.20042.
+
 
 ### BibTeX
 
