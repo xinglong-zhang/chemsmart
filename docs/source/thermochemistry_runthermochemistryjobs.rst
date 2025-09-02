@@ -168,20 +168,32 @@ EXAMPLES
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file.out
+   chemsmart run thermochemistry -T 298.15 -f water_opt.out
 
-Calculate standard thermochemical properties (*E*, *ZPE*, *H*, *T.S*, *G(T)*) at 298.15 K for ``file.out``. Results are
-saved as ``file.dat``.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   water_opt                                  -76.323311   0.021581    -76.297951   0.021430    -76.319381
+
+Calculate standard thermochemical properties (*E*, *ZPE*, *H*, *T.S*, *G(T)*) at 298.15 K for ``water_opt.out``. Results
+are saved as ``water_opt.dat``.
 
 **Thermochemical calculation for multiple files**
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file1.log -f file2.out
+   chemsmart run thermochemistry -T 298.15 -f he_gaussian.log -f he_orca.out
 
-Compute standard thermochemical properties for both ``file1.log`` and ``file2.out``.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   he_gaussian                                 -2.915130   0.000000     -2.912769   0.014313     -2.927083
 
-Results are saved as ``file1.dat`` and ``file2.dat``, respectively.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   he_orca                                     -2.899161   0.000000     -2.896800   0.014313     -2.911114
+
+Compute standard thermochemical properties for both ``he_gaussian.log`` and ``he_orca.out``.
+
+Results are saved as ``he_gaussian.dat`` and ``he_orca.dat``, respectively.
 
 **Batch calculation for all files of a specified type**
 
@@ -195,21 +207,33 @@ Process all ``.log`` files in the specified directory and summarize results in `
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file.log -c 0.5
+   chemsmart run thermochemistry -T 298.15 -f co2.log -c 1.0
 
-Calculate standard thermochemical properties in the solution at a concentration of 0.5 mol/L.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   co2                                       -188.444680   0.011776   -188.429325   0.021262   -188.450587
+
+Calculate standard thermochemical properties in the solution at a concentration of 1.0 mol/L.
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file.log -p 2.0
+   chemsmart run thermochemistry -T 298.15 -f co2.log -p 1.0
 
-Calculate standard thermochemical properties in the gas phase at a pressure of 2.0 atm.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   co2                                       -188.444680   0.011776   -188.429325   0.024281   -188.453606
+
+Calculate standard thermochemical properties in the gas phase at a pressure of 1.0 atm.
 
 **Thermochemical calculation with quasi-RRHO corrections**
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file.out -csg 100
+   chemsmart run thermochemistry -T 298.15 -f water_mp2.log -csg 100
+
+   Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+   ================================================================================================================================
+   water_mp2                                  -76.328992   0.021410    -76.303803   0.021424   0.021424    -76.325227    -76.325227
 
 Apply Grimme’s quasi-RRHO correction with a frequency cut-off of 100 :math:`\rm cm^{-1}` for entropy to obtain the
 corrected entropy (*qh-S*).
@@ -219,7 +243,11 @@ together with *H*.
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file.out -ch 200
+   chemsmart run thermochemistry -T 298.15 -f water_mp2.log -ch 200
+
+   Structure                                           E        ZPE             H          qh-H        T.S          G(T)       qh-G(T)
+   ===================================================================================================================================
+   water_mp2                                  -76.328992   0.021410    -76.303803    -76.303804   0.021424    -76.325227    -76.325228
 
 Apply Head-Gordon’s quasi-RRHO correction with a frequency cut-off of 200 :math:`\rm cm^{-1}` for enthalpy to calculate
 the corrected enthalpy (*qh-H*).
@@ -229,7 +257,11 @@ together with *S*.
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f file.out -cst 40 -ch 100
+   chemsmart run thermochemistry -T 298.15 -f water_mp2.log -cst 40 -ch 100
+
+   Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
+   ==============================================================================================================================================
+   water_mp2                                  -76.328992   0.021410    -76.303803    -76.303803   0.021424   0.021424    -76.325227    -76.325227
 
 Perform thermochemical analysis by applying Truhlar’s quasi-RRHO method with a frequency cut-off of 40 :math:`\rm
 cm^{-1}` to entropy and Head-Gordon’s method with a frequency cut-off of 100 :math:`\rm cm^{-1}` to enthalpy.
@@ -286,10 +318,14 @@ EXAMPLES
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -f conformer1.log -f conformer2.log boltzmann -w electronic
+   chemsmart run thermochemistry -T 298.15 -f udc3_mCF3_monomer_c1.log -f udc3_mCF3_monomer_c4.log boltzmann -w electronic
 
-Perform thermochemical analysis for ``conformer1.log`` and ``conformer2.log``, followed by Boltzmann-weighted averaging
-using electronic energies.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   udc3_mCF3_monomer_c_boltzmann_avg_by_electronic  -2189.631938   0.288732  -2189.312517   0.097016  -2189.409533
+
+Perform thermochemical analysis for ``udc3_mCF3_monomer_c1.log`` and ``udc3_mCF3_monomer_c4.log``, followed by
+Boltzmann-weighted averaging using electronic energies.
 
 Results will be saved to ``thermochemistry_job_boltzmann.dat``.
 
@@ -297,9 +333,13 @@ Results will be saved to ``thermochemistry_job_boltzmann.dat``.
 
 .. code:: console
 
-   chemsmart run thermochemistry -T 298.15 -d </path/to/directory> -t out boltzmann
+   chemsmart run thermochemistry -T 298.15 -d . -t log boltzmann
 
-Perform thermochemical calculations for all ``.out`` files in the directory and apply Boltzmann-weighted average using
-Gibbs free energies.
+   Structure                                           E        ZPE             H        T.S          G(T)
+   =======================================================================================================
+   udc3_mCF3_monomer_c_boltzmann_avg_by_gibbs  -2189.631914   0.288696  -2189.312512   0.097155  -2189.409667
+
+Perform thermochemical calculations for all ``.log`` files in current directory and apply Boltzmann-weighted average
+using Gibbs free energies.
 
 Results will be saved to ``thermochemistry_job_boltzmann.dat``.
