@@ -90,7 +90,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Create Coverage
-        if: ${{ github.event_name == 'pull_request' && hashFiles('coverage.xml') != '' }}
+
+        if: >
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('coverage.xml') != ''
         uses: orgoro/coverage@v3
         with:
           coverageFile: coverage.xml
