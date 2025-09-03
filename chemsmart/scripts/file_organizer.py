@@ -67,7 +67,13 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def entry_point(
     directory, filename, name, type, cols, skip, row, keep_default_na
 ):
-    """Script for organizing files for supporting information.
+    """
+    Script for organizing files for supporting information.
+    
+    This script organizes files based on information from an Excel
+    spreadsheet, allowing for systematic file management and organization
+    for research documentation purposes.
+    
     Example usage:
         file_organizer.py -f jq.xlsx -n co2 -c B:D -s 2 -r 100
     """

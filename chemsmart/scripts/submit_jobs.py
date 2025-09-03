@@ -32,22 +32,31 @@ def entry_point(filename, command):
     """Script for submitting a list of jobs from a .txt file.
     The .txt file contains the names of the files to be submitted.
     Usage:
-    submit_jobs.py -f filename.txt -c "command"
-    where "command" is the submission command for all files, e.g.,
-    "chemsmart sub gaussian -p test -f file sp" where "file" is the placeholder
-    (required) for all filenames in the .txt file.
+        submit_jobs.py -f filename.txt -c "command"
+        
+    Where "command" is the submission command template for all files, e.g.,
+    "chemsmart sub gaussian -p test -f file sp" where "file" is the 
+    placeholder (required) for all filenames in the text file.
+    
+    Args:
+        filename: Path to text file containing list of files to submit
+        command: Command template with "file" as placeholder for filenames
     """
     create_logger()
     logger.info(f"Reading filenames from {filename}")
+    
+    # Read filenames from the input file
     with open(filename, "r") as f:
         filenames = f.readlines()
     filenames = [filename.strip() for filename in filenames]
 
+    # Submit job for each filename
     for filename in filenames:
         logger.info(f"Submitting job for {filename}")
         cmd = command.replace("file", filename)
         logger.info(f"Command executed: {cmd}")
-        # use subprocess to run the command
+        
+        # Execute the submission command using subprocess
         p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
         p.communicate()
         logger.info(f"Job submitted for {filename}")

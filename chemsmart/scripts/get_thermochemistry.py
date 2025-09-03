@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""Thermochemistry calculation script using quasi-RRHO approximation.
+
+This script performs thermochemistry calculations on Gaussian or ORCA
+output files using the quasi-rigid-rotor-harmonic-oscillator (quasi-RRHO)
+approximation to correct for low-frequency vibrational modes.
+"""
+
 import glob
 import logging
 import os
@@ -75,7 +82,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default=1.0,
     type=float,
     show_default=True,
-    help="Pressure in Standard atmosphere (gas phase). Ignored if -c/--concentration is provided.",
+    help="Pressure in Standard atmosphere (gas phase). "
+         "Ignored if -c/--concentration is provided.",
 )
 @click.option(
     "-t",
@@ -99,8 +107,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
     is_flag=True,
     default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (True) or use most abundant masses (False).\n"
-    "Default to False, i.e., use single isotopic mass.",
+    help="Use natural abundance weighted masses (True) or use most "
+         "abundant masses (False).\nDefault to False, i.e., use single "
+         "isotopic mass.",
 )
 @click.option(
     "-q",
@@ -153,19 +162,48 @@ def entry_point(
     quasi_rrho_enthalpy,
     units,
 ):
-    """Thermochemistry calculation script using quasi-RRHO approximation."""
+    """Thermochemistry calculation script using quasi-RRHO approximation.
+    
+    This function calculates thermochemical properties from quantum chemistry
+    output files using the quasi-rigid-rotor-harmonic-oscillator approximation.
+    Supports both Gaussian and ORCA output formats.
+    
+    Args:
+        filenames: List of output files to process
+        directory: Directory containing output files
+        filetype: Type of files to process ('log' or 'out')
+        cutoff: Global frequency cutoff for quasi-RRHO
+        entropy_cutoff: Frequency cutoff for entropy correction
+        enthalpy_cutoff: Frequency cutoff for enthalpy correction
+        concentration: Solution concentration in mol/L
+        pressure: Gas phase pressure in atm
+        temperature: Temperature in Kelvin
+        alpha: Damping function exponent
+        weighted: Use weighted atomic masses
+        quasi_rrho: Apply quasi-RRHO for both entropy and enthalpy
+        quasi_rrho_entropy: Apply quasi-RRHO for entropy only
+        quasi_rrho_enthalpy: Apply quasi-RRHO for enthalpy only
+        units: Energy units for output
+    """
 
     def log(message, output="thermochemistry.dat"):
-        # log is a math function for logarithm
+        """Log message to both console and output file.
+        
+        Args:
+            message: Message to log
+            output: Output file name
+        """
+        # Note: 'log' function name used for file logging, not logarithm
         logger.info(message)
         with open(output, "a") as out:
             out.write(message)
 
+    # Set frequency cutoffs based on global cutoff parameter
     if cutoff != 100.0:
         entropy_cutoff = cutoff
         enthalpy_cutoff = cutoff
 
-    # Energy Conversion
+    # Configure energy unit conversion factors
     if units.lower() == "ev":
         energy_unit = "eV"
         unit_conversion = (
@@ -204,36 +242,33 @@ def entry_point(
             logger.error("Try 'get_thermochemistry.py --help' for help.")
             return
 
-    # Error Handling
+    # Validate file extensions
     for file in filenames:
         if not file.endswith((".log", ".out")):
             logger.error(
-                f"Unsupported file extension for '{file}'. Only .log or .out files are accepted."
+                f"Unsupported file extension for '{file}'. "
+                f"Only .log or .out files are accepted."
             )
             logger.error("Try 'get_thermochemistry.py --help' for help.")
             return
 
-    # ASCII Arts for CHEMSMART
+    # Display ChemSmart ASCII banner
     logger.info("\n")
     logger.info(
-        "   "
-        + " " * 25
-        + "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ "
+        "   " + " " * 25 +
+        "  ____ _   _ _____ __  __ ____  __  __    _    ____ _____ "
     )
     logger.info(
-        "   "
-        + " " * 25
-        + " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
+        "   " + " " * 25 +
+        " / ___| | | | ____|  \/  / ___||  \/  |  / \  |  _ \_   _|"
     )
     logger.info(
-        "   "
-        + " " * 25
-        + "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || | "
+        "   " + " " * 25 +
+        "| |   | |_| |  _| | |\/| \___ \| |\/| | / _ \ | |_) || | "
     )
     logger.info(
-        "   "
-        + " " * 25
-        + "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | | "
+        "   " + " " * 25 +
+        "| |___|  _  | |___| |  | |___) | |  | |/ ___ \|  _ < | | "
     )
     logger.info(
         "   "

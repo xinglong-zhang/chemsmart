@@ -6,7 +6,7 @@ from chemsmart.utils.logger import create_logger
 
 
 @click.command()
-@click.option("-f", "--folder", default=".")
+@click.option("-f", "--folder", default=".", help="Folder containing output files")
 @click.option(
     "-p",
     "--program",
@@ -23,17 +23,20 @@ from chemsmart.utils.logger import create_logger
     "-o",
     "--outputname",
     default="dias",
-    help="output file name for dias data to be written",
+    help="Output file name for DIAS data to be written",
 )
-@click.option("-e", "--extrapolate", default=True)
-@click.option("-r", "--reverse/--no-reverse", default=False)
-@click.option("-n", "--new-length", default=1000)
+@click.option("-e", "--extrapolate", default=True, help="Enable extrapolation")
+@click.option(
+    "-r", "--reverse/--no-reverse", default=False, help="Reverse data order"
+)
+@click.option("-n", "--new-length", default=1000, help="New data length")
 @click.option(
     "-k",
     "--k-value",
     type=int,
     default=3,
-    help="Degree of the smoothing spline. Must be 1 <= k <= 5. k = 3 is a cubic spline. Default is 3.",
+    help="Degree of the smoothing spline. Must be 1 <= k <= 5. "
+         "k = 3 is a cubic spline. Default is 3.",
 )
 @click.option(
     "-a",
@@ -71,8 +74,30 @@ def entry_point(
     atom_number2,
     ref_file,
 ):
-    """Example usage: plot_dias.py -p orca -z  -a 5 -b 7 -r."""
+    """Analyze and plot DIAS data from quantum chemistry calculations.
+    
+    This function processes output files from Gaussian or ORCA calculations
+    to perform Distortion Interaction Activation Strain (DIAS) analysis
+    and generates plots showing energy decomposition.
+    
+    Example usage: plot_dias.py -p orca -z -a 5 -b 7 -r
+    
+    Args:
+        folder: Directory containing calculation output files
+        program: Type of quantum chemistry program ('gaussian' or 'orca')
+        zero: Set reference point to zero
+        outputname: Base name for output files
+        extrapolate: Enable data extrapolation
+        reverse: Reverse data order
+        new_length: Target length for interpolated data
+        k_value: Spline degree for smoothing
+        atom_number1: First atom number for bond distance
+        atom_number2: Second atom number for bond distance
+        ref_file: Reference file for zero point
+    """
     create_logger(debug=True, stream=True)
+    
+    # Initialize DIAS analysis based on program type
     if program.lower() == "gaussian":
         dias_folder = GaussianDIASLogFolder(
             folder=folder,
@@ -93,8 +118,11 @@ def entry_point(
         )
     else:
         raise TypeError(
-            "Unknown program output files to plot DIAS. Supported outputs are from Gaussian or ORCA."
+            "Unknown program output files to plot DIAS. "
+            "Supported outputs are from Gaussian or ORCA."
         )
+        
+    # Generate DIAS data and plots
     dias_folder.write_data()
     dias_folder.plot_dias(
         extrapolate=extrapolate,
