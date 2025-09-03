@@ -2,7 +2,7 @@ import re
 from functools import cached_property
 
 from chemsmart.utils.mixins import FileMixin
-from chemsmart.utils.repattern import energy_value_pattern
+from chemsmart.utils.repattern import raw_energy_value_pattern
 from chemsmart.utils.utils import string2index_1based
 
 
@@ -76,7 +76,7 @@ class XYZFile(FileMixin):
                 # will extract the first float number in the line.
                 # example case 1: "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
                 # energy will be -25900.214629.
-                match = re.findall(energy_value_pattern, comment)
+                match = re.findall(raw_energy_value_pattern, comment)
                 if match:
                     molecules[i].energy = float(match[0])
                     # Assign energy to the only or the first negative float number

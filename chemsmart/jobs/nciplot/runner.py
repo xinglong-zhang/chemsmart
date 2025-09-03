@@ -6,7 +6,7 @@ from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
 from glob import glob
-from shutil import SameFileError, copy, rmtree
+from shutil import SameFileError, copy
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.jobs.runner import JobRunner
@@ -245,13 +245,13 @@ class NCIPLOTJobRunner(JobRunner):
                         copy(file, job.folder)
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
-            if self.scratch:
-                logger.info(
-                    f"Removing scratch directory: {self.running_directory}."
-                )
-                rmtree(self.running_directory)
+            # # if job is completed, remove scratch directory and submit_script
+            # # and log.info and log.err files
+            # if self.scratch:
+            #     logger.info(
+            #         f"Removing scratch directory: {self.running_directory}."
+            #     )
+            #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
 

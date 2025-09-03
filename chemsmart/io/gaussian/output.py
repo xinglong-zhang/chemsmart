@@ -179,33 +179,55 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
+        num_structures_to_use = min(
+            len(orientations),
+            len(self.energies) if self.energies is not None else 0,
+            len(self.forces) if self.forces is not None else 0,
+        )
         # Remove first structure if it's a link job
-        if self.job_type != "link":
+        if self.is_link:
+            if self.job_type == "sp":
+                orientations = [orientations[-1]]
+                energies = [self.energies[-1]]
+                orientations_pbc = [orientations_pbc[-1]]
+            # Remove the duplicate structure of the optimization section if it's a successful link opt job
+            elif self.job_type == "opt":
+                orientations = orientations[1:]
+                orientations_pbc = orientations_pbc[1:]
+                if self.normal_termination:
+                    orientations.pop(-2)
+                    orientations_pbc.pop(-2)
+                energies = self.energies[1:]
+            else:
+                orientations = orientations[1:]
+                orientations_pbc = orientations_pbc[1:]
+                energies = self.energies[1:]
+
+        else:
+            energies = self.energies
             clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
         # Handle normal termination
-        num_structures_to_use = self._get_num_structures_to_use()
         if self.normal_termination:
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies,
+                energies,
                 self.forces,
                 self.symbols,
                 self.charge,
                 self.multiplicity,
                 frozen_atoms,
                 self.list_of_pbc_conditions,
-                num_structures=num_structures_to_use,
             )
         else:
             # Handle abnormal termination
             all_structures = create_molecule_list(
                 orientations,
                 orientations_pbc,
-                self.energies,
+                energies,
                 self.forces,
                 self.symbols,
                 self.charge,
@@ -214,7 +236,6 @@ class Gaussian16Output(GaussianFileMixin):
                 self.list_of_pbc_conditions,
                 num_structures=num_structures_to_use,
             )
-        num_structures = len(all_structures)
 
         # Filter optimized steps if required
         if self.optimized_steps_indices and not self.include_intermediate:
@@ -225,20 +246,10 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug(f"Total number of structures located: {num_structures}")
+        logger.debug(
+            f"Total number of structures located: {len(all_structures)}"
+        )
         return all_structures
-
-    def _get_num_structures_to_use(self):
-        num_structures_to_use = []
-        if self.standard_orientations:
-            num_structures_to_use.append(len(self.standard_orientations))
-        if self.energies:
-            num_structures_to_use.append(len(self.energies))
-        if self.forces:
-            if self.job_type == "link":
-                self.forces.insert(0, None)
-            num_structures_to_use.append(len(self.forces))
-        return min(num_structures_to_use)
 
     @cached_property
     def optimized_structure(self):
@@ -306,7 +317,9 @@ class Gaussian16Output(GaussianFileMixin):
     def _get_route(self):
         lines = self.contents
         for i, line in enumerate(lines):
-            if line.startswith("#"):
+            if line.startswith("#") and "stable=opt" in line:
+                continue
+            elif line.startswith("#"):
                 if lines[i + 1].startswith("------"):
                     # route string in a single line
                     route = line.lower()
@@ -644,7 +657,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         return masks
 
-    @property
+    @cached_property
     def scf_energies(self):
         """Obtain SCF energies from the Gaussian output file. Default units of Hartree."""
         scf_energies = []
@@ -674,7 +687,7 @@ class Gaussian16Output(GaussianFileMixin):
                 oniom_energies.append(float(match[1]))
         return oniom_energies
 
-    @property
+    @cached_property
     def energies(self):
         """Return energies of the system."""
         if len(self.mp2_energies) == 0 and len(self.oniom_energies) == 0:
@@ -1082,10 +1095,6 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def homo_energy(self):
         if self.multiplicity == 1:
-            assert (
-                self.beta_occ_eigenvalues is None
-                and self.beta_virtual_eigenvalues is None
-            )
             return self.alpha_occ_eigenvalues[-1]
 
     @cached_property
@@ -1117,10 +1126,6 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def lumo_energy(self):
         if self.multiplicity == 1:
-            assert (
-                self.beta_occ_eigenvalues is None
-                and self.beta_virtual_eigenvalues is None
-            )
             return self.alpha_virtual_eigenvalues[0]
 
     @cached_property
