@@ -7,6 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 def logger_options(f):
+    """
+    Logging configuration options.
+    """
     @click.option(
         "-d",
         "--debug/--no-debug",

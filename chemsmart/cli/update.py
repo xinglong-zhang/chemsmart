@@ -16,7 +16,9 @@ create_logger(debug=True, stream=True)
 
 
 class Updater:
-    """Handles dependency updates in pyproject.toml."""
+    """
+    Handles dependency updates in pyproject.toml.
+    """
 
     def __init__(self):
         self._package_path = Path(__file__).resolve().parent.parent.parent
@@ -32,13 +34,17 @@ class Updater:
         return self._pyproject_path
 
     def update_pyproject_toml(self):
-        """Update dependencies in pyproject.toml."""
+        """
+        Update dependencies in pyproject.toml.
+        """
         requirements_path = self._generate_requirements()
         if requirements_path:
             self._update_toml(requirements_path)
 
     def _generate_requirements(self, ignore_dirs=None) -> Path:
-        """Run pipreqs and extract dependencies."""
+        """
+        Run pipreqs and extract dependencies.
+        """
         ignore_dirs = ignore_dirs or [".git", ".github"]
         ignore_arg = ",".join(ignore_dirs)
 
@@ -69,7 +75,9 @@ class Updater:
         return tmp_path
 
     def _get_existing_dependencies(self):
-        """Extract dependencies from pyproject.toml and environment.yml."""
+        """
+        Extract dependencies from pyproject.toml and environment.yml.
+        """
         dependencies = set()
         dependencies.update(self._get_existing_dependencies_from_pyproject())
         dependencies.update(
@@ -78,7 +86,9 @@ class Updater:
         return dependencies
 
     def _get_existing_dependencies_from_pyproject(self):
-        """Extract dependencies from pyproject.toml."""
+        """
+        Extract dependencies from pyproject.toml.
+        """
         if not self.pyproject_path.exists():
             logger.error("pyproject.toml not found.")
             return set()
@@ -90,7 +100,9 @@ class Updater:
         return set(pyproject_toml.get("project", {}).get("dependencies", []))
 
     def _get_existing_dependencies_from_environment_yml(self):
-        """Extract dependencies from environment.yml."""
+        """
+        Extract dependencies from environment.yml.
+        """
         env_yml_path = Path("environment.yml")
         if not env_yml_path.exists():
             logger.info(
@@ -112,7 +124,10 @@ class Updater:
         return dependencies
 
     def _get_missing_dependencies(self, requirements_path):
-        """Identify dependencies missing from pyproject.toml, preserving versions."""
+        """
+        Identify dependencies missing from pyproject.toml, preserving 
+        versions.
+        """
         if not requirements_path.exists():
             logger.error("Generated requirements file not found.")
             return set()
@@ -126,7 +141,8 @@ class Updater:
 
         # Package name normalization mapping (for comparison)
         package_mapping = {
-            "pymol-open-source": "pymol",  # Treat pymol-open-source as pymol for matching
+            "pymol-open-source": "pymol",  # Treat pymol-open-source as 
+                                          # pymol for matching
         }
         reverse_mapping = {
             v: k for k, v in package_mapping.items()
@@ -157,7 +173,10 @@ class Updater:
         return missing_dependencies
 
     def _update_toml(self, requirements_path):
-        """Update pyproject.toml with missing dependencies, including versions, in lowercase."""
+        """
+        Update pyproject.toml with missing dependencies, including versions,
+        in lowercase.
+        """
         missing_dependencies = self._get_missing_dependencies(
             requirements_path
         )
@@ -168,7 +187,8 @@ class Updater:
         with self.pyproject_path.open("r") as f:
             pyproject_toml = tomlkit.parse(f.read())
 
-        # Function to normalize package name to lowercase while preserving version
+        # Function to normalize package name to lowercase while preserving 
+        # version
         def normalize_dep(dep):
             pkg_name, *version = re.split(r"([=<>~!])", dep, maxsplit=1)
             if version:  # If there's a version specifier
@@ -192,7 +212,9 @@ class Updater:
 @click.group(name="update")
 @click.pass_context
 def update(ctx):
-    """Manage updates in the chemsmart package."""
+    """
+    Manage updates in the chemsmart package.
+    """
     ctx.ensure_object(dict)
     ctx.obj["updater"] = Updater()
 
@@ -200,7 +222,9 @@ def update(ctx):
 @update.command()
 @click.pass_context
 def deps(ctx):
-    """Automatically update dependencies in pyproject.toml."""
+    """
+    Automatically update dependencies in pyproject.toml.
+    """
     logger.info("Updating dependencies...")
     ctx.obj["updater"].update_pyproject_toml()
     logger.info("Update complete.")
