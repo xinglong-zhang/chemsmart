@@ -1142,6 +1142,8 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def somo_energy(self):
+        """The SOMO energy should be the next alpha occ. orbital after
+        same number of alpha and beta orbitals."""
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
             assert (
@@ -1150,7 +1152,7 @@ class Gaussian16Output(GaussianFileMixin):
                 + 1
                 == self.multiplicity
             )
-            return self.alpha_occ_eigenvalues[-1]
+            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons]
 
     @cached_property
     def lumo_energy(self):

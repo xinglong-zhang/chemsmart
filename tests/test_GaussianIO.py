@@ -568,7 +568,9 @@ class TestGaussian16Output:
         )
         assert g16_output.homo_energy is None
         assert g16_output.lumo_energy is None
-        assert g16_output.somo_energy == -0.15673 * units.Hartree
+        assert g16_output.num_unpaired_electrons == 2
+        assert g16_output.multiplicity == 3
+        assert g16_output.somo_energy == -0.19177 * units.Hartree
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -596,8 +598,12 @@ class TestGaussian16Output:
         assert (
             g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
         )
-        assert g16_output.somo_energy == -0.18764 * units.Hartree
         assert g16_output.fmo_gap is None
+        assert g16_output.num_unpaired_electrons == 4
+        assert g16_output.multiplicity == 5
+        assert np.isclose(
+            g16_output.somo_energy, -0.22065 * units.Hartree, atol=1e-5
+        )
 
     def test_read_gaussian_link_opt_output_file(
         self, gaussian_link_opt_outputfile
@@ -709,57 +715,53 @@ class TestGaussian16Output:
         )
         assert g16_link_modred.is_link
         assert g16_link_modred.job_type == "modred"
-        print("Energies:")
-        print(len(g16_link_modred.energies))
-        print("Forces:")
-        print(len(g16_link_modred.forces))
-        print("All structures:")
-        print(len(g16_link_modred.all_structures))
         assert isinstance(g16_link_modred.molecule, Molecule)
-        assert len(g16_link_modred.vibrational_frequencies) == 0
+        assert len(g16_link_modred.vibrational_frequencies) == 126
         assert (
             g16_link_modred.num_vib_modes
             == g16_link_modred.num_vib_frequencies
-            == 0
+            == 126
         )
-        assert len(g16_link_modred.alpha_occ_eigenvalues) == 8
+        assert len(g16_link_modred.alpha_occ_eigenvalues) == 97
         assert (
             g16_link_modred.alpha_occ_eigenvalues[0]
-            == -19.77692 * units.Hartree
+            == -254.07064 * units.Hartree
         )
         assert (
             g16_link_modred.alpha_occ_eigenvalues[-1]
-            == -0.36639 * units.Hartree
+            == -0.24253 * units.Hartree
         )
-        assert len(g16_link_modred.alpha_virtual_eigenvalues) == 20
+        assert len(g16_link_modred.alpha_virtual_eigenvalues) == 339
         assert (
             g16_link_modred.alpha_virtual_eigenvalues[0]
-            == -0.06479 * units.Hartree
+            == 0.01660 * units.Hartree
         )
         assert (
             g16_link_modred.alpha_virtual_eigenvalues[-1]
-            == 3.87784 * units.Hartree
+            == 4.09404 * units.Hartree
         )
-        assert len(g16_link_modred.beta_occ_eigenvalues) == 8
+        assert len(g16_link_modred.beta_occ_eigenvalues) == 93
         assert (
             g16_link_modred.beta_occ_eigenvalues[0]
-            == -19.77692 * units.Hartree
+            == -254.07343 * units.Hartree
         )
         assert (
             g16_link_modred.beta_occ_eigenvalues[-1]
-            == -0.36639 * units.Hartree
+            == -0.26404 * units.Hartree
         )
-        assert len(g16_link_modred.beta_virtual_eigenvalues) == 20
+        assert len(g16_link_modred.beta_virtual_eigenvalues) == 343
         assert (
             g16_link_modred.beta_virtual_eigenvalues[0]
-            == -0.06479 * units.Hartree
+            == -0.03779 * units.Hartree
         )
         assert (
             g16_link_modred.beta_virtual_eigenvalues[-1]
-            == 3.87784 * units.Hartree
+            == 4.21075 * units.Hartree
         )
+        assert g16_link_modred.multiplicity == 5
+        assert g16_link_modred.num_unpaired_electrons == 4
         assert np.isclose(
-            g16_link_modred.fmo_gap, 0.3016 * units.Hartree, atol=1e-5
+            g16_link_modred.somo_energy, -0.30450 * units.Hartree, atol=1e-5
         )
 
     def test_read_gaussian_link_sp_output_file(
