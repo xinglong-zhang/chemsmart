@@ -38,11 +38,13 @@ def nci(
     """CLI for generating automatic PyMOL NCI plot and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
-    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_visualize.pse
-    with added van der Waal's surface (-v) automatically.
+    This visualizes phenyldioxazolone.com file and saves as
+    phenyldioxazolone_visualize.pse with added van der Waal's surface (-v)
+    automatically.
         chemsmart run --debug mol -f vhr_ox_modred_ts10.log visualize -c [[1,2],[3,4,5],[1,3,4,5],[4,5],[4,6,9]]
-    This visualizes vhr_ox_modred_ts10.log file and saves as vhr_ox_modred_ts10_visualize.pse and add in additional
-    coordinates (bonds, angles and dihedrals) for labelling."""
+    This visualizes vhr_ox_modred_ts10.log file and saves as
+    vhr_ox_modred_ts10_visualize.pse and add in additional coordinates
+    (bonds, angles and dihedrals) for labelling."""
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -59,7 +61,8 @@ def nci(
                 f"Invalid coordinates input: {coordinates}. Error: {e}"
             )
             raise ValueError(
-                "Invalid coordinates input. Please provide a valid Python literal."
+                "Invalid coordinates input. Please provide a valid Python "
+                "literal."
             )
     from chemsmart.jobs.mol.nci import PyMOLNCIJob
 

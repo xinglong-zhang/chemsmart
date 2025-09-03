@@ -37,7 +37,8 @@ def mo(
     """CLI for generating molecular orbitals (MOs) and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com mo --homo
-    This visualizes the HOMO of phenyldioxazolone.com file and saves as phenyldioxazolone_HOMO.pse
+    This visualizes the HOMO of phenyldioxazolone.com file and saves as
+    phenyldioxazolone_HOMO.pse
     """
 
     # get molecule
@@ -55,7 +56,8 @@ def mo(
                 f"Invalid coordinates input: {coordinates}. Error: {e}"
             )
             raise ValueError(
-                "Invalid coordinates input. Please provide a valid Python literal."
+                "Invalid coordinates input. Please provide a valid Python "
+                "literal."
             )
     from chemsmart.jobs.mol.mo import PyMOLMOJob
 

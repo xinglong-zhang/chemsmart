@@ -1,7 +1,7 @@
 from .irc import irc
 from .mo import mo
 from .mol import (
-    mol,  # to avoid potential conflict with inbuilt pymol module, we use mol instead
+    mol,  # instead; to avoid potential conflict with inbuilt pymol module, we use mol
 )
 from .movie import movie
 from .nci import nci
