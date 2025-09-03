@@ -1,5 +1,7 @@
-Welcome to the tutorials! We’re thrilled to have you here. Please go through the code examples, and don’t hesitate to
-contact our team if you have questions or feedback.
+Thank you for downloading and using chemsmart. Please confirm the operating system you are using and follow the
+corresponding configuration steps.
+
+If you encounter any problems, please feel free to contact us.
 
 #############################
  Set up the Project Settings

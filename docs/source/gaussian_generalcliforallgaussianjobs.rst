@@ -289,8 +289,6 @@ Works for all Gaussian jobs
       -  Description
    -  -  ``opt``
       -  for optimization calculation for Gaussian
-   -  -  ``crestopt``
-      -  for CREST-optimization calculation for Gaussian
 
 .. list-table:: Transition State Search
    :header-rows: 1

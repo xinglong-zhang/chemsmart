@@ -24,24 +24,6 @@
    :undoc-members:
    :show-inheritance:
 
-****************************************
- chemsmart.cli.gaussian.crestopt module
-****************************************
-
-.. automodule:: chemsmart.cli.gaussian.crestopt
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-***************************************
- chemsmart.cli.gaussian.crestts module
-***************************************
-
-.. automodule:: chemsmart.cli.gaussian.crestts
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 **************************************
  chemsmart.cli.gaussian.custom module
 **************************************
