@@ -29,12 +29,14 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project opt settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
     check_charge_and_multiplicity(opt_settings)

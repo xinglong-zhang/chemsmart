@@ -26,21 +26,24 @@ logger = logging.getLogger(__name__)
         ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
     ),
     default=None,
-    help="Type of predictors used for IRC. Examples include[HPC, EulerPC, LQA, DVV, Euler].",
+    help="Type of predictors used for IRC. Examples include[HPC, EulerPC, "
+    "LQA, DVV, Euler].",
 )
 @click.option(
     "-rc",
     "--recorrect",
     type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
     default=None,
-    help='Recorrection step of HPC and EulerPC IRCs. options are: ["Never", "Always", "Test"].',
+    help='Recorrection step of HPC and EulerPC IRCs. options are: '
+    '["Never", "Always", "Test"].',
 )
 @click.option(
     "-rs",
     "--recalc-step",
     type=int,
     default=6,
-    help="Compute the Hessian analytically every N predictor steps or every |N| corrector steps if N<0. ",
+    help="Compute the Hessian analytically every N predictor steps or every "
+    "|N| corrector steps if N<0. ",
 )
 @click.option(
     "-p",
@@ -85,17 +88,21 @@ def irc(
     project_settings = ctx.obj["project_settings"]
     irc_project_settings = project_settings.irc_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project irc settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project irc settings with job settings from cli keywords from
+    # cli.orca.py subcommands
     irc_settings = irc_project_settings.merge(job_settings, keywords=keywords)
 
     # update irc_settings if any attribute is specified in cli options
-    # suppose project has a non None value, and user does not specify a value (None),
-    # then the project value should be used and unmodified, ie, should not be merged.
+    # suppose project has a non None value, and user does not specify a
+    # value (None),
+    # then the project value should be used and unmodified, ie, should not be
+    # merged.
     # update value only if user specifies a value for the attribute:
     if predictor is not None:
         irc_settings.predictor = predictor
