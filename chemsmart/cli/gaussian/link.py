@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
     "--stable",
     type=str,
     default="opt",
-    help='Gaussian stability test. See https://gaussian.com/stable/ for '
+    help="Gaussian stability test. See https://gaussian.com/stable/ for "
     'options. Defaults to "stable=opt".',
 )
 @click.option(
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
     "--guess",
     type=str,
     default="mix",
-    help='Gaussian guess options. See https://gaussian.com/guess/ for '
+    help="Gaussian guess options. See https://gaussian.com/guess/ for "
     'options. Defaults to "guess=mix".',
 )
 @click.option(

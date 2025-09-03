@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
     "--recorrect",
     type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
     default=None,
-    help='Recorrection step of HPC and EulerPC IRCs. options are: '
+    help="Recorrection step of HPC and EulerPC IRCs. options are: "
     '["Never", "Always", "Test"].',
 )
 @click.option(
