@@ -165,6 +165,144 @@ class Gaussian16Output(GaussianFileMixin):
         Use Standard orientations to get the structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
         """
+        return self._get_all_molecular_structures()
+
+    def _get_all_molecular_structures(self):
+        """
+        Build and return the list of Molecule objects parsed from a calculation.
+
+        Selection precedence for orientations:
+          1) standard_orientations (+ PBC)
+          2) input_orientations (+ PBC)
+
+        Special handling:
+          - Link jobs: drop the first frame (Gaussian "Link1" carry-over). For single-point
+            link jobs, keep only the last frame.
+          - Duplicate tail frames from optimizations are de-duplicated.
+          - If the job did not terminate normally, truncate to the minimum length across
+            the available arrays (orientations, energies, forces).
+          - If `optimized_steps_indices` is present and `include_intermediate` is False,
+            restrict to those steps only.
+
+        Returns
+        -------
+        list
+            List of Molecule objects (possibly empty).
+        """
+        # 1) Choose orientations (and their PBC)
+        if self.standard_orientations:
+            orientations = list(self.standard_orientations)
+            orientations_pbc = list(self.standard_orientations_pbc or [])
+        elif self.input_orientations:
+            orientations = list(self.input_orientations)
+            orientations_pbc = list(self.input_orientations_pbc or [])
+        else:
+            return []  # Nothing to build
+
+        energies = list(self.energies) if self.energies else None
+        forces = list(self.forces) if self.forces else None
+
+        # 2) Handle link jobs
+        if self.is_link:
+            # Drop the first frame (and keep arrays aligned)
+            if orientations:
+                orientations = orientations[1:]
+            if orientations_pbc:
+                orientations_pbc = orientations_pbc[1:]
+            if energies:
+                energies = energies[1:]
+
+            # For single-point link jobs, keep only the last frame
+            if self.job_type == "sp" and orientations:
+                orientations = [orientations[-1]]
+                orientations_pbc = (
+                    [orientations_pbc[-1]] if orientations_pbc else []
+                )
+                if energies:
+                    energies = [energies[-1]]
+
+        # 3) Remove repeated terminal geometries (in-place de-dup)
+        clean_duplicate_structure(orientations)
+
+        # 4) Decide how many structures to use when abnormal termination
+        def _safe_min_lengths():
+            lengths = [len(orientations)]
+            if energies is not None:
+                lengths.append(len(energies))
+            if forces is not None:
+                lengths.append(len(forces))
+            return min(lengths) if lengths else 0
+
+        num_structures_to_use = _safe_min_lengths()
+
+        logger.debug(
+            "Structures to use: %d | orientations=%d | energies=%d | forces=%d",
+            num_structures_to_use,
+            len(orientations),
+            len(energies) if energies is not None else 0,
+            len(forces) if forces is not None else 0,
+        )
+
+        frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
+
+        # 5) Build Molecule list
+        create_kwargs = dict(
+            orientations=orientations,
+            orientations_pbc=orientations_pbc,
+            energies=energies,
+            forces=forces,
+            symbols=self.symbols,
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=frozen_atoms,
+            pbc_conditions=self.list_of_pbc_conditions,
+        )
+
+        if self.normal_termination:
+            all_structures = create_molecule_list(**create_kwargs)
+        else:
+            all_structures = create_molecule_list(
+                **create_kwargs, num_structures=num_structures_to_use
+            )
+
+        # 6) Keep only optimized steps if requested
+        if (
+            getattr(self, "optimized_steps_indices", None)
+            and not self.include_intermediate
+        ):
+            logger.debug(
+                "Ignoring intermediate optimization steps (constrained opt)."
+            )
+            all_structures = [
+                all_structures[i] for i in self.optimized_steps_indices
+            ]
+
+        logger.debug("Total structures returned: %d", len(all_structures))
+        return all_structures
+
+    def _get_all_molecular_structures2(self):
+        """
+        Build and return the list of Molecule objects parsed from a calculation.
+
+        Selection precedence for orientations:
+          1) standard_orientations (+ PBC)
+          2) input_orientations (+ PBC)
+
+        Special handling:
+          - Link jobs: drop the first frame (Gaussian "Link1" carry-over). For single-point
+            link jobs, keep only the last frame.
+          - Duplicate tail frames from optimizations are de-duplicated.
+          - If the job did not terminate normally, truncate to the minimum length across
+            the available arrays (orientations, energies, forces).
+          - If `optimized_steps_indices` is present and `include_intermediate` is False,
+            restrict to those steps only.
+
+        Returns
+        -------
+        list
+            List of Molecule objects (possibly empty).
+        """
+
         # Determine orientations and their periodic boundary conditions (PBC)
         if self.standard_orientations:
             orientations, orientations_pbc = (
@@ -179,33 +317,37 @@ class Gaussian16Output(GaussianFileMixin):
         else:
             return []  # No structures found
 
+        # remove first structure and energy if it is a link job
+        if self.is_link:
+            orientations = orientations[1:]
+            orientations_pbc = orientations_pbc[1:]
+            energies = self.energies[1:] if self.energies else None
+        else:
+            energies = self.energies
+
         num_structures_to_use = min(
             len(orientations),
-            len(self.energies) if self.energies is not None else 0,
+            len(energies) if energies is not None else 0,
             len(self.forces) if self.forces is not None else 0,
         )
-        # Remove first structure if it's a link job
+        logger.debug(f"Number of structures to use: {num_structures_to_use}")
+        logger.debug(f"Number of orientations: {len(orientations)}")
+        logger.debug(f"Number of energies: {len(energies) if energies else 0}")
+        logger.debug(
+            f"Number of forces: {len(self.forces) if self.forces else 0}"
+        )
+
         if self.is_link:
+            # if this is a link job and it is a single point job, only keep the last structure
             if self.job_type == "sp":
                 orientations = [orientations[-1]]
                 energies = [self.energies[-1]]
                 orientations_pbc = [orientations_pbc[-1]]
-            # Remove the duplicate structure of the optimization section if it's a successful link opt job
-            elif self.job_type == "opt":
-                orientations = orientations[1:]
-                orientations_pbc = orientations_pbc[1:]
-                if self.normal_termination:
-                    orientations.pop(-2)
-                    orientations_pbc.pop(-2)
-                energies = self.energies[1:]
-            else:
-                orientations = orientations[1:]
-                orientations_pbc = orientations_pbc[1:]
-                energies = self.energies[1:]
-
         else:
             energies = self.energies
-            clean_duplicate_structure(orientations)
+
+        # clean up repeated orientations at the end of the optimization
+        clean_duplicate_structure(orientations)
 
         frozen_atoms = self.frozen_atoms_masks if self.use_frozen else None
 
