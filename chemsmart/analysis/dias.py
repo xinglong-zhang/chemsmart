@@ -31,7 +31,8 @@ class DIASOutputFolder(BaseFolder):
     atom1: atom number 1 for plotting bond distance
     atom2: atom number 2 for plotting bond distance
     zero: bool to turn on/off reference to the lowest total energy as zero
-    ref_file: user supplied reference file to act as minimum (energy in a.u. as from calculation).
+    ref_file: user supplied reference file to act as minimum
+              (energy in a.u. as from calculation).
     """
 
     def __init__(
@@ -67,9 +68,11 @@ class DIASOutputFolder(BaseFolder):
             == len(self.fragment1_energies_list)
             == len(self.fragment2_energies_list)
         ), (
-            f"Number of points along the IRC for full molecule {len(self.full_molecule_energies_list)} "
-            f"should be the same as number of points for their corresponding fragments, f1, "
-            f"{len(self.fragment1_energies_list)} and f2, {len(self.fragment2_energies_list)}"
+            f"Number of points along the IRC for full molecule "
+            f"{len(self.full_molecule_energies_list)} should be the same as "
+            f"number of points for their corresponding fragments, f1, "
+            f"{len(self.fragment1_energies_list)} and f2, "
+            f"{len(self.fragment2_energies_list)}"
         )
         return len(self.full_molecule_energies_list)
 
@@ -184,7 +187,10 @@ class DIASOutputFolder(BaseFolder):
         return self._get_reaction_coordinates(all_files_full_molecule_sorted)
 
     def _get_reaction_coordinates(self, list_of_filenames):
-        """Computes distance between two atoms in each frame along IRC point, for a given list of filenames."""
+        """Computes distance between two atoms in each frame along IRC.
+
+        For a given list of filenames.
+        """
         list_rc = []
         atom1 = (
             self.atom1 - 1
@@ -201,13 +207,15 @@ class DIASOutputFolder(BaseFolder):
                 molecule = oout.molecule
             else:
                 raise ValueError(
-                    f"File {file} has unknown format. Acceptable formats are Gaussian .log or ORCA .out."
+                    f"File {file} has unknown format. Acceptable formats "
+                    f"are Gaussian .log or ORCA .out."
                 )
 
             coordinates = molecule.positions
             symbols = molecule.chemical_symbols
             logger.info(
-                f"Getting distance between atoms {symbols[atom1]}{self.atom1} and {symbols[atom2]}{self.atom2}"
+                f"Getting distance between atoms {symbols[atom1]}{self.atom1} "
+                f"and {symbols[atom2]}{self.atom2}"
             )
             distance = np.linalg.norm(coordinates[atom1] - coordinates[atom2])
             list_rc.append(distance)
@@ -222,7 +230,8 @@ class DIASOutputFolder(BaseFolder):
                 # ref file is given, zero ref wrt to the ref file given
                 lowest_rel_tot_e = self.ref_file_rel_energy
         else:
-            # no zeroing reference, plot as given (whether ref file is given or not)
+            # no zeroing reference, plot as given
+            # (whether ref file is given or not)
             lowest_rel_tot_e = 0.0
         rel_total_energies = [
             i - lowest_rel_tot_e for i in self.list_rel_total_energies
@@ -251,11 +260,13 @@ class DIASOutputFolder(BaseFolder):
 
         with open(outfile_path, "w") as f:
             f.write(
-                "#   Reaction_coordinate    total    distortion    interaction\n"
+                "#   Reaction_coordinate    total    distortion    "
+                "interaction\n"
             )
             for i in range(len(self.list_rc)):
                 f.write(
-                    f"{self.list_rc[i]:10.5f} {rel_total_energies[i]:10.5f} {total_strain_energies[i]:10.5f} "
+                    f"{self.list_rc[i]:10.5f} {rel_total_energies[i]:10.5f} "
+                    f"{total_strain_energies[i]:10.5f} "
                     f"{total_interaction_energies[i]:10.5f}\n"
                 )
 
@@ -274,7 +285,10 @@ class DIASOutputFolder(BaseFolder):
             == len(rel_total_energies)
             == len(total_strain_energies)
             == len(total_interaction_energies)
-        ), "Number of all points for full molecule and fragments must be the same!"
+        ), (
+            "Number of all points for full molecule and fragments must be "
+            "the same!"
+        )
         plt.figure()
         font = {"family": "Arial", "weight": "bold"}
         plt.rc("font", **font)
