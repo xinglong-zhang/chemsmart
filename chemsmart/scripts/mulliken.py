@@ -72,13 +72,12 @@ def entry_point(filename, numbers):
             logger.info(f"Mulliken Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 
-    # Display specific atom spins if requested
     if numbers is not None:
         for n in numbers:
             spin_value = get_value_by_number(n, mulliken_spins)
             hk = get_key_by_value_and_number(spin_value, n, mulliken_spins)
             logger.info(
-                f"Mulliken Spin density at {hk} is {spin_value:.3f}."
+                f"Mulliken Spin densities at {hk} is {mulliken_spins:.3f}."
             )
         logger.info("\n")
 

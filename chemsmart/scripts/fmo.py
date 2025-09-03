@@ -31,10 +31,6 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def entry_point(filename, unit):
     """
     Calculate and display frontier molecular orbital (FMO) properties.
-    
-    This script extracts HOMO and LUMO energies from Gaussian or ORCA
-    output files and calculates derived properties including chemical
-    potential, hardness, and electrophilicity index.
     """
     create_logger()
     if filename.endswith(".log"):

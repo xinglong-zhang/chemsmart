@@ -1,10 +1,3 @@
-"""Generate isotope data for ChemSmart from NIST isotope information.
-
-This script parses isotope data from NIST and generates a Python data file
-containing isotopic masses, abundances, and calculated values for use in
-quantum chemistry calculations.
-"""
-
 import re
 from pathlib import Path
 
@@ -48,20 +41,6 @@ most_stable_mass_numbers = {
 
 
 def parse_isotope_file(filename):
-    """Parse NIST isotope data file and extract isotopic information.
-    
-    This function processes the NIST isotope data file and extracts atomic
-    numbers, mass numbers, relative atomic masses, and isotopic compositions
-    for each isotope.
-    
-    Args:
-        filename (str): Path to the NIST isotope data file.
-        
-    Returns:
-        dict: Dictionary containing isotope data organized by atomic number
-              and mass number, with calculated most abundant isotope and
-              weighted atomic mass for each element.
-    """
     isotopes = {}
     with open(filename, "r") as f:
         lines = f.readlines()
@@ -131,13 +110,11 @@ def parse_isotope_file(filename):
 
 
 if __name__ == "__main__":
-    """Main execution for generating isotope data file."""
     input_file = Path(__file__).parent / "../utils/isotopes.txt"
     output_file = Path(__file__).parent / "../utils/isotopes_data.py"
 
     isotopes = parse_isotope_file(input_file)
 
-    # Write formatted isotope data to Python file
     with open(output_file, "w") as f:
         f.write(
             '''"""Isotope data extracted from NIST public website.

@@ -6,7 +6,7 @@ from chemsmart.utils.logger import create_logger
 
 
 @click.command()
-@click.option("-f", "--folder", default=".", help="Folder containing output files")
+@click.option("-f", "--folder", default=".")
 @click.option(
     "-p",
     "--program",
@@ -25,11 +25,9 @@ from chemsmart.utils.logger import create_logger
     default="dias",
     help="Output file name for DIAS data to be written",
 )
-@click.option("-e", "--extrapolate", default=True, help="Enable extrapolation")
-@click.option(
-    "-r", "--reverse/--no-reverse", default=False, help="Reverse data order"
-)
-@click.option("-n", "--new-length", default=1000, help="New data length")
+@click.option("-e", "--extrapolate", default=True)
+@click.option("-r", "--reverse/--no-reverse", default=False)
+@click.option("-n", "--new-length", default=1000)
 @click.option(
     "-k",
     "--k-value",
@@ -74,26 +72,10 @@ def entry_point(
     atom_number2,
     ref_file,
 ):
-    """Analyze and plot DIAS data from quantum chemistry calculations.
-    
-    This function processes output files from Gaussian or ORCA calculations
-    to perform Distortion Interaction Activation Strain (DIAS) analysis
-    and generates plots showing energy decomposition.
+    """
+    Analyze and plot DIAS data from quantum chemistry calculations.
     
     Example usage: plot_dias.py -p orca -z -a 5 -b 7 -r
-    
-    Args:
-        folder: Directory containing calculation output files
-        program: Type of quantum chemistry program ('gaussian' or 'orca')
-        zero: Set reference point to zero
-        outputname: Base name for output files
-        extrapolate: Enable data extrapolation
-        reverse: Reverse data order
-        new_length: Target length for interpolated data
-        k_value: Spline degree for smoothing
-        atom_number1: First atom number for bond distance
-        atom_number2: Second atom number for bond distance
-        ref_file: Reference file for zero point
     """
     create_logger(debug=True, stream=True)
     

@@ -1,11 +1,4 @@
 #!/usr/bin/env python
-"""Wiberg Bond Index (WBI) and Natural Population Analysis script.
-
-This script extracts and analyzes Wiberg Bond Index data and Natural
-Population Analysis results from Gaussian quantum chemistry calculation
-output files.
-"""
-
 import logging
 import os
 
@@ -38,15 +31,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
          "output file. 1-indexed.",
 )
 def entry_point(filename, numbers):
-    """Analyze Wiberg Bond Index and Natural Population data.
-    
-    This function processes Gaussian output files containing NBO analysis
-    results to extract Wiberg Bond Index values and Natural Population
-    Analysis charges.
-    
-    Args:
-        filename: Path to Gaussian output file with WBI/NPA data
-        numbers: Optional atom numbers for specific charge analysis
+    """
+    Analyze Wiberg Bond Index and Natural Population data.
     """
     create_logger()
     outputfile = Gaussian16WBIOutput(filename=filename)
@@ -71,7 +57,8 @@ def entry_point(filename, numbers):
         for n in numbers:
             # Get natural charge value for the specified atom number
             charge_value = get_value_by_number(n, natural_charges)
-            logger.info(f"Natural Charge at atom {n} is {charge_value:.3f}.")
+            logger.info(f"Natural Charge at atom {n} is {charge_value:.>3f}.")
+            logger.info("\n")
         logger.info("\n")
 
 

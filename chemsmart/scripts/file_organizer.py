@@ -70,10 +70,6 @@ def entry_point(
     """
     Script for organizing files for supporting information.
     
-    This script organizes files based on information from an Excel
-    spreadsheet, allowing for systematic file management and organization
-    for research documentation purposes.
-    
     Example usage:
         file_organizer.py -f jq.xlsx -n co2 -c B:D -s 2 -r 100
     """
