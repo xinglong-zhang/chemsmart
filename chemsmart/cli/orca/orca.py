@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 def click_orca_options(f):
-    """Common click options for ORCA jobs."""
+    """
+    Common click options for ORCA jobs.
+    """
 
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
@@ -26,7 +28,9 @@ def click_orca_options(f):
 
 
 def click_orca_settings_options(f):
-    """Common click options for ORCA Settings."""
+    """
+    Common click options for ORCA Settings.
+    """
 
     @click.option(
         "-f",
@@ -107,7 +111,8 @@ def click_orca_settings_options(f):
             ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
         ),
         default="defgrid2",  # default used in ORCA is defgrid2
-        help="Grid for numerical integration. Choices are ['defgrid1', 'defgrid2', 'defgrid3']",
+        help="Grid for numerical integration. Choices are "
+        "['defgrid1', 'defgrid2', 'defgrid3']",
     )
     @click.option(
         "--scf-tol",
@@ -129,9 +134,10 @@ def click_orca_settings_options(f):
         "--scf-algorithm",
         type=click.Choice(
             ["GDIIS", "DIIS", "SOSCF", "AutoTRAH"], case_sensitive=False
-        ),  # SOSCF is an approximately quadratically convergent variant of the SCF procedure
-        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle, we invoke TRAH-SCF
-        # automatically (AutoTRAH).
+        ),  # SOSCF is an approximately quadratically convergent variant of
+        # the SCF procedure
+        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle,
+        # we invoke TRAH-SCF automatically (AutoTRAH).
         default=None,
         help="SCF algorithm to use.",
     )
@@ -178,7 +184,8 @@ def click_orca_settings_options(f):
         "--index",
         type=str,
         default=None,
-        help="index of molecule to use; default to the last molecule structure.",
+        help="index of molecule to use; default to the last molecule "
+        "structure.",
     )
     @click.option(
         "-r",
@@ -198,7 +205,9 @@ def click_orca_settings_options(f):
 
 
 def click_orca_jobtype_options(f):
-    """Common click options for ORCA link/crest jobs."""
+    """
+    Common click options for ORCA link/crest jobs.
+    """
 
     @click.option(
         "-j",
@@ -211,7 +220,8 @@ def click_orca_jobtype_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates to be fixed for modred or scan job. "
+        "1-indexed.",
     )
     @click.option(
         "-x",
@@ -272,7 +282,9 @@ def orca(
     forces,
     pubchem,
 ):
-    """CLI for running ORCA jobs using the chemsmart framework."""
+    """
+    CLI for running ORCA jobs using the chemsmart framework.
+    """
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
@@ -280,16 +292,20 @@ def orca(
     # get project settings
     project_settings = ORCAProjectSettings.from_project(project)
 
-    # obtain ORCA Settings from filename, if supplied; otherwise return defaults
+    # obtain ORCA Settings from filename, if supplied; otherwise return
+    # defaults
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filename is not supplied, eg, get structure from
+        # pubchem
         job_settings = ORCAJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filename is supplied and ORCA default settings are "
+            f"used:\n{job_settings.__dict__} "
         )
     elif filename.endswith((".com", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
+        # filename supplied - we would want to use the settings from here and
+        # do not use any defaults!
         job_settings = ORCAJobSettings.from_filepath(filename)
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
@@ -366,11 +382,13 @@ def orca(
     molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
+            "[filename] or [pubchem] has not been specified!\nPlease "
+            "specify one of them!"
         )
     if filename and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filename] and [pubchem] have been specified!\nPlease "
+            "specify only one of them."
         )
 
     if filename:
@@ -392,7 +410,8 @@ def orca(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give ORCA input filename or name to be be appended, but not both!"
+            "Only give ORCA input filename or name to be be appended, but "
+            "not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
         ["both", "forward", "backward", "down"], case_sensitive=False
     ),
     default=None,
-    help="IRC drirection. Available options: both, forward, backward, down.",
+    help="IRC direction. Available options: both, forward, backward, down.",
 )
 @click.option(
     "-i",
@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
         ["read", "calc_anfreq", "calc_numfreq"], case_sensitive=False
     ),
     default=None,
-    help="Initial Hessian. Available options: read, calc_anfreq, calc_numfreq.",
+    help="Initial Hessian. Available options: read, calc_anfreq, "
+    "calc_numfreq.",
 )
 @click.option(
     "-f",
@@ -52,20 +53,22 @@ logger = logging.getLogger(__name__)
     "--hessmode",
     type=int,
     default=None,
-    help="Hessian mode used for the initial displacement.Default 0.",
+    help="Hessian mode used for the initial displacement. Default 0.",
 )
 @click.option(
     "-M",
     "--monitor-internals/--no-monitor-internals",
     type=bool,
     default=False,
-    help="Monitor internals to print out up to three internal coordinates",
+    help="Monitor internals to print out up to three internal "
+    "coordinates",
 )
 @click.option(
     "--init-displ",
     type=click.Choice(["DE", "length"], case_sensitive=False),
     default=None,
-    help="Initial displacement. Available options: DE, length. DE for energy difference, length for step size.",
+    help="Initial displacement. Available options: DE, length. "
+    "DE for energy difference, length for step size.",
 )
 @click.option(
     "--scale-init-displ",
@@ -77,7 +80,8 @@ logger = logging.getLogger(__name__)
     "--de-init-displ",
     type=float,
     default=None,
-    help="Energy difference for initial displacement based on provided Hessian (Default: 2 mEh)",
+    help="Energy difference for initial displacement based on provided "
+    "Hessian (Default: 2 mEh)",
 )
 @click.option(
     "--follow-coordtype",
@@ -89,13 +93,14 @@ logger = logging.getLogger(__name__)
     "--scale-displ-sd",
     type=float,
     default=None,
-    help="Scaling factor for scaling the 1st SD step.Default to 0.15.",
+    help="Scaling factor for scaling the 1st SD step. Default to 0.15.",
 )
 @click.option(
     "--adapt-scale-displ/--no-adapt-scale-displ",
     type=bool,
     default=False,
-    help="Modify Scale_Displ_SD when the step size becomes smaller or larger.",
+    help="Modify Scale_Displ_SD when the step size becomes smaller "
+    "or larger.",
 )
 @click.option(
     "--sd-parabolicfit/--no-sd-parabolicfit",
@@ -107,7 +112,8 @@ logger = logging.getLogger(__name__)
     "--interpolate-only/--no-interpolate-only",
     type=bool,
     default=False,
-    help="Only allow interpolation for parabolic fit, not extrapolation.",
+    help="Only allow interpolation for parabolic fit, not "
+    "extrapolation.",
 )
 @click.option(
     "--do-sd-corr/--no-do-sd-corr",
@@ -126,7 +132,8 @@ logger = logging.getLogger(__name__)
     "--sd-corr-parabolicfit/--no-sd-corr-parabolicfit",
     type=bool,
     default=False,
-    help="Do a parabolic fit for finding an optimal correction step length.",
+    help="Do a parabolic fit for finding an optimal correction step "
+    "length.",
 )
 @click.option(
     "--tolrmsg",
@@ -144,7 +151,8 @@ logger = logging.getLogger(__name__)
     "-I",
     "--internal-modred",
     default=None,
-    help="Internal modred. Up to three internal coordinates can be defined and values printed.",
+    help="Internal modred. Up to three internal coordinates can be "
+    "defined and values printed.",
 )
 @click.pass_context
 def irc(
@@ -176,17 +184,20 @@ def irc(
     project_settings = ctx.obj["project_settings"]
     irc_project_settings = project_settings.irc_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py orca -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project irc settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project irc settings with job settings from cli keywords from
+    # cli.orca.py subcommands
     irc_settings = irc_project_settings.merge(job_settings, keywords=keywords)
 
     # update irc_settings if any attribute is specified in cli options
-    # suppose project has a non None value, and user does not specify a value (None),
-    # then the project value should be used and unmodified, ie, should not be merged.
+    # suppose project has a non None value, and user does not specify a 
+    # value (None), then the project value should be used and unmodified, 
+    # ie, should not be merged.
     # update value only if user specifies a value for the attribute:
     if maxiter is not None:
         irc_settings.maxiter = maxiter

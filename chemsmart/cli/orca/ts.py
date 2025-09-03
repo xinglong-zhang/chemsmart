@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
     "-a",
     "--hybrid-hess-atoms",
     default=None,
-    help="List of atoms to use for hybrid Hessian.\nzero-indexed, e.g. [0, 1, 2, 3]",
+    help="List of atoms to use for hybrid Hessian.\n"
+    "zero-indexed, e.g. [0, 1, 2, 3]",
 )
 @click.option(
     "--numhess/--no-numhess",
@@ -98,20 +99,23 @@ def ts(
     project_settings = ctx.obj["project_settings"]
     ts_project_settings = project_settings.ts_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py orca -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project irc settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project irc settings with job settings from cli keywords from
+    # cli.orca.py subcommands
     ts_settings = ts_project_settings.merge(job_settings, keywords=keywords)
 
     # get label for the job
     label = ctx.obj["label"]
 
     # update irc_settings if any attribute is specified in cli options
-    # suppose project has a non None value, and user does not specify a value (None),
-    # then the project value should be used and unmodified, ie, should not be merged.
+    # suppose project has a non None value, and user does not specify a 
+    # value (None), then the project value should be used and unmodified,
+    # ie, should not be merged.
     # update value only if user specifies a value for the attribute:
     if inhess is True:
         ts_settings.inhess = inhess

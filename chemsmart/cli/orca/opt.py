@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
     "-f",
     "--freeze-atoms",
     type=str,
-    help="Indices of atoms to freeze for constrained optimization. 1-indexed.",
+    help="Indices of atoms to freeze for constrained optimization. "
+    "1-indexed.",
 )
 @click.option(
     "-i",
@@ -31,12 +32,14 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project opt settings with job settings from cli keywords from
+    # cli.orca.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
     opt_settings.invert_constraints = invert_constraints
 
