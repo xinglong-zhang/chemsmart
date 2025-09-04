@@ -242,6 +242,9 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
 
     def adjust_to_0based(index):
         """Adjust a 1-based index to 0-based. Handles None gracefully."""
+        # raise error if index is 0, since requires 1-based indexing
+        if index == 0:
+            raise ValueError("Index cannot be 0 in 1-based indexing.")
         return index - 1 if index is not None else None
 
     # If it's not a slice, handle as a single integer or string
@@ -280,6 +283,71 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
         except ValueError:
             # Raise error for invalid slice format
             raise ValueError(f"Invalid slice input: {stridx}")
+
+
+def convert_string_index_from_1_based_to_0_based(
+    index: Union[str, int, slice],
+) -> Union[int, slice, list]:
+    """Convert a string index from 1-based (from user input) to 0-based indexing.
+    Handles single indices, slices, and negative indices.
+
+    Args:
+        index: A string representing an index or slice, e.g., "1", "2:5",
+        "3:10:2", "-1" or user-defined indices such as "1-2,5".
+
+    Returns:
+        An integer or slice or list adjusted for 0-based indexing.
+    """
+    try:
+        # Try numeric index
+        index_int = int(index)
+    except (TypeError, ValueError):
+        try:
+            index_list = string2index_1based(index)
+        except ValueError:
+            # Last resort: user-defined ranges
+            index_list = get_list_from_string_range(index)
+            # convert back to 0-based indexing
+            index_list = [i - 1 for i in index_list]
+    else:
+        # Only runs if int() succeeded
+        if index_int == 0:
+            raise ValueError(
+                f"Index {index_int} is out of range, as 1-indexing is used!\n "
+                f"Please provide a positive integer.\n"
+            )
+        elif index_int < 0:
+            # If negative index, return as is
+            return index_int
+        else:
+            # Convert to 0-based indexing
+            return index_int - 1  # Convert to 0-based indexing
+    return index_list
+
+
+def return_objects_from_string_index(list_of_objects, index):
+    """Return objects from a list of objects based on the given index.
+    The index can be a single integer, a slice, or a list of integers.
+    If the index is negative, it will return the last n objects.
+    If the index is a string, it will convert it to an integer or slice first.
+    Index is 1-based, so inputting 0 will raise an error.
+    """
+    # convert index from 1-based (user input) to 0-based (python code-needed)
+    index = convert_string_index_from_1_based_to_0_based(index)
+    if isinstance(index, list):
+        # if index is a list, use it to select objects
+        objects = [list_of_objects[i] for i in index]
+    elif isinstance(index, int):
+        # if index is a single integer, use it to select a single object
+        objects = list_of_objects[index]
+    else:
+        # index is a Slice
+        objects = list_of_objects[index]
+
+    # if not isinstance(objects, list):
+    #     objects = [objects]
+
+    return objects
 
 
 def get_value_by_number(num, data):

@@ -6,7 +6,6 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +107,11 @@ class GaussianJob(Job):
             filepath=filename, index=":", return_list=True
         )
         logger.info(f"Num of molecules read: {len(molecules)}.")
-        molecules = molecules[string2index_1based(index)]
+
+        # use 1-based indexing for the index
+        from chemsmart.utils.utils import return_objects_from_string_index
+
+        molecules = return_objects_from_string_index(molecules, index)
 
         # Create jobrunner if not provided
         if jobrunner is None:

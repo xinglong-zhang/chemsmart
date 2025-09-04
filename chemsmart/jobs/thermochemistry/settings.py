@@ -14,9 +14,11 @@ class ThermochemistryJobSettings:
         use_weighted_mass=False,
         alpha=4,
         s_freq_cutoff=None,
+        entropy_method=None,
         h_freq_cutoff=None,
         energy_units="hartree",
         outputfile=None,
+        overwrite=False,
         check_imaginary_frequencies=True,
     ):
         self.temperature = temperature
@@ -25,9 +27,11 @@ class ThermochemistryJobSettings:
         self.use_weighted_mass = use_weighted_mass
         self.alpha = alpha
         self.s_freq_cutoff = s_freq_cutoff
+        self.entropy_method = entropy_method
         self.h_freq_cutoff = h_freq_cutoff
         self.energy_units = energy_units.lower()
         self.outputfile = outputfile
+        self.overwrite = overwrite
         self.check_imaginary_frequencies = check_imaginary_frequencies
 
     def copy(self):
@@ -38,9 +42,11 @@ class ThermochemistryJobSettings:
             use_weighted_mass=self.use_weighted_mass,
             alpha=self.alpha,
             s_freq_cutoff=self.s_freq_cutoff,
+            entropy_method=self.entropy_method,
             h_freq_cutoff=self.h_freq_cutoff,
             energy_units=self.energy_units,
             outputfile=self.outputfile,
+            overwrite=self.overwrite,
             check_imaginary_frequencies=self.check_imaginary_frequencies,
         )
 

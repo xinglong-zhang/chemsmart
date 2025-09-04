@@ -1,7 +1,7 @@
 import logging
 import os
 from contextlib import suppress
-from shutil import copy, rmtree
+from shutil import copy
 
 from chemsmart.jobs.runner import JobRunner
 
@@ -120,11 +120,11 @@ class ThermochemistryJobRunner(JobRunner):
                     copy(file, job.folder)
 
             # Clean up scratch directory
-            if os.path.exists(self.running_directory):
-                logger.info(
-                    f"Removing scratch directory: {self.running_directory}"
-                )
-                rmtree(self.running_directory)
+            # if os.path.exists(self.running_directory):
+            #     logger.info(
+            #         f"Removing scratch directory: {self.running_directory}"
+            #     )
+            #     rmtree(self.running_directory)
 
         if job.is_complete():
             self._remove_err_files(job)
