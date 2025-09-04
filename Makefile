@@ -19,6 +19,7 @@ else
 endif
 
 USE_CONDA ?= true  # Default to true if not explicitly set
+USE_CONDA = $(strip $(USE_CONDA))
 MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart$(SEP)cli$(SEP)chemsmart  # Use platform-specific separator
 
