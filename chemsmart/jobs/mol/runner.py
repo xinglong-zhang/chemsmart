@@ -680,3 +680,124 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         command += f"; save {quote_path(job.spin_basename)}.pse"
 
         return command
+
+
+class PyMOLAlignJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_align"]
+
+    def _assign_variables(self, job):
+        """Sets proper file paths for job input, output, and error files."""
+        super()._assign_variables(job)
+        self.running_directory = job.folder
+        logger.debug(f"Running directory: {self.running_directory}")
+        self.job_basename = job.label
+        self.job_inputfile = os.path.abspath(job.inputfile)
+        self.job_logfile = os.path.abspath(
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.log"
+            )
+        )
+        self.job_outputfile = os.path.abspath(
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.out"
+            )
+        )
+        self.job_errfile = os.path.abspath(
+            os.path.join(
+                job.folder, f"alignment_{len(job.molecule)}molecules.err"
+            )
+        )
+
+    def _write_input(self, job):
+        mol = job.molecule
+        job.xyz_absolute_paths = []
+        if isinstance(mol, list):
+            for i, m in enumerate(mol):
+                if not isinstance(m, Molecule):
+                    raise ValueError(f"Object {m} is not of Molecule type!")
+                xyz_path = os.path.join(job.folder, f"alignmol{i + 1}.xyz")
+                abs_xyz_path = os.path.abspath(xyz_path)
+                job.xyz_absolute_paths.append(abs_xyz_path)
+                logger.info(f"Writing molecule {i + 1} to {abs_xyz_path}")
+                m.write(xyz_path, format="xyz", mode="w")
+        elif isinstance(mol, Molecule):
+            xyz_path = os.path.join(job.folder, "alignmol1.xyz")
+            abs_xyz_path = os.path.abspath(xyz_path)
+            job.xyz_absolute_paths.append(abs_xyz_path)
+
+            logger.info(f"Writing molecule to {abs_xyz_path}")
+            mol.write(xyz_path, format="xyz", mode="w")
+        else:
+            raise ValueError(f"Object {mol} is not of Molecule type!")
+
+    def _get_visualization_command(self, job):
+        exe = quote_path(self.executable)
+        xyz_paths = job.xyz_absolute_paths
+        if not xyz_paths:
+            raise ValueError(
+                "No XYZ files found. Ensure _write_input is called first."
+            )
+        first_mol = quote_path(xyz_paths[0])
+        load_cmds = [f"{quote_path(path)}" for path in xyz_paths[1:]]
+        command = f"{exe} {first_mol}"
+        if load_cmds:
+            command += f" {' '.join(load_cmds)}"
+
+        if job.pymol_script is None:
+            style_file_path = os.path.join(
+                job.folder, "zhang_group_pymol_style.py"
+            )
+            if os.path.exists(style_file_path):
+                job_pymol_script = style_file_path
+            else:
+                logger.info(
+                    "Using default zhang_group_pymol_style for rendering."
+                )
+                job_pymol_script = self._generate_visualization_style_script(
+                    job
+                )
+            if os.path.exists(job_pymol_script):
+                command += f" -r {quote_path(job_pymol_script)}"
+        else:
+            # using user-defined style file
+            assert os.path.exists(
+                job.pymol_script
+            ), f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
+            command += f" -r {quote_path(job.pymol_script)}"
+
+        if job.quiet_mode:
+            command += " -q"
+        if job.command_line_only:
+            command += " -c"
+        return command
+
+    def _job_specific_commands(self, job, command):
+        command = self._align_command(job, command)
+        return command
+
+    def _align_command(self, job, command):
+        molnames = job.mol_names
+        align_cmds = []
+        for i in range(1, len(molnames)):
+            align_cmds.append(f"align {molnames[i]}, {molnames[0]}")
+
+    def _create_process(self, job, command, env=None):
+        process = super()._create_process(job, command, env)
+        self._cleanup_xyz_files(job)
+        return process
+
+    def _cleanup_xyz_files(self, job):
+        if hasattr(job, "xyz_absolute_paths"):
+            for path in job.xyz_absolute_paths:
+                if (
+                    os.path.exists(path)
+                    and path.endswith(".xyz")
+                    and os.path.basename(path).startswith("alignmol")
+                    and os.path.commonpath([path, job.folder])
+                    == os.path.abspath(job.folder)
+                ):
+                    try:
+                        os.remove(path)
+                        logger.info(f"Deleted temporary file: {path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete {path}: {e}")
