@@ -50,7 +50,7 @@ class MoleculeGrouper(ABC):
 
     def __init__(self, molecules: Iterable[Molecule], num_procs: int = 1):
         self.molecules = molecules
-        self.num_procs = max(1, num_procs)
+        self.num_procs = int(max(1, num_procs))
 
         self._validate_inputs()
 
@@ -159,6 +159,13 @@ class RMSDGrouper(MoleculeGrouper):
 
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
+            f"ignore_hydrogens={self.ignore_hydrogens})"
+        )
+
 
 class RMSDGrouperSharedMemory(MoleculeGrouper):
     """Group molecules based on RMSD using shared memory with minimal locking."""
@@ -166,7 +173,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.5,  # RMSD threshold for grouping
+        threshold: float = 3.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
     ):
@@ -228,7 +235,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         """Calculate RMSD efficiently using local copies of shared memory."""
         i, j = idx_pair
 
-        # ✅ **Read from Shared Memory ONCE (No repeated locking)**
+        # Read from Shared Memory ONCE (No repeated locking)
         pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
         pos2 = np.array(shared_positions[j])
 
@@ -621,7 +628,9 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
 
 class StructureGrouperFactory:
     @staticmethod
-    def create(structures, strategy="rdkit", num_procs=1, **kwargs):
+    def create(
+        structures, strategy="rmsd", num_procs=1, threshold=5.0, **kwargs
+    ):
         groupers = {
             "rmsd": RMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
@@ -631,5 +640,10 @@ class StructureGrouperFactory:
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
-            return groupers[strategy](structures, num_procs, **kwargs)
+            return groupers[strategy](
+                structures,
+                threshold=threshold,
+                num_procs=num_procs,
+                **kwargs,
+            )
         raise ValueError(f"Unknown grouping strategy: {strategy}")
