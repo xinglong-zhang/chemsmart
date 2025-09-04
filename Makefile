@@ -45,13 +45,13 @@ endif
 env:  ## Create a Conda environment if USE_CONDA=true.
 	@echo Debug: USE_CONDA=$(USE_CONDA)
 ifeq ($(OS),Windows)
-	@if "$(USE_CONDA)"=="true" ( \
+	@if "$(strip $(USE_CONDA))"=="true" ( \
 		$(ECHO) "Using Conda" && $(MAKE) conda-env \
 	) else ( \
 		$(ECHO) "Using virtualenv" && $(MAKE) virtualenv \
 	)
 else
-	@if [ "$(USE_CONDA)" = "true" ]; then \
+	@if [ "$(strip $(USE_CONDA))" = "true" ]; then \
 		$(ECHO) "Using Conda"; \
 		$(MAKE) conda-env; \
 	else \
@@ -167,9 +167,9 @@ endif
 show: ## Display the current environment information.
 	@echo Current environment:
 ifeq ($(OS),Windows)
-	@if "$(USE_CONDA)"=="true" conda env list ^| findstr "*"
+	@if "$(strip $(USE_CONDA))"=="true" conda env list ^| findstr "*"
 else
-	@if [ "$(USE_CONDA)" = "true" ]; then conda env list | grep '*'; fi
+	@if [ "$(strip $(USE_CONDA))" = "true" ]; then conda env list | grep '*'; fi
 endif
 	$(ENV_PREFIX)python -V
 	$(ENV_PREFIX)python -m site
