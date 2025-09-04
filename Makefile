@@ -19,6 +19,7 @@ else
 endif
 
 USE_CONDA ?= true  # Default to true if not explicitly set
+STRIPPED_USE_CONDA = $(strip $(USE_CONDA))
 MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart$(SEP)cli$(SEP)chemsmart  # Use platform-specific separator
 
@@ -43,15 +44,15 @@ endif
 
 .PHONY: env
 env:  ## Create a Conda environment if USE_CONDA=true.
-	@echo Debug: USE_CONDA=$(USE_CONDA)
+	@echo Debug: USE_CONDA=$(STRIPPED_USE_CONDA)
 ifeq ($(OS),Windows)
-	@if "$(strip $(USE_CONDA))"=="true" ( \
+	@if "$(STRIPPED_USE_CONDA)"=="true" ( \
 		$(ECHO) "Using Conda" && $(MAKE) conda-env \
 	) else ( \
 		$(ECHO) "Using virtualenv" && $(MAKE) virtualenv \
 	)
 else
-	@if [ "$(strip $(USE_CONDA))" = "true" ]; then \
+	@if [ "$(STRIPPED_USE_CONDA)" = "true" ]; then \
 		$(ECHO) "Using Conda"; \
 		$(MAKE) conda-env; \
 	else \
@@ -167,9 +168,9 @@ endif
 show: ## Display the current environment information.
 	@echo Current environment:
 ifeq ($(OS),Windows)
-	@if "$(strip $(USE_CONDA))"=="true" conda env list ^| findstr "*"
+	@if "$(STRIPPED_USE_CONDA)"=="true" conda env list ^| findstr "*"
 else
-	@if [ "$(strip $(USE_CONDA))" = "true" ]; then conda env list | grep '*'; fi
+	@if [ "$(STRIPPED_USE_CONDA)" = "true" ]; then conda env list | grep '*'; fi
 endif
 	$(ENV_PREFIX)python -V
 	$(ENV_PREFIX)python -m site
