@@ -63,7 +63,7 @@ entry_point.add_command(update)
 def main():  # pragma: no cover
     """
     The main function executes on commands:
-    `python -m chemsmart` and `$ chemsmart `.
+    ``python -m chemsmart`` and ``$ chemsmart``.
 
     This is your program's entry point.
 

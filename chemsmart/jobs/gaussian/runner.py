@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy, rmtree
+from shutil import copy
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -24,8 +24,6 @@ class GaussianJobRunner(JobRunner):
     # combines information about server and program
     JOBTYPES = [
         "g16crest",
-        "g16crestopt",
-        "g16crestts",
         "g16job",
         "g16dias",
         "g16opt",
@@ -98,9 +96,6 @@ class GaussianJobRunner(JobRunner):
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output, and error files in scratch or not in scratch."""
-        # keep job output file in job folder regardless of running in scratch or not
-        self.job_outputfile = job.outputfile
-
         if self.scratch and self.scratch_dir:
             self._set_up_variables_in_scratch(job)
         else:
@@ -130,12 +125,17 @@ class GaussianJobRunner(JobRunner):
         scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
         self.job_errfile = os.path.abspath(scratch_job_errfile)
 
+        job_outputfile = job.label + ".log"
+        scratch_job_outputfile = os.path.join(scratch_job_dir, job_outputfile)
+        self.job_outputfile = os.path.abspath(scratch_job_outputfile)
+
     def _set_up_variables_in_job_directory(self, job):
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_chkfile = os.path.abspath(job.chkfile)
         self.job_errfile = os.path.abspath(job.errfile)
+        self.job_outputfile = os.path.abspath(job.outputfile)
 
     def _write_input(self, job):
         from chemsmart.jobs.gaussian.writer import GaussianInputWriter
@@ -181,16 +181,21 @@ class GaussianJobRunner(JobRunner):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    copy(file, job.folder)
+                    try:
+                        copy(file, job.folder)
+                    except Exception as e:
+                        logger.error(
+                            f"File {file} cannot be copied to job folder {job.folder}: {e}"
+                        )
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
-            if self.scratch:
-                logger.info(
-                    f"Removing scratch directory: {self.running_directory}."
-                )
-                rmtree(self.running_directory)
+            # # if job is completed, remove scratch directory and submit_script
+            # # and log.info and log.err files
+            # if self.scratch:
+            #     logger.info(
+            #         f"Removing scratch directory: {self.running_directory}."
+            #     )
+            #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
 

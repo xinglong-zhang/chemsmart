@@ -14,6 +14,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
+from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
@@ -142,6 +143,107 @@ def modred_genecp_inputfile(gaussian_inputs_genecp_directory):
 def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     return os.path.join(
         gaussian_inputs_genecp_directory, "modred_genecp_custom_solvent.com"
+    )
+
+
+# Gaussian input files for link jobs
+@pytest.fixture()
+def gaussian_link_inputs_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "link")
+
+
+@pytest.fixture()
+def gaussian_link_opt_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_opt_input_opt_link.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_link_ts_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_ts_input_ts_link.com"
+    )
+
+
+# Gaussian output files for link jobs
+@pytest.fixture()
+def gaussian_link_outputs_test_directory(gaussian_outputs_test_directory):
+    gaussian_link_outputs_test_directory = os.path.join(
+        gaussian_outputs_test_directory, "link"
+    )
+    return gaussian_link_outputs_test_directory
+
+
+@pytest.fixture()
+def gaussian_link_opt_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_ts_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_ts_link.log",
+    )
+    return gaussian_link_ts_outfile
+
+
+@pytest.fixture()
+def gaussian_link_modred_output(gaussian_link_outputs_test_directory):
+    gaussian_link_modred_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "fe_ch_quintet_modred_link.log",
+    )
+    return gaussian_link_modred_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_sp_link.log",
+    )
+
+
+@pytest.fixture()
+def gaussian_dna_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_outfile = os.path.join(
+        gaussian_link_outputs_test_directory, "dna_link_sp.log"
+    )
+    return gaussian_link_outfile
+
+
+@pytest.fixture()
+def gaussian_dppeFeCl2_link_opt_outputfile(
+    gaussian_link_outputs_test_directory,
+):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "dppeFeCl2_opt_quintet_link_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_dppeFeCl2_link_opt_failed_outputfile(
+    gaussian_link_outputs_test_directory,
+):
+    gaussian_link_failed_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
+    )
+    return gaussian_link_failed_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_sp_input_sp_link.com"
     )
 
 
@@ -929,6 +1031,21 @@ def multiple_molecules_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def xtb_optimized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "ts_xtbopt.xyz")
+
+
+@pytest.fixture()
+def chemsmart_generated_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "frozen_coordinates_opt.xyz")
+
+
+@pytest.fixture()
+def extended_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crystal.extxyz")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
@@ -980,6 +1097,18 @@ def pymol_movie_jobrunner(pbs_server):
     return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
 
 
+@pytest.fixture()
+def nciplot_jobrunner_no_scratch(pbs_server):
+    return FakeNCIPLOTJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def nciplot_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeNCIPLOTJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
 ## conformers for testing
 @pytest.fixture()
 def methanol_molecules():
@@ -1001,6 +1130,38 @@ def methanol_molecules():
     methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
 
     return methanol_molecules
+
+
+@pytest.fixture()
+def constrained_atoms():
+    """Fixture to create a simple Ar2 dimer with constraints."""
+    from ase import Atoms
+    from ase.calculators.lj import LennardJones
+    from ase.constraints import FixAtoms, FixBondLength
+
+    # Simple Ar2 dimer with a reasonable separation
+    r0 = 3.5  # Å
+    atoms = Atoms(
+        "Ar2", positions=[(0.0, 0.0, 0.0), (r0, 0.0, 0.0)], pbc=False
+    )
+
+    # Light-weight calculator for tests
+    atoms.calc = LennardJones()  # defaults are fine for unit tests
+
+    # Constraints:
+    #  - Fix the first atom in space
+    #  - Keep the Ar–Ar bond length fixed at its initial value
+    constraints = [
+        FixAtoms(indices=[0]),
+        FixBondLength(0, 1),
+    ]
+    # set the constraints on the Atoms object
+    atoms.set_constraint(constraint=constraints)
+
+    # set velocity
+    atoms.set_velocities([[0, 0, 0], [0, 0, 0]])  # Set zero velocities
+
+    return atoms
 
 
 @pytest.fixture()
@@ -1061,6 +1222,15 @@ def io_test_directory(test_data_directory):
 @pytest.fixture()
 def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
+
+
+@pytest.fixture()
+def constrained_pbc_db_file(io_test_directory):
+    """Fixture of a .db file containing constrained PBC database
+    from heterogeneous catalysis."""
+    return os.path.join(
+        io_test_directory, "heterogenous_pbc_constraints_5images.db"
+    )
 
 
 ## fixtures for mixins

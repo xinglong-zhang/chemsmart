@@ -143,21 +143,39 @@ class Gaussian16Input(GaussianFileMixin):
         self.constrained_atoms = value
 
     def _get_route(self):
-        """Obtain route string that may span over multiple lines and convert route to lower case."""
-        concatenated_string = ""
-        found_hash = False  # Initialize once before the loop
+        """Obtain route strings that may span multiple lines starting with '#',
+        end a block on a blank line (or a non-# line), and convert to lower case.
+        """
+        route_strings = []
+        current_block = []
 
-        for line in self.content_groups[0]:
+        for line in self.contents:
+            # Blank line → end current block if any
+            if not line:
+                if current_block:
+                    route_strings.append(" ".join(current_block).lower())
+                    current_block = []
+                continue
+
+            # Line starts a/continues a '#' block
             if line.startswith("#"):
-                concatenated_string += line.strip()
-                found_hash = True
-            elif found_hash:
-                # Include continuation lines until a blank or non-related line appears
-                if line.strip() == "":
-                    break
-                concatenated_string += " " + line.strip()
+                # remove the leading '#' then trim again
+                current_block.append(line)
+            else:
+                # Non-blank, non-# line ends a block too
+                if current_block:
+                    route_strings.append(" ".join(current_block).lower())
+                    current_block = []
+                # otherwise ignore non-# lines
 
-        return concatenated_string.lower()
+        # Flush last block if file ends in one
+        if current_block:
+            route_strings.append(" ".join(current_block).lower())
+
+        if self.is_link and route_strings:
+            return route_strings[-1]
+
+        return " ".join(route_strings)
 
     def _get_charge_and_multiplicity(self):
         for line in self.contents:

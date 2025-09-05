@@ -42,7 +42,7 @@ We recommend using a Conda environment to manage dependencies.
 
 - **Install the project in development mode**:
   ```bash
-  make install
+  make install-dev
   ```
 
 - **Install pre-commit hooks** (required for developers to enforce code style and quality):

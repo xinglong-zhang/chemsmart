@@ -6,7 +6,7 @@ import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
-from shutil import copy, rmtree
+from shutil import copy
 
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
@@ -38,10 +38,20 @@ class ORCAJobRunner(JobRunner):
     FAKE = False
     SCRATCH = True
 
-    def __init__(self, server, scratch=None, fake=False, **kwargs):
+    def __init__(
+        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+    ):
+        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH  # default to True for ORCA jobs
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+        super().__init__(
+            server=server,
+            scratch=scratch,
+            scratch_dir=scratch_dir,
+            fake=fake,
+            **kwargs,
+        )
+        logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner num cores: {self.num_cores}")
         logger.debug(f"Jobrunner num hours: {self.num_hours}")
         logger.debug(f"Jobrunner num gpus: {self.num_gpus}")
@@ -70,13 +80,12 @@ class ORCAJobRunner(JobRunner):
 
     def _prerun(self, job):
         self._assign_variables(job)
-        self._copy_over_xyz_files(job)
+        if self.scratch and os.path.exists(job.inputfile):
+            # copy input file to scratch directory
+            self._copy_over_xyz_files(job)
 
     def _assign_variables(self, job):
         """Sets proper file paths for job input, output, and error files in scratch or not in scratch."""
-        # keep job output file in job folder regardless of running in scratch or not
-        self.job_outputfile = job.outputfile
-
         if self.scratch and self.scratch_dir:
             self._set_up_variables_in_scratch(job)
         else:
@@ -106,12 +115,17 @@ class ORCAJobRunner(JobRunner):
         scratch_job_errfile = os.path.join(scratch_job_dir, job_errfile)
         self.job_errfile = os.path.abspath(scratch_job_errfile)
 
+        job_outputfile = job.label + ".out"
+        scratch_job_outputfile = os.path.join(scratch_job_dir, job_outputfile)
+        self.job_outputfile = os.path.abspath(scratch_job_outputfile)
+
     def _set_up_variables_in_job_directory(self, job):
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_gbwfile = os.path.abspath(job.gbwfile)
         self.job_errfile = os.path.abspath(job.errfile)
+        self.job_outputfile = os.path.abspath(job.outputfile)
 
     def _copy_over_xyz_files(self, job):
         """Copy over xyz files from run directory to scratch directory,
@@ -175,23 +189,30 @@ class ORCAJobRunner(JobRunner):
         return exe
 
     def _postrun(self, job):
+        logger.debug(f"Scratch: {self.scratch}")
         if self.scratch:
-            # if job was run in scratch, copy files to job folder except files starting with Gau-
+            logger.debug(f"Running directory: {self.running_directory}")
+            # if job was run in scratch, copy files to job folder except files containing .tmp
             for file in glob(f"{self.running_directory}/{job.label}*"):
                 if not file.endswith((".tmp", ".tmp.*")):
                     logger.info(
                         f"Copying file {file} from {self.running_directory} to {job.folder}"
                     )
-                    copy(file, job.folder)
+                    try:
+                        copy(file, job.folder)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to copy file {file} to {job.folder}: {e}"
+                        )
 
         if job.is_complete():
-            # if job is completed, remove scratch directory
-            # and err files
-            if self.scratch:
-                logger.info(
-                    f"Removing scratch directory: {self.running_directory}."
-                )
-                rmtree(self.running_directory)
+            # # if job is completed, remove scratch directory
+            # # and err files
+            # if self.scratch:
+            #     logger.info(
+            #         f"Removing scratch directory: {self.running_directory}."
+            #     )
+            #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
 
