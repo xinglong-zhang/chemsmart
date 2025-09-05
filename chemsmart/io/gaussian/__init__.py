@@ -50,6 +50,7 @@ class GaussianRefs:
         "guess",
         "stable",
         "scf",
+        "geom",  # used for geom=check keyword when reading in a checkpoint file
     ]
     g_additional_opt_options = [
         "maxstep",

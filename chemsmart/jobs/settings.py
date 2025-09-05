@@ -196,10 +196,12 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         "irc",
         "scan",
         "nci",
-        "crestopt",
+        "crest",
         "dias",
         "resp",
         "set",
+        "traj",
+        "uvvis",
         "wbi",
     ]
     sp_job = ["sp"]

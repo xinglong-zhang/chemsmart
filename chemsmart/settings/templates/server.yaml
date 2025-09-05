@@ -41,7 +41,12 @@ ORCA:
     CONDA_ENV: |   # program-specific conda env
         source ~/anaconda3/etc/profile.d/conda.sh
         conda activate ~/anaconda3/envs/chemsmart
+    MODULES: |
+        module purge
+        module load libfabric
+        module load openmpi
     ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
         export PATH=~/programs/openmpi-4.1.6/build/bin:$PATH
         export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 

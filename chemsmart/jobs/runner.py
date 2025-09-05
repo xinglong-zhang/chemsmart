@@ -104,27 +104,36 @@ class JobRunner(RegistryMixin):
 
         scratch_dir = None
         if self.executable is not None:
-            logger.info(f"Setting scratch dir for {self} from executable.")
             scratch_dir = self.executable.scratch_dir
-            logger.info(f"Scratch dir set to: {scratch_dir}")
+            logger.debug(f"Setting scratch dir from executable: {scratch_dir}")
         # (2) then try to get from server specific environment variable
         if scratch_dir is None:
             scratch_dir = self.server.scratch_dir
+            logger.debug(
+                f"Setting scratch dir from server specific env: {scratch_dir}"
+            )
 
         # (3) then try to get from user settings
         if scratch_dir is None:
             scratch_dir = user_settings.scratch
+            logger.debug(
+                f"Setting scratch dir from user settings: {scratch_dir}"
+            )
 
-        if scratch_dir is not None:
+        # (4) finally, if scratch_dir is still None, then disable scratch
+        if scratch_dir is None:
+            logger.warning(
+                f"Could not determine scratch dir for {self}. Not using scratch."
+            )
+            self.scratch = False
+        else:
             # check that the scratch folder exists
             scratch_dir = os.path.expanduser(scratch_dir)
             if not os.path.exists(scratch_dir):
                 raise FileNotFoundError(
                     f"Specified scratch dir does not exist: {scratch_dir}"
                 )
-            return scratch_dir
-        else:
-            return None
+        return scratch_dir
 
     def __repr__(self):
         return f"{self.__class__.__qualname__}<server={self.server}>"
@@ -184,12 +193,23 @@ class JobRunner(RegistryMixin):
         return env
 
     def run(self, job, **kwargs):
+        logger.debug(f"Running job {job} with runner {self}")
+        logger.debug(f"Prerunning job: {job}")
         self._prerun(job)
+        logger.debug(f"Writing input for job: {job}")
         self._write_input(job)
+        logger.debug(f"Obtaining command for job: {job}")
         command = self._get_command(job)
+        logger.debug(f"Command obtained for job {job}: {command}")
+        logger.debug(f"Obtaining environment for job: {job}")
         env = self._update_os_environ(job)
+        logger.debug(f"Environment obtained for job {job}: {env}")
+        logger.debug(f"Creating process for job: {job}")
         process = self._create_process(job, command=command, env=env)
+        logger.debug(f"Process created for job {job}: {process}")
+        logger.debug(f"Running process for job: {job}")
         self._run(process, **kwargs)
+        logger.debug(f"Postrunning job: {job}")
         self._postrun(job)
 
     def copy(self):
@@ -217,6 +237,9 @@ class JobRunner(RegistryMixin):
                     scratch
                     if scratch is not None
                     else getattr(runner, "SCRATCH", None)
+                )
+                logger.info(
+                    f"Using scratch={scratch} for job runner: {runner}"
                 )
 
                 return runner(server=server, scratch=scratch, **kwargs)

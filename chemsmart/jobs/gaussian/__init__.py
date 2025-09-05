@@ -1,6 +1,4 @@
 from .crest import GaussianCrestJob
-from .crestopt import GaussianCrestOptJob
-from .crestts import GaussianCrestTSJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
 from .irc import GaussianIRCJob
@@ -23,8 +21,6 @@ jobs = GaussianJob.subclasses()
 
 __all__ = [
     "GaussianCrestJob",
-    "GaussianCrestOptJob",
-    "GaussianCrestTSJob",
     "GaussianCustomJob",
     "GaussianDIASJob",
     "GaussianOptJob",
