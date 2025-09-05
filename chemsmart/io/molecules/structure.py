@@ -70,6 +70,9 @@ class Molecule:
         velocities=None,
         info=None,
     ):
+        """
+        Initialize molecular structure with atomic and quantum properties.
+        """
         self.symbols = symbols
         self.positions = positions
         self.charge = charge
@@ -91,22 +94,22 @@ class Molecule:
         # Interpolate the aromatic bond length as L_ar ≈ L_s × (4/5)**1/3
         self.bond_length_multipliers = {
             "single": 1.0,
-            "aromatic": (4 / 5) ** (1.0 / 3),  # Aromatic bond approx.
+            "aromatic": (4 / 5) ** (1.0 / 3),  # Aromatic bond approximation
             "double": (2 / 3) ** (1.0 / 3),
             "triple": (1 / 2) ** (1.0 / 3),
         }
 
-        # Ensure symbols and positions are available
+        # Validate essential molecular data
         if self.symbols is None or self.positions is None:
             raise ValueError(
                 "Molecule must have symbols and positions defined."
             )
 
-        # check that the number of symbols are not empty
+        # Ensure non-empty structure
         if len(self.symbols) == 0:
             raise ValueError("The number of symbols should not be empty!")
 
-        # check that the number of symbols and positions are the same
+        # Validate symbols-positions consistency
         if len(self.symbols) != len(self.positions):
             logger.debug(f"Number of symbols: {len(self.symbols)}")
             logger.debug(f"Number of positions: {len(self.positions)}")
@@ -117,14 +120,21 @@ class Molecule:
             )
 
     def __len__(self):
+        """
+        Return the number of atoms in the molecule.
+        
+        Returns:
+            int: Number of atoms in the molecule
+        """
         return len(self.chemical_symbols)
 
     def __getitem__(self, idx):
-        """Interprets the input idx as 1-based indices by index Adjustment (i - 1).
+        """
+        Get subset of molecule using 1-based indexing.
+        
+        Interprets the input idx as 1-based indices by index adjustment (i - 1).
         The method assumes that idx contains 1-based indices (e.g., [1, 2, 3]),
         so it subtracts 1 to convert them to Python's zero-based indexing.
-        Retrieves the corresponding elements from self.symbols and self.positions using the provided indices.
-        reates and returns a new instance of the same class, containing the selected symbols and positions.
         """
         symbols = [self.symbols[i - 1] for i in idx]
         positions = [self.positions[i - 1] for i in idx]
@@ -132,24 +142,39 @@ class Molecule:
 
     @property
     def energy(self):
+        """
+        Total molecular energy in eV.
+        """
         return self._energy
 
     @energy.setter
     def energy(self, value):
+        """
+        Set the molecular energy.
+        """
         self._energy = value
 
     @property
     def empirical_formula(self):
+        """
+        Empirical chemical formula using Hill notation.
+        """
         return Symbols.fromsymbols(self.symbols).get_chemical_formula(
             mode="hill", empirical=True
         )
 
     @property
     def mass(self):
+        """
+        Total molecular mass using standard atomic masses.
+        """
         return sum(p.to_atomic_mass(symbol) for symbol in self.symbols)
 
     @property
     def natural_abundance_weighted_mass(self):
+        """
+        Molecular mass weighted by natural isotope abundances.
+        """
         return sum(
             p.to_weighted_atomic_mass_by_abundance(symbol)
             for symbol in self.symbols
@@ -157,17 +182,25 @@ class Molecule:
 
     @property
     def most_abundant_mass(self):
+        """
+        Molecular mass using most abundant isotopes.
+        """
         return sum(
             p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols
         )
 
     @property
     def masses(self):
-        """Numpy array of atomic masses of the molecule."""
+        """
+        Numpy array of atomic masses of the molecule.
+        """
         return np.array([p.to_atomic_mass(symbol) for symbol in self.symbols])
 
     @property
     def natural_abundance_weighted_masses(self):
+        """
+        Array of natural abundance weighted atomic masses.
+        """
         return np.array(
             [
                 p.to_weighted_atomic_mass_by_abundance(symbol)
@@ -177,68 +210,97 @@ class Molecule:
 
     @property
     def most_abundant_masses(self):
+        """
+        Array of most abundant isotope masses for each atom.
+        """
         return np.array(
             [p.to_most_abundant_atomic_mass(symbol) for symbol in self.symbols]
         )
 
     @property
     def center_of_mass(self):
-        """Compute the center of mass of the molecule."""
+        """
+        Compute the center of mass of the molecule.
+        """
         return np.average(self.positions, axis=0, weights=self.masses)
 
     @property
     def chemical_formula(self):
+        """
+        Get the chemical formula in Hill notation.
+        """
         return self.get_chemical_formula()
 
     @cached_property
     def chemical_symbols(self):
-        """Return a list of chemical symbols strings"""
+        """
+        Return a list of chemical symbols strings
+        """
         if self.symbols is not None:
             return list(self.symbols)
 
     @property
     def num_atoms(self):
-        """Return the number of atoms in the molecule."""
+        """
+        Return the number of atoms in the molecule.
+        """
         return self._num_atoms
 
     @num_atoms.setter
     def num_atoms(self, value):
+        """
+        Set the number of atoms in the molecule.
+        """
         self._num_atoms = value
 
     @property
     def pbc(self):
-        """Return the periodic boundary conditions."""
+        """
+        Return the periodic boundary conditions.
+        """
         if self.pbc_conditions is not None:
             return all(i == 0 for i in self.pbc_conditions)
 
     @property
     def is_chiral(self):
-        """Check if molecule is chiral or not."""
+        """
+        Check if molecule is chiral or not.
+        """
         return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
 
     @property
     def is_aromatic(self):
-        """Check if molecule is aromatic or not."""
+        """
+        Check if molecule is aromatic or not.
+        """
         return Chem.GetAromaticAtoms(self.to_rdkit()) != []
 
     @property
     def is_ring(self):
-        """Check if molecule is a ring or not."""
+        """
+        Check if molecule is a ring or not.
+        """
         return Chem.GetSymmSSSR(self.to_rdkit()) != []
 
     @property
     def is_monoatomic(self):
-        """Check if molecule is monoatomic or not."""
+        """
+        Check if molecule is monoatomic or not.
+        """
         return self.num_atoms == 1
 
     @property
     def is_diatomic(self):
-        """Check if molecule is diatomic or not."""
+        """
+        Check if molecule is diatomic or not.
+        """
         return self.num_atoms == 2
 
     @property
     def is_linear(self):
-        """Check if molecule is linear or not."""
+        """
+        Check if molecule is linear or not.
+        """
         if self.num_atoms <= 2:
             return True
         else:
@@ -260,14 +322,18 @@ class Molecule:
 
     @property
     def moments_of_inertia_tensor(self):
-        """Calculate the moment of inertia tensor of the molecule."""
+        """
+        Calculate the moment of inertia tensor of the molecule.
+        """
         moi_tensor, _, _ = self._get_moments_of_inertia
         return np.array(moi_tensor)
 
     @property
     def moments_of_inertia(self):
-        """Obtain moments of inertia from molecular structure
-        along principal axes as a list."""
+        """
+        Obtain moments of inertia from molecular structure
+        along principal axes as a list.
+        """
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
@@ -276,6 +342,9 @@ class Molecule:
 
     @property
     def moments_of_inertia_weighted_mass(self):
+        """
+        Get moments of inertia using natural abundance weighted masses.
+        """
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
@@ -284,6 +353,9 @@ class Molecule:
 
     @property
     def moments_of_inertia_most_abundant_mass(self):
+        """
+        Get moments of inertia using most abundant isotope masses.
+        """
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
@@ -292,14 +364,18 @@ class Molecule:
 
     @property
     def moments_of_inertia_principal_axes(self):
-        """Obtain moments of inertia along principal axes from molecular structure."""
+        """
+        Obtain moments of inertia along principal axes from molecular structure.
+        """
         _, _, eigenvectors = self._get_moments_of_inertia
         return eigenvectors
 
     @cached_property
     def _get_moments_of_inertia(self):
-        """Calculate the moments of inertia of the molecule.
-        Units of amu Å^2."""
+        """
+        Calculate the moments of inertia of the molecule.
+        Units of amu Å^2.
+        """
         if self.num_atoms == 1:
             return np.zeros(3)
         else:
@@ -309,8 +385,10 @@ class Molecule:
 
     @cached_property
     def _get_moments_of_inertia_weighted_mass(self):
-        """Calculate the moments of inertia of the molecule. Use natural abundance weighted masses.
-        Units of amu Å^2."""
+        """
+        Calculate the moments of inertia of the molecule. Use natural abundance weighted masses.
+        Units of amu Å^2.
+        """
         if self.num_atoms == 1:
             return np.zeros(3)
         else:
@@ -322,8 +400,10 @@ class Molecule:
 
     @cached_property
     def _get_moments_of_inertia_most_abundant_mass(self):
-        """Calculate the moments of inertia of the molecule. Use most abundant masses.
-        Units of amu Å^2."""
+        """
+        Calculate the moments of inertia of the molecule. Use most abundant masses.
+        Units of amu Å^2.
+        """
         if self.num_atoms == 1:
             return np.zeros(3)
         else:
@@ -335,8 +415,10 @@ class Molecule:
 
     @cached_property
     def rotational_temperatures(self):
-        """Obtain the rotational temperatures of the molecule in K.
-        Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z"""
+        """
+        Obtain the rotational temperatures of the molecule in K.
+        Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
+        """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
             for i in self.moments_of_inertia
@@ -347,21 +429,28 @@ class Molecule:
         ]
 
     def get_chemical_formula(self, mode="hill", empirical=False):
+        """
+        Get chemical formula with flexible formatting options.
+        """
         if self.symbols is not None:
             return Symbols.fromsymbols(self.symbols).get_chemical_formula(
                 mode=mode, empirical=empirical
             )
 
     def get_distance(self, idx1, idx2):
-        """Calculate the distance between two points.
-        Use 1-based indexing for idx1 and idx2."""
+        """
+        Calculate the distance between two points.
+        Use 1-based indexing for idx1 and idx2.
+        """
         return np.linalg.norm(
             self.positions[idx1 - 1] - self.positions[idx2 - 1]
         )
 
     def get_angle(self, idx1, idx2, idx3):
-        """Calculate the angle between three points.
-        Use 1-based indexing for idx1, idx2, and idx3."""
+        """
+        Calculate the angle between three points.
+        Use 1-based indexing for idx1, idx2, and idx3.
+        """
         return self.get_angle_from_positions(
             self.positions[idx1 - 1],
             self.positions[idx2 - 1],
@@ -369,15 +458,19 @@ class Molecule:
         )
 
     def get_angle_from_positions(self, position1, position2, position3):
-        """Calculate the angle between three points."""
+        """
+        Calculate the angle between three points.
+        """
         v1 = position1 - position2
         v2 = position3 - position2
         cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
         return np.degrees(np.arccos(cos_theta))
 
     def get_dihedral(self, idx1, idx2, idx3, idx4):
-        """Calculate the dihedral angle between four points, about bond formed by idx2 and idx3.
-        Use 1-based indexing for idx1, idx2, idx3, and idx4."""
+        """
+        Calculate the dihedral angle between four points, about bond formed by idx2 and idx3.
+        Use 1-based indexing for idx1, idx2, idx3, and idx4.
+        """
         return self.get_dihedral_from_positions(
             self.positions[idx1 - 1],
             self.positions[idx2 - 1],
@@ -388,7 +481,9 @@ class Molecule:
     def get_dihedral_from_positions(
         self, position1, position2, position3, position4
     ):
-        """Calculate the dihedral angle between four points."""
+        """
+        Calculate the dihedral angle between four points.
+        """
         v1 = position1 - position2
         v2 = position3 - position2
         v3 = position4 - position3
@@ -399,10 +494,16 @@ class Molecule:
         return np.degrees(np.arctan2(y, x))
 
     def copy(self):
+        """
+        Create a deep copy of the molecule.
+        """
         return copy.deepcopy(self)
 
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
+        """
+        Create molecule from coordinate block text.
+        """
         cb = CoordinateBlock(coordinate_block=coordinate_block)
         return cls(
             symbols=cb.symbols,
@@ -415,6 +516,9 @@ class Molecule:
     def from_symbols_and_positions_and_pbc_conditions(
         cls, list_of_symbols, positions, pbc_conditions=None
     ):
+        """
+        Create molecule from symbols, positions and periodic boundary conditions.
+        """
         return cls(
             symbols=Symbols.fromsymbols(list_of_symbols),
             positions=positions,
@@ -423,6 +527,9 @@ class Molecule:
 
     @classmethod
     def from_filepath(cls, filepath, index="-1", return_list=False, **kwargs):
+        """
+        Create molecule from various file formats.
+        """
         filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"{filepath} could not be found!")
@@ -440,6 +547,9 @@ class Molecule:
 
     @classmethod
     def _read_filepath(cls, filepath, index, return_list, **kwargs):
+        """
+        Internal method to read molecular data from various file formats.
+        """
         basename = os.path.basename(filepath)
 
         if basename.endswith(".xyz"):
@@ -478,6 +588,9 @@ class Molecule:
 
     @classmethod
     def _read_xyz_file(cls, filepath, index=":", return_list=False):
+        """
+        Read XYZ format molecular structure file.
+        """
         xyz_file = XYZFile(filename=filepath)
         molecules = xyz_file.get_molecules(
             index=index, return_list=return_list
@@ -487,12 +600,18 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_sdf_file(filepath):
+        """
+        Read SDF format molecular structure file.
+        """
         sdf_file = SDFFile(filepath)
         return sdf_file.molecule
 
     @staticmethod
     @file_cache()
     def _read_gaussian_inputfile(filepath):
+        """
+        Read Gaussian input file (.com/.gjf) format.
+        """
         from chemsmart.io.gaussian.input import Gaussian16Input
 
         try:
@@ -507,7 +626,9 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_gaussian_logfile(filepath, index, **kwargs):
-        """Returns a list of molecules."""
+        """
+        Returns a list of molecules.
+        """
         from chemsmart.io.gaussian.output import Gaussian16Output
 
         g16_output = Gaussian16Output(filename=filepath, **kwargs)
@@ -516,6 +637,9 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_orca_inputfile(filepath):
+        """
+        Read ORCA input file (.inp) format.
+        """
         from chemsmart.io.orca.input import ORCAInput
 
         orca_input = ORCAInput(filename=filepath)
@@ -524,6 +648,9 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_orca_outfile(filepath, index):
+        """
+        Read ORCA output file (.out) format.
+        """
         # TODO: to improve ORCAOutput object so that all the structures
         #  can be obtained and returned via index
         from chemsmart.io.orca.output import ORCAOutput
@@ -551,7 +678,9 @@ class Molecule:
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
-        """Reads a file using ASE and returns a Molecule object."""
+        """
+        Reads a file using ASE and returns a Molecule object.
+        """
         from .atoms import AtomsChargeMultiplicity
 
         # supplied index is 1-indexed, thus need to convert
@@ -571,13 +700,8 @@ class Molecule:
     @classmethod
     @lru_cache(maxsize=128)
     def from_pubchem(cls, identifier, return_list=False):
-        """Creates Molecule object from pubchem based on an identifier (CID, SMILES, or name).
-        Args:
-        identifier (str): The compound identifier (name, CID, or SMILES string).
-        output_format (str): The desired format of the response. Default is "json".
-                             Other options include "sdf" or "xml".
-        Raises:
-            requests.exceptions.RequestException: For network or HTTP-related issues.
+        """
+        Create molecule object from PubChem database.
         """
         from chemsmart.io.molecules.pubchem import pubchem_search
 
@@ -602,18 +726,25 @@ class Molecule:
 
     @classmethod
     def from_molecule(cls, molecule):
+        """
+        Create molecule from another molecule object.
+        """
         return cls(**molecule.__dict__)
 
     @classmethod
     def from_ase_atoms(cls, atoms):
-        """Creates a Molecule instance from an ASE Atoms object."""
+        """
+        Creates a Molecule instance from an ASE Atoms object.
+        """
         from .atoms import AtomsChargeMultiplicity
 
         return AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
 
     @classmethod
     def from_rdkit_mol(cls, rdMol: Chem.Mol) -> "Molecule":
-        """Creates a Molecule instance from an RDKit Mol object, assuming a single conformer."""
+        """
+        Creates a Molecule instance from an RDKit Mol object, assuming a single conformer.
+        """
         if rdMol is None:
             raise ValueError("Invalid RDKit molecule provided.")
 
@@ -673,8 +804,19 @@ class Molecule:
         return rdkit_mol
 
     def write_coordinates(self, f, program=None):
-        """Write the coordinates of the molecule to a file.
-        No empty end line at the end of the file."""
+        """
+        Write molecular coordinates to file in specified format.
+        
+        Args:
+            f (file): File object to write coordinates to
+            program (str, optional): Format to use ('gaussian' or 'orca'). Default 'gaussian'
+            
+        Raises:
+            ValueError: If program format is not supported
+            
+        Note:
+            No empty end line at the end of the file
+        """
         if program is None:
             program = "gaussian"  # use gaussian format by default
         if program.lower() == "gaussian":
@@ -691,7 +833,18 @@ class Molecule:
             )
 
     def write(self, filename, format="xyz", mode="w", **kwargs):
-        """Write the molecule to a file."""
+        """
+        Write molecule to file in specified format.
+        
+        Args:
+            filename (str): Output file path
+            format (str): File format ('xyz' or 'com'). Default 'xyz'
+            mode (str): File write mode. Default 'w'
+            **kwargs: Additional keyword arguments for format-specific writers
+            
+        Raises:
+            ValueError: If format is not supported
+        """
         if format.lower() == "xyz":
             self.write_xyz(filename, mode=mode, **kwargs)
         elif format.lower() == "com":
@@ -702,7 +855,14 @@ class Molecule:
             raise ValueError(f"Format {format} is not supported for writing.")
 
     def write_xyz(self, filename, mode, **kwargs):
-        """Write the molecule to an XYZ file."""
+        """
+        Write molecule to XYZ format file.
+        
+        Args:
+            filename (str): Output XYZ file path
+            mode (str): File write mode
+            **kwargs: Additional keyword arguments (unused)
+        """
         with open(filename, mode) as f:
             base_filename = os.path.basename(filename)
             if self.energy is not None:
@@ -728,7 +888,9 @@ class Molecule:
         route="# opt freq m062x def2svp",
         **kwargs,
     ):
-        """Write the molecule to a Gaussian input file."""
+        """
+        Write the molecule to a Gaussian input file.
+        """
         with open(filename, "w") as f:
             basename = os.path.basename(filename).split(".")[0]
             f.write(f"%chk={basename}.chk\n")
@@ -746,6 +908,9 @@ class Molecule:
             f.write("\n")
 
     def _write_gaussian_coordinates(self, f):
+        """
+        Write coordinates in Gaussian format.
+        """
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
@@ -764,7 +929,9 @@ class Molecule:
                 )
 
     def _write_gaussian_pbc_coordinates(self, f):
-        """Write the coordinates of the molecule with PBC conditions to a file."""
+        """
+        Write the coordinates of the molecule with PBC conditions to a file.
+        """
         if self.pbc_conditions is None or not any(self.pbc_conditions):
             # this happens when self.pbc_conditions = [False, False, False]
             # when the structure is read in from e.g., ASE database
@@ -783,6 +950,9 @@ class Molecule:
                 )
 
     def _write_orca_coordinates(self, f):
+        """
+        Write coordinates in ORCA format.
+        """
         assert self.symbols is not None, "Symbols to write should not be None!"
         assert (
             self.positions is not None
@@ -796,22 +966,35 @@ class Molecule:
             f.write(f"{s:5} {x:15.10f} {y:15.10f} {z:15.10f}\n")
 
     def _write_orca_pbc_coordinates(self, f):
+        """
+        Write PBC coordinates for ORCA.
+        """
         # ORCA cannot do PBC calculations
         pass
 
     def __repr__(self):
+        """
+        Return string representation of molecule.
+        """
         return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
     def __str__(self):
+        """
+        Return string representation of molecule.
+        """
         return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
     @cached_property
     def distance_matrix(self):
-        """ "Compute pairwise distance matrix."""
+        """
+        Compute pairwise distance matrix.
+        """
         return cdist(self.positions, self.positions)
 
     def determine_bond_order_one_bond(self, bond_length, bond_cutoff):
-        """Determine the bond order based on bond length and cutoff."""
+        """
+        Determine bond order for single bond based on length and cutoff.
+        """
         for bond_type, multiplier in [
             ("triple", 3),
             ("double", 2),
@@ -826,7 +1009,9 @@ class Molecule:
         return 0  # No bond
 
     def determine_bond_order(self, bond_length, bond_cutoff):
-        """Vectorized determination of bond order based on bond length and cutoff."""
+        """
+        Vectorized determination of bond order based on bond length and cutoff.
+        """
         multipliers = np.array([3, 2, 1.5, 1])
         bond_types = ["triple", "double", "aromatic", "single"]
 
@@ -846,10 +1031,16 @@ class Molecule:
         return bond_order
 
     def bond_lengths(self):
+        """
+        Get all bond distances in the molecule.
+        """
         # get all bond distances in the molecule
         return self.get_all_distances()
 
     def get_all_distances(self):
+        """
+        Calculate all pairwise atomic distances in the molecule.
+        """
         bond_distances = []
         for i in range(self.num_atoms):
             for j in range(i + 1, self.num_atoms):
@@ -859,7 +1050,9 @@ class Molecule:
         return bond_distances
 
     def to_smiles(self):
-        """Convert molecule to SMILES string."""
+        """
+        Convert molecule to SMILES string representation.
+        """
         # Create an RDKit molecule
         rdkit_mol = self.to_rdkit()
 
@@ -881,17 +1074,17 @@ class Molecule:
         # Create molecule and add atoms
         rdkit_mol = Chem.RWMol()
 
-        # Add atoms to the RDKit molecule
+        # Add atoms with correct element types
         for symbol in self.symbols:
             rdkit_mol.AddAtom(Chem.Atom(symbol))
 
-        # add bonds
+        # Apply bond detection algorithm if requested
         if add_bonds:
             rdkit_mol = self._add_bonds_to_rdkit_mol(
                 rdkit_mol, bond_cutoff_buffer, adjust_H
             )
 
-        # Create a conformer and set 3D coordinates
+        # Create conformer with 3D coordinates
         conformer = rdchem.Conformer(len(self.symbols))
         for i, pos in enumerate(self.positions):
             conformer.SetAtomPosition(i, Point3D(*pos))
@@ -1220,20 +1413,24 @@ class CoordinateBlock:
         If former, then convert to the latter before future usage."""
         coordinate_block_list = []
         if isinstance(coordinate_block, str):
+            # Parse text format with newline separation
             for line in coordinate_block.split("\n"):
                 coordinate_block_list.append(line.strip())
         elif isinstance(coordinate_block, list):
+            # Use list format directly
             coordinate_block_list = coordinate_block
         else:
             raise TypeError(
-                f"The given coordinate block should be str or list "
-                f"but is {type(coordinate_block)} instead!"
+                f"Coordinate block must be str or list, "
+                f"got {type(coordinate_block)} instead!"
             )
         self.coordinate_block = coordinate_block_list
 
     @property
     def chemical_symbols(self):
-        """Returns a list of chemical symbols for the molecule."""
+        """
+        Returns a list of chemical symbols for the molecule.
+        """
         return self._get_symbols()
 
     @property
