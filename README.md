@@ -32,7 +32,7 @@ By default, this will create a conda environment named `chemsmart`, which instal
 If conda is not installed, one can run
 
 ```bash
-make env USE_CONDA_DEFAULT=false
+make env USE_CONDA=false
 ```
 
 or 
