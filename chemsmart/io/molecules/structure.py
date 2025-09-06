@@ -122,9 +122,6 @@ class Molecule:
     def __len__(self):
         """
         Return the number of atoms in the molecule.
-        
-        Returns:
-            int: Number of atoms in the molecule
         """
         return len(self.chemical_symbols)
 
@@ -639,6 +636,12 @@ class Molecule:
     def _read_orca_inputfile(filepath):
         """
         Read ORCA input file (.inp) format.
+        
+        Args:
+            filepath (str): Path to ORCA input file
+            
+        Returns:
+            Molecule: Molecule object from ORCA input file
         """
         from chemsmart.io.orca.input import ORCAInput
 
@@ -650,6 +653,17 @@ class Molecule:
     def _read_orca_outfile(filepath, index):
         """
         Read ORCA output file (.out) format.
+        
+        Args:
+            filepath (str): Path to ORCA output file
+            index (str or int): Index for multi-structure files
+            
+        Returns:
+            Molecule: Molecule object from ORCA output file
+            
+        Note:
+            TODO: Improve ORCAOutput object so that all structures
+            can be obtained and returned via index
         """
         # TODO: to improve ORCAOutput object so that all the structures
         #  can be obtained and returned via index
@@ -702,6 +716,16 @@ class Molecule:
     def from_pubchem(cls, identifier, return_list=False):
         """
         Create molecule object from PubChem database.
+        
+        Args:
+            identifier (str): Compound identifier (name, CID, or SMILES string)
+            return_list (bool): Whether to return list format. Default False
+            
+        Returns:
+            Molecule or list or None: Molecule object from PubChem, None if not found
+            
+        Raises:
+            requests.exceptions.RequestException: For network or HTTP-related issues
         """
         from chemsmart.io.molecules.pubchem import pubchem_search
 
@@ -1051,7 +1075,7 @@ class Molecule:
 
     def to_smiles(self):
         """
-        Convert molecule to SMILES string representation.
+        Convert molecule to SMILES string.
         """
         # Create an RDKit molecule
         rdkit_mol = self.to_rdkit()
@@ -1116,7 +1140,9 @@ class Molecule:
     def _add_bonds_to_rdkit_mol(
         self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
     ):
-        """Add bonds to the RDKit molecule."""
+        """
+        Add bonds to the RDKit molecule.
+        """
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
                 if adjust_H:
@@ -1209,31 +1235,39 @@ class Molecule:
 
     @cached_property
     def rdkit_fingerprints(self):
-        """Return RDKit molecular fingerprints."""
+        """
+        Return RDKit molecular fingerprints.
+        """
         rdkit_mol = self.to_rdkit()
         return Chem.RDKFingerprint(rdkit_mol)
 
     @cached_property
     def bond_orders(self):
-        """Return a list of bond orders from the molecular graph.
+        """
+        Return a list of bond orders from the molecular graph.
         Note that in conformers analysis, the bond orders should
         be the same for all conformers. In those cases, its best
         to use get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=0.0)
-        or get_bond_orders_from_graph(bond_cutoff_buffer=0.0) directly."""
+        or get_bond_orders_from_graph(bond_cutoff_buffer=0.0) directly.
+        """
         try:
             return self.get_bond_orders_from_graph()
         except Exception:
             return self.get_bond_orders_from_rdkit_mol()
 
     def get_bond_orders_from_rdkit_mol(self, **kwargs):
-        """Return a list of bond orders from the RDKit molecule."""
+        """
+        Return a list of bond orders from the RDKit molecule.
+        """
         return [
             bond.GetBondTypeAsDouble()
             for bond in self.to_rdkit(**kwargs).GetBonds()
         ]
 
     def get_bond_orders_from_graph(self, **kwargs):
-        """Return a list of bond orders from the molecular graph."""
+        """
+        Return a list of bond orders from the molecular graph.
+        """
         graph = self.to_graph(**kwargs)
         bond_orders = []
         for bond in graph.edges.values():
@@ -1241,7 +1275,8 @@ class Molecule:
         return bond_orders
 
     def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
-        """Convert a Molecule object to a connectivity graph with vectorized calculations.
+        """
+        Convert a Molecule object to a connectivity graph with vectorized calculations.
         Bond cutoff value determines the maximum distance between two atoms
         to add a graph edge between them. Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
@@ -1353,7 +1388,9 @@ class Molecule:
         return G
 
     def to_ase(self):
-        """Convert molecule object to ASE atoms object."""
+        """
+        Convert molecule object to ASE atoms object.
+        """
         from .atoms import AtomsChargeMultiplicity
 
         return AtomsChargeMultiplicity(
@@ -1371,14 +1408,18 @@ class Molecule:
         )
 
     def to_pymatgen(self):
-        """Convert molecule object to pymatgen IStructure."""
+        """
+        Convert molecule object to pymatgen IStructure.
+        """
 
         from pymatgen.io.ase import AseAtomsAdaptor
 
         return AseAtomsAdaptor.get_molecule(atoms=self.to_ase())
 
     def to_X_data(self, wbo=False):
-        """Convert molecule object to X_data for ML models."""
+        """
+        Convert molecule object to X_data for ML models.
+        """
         if self.positions is None:
             raise ValueError(
                 "Positions are not available in the molecule object."
@@ -1406,11 +1447,15 @@ class Molecule:
 
 
 class CoordinateBlock:
-    """Class to create coordinate block object to abstract the geometry."""
+    """
+    Class to create coordinate block object to abstract the geometry.
+    """
 
     def __init__(self, coordinate_block):
-        """Accepts a coordinate block either as text string or as a list of lines.
-        If former, then convert to the latter before future usage."""
+        """
+        Accepts a coordinate block either as text string or as a list of lines.
+        If former, then convert to the latter before future usage.
+        """
         coordinate_block_list = []
         if isinstance(coordinate_block, str):
             # Parse text format with newline separation
@@ -1435,33 +1480,45 @@ class CoordinateBlock:
 
     @property
     def positions(self):
-        """Returns a list of positions for the molecule."""
+        """
+        Returns a list of positions for the molecule.
+        """
         return self._get_positions()
 
     @property
     def translation_vectors(self):
-        """Return a list of translation vectors for systems with pbc."""
+        """
+        Return a list of translation vectors for systems with pbc.
+        """
         return self._get_translation_vectors()
 
     @property
     def symbols(self) -> Symbols:
-        """Returns a Symbols object."""
+        """
+        Returns a Symbols object.
+        """
         return Symbols.fromsymbols(symbols=self.chemical_symbols)
 
     @property
     def molecule(self) -> Molecule:
-        """Returns a molecule object."""
+        """
+        Returns a molecule object.
+        """
         return self.convert_coordinate_block_list_to_molecule()
 
     @property
     def constrained_atoms(self):
-        """Returns a list of constraints in Gaussian format where 0 means unconstrained
-        and -1 means constrained."""
+        """
+        Returns a list of constraints in Gaussian format where 0 means unconstrained
+        and -1 means constrained.
+        """
         return self._get_constraints()
 
     def convert_coordinate_block_list_to_molecule(self):
-        """Function to convert coordinate block supplied as text or as a list of lines into
-        Molecule class."""
+        """
+        Function to convert coordinate block supplied as text or as a list of lines into
+        Molecule class.
+        """
         return Molecule(
             symbols=self.symbols,
             positions=self.positions,
@@ -1600,14 +1657,18 @@ class CoordinateBlock:
         return atomic_numbers, np.array(positions), constraints
 
     def _get_atomic_numbers(self):
-        """Obtain a list of symbols as atomic numbers."""
+        """
+        Obtain a list of symbols as atomic numbers.
+        """
         atomic_numbers, _, _ = (
             self._get_atomic_numbers_positions_and_constraints()
         )
         return atomic_numbers
 
     def _get_positions(self):
-        """Obtain the coordinates of the molecule as numpy array."""
+        """
+        Obtain the coordinates of the molecule as numpy array.
+        """
         _, positions, _ = self._get_atomic_numbers_positions_and_constraints()
         return positions
 
@@ -1644,7 +1705,9 @@ class CoordinateBlock:
 
     @property
     def pbc_conditions(self):
-        """Obtain PBC conditions from given translation vectors."""
+        """
+        Obtain PBC conditions from given translation vectors.
+        """
         if self.translation_vectors is not None:
             if len(self.translation_vectors) == 1:
                 return [1, 0, 0]
@@ -1657,7 +1720,9 @@ class CoordinateBlock:
 
 
 class SDFFile(FileMixin):
-    """SDF file object."""
+    """
+    SDF file object.
+    """
 
     def __init__(self, filename):
         self.filename = filename

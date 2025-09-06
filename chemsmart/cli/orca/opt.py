@@ -1,3 +1,12 @@
+"""
+ORCA Geometry Optimization CLI Module
+
+This module provides the command-line interface for ORCA geometry
+optimization calculations. It supports both unconstrained and constrained
+optimizations with options for freezing specific atoms during the
+optimization process.
+"""
+
 import logging
 
 import click
@@ -28,33 +37,46 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
-    # get settings from project
+    """
+    Run ORCA geometry optimization calculations.
+
+    This command performs geometry optimization using ORCA with support
+    for both unconstrained and constrained optimizations. Users can
+    specify atoms to freeze during optimization and configure various
+    optimization parameters.
+
+    The optimization uses settings from the project configuration merged
+    with any command-line overrides. Charge and multiplicity are validated
+    before running the calculation.
+    """
+    # get optimization settings from project configuration
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
+    logger.debug(f"Loaded optimization settings from project: {opt_settings}")
 
     # job setting from filename or default, with updates from user in cli
     # specified in keywords
-    # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
+    # e.g., `chemsmart sub orca -c <user_charge> -m <user_multiplicity> opt`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from
-    # cli.orca.py subcommands
+    # merge project opt settings with job settings from cli keywords
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
     opt_settings.invert_constraints = invert_constraints
+    logger.info(f"Final optimization settings: {opt_settings.__dict__}")
 
+    # validate charge and multiplicity consistency
     check_charge_and_multiplicity(opt_settings)
 
-    # get molecule
+    # get molecule from context (use the last molecule if multiple)
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]
-    logger.info(f"Optimizing molecule: {molecule}.")
+    logger.info(f"Optimizing molecule: {molecule}")
 
-    # get label for the job
+    # get label for the job output files
     label = ctx.obj["label"]
 
-    # Set atoms to freeze
-
+    # Set atoms to freeze for constrained optimization
     from chemsmart.utils.utils import (
         convert_list_to_gaussian_frozen_list,
         get_list_from_string_range,
@@ -66,15 +88,17 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
         molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
             frozen_atoms_list, molecule
         )
-
-    logger.info(f"Opt job settings from project: {opt_settings.__dict__}")
+    else:
+        logger.debug("No atoms will be frozen during optimization")
 
     from chemsmart.jobs.orca.opt import ORCAOptJob
 
-    return ORCAOptJob(
+    job = ORCAOptJob(
         molecule=molecule,
         settings=opt_settings,
         label=label,
         skip_completed=skip_completed,
         **kwargs,
     )
+    logger.debug(f"Created ORCA optimization job: {job}")
+    return job
