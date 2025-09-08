@@ -638,12 +638,21 @@ class StructureGrouperFactory:
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
         }
+
+        threshold_supported = {"rmsd", "tanimoto", "connectivity"}
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
-            return groupers[strategy](
-                structures,
-                threshold=threshold,
-                num_procs=num_procs,
-                **kwargs,
-            )
+            if strategy in threshold_supported:
+                return groupers[strategy](
+                    structures,
+                    threshold=threshold,
+                    num_procs=num_procs,
+                    **kwargs,
+                )
+            else:
+                return groupers[strategy](
+                    structures,
+                    num_procs=num_procs,
+                    **kwargs,
+                )
         raise ValueError(f"Unknown grouping strategy: {strategy}")
