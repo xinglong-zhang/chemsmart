@@ -1,3 +1,11 @@
+"""
+Logging utilities for ChemSmart applications.
+
+Provides customized logging functionality with deduplication capabilities
+and configurable output streams. Supports both file and console logging
+with different levels for information and error messages.
+"""
+
 import logging
 import os
 import re
@@ -5,11 +13,37 @@ import sys
 
 
 class LogOnceFilter(logging.Filter):
+    """
+    Logging filter that prevents duplicate messages from being logged.
+    
+    Maintains a set of previously logged messages and filters out
+    any messages that have already been logged (excluding timestamps).
+    Useful for preventing repetitive log entries in long-running processes.
+    """
+
     def __init__(self):
+        """
+        Initialize the LogOnceFilter with empty message tracking.
+        
+        Creates an empty set to store previously logged messages
+        for duplicate detection.
+        """
         super().__init__()
         self.logged_messages = set()
 
     def filter(self, record):
+        """
+        Filter duplicate log records.
+        
+        Checks if a log message (excluding timestamp) has been logged
+        before and filters it out if it's a duplicate.
+        
+        Args:
+            record (logging.LogRecord): The log record to evaluate.
+            
+        Returns:
+            bool: True if message should be logged, False if duplicate.
+        """
         formatted_message = self.format_record(record)
         stripped_message = self.remove_timestamp(formatted_message)
 
@@ -20,12 +54,36 @@ class LogOnceFilter(logging.Filter):
 
     @staticmethod
     def format_record(record):
+        """
+        Format a log record into a string message.
+        
+        Applies string formatting to the log record message using
+        any provided arguments.
+        
+        Args:
+            record (logging.LogRecord): The log record to format.
+            
+        Returns:
+            str: The formatted message string.
+        """
         if record.args:
             return record.msg % record.args
         return record.msg
 
     @staticmethod
     def remove_timestamp(message):
+        """
+        Remove timestamp prefix from log message.
+        
+        Strips the standard timestamp format from the beginning
+        of log messages for duplicate comparison.
+        
+        Args:
+            message (str): The log message potentially with timestamp.
+            
+        Returns:
+            str: The message with timestamp removed.
+        """
         return re.sub(
             r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - ", "", message
         )
@@ -39,6 +97,29 @@ def create_logger(
     stream=True,
     disable=None,
 ):
+    """
+    Create and configure a logger with customizable output options.
+
+    Sets up a root logger with file and stream handlers, duplicate message
+    filtering, and configurable logging levels.
+
+    Stream behavior:
+    - Errors are always sent to stderr.
+    - If `stream=True`, all messages (including errors) are also sent to stdout.
+
+    Args:
+        debug (bool, optional): Enable debug level logging. Defaults to True.
+        folder (str, optional): Directory for log files. Defaults to ".".
+        logfile (str, optional): Name of the info/debug log file. Defaults to None.
+        errfile (str, optional): Name of the error log file. Defaults to None.
+        stream (bool, optional): Enable console output to stdout (stderr is
+            always used for errors). Defaults to True.
+        disable (list[str], optional): Module names to disable logging for.
+            Defaults to None.
+
+    Returns:
+        logging.Logger: Configured root logger instance.
+    """
     if disable is None:
         disable = []
 
