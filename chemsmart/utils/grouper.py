@@ -629,7 +629,12 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
 class StructureGrouperFactory:
     @staticmethod
     def create(
-        structures, strategy="rmsd", num_procs=1, threshold=5.0, **kwargs
+        structures,
+        strategy="rmsd",
+        num_procs=1,
+        threshold=5.0,
+        ignore_hydrogens=None,
+        **kwargs,
     ):
         groupers = {
             "rmsd": RMSDGrouper,
@@ -643,6 +648,14 @@ class StructureGrouperFactory:
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
             if strategy in threshold_supported:
+                if strategy == "rmsd":
+                    return groupers[strategy](
+                        structures,
+                        threshold=threshold,
+                        num_procs=num_procs,
+                        ignore_hydrogens=ignore_hydrogens,
+                        **kwargs,
+                    )
                 return groupers[strategy](
                     structures,
                     threshold=threshold,
