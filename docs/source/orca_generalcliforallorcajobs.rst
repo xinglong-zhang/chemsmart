@@ -107,7 +107,7 @@ Works for all ORCA jobs
 .. Warning::
 
    1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for
-   moleculare are 1-indexed.
+   molecules are are 1-indexed.
 
 **Get molecule from pubchem directly**
 
