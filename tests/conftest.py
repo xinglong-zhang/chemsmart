@@ -194,6 +194,15 @@ def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_link_modred_output(gaussian_link_outputs_test_directory):
+    gaussian_link_modred_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "fe_ch_quintet_modred_link.log",
+    )
+    return gaussian_link_modred_outfile
+
+
+@pytest.fixture()
 def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
     return os.path.join(
         gaussian_link_outputs_test_directory,
