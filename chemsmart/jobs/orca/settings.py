@@ -1,3 +1,11 @@
+"""
+ORCA job settings implementation.
+
+This module contains the settings classes for configuring ORCA quantum chemistry
+calculations, including general settings and specialized settings for transition
+state and IRC calculations.
+"""
+
 import copy
 import logging
 import os
@@ -13,7 +21,50 @@ logger = logging.getLogger(__name__)
 
 
 class ORCAJobSettings(MolecularJobSettings):
-    """Settings for ORCAJob."""
+    """
+    Settings for ORCA quantum chemistry jobs.
+
+    This class handles the configuration of ORCA calculations including
+    method selection, basis sets, solvation, convergence criteria, and
+    various calculation types.
+
+    Attributes:
+        ab_initio (str | None): Ab initio method (e.g., 'HF', 'MP2').
+        functional (str | None): DFT functional (e.g., 'B3LYP', 'PBE0').
+        dispersion (str | None): Dispersion correction (e.g., 'D3BJ').
+        basis (str | None): Orbital basis set (e.g., 'def2-TZVP').
+        aux_basis (str | None): Auxiliary basis set for RI/DF methods.
+        extrapolation_basis (str | None): Basis for extrapolation schemes.
+        defgrid (str | None): Grid quality keyword (e.g., 'defgrid2').
+        scf_tol (str | float | None): SCF convergence tolerance.
+        scf_algorithm (str | None): SCF algorithm.
+        scf_maxiter (int | None): Maximum SCF iterations.
+        scf_convergence (str | None): SCF convergence criteria.
+        charge (int | None): Molecular charge.
+        multiplicity (int | None): Spin multiplicity.
+        gbw (bool): Write GBW file.
+        freq (bool): Perform vibrational frequency calculation.
+        numfreq (bool): Use numerical frequencies.
+        dipole (bool): Compute dipole moment.
+        quadrupole (bool): Compute quadrupole moment.
+        mdci_cutoff (float | None): MDCI cutoff.
+        mdci_density (float | None): MDCI density.
+        job_type (str | None): Calculation type (e.g., 'opt', 'sp').
+        title (str | None): Job title string.
+        solvent_model (str | None): Solvation model identifier.
+        solvent_id (str | None): Solvent identifier.
+        additional_route_parameters (str | None): Extra route parameters.
+        route_to_be_written (str | None): Custom route string to write.
+        modred (list | dict | None): Modredundant coordinates specification.
+        gen_genecp_file (str | None): Path to gen/genecp file to include.
+        heavy_elements (list | None): Heavy elements list for genecp.
+        heavy_elements_basis (str | None): Basis for heavy elements.
+        light_elements_basis (str | None): Basis for light elements.
+        custom_solvent (str | None): Custom solvent parameters block.
+        forces (bool): Calculate forces.
+        input_string (str | None): Predefined input content to write directly.
+        invert_constraints (bool): Invert modred constraints if True.
+    """
 
     def __init__(
         self,
@@ -54,6 +105,47 @@ class ORCAJobSettings(MolecularJobSettings):
         invert_constraints=False,
         **kwargs,
     ):
+        """
+        Initialize ORCA job settings.
+
+        Args:
+            ab_initio: Ab initio method (e.g., 'HF', 'MP2')
+            functional: DFT functional (e.g., 'B3LYP', 'PBE0')
+            dispersion: Dispersion correction (e.g., 'D3BJ')
+            basis: Basis set (e.g., 'def2-TZVP')
+            aux_basis: Auxiliary basis set
+            extrapolation_basis: Extrapolation basis set
+            defgrid: Grid quality (e.g., 'defgrid2')
+            scf_tol: SCF convergence tolerance
+            scf_algorithm: SCF algorithm
+            scf_maxiter: Maximum SCF iterations
+            scf_convergence: SCF convergence criteria
+            charge: Molecular charge
+            multiplicity: Spin multiplicity
+            gbw: Whether to write GBW file
+            freq: Whether to calculate frequencies
+            numfreq: Whether to use numerical frequencies
+            dipole: Whether to calculate dipole moment
+            quadrupole: Whether to calculate quadrupole moment
+            mdci_cutoff: MDCI cutoff
+            mdci_density: MDCI density
+            job_type: Type of calculation
+            title: Job title
+            solvent_model: Solvation model
+            solvent_id: Solvent identifier
+            additional_route_parameters: Additional route parameters
+            route_to_be_written: Custom route string
+            modred: Modified redundant coordinates
+            gen_genecp_file: General ECP file
+            heavy_elements: Heavy elements list
+            heavy_elements_basis: Basis for heavy elements
+            light_elements_basis: Basis for light elements
+            custom_solvent: Custom solvent parameters
+            forces: Whether to calculate forces
+            input_string: Custom input string
+            invert_constraints: Whether to invert constraints
+            **kwargs: Additional keyword arguments
+        """
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
@@ -81,6 +173,7 @@ class ORCAJobSettings(MolecularJobSettings):
             **kwargs,
         )
 
+        # ORCA-specific parameters
         self.aux_basis = aux_basis
         self.extrapolation_basis = extrapolation_basis
         self.scf_tol = scf_tol
@@ -94,16 +187,29 @@ class ORCAJobSettings(MolecularJobSettings):
         self.quadrupole = quadrupole
         self.invert_constraints = invert_constraints
 
+        # Validate frequency and force settings
         if forces is True and (freq is True or numfreq is True):
             raise ValueError(
-                "Frequency and Force calculations cannot be performed by Orca at the same time!\n"
-                'Such an input file will give "Illegal IType or MSType generated by parse." error.'
+                "Frequency and Force calculations cannot be performed by "
+                "Orca at the same time!\n"
+                'Such an input file will give "Illegal IType or MSType '
+                'generated by parse." error.'
             )
 
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
     ):
-        """Overwrite self settings with other settings."""
+        """
+        Merge this settings object with another.
+
+        Args:
+            other: Settings object or dictionary to merge with
+            keywords: Specific keywords to merge if merge_all is False
+            merge_all: Whether to merge all attributes
+
+        Returns:
+            ORCAJobSettings: New merged settings object
+        """
 
         other_dict = other if isinstance(other, dict) else other.__dict__
 
@@ -123,13 +229,36 @@ class ORCAJobSettings(MolecularJobSettings):
         return type(self)(**merged_dict)
 
     def copy(self):
+        """
+        Create a deep copy of the settings object.
+
+        Returns:
+            ORCAJobSettings: Deep copy of this settings object
+        """
         return copy.deepcopy(self)
 
     def __getitem__(self, key):
+        """
+        Get settings attribute by key.
+
+        Args:
+            key: Attribute name to retrieve
+
+        Returns:
+            Value of the specified attribute
+        """
         return self.__dict__[key]
 
     def __eq__(self, other):
-        """Two settings objects are equal if all their attributes are equal."""
+        """
+        Check equality with another settings object.
+
+        Args:
+            other: Another settings object to compare
+
+        Returns:
+            bool: True if settings are equal, False otherwise
+        """
         if type(self) is not type(other):
             return NotImplemented
 
@@ -144,7 +273,15 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_comfile(cls, com_path):
-        """Return orca job settings from supplied gaussian file."""
+        """
+        Create ORCA job settings from a Gaussian .com file.
+
+        Args:
+            com_path: Path to the Gaussian .com file
+
+        Returns:
+            ORCAJobSettings: Settings object from Gaussian file
+        """
         com_path = os.path.abspath(com_path)
         from chemsmart.io.gaussian.input import Gaussian16Input
 
@@ -159,14 +296,15 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_logfile(cls, log_path, **kwargs):
-        """Return Orca input file base settings from gaussian output .log file.
+        """
+        Create ORCA settings from Gaussian output .log file.
 
         Args:
-            log_path (str): Path to the log file
-            kwargs (dict): Additional arguments to be passed to Gaussian16Output class.
+            log_path: Path to the .log file
+            **kwargs: Additional arguments for Gaussian16Output class
 
         Returns:
-            OrcaJobSetting class.
+            ORCAJobSetting: Settings object from log file
         """
         log_path = os.path.abspath(log_path)
         from chemsmart.io.gaussian.output import Gaussian16Output
@@ -179,6 +317,7 @@ class ORCAJobSettings(MolecularJobSettings):
         orca_settings_from_logfile = orca_default_settings.merge(
             gaussian_settings_from_logfile, merge_all=True
         )
+        # Convert def2 basis set naming
         if (
             "def2" in orca_settings_from_logfile.basis
             and "def2-" not in orca_settings_from_logfile.basis
@@ -190,7 +329,15 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_inpfile(cls, inp_path):
-        """Return orca job settings from supplied orca .inp file."""
+        """
+        Create ORCA job settings from ORCA .inp file.
+
+        Args:
+            inp_path: Path to the ORCA .inp file
+
+        Returns:
+            ORCAJobSettings: Settings object from input file
+        """
         inp_path = os.path.abspath(inp_path)
         from chemsmart.io.orca.input import ORCAInput
 
@@ -203,7 +350,15 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_outfile(cls, out_path):
-        """Return orca job settings from supplied orca .out file."""
+        """
+        Create ORCA job settings from ORCA .out file.
+
+        Args:
+            out_path: Path to the ORCA .out file
+
+        Returns:
+            ORCAJobSettings: Settings object from output file
+        """
         out_path = os.path.abspath(out_path)
         from chemsmart.io.orca.output import ORCAOutput
 
@@ -212,11 +367,27 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_xyzfile(cls):
-        """Return orca job settings from .xyz file. Default orca settings are used for .xyz input."""
+        """
+        Create default ORCA job settings for .xyz file input.
+
+        Returns:
+            ORCAJobSettings: Default ORCA settings for xyz input
+        """
         return ORCAJobSettings.default()
 
     @classmethod
     def from_filepath(cls, filepath, **kwargs):
+        """
+        Create settings from any supported file type.
+
+        Args:
+            filepath: Path to the input file
+            **kwargs: Additional keyword arguments
+
+        Returns:
+            ORCAJobSettings or None: Settings object if file type supported
+        """
+
         if ".com" in filepath or ".gjf" in filepath:
             return cls.from_comfile(filepath)
 
@@ -236,6 +407,12 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @classmethod
     def default(cls):
+        """
+        Create default ORCA job settings.
+
+        Returns:
+            ORCAJobSettings: Default settings object
+        """
         return cls(
             ab_initio=None,
             functional=None,
@@ -274,6 +451,12 @@ class ORCAJobSettings(MolecularJobSettings):
 
     @property
     def route_string(self):
+        """
+        Get the ORCA route string for the job.
+
+        Returns:
+            str: ORCA route string based on job settings
+        """
         if self.route_to_be_written is not None:
             route_string = self._get_route_string_from_user_input()
         else:
@@ -282,13 +465,27 @@ class ORCAJobSettings(MolecularJobSettings):
         return route_string
 
     def _get_route_string_from_user_input(self):
+        """
+        Get route string from user-provided input.
+
+        Returns:
+            str: User-specified route string with '!' prefix if needed
+        """
         route_string = self.route_to_be_written
         if not route_string.startswith("!"):
             route_string = f"! {route_string}"
         return route_string
 
     def _get_route_string_from_jobtype(self):
-        """Get the ORCA job route string from the ORCA job type."""
+        """
+        Generate ORCA route string based on job type and settings.
+
+        Returns:
+            str: Generated ORCA route string
+
+        Raises:
+            ValueError: If invalid combination of settings is specified
+        """
         route_string = ""
         if not route_string.startswith("!"):
             route_string += "! "
@@ -342,12 +539,13 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string += f" {self.solvent_model}({self.solvent_id})"
         elif self.solvent_model is not None and self.solvent_id is None:
             raise ValueError(
-                "Warning: Solvent model is specified but solvent identity is missing!"
+                "Warning: Solvent model is specified but solvent identity "
+                "is missing!"
             )
         elif self.solvent_model is None and self.solvent_id is not None:
             logger.warning(
-                "Warning: Solvent identity is specified but solvent model is missing!\n"
-                "Defaulting to CPCM model."
+                "Warning: Solvent identity is specified but solvent model "
+                "is missing!\nDefaulting to CPCM model."
             )
             route_string += f" CPCM({self.solvent_id})"
         else:
@@ -356,15 +554,27 @@ class ORCAJobSettings(MolecularJobSettings):
         return route_string
 
     def _get_level_of_theory(self):
+        """
+        Get the level of theory string.
+
+        Returns:
+            str: Level of theory specification
+
+        Raises:
+            ValueError: If invalid method combination or missing parameters
+        """
         level_of_theory = ""
+        
         if self.ab_initio is not None and self.functional is not None:
             raise ValueError(
-                "Warning: both ab initio and DFT are specified!\nPlease specify only one method!"
+                "Warning: both ab initio and DFT are specified!\n"
+                "Please specify only one method!"
             )
 
         if self.ab_initio is None and self.functional is None:
             raise ValueError(
-                "Warning: neither ab initio nor DFT is specified!\nPlease specify one method!"
+                "Warning: neither ab initio nor DFT is specified!\n"
+                "Please specify one method!"
             )
 
         if self.ab_initio is not None:
@@ -385,6 +595,16 @@ class ORCAJobSettings(MolecularJobSettings):
         return level_of_theory
 
     def _write_geometry(self, f, atoms):
+        """
+        Write molecular geometry to input file.
+
+        Args:
+            f: File object to write to
+            atoms: Atoms object containing molecular geometry
+
+        Raises:
+            AssertionError: If charge, multiplicity, or geometry is missing
+        """
         # check that both charge and multiplicity are specified
         assert self.charge is not None, "No charge found!"
         assert self.multiplicity is not None, "No multiplicity found!"
@@ -404,6 +624,15 @@ class ORCAJobSettings(MolecularJobSettings):
         f.write("*\n")
 
     def _check_solvent(self, solvent_model):
+        """
+        Validate solvent model specification.
+
+        Args:
+            solvent_model: Solvent model name to validate
+
+        Raises:
+            ValueError: If solvent model is not supported
+        """
         if solvent_model.lower() not in ORCA_ALL_SOLVENT_MODELS:
             raise ValueError(
                 f"The specified solvent model {solvent_model} is not in \n"
@@ -412,6 +641,25 @@ class ORCAJobSettings(MolecularJobSettings):
 
 
 class ORCATSJobSettings(ORCAJobSettings):
+    """
+    Settings for ORCA transition state calculations.
+
+    This class extends ORCAJobSettings with specialized options for
+    transition state searches and optimizations.
+
+    Attributes:
+        inhess (bool): Read initial Hessian if True.
+        inhess_filename (str | None): Path to initial Hessian file (used when inhess=True).
+        hybrid_hess (bool): Use hybrid Hessian scheme.
+        hybrid_hess_atoms (list[int] | None): 1‑based atom indices for hybrid Hessian region.
+        numhess (bool): Use numerical Hessian.
+        recalc_hess (int): Frequency (in cycles) to recalculate Hessian.
+        trust_radius (float | None): Trust radius for optimization.
+        tssearch_type (str): TS search method ('optts' or 'scants').
+        scants_modred (list | dict | None): Modredundant coordinates for ScanTS.
+        full_scan (bool): If True, do not abort ScanTS after highest point.
+    """
+
     def __init__(
         self,
         inhess=False,
@@ -426,6 +674,22 @@ class ORCATSJobSettings(ORCAJobSettings):
         full_scan=False,
         **kwargs,
     ):
+        """
+        Initialize ORCA transition state job settings.
+
+        Args:
+            inhess: Whether to read initial Hessian
+            inhess_filename: Filename for initial Hessian
+            hybrid_hess: Whether to use hybrid Hessian
+            hybrid_hess_atoms: Atoms for hybrid Hessian (1-indexed)
+            numhess: Whether to use numerical Hessian
+            recalc_hess: Frequency for Hessian recalculation
+            trust_radius: Trust radius for optimization
+            tssearch_type: Type of TS search ('optts' or 'scants')
+            scants_modred: Modified coordinates for ScanTS
+            full_scan: Whether to do full scan or abort after highest point
+            **kwargs: Additional keyword arguments
+        """
         super().__init__(**kwargs)
         self.inhess = inhess
         self.inhess_filename = inhess_filename
@@ -446,7 +710,14 @@ class ORCATSJobSettings(ORCAJobSettings):
 
     @property
     def route_string(self):
-        """Get the ORCA job route string for ORCA TS job; overrides parent property."""
+        """
+        Get ORCA route string for transition state job.
+
+        Overrides parent property to handle TS-specific keywords.
+
+        Returns:
+            str: ORCA route string for TS calculation
+        """
         self.job_type = "ts"
         route_string = self._get_route_string_from_jobtype()
         if self.tssearch_type.lower() == "scants":
@@ -455,6 +726,36 @@ class ORCATSJobSettings(ORCAJobSettings):
 
 
 class ORCAIRCJobSettings(ORCAJobSettings):
+    """
+    Settings for ORCA intrinsic reaction coordinate calculations.
+
+    This class extends ORCAJobSettings with specialized options for
+    IRC path following calculations.
+
+    Attributes:
+        maxiter (int | None): Maximum number of IRC iterations.
+        printlevel (int | None): Verbosity level for IRC output.
+        direction (str | None): IRC direction ('both', 'forward', 'backward', 'down').
+        inithess (str | None): Initial Hessian specification ('read', 'calc_anfreq', 'calc_numfreq').
+        hess_filename (str | None): Hessian filename when inithess='read'.
+        hessmode (int | None): Hessian mode index used for initial displacement.
+        init_displ (str | None): Initial displacement type ('DE' or 'length').
+        scale_init_displ (float | None): Step size for initial displacement.
+        de_init_displ (float | None): Target energy difference for initial displacement (Eh or mEh as per ORCA).
+        follow_coordtype (str | None): Coordinate type to follow (typically 'cartesian').
+        scale_displ_sd (float | None): Scaling factor for the first SD step.
+        adapt_scale_displ (bool | None): Adapt SD step scaling dynamically.
+        sd_parabolicfit (bool | None): Use parabolic fit to optimize SD step length.
+        interpolate_only (bool | None): Restrict parabolic fit to interpolation only.
+        do_sd_corr (bool | None): Apply correction to the first SD step.
+        scale_displ_sd_corr (float | None): Scaling factor for SD correction step.
+        sd_corr_parabolicfit (bool | None): Use parabolic fit for the correction step.
+        tolrmsg (float | None): RMS gradient tolerance (a.u.).
+        tolmaxg (float | None): Max gradient element tolerance (a.u.).
+        monitor_internals (bool | None): Print selected internal coordinates during IRC.
+        internal_modred (list | dict | None): Internal coordinates (B/A/D/I) to monitor when monitor_internals=True.
+    """
+
     def __init__(
         self,
         maxiter=None,
@@ -480,6 +781,33 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         internal_modred=None,
         **kwargs,
     ):
+        """
+        Initialize ORCA IRC job settings.
+
+        Args:
+            maxiter: Maximum number of IRC iterations
+            printlevel: Level of output detail
+            direction: IRC direction ('both', 'forward', 'backward', 'down')
+            inithess: Initial Hessian specification
+            hess_filename: Filename for Hessian file
+            hessmode: Hessian mode for initial displacement
+            init_displ: Initial displacement type
+            scale_init_displ: Scaling for initial displacement
+            de_init_displ: Energy difference for initial displacement
+            follow_coordtype: Coordinate type to follow
+            scale_displ_sd: Scaling for steepest descent displacement
+            adapt_scale_displ: Whether to adapt displacement scaling
+            sd_parabolicfit: Whether to use parabolic fit for SD step
+            interpolate_only: Whether to only allow interpolation
+            do_sd_corr: Whether to apply SD correction
+            scale_displ_sd_corr: Scaling for SD correction
+            sd_corr_parabolicfit: Whether to use parabolic fit for correction
+            tolrmsg: RMS gradient tolerance
+            tolmaxg: Maximum gradient tolerance
+            monitor_internals: Whether to monitor internal coordinates
+            internal_modred: Internal coordinates to monitor
+            **kwargs: Additional keyword arguments
+        """
         super().__init__(**kwargs)
         self.maxiter = maxiter
         self.printlevel = printlevel
@@ -505,7 +833,15 @@ class ORCAIRCJobSettings(ORCAJobSettings):
 
     @property
     def route_string(self):
-        """Get the ORCA job route string for ORCA IRC job; overrides parent property."""
+        """
+        Get ORCA route string for IRC job.
+
+        Overrides parent property, removes frequency calculation
+        as it's not compatible with IRC.
+
+        Returns:
+            str: ORCA route string for IRC calculation
+        """
         self.job_type = "irc"
         route_string = self._get_route_string_from_jobtype()
         if "freq" in route_string.lower():
