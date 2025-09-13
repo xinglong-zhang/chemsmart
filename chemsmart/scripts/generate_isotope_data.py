@@ -1,3 +1,11 @@
+"""
+Isotope data generation script.
+
+This script generates atomic mass and isotope abundance data for elements,
+including handling of radioactive elements with most stable mass numbers.
+Used for periodic table and molecular weight calculations.
+"""
+
 import re
 from pathlib import Path
 

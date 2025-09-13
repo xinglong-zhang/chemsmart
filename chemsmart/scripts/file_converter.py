@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+File format converter script.
+
+This script provides command-line functionality to convert molecular
+structure files between different formats (e.g., XYZ, SDF, MOL).
+"""
+
 import logging
 import os
 

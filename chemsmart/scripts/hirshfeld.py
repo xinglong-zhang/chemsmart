@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Hirshfeld charge analysis script.
+
+This script extracts and analyzes Hirshfeld atomic charges from
+Gaussian and ORCA output files, providing atomic charge distributions
+and population analysis for molecular systems.
+"""
+
 import logging
 import os
 

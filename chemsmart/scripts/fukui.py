@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+Fukui function analysis script.
+
+This script calculates Fukui functions for molecular reactivity analysis
+from neutral, cationic, and anionic electronic structure calculations,
+providing insights into electrophilic and nucleophilic reaction sites.
+"""
 
 import logging
 import os

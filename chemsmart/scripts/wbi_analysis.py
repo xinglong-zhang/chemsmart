@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Wiberg Bond Index (WBI) analysis script.
+
+This script extracts and analyzes Wiberg Bond Indices from Gaussian
+output files, providing bond order analysis and molecular bonding
+characterization for chemical systems.
+"""
+
 import logging
 import os
 

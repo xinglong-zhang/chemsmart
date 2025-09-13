@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+DIAS (Density-based Index of Aromaticity) plotting script.
+
+This script creates plots and visualizations for DIAS aromaticity analysis
+from Gaussian and ORCA calculations, helping to analyze aromatic character
+in molecular systems.
+"""
+
 import click
 
 from chemsmart.analysis.dias import GaussianDIASLogFolder, ORCADIASOutFolder

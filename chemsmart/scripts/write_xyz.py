@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+XYZ file writer script.
+
+This script converts molecular structure files to XYZ format, extracting
+specific conformations or frames from multi-structure files and writing
+them in standard XYZ coordinate format.
+"""
+
 import logging
 import os
 

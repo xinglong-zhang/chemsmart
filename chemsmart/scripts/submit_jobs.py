@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Job submission script.
+
+This script provides command-line functionality to submit computational
+chemistry jobs to job schedulers or computing clusters, reading job
+files from a list and handling batch submissions.
+"""
+
 import logging
 import os
 import shlex

@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Thermochemistry data extraction script.
+
+This script extracts thermochemical properties (enthalpies, entropies,
+Gibbs free energies) from computational chemistry output files and
+performs thermochemical analysis and calculations.
+"""
+
 import glob
 import logging
 import os

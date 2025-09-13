@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Mulliken population analysis script.
+
+This script extracts and analyzes Mulliken atomic charges and populations
+from Gaussian and ORCA output files, providing atomic charge distributions
+and electron population analysis for molecular systems.
+"""
+
 import logging
 import os
 

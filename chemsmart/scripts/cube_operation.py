@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Cube file operations script.
+
+This script provides command-line functionality for performing mathematical
+operations on Gaussian cube files, such as addition, subtraction, and
+other mathematical transformations.
+"""
+
 import logging
 import os
 

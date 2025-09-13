@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Molecular structure filtering script.
+
+This script filters and groups molecular structures based on various
+criteria such as similarity, energy, or structural features, helping
+to organize and analyze large sets of molecular conformations.
+"""
+
 import glob
 import logging
 import os
