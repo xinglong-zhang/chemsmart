@@ -2,7 +2,8 @@
 NCIPLOT job implementation.
 
 This module contains the NCIPLOTJob class for running non-covalent
-interaction analysis using the NCIPLOT program.
+interaction job for creating dens.cube and grad.cube files
+using the NCIPLOT program.
 """
 
 import logging
@@ -18,10 +19,11 @@ logger = logging.getLogger(__name__)
 
 class NCIPLOTJob(Job):
     """
-    NCIPLOT job for non-covalent interaction analysis.
+    NCIPLOT job for non-covalent interaction job creating dens.cube 
+    and grad.cube files.
 
     This class handles the setup and execution of NCIPLOT calculations for
-    analyzing non-covalent interactions in molecular systems.
+    creat non-covalent interaction cube files in molecular systems.
 
     Attributes:
         PROGRAM (str): Program identifier ('NCIPLOT').
