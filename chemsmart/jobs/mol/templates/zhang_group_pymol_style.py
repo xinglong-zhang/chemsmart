@@ -1,15 +1,13 @@
 """
-Zhang Group PyMOL Style Settings and Functions.
+Xinglong ZHANG Group PyMOL Style Settings and Functions.
 
 This module provides comprehensive PyMOL styling functions and atomic
 Van der Waals radius definitions for high-quality molecular visualization.
 Includes rendering presets, molecular representation styles, and specialized
 visualization functions for NCI analysis.
+Add_VDW creates a copy of an object with full-sized, transparent spheres
+Bondi VDW values added below to override default PyMOL settings
 """
-
-# Xinglong Zhang Group PyMOL Style Settings
-# Add_VDW creates a copy of an object with full-sized, transparent spheres
-# Bondi VDW values added below to override default PyMOL settings
 
 from pymol import cmd
 
