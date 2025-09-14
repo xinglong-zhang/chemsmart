@@ -821,3 +821,13 @@ def spline_data(x, y, new_length=1000, k=3):
     new_x = np.linspace(min(x1), max(x1), new_length)
     new_y = UnivariateSpline(x1, y1, k=k)(new_x)
     return new_x, new_y
+
+
+def safe_min_lengths(lista, listb, listc):
+    """Script for finding the minimum length of multiple lists."""
+    lengths = [len(lista)]
+    if listb is not None:
+        lengths.append(len(listb))
+    if listc is not None:
+        lengths.append(len(listc))
+    return min(lengths) if lengths else 0
