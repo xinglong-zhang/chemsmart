@@ -16,13 +16,11 @@ Configuration Structure:
     ~/.chemsmart/
     ├── usersettings.yaml
     ├── server/
+    │   └── server.yaml
     ├── gaussian/
-    │   ├── gaussian.envars
-    │   ├── gaussian.modules
-    │   └── gaussian.sh
+    │   └── aussian_project_settings.yaml
     └── orca/
-        ├── orca.envars
-        └── orca.modules
+        └── orca_project_settings.yaml
 """
 
 import glob
