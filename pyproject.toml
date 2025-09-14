@@ -37,6 +37,7 @@ dependencies = [
     "tenacity>=9.1.2",
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
+    "py3dmol",
     "pytest_mock>=3.14.0",
 ]
 

@@ -4,6 +4,7 @@ from functools import cached_property
 from itertools import islice
 
 import numpy as np
+import py3Dmol
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock
@@ -599,6 +600,78 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def num_vib_frequencies(self):
         return len(self.vibrational_frequencies)
+
+    # def visualize_vibrational_modes(self, mode_index, scale=1.0):
+    #     """Visualize a specific vibrational mode by index (1-based).
+    #     Args:
+    #         mode_index (int): Index of the vibrational mode to visualize (1-based).
+    #         scale (float): Scaling factor for the displacement vectors.
+    #     Returns:
+    #         Molecule: A new Molecule object with displaced coordinates.
+    #     """
+    #     if mode_index < 1 or mode_index > self.num_vib_modes:
+    #         raise ValueError(f"Mode index {mode_index} is out of range.")
+    #
+    #     vib_mode = self.vibrational_modes[mode_index-1]  # Convert to 0-based index
+    #     displaced_positions = (
+    #         self.last_structure.positions + scale * vib_mode
+    #     )
+    #
+    #     return self.last_structure.copy(positions=displaced_positions)
+
+    def _xyz_frames(self, mode_index, amp=0.6, nframes=30):
+        """Return a multi-model XYZ string for animation."""
+        symbols = list(self.symbols)
+        R0 = np.asarray(self.last_structure.positions, float)
+        vib_mode = self.vibrational_modes[mode_index - 1]
+        M = np.asarray(vib_mode)
+        buf = []
+        for t in np.linspace(0, 2 * np.pi, nframes, endpoint=False):
+            Rt = R0 + amp * np.sin(t) * M
+            buf.append(str(len(symbols)))
+            buf.append(f"vib frame t={t:.3f}, amp={amp} Å")
+            for s, (x, y, z) in zip(symbols, Rt):
+                buf.append(f"{s} {x:.6f} {y:.6f} {z:.6f}")
+        return "\n".join(buf)
+
+    def view_vibration(self, mode_index, amp=0.6, nframes=30, interval_ms=50):
+        xyz = self._xyz_frames(mode_index, amp=amp, nframes=nframes)
+        v = py3Dmol.view(width=600, height=450)
+        v.addModelsAsFrames(xyz, "xyz")
+        v.setStyle({"stick": {}})
+        v.animate({"loop": "forward", "reps": 1, "interval": interval_ms})
+        v.zoomTo()
+        return v
+
+    def save_vibration_html(
+        self,
+        mode_index,
+        amp=0.6,
+        nframes=40,
+        interval_ms=40,
+        outfile="vibration.html",
+    ):
+        """Write an interactive py3Dmol animation to an HTML file."""
+        xyz = self._xyz_frames(mode_index, amp=amp, nframes=nframes)
+        v = py3Dmol.view(width=800, height=600)
+        v.addModelsAsFrames(xyz, "xyz")
+        v.setStyle({"stick": {}})
+        v.animate({"loop": "forward", "reps": 1, "interval": interval_ms})
+        v.zoomTo()
+        # py3Dmol provides a private HTML maker that works outside notebooks
+        html = v._make_html()  # noqa: SLF001 (intentional)
+        with open(outfile, "w", encoding="utf-8") as f:
+            f.write(html)
+        return outfile
+
+    def write_mode_xyz(self, mode_index, amp=0.6, nframes=60, outfile=None):
+        """Write a multi-model XYZ trajectory for external viewers."""
+        if outfile is None:
+            outfile = f"mode_{mode_index:03d}.xyz"
+        xyz = self._xyz_frames(mode_index, amp=amp, nframes=nframes)
+        with open(outfile, "w", encoding="utf-8") as f:
+            f.write(xyz)
+        return outfile
 
     #### FREQUENCY CALCULATIONS
     @cached_property
