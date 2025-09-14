@@ -210,9 +210,8 @@ class Gaussian16Output(GaussianFileMixin):
                 orientations_pbc = orientations_pbc[1:]
             if energies:
                 energies = energies[1:]
-            # if forces:
-            # forces need not be dropped since no computation at first link job
-            #     forces = forces[1:]
+            # Forces do not need to be dropped here because no force computation occurs at the first link job.
+            # This is intentional: the forces array is already aligned with the relevant orientations.
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
