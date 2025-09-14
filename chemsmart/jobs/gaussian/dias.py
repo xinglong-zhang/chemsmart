@@ -1,8 +1,9 @@
 """
-Gaussian DI-AS (Dissociation-Association) calculation job implementation.
+Gaussian DI-AS (Distortion interaction-Activation strain) 
+calculation job implementation.
 
 This module provides the GaussianDIASJob class for performing
-DI-AS (Dissociation-Association) analysis calculations using Gaussian.
+DI-AS analysis calculations using Gaussian.
 These calculations analyze molecular fragmentation along reaction
 coordinates by computing energies of fragments and whole molecules.
 """
@@ -15,10 +16,10 @@ class GaussianDIASJob(GaussianJob):
     """
     Gaussian job class for DI-AS fragmentation analysis calculations.
     
-    Performs Dissociation-Association (DI-AS) analysis by calculating
-    energies of molecular fragments and complete molecules along a
-    reaction coordinate. Supports both IRC and transition state modes
-    with configurable fragment definitions and sampling.
+    Performs distortion interaction-Activation strain (DI-AS) analysis 
+    by calculating energies of molecular fragments and complete molecules 
+    along a reaction coordinate. Supports both IRC and transition state 
+    modes with configurable fragment definitions and sampling.
     
     The calculation involves three sets of jobs:
     1. Complete molecule calculations at sampled points
