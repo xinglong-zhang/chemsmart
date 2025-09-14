@@ -187,9 +187,8 @@ class DIASOutputFolder(BaseFolder):
         return self._get_reaction_coordinates(all_files_full_molecule_sorted)
 
     def _get_reaction_coordinates(self, list_of_filenames):
-        """Computes distance between two atoms in each frame along IRC.
-
-        For a given list of filenames.
+        """Computes distance between two atoms in each frame along IRC,
+        for a given list of filenames.
         """
         list_rc = []
         atom1 = (
