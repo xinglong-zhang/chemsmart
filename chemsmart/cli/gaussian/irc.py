@@ -99,10 +99,8 @@ def irc(
     irc_settings = irc_project_settings.merge(job_settings, keywords=keywords)
 
     # update irc_settings if any attribute is specified in cli options
-    # suppose project has a non None value, and user does not specify a
-    # value (None),
-    # then the project value should be used and unmodified, ie, should not be
-    # merged.
+    # suppose project has a non None value, and user does not specify a value (None),
+    # then the project value should be used and unmodified, ie, should not be merged.
     # update value only if user specifies a value for the attribute:
     if predictor is not None:
         irc_settings.predictor = predictor
