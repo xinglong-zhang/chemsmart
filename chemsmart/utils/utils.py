@@ -823,11 +823,14 @@ def spline_data(x, y, new_length=1000, k=3):
     return new_x, new_y
 
 
-def safe_min_lengths(lista, listb, listc):
-    """Script for finding the minimum length of multiple lists."""
-    lengths = [len(lista)]
-    if listb is not None:
-        lengths.append(len(listb))
-    if listc is not None:
-        lengths.append(len(listc))
+def safe_min_lengths(*lists):
+    """Return the minimum length of any number of provided lists (ignoring None).
+
+    Args:
+        *lists: Variable number of list-like objects. None values are ignored.
+
+    Returns:
+        int: The minimum length among the provided lists, or 0 if no valid lists are given.
+    """
+    lengths = [len(lst) for lst in lists if lst is not None]
     return min(lengths) if lengths else 0
