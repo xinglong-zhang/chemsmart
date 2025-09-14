@@ -1199,7 +1199,8 @@ class Thermochemistry:
 
             header += (
                 f"Mass Weighted: "
-                f"{'Most Abundant Masses' if not self.use_weighted_mass else 'Natural Abundance Weighted Masses'}\n"
+                f"{'Most Abundant Masses' if not self.use_weighted_mass 
+                   else 'Natural Abundance Weighted Masses'}\n"
             )
             header += f"Energy Unit: {self.energy_units}\n\n"
 
