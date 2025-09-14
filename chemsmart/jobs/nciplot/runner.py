@@ -392,8 +392,12 @@ class NCIPLOTJobRunner(JobRunner):
 
         if job.is_complete():
             # Remove error files if job completed successfully
-            # Note: Scratch directory cleanup is commented out to preserve
-            # intermediate files for debugging
+            # if job is completed, remove scratch directory
+            # if self.scratch:
+            #     logger.info(
+            #         f"Removing scratch directory: {self.running_directory}."
+            #     )
+            #     rmtree(self.running_directory)
             logger.debug("Job completed successfully, cleaning up error files")
             self._remove_err_files(job)
 
