@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 """
-Fragment Molecular Orbital (FMO) analysis script.
+Frontier Molecular Orbital (FMO) analysis script.
 
-This script extracts and analyzes Fragment Molecular Orbital data from
-Gaussian and ORCA output files, providing insights into molecular
-fragment interactions and electronic structure.
+This script extracts and analyzes Frontier Molecular Orbital data from
+Gaussian and ORCA output files.
 """
 
 import logging
