@@ -21,7 +21,7 @@ from chemsmart.utils.repattern import (
     oniom_energy_pattern,
     scf_energy_pattern,
 )
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.utils import safe_min_lengths, string2index_1based
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)
@@ -173,16 +173,15 @@ class Gaussian16Output(GaussianFileMixin):
 
         Selection precedence for orientations:
           1) standard_orientations (+ PBC)
-          2) input_orientations (+ PBC)
+          2) input_orientations   (+ PBC)
 
-        Special handling:
-          - Link jobs: drop the first frame (Gaussian "Link1" carry-over). For single-point
-            link jobs, keep only the last frame.
-          - Duplicate tail frames from optimizations are de-duplicated.
-          - If the job did not terminate normally, truncate to the minimum length across
-            the available arrays (orientations, energies, forces).
-          - If `optimized_steps_indices` is present and `include_intermediate` is False,
-            restrict to those steps only.
+        Special handling (as per design):
+          - Non-link & normal termination: de-duplicate the terminal (e.g. freq) frame.
+          - Non-link & abnormal termination: use safe_min_lengths.
+          - Link & normal termination: drop the first frame, then behave like normal termination (incl. de-dup).
+          - Link & abnormal termination:
+              * if multiple frames: drop the first (carry-over), then use safe_min_lengths.
+              * if single frame: return that only frame (no drop).
 
         Returns
         -------
@@ -202,38 +201,88 @@ class Gaussian16Output(GaussianFileMixin):
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
 
-        # 2) Handle link jobs
-        if self.is_link:
-            # Drop the first frame (and keep arrays aligned)
+        # Helper to drop the first item across all arrays (when present)
+        def drop_first():
+            nonlocal orientations, orientations_pbc, energies, forces
             if orientations:
                 orientations = orientations[1:]
             if orientations_pbc:
                 orientations_pbc = orientations_pbc[1:]
             if energies:
                 energies = energies[1:]
+            # Forces do not need to be dropped here because no force computation occurs at the first link job.
+            # This is intentional: the forces array is already aligned with the relevant orientations.
 
-            # For single-point link jobs, keep only the last frame
-            if self.job_type == "sp" and orientations:
-                orientations = [orientations[-1]]
-                orientations_pbc = (
-                    [orientations_pbc[-1]] if orientations_pbc else []
+        # Helper to keep only the last frame across all arrays
+        def keep_last_only():
+            nonlocal orientations, orientations_pbc, energies, forces
+            orientations = orientations[-1:] if orientations else []
+            orientations_pbc = (
+                orientations_pbc[-1:] if orientations_pbc else []
+            )
+            if energies:
+                energies = energies[-1:]
+            if forces:
+                forces = forces[-1:]
+
+        # Right-trim auxiliaries to the number of orientations (no data loss in orientations)
+        def align_lengths_to_orientations():
+            nonlocal orientations, orientations_pbc, energies, forces
+            n = len(orientations)
+            if orientations_pbc and len(orientations_pbc) > n:
+                orientations_pbc = orientations_pbc[:n]
+            if energies and len(energies) > n:
+                energies = energies[:n]
+            if forces and len(forces) > n:
+                forces = forces[:n]
+
+        # 2) Handle link jobs
+        if self.is_link:
+            if self.normal_termination:
+                logger.debug(
+                    "Link job with normal termination: dropping first frame."
                 )
-                if energies:
-                    energies = [energies[-1]]
+                if orientations:  # drop carried-over first frame if present
+                    drop_first()
 
-        # 3) Remove repeated terminal geometries (in-place de-dup)
-        clean_duplicate_structure(orientations)
+                # Single-point link jobs: keep only the last frame (after drop)
+                if self.job_type == "sp" and orientations:
+                    keep_last_only()
 
-        # 4) Decide how many structures to use when abnormal termination
-        def _safe_min_lengths():
-            lengths = [len(orientations)]
-            if energies is not None:
-                lengths.append(len(energies))
-            if forces is not None:
-                lengths.append(len(forces))
-            return min(lengths) if lengths else 0
+                # Fall through to "normal termination" handling below
+            else:
+                logger.debug("Link job with error termination.")
+                if len(orientations) > 1:
+                    # Multiple frames: drop carried-over first, then treat as abnormal
+                    drop_first()
+                    # Fall through to abnormal handling below (safe_min_lengths)
+                else:
+                    # Single frame available: return it as-is (do NOT drop)
+                    frozen_atoms = (
+                        self.frozen_atoms_masks if self.use_frozen else None
+                    )
+                    return create_molecule_list(
+                        orientations=orientations,
+                        orientations_pbc=orientations_pbc,
+                        energies=energies,
+                        forces=forces,
+                        symbols=self.symbols,
+                        charge=self.charge,
+                        multiplicity=self.multiplicity,
+                        frozen_atoms=frozen_atoms,
+                        pbc_conditions=self.list_of_pbc_conditions,
+                    )
 
-        num_structures_to_use = _safe_min_lengths()
+        # 3) De-dup only for normal-termination paths (incl. link-normal after drop)
+        if self.normal_termination:
+            clean_duplicate_structure(orientations)
+            # After dedup, ensure auxiliaries aren't longer than orientations
+            align_lengths_to_orientations()
+
+        # 4) Compute safe min length for logging and for abnormal (non-link or link>1-after-drop)
+        num_structures_to_use = safe_min_lengths(
+            orientations, energies, forces
+        )
 
         logger.debug(
             "Structures to use: %d | orientations=%d | energies=%d | forces=%d",
@@ -261,6 +310,7 @@ class Gaussian16Output(GaussianFileMixin):
         if self.normal_termination:
             all_structures = create_molecule_list(**create_kwargs)
         else:
+            # Abnormal (non-link, or link with >1 frame after drop): truncate safely
             all_structures = create_molecule_list(
                 **create_kwargs, num_structures=num_structures_to_use
             )

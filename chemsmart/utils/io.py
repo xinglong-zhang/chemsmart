@@ -1,8 +1,11 @@
+import logging
 import re
 
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+
+logger = logging.getLogger(__name__)
 
 
 def create_molecule_list(
@@ -19,6 +22,19 @@ def create_molecule_list(
 ):
     """Helper function to create Molecule objects."""
     num_structures = num_structures or len(orientations)
+    logger.debug(f"Number of structures to create: {num_structures}")
+    logger.debug(f"Orientations shape: {np.array(orientations).shape}")
+    logger.debug(
+        f"Number of PBC orientations: {len(orientations_pbc) if orientations_pbc else 'N/A'}"
+    )
+    logger.debug(f"Number of energies: {len(energies) if energies else 'N/A'}")
+    logger.debug(
+        f"Energies shape: {np.array(energies).shape if energies else 'N/A'}"
+    )
+    logger.debug(f"Number of forces: {len(forces) if forces else 'N/A'}")
+    logger.debug(
+        f"Forces shape: {np.array(forces).shape if forces else 'N/A'}"
+    )
 
     return [
         Molecule(

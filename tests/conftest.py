@@ -241,6 +241,13 @@ def gaussian_dppeFeCl2_link_opt_failed_outputfile(
 
 
 @pytest.fixture()
+def gaussian_failed_link_output(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory, "failed_link_job.log"
+    )
+
+
+@pytest.fixture()
 def gaussian_link_sp_input(gaussian_link_inputs_test_directory):
     return os.path.join(
         gaussian_link_inputs_test_directory, "link_sp_input_sp_link.com"
