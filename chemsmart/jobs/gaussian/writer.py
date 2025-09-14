@@ -253,10 +253,9 @@ class GaussianInputWriter(InputWriter):
         assert self.job.molecule is not None, "No molecular geometry found!"
         
         # Log molecular information for debugging
-        num_atoms = len(self.job.molecule)
         logger.debug(
-            f"Molecule contains {num_atoms} atoms with formula: "
-            f"{self.job.molecule.formula}"
+            f"Molecule contains {self.job.molecule.num_atoms} atoms with formula: "
+            f"{self.job.molecule.chemical_formula}"
         )
         
         self.job.molecule.write_coordinates(f, program="gaussian")
