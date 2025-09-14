@@ -2,9 +2,8 @@
 """
 File organization script.
 
-This script provides command-line functionality to organize computational
-chemistry files into structured directories based on file types,
-calculation types, or other organizational schemes.
+This script provides command-line functionality to organize 
+computational chemistry files into structured directories.
 """
 
 import logging
