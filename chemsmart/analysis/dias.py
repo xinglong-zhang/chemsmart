@@ -283,8 +283,7 @@ class DIASOutputFolder(BaseFolder):
             == len(total_strain_energies)
             == len(total_interaction_energies)
         ), (
-            "Number of all points for full molecule and fragments must be "
-            "the same!"
+            "Number of all points for full molecule and fragments must be the same!"
         )
         plt.figure()
         font = {"family": "Arial", "weight": "bold"}
