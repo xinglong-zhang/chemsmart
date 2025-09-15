@@ -173,7 +173,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 3.5,  # RMSD threshold for grouping
+        threshold: float = 0.5,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
     ):
@@ -632,7 +632,7 @@ class StructureGrouperFactory:
         structures,
         strategy="rmsd",
         num_procs=1,
-        threshold=5.0,
+        threshold=None,
         ignore_hydrogens=None,
         **kwargs,
     ):
