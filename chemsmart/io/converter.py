@@ -43,6 +43,12 @@ class FileConverter:
         self.include_intermediate_structures = include_intermediate_structures
 
     def convert_files(self):
+        """
+        Convert files based on the specified parameters.
+
+        Converts either all files in a directory (if directory is specified)
+        or a single file (if filename is specified) to the target output format.
+        """
         if self.directory is not None:
             logger.info(f"Converting files in directory: {self.directory}")
             assert (
@@ -66,7 +72,14 @@ class FileConverter:
                 )
 
     def _convert_all_files(self, directory, type, output_filetype):
-        """Convert all files of specified type in the directory."""
+        """
+        Convert all files of specified type in the directory.
+
+        Args:
+            directory (str): Directory containing files to convert.
+            type (str): File type to convert (log, com, gjf, out, inp, xyz, sdf).
+            output_filetype (str): Target output format.
+        """
         if type == "log":
             g16_folder = GaussianLogFolder(folder=directory)
             all_files = g16_folder.all_logfiles
@@ -132,7 +145,13 @@ class FileConverter:
                 mol.write(output_filepath, format=output_filetype)
 
     def _convert_single_file(self, filename, output_filetype):
-        """Convert single file to specified format."""
+        """
+        Convert single file to specified format.
+
+        Args:
+            filename (str): Path to the file to convert.
+            output_filetype (str): Target output format.
+        """
         logger.info(f"Converting file type: {self.type}")
         if self.type == "log":
             outfile = Gaussian16Output(filename=filename)

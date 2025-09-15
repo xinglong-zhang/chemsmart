@@ -29,12 +29,14 @@ def sp(
     project_settings = ctx.obj["project_settings"]
     sp_settings = project_settings.sp_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     sp_settings = sp_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(sp_settings)
 
@@ -53,13 +55,16 @@ def sp(
         solvent_id=solvent_id,
     )
 
-    # either supplied or not from cli, would still want label to have model and id, if both given;
-    # will not be activated when both are not given, e.g., in the gaussian calculator calling the sp job
+    # either supplied or not from cli, would still want label to have model
+    # and id, if both given;
+    # will not be activated when both are not given, e.g., in the gaussian
+    # calculator calling the sp job
     if (
         sp_settings.solvent_model is not None
         and sp_settings.solvent_id is not None
     ):
-        # replace , by _ if it occurs in the solvent name, as , in file will cause gaussian run error
+        # replace , by _ if it occurs in the solvent name, as , in file will
+        # cause gaussian run error
         solvent_label = sp_settings.solvent_id.replace(",", "_")
         solvent_label = solvent_label.replace("-", "_")
         label = f"{label}_{sp_settings.solvent_model}_{solvent_label}"

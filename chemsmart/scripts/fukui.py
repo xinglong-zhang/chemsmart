@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+"""
+Fukui function analysis script.
 
-"""Script for calculating Fukui reactivity indices based on charges.
-Structures for the neutral, radical cationic and radical anionic
- systems should be based on the optimised neural system."""
+This script calculates Fukui functions for molecular reactivity analysis
+from neutral, cationic, and anionic electronic structure calculations,
+providing insights into electrophilic and nucleophilic reaction sites.
+"""
+
 import logging
 import os
 
@@ -54,11 +58,15 @@ def entry_point(
     radical_anion_filename=None,
     mode="mulliken",
 ):
+    """
+    Calculate Fukui reactivity indices from charge analysis.
+    """
     create_logger()
 
     if radical_cation_filename is None and radical_anion_filename is None:
         raise ValueError(
-            "At least one of radical cation or radical anion files must be provided."
+            "At least one of radical cation or radical anion files must "
+            "be provided."
         )
 
     if neutral_filename.endswith(".log"):
@@ -92,7 +100,8 @@ def entry_point(
 
     if mode == "mulliken":
         logger.info(
-            "\nUsing Mulliken Charges for computing Fukui Reactivity Indices."
+            "\nUsing Mulliken Charges for computing Fukui Reactivity "
+            "Indices."
         )
         charge_for_neutral = neutral_output.mulliken_atomic_charges
         if radical_cation_filename is not None:
@@ -114,7 +123,8 @@ def entry_point(
             charge_for_radical_anion = radical_anion_output.natural_charges
     elif mode == "hirshfeld":
         logger.info(
-            "\nUsing Hirshfeld Charges for computing Fukui Reactivity Indices."
+            "\nUsing Hirshfeld Charges for computing Fukui Reactivity "
+            "Indices."
         )
         charge_for_neutral = neutral_output.hirshfeld_charges
         if radical_cation_filename is not None:
@@ -139,7 +149,8 @@ def entry_point(
             )
     else:
         raise ValueError(
-            f"Unknown mode {mode}. Supported modes are: mulliken, nbo, hirshfeld, cm5."
+            f"Unknown mode {mode}. Supported modes are: mulliken, nbo, "
+            f"hirshfeld, cm5."
         )
 
     logger.info("\nNeutral System Charges:")

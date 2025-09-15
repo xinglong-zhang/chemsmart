@@ -1,4 +1,24 @@
-"""Utility functions for command line interface."""
+"""
+CLI utilities for ChemSmart.
+
+Provides helpers and Click integrations used by the ChemSmart command line
+tools, including:
+
+- Custom Click `Group`/`Command` that persist subcommand metadata on the
+  context for later reconstruction.
+- Reconstruction of command-line arguments from a Click context object into a
+  flat `list[str]` suitable for logging or re-execution.
+- Job settings selection helpers for Gaussian and ORCA (opt, ts, modred, irc,
+  scan, sp, td, wbi, nci).
+- Coordinate/parameter validation helpers for scan and modred workflows with
+  clear error messages.
+
+Public API:
+- `MyGroup`, `MyCommand`
+- `CtxObjArguments`
+- `get_setting_from_jobtype_for_gaussian`, `check_scan_coordinates_gaussian`
+- `get_setting_from_jobtype_for_orca`, `check_scan_coordinates_orca`
+"""
 
 import ast
 import copy
@@ -13,6 +33,16 @@ logger = logging.getLogger(__name__)
 
 
 def _add_subcommand_info_to_ctx(ctx):
+    """
+    Add subcommand information to the Click context object.
+
+    Extracts parameter information from the current command context and
+    stores it in a structured format for later reconstruction of command
+    line arguments.
+
+    Args:
+        ctx (Context): Click context object containing command information.
+    """
     if "subcommand" not in ctx.obj:
         ctx.obj["subcommand"] = []
 
@@ -46,56 +76,157 @@ def _add_subcommand_info_to_ctx(ctx):
 
 
 class MyGroup(click.Group):
-    """For click commands to store subcommand information."""
+    """
+    Click Group that records invocation metadata in the context.
+
+    On each invocation it appends this group's name and parameter values to
+    `ctx.obj["subcommand"]`, so the full CLI can be reconstructed later
+    (see `CtxObjArguments`). Works in tandem with `MyCommand` to capture the
+    entire subcommand chain. Expects `ctx.obj` to be a mutable mapping.
+    """
 
     def invoke(self, ctx: Context) -> t.Any:
-        """Add subcommand information to context before invoking."""
+        """
+        Record group invocation metadata, then delegate to Click.
+
+        Args:
+            ctx (Context): Click context object.
+
+        Returns:
+            Any: Result of `click.Group.invoke`.
+        """
         _add_subcommand_info_to_ctx(ctx)
         return super().invoke(ctx)
 
 
 class MyCommand(click.Command):
+    """
+    Click Command that records invocation metadata in the context.
+
+    On invocation it appends this command's name and parameter values to
+    `ctx.obj["subcommand"]` so the full CLI can be reconstructed later
+    (see `CtxObjArguments`). Typically used together with `MyGroup` to
+    capture the entire command chain. Expects `ctx.obj` to be a mutable
+    mapping.
+    """
+
     def invoke(self, ctx):
+        """
+        Record command invocation metadata, then delegate to Click.
+
+        Args:
+            ctx (Context): Click context object.
+
+        Returns:
+            Any: Result of `click.Command.invoke`.
+        """
         _add_subcommand_info_to_ctx(ctx)
         return super().invoke(ctx)
 
 
 class CtxObjArguments:
+    """
+    Reconstruct command-line arguments from Click context metadata.
+
+    Consumes the subcommand records produced by `MyGroup`/`MyCommand` and
+    rebuilds a flat list of CLI arguments suitable for logging or
+    re-execution.
+
+    Attributes:
+        commands (list[dict]): Shallow copy of the context subcommand list;
+            each dict contains keys like "name", "parent", and "kwargs".
+        entry_point (str | None): Optional explicit entry command name; if
+            None, the command with no parent is used as the root.
+    """
+
     def __init__(self, commands, entry_point=None):
+        """
+        Initialize the argument reconstruction manager.
+
+        Args:
+            commands (list): List of command dictionaries from context.
+            entry_point (str, optional): Specific entry point command name.
+        """
         self.commands = copy.copy(commands)
         self.entry_point = entry_point
 
     @staticmethod
     def _value(v):
+        """
+        Convert a parameter value to its CLI string representation.
+
+        Booleans return an empty string because flags do not take values.
+
+        Args:
+            v: Parameter value of any type.
+
+        Returns:
+            str: String representation (empty for booleans).
+        """
         if v is True or v is False:
             return ""
         return str(v)
 
     @staticmethod
     def argument_keyword(arg, value, is_flag, secondary_opts):
+        """
+        Generate the appropriate CLI option keyword for an argument.
+
+        Handles flag options, boolean negation via secondary options, and
+        short vs. long option formatting. Returns an empty string when a
+        False-valued simple flag should be omitted entirely.
+
+        Args:
+            arg (str): Argument name.
+            value: Argument value.
+            is_flag (bool): Whether the argument is a flag.
+            secondary_opts (list[str]): Secondary option names from Click.
+
+        Returns:
+            str: Formatted option keyword (may be empty string).
+        """
         arg = arg.replace("_", "-")
 
         if value is False:
             if is_flag and len(secondary_opts) == 0:
-                # click "is_flag" option. Click param class has no way to check if
+                # Click "is_flag" option. Click param class has no way to check if
                 # flag is True or not only can determine by checking arg_secondary_opts
                 return ""
 
-            # if variable is bool, then there will be non-empty secondary_opts
+            # If variable is bool, then there will be non-empty secondary_opts
             if len(secondary_opts) == 1:
                 arg = secondary_opts[0].strip("-")
             elif len(secondary_opts) > 1:
                 arg = secondary_opts[-1].strip(
                     "--"
-                )  # instead of assert, use last option
+                )  # Instead of assert, use last option
 
         return "-" + arg if len(arg) == 1 else "--" + arg
 
     @property
     def _subcommands(self):
+        """
+        Get the list of subcommands.
+
+        Returns:
+            list[dict]: List of subcommand dictionaries.
+        """
         return self.commands
 
     def _entry_point(self):
+        """
+        Find and return the entry point command.
+
+        Locates the main entry point command either by specified name
+        or by finding the command with no parent.
+
+        Returns:
+            dict: Entry point command dictionary.
+
+        Raises:
+            ValueError: If specified entry point is not found.
+            AssertionError: If no entry point can be determined.
+        """
         if self.entry_point is not None:
             subcommand = [
                 s for s in self._subcommands if s["name"] == self.entry_point
@@ -113,6 +244,19 @@ class CtxObjArguments:
         raise AssertionError("Could not find entry point")
 
     def _reconstruct_command(self, command):
+        """
+        Reconstruct command line arguments for a single command.
+
+        Processes a command dictionary to generate the corresponding
+        command line string with all arguments and options properly
+        formatted.
+
+        Args:
+            command (dict): Command dictionary with name and kwargs.
+
+        Returns:
+            list[str]: Command line arguments for this command.
+        """
         subcommand_args = command["kwargs"]
         subcommand_name = command["name"]
         logger.debug(f"Subcommand name {subcommand_name}")
@@ -153,6 +297,18 @@ class CtxObjArguments:
         return command_line_string
 
     def _reconstruct_family(self, parent):
+        """
+        Reconstruct command line for a command family (parent and children).
+
+        Recursively processes a parent command and all its child commands
+        to generate a complete command line sequence.
+
+        Args:
+            parent (dict): Parent command dictionary.
+
+        Returns:
+            list[str]: Complete command line arguments for parent and children.
+        """
         children = self._subcommands_of(parent)
         logger.debug(
             f'Parent: {parent["name"]};  children: {[c["name"] for c in children]}'
@@ -166,6 +322,15 @@ class CtxObjArguments:
         return parent_command_line + children_command_line
 
     def _subcommands_of(self, parent):
+        """
+        Get all direct child subcommands of a parent command.
+
+        Args:
+            parent (dict): Parent command dictionary.
+
+        Returns:
+            list[dict]: List of child command dictionaries.
+        """
         return [
             subcommand
             for subcommand in self._subcommands
@@ -173,6 +338,15 @@ class CtxObjArguments:
         ]
 
     def reconstruct_command_line(self):
+        """
+        Reconstruct the complete command line from stored context data.
+
+        Processes all stored command information to generate a complete
+        command line that can be used for job execution or logging.
+
+        Returns:
+            list[str]: Complete command line arguments as list of strings.
+        """
         parent = self._entry_point()
         command_line = self._reconstruct_family(parent)
         # logger.info(f'Cmd: {command_line}')
@@ -182,6 +356,28 @@ class CtxObjArguments:
 def get_setting_from_jobtype_for_gaussian(
     project_settings, jobtype, coordinates, step_size, num_steps
 ):
+    """
+    Get Gaussian job settings based on job type and parameters.
+
+    Retrieves appropriate settings configuration for different types of
+    Gaussian calculations including optimization, transition state search,
+    IRC calculations, and coordinate scans.
+
+    Args:
+        project_settings: Gaussian project settings object.
+        jobtype (str): Type of calculation (opt, ts, modred, irc, scan, etc.).
+        coordinates: Coordinate specification for modred/scan jobs.
+        step_size (float): Step size for scan calculations.
+        num_steps (int): Number of steps for scan calculations.
+
+    Returns:
+        GaussianJobSettings or None: Configured settings object for the job
+        type (or subclass), or None if the jobtype is unsupported.
+
+    Raises:
+        ValueError: If jobtype is None.
+        AssertionError: If required parameters are missing for specific job types.
+    """
     if jobtype is None:
         raise ValueError("Jobtype must be provided for Crest and Link job.")
 
@@ -226,6 +422,22 @@ def get_setting_from_jobtype_for_gaussian(
 
 
 def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
+    """
+    Validate scan coordinate parameters for Gaussian calculations.
+
+    Ensures all required parameters for coordinate scan calculations are
+    provided and non-None. Provides detailed error messages with usage
+    examples for missing parameters.
+
+    Args:
+        coordinates: Coordinate specification for the scan.
+        step_size (float): Step size for the scan.
+        num_steps (int): Number of scan steps.
+
+    Raises:
+        AssertionError: If any required parameter is None, with detailed
+            usage instructions.
+    """
     assert all(v is not None for v in [coordinates, step_size, num_steps]), (
         "Scanning coordinates, step size and number of steps of scan required!\n"
         f"But is coordinates: {coordinates}, step_size: {step_size}, num_steps: {num_steps}\n"
@@ -237,6 +449,29 @@ def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
 def get_setting_from_jobtype_for_orca(
     project_settings, jobtype, coordinates, dist_start, dist_end, num_steps
 ):
+    """
+    Get ORCA job settings based on job type and parameters.
+
+    Retrieves appropriate settings configuration for different types of
+    ORCA calculations including optimization, transition state search,
+    IRC calculations, and coordinate scans with distance specifications.
+
+    Args:
+        project_settings: ORCA project settings object.
+        jobtype (str): Type of calculation (opt, ts, modred, irc, scan, etc.).
+        coordinates: Coordinate specification for modred/scan jobs.
+        dist_start (float): Starting distance for scan calculations.
+        dist_end (float): Ending distance for scan calculations.
+        num_steps (int): Number of steps for scan calculations.
+
+    Returns:
+        ORCAJobSettings or None: Configured settings object for the job type
+        (or subclass), or None if the jobtype is unsupported.
+
+    Raises:
+        ValueError: If jobtype is None.
+        AssertionError: If required parameters are missing for specific job types.
+    """
     if jobtype is None:
         raise ValueError("Jobtype must be provided for Crest and Link job.")
 
@@ -284,6 +519,23 @@ def get_setting_from_jobtype_for_orca(
 
 
 def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
+    """
+    Validate scan coordinate parameters for ORCA calculations.
+
+    Ensures all required parameters for ORCA coordinate scan calculations
+    are provided and non-None. Provides detailed error messages with usage
+    examples and index conversion notes.
+
+    Args:
+        coordinates: Coordinate specification for the scan.
+        dist_start (float): Starting distance for the scan.
+        dist_end (float): Ending distance for the scan.
+        num_steps (int): Number of scan steps.
+
+    Raises:
+        AssertionError: If any required parameter is None, with detailed
+            usage instructions and indexing information.
+    """
     assert all(
         v is not None for v in [coordinates, dist_start, dist_end, num_steps]
     ), (

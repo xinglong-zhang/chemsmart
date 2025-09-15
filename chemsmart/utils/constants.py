@@ -1,4 +1,15 @@
-"""Constants not found in ase units."""
+"""
+Physical constants and energy unit conversions.
+
+Convenience constants and a small, explicit energy unit conversion helper
+that complement ASE's units. Includes common pressure/length/mass factors
+and robust conversions among Hartree, eV, kcal/mol, kJ/mol, and J/mol.
+
+Highlights:
+- `atm_to_pa`, `R`, `bohr_to_meter`, `amu_to_kg`, `hartree_to_joules`.
+- `energy_conversion(from_unit, to_unit, value)` to convert between energy
+  units (case-insensitive).
+"""
 
 import logging
 
@@ -7,6 +18,7 @@ from ase import units
 logger = logging.getLogger(__name__)
 
 
+# Pressure and fundamental constants
 atm_to_pa = 101325  # 1 atm = 101325 Pa
 R = units._k * units._Nav  # Ideal gas constant
 bohr_to_meter = (
@@ -28,26 +40,25 @@ joule_per_mol_to_hartree = 1 / (
 
 def energy_conversion(from_unit, to_unit, value=1.0):
     """
-    Convert energy values between different units.
+    Convert an energy value between supported units (case-insensitive).
 
-    Parameters
-    ----------
-    from_unit : str
-        The unit to convert from. Options: 'hartree', 'eV', 'kcal/mol', 'kJ/mol', 'J/mol'.
-    to_unit : str
-        The unit to convert to. Options: 'hartree', 'eV', 'kcal/mol', 'kJ/mol', 'J/mol'.
-    value : float, optional
-        The energy value to convert. Default is 1.0 (returns conversion factor).
+    Supports: Hartree, eV, kcal/mol, kJ/mol, and J/mol. Unit strings are
+    matched case-insensitively; canonical lower-case keys are
+    "hartree", "ev", "kcal/mol", "kj/mol", and "j/mol".
 
-    Returns
-    -------
-    float
-        The converted energy value.
+    Args:
+        from_unit (str): Unit to convert from. Options: 'hartree', 'eV',
+            'kcal/mol', 'kJ/mol', 'J/mol' (case-insensitive).
+        to_unit (str): Unit to convert to. Options: 'hartree', 'eV',
+            'kcal/mol', 'kJ/mol', 'J/mol' (case-insensitive).
+        value (float, optional): Energy value to convert. Defaults to 1.0
+            (i.e., returns the conversion factor).
 
-    Raises
-    ------
-    ValueError
-        If from_unit or to_unit is not supported.
+    Returns:
+        float or None: Converted value, or None if `value` is None.
+
+    Raises:
+        ValueError: If either unit is unsupported.
     """
     if value is None:
         return None

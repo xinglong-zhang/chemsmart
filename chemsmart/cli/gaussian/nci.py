@@ -23,12 +23,14 @@ def nci(ctx, **kwargs):
     project_settings = ctx.obj["project_settings"]
     nci_settings = project_settings.nci_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     nci_settings = nci_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(nci_settings)
 

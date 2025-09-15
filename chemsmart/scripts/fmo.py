@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+Frontier Molecular Orbital (FMO) analysis script.
+
+This script extracts and analyzes Frontier Molecular Orbital data from
+Gaussian and ORCA output files.
+"""
+
 import logging
 import os
 
@@ -29,6 +36,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Unit of FMO energy.",
 )
 def entry_point(filename, unit):
+    """
+    Calculate and display frontier molecular orbital (FMO) properties.
+    """
     create_logger()
     if filename.endswith(".log"):
         outputfile = Gaussian16Output(filename=filename)
@@ -47,8 +57,8 @@ def entry_point(filename, unit):
         energy_unit = "kcal/mol"
 
     # obtain chemical potential, μ = 1/2 * (lumo_energy + homo_energy)
-    #        Chemical hardness, n = 1/2 * (lumo_energy - homo_energy)
-    #        Electrophilicity index = ω = μ^2/2η
+    # Chemical hardness, η = 1/2 * (lumo_energy - homo_energy)
+    # Electrophilicity index = ω = μ^2/2η
 
     chemical_potential = 1 / 2 * (lumo_energy + homo_energy)
     chemical_hardness = 1 / 2 * (lumo_energy - homo_energy)
@@ -65,7 +75,8 @@ def entry_point(filename, unit):
         f"Chemical hardness, eta: {chemical_hardness:.4} {energy_unit}"
     )
     logger.info(
-        f"Electrophilicity Index, omega: {electrophilicity_index:.4} {energy_unit}"
+        f"Electrophilicity Index, omega: {electrophilicity_index:.4} "
+        f"{energy_unit}"
     )
 
 
