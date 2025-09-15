@@ -1,3 +1,16 @@
+"""
+Gaussian computational chemistry job classes and utilities.
+
+This module provides a comprehensive collection of Gaussian job types
+for various computational chemistry calculations including optimization,
+frequency analysis, single point calculations, IRC, NCI analysis,
+and more. All job classes inherit from the base GaussianJob class
+and provide specialized functionality for different calculation types.
+
+The module also includes job runners and utilities for managing
+Gaussian calculations in computational workflows.
+"""
+
 from .crest import GaussianCrestJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
@@ -17,6 +30,7 @@ from .ts import GaussianTSJob
 from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
 
+# Dynamically collect all registered Gaussian job subclasses
 jobs = GaussianJob.subclasses()
 
 __all__ = [

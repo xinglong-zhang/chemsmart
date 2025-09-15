@@ -7,9 +7,22 @@ from chemsmart.utils.utils import string2index_1based
 
 
 class XYZFile(FileMixin):
-    """xyz file object."""
+    """
+    Parser for XYZ coordinate files.
+
+    This class handles XYZ files containing molecular coordinates, supporting
+    both single-molecule files and multi-molecule files (e.g., conformer
+    ensembles). It can extract molecular geometries, comments, and energies
+    from XYZ file formats.
+    """
 
     def __init__(self, filename):
+        """
+        Initialize XYZ file parser.
+
+        Args:
+            filename (str): Path to the XYZ file to parse
+        """
         self.filename = filename
 
     def __repr__(self):
@@ -20,20 +33,51 @@ class XYZFile(FileMixin):
 
     @cached_property
     def num_atoms(self):
+        """
+        Get number of atoms from the first line of XYZ file.
+
+        Returns:
+            int: Number of atoms in the molecular structure
+        """
         return int(self.contents[0])
 
     @cached_property
     def molecule(self):
+        """
+        Get the last molecule from the XYZ file.
+
+        Returns:
+            Molecule: Last molecular structure in the file
+        """
         return self.get_molecules(index="-1")
 
     @cached_property
     def comments(self):
+        """
+        Get the last comment line from the XYZ file.
+
+        Returns:
+            str: Last comment line in the file
+        """
         return self.get_comments(index="-1")
 
     def _get_molecules_and_comments(self, index=":", return_list=False):
-        """Return a molecule object or a list of molecule objects from an xyz file.
-        The xzy file can either contain a single molecule, as conventionally, or a list
-        of molecules, such as those in crest_conformers.xyz file."""
+        """
+        Extract molecules and comments from XYZ file.
+
+        The XYZ file can contain a single molecule (conventional format) or
+        multiple molecules (e.g., conformer ensembles from CREST).
+
+        Args:
+            index (str): Index specification for molecule selection
+            return_list (bool): Whether to always return lists
+
+        Returns:
+            tuple: (molecules, comments) - molecules and their comment lines
+
+        Raises:
+            ValueError: If number of atoms is zero
+        """
         from chemsmart.io.molecules.structure import Molecule
 
         all_molecules = []
@@ -65,6 +109,19 @@ class XYZFile(FileMixin):
             return molecules, comments
 
     def get_molecules(self, index=":", return_list=False):
+        """
+        Extract molecular structures from XYZ file with energy assignment.
+
+        Parses comment lines to extract energy values and assigns them to
+        the corresponding Molecule objects.
+
+        Args:
+            index (str): Index specification for molecule selection
+            return_list (bool): Whether to return list format
+
+        Returns:
+            Molecule or list: Single molecule or list of molecules with energies
+        """
         # Ensure that when return_list=False, molecules is always treated as a list before iteration:
         molecules, comments = self._get_molecules_and_comments(
             index=index, return_list=True
@@ -91,6 +148,16 @@ class XYZFile(FileMixin):
             )  # Return a single molecule if list has one item
 
     def get_comments(self, index=":", return_list=False):
+        """
+        Extract comment lines from XYZ file.
+
+        Args:
+            index (str): Index specification for comment selection
+            return_list (bool): Whether to return list format
+
+        Returns:
+            str or list: Single comment or list of comments
+        """
         _, comments = self._get_molecules_and_comments(
             index=index, return_list=return_list
         )

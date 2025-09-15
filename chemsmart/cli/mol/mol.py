@@ -59,14 +59,16 @@ def click_pymol_visualization_options(f):
         "--file",
         type=str,
         default=None,
-        help="PyMOL file script or style. If not specified, defaults to zhang_group_pymol_style.py.",
+        help="PyMOL file script or style. If not specified, defaults to "
+        "zhang_group_pymol_style.py.",
     )
     @click.option(
         "-s",
         "--style",
         type=click.Choice(["pymol", "cylview"], case_sensitive=False),
         default=None,
-        help='PyMOL render style. Choices include "pymol" or "cylview", if using zhang_group_pymol_style.',
+        help='PyMOL render style. Choices include "pymol" or "cylview", if '
+        "using zhang_group_pymol_style.",
     )
     @click.option(
         "-t/",
@@ -99,7 +101,8 @@ def click_pymol_visualization_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates (bonds, angles and dihedrals) for labelling. 1-indexed.",
+        help="List of coordinates (bonds, angles and dihedrals) for "
+        "labelling. 1-indexed.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -136,7 +139,8 @@ def click_pymol_nci_options(f):
         "--intermediate",
         is_flag=True,
         default=False,
-        help="Plot NCI plots with intermediate range colors. Default to False.",
+        help="Plot NCI plots with intermediate range colors. Default to "
+        "False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -153,21 +157,24 @@ def click_pymol_mo_options(f):
         "--number",
         type=int,
         default=None,
-        help="Molecular Orbital number to be visualized (e.g., 31 will visualize MO #31). Default to None.",
+        help="Molecular Orbital number to be visualized (e.g., 31 will "
+        "visualize MO #31). Default to None.",
     )
     @click.option(
         "-h",
         "--homo",
         is_flag=True,
         default=False,
-        help="Plot the highest occupied molecular orbital (HOMO). Default to False.",
+        help="Plot the highest occupied molecular orbital (HOMO). "
+        "Default to False.",
     )
     @click.option(
         "-l",
         "--lumo",
         is_flag=True,
         default=False,
-        help="Plot the lowest unoccuplied molecular orbitals (LUMO). Default to False.",
+        help="Plot the lowest unoccuplied molecular orbitals (LUMO). "
+        "Default to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

@@ -35,12 +35,15 @@ def movie(
     """CLI for generating automatic PyMOL movie for rotating molecule and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com movie -v
-    This visualizes phenyldioxazolone.com file and saves as phenyldioxazolone_movie.pse
-    with added van der Waal's surface (-v) automatically.
-    If the movie mp4 file exists, it will not be overwritten unless -o is specified.
+    This visualizes phenyldioxazolone.com file and saves as
+    phenyldioxazolone_movie.pse with added van der Waal's surface (-v)
+    automatically.
+    If the movie mp4 file exists, it will not be overwritten unless -o is
+    specified.
         chemsmart run --debug mol -f vhr_ox_modred_ts10.log visualize -c [[1,2],[3,4,5],[1,3,4,5],[4,5],[4,6,9]]
-    This visualizes vhr_ox_modred_ts10.log file and saves as vhr_ox_modred_ts10_visualize.pse and add in additional
-    coordinates (bonds, angles and dihedrals) for labelling."""
+    This visualizes vhr_ox_modred_ts10.log file and saves as
+    vhr_ox_modred_ts10_visualize.pse and add in additional coordinates
+    (bonds, angles and dihedrals) for labelling."""
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -55,7 +58,8 @@ def movie(
                 f"Invalid coordinates input: {coordinates}. Error: {e}"
             )
             raise ValueError(
-                "Invalid coordinates input. Please provide a valid Python literal."
+                "Invalid coordinates input. Please provide a valid Python "
+                "literal."
             )
 
     # get label for the job

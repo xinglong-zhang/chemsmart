@@ -145,13 +145,15 @@ def click_gaussian_jobtype_options(f):
         "--jobtype",
         type=str,
         default=None,
-        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", '
+        '"sp"]',
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates to be fixed for modred or scan job. "
+        "1-indexed.",
     )
     @click.option(
         "-s",
@@ -221,7 +223,8 @@ def click_gaussian_solvent_options(f):
         "-r/ ",
         type=bool,
         default=False,
-        help="Whether to use solvent model in the job. Defaults to project settings.",
+        help="Whether to use solvent model in the job. Defaults to project "
+        "settings.",
     )
     @click.option(
         "-sm",
@@ -244,7 +247,8 @@ def click_gaussian_solvent_options(f):
         default=None,
         help="Additional solvent options in scrf=() route. "
         "E.g., `iterative` in scrf=(smd,water,iterative) via"
-        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp -so iterative",
+        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp "
+        "-so iterative",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -330,18 +334,23 @@ def gaussian(
     # get project settings
     project_settings = GaussianProjectSettings.from_project(project)
 
-    # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
+    # obtain Gaussian Settings from filename, if supplied;
+    #  otherwise return defaults
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filename is not supplied, eg,
+        #  get structure from pubchem
         job_settings = GaussianJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filename is supplied and Gaussian default settings are used:\n"
+            f"{job_settings.__dict__} "
         )
     elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
+        # filename supplied - we would want to use the settings from here
+        #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
-    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
+    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
+    #  ".cif", ".traj", ".gro", ".db")):
     else:
         job_settings = GaussianJobSettings.default()
     # else:
@@ -393,11 +402,13 @@ def gaussian(
     molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
+            "[filename] or [pubchem] has not been specified!\n"
+            "Please specify one of them!"
         )
     if filename and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filename] and [pubchem] have been specified!\n"
+            "Please specify only one of them."
         )
 
     if filename:
@@ -421,7 +432,8 @@ def gaussian(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give Gaussian input filename or name to be be appended, but not both!"
+            "Only give Gaussian input filename or name to be be appended,"
+            "but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
