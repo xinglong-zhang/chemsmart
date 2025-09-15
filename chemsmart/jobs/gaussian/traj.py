@@ -30,9 +30,15 @@ class GaussianTrajJob(GaussianJob):
 
     The workflow includes:
     1. Extract structures from trajectory end portion
-    2. Group similar structures to identify unique conformations
+    2. Group similar structures to identify unique conformations (default: no grouping)
     3. Sort structures by energy for prioritization
     4. Run Gaussian calculations on selected unique structures
+
+    Note:
+        By default, no structure grouping is performed (grouping_strategy=None),
+        meaning all trajectory structures will be treated as unique and potentially
+        processed. To enable structure grouping and identify truly unique conformations,
+        specify a grouping strategy (e.g., 'rmsd', 'tanimoto') via the CLI -g option.
 
     Attributes:
         TYPE (str): Job type identifier ('g16traj').
@@ -61,7 +67,7 @@ class GaussianTrajJob(GaussianJob):
         label,
         jobrunner,
         num_structures_to_run=None,
-        grouping_strategy="rmsd",
+        grouping_strategy=None,
         num_procs=1,
         proportion_structures_to_use=0.1,
         skip_completed=True,
@@ -81,8 +87,7 @@ class GaussianTrajJob(GaussianJob):
             jobrunner: Job execution handler.
             num_structures_to_run (int, optional): Number of structures
                 to process. If None, process all unique structures.
-            grouping_strategy (str): Structure grouping method
-                (default: "rmsd").
+            grouping_strategy (str): Structure grouping method.
             num_procs (int): Number of processes for parallel execution
                 (currently not implemented).
             proportion_structures_to_use (float): Fraction of trajectory
@@ -121,9 +126,13 @@ class GaussianTrajJob(GaussianJob):
             round(len(molecules) * proportion_structures_to_use, 1)
         )
         self.molecules = molecules[-last_num_structures:]
-        self.grouper = StructureGrouperFactory.create(
-            self.molecules, strategy=self.grouping_strategy, **kwargs
-        )
+        if grouping_strategy is not None:
+            self.grouper = StructureGrouperFactory.create(
+                self.molecules, strategy=self.grouping_strategy, **kwargs
+            )
+            self.grouper.group()
+        else:
+            self.grouper = None
 
     @cached_property
     def num_structures(self):
@@ -191,6 +200,8 @@ class GaussianTrajJob(GaussianJob):
         Returns:
             list: Unique Molecule objects after grouping.
         """
+        if self.grouper is None:
+            return self.molecules
         return self.grouper.unique()
 
     @property
@@ -211,6 +222,8 @@ class GaussianTrajJob(GaussianJob):
         Returns:
             int: Count of structurally distinct conformations.
         """
+        if self.grouper is None:
+            return len(self.molecules)
         return len(self.unique_structures)
 
     def _prepare_all_jobs(self):

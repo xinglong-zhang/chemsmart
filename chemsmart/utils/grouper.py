@@ -121,7 +121,7 @@ class MoleculeGrouper(ABC):
                 Defaults to 1.
         """
         self.molecules = molecules
-        self.num_procs = max(1, num_procs)
+        self.num_procs = int(max(1, num_procs))
 
         self._validate_inputs()
 
@@ -189,7 +189,7 @@ class RMSDGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.5,  # RMSD threshold for grouping
+        threshold=None,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # Option to ignore H atoms for grouping
@@ -207,6 +207,8 @@ class RMSDGrouper(MoleculeGrouper):
                 RMSD calculation. Defaults to False.
         """
         super().__init__(molecules, num_procs)
+        if threshold is None:
+            threshold = 0.5
         self.threshold = threshold  # RMSD threshold for grouping
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
@@ -311,6 +313,13 @@ class RMSDGrouper(MoleculeGrouper):
             pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
 
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
+            f"ignore_hydrogens={self.ignore_hydrogens})"
+        )
 
 
 class RMSDGrouperSharedMemory(MoleculeGrouper):
@@ -439,7 +448,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         """
         i, j = idx_pair
 
-        # ✅ **Read from Shared Memory ONCE (No repeated locking)**
+        # Read from Shared Memory ONCE (No repeated locking)
         pos1 = np.array(shared_positions[i])  # Copying reduces lock contention
         pos2 = np.array(shared_positions[j])
 
@@ -478,7 +487,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.9,  # Tanimoto similarity threshold
+        threshold=None,  # Tanimoto similarity threshold
         num_procs: int = 1,
         use_rdkit_fp: bool = True,  # Allows switching between RDKit FP and RDKFingerprint
     ):
@@ -493,6 +502,8 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 RDKFingerprint method (False). Defaults to True.
         """
         super().__init__(molecules, num_procs)
+        if threshold is None:
+            threshold = 0.9
         self.threshold = threshold
         self.use_rdkit_fp = use_rdkit_fp  # Choose fingerprinting method
 
@@ -797,7 +808,7 @@ class ConnectivityGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
-        threshold: float = 0.0,  # Buffer for bond cutoff
+        threshold=None,  # Buffer for bond cutoff
         adjust_H: bool = True,
     ):
         """
@@ -811,6 +822,8 @@ class ConnectivityGrouper(MoleculeGrouper):
                 Defaults to True.
         """
         super().__init__(molecules, num_procs)
+        if threshold is None:
+            threshold = 0.0
         self.threshold = threshold  # Buffer for bond cutoff
         self.adjust_H = adjust_H
 
@@ -1091,7 +1104,14 @@ class StructureGrouperFactory:
     """
 
     @staticmethod
-    def create(structures, strategy="rdkit", num_procs=1, **kwargs):
+    def create(
+        structures,
+        strategy="rmsd",
+        num_procs=1,
+        threshold=None,
+        ignore_hydrogens=None,
+        **kwargs,
+    ):
         """
         Create a molecular grouper instance by strategy name.
 
@@ -1113,13 +1133,33 @@ class StructureGrouperFactory:
         groupers = {
             "rmsd": RMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
-            "fingerprint": TanimotoSimilarityGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
-            "rdkit": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
         }
+
+        threshold_supported = {"rmsd", "tanimoto", "connectivity"}
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
-            return groupers[strategy](structures, num_procs, **kwargs)
+            if strategy in threshold_supported:
+                if strategy == "rmsd":
+                    return groupers[strategy](
+                        structures,
+                        threshold=threshold,
+                        num_procs=num_procs,
+                        ignore_hydrogens=ignore_hydrogens,
+                        **kwargs,
+                    )
+                return groupers[strategy](
+                    structures,
+                    threshold=threshold,
+                    num_procs=num_procs,
+                    **kwargs,
+                )
+            else:
+                return groupers[strategy](
+                    structures,
+                    num_procs=num_procs,
+                    **kwargs,
+                )
         raise ValueError(f"Unknown grouping strategy: {strategy}")

@@ -171,7 +171,6 @@ Grouper-Specific OPTIONS
    -  -  ``-g, --grouping-strategy``
       -  string
       -  Grouping strategy to use for grouping. Options: "rmsd", "tanimoto", "formula", "isomorphism", "connectivity"
-         (default = "rmsd")
 
    -  -  ``-i, --ignore-hydrogens``
       -  bool
@@ -179,7 +178,7 @@ Grouper-Specific OPTIONS
 
    -  -  ``-t, --threshold``
       -  float
-      -  Threshold value for grouping (Default = 0.5 for rmsd, 0.9 for tanimoto)
+      -  Threshold value for grouping (Default = 0.5 for rmsd, 0.9 for tanimoto, 0.0 for connectivity)
 
    -  -  ``-p, --num-procs``
       -  int
