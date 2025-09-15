@@ -8,6 +8,7 @@ progress and completion tracking across the ensemble.
 """
 
 import logging
+
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 
 logger = logging.getLogger(__name__)
