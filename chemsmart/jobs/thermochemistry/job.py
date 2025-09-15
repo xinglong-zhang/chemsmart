@@ -74,8 +74,7 @@ class ThermochemistryJob(Job):
             settings, ThermochemistryJobSettings
         ):
             raise ValueError(
-                f"Settings must be instance of {ThermochemistryJobSettings} "
-                f"for {self}, but is {settings} instead!"
+                f"Settings must be instance of {ThermochemistryJobSettings} for {self}, but is {settings} instead!"
             )
 
         # Validate molecule type
