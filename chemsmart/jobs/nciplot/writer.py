@@ -45,7 +45,7 @@ class NCIPLOTInputWriter(InputWriter):
         # Determine target directory
         if target_directory is not None:
             if not os.path.exists(target_directory):
-                logger.debug(f"Creating target directory: {target_directory}")
+                logger.debug(f"Creating target directory: {target_directory}.")
                 os.makedirs(target_directory)
             folder = target_directory
         else:
@@ -53,7 +53,7 @@ class NCIPLOTInputWriter(InputWriter):
         
         # Construct input file path
         job_inputfile = os.path.join(folder, f"{self.job.label}.nci")
-        logger.debug(f"Writing NCIPLOT input file: {job_inputfile}")
+        logger.debug(f"Writing NCIPLOT input file: {job_inputfile}.")
         
         with open(job_inputfile, "w") as f:
             self._write_all(f)
@@ -68,7 +68,7 @@ class NCIPLOTInputWriter(InputWriter):
         Args:
             f: File object to write to
         """
-        logger.debug("Writing all NCIPLOT input sections")
+        logger.debug("Writing all NCIPLOT input sections.")
         
         # Write input file sections in proper order
         self._write_filenames(f)
@@ -92,11 +92,11 @@ class NCIPLOTInputWriter(InputWriter):
         Args:
             f: File object to write to
         """
-        logger.debug("Writing NCIPLOT input files section")
+        logger.debug("Writing NCIPLOT input files section.")
         
         if self.job.filenames is None:
             # Case when job is created from PubChem structure
-            logger.debug("No filenames provided for NCIPLOT job")
+            logger.debug("No filenames provided for NCIPLOT job.")
             f.write("1\n")
             f.write(f"{self.job.label}.xyz\n")
         else:
@@ -107,16 +107,16 @@ class NCIPLOTInputWriter(InputWriter):
                     "at least one file."
                 )
             else:
-                logger.debug(f"Number of files: {number_of_files}")
+                logger.debug(f"Number of files: {number_of_files}.")
                 f.write(f"{number_of_files}\n")
-                logger.debug(f"Filenames: {self.job.filenames}")
+                logger.debug(f"Filenames: {self.job.filenames}.")
                 
                 for file in self.job.filenames:
                     # Convert non-supported formats to promolecular xyz
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
                     
-                    logger.debug(f"Writing filename: {file}")
+                    logger.debug(f"Writing filename: {file}.")
                     
                     # Determine file path based on execution mode
                     if self.jobrunner.scratch:
@@ -149,7 +149,7 @@ class NCIPLOTInputWriter(InputWriter):
         """
         rthres = self.settings.rthres
         if rthres is not None:
-            logger.debug("Writing rthres section")
+            logger.debug("Writing rthres section.")
             f.write(f"RTHRES {rthres}\n")
 
     def _write_ligand(self, f):
@@ -164,7 +164,7 @@ class NCIPLOTInputWriter(InputWriter):
         
         # Check that if one is not None, the other is not None
         if ligand_file_number is not None and ligand_radius is not None:
-            logger.debug("Writing ligand section")
+            logger.debug("Writing ligand section.")
             f.write(f"LIGAND {ligand_file_number} {ligand_radius}\n")
         elif ligand_file_number is not None or ligand_radius is not None:
             raise ValueError(
@@ -172,7 +172,7 @@ class NCIPLOTInputWriter(InputWriter):
                 "or both must be None."
             )
         else:
-            logger.debug("No ligand section written, both values are None")
+            logger.debug("No ligand section written, both values are None.")
 
     def _write_radius(self, f):
         """
@@ -186,13 +186,13 @@ class NCIPLOTInputWriter(InputWriter):
         
         # Check that if one is not None, the other is not None
         if radius_positions is not None and radius_r is not None:
-            logger.debug("Writing radius section")
+            logger.debug("Writing radius section.")
             radius_line = "RADIUS "
             
             # Clean up coordinate string format
             radius_positions = radius_positions.replace("(", "")
             radius_positions = radius_positions.replace(")", "")
-            logger.debug(f"radius_positions: {radius_positions}")
+            logger.debug(f"radius_positions: {radius_positions}.")
             
             coords = radius_positions.split(",")
             if len(coords) != 3:
@@ -216,7 +216,7 @@ class NCIPLOTInputWriter(InputWriter):
                 "both must be None."
             )
         else:
-            logger.debug("No radius section written, both values are None")
+            logger.debug("No radius section written, both values are None.")
 
     def _write_intermolecular(self, f):
         """
@@ -230,7 +230,7 @@ class NCIPLOTInputWriter(InputWriter):
 
         # Check if either intercut1 or intercut2 is provided
         if intercut1 is not None or intercut2 is not None:
-            logger.debug("Writing intermolecular section")
+            logger.debug("Writing intermolecular section.")
             f.write("INTERMOLECULAR\n")
 
             # Validate and convert intercut values to floats
@@ -242,11 +242,11 @@ class NCIPLOTInputWriter(InputWriter):
                 raise ValueError("INTERCUT values must be positive")
 
             f.write(f"INTERCUT {intercut1_val} {intercut2_val}\n")
-            logger.debug(f"Wrote INTERCUT {intercut1_val} {intercut2_val}")
+            logger.debug(f"Wrote INTERCUT {intercut1_val} {intercut2_val}.")
         else:
             logger.debug(
                 "No intermolecular section written, both intercut values "
-                "are None"
+                "are None."
             )
 
     def _write_increments(self, f):
@@ -258,7 +258,7 @@ class NCIPLOTInputWriter(InputWriter):
         """
         increments = self.settings.increments
         if increments is not None:
-            logger.debug("Writing increments section")
+            logger.debug("Writing increments section.")
             increments_line = "INCREMENTS "
             
             # Clean up increment string format
@@ -277,7 +277,7 @@ class NCIPLOTInputWriter(InputWriter):
             increments_line = increments_line.strip() + "\n"
             f.write(increments_line)
         else:
-            logger.debug("No increments section written, increments is None")
+            logger.debug("No increments section written, increments is None.")
 
     def _write_fragments(self, f):
         """Write the fragments section for the input file.
@@ -322,7 +322,7 @@ class NCIPLOTInputWriter(InputWriter):
         by the input order and atom n is the atomic label in ifile"""
         fragments = self.settings.fragments
         if fragments is not None:
-            logger.debug("Writing fragments section")
+            logger.debug("Writing fragments section.")
             f.write("FRAGMENTS\n")
             
             # Ensure fragments is a dictionary
@@ -340,7 +340,7 @@ class NCIPLOTInputWriter(InputWriter):
             else:
                 raise ValueError("Fragments must be a dictionary.")
         else:
-            logger.debug("No fragments section written, fragments is None")
+            logger.debug("No fragments section written, fragments is None.")
 
     def _write_cutoffs(self, f):
         """
@@ -352,11 +352,11 @@ class NCIPLOTInputWriter(InputWriter):
         cutoff_density_dat = self.settings.cutoff_density_dat
         cutoff_rdg_dat = self.settings.cutoff_rdg_dat
 
-        # Check if either cutoff parameter is provided
+        # Check if either cutoff_density_dat or cutoff_rdg_dat is provided
         if cutoff_density_dat is not None or cutoff_rdg_dat is not None:
-            logger.debug("Writing cutoffs section")
+            logger.debug("Writing cutoffs section.")
 
-            # Validate and convert cutoff values to floats with defaults
+            # Validate and convert intercut values to floats
             cutoff_density_dat = (
                 float(cutoff_density_dat)
                 if cutoff_density_dat is not None
@@ -372,11 +372,11 @@ class NCIPLOTInputWriter(InputWriter):
 
             f.write(f"CUTOFFS {cutoff_density_dat} {cutoff_rdg_dat}\n")
             logger.debug(
-                f"Wrote CUTOFFS {cutoff_density_dat} {cutoff_rdg_dat}"
+                f"Wrote CUTOFFS {cutoff_density_dat} {cutoff_rdg_dat}."
             )
         else:
             logger.debug(
-                "No CUTOFFS section written, both CUTOFFS values are None"
+                "No CUTOFFS section written, both CUTOFFS values are None."
             )
 
     def _write_cutplot(self, f):
@@ -397,7 +397,7 @@ class NCIPLOTInputWriter(InputWriter):
         if self.job.filenames is None:
             logger.debug(
                 "No filenames provided for NCIPLOT job. "
-                "Job likely generated from PubChem structure. "
+                "Job likely generated from PubChem structure.\n"
                 "Promolecular NCIPLOT job will be created."
             )
             density = "promolecular"
@@ -417,7 +417,7 @@ class NCIPLOTInputWriter(InputWriter):
                     "at least one file."
                 )
             else:
-                logger.debug(f"Number of files: {len(self.job.filenames)}")
+                logger.debug(f"Number of files: {len(self.job.filenames)}.")
                 first_filename = self.job.filenames[0]
                 if first_filename.endswith(".xyz"):
                     density = "promolecular"
@@ -436,7 +436,7 @@ class NCIPLOTInputWriter(InputWriter):
 
         # Check if either cutoff parameter is provided
         if cutoff_density_cube is not None or cutoff_rdg_cube is not None:
-            logger.debug("Writing CUTPLOT section")
+            logger.debug("Writing CUTPLOT section.")
 
             # Validate and convert cutoff values to floats
             cutoff_density_cube = (
@@ -456,11 +456,11 @@ class NCIPLOTInputWriter(InputWriter):
 
             f.write(f"CUTPLOT {cutoff_density_cube} {cutoff_rdg_cube}\n")
             logger.debug(
-                f"Wrote CUTPLOT {cutoff_density_cube} {cutoff_rdg_cube}"
+                f"Wrote CUTPLOT {cutoff_density_cube} {cutoff_rdg_cube}."
             )
         else:
             logger.debug(
-                "No CUTPLOT section written, both CUTPLOT values are None"
+                "No CUTPLOT section written, both CUTPLOT values are None."
             )
 
     def _write_dgrid(self, f):
@@ -472,10 +472,10 @@ class NCIPLOTInputWriter(InputWriter):
         """
         dgrid = self.settings.dgrid
         if dgrid:
-            logger.debug("Writing DGRID section")
+            logger.debug("Writing DGRID section.")
             f.write("DGRID\n")
         else:
-            logger.debug("No DGRID section written, dgrid is disabled or None")
+            logger.debug("No DGRID section written, dgrid is None.")
 
     def _write_integrate(self, f):
         """
@@ -486,11 +486,11 @@ class NCIPLOTInputWriter(InputWriter):
         """
         integrate = self.settings.integrate
         if integrate:
-            logger.debug("Writing INTEGRATE section")
+            logger.debug("Writing INTEGRATE section.")
             f.write("INTEGRATE\n")
         else:
             logger.debug(
-                "No INTEGRATE section written, integrate is disabled or None"
+                "No INTEGRATE section written, integrate is disabled or None."
             )
 
     def _write_ranges(self, f):
@@ -512,7 +512,7 @@ class NCIPLOTInputWriter(InputWriter):
                     try:
                         r1, r2 = float(r[0]), float(r[1])
                         f.write(f"{r1} {r2}\n")
-                        logger.debug(f"Wrote range: {r1} {r2}")
+                        logger.debug(f"Wrote range: {r1} {r2}.")
                     except ValueError as e:
                         raise ValueError(
                             f"Invalid range values: {r}. Error: {e}"
@@ -523,7 +523,7 @@ class NCIPLOTInputWriter(InputWriter):
                         f"values. Invalid range: {r}"
                     )
         else:
-            logger.debug("No RANGES section written, ranges is None")
+            logger.debug("No RANGES section written, both values are None.")
 
     def _write_grid_quality(self, f):
         """
@@ -538,5 +538,5 @@ class NCIPLOTInputWriter(InputWriter):
             f.write(f"{grid_quality.upper()}\n")
         else:
             logger.debug(
-                "No GRID QUALITY section written, using default grids"
+                "No GRID QUALITY section written, using default grids."
             )

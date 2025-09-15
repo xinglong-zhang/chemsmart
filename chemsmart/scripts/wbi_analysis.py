@@ -63,7 +63,7 @@ def entry_point(filename, numbers):
     # Display specific atom charges if requested
     if numbers is not None:
         for n in numbers:
-            # Get natural charge value for the specified atom number
+            # Get natural population analysis value corresponding to the atom number
             charge_value = get_value_by_number(n, natural_charges)
             logger.info(f"Natural Charge at atom {n} is {charge_value:.>3f}.")
             logger.info("\n")
