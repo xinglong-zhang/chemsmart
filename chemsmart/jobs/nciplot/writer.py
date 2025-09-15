@@ -1,3 +1,10 @@
+"""
+NCIPLOT input file writer.
+
+This module contains the NCIPLOTInputWriter class for generating
+NCIPLOT input files with proper formatting and validation.
+"""
+
 import logging
 import os.path
 
@@ -7,20 +14,47 @@ logger = logging.getLogger(__name__)
 
 
 class NCIPLOTInputWriter(InputWriter):
-    """Class that writes NCIPLOT input files for a job."""
+    """
+    Class that writes NCIPLOT input files for a job.
+
+    This class handles the generation of properly formatted NCIPLOT input
+    files with all necessary parameters and sections.
+
+    Attributes:
+        job (NCIPLOTJob): Target job for which the input is generated.
+        settings (NCIPLOTJobSettings): Settings used to populate sections.
+        jobrunner (NCIPLOTJobRunner): Runner providing paths/scratch context.
+    """
 
     def write(self, **kwargs):
+        """
+        Write the NCIPLOT input file.
+
+        Args:
+            **kwargs: Additional keyword arguments for writing
+        """
         self._write(**kwargs)
 
     def _write(self, target_directory=None):
+        """
+        Internal method to write the input file.
+
+        Args:
+            target_directory: Directory where input file should be written
+        """
+        # Determine target directory
         if target_directory is not None:
             if not os.path.exists(target_directory):
+                logger.debug(f"Creating target directory: {target_directory}.")
                 os.makedirs(target_directory)
             folder = target_directory
         else:
             folder = self.job.folder
+        
+        # Construct input file path
         job_inputfile = os.path.join(folder, f"{self.job.label}.nci")
-        logger.debug(f"Writing NCIPLOT input file: {job_inputfile}")
+        logger.debug(f"Writing NCIPLOT input file: {job_inputfile}.")
+        
         with open(job_inputfile, "w") as f:
             self._write_all(f)
             logger.info(
@@ -28,6 +62,15 @@ class NCIPLOTInputWriter(InputWriter):
             )
 
     def _write_all(self, f):
+        """
+        Write all sections of the NCIPLOT input file.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing all NCIPLOT input sections.")
+        
+        # Write input file sections in proper order
         self._write_filenames(f)
         self._write_rthres(f)
         self._write_ligand(f)
@@ -43,9 +86,16 @@ class NCIPLOTInputWriter(InputWriter):
         self._write_grid_quality(f)
 
     def _write_filenames(self, f):
-        logger.debug("Writing NCIPLOT input files.")
+        """
+        Write the filenames section for the input file.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing NCIPLOT input files section.")
+        
         if self.job.filenames is None:
-            # this is the case when the job is created from PubChem
+            # Case when job is created from PubChem structure
             logger.debug("No filenames provided for NCIPLOT job.")
             f.write("1\n")
             f.write(f"{self.job.label}.xyz\n")
@@ -53,16 +103,22 @@ class NCIPLOTInputWriter(InputWriter):
             number_of_files = len(self.job.filenames)
             if number_of_files == 0:
                 raise ValueError(
-                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                    "No filenames provided for NCIPLOT job. Please provide "
+                    "at least one file."
                 )
             else:
-                logger.debug(f"Number of files: {number_of_files}")
+                logger.debug(f"Number of files: {number_of_files}.")
                 f.write(f"{number_of_files}\n")
-                logger.debug(f"Filenames: {self.job.filenames}")
+                logger.debug(f"Filenames: {self.job.filenames}.")
+                
                 for file in self.job.filenames:
+                    # Convert non-supported formats to promolecular xyz
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
-                    logger.debug(f"Writing filename: {file}")
+                    
+                    logger.debug(f"Writing filename: {file}.")
+                    
+                    # Determine file path based on execution mode
                     if self.jobrunner.scratch:
                         file_path = os.path.join(
                             self.jobrunner.scratch_dir,
@@ -74,51 +130,76 @@ class NCIPLOTInputWriter(InputWriter):
                     else:
                         file_path = self.job.folder
                         logger.info(f"Running in job directory: {file_path}")
+                    
+                    # Validate file existence
                     full_path = os.path.join(file_path, file)
                     if not os.path.exists(full_path):
                         raise FileNotFoundError(
-                            f"File {os.path.abspath(full_path)} does not exist. Please check the file path."
+                            f"File {os.path.abspath(full_path)} does not "
+                            f"exist. Please check the file path."
                         )
                     f.write(f"{file}\n")
 
     def _write_rthres(self, f):
-        """Write the rthres section for the input file."""
+        """
+        Write the rthres section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         rthres = self.settings.rthres
         if rthres is not None:
             logger.debug("Writing rthres section.")
             f.write(f"RTHRES {rthres}\n")
 
     def _write_ligand(self, f):
-        """Write the ligand section for the input file."""
+        """
+        Write the ligand section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         ligand_file_number = self.settings.ligand_file_number
         ligand_radius = self.settings.ligand_radius
-        # check that if one is not None, the other is not None
+        
+        # Check that if one is not None, the other is not None
         if ligand_file_number is not None and ligand_radius is not None:
             logger.debug("Writing ligand section.")
             f.write(f"LIGAND {ligand_file_number} {ligand_radius}\n")
         elif ligand_file_number is not None or ligand_radius is not None:
             raise ValueError(
-                "Both ligand_file_number and ligand_radius must be provided or both must be None."
+                "Both ligand_file_number and ligand_radius must be provided "
+                "or both must be None."
             )
         else:
             logger.debug("No ligand section written, both values are None.")
 
     def _write_radius(self, f):
-        """Write the radius section for the input file."""
+        """
+        Write the radius section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         radius_positions = self.settings.radius_positions
         radius_r = self.settings.radius_r
-        # check that if one is not None, the other is not None
+        
+        # Check that if one is not None, the other is not None
         if radius_positions is not None and radius_r is not None:
             logger.debug("Writing radius section.")
             radius_line = "RADIUS "
+            
+            # Clean up coordinate string format
             radius_positions = radius_positions.replace("(", "")
             radius_positions = radius_positions.replace(")", "")
-            logger.debug(f"radius_positions: {radius_positions}")
+            logger.debug(f"radius_positions: {radius_positions}.")
+            
             coords = radius_positions.split(",")
             if len(coords) != 3:
                 raise ValueError(
                     "Expected exactly 3 coordinates in 'x,y,z' format"
                 )
+            
             # Convert to floats to validate numeric values
             for c in coords:
                 try:
@@ -126,25 +207,28 @@ class NCIPLOTInputWriter(InputWriter):
                     radius_line += f"{c} "
                 except ValueError:
                     raise ValueError(f"Invalid coordinate value: {c}")
+            
             radius_line += f"{radius_r}\n"
             f.write(radius_line)
         elif radius_positions is not None or radius_r is not None:
             raise ValueError(
-                "Both radius_positions and radius_r must be provided or both must be None."
+                "Both radius_positions and radius_r must be provided or "
+                "both must be None."
             )
         else:
             logger.debug("No radius section written, both values are None.")
 
     def _write_intermolecular(self, f):
-        """Write the intermolecular section for the input file.
+        """
+        Write the intermolecular section for the input file.
 
         Args:
-            f: File object to write to.
+            f: File object to write to
         """
         intercut1 = self.settings.intercut1
         intercut2 = self.settings.intercut2
 
-        # check if either intercut1 or intercut2 is provided
+        # Check if either intercut1 or intercut2 is provided
         if intercut1 is not None or intercut2 is not None:
             logger.debug("Writing intermolecular section.")
             f.write("INTERMOLECULAR\n")
@@ -153,33 +237,43 @@ class NCIPLOTInputWriter(InputWriter):
             intercut1_val = float(intercut1) if intercut1 is not None else 0.95
             intercut2_val = float(intercut2) if intercut2 is not None else 0.75
 
-            # ensure values are positive
+            # Ensure values are positive
             if intercut1_val <= 0 or intercut2_val <= 0:
                 raise ValueError("INTERCUT values must be positive")
 
             f.write(f"INTERCUT {intercut1_val} {intercut2_val}\n")
-            logger.debug(f"Wrote INTERCUT {intercut1_val} {intercut2_val}")
+            logger.debug(f"Wrote INTERCUT {intercut1_val} {intercut2_val}.")
         else:
             logger.debug(
-                "No intermolecular section written, both intercut values are None."
+                "No intermolecular section written, both intercut values "
+                "are None."
             )
 
     def _write_increments(self, f):
-        """Write the increments section for the input file."""
+        """
+        Write the increments section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         increments = self.settings.increments
         if increments is not None:
             logger.debug("Writing increments section.")
             increments_line = "INCREMENTS "
+            
+            # Clean up increment string format
             increments = increments.replace("(", "")
             increments = increments.replace(")", "")
             incr = increments.split(",")
 
+            # Validate each increment value
             for i in incr:
                 try:
                     float(i)
                     increments_line += f"{i} "
                 except ValueError:
                     raise ValueError(f"Invalid increment value: {i}")
+            
             increments_line = increments_line.strip() + "\n"
             f.write(increments_line)
         else:
@@ -230,11 +324,12 @@ class NCIPLOTInputWriter(InputWriter):
         if fragments is not None:
             logger.debug("Writing fragments section.")
             f.write("FRAGMENTS\n")
+            
             # Ensure fragments is a dictionary
             if isinstance(fragments, dict):
                 for key, value in fragments.items():
                     if isinstance(value, (list, tuple)):
-                        # Convert each value to a string of space-separated atoms
+                        # Convert each value to space-separated atoms string
                         atom_string = " ".join(map(str, value))
                         f.write(f"  {key} {atom_string}\n")
                     else:
@@ -248,11 +343,16 @@ class NCIPLOTInputWriter(InputWriter):
             logger.debug("No fragments section written, fragments is None.")
 
     def _write_cutoffs(self, f):
-        """Write the cutoffs section for the input file."""
+        """
+        Write the cutoffs section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         cutoff_density_dat = self.settings.cutoff_density_dat
         cutoff_rdg_dat = self.settings.cutoff_rdg_dat
 
-        # check if either cutoff_density_dat or cutoff_rdg_dat is provided
+        # Check if either cutoff_density_dat or cutoff_rdg_dat is provided
         if cutoff_density_dat is not None or cutoff_rdg_dat is not None:
             logger.debug("Writing cutoffs section.")
 
@@ -266,13 +366,13 @@ class NCIPLOTInputWriter(InputWriter):
                 float(cutoff_rdg_dat) if cutoff_rdg_dat is not None else 1.0
             )  # default value
 
-            # ensure values are positive
+            # Ensure values are positive
             if cutoff_density_dat <= 0 or cutoff_rdg_dat <= 0:
                 raise ValueError("CUTOFFS values must be positive")
 
             f.write(f"CUTOFFS {cutoff_density_dat} {cutoff_rdg_dat}\n")
             logger.debug(
-                f"Wrote CUTOFFS {cutoff_density_dat} {cutoff_rdg_dat}"
+                f"Wrote CUTOFFS {cutoff_density_dat} {cutoff_rdg_dat}."
             )
         else:
             logger.debug(
@@ -280,11 +380,14 @@ class NCIPLOTInputWriter(InputWriter):
             )
 
     def _write_cutplot(self, f):
-        """Write the CUTPLOT section for the input file.
+        """
+        Write the CUTPLOT section for the input file.
+
+        CUTPLOT controls density and RDG cutoffs for cube file generation.
+        Default values depend on the density type (promolecular vs SCF).
 
         Args:
-            f: File object to write to.
-            (promolecular or SCF).
+            f: File object to write to
         """
         cutoff_density_cube = self.settings.cutoff_density_cube
         cutoff_rdg_cube = self.settings.cutoff_rdg_cube
@@ -293,26 +396,28 @@ class NCIPLOTInputWriter(InputWriter):
         density = ""
         if self.job.filenames is None:
             logger.debug(
-                "No filenames provided for NCIPLOT job."
+                "No filenames provided for NCIPLOT job. "
                 "Job likely generated from PubChem structure.\n"
                 "Promolecular NCIPLOT job will be created."
             )
             density = "promolecular"
         else:
             logger.debug(
-                f"Filenames provided: {self.job.filenames} for NCIPLOT job."
+                f"Filenames provided: {self.job.filenames} for NCIPLOT job. "
                 "Determining density type based on file extension."
             )
             if not isinstance(self.job.filenames, (list, tuple)):
                 raise TypeError(
-                    f"Expected self.job.filenames to be a list or tuple, got {type(self.job.filenames).__name__}"
+                    f"Expected self.job.filenames to be a list or tuple, "
+                    f"got {type(self.job.filenames).__name__}"
                 )
             if len(self.job.filenames) == 0:
                 raise ValueError(
-                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                    "No filenames provided for NCIPLOT job. Please provide "
+                    "at least one file."
                 )
             else:
-                logger.debug(f"Number of files: {len(self.job.filenames)}")
+                logger.debug(f"Number of files: {len(self.job.filenames)}.")
                 first_filename = self.job.filenames[0]
                 if first_filename.endswith(".xyz"):
                     density = "promolecular"
@@ -321,6 +426,7 @@ class NCIPLOTInputWriter(InputWriter):
                 ) or first_filename.endswith(".wfx"):
                     density = "SCF"
 
+        # Set appropriate default values based on density type
         if density == "promolecular":
             default_density = 0.07  # Promolecular default for r1
             default_rdg = 0.3  # Promolecular default for r2
@@ -328,7 +434,7 @@ class NCIPLOTInputWriter(InputWriter):
             default_density = 0.05  # SCF default for r1
             default_rdg = 0.5  # SCF default for r2
 
-        # Check if either cutoff_density_cube or cutoff_rdg_cube is provided
+        # Check if either cutoff parameter is provided
         if cutoff_density_cube is not None or cutoff_rdg_cube is not None:
             logger.debug("Writing CUTPLOT section.")
 
@@ -350,7 +456,7 @@ class NCIPLOTInputWriter(InputWriter):
 
             f.write(f"CUTPLOT {cutoff_density_cube} {cutoff_rdg_cube}\n")
             logger.debug(
-                f"Wrote CUTPLOT {cutoff_density_cube} {cutoff_rdg_cube}"
+                f"Wrote CUTPLOT {cutoff_density_cube} {cutoff_rdg_cube}."
             )
         else:
             logger.debug(
@@ -358,7 +464,12 @@ class NCIPLOTInputWriter(InputWriter):
             )
 
     def _write_dgrid(self, f):
-        """Write the DGRID section for the input file."""
+        """
+        Write the DGRID section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         dgrid = self.settings.dgrid
         if dgrid:
             logger.debug("Writing DGRID section.")
@@ -367,44 +478,65 @@ class NCIPLOTInputWriter(InputWriter):
             logger.debug("No DGRID section written, dgrid is None.")
 
     def _write_integrate(self, f):
-        """Write the INTEGRATE section for the input file."""
+        """
+        Write the INTEGRATE section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         integrate = self.settings.integrate
         if integrate:
             logger.debug("Writing INTEGRATE section.")
             f.write("INTEGRATE\n")
         else:
-            logger.debug("No INTEGRATE section written, integrate is None.")
+            logger.debug(
+                "No INTEGRATE section written, integrate is disabled or None."
+            )
 
     def _write_ranges(self, f):
-        """Write the RANGES section for the input file."""
+        """
+        Write the RANGES section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         ranges = self.settings.ranges
         if ranges is not None:
             number_of_ranges = len(ranges)
             logger.debug("Writing RANGES section.")
             f.write(f"RANGE {number_of_ranges}\n")
+            
             for r in ranges:
                 if isinstance(r, (list, tuple)) and len(r) == 2:
                     # Ensure both values are floats
                     try:
                         r1, r2 = float(r[0]), float(r[1])
                         f.write(f"{r1} {r2}\n")
-                        logger.debug(f"Wrote range: {r1} {r2}")
+                        logger.debug(f"Wrote range: {r1} {r2}.")
                     except ValueError as e:
                         raise ValueError(
                             f"Invalid range values: {r}. Error: {e}"
                         )
                 else:
                     raise ValueError(
-                        f"Each range must be a list or tuple of two numeric values. Invalid range: {r}"
+                        f"Each range must be a list or tuple of two numeric "
+                        f"values. Invalid range: {r}"
                     )
         else:
             logger.debug("No RANGES section written, both values are None.")
 
     def _write_grid_quality(self, f):
-        """Write the GRID QUALITY section for the input file."""
+        """
+        Write the GRID QUALITY section for the input file.
+
+        Args:
+            f: File object to write to
+        """
         grid_quality = self.settings.grid_quality
         if grid_quality is not None:
             logger.debug("Writing GRID QUALITY section.")
             f.write(f"{grid_quality.upper()}\n")
         else:
-            logger.debug("No GRID QUALITY is given, default grids are used.")
+            logger.debug(
+                "No GRID QUALITY section written, using default grids."
+            )

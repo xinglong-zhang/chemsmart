@@ -13,19 +13,23 @@ logger = logging.getLogger(__name__)
 
 
 def click_thermochemistry_options(f):
-    """Common click options for Thermochemistry."""
+    """
+    Common click options for Thermochemistry.
+    """
 
     @click.option(
         "-d",
         "--directory",
         default=None,
-        help="Directory in which to compute thermochemistry for all files.",
+        help="Directory in which to compute thermochemistry for all "
+        "files.",
     )
     @click.option(
         "-t",
         "--filetype",
         default=None,
-        help="Type of file to calculate thermochemistry for, if directory is specified.",
+        help="Type of file to calculate thermochemistry for, if directory "
+        "is specified.",
     )
     @click.option(
         "-f",
@@ -41,7 +45,8 @@ def click_thermochemistry_options(f):
         default=None,
         type=float,
         show_default=True,
-        help="Cutoff frequency for entropy in wavenumbers, using Grimme's quasi-RRHO method.",
+        help="Cutoff frequency for entropy in wavenumbers, using Grimme's "
+        "quasi-RRHO method.",
     )
     @click.option(
         "-cst",
@@ -49,7 +54,8 @@ def click_thermochemistry_options(f):
         default=None,
         type=float,
         show_default=True,
-        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's quasi-RRHO method.",
+        help="Cutoff frequency for entropy in wavenumbers, using Truhlar's "
+        "quasi-RRHO method.",
     )
     @click.option(
         "-ch",
@@ -57,7 +63,8 @@ def click_thermochemistry_options(f):
         default=None,
         type=float,
         show_default=True,
-        help="Cutoff frequency for enthalpy in wavenumbers, using Head-Gordon's quasi-RRHO method.",
+        help="Cutoff frequency for enthalpy in wavenumbers, using "
+        "Head-Gordon's quasi-RRHO method.",
     )
     @click.option(
         "-c",
@@ -97,8 +104,9 @@ def click_thermochemistry_options(f):
         is_flag=True,
         default=False,
         show_default=True,
-        help="Use natural abundance weighted masses (True) or use most abundant masses (False).\n"
-        "Default to False, i.e., use single isotopic mass.",
+        help="Use natural abundance weighted masses (True) or use most "
+        "abundant masses (False).\nDefault to False, i.e., use single "
+        "isotopic mass.",
     )
     @click.option(
         "-u",
@@ -115,9 +123,9 @@ def click_thermochemistry_options(f):
         "--outputfile",
         default=None,
         type=str,
-        help="Output file to save the thermochemistry results. Defaults to None, which "
-        "will save results to file_basename.dat.\n If specified, it will save all "
-        "thermochemistry results to this file.",
+        help="Output file to save the thermochemistry results. Defaults to "
+        "None, which will save results to file_basename.dat.\nIf "
+        "specified, it will save all thermochemistry results to this file.",
     )
     @click.option(
         "-O",
@@ -167,13 +175,22 @@ def thermochemistry(
     skip_completed,
     **kwargs,
 ):
-    """CLI for running thermochemistry jobs using the chemsmart framework.
-    This command allows you to compute thermochemistry for Gaussian or ORCA output files.
-    `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log -f udc3_mCF3_monomer_c29.log  -T 298.15`
-    will save results to `udc3_mCF3_monomer_c9.dat` and `udc3_mCF3_monomer_c29.dat`.
-    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15 -o thermochemistry_results.dat`
-    will compute thermochemistry for all Gaussian log files in the specified directory and save to
-    `thermochemistry_results.dat`.
+    """
+    CLI for running thermochemistry jobs using the chemsmart framework.
+    
+    This command allows you to compute thermochemistry for Gaussian or ORCA 
+    output files.
+    
+    Examples:
+    `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log 
+    -f udc3_mCF3_monomer_c29.log -T 298.15`
+    will save results to `udc3_mCF3_monomer_c9.dat` and 
+    `udc3_mCF3_monomer_c29.dat`.
+    
+    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15 
+    -o thermochemistry_results.dat`
+    will compute thermochemistry for all Gaussian log files in the specified 
+    directory and save to `thermochemistry_results.dat`.
     """
     # validate input
     if directory and filenames:
@@ -184,7 +201,8 @@ def thermochemistry(
         raise ValueError("Must specify --filetype when using --directory.")
     if cutoff_entropy_grimme and cutoff_entropy_truhlar:
         raise ValueError(
-            "Cannot specify both --cutoff-entropy-grimme and --cutoff-entropy-truhlar. Please choose one."
+            "Cannot specify both --cutoff-entropy-grimme and "
+            "--cutoff-entropy-truhlar. Please choose one."
         )
 
     # choose entropy cutoff
@@ -251,7 +269,8 @@ def thermochemistry(
         for file in filenames:
             if not file.endswith((".log", ".out")):
                 raise ValueError(
-                    f"Unsupported file extension for '{file}'. Use .log or .out."
+                    f"Unsupported file extension for '{file}'. Use .log or "
+                    f".out."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,
@@ -277,7 +296,9 @@ def thermochemistry(
 @thermochemistry.result_callback()
 @click.pass_context
 def thermochemistry_process_pipeline(ctx, *args, **kwargs):
-    """Process the thermochemistry jobs."""
+    """
+    Process the thermochemistry jobs.
+    """
     logger.debug(f"Context object: {ctx.obj}")
     logger.debug(f"args: {args}")
     logger.debug(f"kwargs: {kwargs}")
@@ -298,7 +319,8 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
                 logger.error(f"Error processing job for {job.label}: {e}")
 
         if outputfile is None:
-            # If no output file is specified, save results to individual files
+            # If no output file is specified, save results to individual 
+            # files
             for job in jobs:
                 job.show_results()
         else:

@@ -59,10 +59,13 @@ def irc(
     """CLI for generating automatic PyMOL IRC movie and saving the pse file.
     Example usage:
         chemsmart run mol irc -r vhr_ox_modred_ts10_ircr.log -p vhr_ox_modred_ts10_ircf.log -c [1,12] -o
-    This makes an IRC movie from vhr_ox_modred_ts10_ircr.log and vhr_ox_modred_ts10_ircf.log, with coordinate labels.
-    If the movie mp4 file exists, it will not be overwritten unless -o is specified.
+    This makes an IRC movie from vhr_ox_modred_ts10_ircr.log and
+    vhr_ox_modred_ts10_ircf.log, with coordinate labels.
+    If the movie mp4 file exists, it will not be overwritten unless -o is
+    specified.
         chemsmart run mol irc -a vhr_ox_modred_ts10_irc.log -c [1,12]
-    for full irc run, with coordinate labels. This can also be used for any .log to obtain all structures as a movie.
+    for full irc run, with coordinate labels. This can also be used for any
+    .log to obtain all structures as a movie.
     """
 
     # get label for the job
@@ -77,7 +80,8 @@ def irc(
                 f"Invalid coordinates input: {coordinates}. Error: {e}"
             )
             raise ValueError(
-                "Invalid coordinates input. Please provide a valid Python literal."
+                "Invalid coordinates input. Please provide a valid Python "
+                "literal."
             )
 
     from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob

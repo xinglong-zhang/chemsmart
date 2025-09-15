@@ -1,10 +1,17 @@
-# Xinglong Zhang Group PyMOL Style Settings
-# Add_VDW creates a copy of an object with full-sized, transparent spheres
-# Bondi VDW values added below to override default PyMOL settings
+"""
+Xinglong ZHANG Group PyMOL Style Settings and Functions.
+
+This module provides comprehensive PyMOL styling functions and atomic
+Van der Waals radius definitions for high-quality molecular visualization.
+Includes rendering presets, molecular representation styles, and specialized
+visualization functions for NCI analysis.
+Add_VDW creates a copy of an object with full-sized, transparent spheres
+Bondi VDW values added below to override default PyMOL settings
+"""
 
 from pymol import cmd
 
-# Bondi VDW values
+# Bondi VDW values for accurate atomic radius representation
 cmd.alter("elem Ac", "vdw=2.00")
 cmd.alter("elem Al", "vdw=2.00")
 cmd.alter("elem Am", "vdw=2.00")
@@ -118,7 +125,13 @@ cmd.rebuild()
 
 
 def default_render():
-    """Set default rendering settings for PyMOL."""
+    """
+    Set default high-quality rendering settings for PyMOL.
+    
+    Configures PyMOL with optimized settings for publication-quality
+    static molecular visualizations with appropriate lighting, shadows,
+    and transparency settings.
+    """
     cmd.bg_color("white")
     cmd.set("ray_opaque_background", "off")
     cmd.util.ray_shadows("light")
@@ -137,7 +150,12 @@ cmd.extend("default_render", default_render)
 
 
 def movie_render():
-    """Set rendering settings for PyMOL movie."""
+    """
+    Set optimized rendering settings for PyMOL movie generation.
+    
+    Configures PyMOL for efficient animation rendering with reduced
+    shadow complexity while maintaining visual quality for video output.
+    """
     cmd.bg_color("white")
     cmd.set("ray_opaque_background", "off")
     cmd.set("specular", 0.25)
@@ -157,6 +175,12 @@ cmd.extend("movie_render", movie_render)
 
 
 def enhance_visuals():
+    """
+    Apply enhanced visual settings for superior molecular visualization.
+    
+    Sets up advanced lighting, material properties, and rendering
+    options for the highest quality molecular visualization output.
+    """
     # Set background color to white
     cmd.bg_color("white")
     cmd.set("ray_opaque_background", "off")
@@ -184,7 +208,16 @@ cmd.extend("enhance_visuals", enhance_visuals)
 
 
 def ballnstick(arg1):
-    """Set ball-and-stick representation for a given selection."""
+    """
+    Apply ball-and-stick molecular representation style.
+    
+    Creates a professional ball-and-stick representation with
+    appropriate atom colors, sizes, and bond styling for
+    clear molecular structure visualization.
+    
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
     cmd.show("sticks", arg1)
     cmd.show("spheres", arg1)
     cmd.color("gray85", "elem C and " + arg1)
@@ -202,6 +235,15 @@ def ballnstick(arg1):
 
 
 def pymol_style(arg1):
+    """
+    Apply standard PyMOL visualization style.
+    
+    Combines default rendering settings with ball-and-stick
+    representation for standard molecular visualization.
+    
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
     default_render()
     ballnstick(arg1)
 
@@ -210,6 +252,15 @@ cmd.extend("pymol_style", pymol_style)
 
 
 def cylview_style(arg1):
+    """
+    Apply CylView-inspired enhanced visualization style.
+    
+    Combines enhanced visual settings with ball-and-stick
+    representation for superior quality molecular visualization.
+    
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
     enhance_visuals()
     ballnstick(arg1)
 
@@ -218,6 +269,15 @@ cmd.extend("cylview_style", cylview_style)
 
 
 def movie_style(arg1):
+    """
+    Apply movie-optimized visualization style.
+    
+    Combines movie rendering settings with ball-and-stick
+    representation for animation-friendly molecular visualization.
+    
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
     movie_render()
     ballnstick(arg1)
 
@@ -226,6 +286,16 @@ cmd.extend("movie_style", movie_style)
 
 
 def add_vdw(arg1):
+    """
+    Add Van der Waals surface representation to molecules.
+    
+    Creates a transparent VDW surface overlay to show molecular
+    volume and surface accessibility alongside the standard
+    molecular representation.
+    
+    Args:
+        arg1: PyMOL selection string for target molecules.
+    """
     cmd.copy(arg1 + "_vdw", arg1)
     cmd.alter(arg1 + "_vdw and elem H", "vdw=1.09")
     cmd.rebuild()
@@ -240,6 +310,18 @@ cmd.extend("add_vdw", add_vdw)
 
 
 def nci(arg1, isosurface=0.5, range=1.0):
+    """
+    Generate NCI (Non-Covalent Interactions) visualization.
+    
+    Creates isosurface visualization of non-covalent interactions
+    using density and gradient cube files with rainbow coloring
+    to distinguish interaction types.
+    
+    Args:
+        arg1: Base name for cube files (expects -dens and -grad files).
+        isosurface: Isosurface level for visualization (default: 0.5).
+        range: Color range for interaction mapping (default: 1.0).
+    """
     dens_file = arg1 + "-dens"
     grad_file = arg1 + "-grad"
     cmd.isosurface("grad", grad_file, isosurface)
@@ -254,6 +336,17 @@ cmd.extend("nci", nci)
 
 
 def nci_intermediate(arg1, isosurface=0.5, range=1.0):
+    """
+    Generate intermediate NCI visualization with five-color scheme.
+    
+    Creates NCI visualization using a five-color gradient from
+    blue to red for more detailed interaction classification.
+    
+    Args:
+        arg1: Base name for cube files (expects -dens and -grad files).
+        isosurface: Isosurface level for visualization (default: 0.5).
+        range: Color range for interaction mapping (default: 1.0).
+    """
     dens_file = arg1 + "-dens"
     grad_file = arg1 + "-grad"
     cmd.isosurface("grad", grad_file, isosurface)
@@ -270,6 +363,18 @@ cmd.extend("nci_intermediate", nci_intermediate)
 
 
 def nci_binary(arg1, isosurface=0.5, range=1.0):
+    """
+    Generate binary NCI visualization with simplified coloring.
+    
+    Creates NCI visualization using a three-color scheme (blue,
+    white, red) for simplified attractive/repulsive interaction
+    classification.
+    
+    Args:
+        arg1: Base name for cube files (expects -dens and -grad files).
+        isosurface: Isosurface level for visualization (default: 0.5).
+        range: Color range for interaction mapping (default: 1.0).
+    """
     dens_file = arg1 + "-dens"
     grad_file = arg1 + "-grad"
     cmd.isosurface("grad", grad_file, isosurface)

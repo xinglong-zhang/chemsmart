@@ -30,17 +30,40 @@ logger = logging.getLogger(__name__)
 
 
 class ORCAOutput(ORCAFileMixin):
-    """ORCA output file with .out extension.
-    ORCA does NOT support any PBC calculations as of version 6.0.1."""
+    """
+    Parser for ORCA quantum chemistry output files.
+    
+    This class provides comprehensive parsing capabilities for ORCA output files,
+    extracting energies, molecular properties, geometries, frequencies, and
+    calculation statistics. Supports various ORCA calculation types including
+    single-point energies, geometry optimizations, and frequency calculations.
+    
+    Note: ORCA does not support periodic boundary condition (PBC) calculations
+    as of version 6.0.1.
+    
+    Args:
+        filename (str): Path to the ORCA output file
+    """
 
     def __init__(self, filename):
+        """
+        Initialize ORCA output file parser.
+        
+        Args:
+            filename (str): Path to the ORCA output file to parse
+        """
         self.filename = filename
 
     @property
     def normal_termination(self):
-        """Check if ORCA job has completed successfully.
+        """
+        Check if ORCA job has completed successfully.
 
-        Checks each of the output file line from the last line onwards.
+        Checks each output file line from the last line onwards for
+        successful termination indicators.
+        
+        Returns:
+            bool: True if job terminated normally, False otherwise
         """
 
         def _line_contains_success_indicators(line):
@@ -57,7 +80,12 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def has_forces(self):
-        """Check if the output file contains forces."""
+        """
+        Check if the output file contains force calculations.
+        
+        Returns:
+            bool: True if cartesian gradients/forces are present
+        """
         for line in self.contents:
             if "CARTESIAN GRADIENT" in line:
                 return True
@@ -65,6 +93,12 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def forces(self):
+        """
+        Extract forces for all molecular geometries.
+        
+        Returns:
+            list: List of force arrays for each geometry optimization step
+        """
         return self._get_forces_for_molecules()
 
     def _get_forces_for_molecules(self):
@@ -94,11 +128,15 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def energies(self):
-        """Return energies of the system from ORCA output file."""
+        """
+        Return energies of the system from ORCA output file.
+        """
         return self._get_energies()
 
     def _get_energies(self):
-        """Obtain a list of energies for each geometry optimization point."""
+        """
+        Obtain a list of energies for each geometry optimization point.
+        """
         energies = []
         for i, line in enumerate(self.contents):
             if "FINAL SINGLE POINT ENERGY" in line:
@@ -108,7 +146,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def input_coordinates_block(self):
-        """Obtain the coordinate block from the input that is printed in the outputfile."""
+        """
+        Obtain the coordinate block from the input that is printed in the outputfile.
+        """
         return self._get_first_structure_coordinates_block_in_output()
 
     def _get_input_structure_coordinates_block_in_output(self):
@@ -140,7 +180,9 @@ class ORCAOutput(ORCAFileMixin):
         return cb
 
     def _get_first_structure_coordinates_block_in_output(self):
-        """Obtain the first structure coordinates block in the output file."""
+        """
+        Obtain the first structure coordinates block in the output file.
+        """
         coordinates_block_lines_list = []
         pattern = re.compile(standard_coord_pattern)
         found_header = False
@@ -169,7 +211,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def frozen_atoms(self):
-        """Get frozen atoms from the ORCA output file."""
+        """
+        Get frozen atoms from the ORCA output file.
+        """
         frozen_atoms = []
         for line in self.contents:
             if re.match(orca_frozen_atoms_output_pattern, line):
@@ -181,16 +225,25 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def constrained_bond_lengths(self):
+        """
+        Get constrained bond lengths from the ORCA output file.
+        """
         constrained_bond_lengths, _, _ = self._get_constraints
         return constrained_bond_lengths
 
     @property
     def constrained_bond_angles(self):
+        """
+        Get constrained bond angles from the ORCA output file.
+        """
         _, constrained_bond_angles, _ = self._get_constraints
         return constrained_bond_angles
 
     @property
     def constrained_dihedral_angles(self):
+        """
+        Get constrained dihedral angles from the ORCA output file.
+        """
         _, _, constrained_dihedral_angles = self._get_constraints
         return constrained_dihedral_angles
 
@@ -265,7 +318,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def route_string(self):
-        """Route string for ORCA file, convert to lower case."""
+        """
+        Route string for ORCA file, convert to lower case.
+        """
         for line in self.contents:
             if line.startswith("|  1> !"):
                 return line.lower().split("1> ")[-1]
@@ -273,6 +328,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def natoms(self):
+        """
+        Get the number of atoms from the ORCA output file.
+        """
         for line in self.contents:
             if "Number of atoms" in line:
                 return int(line.split()[-1])
@@ -280,6 +338,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_basis_functions(self):
+        """
+        Get the number of basis functions from the ORCA output file.
+        """
         for line in self.contents:
             if "Number of basis functions" in line:
                 return int(line.split()[-1])
@@ -287,6 +348,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_shells(self):
+        """
+        Get the number of shells from the ORCA output file.
+        """
         for line in self.contents:
             if "Number of shells" in line:
                 return int(line.split()[-1])
@@ -294,7 +358,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def max_ang_mom(self):
-        """Max. angular momentum."""
+        """
+        Max. angular momentum.
+        """
         for line in self.contents:
             if "Maximum angular momentum" in line:
                 return int(line.split()[-1])
@@ -302,6 +368,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def contraction_scheme(self):
+        """
+        Get the contraction scheme used from the ORCA output file.
+        """
         for line in self.contents:
             if "Contraction scheme used" in line:
                 return line.split("...")[-1].strip()
@@ -309,6 +378,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def coulomb_range_seperation(self):
+        """
+        Get the Coulomb range separation parameter from the ORCA output file.
+        """
         for line in self.contents:
             if "Coulomb Range Separation" in line:
                 return line.split("...")[-1].strip()
@@ -316,6 +388,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def exchange_range_seperation(self):
+        """
+        Get the exchange range separation parameter from the ORCA output file.
+        """
         for line in self.contents:
             if "Exchange Range Separation" in line:
                 return line.split("...")[-1].strip()
@@ -323,6 +398,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def finite_nucleus_model(self):
+        """
+        Get the finite nucleus model setting from the ORCA output file.
+        """
         for line in self.contents:
             if "Finite Nucleus Model" in line:
                 return line.split("...")[-1].strip()
@@ -330,7 +408,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_j_fitting_basis(self):
-        """Auxiliary Coulomb fitting basis."""
+        """
+        Auxiliary Coulomb fitting basis.
+        """
         for line in self.contents:
             if "Auxiliary Coulomb fitting basis" in line:
                 return line.split("...")[-1].strip()
@@ -338,7 +418,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_j_num_basis_functions(self):
-        """# of basis functions in Aux-J."""
+        """
+        # of basis functions in Aux-J.
+        """
         for line in self.contents:
             if "# of basis functions in Aux-J" in line:
                 return int(line.split("...")[-1].strip())
@@ -346,7 +428,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_j_num_shells(self):
-        """# of shells in Aux-J."""
+        """
+        # of shells in Aux-J.
+        """
         for line in self.contents:
             if "# of shells in Aux-J" in line:
                 return int(line.split("...")[-1].strip())
@@ -354,7 +438,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_j_max_ang_mom(self):
-        """# of angular momentum in Aux-J."""
+        """
+        # of angular momentum in Aux-J.
+        """
         for line in self.contents:
             if "Maximum angular momentum in Aux-J" in line:
                 return int(line.split("...")[-1].strip())
@@ -362,7 +448,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_jk_fitting_basis(self):
-        """Auxiliary J/K fitting basis."""
+        """
+        Auxiliary J/K fitting basis.
+        """
         for line in self.contents:
             if "Auxiliary J/K fitting basis" in line:
                 return line.split("...")[-1].strip()
@@ -370,7 +458,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_k_fitting_basis(self):
-        """Auxiliary Correlation fitting basis."""
+        """
+        Auxiliary Correlation fitting basis.
+        """
         for line in self.contents:
             if "Auxiliary Correlation fitting basis" in line:
                 return line.split("...")[-1].strip()
@@ -378,7 +468,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def aux_external_fitting_basis(self):
-        """Auxiliary 'external' fitting basis."""
+        """
+        Auxiliary 'external' fitting basis.
+        """
         for line in self.contents:
             if "Auxiliary 'external' fitting basis" in line:
                 return line.split("...")[-1].strip()
@@ -386,7 +478,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def integral_threshold(self):
-        """Integral threshold."""
+        """
+        Integral threshold.
+        """
         for line in self.contents:
             if "Integral threshold" in line:
                 return float(line.split()[-1])
@@ -394,7 +488,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def primitive_cutoff(self):
-        """Primitive cut-off."""
+        """
+        Primitive cut-off.
+        """
         for line in self.contents:
             if "Primitive cut-off" in line:
                 return float(line.split()[-1])
@@ -402,7 +498,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def primitive_pair_threshold(self):
-        """Primitive pair pre-selection threshold."""
+        """
+        Primitive pair pre-selection threshold.
+        """
         for line in self.contents:
             if "Primitive pair pre-selection threshold" in line:
                 return float(line.split()[-1])
@@ -410,7 +508,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def ri_approx(self):
-        """RI-approximation to the Coulomb term."""
+        """
+        RI-approximation to the Coulomb term.
+        """
         for line in self.contents:
             if "RI-approximation to the Coulomb term is turned" in line:
                 return line.split()[-1] == "on"
@@ -418,7 +518,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def rij_cosx(self):
-        """RIJ-COSX(HFX calculated with COS-X))."""
+        """
+        RIJ-COSX(HFX calculated with COS-X)).
+        """
         for line in self.contents:
             if "RIJ-COSX (HFX calculated with COS-X)" in line:
                 return line.split()[-1] == "on"
@@ -426,6 +528,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def charge(self):
+        """
+        Get the total charge of the system from the ORCA output file.
+        """
         pattern = re.compile(r"Total Charge\s+Charge")
         for line in self.contents:
             if pattern.search(line):
@@ -434,6 +539,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def multiplicity(self):
+        """
+        Get the spin multiplicity of the system from the ORCA output file.
+        """
         pattern = re.compile(r"Multiplicity\s+Mult")
         for line in self.contents:
             if pattern.search(line):
@@ -442,6 +550,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_electrons(self):
+        """
+        Get the number of electrons from the ORCA output file.
+        """
         pattern = re.compile(r"Number of Electrons\s+NEL")
         for line in self.contents:
             if pattern.search(line):
@@ -450,6 +561,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def basis_dim(self):
+        """
+        Get the basis dimension from the ORCA output file.
+        """
         pattern = re.compile(r"Basis Dimension\s+Dim")
         for line in self.contents:
             if pattern.search(line):
@@ -458,7 +572,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def diis_acceleration(self):
-        """Convergence Acceleration using DIIS."""
+        """
+        Convergence Acceleration using DIIS.
+        """
         pattern = re.compile(r"DIIS\s+CNVDIIS")
         for line in self.contents:
             if pattern.search(line):
@@ -467,6 +583,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def scf_maxiter(self):
+        """
+        Get the maximum number of SCF iterations from the ORCA output file.
+        """
         pattern = re.compile(r"Maximum # iterations\s+MaxIter")
         for line in self.contents:
             if pattern.search(line):
@@ -475,6 +594,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def scf_convergence(self):
+        """
+        Get the SCF convergence criteria from the ORCA output file.
+        """
         pattern = re.compile(r"\|.*>.*convergence", re.IGNORECASE)
         for line in self.contents:
             if pattern.search(line):
@@ -485,6 +607,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def dipole(self):
+        """
+        Get dipole moment calculation status from the ORCA output file.
+        """
         pattern = re.compile(r"\|.*>.*dipole", re.IGNORECASE)
         for line in self.contents:
             if pattern.search(line):
@@ -495,6 +620,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def quadrupole(self):
+        """
+        Get quadrupole moment calculation status from the ORCA output file.
+        """
         pattern = re.compile(r"\|.*>.*quadrupole", re.IGNORECASE)
         # same as
         # `if '|' in line and '>' in line and 'quadrupole' in line:`
@@ -507,6 +635,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def converged(self):
+        """
+        Check if the ORCA optimization has converged.
+        """
         for line in self.contents:
             if "THE OPTIMIZATION HAS CONVERGED" in line:
                 return True
@@ -592,7 +723,9 @@ class ORCAOutput(ORCAFileMixin):
         return all_structures
 
     def _get_all_orientations(self):
-        """Extract all Cartesian coordinate blocks from the ORCA output."""
+        """
+        Extract all Cartesian coordinate blocks from the ORCA output.
+        """
         orientations = []
         for i, line in enumerate(self.contents):
             if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
@@ -612,7 +745,9 @@ class ORCAOutput(ORCAFileMixin):
         return orientations
 
     def _get_pbc_conditions(self):
-        """Extract periodic boundary conditions if present (rare in ORCA outputs)."""
+        """
+        Extract periodic boundary conditions if present (rare in ORCA outputs).
+        """
         # ORCA rarely includes PBC in standard outputs; this is a placeholder
         # If your ORCA output includes lattice vectors, implement parsing here
         return None  # Default: no PBC unless explicitly parsed
@@ -638,7 +773,8 @@ class ORCAOutput(ORCAFileMixin):
     #######  GET OPTIMIZED PARAMETERS ##############
     ################################################
     def get_optimized_parameters(self):
-        """Obtain a list of optimized geometry parameters in ORCA output.
+        """
+        Obtain a list of optimized geometry parameters in ORCA output.
 
         --- Optimized Parameters --- (Angstrom and degrees)
         Example in the output file:
@@ -724,6 +860,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def final_structure(self):
+        """
+        Get the final structure from the ORCA output file.
+        """
         if self.optimized_output_lines is not None:
             return self.optimized_structure
         try:
@@ -737,18 +876,29 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def last_structure(self):
-        """Return last structure, whether the output file has completed successfully or not."""
+        """
+        Return last structure, whether the output file has completed successfully or not.
+        """
         return self.all_structures[-1]
 
     @property
     def molecule(self):
+        """
+        Get the molecule structure from the ORCA output file.
+        """
         return self.final_structure
 
     def get_molecule(self, index="-1"):
+        """
+        Get a specific molecule structure by index from the ORCA output file.
+        """
         index = string2index_1based(index)
         return self.all_structures[index]
 
     def _get_molecule_from_sp_output_file(self):
+        """
+        Extract molecule structure from single point output file.
+        """
         molecule = None
 
         # if sp output file contains line read from .xyz
@@ -801,14 +951,22 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def empirical_formula(self):
+        """
+        Get the empirical formula of the molecule.
+        """
         return self.molecule.get_chemical_formula(empirical=True)
 
     @property
     def optimized_geometry(self):
+        """
+        Get the optimized geometry positions.
+        """
         return self.molecule.positions
 
     def _get_optimized_scf_energy(self):
-        """Get the final SCF energy in Hartree."""
+        """
+        Get the final SCF energy in Hartree.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if "TOTAL SCF ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -825,7 +983,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def _get_sp_scf_energy(self):
-        """Get the final SCF energy in Hartree."""
+        """
+        Get the final SCF energy in Hartree.
+        """
         if self.optimized_output_lines is None:
             for line in self.contents:
                 if "Total Energy       :" in line:
@@ -841,18 +1001,27 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def final_scf_energy(self):
+        """
+        Get the final SCF energy in Hartree.
+        """
         if self.optimized_output_lines is not None:
             return self._get_optimized_scf_energy()
         return self._get_sp_scf_energy()
 
     @property
     def final_energy(self):
+        """
+        Get the final energy in Hartree.
+        """
         if self.final_scf_energy is not None:
             return self.final_scf_energy
         return self.single_point_energy
 
     @property
     def single_point_energy(self):
+        """
+        Get the single point energy in Hartree.
+        """
         for line in self.contents:
             if "FINAL SINGLE POINT ENERGY" in line:
                 sp_energy_in_hartree = float(line.split()[-1])
@@ -861,12 +1030,16 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def single_point_energy_eV(self):
-        """Get the single point energy in eV."""
+        """
+        Get the single point energy in eV.
+        """
         return self.single_point_energy * units.Hartree
 
     @property
     def final_nuclear_repulsion(self):
-        """Get the final nuclear repulsion energy in Hartree."""
+        """
+        Get the final nuclear repulsion energy in Hartree.
+        """
         final_nuclear_repulsion_hartree, _ = (
             self._get_final_nuclear_repulsion()
         )
@@ -874,11 +1047,16 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def final_nuclear_repulsion_eV(self):
-        """Get the final nuclear repulsion energy in eV."""
+        """
+        Get the final nuclear repulsion energy in eV.
+        """
         _, final_nuclear_repulsion_eV = self._get_final_nuclear_repulsion()
         return final_nuclear_repulsion_eV
 
     def _get_final_nuclear_repulsion(self):
+        """
+        Extract the final nuclear repulsion energy in both Hartree and eV.
+        """
         final_nuclear_repulsion_hartree = []
         final_nuclear_repulsion_eV = []
         for line in self.contents:
@@ -900,7 +1078,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def final_electronic_energy(self):
-        """Get the final electronic energy in Hartree."""
+        """
+        Get the final electronic energy in Hartree.
+        """
         final_electronic_energy_hartree, _ = (
             self._get_final_electronic_energy()
         )
@@ -908,11 +1088,16 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def final_electronic_energy_eV(self):
-        """Get the final electronic energy in eV."""
+        """
+        Get the final electronic energy in eV.
+        """
         _, final_electronic_energy_eV = self._get_final_electronic_energy()
         return final_electronic_energy_eV * units.Hartree
 
     def _get_final_electronic_energy(self):
+        """
+        Extract the final electronic energy in both Hartree and eV.
+        """
         final_electronic_energy_hartree = []
         final_electronic_energy_eV = []
         for line in self.contents:
@@ -934,17 +1119,24 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def one_electron_energy(self):
-        """Get the one-electron energy in Hartree."""
+        """
+        Get the one-electron energy in Hartree.
+        """
         one_electron_energy_hartree, _ = self._get_one_electron_energy()
         return one_electron_energy_hartree
 
     @property
     def one_electron_energy_eV(self):
-        """Get the one-electron energy in eV."""
+        """
+        Get the one-electron energy in eV.
+        """
         _, one_electron_energy_eV = self._get_one_electron_energy()
         return one_electron_energy_eV * units.Hartree
 
     def _get_one_electron_energy(self):
+        """
+        Extract the one-electron energy in both Hartree and eV.
+        """
         one_electron_energy_hartree = []
         one_electron_energy_eV = []
         for line in self.contents:
@@ -963,17 +1155,24 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def two_electron_energy(self):
-        """Get the two-electron energy in Hartree."""
+        """
+        Get the two-electron energy in Hartree.
+        """
         two_electron_energy_hartree, _ = self._get_two_electron_energy()
         return two_electron_energy_hartree
 
     @property
     def two_electron_energy_eV(self):
-        """Get the two-electron energy in eV."""
+        """
+        Get the two-electron energy in eV.
+        """
         _, two_electron_energy_eV = self._get_two_electron_energy()
         return two_electron_energy_eV * units.Hartree
 
     def _get_two_electron_energy(self):
+        """
+        Extract the two-electron energy in both Hartree and eV.
+        """
         two_electron_energy_hartree = []
         two_electron_energy_eV = []
         for line in self.contents:
@@ -992,7 +1191,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def max_cosx_asymmetry_energy(self):
-        """Get the max COSX asymmetry energy in Hartree."""
+        """
+        Get the max COSX asymmetry energy in Hartree.
+        """
         max_cosx_asymmetry_energy_hartree = (
             self._get_max_cosx_asymmetry_energy()
         )
@@ -1001,12 +1202,17 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def max_cosx_asymmetry_energy_eV(self):
-        """Get the max COSX asymmetry energy in eV."""
+        """
+        Get the max COSX asymmetry energy in eV.
+        """
         max_cosx_asymmetry_energy_eV = self._get_max_cosx_asymmetry_energy_eV()
         if max_cosx_asymmetry_energy_eV is not None:
             return max_cosx_asymmetry_energy_eV[-1]
 
     def _get_max_cosx_asymmetry_energy(self):
+        """
+        Extract the max COSX asymmetry energy in Hartree.
+        """
         max_cosx_asymmetry_energy_hartree = []
         for line in self.contents:
             if "Max COSX asymmetry :" in line:
@@ -1016,6 +1222,9 @@ class ORCAOutput(ORCAFileMixin):
             return max_cosx_asymmetry_energy_hartree
 
     def _get_max_cosx_asymmetry_energy_eV(self):
+        """
+        Extract the max COSX asymmetry energy in eV.
+        """
         max_cosx_asymmetry_energy_hartree = (
             self._get_max_cosx_asymmetry_energy()
         )
@@ -1028,19 +1237,26 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def potential_energy(self):
-        """Get the potential energy in Hartree."""
+        """
+        Get the potential energy in Hartree.
+        """
         potential_energy_hartree = self._get_potential_energy_hartree()
         if potential_energy_hartree is not None:
             return potential_energy_hartree[-1]
 
     @property
     def potential_energy_eV(self):
-        """Get the potential energy in eV."""
+        """
+        Get the potential energy in eV.
+        """
         potential_energy_eV = self._get_potential_energy_eV()
         if potential_energy_eV is not None:
             return potential_energy_eV[-1]
 
     def _get_potential_energy_hartree(self):
+        """
+        Extract the potential energy in Hartree.
+        """
         potential_energy_hartree = []
         for line in self.contents:
             if "Potential Energy   :" in line:
@@ -1050,6 +1266,9 @@ class ORCAOutput(ORCAFileMixin):
             return potential_energy_hartree
 
     def _get_potential_energy_eV(self):
+        """
+        Extract the potential energy in eV.
+        """
         potential_energy_hartree = self._get_potential_energy_hartree()
         if len(potential_energy_hartree) != 0:
             potential_energy_eV = [
@@ -1059,19 +1278,26 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def kinetic_energy(self):
-        """Get the kinetic energy in Hartree."""
+        """
+        Get the kinetic energy in Hartree.
+        """
         kinetic_energy_in_hartree = self._get_kinetic_energy_hartree()
         if kinetic_energy_in_hartree is not None:
             return kinetic_energy_in_hartree[-1]
 
     @property
     def kinetic_energy_eV(self):
-        """Get the kinetic energy in eV."""
+        """
+        Get the kinetic energy in eV.
+        """
         kinetic_energy_eV = self._get_kinetic_energy_eV()
         if kinetic_energy_eV is not None:
             return kinetic_energy_eV[-1]
 
     def _get_kinetic_energy_hartree(self):
+        """
+        Extract the kinetic energy in Hartree.
+        """
         kinetic_energy_hartree = []
         for line in self.contents:
             if "Kinetic Energy     :" in line:
@@ -1081,6 +1307,9 @@ class ORCAOutput(ORCAFileMixin):
             return kinetic_energy_hartree
 
     def _get_kinetic_energy_eV(self):
+        """
+        Extract the kinetic energy in eV.
+        """
         kinetic_energy_eV = [
             value * units.Hartree
             for value in self._get_kinetic_energy_hartree()
@@ -1090,6 +1319,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def virial_ratio(self):
+        """
+        Get the virial ratio from the ORCA output file.
+        """
         virial_ratios = []
         for line in self.contents:
             if "Virial Ratio       :" in line:
@@ -1099,19 +1331,26 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def xc_energy(self):
-        """Get the XC energy in Hartree."""
+        """
+        Get the XC energy in Hartree.
+        """
         xc_energy_hartree = self._get_xc_energy_hartree()
         if xc_energy_hartree is not None:
             return xc_energy_hartree[-1]
 
     @property
     def xc_energy_eV(self):
-        """Get the XC energy in eV."""
+        """
+        Get the XC energy in eV.
+        """
         xc_energy_eV = self._get_xc_energy_eV()
         if xc_energy_eV is not None:
             return xc_energy_eV[-1]
 
     def _get_xc_energy_hartree(self):
+        """
+        Extract the XC energy in Hartree.
+        """
         xc_energy_hartree = []
         for line in self.contents:
             if "E(XC)              :" in line:
@@ -1120,6 +1359,9 @@ class ORCAOutput(ORCAFileMixin):
         return xc_energy_hartree
 
     def _get_xc_energy_eV(self):
+        """
+        Extract the XC energy in eV.
+        """
         xc_energy_hartree = self._get_xc_energy_hartree()
         if xc_energy_hartree is not None:
             xc_energy_eV = [
@@ -1129,7 +1371,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def dfet_embed_energy(self):
-        """Get the DFET-embed energy in Hartree."""
+        """
+        Get the DFET-embed energy in Hartree.
+        """
         dfet_embed_energy_hartree = self._get_dfet_embed_energy()
         if dfet_embed_energy_hartree is not None:
             print(dfet_embed_energy_hartree)
@@ -1137,13 +1381,17 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def dfet_embed_energy_eV(self):
-        """Get the DFET-embed energy in eV."""
+        """
+        Get the DFET-embed energy in eV.
+        """
         dfet_embed_energy_eV = self._get_dfet_embed_energy_eV()
         if dfet_embed_energy_eV is not None:
             return dfet_embed_energy_eV[-1]
 
     def _get_dfet_embed_energy(self):
-        """Get the DFET-embed energy in Hartree."""
+        """
+        Get the DFET-embed energy in Hartree.
+        """
         dfet_embed_energy_hartree = []
         for line in self.contents:
             if "DFET-embed. en.    :" in line:
@@ -1152,6 +1400,9 @@ class ORCAOutput(ORCAFileMixin):
             return dfet_embed_energy_hartree
 
     def _get_dfet_embed_energy_eV(self):
+        """
+        Get the DFET-embed energy in eV.
+        """
         dfet_embed_energy_hartree = self._get_dfet_embed_energy()
         if len(dfet_embed_energy_hartree) != 0:
             dfet_embed_energy_eV = [
@@ -1161,11 +1412,17 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def orbital_occupancy(self):
+        """
+        Get the orbital occupancy from the ORCA output file.
+        """
         _, orbital_occupancy = self._get_orbital_energies_and_occupancy()
         return orbital_occupancy
 
     @property
     def orbital_energies(self):
+        """
+        Get the orbital energies from the ORCA output file.
+        """
         orbital_energies, _ = self._get_orbital_energies_and_occupancy()
         return orbital_energies
 
@@ -1189,7 +1446,9 @@ class ORCAOutput(ORCAFileMixin):
         return orbital_energies, orbital_occupancy
 
     def _get_last_orbital_energies_section(self):
-        """Get the last section of orbital energies"""
+        """
+        Get the last section of orbital energies
+        """
         reversed_lines = []
         for line in reversed(self.contents):
             if "ORBITAL ENERGIES" not in line:
@@ -1200,6 +1459,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def homo_energy(self):
+        """
+        Get the HOMO (Highest Occupied Molecular Orbital) energy in eV.
+        """
         # get all filled orbitals
         orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
         occupied_energies = [
@@ -1210,6 +1472,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def lumo_energy(self):
+        """
+        Get the LUMO (Lowest Unoccupied Molecular Orbital) energy in eV.
+        """
         # get all empty orbitals
         orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
         unoccupied_energies = [
@@ -1220,6 +1485,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def fmo_gap(self):
+        """
+        Get the HOMO-LUMO gap in eV for closed-shell systems.
+        """
         if self.multiplicity == 1:
             return self.lumo_energy - self.homo_energy
         else:
@@ -1228,6 +1496,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mulliken_atomic_charges(self):
+        """
+        Get the Mulliken atomic charges from the ORCA output file.
+        """
         all_mulliken_atomic_charges = []
         for i, line_i in enumerate(self.contents):
             mulliken_atomic_charges = {}
@@ -1246,6 +1517,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def loewdin_atomic_charges(self):
+        """
+        Get the Loewdin atomic charges from the ORCA output file.
+        """
         all_loewdin_atomic_charges = []
         for i, line_i in enumerate(self.contents):
             loewdin_atomic_charges = {}
@@ -1268,6 +1542,9 @@ class ORCAOutput(ORCAFileMixin):
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def mayer_mulliken_gross_atomic_population(self):
+        """
+        Get Mayer Mulliken gross atomic population from the ORCA output file.
+        """
         all_mayer_mulliken_gross_atomic_population = []
         for i, line_i in enumerate(self.contents):
             mayer_mulliken_gross_atomic_population = {}
@@ -1289,6 +1566,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mayer_total_nuclear_charge(self):
+        """
+        Get Mayer total nuclear charge from the ORCA output file.
+        """
         all_mayer_total_nuclear_charge = []
         for i, line_i in enumerate(self.contents):
             mayer_total_nuclear_charge = {}
@@ -1310,6 +1590,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mayer_mulliken_gross_atomic_charge(self):
+        """
+        Get Mayer Mulliken gross atomic charge from the ORCA output file.
+        """
         all_mayer_mulliken_gross_atomic_charge = []
         for i, line_i in enumerate(self.contents):
             mayer_mulliken_gross_atomic_charge = {}
@@ -1331,6 +1614,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mayer_total_valence(self):
+        """
+        Get Mayer total valence from the ORCA output file.
+        """
         all_mayer_total_valence = []
         for i, line_i in enumerate(self.contents):
             mayer_total_valence = {}
@@ -1350,6 +1636,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mayer_bonded_valence(self):
+        """
+        Get Mayer bonded valence from the ORCA output file.
+        """
         all_mayer_bonded_valence = []
         for i, line_i in enumerate(self.contents):
             mayer_bonded_valence = {}
@@ -1369,6 +1658,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mayer_free_valence(self):
+        """
+        Get Mayer free valence from the ORCA output file.
+        """
         all_mayer_free_valence = []
         for i, line_i in enumerate(self.contents):
             mayer_free_valence = {}
@@ -1426,6 +1718,9 @@ class ORCAOutput(ORCAFileMixin):
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def total_integrated_alpha_density(self):
+        """
+        Get total integrated alpha density from Hirshfeld analysis.
+        """
         all_hirshfeld_alpha_density = []
         for i, line_i in enumerate(self.contents):
             if "HIRSHFELD ANALYSIS" in line_i:
@@ -1440,6 +1735,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def total_integrated_beta_density(self):
+        """
+        Get total integrated beta density from Hirshfeld analysis.
+        """
         all_hirshfeld_beta_density = []
         for i, line_i in enumerate(self.contents):
             if "HIRSHFELD ANALYSIS" in line_i:
@@ -1453,6 +1751,9 @@ class ORCAOutput(ORCAFileMixin):
         return all_hirshfeld_beta_density[-1]
 
     def _get_hirshfeld_charges_and_spins(self):
+        """
+        Get Hirshfeld charges and spin densities from the ORCA output file.
+        """
         all_hirshfeld_charges = []
         all_hirshfeld_spins = []
         for i, line_i in enumerate(self.contents):
@@ -1479,11 +1780,17 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def hirshfeld_charges(self):
+        """
+        Get Hirshfeld charges from the ORCA output file.
+        """
         hirshfeld_charges, _ = self._get_hirshfeld_charges_and_spins()
         return hirshfeld_charges
 
     @property
     def hirshfeld_spin_densities(self):
+        """
+        Get Hirshfeld spin densities from the ORCA output file.
+        """
         _, hirshfeld_spins = self._get_hirshfeld_charges_and_spins()
         return hirshfeld_spins
 
@@ -1627,7 +1934,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def rotational_symmetry_number(self):
-        """Obtain the rotational symmetry number from the output file."""
+        """
+        Obtain the rotational symmetry number from the output file.
+        """
         for i, line_i in enumerate(self.contents):
             if line_i == "ENTHALPY":
                 for line_j in self.contents[i:]:
@@ -1644,7 +1953,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def rotational_constants_in_wavenumbers(self):
-        """Rotational constants in wavenumbers."""
+        """
+        Rotational constants in wavenumbers.
+        """
         all_rotational_constants_in_wavenumbers = []
         for i, line_i in enumerate(self.contents):
             rotational_constants_in_wavenumbers = []
@@ -1687,6 +1998,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def vibrational_frequencies(self):
+        """
+        Get vibrational frequencies from the ORCA output file.
+        """
         vibrational_frequencies = []
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "VIBRATIONAL FREQUENCIES":
@@ -1817,6 +2131,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_vibration_modes(self):
+        """
+        Get the number of vibration modes from the ORCA output file.
+        """
         for i, line_i in enumerate(self.contents):
             if line_i == "IR SPECTRUM":
                 for line_j in self.contents[i + 6 :]:
@@ -1853,7 +2170,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def total_mass_in_amu(self):
-        """Total mass in amu."""
+        """
+        Total mass in amu.
+        """
         for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
                 for line_j in self.contents[i + 3 :]:
@@ -1864,6 +2183,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def mass(self):
+        """
+        Get the molecular mass in amu.
+        """
         return self.total_mass_in_amu
 
     @property
@@ -1944,7 +2266,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def thermal_vibration_correction(self):
-        """E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states."""
+        """
+        E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -1958,6 +2282,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def thermal_vibration_correction_in_eV(self):
+        """
+        Get thermal vibration correction in eV.
+        """
         return self.thermal_vibration_correction * units.Hartree
 
     @property
@@ -1977,11 +2304,16 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def thermal_rotation_correction_in_eV(self):
+        """
+        Get thermal rotation correction in eV.
+        """
         return self.thermal_rotation_correction * units.Hartree
 
     @property
     def thermal_translation_correction(self):
-        """E(trans)- is the translational thermal energy."""
+        """
+        E(trans)- is the translational thermal energy.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if "INNER ENERGY" in line_i:
                 for line_j in self.optimized_output_lines[i:]:
@@ -1995,10 +2327,16 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def thermal_translation_correction_in_eV(self):
+        """
+        Get thermal translation correction in eV.
+        """
         return self.thermal_translation_correction * units.Hartree
 
     @property
     def total_thermal_correction_due_to_trans_rot_vib(self):
+        """
+        Get total thermal correction due to translation, rotation and vibration.
+        """
         return (
             self.thermal_translation_correction
             + self.thermal_rotation_correction
@@ -2007,7 +2345,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def total_correction(self):
-        """Total correction due to Thermal (trans, rot, vib) + ZPE."""
+        """
+        Total correction due to Thermal (trans, rot, vib) + ZPE.
+        """
         return (
             self.thermal_translation_correction
             + self.thermal_rotation_correction
@@ -2033,6 +2373,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def enthalpy_in_eV(self):
+        """
+        Get enthalpy in eV.
+        """
         return self.enthalpy * units.Hartree
 
     @property
@@ -2055,11 +2398,16 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def thermal_enthalpy_correction_in_eV(self):
+        """
+        Get thermal enthalpy correction in eV.
+        """
         return self.thermal_enthalpy_correction * units.Hartree
 
     @property
     def electronic_entropy_no_temperature_in_SI(self):
-        """Return electronic entropy in J/mol/K."""
+        """
+        Return electronic entropy in J/mol/K.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTROPY":
                 for line_j in self.optimized_output_lines[i + 10 :]:
@@ -2080,7 +2428,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def vibrational_entropy_no_temperature_in_SI(self):
-        """Return vibrational entropy in J/mol/K."""
+        """
+        Return vibrational entropy in J/mol/K.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTROPY":
                 for line_j in self.optimized_output_lines[i + 10 :]:
@@ -2103,7 +2453,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def rotational_entropy_no_temperature_in_SI(self):
-        """Return rotational entropy in J/mol/K."""
+        """
+        Return rotational entropy in J/mol/K.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTROPY":
                 for line_j in self.optimized_output_lines[i + 10 :]:
@@ -2124,7 +2476,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def translational_entropy_no_temperature_in_SI(self):
-        """Return translational entropy in J/mol/K."""
+        """
+        Return translational entropy in J/mol/K.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTROPY":
                 for line_j in self.optimized_output_lines[i + 10 :]:
@@ -2172,7 +2526,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def rotational_entropy_symmetry_correction_J_per_mol_per_K(self):
-        """Return rotational entropy in J/mol/K for different symmetry numbers sn=1-12."""
+        """
+        Return rotational entropy in J/mol/K for different symmetry numbers sn=1-12.
+        """
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
         for i, line_i in enumerate(self.optimized_output_lines):
             if "rotational entropy values for sn=1,12 :" in line_i:
@@ -2204,7 +2560,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def gibbs_free_energy(self):
-        """The Gibbs free energy is G = H - T*S."""
+        """
+        The Gibbs free energy is G = H - T*S.
+        """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "GIBBS FREE ENERGY":
                 for line_j in self.optimized_output_lines[i:]:
@@ -2216,11 +2574,17 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def gibbs_free_energy_in_eV(self):
+        """
+        Get Gibbs free energy in eV.
+        """
         return self.gibbs_free_energy * units.Hartree
 
     # Below gives computing time/resources used by ORCA
     @cached_property
     def elapsed_walltime_by_jobs(self):
+        """
+        Get elapsed walltime by jobs from the ORCA output file.
+        """
         elapsed_walltimes = []
         for line in self.contents:
             if line.startswith("TOTAL RUN TIME:"):
@@ -2238,6 +2602,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def total_elapsed_walltime(self):
+        """
+        Get total elapsed walltime from the ORCA output file.
+        """
         return round(sum(self.elapsed_walltime_by_jobs), 1)
 
     @cached_property
@@ -2260,28 +2627,50 @@ class ORCAOutput(ORCAFileMixin):
 
     @cached_property
     def service_units_by_jobs(self):
-        """SUs defined as the JOB CPU time in hours."""
+        """
+        SUs defined as the JOB CPU time in hours.
+        """
         return round(self.cpu_runtime_by_jobs_core_hours, 2)
 
     @cached_property
     def total_core_hours(self):
+        """
+        Get the total core hours used in the calculation.
+        """
         return round(self.cpu_runtime_by_jobs_core_hours, 2)
 
     @cached_property
     def total_service_unit(self):
+        """
+        Get the total service units used in the calculation.
+        """
         return self.total_core_hours
 
 
 class ORCAEngradFile(ORCAFileMixin):
+    """
+    Class for handling ORCA energy and gradient files (.engrad).
+    """
+    
     def __init__(self, filename):
+        """Initialize ORCA energy and gradient file reader.
+        
+        Args:
+            filename: Path to the ORCA .engrad file
+        """
         self.filename = filename
-        """ Obtain energy and gradient of ORCA calculation"""
+        """
+         Obtain energy and gradient of ORCA calculation
+        """
         self.natoms = self._get_natoms()
         self.energy = self._get_energy()
         self.gradient = self._get_gradient()
         self.molecule = self._get_molecule()
 
     def _get_natoms(self):
+        """
+        Extract the number of atoms from the .engrad file.
+        """
         for i, line in enumerate(self.contents):
             if "Number of atoms" in line:
                 # check 3 lines following the match
@@ -2293,7 +2682,9 @@ class ORCAEngradFile(ORCAFileMixin):
         return None
 
     def _get_energy(self):
-        """Get the total energy from the ORCA output file, in Hartree."""
+        """
+        Get the total energy from the ORCA output file, in Hartree.
+        """
         for i, line in enumerate(self.contents):
             if (
                 "current total energy" in line
@@ -2308,7 +2699,9 @@ class ORCAEngradFile(ORCAFileMixin):
         return None
 
     def _get_gradient(self):
-        """Get the gradient from the ORCA output file, in Hartree/Bohr."""
+        """
+        Get the gradient from the ORCA output file, in Hartree/Bohr.
+        """
         for i, line in enumerate(self.contents):
             if "current gradient" in line:
                 # check 3N + 3 lines following the match, where N is number of atoms
@@ -2328,6 +2721,9 @@ class ORCAEngradFile(ORCAFileMixin):
         return None
 
     def _get_molecule(self):
+        """
+        Extract molecule structure from the .engrad file.
+        """
         for i, line in enumerate(self.contents):
             if (
                 "atomic numbers and current coordinates" in line

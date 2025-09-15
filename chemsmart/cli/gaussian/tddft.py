@@ -26,12 +26,14 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     project_settings = ctx.obj["project_settings"]
     td_settings = project_settings.td_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     td_settings = td_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(td_settings)
 
@@ -43,7 +45,8 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
-    # convert from GaussianJobSettings instance to GaussianTDJobSettings instance
+    # convert from GaussianJobSettings instance to GaussianTDJobSettings
+    # instance
     td_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
 
     # populate cli options

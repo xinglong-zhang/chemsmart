@@ -1,3 +1,11 @@
+"""
+ORCA input file writer implementation.
+
+This module contains the input file writer for ORCA quantum chemistry
+calculations, handling the generation of properly formatted input files
+based on job settings and molecular structures.
+"""
+
 import logging
 import os.path
 
@@ -12,12 +20,35 @@ logger = logging.getLogger(__name__)
 
 
 class ORCAInputWriter(InputWriter):
-    """Class that writes ORCA input files for a job."""
+    """
+    ORCA input file writer.
+
+    This class handles the generation of ORCA input files with proper
+    formatting for quantum chemistry calculations, including route sections,
+    job parameters, and molecular geometry specifications.
+
+    Attributes:
+        job (ORCAJob): Target job for which the input is generated.
+        settings (ORCAJobSettings): Settings used to generate the route and blocks.
+        jobrunner (ORCAJobRunner): Runner providing cores/memory and paths.
+    """
 
     def write(self, **kwargs):
+        """
+        Write the ORCA input file.
+
+        Args:
+            **kwargs: Additional arguments for writing
+        """
         self._write(**kwargs)
 
     def _write(self, target_directory=None):
+        """
+        Internal method to write the input file.
+
+        Args:
+            target_directory: Directory to write the file to
+        """
         if target_directory is not None:
             if not os.path.exists(target_directory):
                 os.makedirs(target_directory)
@@ -36,7 +67,13 @@ class ORCAInputWriter(InputWriter):
         f.close()
 
     def _write_all(self, f):
-        """Write the entire input file."""
+        """
+        Write the complete input file with all sections.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing complete ORCA input file")
         self._write_route_section(f)
         self._write_processors(f)
         self._write_memory(f)
@@ -60,30 +97,55 @@ class ORCAInputWriter(InputWriter):
         # self._append_other_additional_info(f)
 
     def _write_self(self, f):
-        """Write the input file itself for direct run."""
+        """
+        Write user-provided input string directly.
+
+        Args:
+            f: File object to write to
+        """
         f.write(self.job.settings.input_string)
 
     def _write_route_section(self, f):
-        logger.debug("Writing ORCA route section.")
+        """
+        Write the ORCA route section (calculation keywords).
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing ORCA route section")
+        
         if self.job.molecule.is_monoatomic:
             # TODO: need to merge thermo branch into main branch
             logger.info(f"Molecule {self.job.molecule} is monoatomic.")
             logger.info(
-                "Removing `opt` keyword from route string, since ORCA cannot run"
-                "OPT on monoatomic molecule."
+                "Removing `opt` keyword from route string, since ORCA cannot "
+                "run OPT on monoatomic molecule."
             )
             route_string = remove_keyword(self.settings.route_string, "opt")
         else:
             route_string = self.settings.route_string
+            
         f.write(route_string + "\n")
 
     def _write_processors(self, f):
-        logger.debug("Writing processors.")
+        """
+        Write processor specification for parallel execution.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug(f"Writing processors.")
         f.write("# Number of processors\n")
         f.write(f"%pal nprocs {self.jobrunner.num_cores} end\n")
 
     def _write_memory(self, f):
-        logger.debug("Writing memory.")
+        """
+        Write memory specification per core.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing memory specification")
         f.write("# Memory per core\n")
         mpc = (self.jobrunner.mem_gb * 1000) / self.jobrunner.num_cores * 0.75
         # Safety Factor: Applies a 75% factor to the memory per core to
@@ -92,7 +154,14 @@ class ORCAInputWriter(InputWriter):
         f.write(f"%maxcore {mpc}\n")
 
     def _write_scf_block(self, f):
-        logger.debug("Writing SCF black.")
+        """
+        Write SCF convergence parameters.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing SCF block")
+        
         if self.settings.scf_convergence or self.settings.scf_maxiter:
             f.write("%scf\n")
             self._write_scf_maxiter(f)
@@ -100,7 +169,12 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_scf_maxiter(self, f):
-        """Write the SCF maxiter for the ORCA input file."""
+        """
+        Write SCF maximum iterations parameter.
+
+        Args:
+            f: File object to write to
+        """
         scf_maxiter = (
             self.settings.scf_maxiter
             if self.settings.scf_maxiter is not None
@@ -109,6 +183,15 @@ class ORCAInputWriter(InputWriter):
         f.write(f"  maxiter {scf_maxiter}\n")
 
     def _write_scf_convergence(self, f):
+        """
+        Write SCF convergence criteria.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            ValueError: If unsupported convergence option is specified
+        """
         if self.settings.scf_convergence:
             from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
 
@@ -124,16 +207,35 @@ class ORCAInputWriter(InputWriter):
             f.write(f"  convergence {scf_conv}\n")
 
     def _write_solvent_block(self, f):
-        """Write the solvent block for the ORCA input file."""
+        """
+        Write solvent parameters block.
+
+        Args:
+            f: File object to write to
+
+        Note:
+            Currently placeholder for complex solvents specified via
+            %cpcm, %cosmo, or %smd blocks that cannot be captured by route.
+        """
         # to implement if there is more complex solvents to be specified via
         # %cpcm block, %cosmo block, or %smd block that cannot be capture by route
         pass
 
     def _write_mdci_block(self, f):
+        """
+        Write MDCI (domain-based local correlation) parameters.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If invalid MDCI options are specified
+        """
         mdci_cutoff = self.settings.mdci_cutoff
         mdci_density = self.settings.mdci_density
+        
         if mdci_cutoff is not None:
-            logger.debug("Writing MDCI block.")
+            logger.debug("Writing MDCI block")
             # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
             assert mdci_cutoff.lower() in ["loose", "normal", "tight"], (
                 "mdci_cutoff must be one of the allowed values: "
@@ -155,6 +257,7 @@ class ORCAInputWriter(InputWriter):
                 f.write("  TCutPairs 1e-5\n")
                 f.write("  TCutPNO 1e-7\n")
                 f.write("  TCutMKN 1e-4\n")
+                
             if mdci_density is not None:
                 # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
                 assert mdci_density.lower() in [
@@ -174,11 +277,17 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_elprop_block(self, f):
-        """Write the elprop block for the ORCA input file."""
+        """
+        Write electronic properties calculation block.
+
+        Args:
+            f: File object to write to
+        """
         dipole = self.settings.dipole
         quadrupole = self.settings.quadrupole
+        
         if dipole or quadrupole:
-            logger.debug("Writing elprop block.")
+            logger.debug("Writing elprop block")
             f.write("%elprop\n")
             if dipole:
                 f.write("  Dipole True\n")
@@ -191,12 +300,25 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_modred_block(self, f):
+        """
+        Write modified redundant coordinates block.
+
+        Args:
+            f: File object to write to
+        """
         if self.settings.modred:
             f.write("%geom\n")
             self._write_modred(f, modred=self.settings.modred)
             f.write("end\n")
 
     def _write_modred(self, f, modred):
+        """
+        Write modified redundant coordinates.
+
+        Args:
+            f: File object to write to
+            modred: Modified redundant coordinates specification
+        """
         if isinstance(modred, list):
             self._write_modred_if_list(f, modred)
         elif isinstance(modred, dict):
@@ -204,6 +326,13 @@ class ORCAInputWriter(InputWriter):
 
     @staticmethod
     def _write_modred_if_list(f, modred):
+        """
+        Write modred as constraints (list format).
+
+        Args:
+            f: File object to write to
+            modred: List of coordinate constraints
+        """
         f.write("  Constraints\n")
         # append for modred jobs
         # 'self.modred' as list of lists, or a single list if only one fixed constraint
@@ -217,6 +346,13 @@ class ORCAInputWriter(InputWriter):
 
     @staticmethod
     def _write_modred_if_dict(f, modred):
+        """
+        Write modred as scan coordinates (dictionary format).
+
+        Args:
+            f: File object to write to
+            modred: Dictionary containing scan parameters
+        """
         f.write("  Scan\n")
         # append for scanning job
         coords_list = modred["coords"]
@@ -245,10 +381,25 @@ class ORCAInputWriter(InputWriter):
         f.write("  end\n")
 
     def _write_hessian_block(self, f):
+        """
+        Write Hessian calculation parameters for transition state jobs.
+
+        Args:
+            f: File object to write to
+        """
         if isinstance(self.settings, ORCATSJobSettings):
             self._write_hessian_block_for_ts(f)
 
     def _write_hessian_block_for_ts(self, f):
+        """
+        Write ORCA Hessian block for transition state calculations.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If required Hessian files or parameters are missing
+        """
         # write orca block for hessian options
         f.write("%geom\n")
 
@@ -316,6 +467,12 @@ class ORCAInputWriter(InputWriter):
         f.write("end\n")
 
     def _write_irc_block(self, f):
+        """
+        Write IRC calculation parameters.
+
+        Args:
+            f: File object to write to
+        """
         if isinstance(self.settings, ORCAIRCJobSettings):
             self._write_irc_block_for_irc(f)
 
@@ -435,7 +592,12 @@ class ORCAInputWriter(InputWriter):
         f.write("end\n")
 
     def _write_constrained_atoms(self, f):
-        """Write constraints on atoms in a molecule, if specified via frozen_atoms."""
+        """
+        Write atomic constraints for frozen atoms.
+
+        Args:
+            f: File object to write to
+        """
         molecule = self.job.molecule
         if molecule.frozen_atoms:
             f.write("%geom\n")
@@ -447,7 +609,15 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_charge_and_multiplicity(self, f):
-        logger.debug("Writing charge and multiplicity.")
+        """
+        Write molecular charge and spin multiplicity.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If charge or multiplicity is not specified
+        """
         charge = self.settings.charge
         multiplicity = self.settings.multiplicity
         assert (
@@ -456,8 +626,17 @@ class ORCAInputWriter(InputWriter):
         f.write(f"* xyz {charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
+        """
+        Write molecular Cartesian coordinates.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If molecular geometry is not available
+        """
         logger.debug(
-            f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
+            f"Writing Cartesian coordinates of molecule: {self.job.molecule}"
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f, program="orca")

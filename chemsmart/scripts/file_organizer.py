@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+File organization script.
+
+This script provides command-line functionality to organize 
+computational chemistry files into structured directories.
+"""
+
 import logging
 import os
 
@@ -67,7 +74,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def entry_point(
     directory, filename, name, type, cols, skip, row, keep_default_na
 ):
-    """Script for organizing files for supporting information.
+    """
+    Script for organizing files for supporting information.
+    
     Example usage:
         file_organizer.py -f jq.xlsx -n co2 -c B:D -s 2 -r 100
     """

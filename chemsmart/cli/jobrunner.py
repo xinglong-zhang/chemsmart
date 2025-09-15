@@ -7,12 +7,16 @@ logger = logging.getLogger(__name__)
 
 
 def click_jobrunner_options(f):
+    """
+    Common job runner configuration options.
+    """
     @click.option(
         "-s",
         "--server",
         type=str,
         default=None,
-        help="Server. If not specified, will try to automatically determine and use the current server.",
+        help="Server. If not specified, will try to automatically "
+        "determine and use the current server.",
     )
     @click.option(
         "-n",
@@ -25,7 +29,8 @@ def click_jobrunner_options(f):
         "--num-gpus",
         type=int,
         default=None,
-        help="Number of gpus per node. Defaults to number of GPUs on specified server if None.",
+        help="Number of gpus per node. Defaults to number of GPUs on "
+        "specified server if None.",
     )
     @click.option(
         "-m", "--mem-gb", type=int, default=None, help="Memory in GBs"

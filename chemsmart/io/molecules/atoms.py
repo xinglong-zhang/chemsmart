@@ -2,13 +2,26 @@ from ase import Atoms
 
 
 class AtomsChargeMultiplicity(Atoms):
-    """Modified ASE Atoms subclass with charge and spin multiplicity.
+    """
+    Modified ASE Atoms subclass with charge and spin multiplicity.
     Main purpose for this is to be able to convert Atoms stored in
-    ASE format to Molecule objects with charge and multiplicity."""
+    ASE format to Molecule objects with charge and multiplicity.
+    """
 
     def __init__(
         self, charge, multiplicity, frozen_atoms, energy, forces, **kwargs
     ):
+        """
+        Initialize enhanced Atoms object with QM properties.
+        
+        Args:
+            charge (int): Molecular charge
+            multiplicity (int): Spin multiplicity (2S + 1)
+            frozen_atoms (list or None): Frozen atom constraints
+            energy (float or None): Total molecular energy
+            forces (array or None): Atomic forces
+            **kwargs: Additional arguments for ASE Atoms constructor
+        """
         super().__init__(**kwargs)
         self._charge = charge
         self._multiplicity = multiplicity
@@ -18,18 +31,26 @@ class AtomsChargeMultiplicity(Atoms):
 
     @property
     def charge(self) -> int:
+        """
+        Molecular charge (total electron count adjustment).
+        
+        Returns:
+            int: Molecular charge
+        """
         return self._charge
 
     @charge.setter
     def charge(self, value):
-        """Set the molecular charge.
+        """
+        Set the molecular charge.
 
         Args:
             value: The charge of the molecule (must be an integer).
 
         Raises:
             TypeError: If value is not an integer or cannot be converted to one.
-            ValueError: If value is not a valid molecular charge (optional, depending on constraints).
+            ValueError: If value is not a valid molecular charge 
+                        (optional, depending on constraints).
         """
         if not isinstance(value, (int, float)) or (
             isinstance(value, float) and not value.is_integer()
@@ -39,18 +60,26 @@ class AtomsChargeMultiplicity(Atoms):
 
     @property
     def multiplicity(self) -> int:
+        """
+        Spin multiplicity (2S + 1, where S is total spin).
+        
+        Returns:
+            int: Spin multiplicity
+        """
         return self._multiplicity
 
     @multiplicity.setter
     def multiplicity(self, value):
-        """Set the molecular spin multiplicity.
+        """
+        Set the molecular spin multiplicity.
 
         Args:
             value: The spin multiplicity of the molecule (must be an integer).
 
         Raises:
             TypeError: If value is not an integer or cannot be converted to one.
-            ValueError: If value is not a valid spin multiplicity (optional, depending on constraints).
+            ValueError: If value is not a valid spin multiplicity 
+                        (optional, depending on constraints).
         """
         if not isinstance(value, (int, float)) or (
             isinstance(value, float) and not value.is_integer()
@@ -59,7 +88,9 @@ class AtomsChargeMultiplicity(Atoms):
         self._multiplicity = int(value)
 
     def to_molecule(self, charge=None, multiplicity=None):
-        """Convert to Molecule object."""
+        """
+        Convert to Molecule object.
+        """
         from chemsmart.io.molecules.structure import Molecule
 
         if charge is None:
@@ -83,14 +114,17 @@ class AtomsChargeMultiplicity(Atoms):
 
     @classmethod
     def from_atoms(cls, atoms, charge=None, multiplicity=None):
-        """Create AtomsChargeMultiplicity from ASE Atoms."""
+        """
+        Create AtomsChargeMultiplicity from ASE Atoms.
+        """
         from ase.calculators.calculator import (
             CalculatorError,
             PropertyNotImplementedError,
         )
         from ase.constraints import FixAtoms
 
-        # check if the Atoms object has any constraints, if yes, convert to 1-indexed list
+        # check if the Atoms object has any constraints, 
+        # if yes, convert to 1-indexed list
         frozen_atoms = []
         if atoms.constraints:
             # get indices of fix atoms --> frozen elements in Molecule
@@ -110,10 +144,12 @@ class AtomsChargeMultiplicity(Atoms):
                 # convert to 1-indexed list
                 for index in indices:
                     frozen_atoms.append(index + 1)
+                    
         if len(frozen_atoms) == 0:
             frozen_atoms = None
         else:
-            # convert the 1-indexed list to masks where -1 means frozen and 0 means not frozen
+            # convert the 1-indexed list to masks where -1 means frozen 
+            # and 0 means not frozen
             frozen_atoms = [
                 -1 if i + 1 in frozen_atoms else 0 for i in range(len(atoms))
             ]
@@ -136,6 +172,7 @@ class AtomsChargeMultiplicity(Atoms):
                     "Ensure that the Atoms object has a valid calculator."
                 ) from e
         else:
+            # No calculator attached - set properties to None
             energy = None
             forces = None
             velocities = None
