@@ -30,9 +30,15 @@ class GaussianTrajJob(GaussianJob):
 
     The workflow includes:
     1. Extract structures from trajectory end portion
-    2. Group similar structures to identify unique conformations
+    2. Group similar structures to identify unique conformations (default: no grouping)
     3. Sort structures by energy for prioritization
     4. Run Gaussian calculations on selected unique structures
+
+    Note:
+        By default, no structure grouping is performed (grouping_strategy=None),
+        meaning all trajectory structures will be treated as unique and potentially
+        processed. To enable structure grouping and identify truly unique conformations,
+        specify a grouping strategy (e.g., 'rmsd', 'tanimoto') via the CLI -g option.
 
     Attributes:
         TYPE (str): Job type identifier ('g16traj').
@@ -81,8 +87,7 @@ class GaussianTrajJob(GaussianJob):
             jobrunner: Job execution handler.
             num_structures_to_run (int, optional): Number of structures
                 to process. If None, process all unique structures.
-            grouping_strategy (str): Structure grouping method
-                (default: "rmsd").
+            grouping_strategy (str): Structure grouping method.
             num_procs (int): Number of processes for parallel execution
                 (currently not implemented).
             proportion_structures_to_use (float): Fraction of trajectory
