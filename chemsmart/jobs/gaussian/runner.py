@@ -19,7 +19,7 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy
+from shutil import copy, rmtree
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -332,6 +332,10 @@ class GaussianJobRunner(JobRunner):
         If using scratch directories, copies output files from scratch
         back to the job directory, excluding temporary Gaussian files.
 
+        If job run is successfully completed, remove run folder in
+        scratch directory after copying back into job folder; also
+        remove .err files.
+
         Args:
             job: Job object containing folder and label information.
         """
@@ -353,13 +357,16 @@ class GaussianJobRunner(JobRunner):
                         )
 
         if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
-            # if self.scratch:
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}."
-            #     )
-            #     rmtree(self.running_directory)
+            logger.debug(f"Job {job} is complete.")
+            logger.debug(
+                "Remove run folder in scratch directory: "
+                f"{self.running_directory}."
+            )
+            if self.scratch:
+                logger.info(
+                    f"Removing scratch directory: {self.running_directory}."
+                )
+                rmtree(self.running_directory)
 
             self._remove_err_files(job)
 
