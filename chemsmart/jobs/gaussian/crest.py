@@ -7,7 +7,11 @@ It batches multiple conformer optimizations and offers utilities for
 progress and completion tracking across the ensemble.
 """
 
+import logging
+
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+
+logger = logging.getLogger(__name__)
 
 
 class GaussianCrestJob(GaussianJob):
@@ -46,6 +50,8 @@ class GaussianCrestJob(GaussianJob):
         label=None,
         jobrunner=None,
         num_confs_to_run=None,
+        grouping_strategy=None,
+        skip_completed=True,
         **kwargs,
     ):
         """
@@ -76,14 +82,37 @@ class GaussianCrestJob(GaussianJob):
             settings=settings,
             label=label,
             jobrunner=jobrunner,
+            skip_completed=skip_completed,
             **kwargs,
         )
 
         if num_confs_to_run is None:
             num_confs_to_run = len(molecules)
 
-        self.all_conformers = molecules
         self.num_confs_to_opt = num_confs_to_run
+
+        # if grouping strategy is provided, set the grouper
+        # and carry out the grouping before running the group of molecules
+        if grouping_strategy is not None:
+            logger.info(f"Using grouping strategy: {grouping_strategy}")
+            from chemsmart.utils.grouper import StructureGrouperFactory
+
+            logger.info(f"Total structures to group: {len(molecules)}")
+            grouper = StructureGrouperFactory.create(
+                molecules, strategy=grouping_strategy, **kwargs
+            )
+            grouper.group()
+            unique_molecules = grouper.unique()
+            self.grouper = grouper
+            logger.debug(f"Grouping strategy: {grouper.__repr__()}")
+            logger.info(f"Number of unique groups: {len(unique_molecules)}")
+            logger.info(f"Unique molecules: {unique_molecules}")
+            self.all_conformers = unique_molecules
+
+        else:
+            # if no grouping strategy is provided, use all molecules as conformers
+            self.grouper = None
+            self.all_conformers = molecules
 
     @property
     def num_conformers(self):
