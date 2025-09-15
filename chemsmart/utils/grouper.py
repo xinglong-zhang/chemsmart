@@ -1133,9 +1133,7 @@ class StructureGrouperFactory:
         groupers = {
             "rmsd": RMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
-            "fingerprint": TanimotoSimilarityGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
-            "rdkit": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
         }
