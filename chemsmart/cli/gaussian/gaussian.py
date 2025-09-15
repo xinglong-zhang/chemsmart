@@ -189,8 +189,8 @@ def click_gaussian_grouper_options(f):
         "-t",
         "--threshold",
         type=float,
-        default=0.1,
-        help="Threshold for grouping.",
+        default=None,
+        help="Threshold for grouping. If not specified, uses strategy-specific defaults: RMSD=0.5, Tanimoto=0.9, Connectivity=0.0.",
     )
     @click.option(
         "-i",
@@ -203,7 +203,7 @@ def click_gaussian_grouper_options(f):
         "-p",
         "--num-procs",
         type=int,
-        default=4,
+        default=1,
         help="Number of processors to use for grouper.",
     )
     @functools.wraps(f)

@@ -81,12 +81,14 @@ class RMSDGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.5,  # RMSD threshold for grouping
+        threshold=None,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,  # option to ignore H atoms for grouping
     ):
         super().__init__(molecules, num_procs)
+        if threshold is None:
+            threshold = 0.5
         self.threshold = threshold  # RMSD threshold for grouping
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
@@ -273,11 +275,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.9,  # Tanimoto similarity threshold
+        threshold=None,  # Tanimoto similarity threshold
         num_procs: int = 1,
         use_rdkit_fp: bool = True,  # Allows switching between RDKit FP and RDKFingerprint
     ):
         super().__init__(molecules, num_procs)
+        if threshold is None:
+            threshold = 0.9
         self.threshold = threshold
         self.use_rdkit_fp = use_rdkit_fp  # Choose fingerprinting method
 
@@ -466,10 +470,12 @@ class ConnectivityGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         num_procs: int = 1,
-        threshold: float = 0.0,  # Buffer for bond cutoff
+        threshold=None,  # Buffer for bond cutoff
         adjust_H: bool = True,
     ):
         super().__init__(molecules, num_procs)
+        if threshold is None:
+            threshold = 0.0
         self.threshold = threshold  # Buffer for bond cutoff
         self.adjust_H = adjust_H
 
