@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Job submission script.
+
+This script provides command-line functionality to submit computational
+chemistry jobs to job schedulers or computing clusters, reading job
+files from a list and handling batch submissions.
+"""
+
 import logging
 import os
 import shlex
@@ -39,15 +47,19 @@ def entry_point(filename, command):
     """
     create_logger()
     logger.info(f"Reading filenames from {filename}")
+
+    # Read filenames from the input file
     with open(filename, "r") as f:
         filenames = f.readlines()
     filenames = [filename.strip() for filename in filenames]
 
+    # Submit job for each filename
     for filename in filenames:
         logger.info(f"Submitting job for {filename}")
         cmd = command.replace("file", filename)
         logger.info(f"Command executed: {cmd}")
-        # use subprocess to run the command
+
+        # Execute the submission command using subprocess
         p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
         p.communicate()
         logger.info(f"Job submitted for {filename}")

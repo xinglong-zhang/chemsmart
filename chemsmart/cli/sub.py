@@ -1,4 +1,9 @@
-"""Submission of jobs to queuing system via cli."""
+"""
+Submission of jobs to queuing system via cli.
+
+This module provides command-line interface for submitting jobs to
+various queuing systems and cluster schedulers.
+"""
 
 import logging
 
@@ -30,7 +35,8 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--test/--no-test",
     default=False,
-    help="If true, job will not be submitted; only run and submit scripts will be written.",
+    help="If true, job will not be submitted; only run and submit "
+    "scripts will be written.",
 )
 @click.option(
     "--print-command/--no-print-command",
@@ -54,6 +60,12 @@ def sub(
     print_command,
     **kwargs,
 ):
+    """
+    Main command for submitting chemsmart jobs to queuing systems.
+
+    This command prepares and submits jobs to cluster schedulers with
+    specified resource requirements and queue parameters.
+    """
     # Set up logging
     if verbose:
         create_logger(stream=True, debug=True)
@@ -89,10 +101,21 @@ def sub(
 @sub.result_callback(replace=True)
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
+    """
+    Process the job for submission to queuing system.
+
+    This callback function handles job submission by reconstructing
+    command-line arguments and interfacing with the appropriate
+    scheduler system.
+    """
+
     def _clean_command(ctx):
-        """Remove keywords used in sub.py but not in run.py.
+        """
+        Remove keywords used in sub.py but not in run.py.
+
         Specifically: Some keywords/options (like queue, verbose, etc.)
-        are only relevant to sub.py and not applicable to run.py."""
+        are only relevant to sub.py and not applicable to run.py.
+        """
         # Get "sub" command and assert that there is exactly one.
         command = next(
             (
@@ -121,7 +144,12 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         return ctx
 
     def _reconstruct_cli_args(ctx, job):
-        """Get cli args that reconstruct the command line."""
+        """
+        Get cli args that reconstruct the command line.
+
+        Rebuilds the command-line arguments from the context object
+        for job submission purposes.
+        """
         commands = ctx.obj["subcommand"]
 
         args = CtxObjArguments(commands, entry_point="sub")

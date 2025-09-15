@@ -811,6 +811,15 @@ class TestGaussian16Output:
             g16_link_sp.fmo_gap, 0.29835 * units.Hartree, atol=1e-5
         )
 
+    def test_read_failed_link_job(self, gaussian_failed_link_output):
+        assert os.path.exists(gaussian_failed_link_output)
+        g16_failed_link = Gaussian16Output(
+            filename=gaussian_failed_link_output
+        )
+        assert not g16_failed_link.normal_termination
+        molecule = Molecule.from_filepath(gaussian_failed_link_output)
+        assert isinstance(molecule, Molecule)
+
     def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
         assert os.path.exists(gaussian_ts_genecp_outfile)
         g16_genecp = Gaussian16Output(filename=gaussian_ts_genecp_outfile)
