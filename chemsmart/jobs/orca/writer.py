@@ -118,8 +118,7 @@ class ORCAInputWriter(InputWriter):
             # TODO: need to merge thermo branch into main branch
             logger.info(f"Molecule {self.job.molecule} is monoatomic.")
             logger.info(
-                "Removing `opt` keyword from route string, since ORCA cannot "
-                "run OPT on monoatomic molecule."
+                "Removing `opt` keyword from route string, since ORCA cannot run OPT on monoatomic molecule."
             )
             route_string = remove_keyword(self.settings.route_string, "opt")
         else:
