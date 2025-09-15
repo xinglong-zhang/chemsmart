@@ -1178,6 +1178,11 @@ class Thermochemistry:
 
         def build_header():
             """Return appropriate header string depending on qh corrections."""
+            used_mass = (
+                "Most Abundant Masses"
+                if not self.use_weighted_mass
+                else "Natural Abundance Weighted Masses"
+            )
             header = f"Temperature: {self.temperature:.2f} K\n"
             if self.concentration is not None:
                 header += f"Concentration: {self.concentration:.1f} mol/L\n"
@@ -1197,11 +1202,7 @@ class Thermochemistry:
             if self.s_freq_cutoff or self.h_freq_cutoff:
                 header += f"Damping Function Exponent: {self.alpha}\n"
 
-            header += (
-                f"Mass Weighted: "
-                f"{'Most Abundant Masses' if not self.use_weighted_mass 
-                   else 'Natural Abundance Weighted Masses'}\n"
-            )
+            header += f"Mass Weighted: {used_mass}\n"
             header += f"Energy Unit: {self.energy_units}\n\n"
 
             if self.h_freq_cutoff or self.s_freq_cutoff:
