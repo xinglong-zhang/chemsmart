@@ -69,8 +69,7 @@ logger = logging.getLogger(__name__)
     "--monitor-internals/--no-monitor-internals",
     type=bool,
     default=False,
-    help="Monitor internals to print out up to three internal "
-    "coordinates",
+    help="Monitor internals to print out up to three internal " "coordinates",
 )
 @click.option(
     "--init-displ",
@@ -121,8 +120,7 @@ logger = logging.getLogger(__name__)
     "--interpolate-only/--no-interpolate-only",
     type=bool,
     default=False,
-    help="Only allow interpolation for parabolic fit, not "
-    "extrapolation.",
+    help="Only allow interpolation for parabolic fit, not " "extrapolation.",
 )
 @click.option(
     "--do-sd-corr/--no-do-sd-corr",
@@ -268,7 +266,9 @@ def irc(
         logger.debug(f"Set SD correction scaling: {scale_displ_sd_corr}")
     if sd_corr_parabolicfit is not None:
         irc_settings.sd_corr_parabolicfit = sd_corr_parabolicfit
-        logger.debug(f"Set SD correction parabolic fit: {sd_corr_parabolicfit}")
+        logger.debug(
+            f"Set SD correction parabolic fit: {sd_corr_parabolicfit}"
+        )
     if tolrmsg is not None:
         irc_settings.tolrmsg = tolrmsg
         logger.debug(f"Set RMS gradient tolerance: {tolrmsg}")

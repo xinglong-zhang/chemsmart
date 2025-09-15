@@ -24,11 +24,11 @@ project_settings_registry: list[str] = []
 class ORCAProjectSettings(RegistryMixin):
     """
     Base class for ORCA project settings with default configurations.
-    
+
     Provides fundamental settings and configurations for ORCA quantum chemistry
     calculations. Includes default values for computational parameters and
     methods for creating job-specific settings for various calculation types.
-    
+
     Attributes:
         PROJECT_NAME (str): Name identifier for the project.
         functional (str): DFT functional to use for calculations.
@@ -44,10 +44,10 @@ class ORCAProjectSettings(RegistryMixin):
     def main_settings(self):
         """
         Create main ORCA settings with default values.
-        
+
         Provides the base settings configuration that serves as the foundation
         for all other job types. Includes functional and basis set assignments.
-        
+
         Returns:
             ORCAJobSettings: Default ORCA job settings with functional and basis set.
         """
@@ -59,10 +59,10 @@ class ORCAProjectSettings(RegistryMixin):
     def opt_settings(self):
         """
         ORCA settings for geometry optimization calculations.
-        
+
         Creates settings for geometry optimization jobs that find
         minimum energy structures on the potential energy surface.
-        
+
         Returns:
             ORCAJobSettings: Settings configured for geometry optimization.
         """
@@ -73,10 +73,10 @@ class ORCAProjectSettings(RegistryMixin):
     def modred_settings(self):
         """
         ORCA settings for modredundant coordinate optimization.
-        
+
         Creates settings for constrained optimization using modredundant
         coordinates, allowing partial optimization of specific coordinates.
-        
+
         Returns:
             ORCAJobSettings: Settings configured for modredundant optimization.
         """
@@ -87,10 +87,10 @@ class ORCAProjectSettings(RegistryMixin):
     def ts_settings(self):
         """
         ORCA settings for transition state optimization calculations.
-        
+
         Creates settings for finding and optimizing transition states using
         specialized TS optimization algorithms in ORCA.
-        
+
         Returns:
             ORCATSJobSettings: Settings configured for transition state optimization.
         """
@@ -104,11 +104,11 @@ class ORCAProjectSettings(RegistryMixin):
     def irc_settings(self):
         """
         ORCA settings for intrinsic reaction coordinate calculations.
-        
+
         Creates settings for IRC calculations that trace reaction pathways
         from transition states to reactants and products. Frequency calculations
         are disabled by default for IRC jobs.
-        
+
         Returns:
             ORCAIRCJobSettings: Settings configured for IRC calculations.
         """
@@ -123,11 +123,11 @@ class ORCAProjectSettings(RegistryMixin):
     def scan_settings(self):
         """
         ORCA settings for potential energy surface scan calculations.
-        
+
         Creates settings for relaxed coordinate scans to explore potential
         energy surfaces along specific reaction coordinates. Frequency
         calculations are disabled by default.
-        
+
         Returns:
             ORCAJobSettings: Settings configured for coordinate scan calculations.
         """
@@ -139,11 +139,11 @@ class ORCAProjectSettings(RegistryMixin):
     def nci_settings(self):
         """
         ORCA settings for non-covalent interaction analysis.
-        
+
         Creates settings for NCI (Non-Covalent Interaction) analysis calculations
         that identify and characterize weak intermolecular interactions.
         Frequency calculations are disabled by default.
-        
+
         Returns:
             ORCAJobSettings: Settings configured for NCI analysis.
         """
@@ -155,11 +155,11 @@ class ORCAProjectSettings(RegistryMixin):
     def wbi_settings(self):
         """
         ORCA settings for Wiberg Bond Index calculations.
-        
+
         Creates settings for WBI calculations that provide quantitative
         measures of bond orders and electron sharing between atoms.
         Frequency calculations are disabled by default.
-        
+
         Returns:
             ORCAJobSettings: Settings configured for WBI calculations.
         """
@@ -171,11 +171,11 @@ class ORCAProjectSettings(RegistryMixin):
     def sp_settings(self):
         """
         ORCA settings for single point energy calculations.
-        
+
         Creates settings for single point calculations at higher level of theory
         using large basis set. Frequency calculations are disabled and the
         large basis set is used for improved accuracy.
-        
+
         Returns:
             ORCAJobSettings: Settings configured for single point calculations.
         """
@@ -189,17 +189,17 @@ class ORCAProjectSettings(RegistryMixin):
     def from_project(cls, project):
         """
         Get project settings based on project name.
-        
+
         Loads project settings from various sources including user-defined
         settings and built-in test projects. Provides detailed error messages
         if the requested project is not found.
-        
+
         Args:
             project (str): Name of the project to load settings for.
-            
+
         Returns:
             YamlORCAProjectSettings: Configured YAML-based project settings instance.
-            
+
         Raises:
             FileNotFoundError: If no project settings are found for the
                 specified project name, with guidance on creating new settings.
@@ -226,13 +226,13 @@ class ORCAProjectSettings(RegistryMixin):
     def _from_projects_manager(cls, manager):
         """
         Load project settings using a project manager.
-        
+
         Internal method for loading project settings through a manager instance.
         Handles exceptions and provides error logging for failed operations.
-        
+
         Args:
             manager: Project settings manager instance.
-            
+
         Returns:
             YamlORCAProjectSettings or None: YAML-based loaded settings or None if loading fails.
         """
@@ -245,13 +245,13 @@ class ORCAProjectSettings(RegistryMixin):
     def _from_user_project_name(cls, project_name):
         """
         Load YAML project settings from user directory.
-        
+
         Searches for project settings files in the user's ORCA settings
         directory based on the project name.
-        
+
         Args:
             project_name (str): Name of the project to load.
-            
+
         Returns:
             YamlORCAProjectSettings or None: YAML-based loaded settings or None if not found.
         """
@@ -271,13 +271,13 @@ class ORCAProjectSettings(RegistryMixin):
     def _from_chemsmart_test_projects(cls, project_name):
         """
         Load YAML project settings from test projects directory.
-        
+
         Searches for project settings in the chemsmart test projects directory,
         typically used for built-in example configurations.
-        
+
         Args:
             project_name (str): Name of the test project to load.
-            
+
         Returns:
             YamlORCAProjectSettings or None: YAML-based loaded settings or None if not found.
         """
@@ -301,11 +301,11 @@ class ORCAProjectSettings(RegistryMixin):
 class YamlORCAProjectSettings(ORCAProjectSettings):
     """
     YAML-based ORCA project settings with job-specific configurations.
-    
+
     This class loads and manages ORCA calculation settings from YAML
     configuration files, providing pre-configured settings for different
     job types. Each job type maintains its own settings instance.
-    
+
     Attributes:
         PROJECT_NAME (str): Project name identifier for YAML settings.
         _opt_settings: Geometry optimization job settings.
@@ -318,7 +318,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         _td_settings: Time-dependent DFT settings.
         _wbi_settings: Wiberg bond index calculation settings.
     """
-    
+
     PROJECT_NAME = "yaml"
 
     def __init__(
@@ -335,7 +335,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     ):
         """
         Initialize YAML-based ORCA project settings.
-        
+
         Args:
             opt_settings: Settings for geometry optimization jobs.
             modred_settings: Settings for modredundant coordinate jobs.
@@ -360,7 +360,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def opt_settings(self):
         """
         Get geometry optimization settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured optimization settings.
         """
@@ -369,7 +369,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def modred_settings(self):
         """
         Get modredundant coordinate optimization settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured modredundant settings.
         """
@@ -378,7 +378,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def ts_settings(self):
         """
         Get transition state optimization settings.
-        
+
         Returns:
             ORCATSJobSettings: Pre-configured TS optimization settings.
         """
@@ -387,7 +387,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def irc_settings(self):
         """
         Get intrinsic reaction coordinate calculation settings.
-        
+
         Returns:
             ORCAIRCJobSettings: Pre-configured IRC calculation settings.
         """
@@ -396,7 +396,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def scan_settings(self):
         """
         Get coordinate scan calculation settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured scan calculation settings.
         """
@@ -405,7 +405,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def nci_settings(self):
         """
         Get non-covalent interaction analysis settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured NCI analysis settings.
         """
@@ -414,7 +414,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def sp_settings(self):
         """
         Get single point calculation settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured single point settings.
         """
@@ -423,7 +423,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def td_settings(self):
         """
         Get time-dependent DFT calculation settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured TD-DFT settings.
         """
@@ -432,7 +432,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def wbi_settings(self):
         """
         Get Wiberg bond index calculation settings.
-        
+
         Returns:
             ORCAJobSettings: Pre-configured WBI calculation settings.
         """
@@ -442,10 +442,10 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
     def from_yaml(cls, filename):
         """
         Create project settings from YAML configuration file.
-        
+
         Args:
             filename (str): Path to YAML configuration file.
-            
+
         Returns:
             YamlORCAProjectSettings: Configured project settings instance.
         """
@@ -456,19 +456,19 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
 class YamlORCAProjectSettingsBuilder:
     """
     Builder class for constructing YAML-based ORCA project settings.
-    
+
     This class reads YAML configuration files and builds appropriate
     ORCA project settings with job-specific configurations. Handles
     the mapping of YAML data to ORCA job settings objects.
-    
+
     Attributes:
         filename (str): Path to the YAML configuration file.
     """
-    
+
     def __init__(self, filename):
         """
         Initialize the YAML ORCA project settings builder.
-        
+
         Args:
             filename (str): Path to YAML configuration file containing
                 ORCA job definitions and settings.
@@ -478,15 +478,15 @@ class YamlORCAProjectSettingsBuilder:
     def build(self):
         """
         Build complete ORCA project settings from YAML configuration.
-        
+
         Reads the YAML file and creates job-specific settings for all
         supported ORCA calculation types, constructing a complete
         project settings instance.
-        
+
         Returns:
             YamlORCAProjectSettings: Complete project settings with all
                 job types configured from YAML data.
-                
+
         Raises:
             FileNotFoundError: If the YAML configuration file is not found.
             ValueError: If the YAML file contains invalid configuration.
@@ -522,7 +522,7 @@ class YamlORCAProjectSettingsBuilder:
     def _read_config(self):
         """
         Read and parse the YAML configuration file.
-        
+
         Returns:
             dict: Parsed YAML configuration data.
         """
@@ -533,19 +533,19 @@ class YamlORCAProjectSettingsBuilder:
     def _project_settings_for_job(self, job_type):
         """
         Create job-specific settings from YAML configuration.
-        
+
         Maps job types to appropriate settings classes and creates
         configured instances based on YAML data.
-        
+
         Args:
             job_type (str): Type of job (opt, ts, irc, scan, etc.).
-            
+
         Returns:
-            ORCAJobSettings or ORCAIRCJobSettings or ORCATSJobSettings: Configured 
-                settings for the specified job type. Returns ORCAIRCJobSettings for 
-                IRC jobs, ORCATSJobSettings for TS jobs, and ORCAJobSettings for 
+            ORCAJobSettings or ORCAIRCJobSettings or ORCATSJobSettings: Configured
+                settings for the specified job type. Returns ORCAIRCJobSettings for
+                IRC jobs, ORCATSJobSettings for TS jobs, and ORCAJobSettings for
                 all other job types.
-            
+
         Raises:
             RuntimeError: If configuration for the job type is not found.
         """
@@ -569,7 +569,7 @@ class YamlORCAProjectSettingsBuilder:
     def _parse_project_name(self):
         """
         Extract project name from the YAML filename.
-        
+
         Returns:
             str: Project name derived from filename (without extension).
         """
@@ -579,11 +579,11 @@ class YamlORCAProjectSettingsBuilder:
 class ORCAProjectSettingsManager:
     """
     Manager for ORCA project settings from YAML configuration files.
-    
+
     Provides management interface for loading ORCA computational chemistry
     project settings from YAML files in a specified folder structure. Handles
     file validation and project settings creation.
-    
+
     Attributes:
         filename (str): Absolute path to the YAML configuration file.
     """
@@ -591,11 +591,11 @@ class ORCAProjectSettingsManager:
     def __init__(self, filename):
         """
         Initialize the ORCA project settings manager.
-        
+
         Args:
             filename (str): Path to YAML configuration file containing
                 ORCA project settings.
-                
+
         Raises:
             ValueError: If filename is None or not specified.
         """
@@ -606,14 +606,14 @@ class ORCAProjectSettingsManager:
     def create(self):
         """
         Create project settings from the specified YAML file.
-        
+
         Loads and parses the YAML configuration file to create a complete
         ORCA project settings instance with all job configurations.
-        
+
         Returns:
             YamlORCAProjectSettings: Configured project settings loaded
                 from the YAML file.
-                
+
         Raises:
             FileNotFoundError: If the specified YAML file does not exist.
             ValueError: If the YAML file is malformed or invalid.

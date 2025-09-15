@@ -45,7 +45,9 @@ def modred(
     modred_settings = get_setting_from_jobtype_for_orca(
         project_settings, jobtype, coordinates, dist_start, dist_end, num_steps
     )
-    logger.debug(f"Loaded modred settings for jobtype {jobtype}: {modred_settings}")
+    logger.debug(
+        f"Loaded modred settings for jobtype {jobtype}: {modred_settings}"
+    )
 
     # job setting from filename or default, with updates from user in cli
     # specified in keywords

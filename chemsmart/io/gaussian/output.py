@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 
 class Gaussian16Output(GaussianFileMixin):
     """Comprehensive parser for Gaussian 16 output files.
-    
+
     This class provides extensive parsing capabilities for Gaussian output
     files, extracting molecular geometries, energies, vibrational frequencies,
     thermochemical data, and other computational results. It supports various
     calculation types including single-point energy calculations, geometry
     optimizations, frequency analyses, and potential energy surface scans.
-    
+
     Args:
         filename (str): Path to the Gaussian output file to parse
         use_frozen (bool, optional): Whether to include frozen coordinates
@@ -61,7 +61,7 @@ class Gaussian16Output(GaussianFileMixin):
     def normal_termination(self):
         """
         Check if the Gaussian calculation terminated normally.
-        
+
         Examines the last line of the output file for the standard
         Gaussian termination message to determine if the calculation
         completed successfully.
@@ -149,7 +149,7 @@ class Gaussian16Output(GaussianFileMixin):
     def spin(self):
         """
         Determine if calculation uses restricted or unrestricted spin.
-        
+
         Analyzes the SCF method specification to determine whether
         the calculation uses restricted (R) or unrestricted (U) spin.
         """
@@ -322,7 +322,7 @@ class Gaussian16Output(GaussianFileMixin):
     def last_structure(self):
         """
         Return the last molecular structure from the calculation.
-        
+
         Returns the final structure regardless of whether the calculation
         completed successfully. Useful for analyzing partially converged
         optimizations or error cases.
@@ -619,9 +619,9 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def vibrational_modes(self):
         """
-        Obtain list of vibrational normal modes corresponding 
-        to the vibrational frequency. Returns a list of normal modes, 
-        each of num_atoms x 3 (in dx, dy, and dz for each element) 
+        Obtain list of vibrational normal modes corresponding
+        to the vibrational frequency. Returns a list of normal modes,
+        each of num_atoms x 3 (in dx, dy, and dz for each element)
         vibration.
         """
         list_of_vib_modes = []
@@ -666,7 +666,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def has_frozen_coordinates(self):
         """Check if the calculation includes frozen coordinates.
-        
+
         Returns:
             bool: True if frozen coordinates are present
         """

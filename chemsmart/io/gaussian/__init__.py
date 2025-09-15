@@ -1,10 +1,10 @@
 class GaussianRefs:
     """Reference data for Gaussian quantum chemistry calculations.
-    
+
     This class contains lists of supported methods, basis sets, solvation
     models, and other parameters available in Gaussian software.
     """
-    
+
     # Ab initio methods supported by Gaussian
     g_ab_initio = [
         "hf",
@@ -18,7 +18,7 @@ class GaussianRefs:
         "ccsd",
         "ccsd(t)",
     ]
-    
+
     # Density functional theory (DFT) functionals
     g_functionals = [
         "pbe",
@@ -33,10 +33,10 @@ class GaussianRefs:
         "m06",
         "mn15",
     ]
-    
+
     # Basis set families and prefixes
     g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
-    
+
     # Semi-empirical methods
     g_semiempirical = [
         "AM1",
@@ -48,7 +48,7 @@ class GaussianRefs:
         "MNDO",
         "MINDO3",
     ]
-    
+
     # Solvation models available in Gaussian
     g_solvation_models = [
         "smd",
@@ -59,7 +59,7 @@ class GaussianRefs:
         "ipcm",
         "dipole",
     ]
-    
+
     # Additional route line parameters
     g_additional_route_parameters = [
         "force",
@@ -69,7 +69,7 @@ class GaussianRefs:
         "scf",
         "geom",  # Used for geom=check keyword when reading checkpoint files
     ]
-    
+
     # Additional optimization options
     g_additional_opt_options = [
         "maxstep",
@@ -90,7 +90,7 @@ class GaussianRefs:
         "micro",
         "quadmacro",
     ]
-    
+
     # Gaussian route line verbosity tags
     g_dieze_tags = ["#n", "#p", "#t"]
 
@@ -139,7 +139,7 @@ class BSEMetadata:
     """
     Basis Set Exchange metadata and interface.
     """
-    
+
     def __init__(self):
         try:
             import basis_set_exchange as bse
@@ -154,7 +154,7 @@ class BSEMetadata:
 
     def all_bases_names(self):
         """Get all available basis set names in lowercase.
-        
+
         Returns:
             list: List of all basis set names converted to lowercase
         """
@@ -164,7 +164,7 @@ class BSEMetadata:
 
     def all_formats(self):
         """Get all available output formats.
-        
+
         Returns:
             dict: Dictionary mapping format keys to format names
         """
@@ -200,7 +200,7 @@ class BSEMetadata:
         Available formats include: nwchem, gaussian94, psi4, molcas, qchem,
         orca, dalton, qcschema, cp2k, pqs, demon2k, gamess_us, turbomole,
         gamess_uk, molpro, cfour, acesii, xtron, bsedebug, json, bdf.
-        
+
         Returns:
             list: List of format keys
         """

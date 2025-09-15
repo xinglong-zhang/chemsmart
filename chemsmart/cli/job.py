@@ -13,10 +13,11 @@ import click
 def click_job_options(f):
     """
     Common job control options for all job types.
-    
+
     Provides standard options for job execution control, including
     the ability to skip completed jobs or force re-execution.
     """
+
     @click.option(
         "-S/-R",
         "--skip-completed/--no-skip-completed",
@@ -35,7 +36,7 @@ def click_job_options(f):
 def click_pubchem_options(f):
     """
     PubChem integration options for molecular structure retrieval.
-    
+
     Provides command-line options for querying molecular structures
     from the PubChem database using various identifiers.
     """

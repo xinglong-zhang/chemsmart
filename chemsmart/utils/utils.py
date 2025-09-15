@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class OrderedSet:
     """
     Set-like container that maintains insertion order.
-    
+
     Provides set operations while preserving the order in which items
     were added. Useful when uniqueness is required but order matters.
     """
@@ -35,7 +35,7 @@ class OrderedSet:
     def __init__(self, iterable=None):
         """
         Initialize an OrderedSet with optional initial items.
-        
+
         Args:
             iterable (optional): Initial items to add to the set.
         """
@@ -47,7 +47,7 @@ class OrderedSet:
     def add(self, item):
         """
         Add an item to the set if not already present.
-        
+
         Args:
             item: Item to add to the set.
         """
@@ -57,7 +57,7 @@ class OrderedSet:
     def remove(self, item):
         """
         Remove an item from the set if present.
-        
+
         Args:
             item: Item to remove from the set.
         """
@@ -67,10 +67,10 @@ class OrderedSet:
     def __contains__(self, item):
         """
         Check if an item is in the set.
-        
+
         Args:
             item: Item to check for membership.
-            
+
         Returns:
             bool: True if item is in the set, False otherwise.
         """
@@ -79,7 +79,7 @@ class OrderedSet:
     def __iter__(self):
         """
         Return an iterator over the items in the set.
-        
+
         Returns:
             iterator: Iterator over set items in insertion order.
         """
@@ -88,7 +88,7 @@ class OrderedSet:
     def __len__(self):
         """
         Return the number of items in the set.
-        
+
         Returns:
             int: Number of items in the set.
         """
@@ -112,13 +112,13 @@ def file_cache(copy_result=True, maxsize=64):
         ...
 
     Args:
-        copy_result (bool, optional): If true, will copy the result of the 
-                                    function call before caching. This 
-                                    prevents changes to the result from 
+        copy_result (bool, optional): If true, will copy the result of the
+                                    function call before caching. This
+                                    prevents changes to the result from
                                     polluting the cache. Defaults to True.
-        maxsize (int, optional): Maximum number of results to cache. 
+        maxsize (int, optional): Maximum number of results to cache.
                                Defaults to 64.
-                               
+
     Returns:
         function: Decorated function with file-based caching.
     """
@@ -180,23 +180,24 @@ def file_cache(copy_result=True, maxsize=64):
 class FileReadError(Exception):
     """
     Exception raised when file reading operations fail.
-    
+
     Used to indicate errors during file parsing or reading operations
     in computational chemistry file processing.
     """
+
     pass
 
 
 def is_float(string):
     """
     Test if a given string represents a float value.
-    
+
     Checks if a string can be converted to a float, excluding
     strings that represent integers.
-    
+
     Args:
         string (str): String to test for float representation.
-        
+
     Returns:
         bool: True if string represents a float, False otherwise.
     """
@@ -212,13 +213,13 @@ def is_float(string):
 def strip_out_comments(string):
     """
     Remove comments from a string.
-    
+
     Strips out comments by removing everything that follows after '#'
     for each line in the input string.
-    
+
     Args:
         string (str): Input string potentially containing comments.
-        
+
     Returns:
         str: String with comments removed.
     """
@@ -228,13 +229,13 @@ def strip_out_comments(string):
 def content_blocks_by_paragraph(string_list):
     """
     Group lines into content blocks separated by empty lines.
-    
+
     Takes a list of strings and groups them into blocks based on
     empty line separators.
-    
+
     Args:
         string_list (list): List of strings to group into blocks.
-        
+
     Returns:
         list: List of content blocks, each block is a list of strings.
     """
@@ -250,13 +251,13 @@ def write_list_of_lists_as_a_string_with_empty_line_between_lists(
 ):
     """
     Convert nested lists to a formatted string with separating empty lines.
-    
+
     Converts a list of lists into a single string where each inner list
     becomes a block of lines, separated by empty lines between blocks.
-    
+
     Args:
         list_of_lists (list): Nested list structure to convert.
-        
+
     Returns:
         str: Formatted string with empty lines between list blocks.
     """
@@ -298,14 +299,14 @@ def get_list_from_string_range(string_of_range):
 def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
     """
     Convert atom indices to Gaussian frozen coordinate format.
-    
+
     Creates a mask list for Gaussian input where specified atoms
     are marked for coordinate freezing. Uses 1-indexed numbering.
-    
+
     Args:
         list_of_indices (list): List of atom indices to freeze (1-indexed).
         molecule: Molecule object containing chemical symbols.
-        
+
     Returns:
         list: Binary mask list for Gaussian frozen coordinates.
     """
@@ -319,14 +320,14 @@ def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
 def convert_list_to_orca_frozen_list(list_of_indices, molecule):
     """
     Convert atom indices to ORCA frozen coordinate format.
-    
+
     Creates a mask list for ORCA input where specified atoms
     are marked for coordinate freezing. Uses 0-indexed numbering.
-    
+
     Args:
         list_of_indices (list): List of atom indices to freeze (0-indexed).
         molecule: Molecule object containing chemical symbols.
-        
+
     Returns:
         list: Binary mask list for ORCA frozen coordinates.
     """
@@ -340,7 +341,7 @@ def convert_list_to_orca_frozen_list(list_of_indices, molecule):
 def str_indices_range_to_list(str_indices):
     """
     Convert string index notation to a list of indices.
-    
+
     Parses various string formats for specifying index ranges
     and converts them to a list of individual indices. All 1-indexed.
 
@@ -349,10 +350,10 @@ def str_indices_range_to_list(str_indices):
         '1,2,4' -> gives [1,2,4]
         '1-9' -> gives [1,2,3,4,5,6,7,8]
         '[1-9]' -> gives [1,2,3,4,5,6,7,8]
-        
+
     Args:
         str_indices (str): String representation of indices in supported formats.
-        
+
     Returns:
         list: List of individual integer indices.
     """
@@ -383,17 +384,17 @@ def str_indices_range_to_list(str_indices):
 def string2index_1based(stridx: str) -> Union[int, slice, str]:
     """
     Convert string index to appropriate type using 1-based indexing.
-    
+
     Wrapper function that converts string representations of indices
     to the appropriate Python types (int, slice) while handling
     1-based to 0-based index conversion.
-    
+
     Args:
         stridx (str): String representation of index (e.g., '1', '1:5', '1:5:2').
-        
+
     Returns:
         Union[int, slice, str]: Converted index in appropriate Python type.
-        
+
     Raises:
         ValueError: If index is 0 or has invalid format.
     """
@@ -448,19 +449,19 @@ def convert_string_index_from_1_based_to_0_based(
 ) -> Union[int, slice, list]:
     """
     Convert string index from 1-based to 0-based indexing.
-    
+
     Handles single indices, slices, and negative indices. Supports
     various input formats including user-defined ranges.
 
     Args:
         index (Union[str, int, slice]): String representing an index or slice,
-                                       e.g., "1", "2:5", "3:10:2", "-1", 
+                                       e.g., "1", "2:5", "3:10:2", "-1",
                                        or user-defined ranges like "1-2,5".
 
     Returns:
-        Union[int, slice, list]: Integer, slice, or list adjusted for 
+        Union[int, slice, list]: Integer, slice, or list adjusted for
                                 0-based indexing.
-                                
+
     Raises:
         ValueError: If index is 0 (invalid for 1-based indexing).
     """
@@ -520,14 +521,14 @@ def return_objects_from_string_index(list_of_objects, index):
 def get_value_by_number(num, data):
     """
     Retrieve dictionary value by matching numeric part of keys.
-    
+
     Searches through dictionary keys to find one containing the
     specified number and returns the corresponding value.
-    
+
     Args:
         num (int): Number to search for in dictionary keys.
         data (dict): Dictionary to search through.
-        
+
     Returns:
         Any: Value corresponding to the key containing the number.
     """
@@ -542,15 +543,15 @@ def get_value_by_number(num, data):
 def get_key_by_value_and_number(value, number, data):
     """
     Find dictionary key by matching both value and numeric suffix.
-    
+
     Searches for a dictionary entry where both the value matches
     the specified value and the key ends with the specified number.
-    
+
     Args:
         value (Any): Value to match in the dictionary.
         number (int): Number that should appear at the end of the key.
         data (dict): Dictionary to search through.
-        
+
     Returns:
         str: Key that matches both criteria, or None if not found.
     """
@@ -570,7 +571,7 @@ def two_files_have_similar_contents(
 ):
     """
     Compare two files for similar contents with optional string exclusion.
-    
+
     Checks if the reference file has the same contents as the output file,
     optionally ignoring lines containing specified strings.
 
@@ -579,7 +580,7 @@ def two_files_have_similar_contents(
         output_file (str): Path to the output file to compare.
         ignored_string (str, optional): If specified, lines containing this
                                        string will not be compared.
-                                       
+
     Returns:
         bool: True if files have similar contents, False otherwise.
     """
@@ -600,7 +601,7 @@ def two_files_have_similar_contents(
 def two_lists_have_similar_contents(list1, list2, ignore_string=None):
     """
     Compare two lists for identical contents with optional string exclusion.
-    
+
     Checks if two lists have the same contents, optionally ignoring
     list members that contain a specified string.
 
@@ -609,7 +610,7 @@ def two_lists_have_similar_contents(list1, list2, ignore_string=None):
         list2 (list): Second list to compare.
         ignore_string (str, optional): If specified, list items containing
                                       this string will be ignored in comparison.
-                                      
+
     Returns:
         bool: True if lists have similar contents, False otherwise.
     """
@@ -626,18 +627,18 @@ def two_lists_have_similar_contents(list1, list2, ignore_string=None):
 def update_dict_with_existing_keys(dict1, dict2):
     """
     Update dictionary with values from another dictionary.
-    
+
     Updates dict1 with values from dict2, but only for keys that
     already exist in dict1. Raises an error if dict2 contains
     keys not present in dict1.
-    
+
     Args:
         dict1 (dict): Dictionary to be updated (modified in place).
         dict2 (dict): Dictionary containing new values.
-        
+
     Returns:
         dict: The updated dict1.
-        
+
     Raises:
         ValueError: If dict2 contains keys not present in dict1.
     """
@@ -656,16 +657,16 @@ def update_dict_with_existing_keys(dict1, dict2):
 def get_prepend_string_for_modred(list_of_string):
     """
     Get coordinate type prefix for molecular geometry modifications.
-    
+
     Returns the appropriate prefix string based on the number of
     atoms involved in the coordinate specification.
-    
+
     Args:
         list_of_string (list): List of atom indices for coordinate.
-        
+
     Returns:
         str: Prefix string ('B' for bond, 'A' for angle, 'D' for dihedral).
-        
+
     Raises:
         ValueError: If list length is not 2, 3, or 4.
     """
@@ -681,10 +682,10 @@ def get_prepend_string_for_modred(list_of_string):
 def convert_modred_list_to_string(modred_list):
     """
     Convert a list of modification coordinates to a space-separated string.
-    
+
     Args:
         modred_list (list): List of coordinate values to convert.
-        
+
     Returns:
         str: Space-separated string of coordinate values.
     """
@@ -744,19 +745,19 @@ def get_prepend_string_list_from_modred_free_format(
 def prune_list_of_elements(list_of_elements, molecule):
     """
     Filter element list to only include elements present in molecule.
-    
+
     Prunes the list of elements so that only the specified elements
     that appear in a molecule are returned. Useful for filtering
     predefined element lists based on actual molecular composition.
-    
+
     Example:
         Heavy elements specified as ["Pd", "Ag", "Au"], but if only "Pd"
         appears in the molecule, then only "Pd" will be returned.
-    
+
     Args:
         list_of_elements (list): List of element symbols to filter.
         molecule: Molecule object with chemical_symbols attribute.
-        
+
     Returns:
         list: Filtered list containing only elements present in molecule.
     """
@@ -768,14 +769,14 @@ def prune_list_of_elements(list_of_elements, molecule):
 def sdf2molecule(sdf_lines):
     """
     Convert SDF format data to a Molecule object.
-    
+
     Parses Structure Data Format (SDF) lines containing atomic coordinates
     and element information to create a Molecule object.
-    
+
     Args:
         sdf_lines (Union[list, str]): SDF format data as list of lines
                                      or as a single string.
-                                     
+
     Returns:
         Molecule: Molecule object created from SDF coordinate data.
     """
@@ -813,13 +814,13 @@ def sdf2molecule(sdf_lines):
 def check_charge_and_multiplicity(settings):
     """
     Validate that charge and multiplicity are set in settings.
-    
+
     Checks if both charge and multiplicity are properly configured
     in the settings object, raising an error if either is missing.
-    
+
     Args:
         settings: Settings object containing charge and multiplicity attributes.
-        
+
     Raises:
         ValueError: If charge or multiplicity is None.
     """
@@ -848,7 +849,7 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
     Returns:
         bool: True if files are identical except for ignored lines,
               False otherwise.
-              
+
     Raises:
         ValueError: If ignore_string is not a string or list of strings.
     """
@@ -880,13 +881,13 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
 def run_command(command):
     """
     Execute a shell command and capture its output.
-    
+
     Runs a shell command using subprocess.Popen and captures its output.
     Handles both string commands and command lists with proper error handling.
 
     Args:
-        command (Union[str, list]): Command to execute. Can be a string 
-                                  (e.g., 'ls -l') or a list 
+        command (Union[str, list]): Command to execute. Can be a string
+                                  (e.g., 'ls -l') or a list
                                   (e.g., ['ls', '-l']).
 
     Returns:
@@ -920,13 +921,13 @@ def run_command(command):
 def quote_path(path):
     """
     Quote file paths to handle spaces and special characters.
-    
+
     Adds quotes around paths on Windows to handle spaces and backslashes
     properly. On other platforms, returns the path unchanged.
-    
+
     Args:
         path (str): File path to quote.
-        
+
     Returns:
         str: Quoted path on Windows, original path on other platforms.
     """
@@ -941,21 +942,21 @@ def kabsch_align(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Align molecules using the Kabsch algorithm.
-    
+
     Performs optimal alignment of two molecular structures using the
     Kabsch algorithm for finding the optimal rotation and translation
     that minimizes RMSD between corresponding atoms.
-    
+
     Args:
         P (np.ndarray): First molecule coordinates (N x 3 array).
         Q (np.ndarray): Second molecule coordinates (N x 3 array).
-        
+
     Returns:
         Tuple[np.ndarray, np.ndarray]: Aligned coordinates for both molecules.
-        
+
     Raises:
         AssertionError: If matrix dimensions don't match.
-        
+
     Reference:
         From https://hunterheidenreich.com/posts/kabsch_algorithm/
     """
@@ -1000,21 +1001,21 @@ def kabsch_align2(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """
     Alternative Kabsch algorithm implementation for molecular alignment.
-    
+
     Note: This implementation may not work correctly and is kept for
     reference. Use kabsch_align() for reliable molecular alignment.
 
     Args:
         P (np.ndarray): First molecule coordinates (N x 3 array).
         Q (np.ndarray): Second molecule coordinates (N x 3 array).
-        
+
     Returns:
         Tuple containing:
         - aligned_P: P after rotation and translation to match Q's position
         - R: Optimal rotation matrix
         - t: Optimal translation vector
         - rmsd: Root Mean Square Deviation after alignment
-        
+
     Raises:
         AssertionError: If input matrices have different dimensions.
     """
@@ -1055,13 +1056,13 @@ def kabsch_align2(
 def extract_number(filename):
     """
     Extract numeric part from filename for sorting purposes.
-    
+
     Extracts the numeric component from filenames containing patterns
     like 'c123' or 'c456*'. Used for natural sorting of files.
-    
+
     Args:
         filename (str): Filename to extract number from.
-        
+
     Returns:
         int or float: Extracted number, or infinity if no number found
                      (to place files without numbers at the end during sorting).
@@ -1079,14 +1080,14 @@ def extract_number(filename):
 def search_file(filename):
     """
     Search for a file in current directory and subdirectories.
-    
+
     Searches for a file in the current directory and its subdirectories
     using the system's find command. Returns both absolute file path
     and directory path.
-    
+
     Args:
         filename (str): Name of the file to search for.
-        
+
     Returns:
         tuple: (absolute_file_path, absolute_file_dir) or (None, None)
                if file is not found or an error occurs.
@@ -1131,14 +1132,14 @@ def search_file(filename):
 def iterative_compare(input_list):
     """
     Extract unique elements from a list while preserving order.
-    
+
     Compares an input list and returns a list of unique elements,
     maintaining the order of first occurrence. Can handle lists
     of various data types including nested lists, strings, or dictionaries.
-    
+
     Args:
         input_list (list): List to process for unique elements.
-        
+
     Returns:
         list: List containing unique elements in order of first occurrence.
     """
@@ -1152,14 +1153,14 @@ def iterative_compare(input_list):
 def naturally_sorted(lst):
     """
     Sort a list of strings in natural order with numeric awareness.
-    
+
     Unlike standard alphabetical sorting, this function treats numerical
     parts as numbers rather than strings, ensuring proper ordering
     (e.g., "file10.txt" comes after "file2.txt").
 
     Args:
         lst (list): List of strings to sort naturally.
-        
+
     Returns:
         list: Sorted list using natural ordering.
     """
@@ -1176,7 +1177,7 @@ def naturally_sorted(lst):
 def spline_data(x, y, new_length=1000, k=3):
     """
     Interpolate data points using univariate spline with even spacing.
-    
+
     Interpolates data points using a univariate spline and returns
     evenly spaced points. Input points are automatically sorted by
     x-values to ensure proper interpolation.

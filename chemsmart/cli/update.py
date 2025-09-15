@@ -125,7 +125,7 @@ class Updater:
 
     def _get_missing_dependencies(self, requirements_path):
         """
-        Identify dependencies missing from pyproject.toml, preserving 
+        Identify dependencies missing from pyproject.toml, preserving
         versions.
         """
         if not requirements_path.exists():
@@ -141,8 +141,8 @@ class Updater:
 
         # Package name normalization mapping (for comparison)
         package_mapping = {
-            "pymol-open-source": "pymol",  # Treat pymol-open-source as 
-                                          # pymol for matching
+            "pymol-open-source": "pymol",  # Treat pymol-open-source as
+            # pymol for matching
         }
         reverse_mapping = {
             v: k for k, v in package_mapping.items()
@@ -187,7 +187,7 @@ class Updater:
         with self.pyproject_path.open("r") as f:
             pyproject_toml = tomlkit.parse(f.read())
 
-        # Function to normalize package name to lowercase while preserving 
+        # Function to normalize package name to lowercase while preserving
         # version
         def normalize_dep(dep):
             pkg_name, *version = re.split(r"([=<>~!])", dep, maxsplit=1)

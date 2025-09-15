@@ -82,10 +82,10 @@ class FileOrganizer:
     def load_data(self):
         """
         Load data from Excel file.
-        
+
         Reads data from the Excel file using the specified parameters including
         sheet name, columns, rows to skip, and other formatting options.
-        
+
         Returns:
             pd.DataFrame: DataFrame containing the loaded Excel data.
         """
@@ -102,15 +102,15 @@ class FileOrganizer:
     def clean_data(self):
         """
         Clean data from Excel file by removing empty structure names in second column.
-        
+
         Processes the loaded Excel data to remove rows where the second column
         (structure names) is empty or contains only whitespace. Converts all
         valid entries to strings and strips whitespace.
-        
+
         Returns:
             tuple: A tuple containing three lists:
                 - new_list1 (list): Cleaned folder names from first column
-                - new_list2 (list): Cleaned final filenames from second column  
+                - new_list2 (list): Cleaned final filenames from second column
                 - new_list3 (list): Cleaned runtime filenames from third column
         """
         columns = self.data.columns
@@ -133,13 +133,13 @@ class FileOrganizer:
     def create_directories(self, folders):
         """
         Create directories for organizing files.
-        
-        Creates subdirectories within the working directory based on the 
+
+        Creates subdirectories within the working directory based on the
         provided folder names. Only creates directories that don't already exist.
-        
+
         Args:
             folders (list): List of folder names to create.
-            
+
         Returns:
             None
         """
@@ -152,15 +152,15 @@ class FileOrganizer:
     def copy_and_rename(self, target_folder, new_filename, old_filename):
         """
         Copy and rename files to target folder.
-        
-        Searches for the original file, adds file extensions if needed, and 
+
+        Searches for the original file, adds file extensions if needed, and
         copies the file to the target folder with the new filename.
-        
+
         Args:
             target_folder (str): Destination folder for the file.
             new_filename (str): New name for the file.
             old_filename (str): Original name of the file to copy.
-            
+
         Returns:
             None
         """
@@ -181,12 +181,12 @@ class FileOrganizer:
     def organize_files(self):
         """
         Organize files in Excel file into folders.
-        
+
         Main method that orchestrates the file organization process:
         1. Cleans the Excel data to get valid folder names and filenames
         2. Creates necessary directories
         3. Copies and renames files to their target locations
-        
+
         Returns:
             None
         """

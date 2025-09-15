@@ -13,12 +13,12 @@ from chemsmart.jobs.gaussian.job import GaussianJob
 class GaussianCustomJob(GaussianJob):
     """
     Gaussian job class for custom user-defined calculations.
-    
+
     Provides a flexible job type for running custom Gaussian
     calculations that may not fit into standard specialized
     categories. Allows users to define their own calculation
     parameters and job configurations.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16job').
         molecule (Molecule): Molecular structure used for the calculation.
@@ -27,6 +27,7 @@ class GaussianCustomJob(GaussianJob):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "g16job"
 
     def __init__(
@@ -34,10 +35,10 @@ class GaussianCustomJob(GaussianJob):
     ):
         """
         Initialize a Gaussian custom calculation job.
-        
+
         Sets up a custom calculation with the specified molecular
         structure and user-defined calculation settings.
-        
+
         Args:
             molecule (Molecule): Molecular structure for calculation.
             settings (GaussianJobSettings, optional): Calculation configuration.

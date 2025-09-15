@@ -564,7 +564,7 @@ class ORCAJobSettings(MolecularJobSettings):
             ValueError: If invalid method combination or missing parameters
         """
         level_of_theory = ""
-        
+
         if self.ab_initio is not None and self.functional is not None:
             raise ValueError(
                 "Warning: both ab initio and DFT are specified!\n"

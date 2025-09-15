@@ -28,17 +28,17 @@ logger = logging.getLogger(__name__)
 class GaussianJobSettings(MolecularJobSettings):
     """
     Configuration settings for Gaussian computational chemistry jobs.
-    
+
     Manages all parameters needed to configure Gaussian calculations
     including quantum chemistry methods, basis sets, solvation models,
     optimization options, and advanced features like pseudopotentials.
     Provides validation and merging capabilities for job configurations.
-    
+
     Inherits common calculation fields from `MolecularJobSettings`, such as
     `ab_initio`, `functional`, `basis`, `semiempirical`, `charge`,
     `multiplicity`, `job_type`, `title`, `freq`, `numfreq`, `solvent_model`,
     `solvent_id`, `custom_solvent`, `forces`, and `input_string`.
-    
+
     Attributes:
         chk (bool): Whether to use checkpoint files.
         dieze_tag (str): Calculation level specification.
@@ -47,7 +47,7 @@ class GaussianJobSettings(MolecularJobSettings):
         append_additional_info (str): Additional input file content.
         gen_genecp_file (str): Path to GenECP definition file.
     """
-    
+
     def __init__(
         self,
         ab_initio=None,
@@ -81,10 +81,10 @@ class GaussianJobSettings(MolecularJobSettings):
     ):
         """
         Initialize Gaussian job settings with calculation parameters.
-        
+
         Sets up all configuration options for Gaussian calculations
         including validation of parameter combinations and path expansion.
-        
+
         Args:
             ab_initio (str, optional): Ab initio method (e.g., 'HF', 'MP2').
             functional (str, optional): DFT functional (e.g., 'B3LYP').
@@ -114,7 +114,7 @@ class GaussianJobSettings(MolecularJobSettings):
             forces (bool): Calculate forces.
             input_string (str, optional): Custom input string.
             **kwargs: Additional keyword arguments.
-            
+
         Raises:
             ValueError: If incompatible options are specified (freq + forces).
         """
@@ -170,10 +170,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def genecp(self):
         """
         Check if GenECP pseudopotentials are configured.
-        
+
         Determines whether the job uses GenECP pseudopotential
         definitions either from a file or heavy element specifications.
-        
+
         Returns:
             bool: True if GenECP is configured, False otherwise.
         """
@@ -189,11 +189,11 @@ class GaussianJobSettings(MolecularJobSettings):
     ):
         """
         Merge current settings with another settings object.
-        
+
         Combines settings from two sources, with the other settings
         taking precedence. Supports selective merging of specific
         keywords or complete merging of all parameters.
-        
+
         Args:
             keywords (list): Specific list of keywords to merge.
                 Defaults to charge and multiplicity.
@@ -228,10 +228,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def copy(self):
         """
         Create a deep copy of the settings object.
-        
+
         Returns a completely independent copy of the settings
         that can be modified without affecting the original.
-        
+
         Returns:
             GaussianJobSettings: Deep copy of this settings object.
         """
@@ -240,13 +240,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def __getitem__(self, key):
         """
         Get setting value by key using dictionary-style access.
-        
+
         Allows settings to be accessed like a dictionary for
         compatibility with existing code patterns.
-        
+
         Args:
             key (str): Setting name to retrieve.
-            
+
         Returns:
             Any: Value of the requested setting.
         """
@@ -255,13 +255,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def __eq__(self, other):
         """
         Compare two settings objects for equality.
-        
+
         Checks if all attributes are equal between two settings objects,
         excluding the append_additional_info field from comparison.
-        
+
         Args:
             other (GaussianJobSettings): Settings object to compare with.
-            
+
         Returns:
             bool or NotImplemented: True if equal, False if different,
                 NotImplemented if types don't match.
@@ -289,13 +289,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def from_comfile(cls, filename):
         """
         Create Gaussian settings from a Gaussian .com input file.
-        
+
         Parses a Gaussian input file to extract calculation settings
         and returns a configured GaussianJobSettings object.
-        
+
         Args:
             filename (str): Path to the .com file to be parsed.
-            
+
         Returns:
             GaussianJobSettings: Settings object extracted from input file.
         """
@@ -311,13 +311,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def from_inpfile(cls, filename):
         """
         Create Gaussian settings from an ORCA .inp input file.
-        
+
         Converts ORCA input file settings to equivalent Gaussian
         settings by parsing the file and merging with default values.
-        
+
         Args:
             filename (str): Path to the .inp file to be parsed.
-            
+
         Returns:
             GaussianJobSettings: Gaussian-compatible settings object.
         """
@@ -341,13 +341,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def from_logfile(cls, filename):
         """
         Create Gaussian settings from a Gaussian .log output file.
-        
+
         Extracts calculation settings from a completed Gaussian
         log file, including support for periodic boundary conditions.
-        
+
         Args:
             filename (str): Path to the .log file to be parsed.
-            
+
         Returns:
             GaussianJobSettings: Settings object extracted from log file.
         """
@@ -371,13 +371,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def from_outfile(cls, filename):
         """
         Create Gaussian settings from an ORCA .out output file.
-        
+
         Converts ORCA output file settings to equivalent Gaussian
         settings by parsing the file and merging with defaults.
-        
+
         Args:
             filename (str): Path to the ORCA .out file to be parsed.
-            
+
         Returns:
             GaussianJobSettings: Gaussian-compatible settings object.
         """
@@ -403,10 +403,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def default(cls):
         """
         Create default Gaussian job settings.
-        
+
         Returns a GaussianJobSettings object with sensible default
         values for common calculations including frequency analysis.
-        
+
         Returns:
             GaussianJobSettings: Default settings configuration.
         """
@@ -444,28 +444,32 @@ class GaussianJobSettings(MolecularJobSettings):
     def from_filepath(cls, filepath, **kwargs):
         """
         Create settings from a file based on its extension.
-        
+
         Automatically determines the file type and uses the appropriate
         parser to create settings from the input file.
-        
+
         Args:
             filepath (str): Path to input file (.com, .gjf, .inp, .log).
             **kwargs: Additional keyword arguments for file parsing.
-            
+
         Returns:
             GaussianJobSettings: Settings object from the input file.
-            
+
         Raises:
             ValueError: If file extension is not supported.
         """
         if filepath.endswith((".com", ".gjf")):
-            logger.debug(f"Loading settings from Gaussian input file: {filepath}")
+            logger.debug(
+                f"Loading settings from Gaussian input file: {filepath}"
+            )
             return cls.from_comfile(filepath)
         if filepath.endswith(".inp"):
             logger.debug(f"Loading settings from ORCA input file: {filepath}")
             return cls.from_inpfile(filepath)
         if filepath.endswith(".log"):
-            logger.debug(f"Loading settings from Gaussian log file: {filepath}")
+            logger.debug(
+                f"Loading settings from Gaussian log file: {filepath}"
+            )
             return cls.from_logfile(filepath)
         raise ValueError(f"Could not create {cls} from {filepath}")
 
@@ -473,10 +477,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def route_string(self):
         """
         Generate the Gaussian route string for the calculation.
-        
+
         Constructs the complete route line (#-line) for the Gaussian
         input file based on the configured job settings.
-        
+
         Returns:
             str: Complete route string for Gaussian input file.
         """
@@ -490,10 +494,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def _get_route_string_from_user_input(self):
         """
         Generate route string from user-provided route specification.
-        
+
         Processes user-defined route string and adds appropriate
         prefix (#-tag) if not already present.
-        
+
         Returns:
             str: Formatted route string with proper prefix.
         """
@@ -509,14 +513,14 @@ class GaussianJobSettings(MolecularJobSettings):
     def get_light_elements(self, molecule):
         """
         Identify light elements in molecule for GenECP calculations.
-        
+
         Determines which elements in the molecular structure are
         considered light elements (not in heavy_elements list) for
         mixed basis set calculations with pseudopotentials.
-        
+
         Args:
             molecule: Molecule object containing atomic information.
-            
+
         Returns:
             list or None: Sorted list of light element symbols,
                 or None if no heavy elements are specified.
@@ -539,14 +543,14 @@ class GaussianJobSettings(MolecularJobSettings):
     def _get_route_string_from_jobtype(self):
         """
         Generate route string based on job type and settings.
-        
+
         Constructs the Gaussian route string by analyzing the job type
         and incorporating all relevant calculation parameters including
         optimization options, frequency calculations, and solvation.
-        
+
         Returns:
             str: Complete route string for the specified job type.
-            
+
         Raises:
             ValueError: If required parameters are missing or incompatible
                 options are specified.
@@ -734,10 +738,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def _genecp_elements_specified(self):
         """
         Check if GenECP elements are properly specified.
-        
+
         Verifies that both heavy elements and their basis set are
         defined for GenECP pseudopotential calculations.
-        
+
         Returns:
             bool: True if GenECP elements are properly specified.
         """
@@ -750,10 +754,10 @@ class GaussianJobSettings(MolecularJobSettings):
     def _genecp_file_specified(self):
         """
         Check if GenECP file is properly specified and exists.
-        
+
         Verifies that a GenECP file path is provided and the file
         exists on the filesystem for pseudopotential definitions.
-        
+
         Returns:
             bool: True if GenECP file is specified and exists.
         """
@@ -764,17 +768,17 @@ class GaussianJobSettings(MolecularJobSettings):
     def get_genecp_section(self, molecule):
         """
         Generate GenECP section for mixed basis set calculations.
-        
+
         Creates the GenECP pseudopotential section either from
         explicitly specified elements and basis sets or from a
         pre-defined GenECP file.
-        
+
         Args:
             molecule: Molecule object for element analysis.
-            
+
         Returns:
             GenGenECPSection: GenECP section for Gaussian input.
-            
+
         Raises:
             ValueError: If neither GenECP elements nor file are specified.
         """
@@ -811,14 +815,14 @@ class GaussianJobSettings(MolecularJobSettings):
     def prune_heavy_elements(self, molecule):
         """
         Filter heavy elements list to those present in the molecule.
-        
+
         Removes heavy elements from the settings list that are not
         actually present in the current molecular structure, ensuring
         only relevant pseudopotentials are included.
-        
+
         Args:
             molecule: Molecule object containing atomic information.
-            
+
         Returns:
             list or None: Heavy elements present in the molecule,
                 or None if no heavy elements are specified.
@@ -835,13 +839,13 @@ class GaussianJobSettings(MolecularJobSettings):
     def _check_solvent(self, solvent_model):
         """
         Validate that the specified solvent model is supported.
-        
+
         Checks if the provided solvent model is in the list of
         supported Gaussian solvation models.
-        
+
         Args:
             solvent_model (str): Solvent model to validate.
-            
+
         Raises:
             ValueError: If solvent model is not supported.
         """
@@ -855,11 +859,11 @@ class GaussianJobSettings(MolecularJobSettings):
 class GaussianIRCJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian IRC (Intrinsic Reaction Coordinate) jobs.
-    
+
     Extends GaussianJobSettings with IRC-specific parameters for tracking
     reaction pathways from transition states to reactants and products.
     Includes options for predictors, recorrection, and flat IRC calculations.
-    
+
     Attributes:
         predictor (str): IRC predictor method (e.g., 'LQA', 'Euler').
         recorrect (str): Recorrection strategy (e.g., 'never', 'always').
@@ -869,7 +873,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         maxcycles (int): Max optimization cycles per IRC point.
         stepsize (int): IRC integration step size.
     """
-    
+
     def __init__(
         self,
         predictor=None,
@@ -884,10 +888,10 @@ class GaussianIRCJobSettings(GaussianJobSettings):
     ):
         """
         Initialize IRC-specific Gaussian job settings.
-        
+
         Configures parameters for IRC calculations including predictor
         methods, recorrection strategies, and integration limits.
-        
+
         Args:
             predictor (str, optional): Predictor method for IRC integration.
             recorrect (str, optional): Recorrection strategy.
@@ -915,20 +919,20 @@ class GaussianIRCJobSettings(GaussianJobSettings):
     def _get_route_string_from_jobtype(self):
         """
         Generate IRC-specific route string for Gaussian calculations.
-        
+
         Constructs the route string with IRC-specific keywords including
         predictor methods, recorrection settings, and integration
         parameters. Handles both regular and flat IRC calculations.
-        
+
         Returns:
             str: Complete IRC route string.
-            
+
         Raises:
             ValueError: If predictor and recorrect are inconsistently
                 specified.
         """
         route_string = super()._get_route_string_from_jobtype()
-        
+
         # Configure flat IRC parameters with appropriate defaults
         if self.flat_irc:
             logger.debug("Configuring flat IRC calculation parameters")
@@ -993,27 +997,27 @@ class GaussianIRCJobSettings(GaussianJobSettings):
 class GaussianLinkJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian multi-step link calculations.
-    
+
     Extends GaussianJobSettings for calculations that require multiple
     linked steps, such as stability analysis followed by optimization.
     Manages checkpoint file usage and guess orbital specifications.
-    
+
     Attributes:
         link (bool): Whether to use link job functionality.
         link_route (str): Custom route string for the link step.
         stable (str): Stability analysis type ('opt', 'qrhf', etc.).
         guess (str): Initial guess method ('mix', 'read', etc.).
     """
-    
+
     def __init__(
         self, link=True, link_route=None, stable="opt", guess="mix", **kwargs
     ):
         """
         Initialize link job specific Gaussian settings.
-        
+
         Configures parameters for multi-step calculations that use
         checkpoint files to pass information between calculation steps.
-        
+
         Args:
             link (bool): Enable link job functionality.
             link_route (str, optional): Custom route for link step.
@@ -1031,11 +1035,11 @@ class GaussianLinkJobSettings(GaussianJobSettings):
     def link_route_string(self):
         """
         Generate the route string for the link calculation step.
-        
+
         Creates the route string for the second step in a link job,
         ensuring proper geometry and orbital guess specifications
         for continuation from the previous step.
-        
+
         Returns:
             str: Route string for the link calculation step.
         """
@@ -1061,11 +1065,11 @@ class GaussianLinkJobSettings(GaussianJobSettings):
     def _get_route_string_from_jobtype(self):
         """
         Generate route string for the initial stability analysis step.
-        
+
         Creates the first route string in a link job by removing
         optimization and frequency keywords and adding stability
         analysis and guess method specifications.
-        
+
         Returns:
             str: Route string for stability analysis step.
         """
@@ -1091,11 +1095,11 @@ class GaussianLinkJobSettings(GaussianJobSettings):
     def _get_link_route_string_from_jobtype(self):
         """
         Generate route string for the optimization step in link jobs.
-        
+
         Creates the second route string that continues from the
         stability analysis by adding checkpoint geometry and orbital
         reading specifications.
-        
+
         Returns:
             str: Route string for the optimization step.
         """
@@ -1112,27 +1116,27 @@ class GaussianLinkJobSettings(GaussianJobSettings):
 class GaussianTDDFTJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian TD-DFT excited state calculations.
-    
+
     Extends GaussianJobSettings with parameters specific to time-dependent
     density functional theory calculations for excited states, including
     state selection, solvation effects, and transition analysis.
-    
+
     Attributes:
         states (str): Type of excited states ('singlets', 'triplets').
         root (int): Specific excited state root to analyze.
         nstates (int): Number of excited states to calculate.
         eqsolv (str): Equilibrium solvation treatment.
     """
-    
+
     def __init__(
         self, states="singlets", root=1, nstates=3, eqsolv=None, **kwargs
     ):
         """
         Initialize TD-DFT specific Gaussian job settings.
-        
+
         Configures parameters for excited state calculations including
         the number of states, state types, and solvation effects.
-        
+
         Args:
             states (str): Type of excited states to calculate.
             root (int): Specific excited state root for analysis.
@@ -1150,14 +1154,14 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
     def _get_route_string_from_jobtype(self):
         """
         Generate TD-DFT specific route string for excited state calculations.
-        
+
         Constructs the route string with TD-DFT keywords including
         state types, number of states, root selection, and solvation
         equilibrium options.
-        
+
         Returns:
             str: Complete TD-DFT route string.
-            
+
         Raises:
             AssertionError: If eqsolv option is not valid.
         """

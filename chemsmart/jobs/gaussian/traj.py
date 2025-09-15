@@ -22,18 +22,18 @@ logger = logging.getLogger(__name__)
 class GaussianTrajJob(GaussianJob):
     """
     Gaussian job class for trajectory structure processing.
-    
+
     Processes molecular trajectory data by grouping similar structures,
     sorting by energy, and running Gaussian calculations on unique
     conformations. Supports various grouping strategies and selective
     processing of trajectory subsets.
-    
+
     The workflow includes:
     1. Extract structures from trajectory end portion
     2. Group similar structures to identify unique conformations
     3. Sort structures by energy for prioritization
     4. Run Gaussian calculations on selected unique structures
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16traj').
         molecules (list[Molecule]): Processed trajectory structures from the
@@ -51,6 +51,7 @@ class GaussianTrajJob(GaussianJob):
         proportion_structures_to_use (float): Initializer input that sets
             `proportion_to_opt` and controls the trajectory fraction used.
     """
+
     TYPE = "g16traj"
 
     def __init__(
@@ -68,11 +69,11 @@ class GaussianTrajJob(GaussianJob):
     ):
         """
         Initialize a Gaussian trajectory processing calculation.
-        
+
         Sets up trajectory processing with structure grouping and
         selective optimization. Validates input and configures
         processing parameters for efficient trajectory analysis.
-        
+
         Args:
             molecules (list): List of Molecule objects from trajectory.
             settings (GaussianJobSettings): Calculation configuration.
@@ -89,7 +90,7 @@ class GaussianTrajJob(GaussianJob):
             skip_completed (bool): Skip already completed jobs.
             **kwargs: Additional keyword arguments for parent class
                 and structure grouping.
-                
+
         Raises:
             ValueError: If molecules is not a list, is empty, or contains
                 non-Molecule objects.
@@ -128,7 +129,7 @@ class GaussianTrajJob(GaussianJob):
     def num_structures(self):
         """
         Get the number of processed structures from trajectory.
-        
+
         Returns:
             int: Number of structures extracted from trajectory
                 end portion.
@@ -139,7 +140,7 @@ class GaussianTrajJob(GaussianJob):
     def all_energies(self):
         """
         Get energies of all processed structures.
-        
+
         Returns:
             list: Energy values for all trajectory structures.
         """
@@ -149,10 +150,10 @@ class GaussianTrajJob(GaussianJob):
     def energies_indices(self):
         """
         Get indices of structures sorted by ascending energy.
-        
+
         Provides index mapping for energy-based structure sorting,
         useful for identifying lowest-energy conformations.
-        
+
         Returns:
             numpy.ndarray: Indices of structures in ascending
                 energy order.
@@ -163,7 +164,7 @@ class GaussianTrajJob(GaussianJob):
     def sorted_energies(self):
         """
         Get energies sorted in ascending order.
-        
+
         Returns:
             list: Structure energies sorted from lowest to highest.
         """
@@ -173,7 +174,7 @@ class GaussianTrajJob(GaussianJob):
     def sorted_molecules(self):
         """
         Get molecules sorted by ascending energy.
-        
+
         Returns:
             list: Molecule objects sorted from lowest to highest energy.
         """
@@ -183,10 +184,10 @@ class GaussianTrajJob(GaussianJob):
     def unique_structures(self):
         """
         Get unique structures after grouping similar conformations.
-        
+
         Uses the configured grouping strategy to identify structurally
         distinct conformations from the trajectory data.
-        
+
         Returns:
             list: Unique Molecule objects after grouping.
         """
@@ -196,7 +197,7 @@ class GaussianTrajJob(GaussianJob):
     def unique_structures_energies(self):
         """
         Get energies of unique structures.
-        
+
         Returns:
             list: Energy values for each unique structure after grouping.
         """
@@ -206,7 +207,7 @@ class GaussianTrajJob(GaussianJob):
     def num_unique_structures(self):
         """
         Get the number of unique structures after grouping.
-        
+
         Returns:
             int: Count of structurally distinct conformations.
         """
@@ -215,11 +216,11 @@ class GaussianTrajJob(GaussianJob):
     def _prepare_all_jobs(self):
         """
         Create Gaussian jobs for all unique structures.
-        
+
         Generates GaussianGeneralJob objects for each unique structure
         identified by the grouping algorithm. Logs structure information
         for debugging and tracking purposes.
-        
+
         Returns:
             list: GaussianGeneralJob objects for unique structures.
         """
@@ -248,7 +249,7 @@ class GaussianTrajJob(GaussianJob):
     def all_structures_run_jobs(self):
         """
         Get all prepared structure calculation jobs.
-        
+
         Returns:
             list: All GaussianGeneralJob objects for trajectory
                 structure processing.
@@ -259,10 +260,10 @@ class GaussianTrajJob(GaussianJob):
     def last_run_job_index(self):
         """
         Get the index of the last completed job.
-        
+
         Tracks progress through the structure job list for resuming
         interrupted calculations.
-        
+
         Returns:
             int: Index of last finished job, or total number if
                 all jobs are complete.
@@ -273,10 +274,10 @@ class GaussianTrajJob(GaussianJob):
     def incomplete_structure_run_jobs(self):
         """
         Get incomplete structure calculation jobs.
-        
+
         Filters the job list to return only those that have not
         completed successfully, useful for selective resubmission.
-        
+
         Returns:
             list: Incomplete GaussianGeneralJob objects.
         """
@@ -289,10 +290,10 @@ class GaussianTrajJob(GaussianJob):
     def _check_last_finished_job_index(self):
         """
         Find the index of the last completed job in sequence.
-        
+
         Iterates through structure jobs to identify progress and
         determine where to resume if needed.
-        
+
         Returns:
             int: Index of last finished job, or total number of unique
                 structures if all jobs are complete.
@@ -306,7 +307,7 @@ class GaussianTrajJob(GaussianJob):
     def _run_all_jobs(self):
         """
         Execute structure calculation jobs based on configuration.
-        
+
         Runs either all available jobs or a specified subset based
         on the num_structures_to_run setting. Handles both complete
         processing and selective structure optimization.
@@ -324,7 +325,7 @@ class GaussianTrajJob(GaussianJob):
     def _run(self):
         """
         Execute the trajectory structure processing workflow.
-        
+
         Main execution method that initiates all configured structure
         calculations. Called internally by the job runner framework.
         """
@@ -333,7 +334,7 @@ class GaussianTrajJob(GaussianJob):
     def is_complete(self):
         """
         Check if all trajectory structure jobs are complete.
-        
+
         Returns:
             bool: True if all required structure calculations have
                 finished successfully, False otherwise.
@@ -343,10 +344,10 @@ class GaussianTrajJob(GaussianJob):
     def _run_all_structure_set_jobs_are_complete(self):
         """
         Verify completion status of all required structure jobs.
-        
+
         Checks completion based on whether all jobs or a subset
         (num_structures_to_run) should be processed.
-        
+
         Returns:
             bool: True if all required jobs are complete,
                 False otherwise.

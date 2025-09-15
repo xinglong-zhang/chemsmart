@@ -61,7 +61,7 @@ class ORCAJob(Job):
                 f"Settings must be instance of {ORCAJobSettings} for {self}, "
                 f"but is {settings} instead!"
             )
-        
+
         # Validate molecule type
         if not isinstance(molecule, Molecule):
             raise ValueError(
@@ -143,7 +143,7 @@ class ORCAJob(Job):
         folder = self._create_backup_folder_name()
         self.backup_file(self.inputfile, folder=folder, **kwargs)
         self.backup_file(self.outputfile, folder=folder, **kwargs)
-        
+
         if backup_gbw:
             self.backup_file(self.gbwfile, folder=folder, **kwargs)
 
@@ -211,7 +211,7 @@ class ORCAJob(Job):
             filepath=filename, index=":", return_list=True
         )
         logger.info(f"Number of molecules read: {len(molecules)}")
-        
+
         # Select specified molecule by index
         molecules = molecules[string2index_1based(index)]
 
@@ -319,7 +319,7 @@ class ORCAJob(Job):
         Raises:
             ValueError: If invalid job type is specified
         """
-        
+
         if jobtype.lower() == "opt":
             # Import optimization job class
             from chemsmart.jobs.orca.opt import ORCAOptJob
@@ -349,7 +349,7 @@ class ORCAJob(Job):
                 jobrunner=jobrunner,
                 **kwargs,
             )
-            
+
         elif jobtype.lower() == "inp":
             # Create jobrunner if not provided
             if jobrunner is None:
@@ -374,7 +374,7 @@ class ORCAJob(Job):
                 jobrunner=jobrunner,
                 **kwargs,
             )
-            
+
         elif jobtype.lower() == "orca":
             # Create jobrunner if not provided
             if jobrunner is None:
@@ -534,7 +534,7 @@ class ORCAInpJob(ORCAJob):
         """
 
         self._copy_input()
-        
+
         # Execute the job using the jobrunner
         self.jobrunner.run(self, **kwargs)
 
@@ -555,7 +555,7 @@ class ORCAInpJob(ORCAJob):
             job_scratch_dir = os.path.join(
                 self.jobrunner.scratch_dir, self.label
             )
-            
+
             # Create scratch directory if needed
             with suppress(FileExistsError):
                 os.mkdir(job_scratch_dir)

@@ -36,7 +36,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     type=int,
     multiple=True,
     help="Atom numbers from which to obtain data from Wiberg Bond Index "
-         "output file. 1-indexed.",
+    "output file. 1-indexed.",
 )
 def entry_point(filename, numbers):
     """
@@ -52,7 +52,7 @@ def entry_point(filename, numbers):
     #     natural_charge = npvalue["natural_charge"]
     #     logger.info(f"{npkey}  :  {natural_charge:.3f}")
     # logger.info("\n")
-    
+
     # Extract and display natural charges
     natural_charges = outputfile.natural_charges
     logger.info("\nNatural Charges:")

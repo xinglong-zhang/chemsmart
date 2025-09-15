@@ -23,12 +23,12 @@ project_settings_registry: list[str] = []
 class GaussianProjectSettings(RegistryMixin):
     """
     Base class for Gaussian project settings with default configurations.
-    
+
     This class provides a framework for managing Gaussian calculation settings
     across different job types. It defines default settings for common quantum
     chemistry calculations including geometry optimization, transition state
     searches, and various analysis methods.
-    
+
     Attributes:
         PROJECT_NAME (str): Identifier for the project configuration.
         functional (str, optional): DFT functional to use for calculations.
@@ -44,7 +44,7 @@ class GaussianProjectSettings(RegistryMixin):
     def main_settings(self):
         """
         Get main Gaussian settings with key default values.
-        
+
         Returns:
             GaussianJobSettings: Default job settings with functional and basis set.
         """
@@ -56,7 +56,7 @@ class GaussianProjectSettings(RegistryMixin):
     def opt_settings(self):
         """
         Get default settings for geometry optimization jobs.
-        
+
         Returns:
             GaussianJobSettings: Settings configured for structure optimization.
         """
@@ -67,7 +67,7 @@ class GaussianProjectSettings(RegistryMixin):
     def modred_settings(self):
         """
         Get default settings for modified redundant coordinate optimization.
-        
+
         Returns:
             GaussianJobSettings: Settings for constrained optimization jobs.
         """
@@ -78,7 +78,7 @@ class GaussianProjectSettings(RegistryMixin):
     def ts_settings(self):
         """
         Get default settings for transition state optimization jobs.
-        
+
         Returns:
             GaussianJobSettings: Settings for transition state searches.
         """
@@ -89,7 +89,7 @@ class GaussianProjectSettings(RegistryMixin):
     def irc_settings(self):
         """
         Get default settings for Intrinsic Reaction Coordinate calculations.
-        
+
         Returns:
             GaussianIRCJobSettings: IRC-specific settings with frequency disabled.
         """
@@ -103,7 +103,7 @@ class GaussianProjectSettings(RegistryMixin):
     def scan_settings(self):
         """
         Get default settings for potential energy surface scan calculations.
-        
+
         Returns:
             GaussianJobSettings: Settings for coordinate scanning with frequency disabled.
         """
@@ -115,7 +115,7 @@ class GaussianProjectSettings(RegistryMixin):
     def nci_settings(self):
         """
         Get default settings for Non-Covalent Interaction analysis.
-        
+
         Returns:
             GaussianJobSettings: Settings for NCI analysis with frequency disabled.
         """
@@ -127,7 +127,7 @@ class GaussianProjectSettings(RegistryMixin):
     def wbi_settings(self):
         """
         Get default settings for Wiberg Bond Index calculations.
-        
+
         Returns:
             GaussianJobSettings: Settings for WBI analysis with frequency disabled.
         """
@@ -139,10 +139,10 @@ class GaussianProjectSettings(RegistryMixin):
     def sp_settings(self):
         """
         Get default settings for single point energy calculations.
-        
+
         Uses the large basis set for higher accuracy and disables frequency
         calculations for computational efficiency.
-        
+
         Returns:
             GaussianJobSettings: Settings for single point calculations.
         """
@@ -156,17 +156,17 @@ class GaussianProjectSettings(RegistryMixin):
     def from_project(cls, project):
         """
         Create project settings instance based on project name.
-        
+
         Searches for project configuration in the following order:
         1. User-defined project settings directory
         2. Chemsmart test project configurations
-        
+
         Args:
             project (str): Name of the project configuration to load.
-            
+
         Returns:
             GaussianProjectSettings: Configured settings instance.
-            
+
         Raises:
             FileNotFoundError: If no configuration is found for the specified project.
         """
@@ -195,10 +195,10 @@ class GaussianProjectSettings(RegistryMixin):
     def _from_projects_manager(cls, manager):
         """
         Create settings from a project manager instance.
-        
+
         Args:
             manager: Project settings manager instance.
-            
+
         Returns:
             YamlGaussianProjectSettings or None: YAML-based settings instance if successful, None if failed.
         """
@@ -211,10 +211,10 @@ class GaussianProjectSettings(RegistryMixin):
     def _from_user_project_name(cls, project_name):
         """
         Load project settings from user directory based on project name.
-        
+
         Args:
             project_name (str): Name of the project configuration file.
-            
+
         Returns:
             YamlGaussianProjectSettings or None: YAML-based settings instance if found, None otherwise.
         """
@@ -234,10 +234,10 @@ class GaussianProjectSettings(RegistryMixin):
     def _from_chemsmart_test_projects(cls, project_name):
         """
         Load project settings from chemsmart test projects directory.
-        
+
         Args:
             project_name (str): Name of the test project configuration.
-            
+
         Returns:
             YamlGaussianProjectSettings or None: YAML-based settings instance if found, None otherwise.
         """
@@ -261,14 +261,15 @@ class GaussianProjectSettings(RegistryMixin):
 class YamlGaussianProjectSettings(GaussianProjectSettings):
     """
     YAML-based implementation of Gaussian project settings.
-    
+
     This class loads and manages Gaussian calculation settings from YAML
     configuration files. It provides specific settings for each job type
     as defined in the YAML configuration.
-    
+
     Attributes:
         PROJECT_NAME (str): Set to "yaml" to identify YAML-based settings.
     """
+
     PROJECT_NAME = "yaml"
 
     def __init__(
@@ -285,7 +286,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
     ):
         """
         Initialize YAML-based project settings.
-        
+
         Args:
             opt_settings: Settings for optimization jobs.
             modred_settings: Settings for modified redundant coordinate jobs.
@@ -343,19 +344,19 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
 class YamlGaussianProjectSettingsBuilder:
     """
     Builder class for constructing YAML-based Gaussian project settings.
-    
+
     This class reads YAML configuration files and builds appropriate
     GaussianJobSettings instances for each job type. It handles the
     mapping between YAML configuration and specific settings classes.
-    
+
     Attributes:
         filename (str): Path to the YAML configuration file.
     """
-    
+
     def __init__(self, filename):
         """
         Initialize the builder with a YAML configuration file.
-        
+
         Args:
             filename (str): Path to the YAML configuration file.
         """
@@ -364,10 +365,10 @@ class YamlGaussianProjectSettingsBuilder:
     def build(self):
         """
         Build a complete YamlGaussianProjectSettings instance.
-        
+
         Reads the YAML configuration and creates settings for all supported
         job types including optimization, transition states, IRC, scans, etc.
-        
+
         Returns:
             YamlGaussianProjectSettings: Fully configured project settings.
         """
@@ -403,7 +404,7 @@ class YamlGaussianProjectSettingsBuilder:
     def _read_config(self):
         """
         Read and parse the YAML configuration file.
-        
+
         Returns:
             dict: Parsed YAML configuration data.
         """
@@ -414,16 +415,16 @@ class YamlGaussianProjectSettingsBuilder:
     def _project_settings_for_job(self, job_type):
         """
         Create job-specific settings from YAML configuration.
-        
+
         Maps job types to appropriate settings classes and creates
         configured instances based on YAML data.
-        
+
         Args:
             job_type (str): Type of job (opt, ts, irc, td, etc.).
-            
+
         Returns:
             GaussianJobSettings: Configured settings for the specified job type.
-            
+
         Raises:
             RuntimeError: If configuration for the job type is not found.
         """
@@ -450,7 +451,7 @@ class YamlGaussianProjectSettingsBuilder:
     def _parse_project_name(self):
         """
         Extract project name from the YAML filename.
-        
+
         Returns:
             str: Project name derived from filename (without extension).
         """
@@ -460,11 +461,11 @@ class YamlGaussianProjectSettingsBuilder:
 class GaussianProjectSettingsManager:
     """
     Manager for Gaussian project settings from YAML configuration files.
-    
+
     Provides management interface for loading Gaussian computational chemistry
     project settings from YAML files in a specified folder structure. Handles
     file validation and project settings creation.
-    
+
     Attributes:
         filename (str): Absolute path to the YAML configuration file.
     """
@@ -472,11 +473,11 @@ class GaussianProjectSettingsManager:
     def __init__(self, filename):
         """
         Initialize the Gaussian project settings manager.
-        
+
         Args:
             filename (str): Path to YAML configuration file containing
                 Gaussian project settings.
-                
+
         Raises:
             ValueError: If filename is None or not specified.
         """
@@ -487,14 +488,14 @@ class GaussianProjectSettingsManager:
     def create(self):
         """
         Create project settings from the specified YAML file.
-        
+
         Loads and parses the YAML configuration file to create a complete
         Gaussian project settings instance with all job configurations.
-        
+
         Returns:
             YamlGaussianProjectSettings: Configured project settings loaded
                 from the YAML file.
-                
+
         Raises:
             FileNotFoundError: If the specified YAML file does not exist.
             ValueError: If the YAML file is malformed or invalid.

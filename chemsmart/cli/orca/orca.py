@@ -485,5 +485,7 @@ def orca_process_pipeline(ctx, *args, **kwargs):
     """
     kwargs.update({"subcommand": ctx.invoked_subcommand})
     ctx.obj[ctx.info_name] = kwargs
-    logger.debug(f"Pipeline completed for subcommand: {ctx.invoked_subcommand}")
+    logger.debug(
+        f"Pipeline completed for subcommand: {ctx.invoked_subcommand}"
+    )
     return args[0]

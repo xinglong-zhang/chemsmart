@@ -23,16 +23,16 @@ logger = logging.getLogger(__name__)
 class GaussianIRCJob(GaussianJob):
     """
     Gaussian job class for Intrinsic Reaction Coordinate calculations.
-    
+
     Performs IRC calculations to trace reaction paths from transition
     states to reactants and products. Automatically manages both forward
     and reverse IRC calculations to provide complete reaction path
     characterization.
-    
+
     IRC calculations follow the steepest descent path on the potential
     energy surface in mass-weighted coordinates, providing the minimum
     energy pathway connecting transition state to stable products.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16irc').
         molecule (Molecule): Transition state structure used as the IRC start.
@@ -41,6 +41,7 @@ class GaussianIRCJob(GaussianJob):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "g16irc"
 
     def __init__(
@@ -48,11 +49,11 @@ class GaussianIRCJob(GaussianJob):
     ):
         """
         Initialize a Gaussian IRC calculation job.
-        
+
         Sets up an IRC calculation with the specified transition state
         structure and calculation settings. Automatically disables
         frequency calculations for the IRC steps.
-        
+
         Args:
             molecule (Molecule): Transition state structure for IRC.
             settings (GaussianIRCJobSettings, optional): IRC configuration.
@@ -74,10 +75,10 @@ class GaussianIRCJob(GaussianJob):
     def settings_class(cls) -> Type[GaussianIRCJobSettings]:
         """
         Get the settings class used by this IRC job type.
-        
+
         Returns the appropriate settings class for configuring
         IRC-specific parameters and calculation options.
-        
+
         Returns:
             Type[GaussianIRCJobSettings]: Settings class for IRC jobs.
         """
@@ -86,10 +87,10 @@ class GaussianIRCJob(GaussianJob):
     def _ircf_job(self):
         """
         Create forward IRC job configuration.
-        
+
         Sets up the forward IRC calculation that follows the reaction
         coordinate from transition state toward products.
-        
+
         Returns:
             GaussianGeneralJob: Configured forward IRC job.
         """
@@ -113,10 +114,10 @@ class GaussianIRCJob(GaussianJob):
     def _ircr_job(self):
         """
         Create reverse IRC job configuration.
-        
+
         Sets up the reverse IRC calculation that follows the reaction
         coordinate from transition state toward reactants.
-        
+
         Returns:
             GaussianGeneralJob: Configured reverse IRC job.
         """
@@ -139,7 +140,7 @@ class GaussianIRCJob(GaussianJob):
     def _run_forward(self):
         """
         Execute the forward IRC calculation.
-        
+
         Runs the forward IRC job that traces the reaction path
         from transition state toward products.
         """
@@ -151,7 +152,7 @@ class GaussianIRCJob(GaussianJob):
     def _run_reverse(self):
         """
         Execute the reverse IRC calculation.
-        
+
         Runs the reverse IRC job that traces the reaction path
         from transition state toward reactants.
         """
@@ -163,10 +164,10 @@ class GaussianIRCJob(GaussianJob):
     def _run(self, **kwargs):
         """
         Execute both forward and reverse IRC calculations.
-        
+
         Orchestrates the complete IRC calculation by running
         both forward and reverse IRC jobs sequentially.
-        
+
         Args:
             **kwargs: Additional keyword arguments (currently unused).
         """
@@ -176,10 +177,10 @@ class GaussianIRCJob(GaussianJob):
     def _job_is_complete(self):
         """
         Check if the complete IRC calculation is finished.
-        
+
         Determines completion status by verifying that both forward
         and reverse IRC calculations have completed successfully.
-        
+
         Returns:
             bool: True if both IRC directions are complete, False otherwise.
         """
@@ -190,7 +191,7 @@ class GaussianIRCJob(GaussianJob):
     def _run_forward_is_complete(self):
         """
         Check if the forward IRC calculation is complete.
-        
+
         Returns:
             bool: True if forward IRC is complete, False otherwise.
         """
@@ -199,7 +200,7 @@ class GaussianIRCJob(GaussianJob):
     def _run_reverse_is_complete(self):
         """
         Check if the reverse IRC calculation is complete.
-        
+
         Returns:
             bool: True if reverse IRC is complete, False otherwise.
         """
@@ -208,10 +209,10 @@ class GaussianIRCJob(GaussianJob):
     def backup_files(self, backup_chk=False):
         """
         Create backup copies of IRC input and output files.
-        
+
         Backs up all files from both forward and reverse IRC calculations
         to preserve important calculation data.
-        
+
         Args:
             backup_chk (bool): Whether to backup checkpoint files.
         """

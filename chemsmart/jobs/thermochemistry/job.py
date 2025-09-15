@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class ThermochemistryJob(Job):
     """
     Job for computing thermochemical properties from quantum calculations.
-    
+
     This class handles the calculation of thermodynamic properties such as
     enthalpy, entropy, and Gibbs free energy from frequency calculations
     in Gaussian or ORCA output files.
@@ -37,7 +37,7 @@ class ThermochemistryJob(Job):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
-    
+
     PROGRAM = "Thermochemistry"
     TYPE = "thermochemistry"
 
@@ -52,7 +52,7 @@ class ThermochemistryJob(Job):
     ):
         """
         Initialize a thermochemistry job instance.
-        
+
         Args:
             filename (str, optional): Path to quantum chemistry output file
             molecule (Molecule, optional): Molecule object for the calculation
@@ -60,7 +60,7 @@ class ThermochemistryJob(Job):
             label (str, optional): Custom label for the job
             jobrunner (JobRunner, optional): Job execution manager
             **kwargs: Additional keyword arguments for parent class
-            
+
         Raises:
             ValueError: If settings or molecule types are invalid
         """
@@ -109,9 +109,9 @@ class ThermochemistryJob(Job):
     def settings_class(cls) -> Type[ThermochemistryJobSettings]:
         """
         Return the settings class for thermochemistry jobs.
-        
+
         Returns:
-            Type[ThermochemistryJobSettings]: Settings class for 
+            Type[ThermochemistryJobSettings]: Settings class for
                                             thermochemistry jobs
         """
         return ThermochemistryJobSettings
@@ -120,7 +120,7 @@ class ThermochemistryJob(Job):
     def inputfile(self):
         """
         Get the absolute path to the input file.
-        
+
         Returns:
             str or None: Absolute path to input file if filename exists,
                         None otherwise
@@ -133,7 +133,7 @@ class ThermochemistryJob(Job):
     def outputfile(self):
         """
         Get the path to the thermochemistry output file.
-        
+
         Returns:
             str: Absolute path to the thermochemistry output file
         """
@@ -144,7 +144,7 @@ class ThermochemistryJob(Job):
     def errfile(self):
         """
         Get the path to the error file for the thermochemistry job.
-        
+
         Returns:
             str: Absolute path to the thermochemistry error file
         """
@@ -154,7 +154,7 @@ class ThermochemistryJob(Job):
     def _backup_files(self, **kwargs):
         """
         Create backup copies of output files before overwriting.
-        
+
         Args:
             **kwargs: Additional keyword arguments for backup operations
         """
@@ -164,7 +164,7 @@ class ThermochemistryJob(Job):
     def _output(self):
         """
         Get the path to the main output file if it exists.
-        
+
         Returns:
             str or None: Absolute path to output file if it exists,
                         None otherwise
@@ -176,7 +176,7 @@ class ThermochemistryJob(Job):
     def _job_is_complete(self):
         """
         Check if the thermochemistry job has completed successfully.
-        
+
         Returns:
             bool: True if output file exists, False otherwise
         """
@@ -185,7 +185,7 @@ class ThermochemistryJob(Job):
     def _run(self, **kwargs):
         """
         Execute the thermochemistry analysis job.
-        
+
         Args:
             **kwargs: Additional keyword arguments for job execution
         """
@@ -206,20 +206,20 @@ class ThermochemistryJob(Job):
     ):
         """
         Create a thermochemistry job from a quantum chemistry output file.
-        
+
         Factory method that creates a ThermochemistryJob instance from
         a Gaussian or ORCA output file containing frequency calculations.
-        
+
         Args:
             filename (str): Path to quantum chemistry output file
             settings (ThermochemistryJobSettings, optional): Job configuration
             label (str, optional): Custom label for the job
             jobrunner (JobRunner, optional): Job execution manager
             **kwargs: Additional keyword arguments for job configuration
-            
+
         Returns:
             ThermochemistryJob: Configured thermochemistry job instance
-            
+
         Raises:
             ValueError: If file extension is not supported
         """
@@ -270,11 +270,11 @@ class ThermochemistryJob(Job):
     def compute_thermochemistry(self):
         """
         Perform thermochemistry calculation and save results.
-        
+
         Computes thermochemical properties including electronic energy,
         zero-point energy, thermal corrections, enthalpy, entropy, and
         Gibbs free energy from frequency calculation data.
-        
+
         Raises:
             ValueError: If no input file is provided
             Exception: If calculation fails during processing
@@ -338,7 +338,7 @@ class ThermochemistryJob(Job):
     def show_results(self):
         """
         Display the thermochemistry calculation results.
-        
+
         Reads and prints the contents of the output file containing
         the computed thermochemical properties to the console.
         """

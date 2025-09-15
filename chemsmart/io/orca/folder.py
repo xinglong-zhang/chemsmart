@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class ORCAInpFolder(BaseFolder):
     """
     Input folder containing all ORCA input files for postprocessing.
-    
+
     This class provides utilities for managing collections of ORCA input files
     within a directory structure.
     """
@@ -19,7 +19,7 @@ class ORCAInpFolder(BaseFolder):
     def __init__(self, folder):
         """
         Initialize ORCA input folder handler.
-        
+
         Args:
             folder (str): Parent folder for all input files
         """
@@ -29,7 +29,7 @@ class ORCAInpFolder(BaseFolder):
     def all_inpfiles(self):
         """
         Get all ORCA input files in the folder and subfolders.
-        
+
         Returns:
             list: Paths to all .inp files found recursively
         """
@@ -41,7 +41,7 @@ class ORCAInpFolder(BaseFolder):
     def all_inpfiles_in_current_folder(self):
         """
         Get all ORCA input files in the current folder only.
-        
+
         Returns:
             list: Paths to all .inp files in current directory
         """
@@ -51,7 +51,7 @@ class ORCAInpFolder(BaseFolder):
 class ORCAOutFolder(BaseFolder):
     """
     Output folder containing all ORCA output files for postprocessing.
-    
+
     This class provides utilities for managing collections of ORCA output files,
     including calculation statistics, runtime analysis, and resource usage tracking.
     """
@@ -59,7 +59,7 @@ class ORCAOutFolder(BaseFolder):
     def __init__(self, folder):
         """
         Initialize ORCA output folder handler.
-        
+
         Args:
             folder (str): Parent folder for all output files
         """
@@ -69,7 +69,7 @@ class ORCAOutFolder(BaseFolder):
     def all_outfiles(self):
         """
         Get all ORCA output files in the folder and subfolders.
-        
+
         Returns:
             list: Paths to all .out files found recursively
         """
@@ -81,7 +81,7 @@ class ORCAOutFolder(BaseFolder):
     def all_logfiles_in_current_folder(self):
         """
         Get all ORCA output files in the current folder only.
-        
+
         Returns:
             list: Paths to all .out files in current directory
         """
@@ -91,7 +91,7 @@ class ORCAOutFolder(BaseFolder):
     def total_service_units(self):
         """
         Calculate total computational service units used across all output files.
-        
+
         Returns:
             float: Total core-hours consumed by all calculations in folder
         """
@@ -105,10 +105,10 @@ class ORCAOutFolder(BaseFolder):
     def write_job_runtime(self, job_runtime_file="job_runtime.txt"):
         """
         Write job runtime summary for all output files in the folder.
-        
+
         Creates a text file listing individual job runtimes and total
         computational resource usage.
-        
+
         Args:
             job_runtime_file (str): Output file name for runtime summary
         """

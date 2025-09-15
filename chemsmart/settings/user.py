@@ -36,11 +36,11 @@ logger = logging.getLogger(__name__)
 class ChemsmartUserSettings:
     """
     User configuration settings manager for ChemSmart.
-    
+
     Manages user-specific configuration files, directories, and settings for
     computational chemistry software. Provides access to configuration paths,
     environment variables, and user-defined project settings.
-    
+
     Attributes:
         USER_YAML_FILE (str): Name of the main user settings YAML file.
         USER_CONFIG_DIR (str): Path to the user configuration directory.
@@ -48,14 +48,14 @@ class ChemsmartUserSettings:
         config_dir (str): User configuration directory path.
         data (dict): Loaded YAML configuration data.
     """
-    
+
     USER_YAML_FILE = "usersettings.yaml"
     USER_CONFIG_DIR = os.path.expanduser("~/.chemsmart")
 
     def __init__(self):
         """
         Initialize user settings manager.
-        
+
         Loads user configuration from YAML file if it exists, otherwise
         initializes with empty configuration.
         """
@@ -70,7 +70,7 @@ class ChemsmartUserSettings:
     def user_server_dir(self):
         """
         Get the user server configurations directory.
-        
+
         Returns:
             str: Path to the directory containing user server configurations.
         """
@@ -80,7 +80,7 @@ class ChemsmartUserSettings:
     def user_gaussian_settings_dir(self):
         """
         Get the user Gaussian settings directory.
-        
+
         Returns:
             str: Path to the directory containing Gaussian-specific settings.
         """
@@ -90,7 +90,7 @@ class ChemsmartUserSettings:
     def user_gaussian_envars(self):
         """
         Get the path to Gaussian environment variables file.
-        
+
         Returns:
             str: Path to the file containing Gaussian environment variables.
         """
@@ -100,7 +100,7 @@ class ChemsmartUserSettings:
     def user_gaussian_modules(self):
         """
         Get the path to Gaussian modules file.
-        
+
         Returns:
             str: Path to the file containing Gaussian module loading commands.
         """
@@ -112,7 +112,7 @@ class ChemsmartUserSettings:
     def user_gaussian_script(self):
         """
         Get the path to Gaussian execution script.
-        
+
         Returns:
             str: Path to the Gaussian execution script file.
         """
@@ -122,7 +122,7 @@ class ChemsmartUserSettings:
     def user_orca_envars(self):
         """
         Get the path to ORCA environment variables file.
-        
+
         Returns:
             str: Path to the file containing ORCA environment variables.
         """
@@ -132,7 +132,7 @@ class ChemsmartUserSettings:
     def user_orca_modules(self):
         """
         Get the path to ORCA modules file.
-        
+
         Returns:
             str: Path to the file containing ORCA module loading commands.
         """
@@ -142,7 +142,7 @@ class ChemsmartUserSettings:
     def user_orca_script(self):
         """
         Get the path to ORCA execution script.
-        
+
         Returns:
             str: Path to the ORCA execution script file.
         """
@@ -152,7 +152,7 @@ class ChemsmartUserSettings:
     def user_orca_settings_dir(self):
         """
         Get the user ORCA settings directory.
-        
+
         Returns:
             str: Path to the directory containing ORCA-specific settings.
         """
@@ -162,7 +162,7 @@ class ChemsmartUserSettings:
     def server_yaml_files(self):
         """
         Get list of server YAML configuration files.
-        
+
         Returns:
             list: List of paths to server configuration YAML files.
         """
@@ -172,7 +172,7 @@ class ChemsmartUserSettings:
     def gaussian_project_yaml_files(self):
         """
         Get list of Gaussian project YAML configuration files.
-        
+
         Returns:
             list: List of paths to Gaussian project configuration YAML files.
         """
@@ -184,7 +184,7 @@ class ChemsmartUserSettings:
     def orca_project_yaml_files(self):
         """
         Get list of ORCA project YAML configuration files.
-        
+
         Returns:
             list: List of paths to ORCA project configuration YAML files.
         """
@@ -194,7 +194,7 @@ class ChemsmartUserSettings:
     def scratch(self):
         """
         Get scratch directory configuration.
-        
+
         Returns:
             str or None: Path to scratch directory or None if not configured.
         """
@@ -204,7 +204,7 @@ class ChemsmartUserSettings:
     def email(self):
         """
         Get user email configuration.
-        
+
         Returns:
             str or None: User email address or None if not configured.
         """
@@ -214,7 +214,7 @@ class ChemsmartUserSettings:
     def project(self):
         """
         Get default project configuration.
-        
+
         Returns:
             str or None: Default project name or None if not configured.
         """
@@ -224,7 +224,7 @@ class ChemsmartUserSettings:
     def all_available_servers(self):
         """
         Get list of all available server configurations.
-        
+
         Returns:
             list: List of server names (without .yaml extension) available
                   in the user server directory.
@@ -238,7 +238,7 @@ class ChemsmartUserSettings:
     def all_available_gaussian_projects(self):
         """
         Get list of all available Gaussian project configurations.
-        
+
         Returns:
             list: List of Gaussian project names (without .yaml extension)
                   available in the user Gaussian settings directory.
@@ -255,7 +255,7 @@ class ChemsmartUserSettings:
     def all_available_orca_projects(self):
         """
         Get list of all available ORCA project configurations.
-        
+
         Returns:
             list: List of ORCA project names (without .yaml extension)
                   available in the user ORCA settings directory.

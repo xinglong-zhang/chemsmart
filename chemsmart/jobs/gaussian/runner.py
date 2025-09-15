@@ -34,14 +34,14 @@ logger = logging.getLogger(__name__)
 class GaussianJobRunner(JobRunner):
     """
     Job runner for executing Gaussian computational chemistry calculations.
-    
+
     Manages the execution of Gaussian jobs on various computing platforms
     including local machines and remote servers. Handles file management,
     scratch directory setup, checkpoint file handling, and result collection.
-    
+
     Supports multiple job types and provides automatic error recovery
     and job monitoring capabilities.
-    
+
     Attributes:
         JOBTYPES (list): Supported Gaussian job type identifiers.
         PROGRAM (str): Program identifier ('gaussian').
@@ -63,7 +63,7 @@ class GaussianJobRunner(JobRunner):
         job_chkfile (str): Full path to the checkpoint `.chk` file.
         job_errfile (str): Full path to the error `.err` file.
     """
-    
+
     # List of supported Gaussian job types
     JOBTYPES = [
         "g16crest",
@@ -99,11 +99,11 @@ class GaussianJobRunner(JobRunner):
     ):
         """
         Initialize Gaussian job runner with server and execution settings.
-        
+
         Sets up the job runner with computational resources, scratch directory
         configuration, and execution mode. Inherits from base JobRunner class
         and applies Gaussian-specific defaults.
-        
+
         Args:
             server: Server configuration object for job execution.
             scratch (bool, optional): Whether to use scratch directories.
@@ -135,13 +135,13 @@ class GaussianJobRunner(JobRunner):
     def executable(self):
         """
         Get the Gaussian executable configuration for the current server.
-        
+
         Retrieves the appropriate Gaussian executable settings based on
         the server configuration. Uses LRU cache for performance.
-        
+
         Returns:
             GaussianExecutable: Configured executable object for the server.
-            
+
         Raises:
             FileNotFoundError: If server configuration file is not found.
         """
@@ -163,10 +163,10 @@ class GaussianJobRunner(JobRunner):
     def _prerun(self, job):
         """
         Perform pre-execution setup for the Gaussian job.
-        
+
         Handles all necessary preparation before job execution including
         file path assignment and directory setup.
-        
+
         Args:
             job: Job object containing calculation parameters and settings.
         """
@@ -175,11 +175,11 @@ class GaussianJobRunner(JobRunner):
     def _assign_variables(self, job):
         """
         Set up file paths for job execution in scratch or job directory.
-        
+
         Configures appropriate file paths for input, output, checkpoint,
         and error files based on whether scratch directories are used.
         Also handles local execution settings.
-        
+
         Args:
             job: Job object to configure file paths for.
         """
@@ -197,11 +197,11 @@ class GaussianJobRunner(JobRunner):
     def _set_up_variables_in_scratch(self, job):
         """
         Configure file paths for execution in a scratch directory.
-        
+
         Sets up a dedicated scratch directory for the job and configures
         all file paths (input, output, checkpoint, error) to point to
         the scratch location for improved I/O performance.
-        
+
         Args:
             job: Job object to configure scratch paths for.
         """
@@ -232,10 +232,10 @@ class GaussianJobRunner(JobRunner):
     def _set_up_variables_in_job_directory(self, job):
         """
         Configure file paths for execution in the job directory.
-        
+
         Sets up all file paths to point to the job's directory instead
         of using a separate scratch directory for execution.
-        
+
         Args:
             job: Job object to configure directory paths for.
         """
@@ -249,10 +249,10 @@ class GaussianJobRunner(JobRunner):
     def _write_input(self, job):
         """
         Write the Gaussian input file to the execution directory.
-        
+
         Creates a GaussianInputWriter instance and uses it to generate
         the input file (.com) in the appropriate directory for execution.
-        
+
         Args:
             job: Job object containing calculation parameters to write.
         """
@@ -264,13 +264,13 @@ class GaussianJobRunner(JobRunner):
     def _get_command(self, job):
         """
         Generate the command string for executing the Gaussian job.
-        
+
         Constructs the complete command line including the executable
         path and input file path for running the calculation.
-        
+
         Args:
             job: Job object (used implicitly via self.job_inputfile).
-            
+
         Returns:
             str: Complete command string for job execution.
         """
@@ -281,15 +281,15 @@ class GaussianJobRunner(JobRunner):
     def _create_process(self, job, command, env):
         """
         Create and start a subprocess for executing the Gaussian job.
-        
+
         Opens output and error files, then starts the Gaussian process
         with appropriate environment variables and working directory.
-        
+
         Args:
             job: Job object containing execution parameters.
             command: Command string to execute.
             env: Environment variables for the process.
-            
+
         Returns:
             subprocess.Popen: The created process object.
         """
@@ -314,10 +314,10 @@ class GaussianJobRunner(JobRunner):
     def _get_executable(self):
         """
         Get the executable path for Gaussian.
-        
+
         Retrieves the configured Gaussian executable path and logs
         the information for debugging purposes.
-        
+
         Returns:
             str: Path to the Gaussian executable.
         """
@@ -328,15 +328,15 @@ class GaussianJobRunner(JobRunner):
     def _postrun(self, job):
         """
         Perform post-execution cleanup and file management.
-        
+
         If using scratch directories, copies output files from scratch
         back to the job directory, excluding temporary Gaussian files.
-        
+
         Args:
             job: Job object containing folder and label information.
         """
         if self.scratch:
-            # if job was run in scratch, copy files to job folder except 
+            # if job was run in scratch, copy files to job folder except
             # files starting with Gau-
             for file in glob(f"{self.running_directory}/{job.label}*"):
                 if not file.startswith("Gau-"):
@@ -367,7 +367,7 @@ class GaussianJobRunner(JobRunner):
 class FakeGaussianJobRunner(GaussianJobRunner):
     """
     Fake Gaussian job runner for testing and simulation purposes.
-    
+
     Provides a simulation environment for Gaussian calculations without
     actually running the Gaussian software, useful for testing workflows
     and development purposes.
@@ -386,6 +386,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         job_chkfile (str): Full path to the checkpoint `.chk` file (path assigned).
         job_errfile (str): Full path to the error `.err` file (path assigned).
     """
+
     # creates job runner process
     # combines information about server and program
     FAKE = True
@@ -395,10 +396,10 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     ):
         """
         Initialize the fake Gaussian job runner.
-        
+
         Sets up a simulation environment that mimics the behavior of
         the real GaussianJobRunner without executing actual calculations.
-        
+
         Args:
             server: Server configuration for the fake runner.
             scratch: Whether to use scratch directories (default: None).
@@ -417,14 +418,14 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     def run(self, job, **kwargs):
         """
         Execute a fake Gaussian job simulation.
-        
+
         Performs all the steps of a real job execution but uses a fake
         Gaussian process instead of the actual software for testing.
-        
+
         Args:
             job: Job object to simulate execution for.
             **kwargs: Additional arguments (unused in fake execution).
-            
+
         Returns:
             int: Return code from the fake Gaussian execution.
         """
@@ -437,10 +438,10 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     def _set_up_variables_in_scratch(self, job):
         """
         Configure fake job file paths in scratch directory.
-        
+
         Sets up scratch directory paths for the fake job execution,
         including special labeling to distinguish from real jobs.
-        
+
         Args:
             job: Job object to configure fake scratch paths for.
         """
@@ -470,10 +471,10 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     def _set_up_variables_in_job_directory(self, job):
         """
         Configure fake job file paths in job directory.
-        
+
         Sets up file paths for fake job execution in the job's directory,
         with special labeling to distinguish from real jobs.
-        
+
         Args:
             job: Job object to configure fake directory paths for.
         """
@@ -489,7 +490,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 class FakeGaussian:
     """
     Fake Gaussian simulation class for testing purposes.
-    
+
     Simulates Gaussian software behavior by parsing input files and
     generating corresponding output files without actual calculations.
     Useful for testing workflows and development.
@@ -517,17 +518,17 @@ class FakeGaussian:
         atomic_coordinates (array): Cartesian coordinates of atoms.
         empirical_formula (str): Empirical chemical formula string.
     """
-    
+
     def __init__(self, file_to_run):
         """
         Initialize the fake Gaussian simulator.
-        
+
         Sets up the simulation by parsing the input file and preparing
         for fake execution without running actual calculations.
-        
+
         Args:
             file_to_run: Path to the Gaussian input file to simulate.
-            
+
         Raises:
             FileNotFoundError: If the input file doesn't exist.
         """
@@ -540,7 +541,7 @@ class FakeGaussian:
     def file_folder(self):
         """
         Get the directory containing the input file.
-        
+
         Returns:
             str: Directory path of the input file.
         """
@@ -550,7 +551,7 @@ class FakeGaussian:
     def filename(self):
         """
         Get the basename of the input file.
-        
+
         Returns:
             str: Filename without directory path.
         """
@@ -560,7 +561,7 @@ class FakeGaussian:
     def input_filepath(self):
         """
         Get the full path to the input file.
-        
+
         Returns:
             str: Complete path to the input file.
         """
@@ -570,10 +571,10 @@ class FakeGaussian:
     def output_filepath(self):
         """
         Get the path for the output log file.
-        
+
         Constructs the output filename by taking the basename up to the
         first '.' and appending '.log' in the same directory.
-        
+
         Returns:
             str: Path to the output log file.
         """
@@ -584,7 +585,7 @@ class FakeGaussian:
     def input_contents(self):
         """
         Get the lines of the input file.
-        
+
         Returns:
             list[str]: Lines of the input file.
         """
@@ -594,7 +595,7 @@ class FakeGaussian:
     def input_blocks(self):
         """
         Get the parsed content blocks from the input file.
-        
+
         Returns:
             list: Parsed content blocks; [0]=route, [1]=title,
                 [2]=charge/coords, [3:]=additional sections.
@@ -605,7 +606,7 @@ class FakeGaussian:
     def molecule(self):
         """
         Get the molecular structure from the input.
-        
+
         Returns:
             Molecule: Molecular structure object.
         """
@@ -615,7 +616,7 @@ class FakeGaussian:
     def charge(self):
         """
         Get the molecular charge from the input.
-        
+
         Returns:
             int: Molecular charge value.
         """
@@ -625,7 +626,7 @@ class FakeGaussian:
     def multiplicity(self):
         """
         Get the spin multiplicity from the input.
-        
+
         Returns:
             int: Spin multiplicity value.
         """
@@ -635,9 +636,9 @@ class FakeGaussian:
     def spin(self):
         """
         Determine spin type based on multiplicity.
-        
+
         Returns restricted (R) for singlets, unrestricted (U) for others.
-        
+
         Returns:
             str: 'R' for restricted, 'U' for unrestricted calculations.
         """
@@ -649,7 +650,7 @@ class FakeGaussian:
     def num_atoms(self):
         """
         Get the number of atoms in the molecule.
-        
+
         Returns:
             int: Number of atoms in the molecular structure.
         """
@@ -659,7 +660,7 @@ class FakeGaussian:
     def atomic_symbols(self):
         """
         Get the atomic symbols of all atoms in the molecule.
-        
+
         Returns:
             list: List of atomic symbols (e.g., ['C', 'H', 'O']).
         """
@@ -669,7 +670,7 @@ class FakeGaussian:
     def atomic_numbers(self):
         """
         Get the atomic numbers of all atoms in the molecule.
-        
+
         Returns:
             list: List of atomic numbers corresponding to the atoms.
         """
@@ -679,7 +680,7 @@ class FakeGaussian:
     def atomic_coordinates(self):
         """
         Get the Cartesian coordinates of all atoms.
-        
+
         Returns:
             array: Array of atomic coordinates in Cartesian space.
         """
@@ -689,7 +690,7 @@ class FakeGaussian:
     def empirical_formula(self):
         """
         Get the empirical formula of the molecule.
-        
+
         Returns:
             str: Empirical formula string (e.g., 'H2O', 'CH4').
         """
@@ -698,11 +699,11 @@ class FakeGaussian:
     def run(self):
         """
         Execute the fake Gaussian simulation.
-        
+
         Creates a fake output file that mimics the structure and content
         of a real Gaussian output log, including job information and
         basic molecular data for testing purposes.
-        
+
         Returns:
             None
         """

@@ -13,7 +13,7 @@ class AtomsChargeMultiplicity(Atoms):
     ):
         """
         Initialize enhanced Atoms object with QM properties.
-        
+
         Args:
             charge (int): Molecular charge
             multiplicity (int): Spin multiplicity (2S + 1)
@@ -33,7 +33,7 @@ class AtomsChargeMultiplicity(Atoms):
     def charge(self) -> int:
         """
         Molecular charge (total electron count adjustment).
-        
+
         Returns:
             int: Molecular charge
         """
@@ -49,7 +49,7 @@ class AtomsChargeMultiplicity(Atoms):
 
         Raises:
             TypeError: If value is not an integer or cannot be converted to one.
-            ValueError: If value is not a valid molecular charge 
+            ValueError: If value is not a valid molecular charge
                         (optional, depending on constraints).
         """
         if not isinstance(value, (int, float)) or (
@@ -62,7 +62,7 @@ class AtomsChargeMultiplicity(Atoms):
     def multiplicity(self) -> int:
         """
         Spin multiplicity (2S + 1, where S is total spin).
-        
+
         Returns:
             int: Spin multiplicity
         """
@@ -78,7 +78,7 @@ class AtomsChargeMultiplicity(Atoms):
 
         Raises:
             TypeError: If value is not an integer or cannot be converted to one.
-            ValueError: If value is not a valid spin multiplicity 
+            ValueError: If value is not a valid spin multiplicity
                         (optional, depending on constraints).
         """
         if not isinstance(value, (int, float)) or (
@@ -123,7 +123,7 @@ class AtomsChargeMultiplicity(Atoms):
         )
         from ase.constraints import FixAtoms
 
-        # check if the Atoms object has any constraints, 
+        # check if the Atoms object has any constraints,
         # if yes, convert to 1-indexed list
         frozen_atoms = []
         if atoms.constraints:
@@ -144,11 +144,11 @@ class AtomsChargeMultiplicity(Atoms):
                 # convert to 1-indexed list
                 for index in indices:
                     frozen_atoms.append(index + 1)
-                    
+
         if len(frozen_atoms) == 0:
             frozen_atoms = None
         else:
-            # convert the 1-indexed list to masks where -1 means frozen 
+            # convert the 1-indexed list to masks where -1 means frozen
             # and 0 means not frozen
             frozen_atoms = [
                 -1 if i + 1 in frozen_atoms else 0 for i in range(len(atoms))

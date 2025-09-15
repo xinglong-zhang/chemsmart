@@ -8,7 +8,7 @@ from chemsmart.jobs.runner import JobRunner
 class PyMOLIRCMovieJob(PyMOLMovieJob):
     """
     PyMOL job for creating Intrinsic Reaction Coordinate (IRC) movies.
-    
+
     Specialized movie job for visualizing reaction pathways by
     animating molecular structures along IRC trajectories, showing
     the progression from reactants to products through the transition state.
@@ -20,6 +20,7 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
         label (str): Job identifier used for file naming and outputs.
         jobrunner (JobRunner): Execution backend for running the job.
     """
+
     TYPE = "pymol_ircmovie"
 
     def __init__(
@@ -31,11 +32,11 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
     ):
         """
         Initialize a PyMOL IRC movie job.
-        
+
         Sets up the job for creating animated visualizations of
         intrinsic reaction coordinate trajectories showing molecular
         changes along the reaction pathway.
-        
+
         Args:
             molecules: List of Molecule objects representing IRC trajectory.
             label: Job identifier string.
@@ -58,11 +59,11 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
     ):
         """
         Create PyMOL IRC movie job from trajectory files.
-        
+
         Creates an IRC animation job from either separate reactant/product
         files or a complete IRC trajectory file, handling molecular
         structure loading and sequence ordering.
-        
+
         Args:
             reactant_file: Path to reactant trajectory file.
             product_file: Path to product trajectory file.
@@ -72,10 +73,10 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
                 and the passed label is ignored.
             jobrunner: Job execution runner (default: auto-created).
             **kwargs: Additional arguments for job configuration.
-            
+
         Returns:
             PyMOLIRCMovieJob: Configured IRC movie job instance.
-            
+
         Raises:
             ValueError: If file inputs are invalid or conflicting.
         """

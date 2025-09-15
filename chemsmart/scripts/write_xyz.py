@@ -21,8 +21,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 @click.command()
 @click.option(
-    "-f", "--filename", default=None, 
-    help="Input filename to be converted."
+    "-f", "--filename", default=None, help="Input filename to be converted."
 )
 @click.option(
     "-i",
@@ -37,8 +36,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
     is_flag=True,
     default=True,
     help="Write all structures to a single .xyz file if more than one "
-         "structure is present.\nDefault is to write all structures to "
-         "a single file.",
+    "structure is present.\nDefault is to write all structures to "
+    "a single file.",
 )
 def entry_point(filename, index, single_file):
     """Script for writing structure to .xyz format.

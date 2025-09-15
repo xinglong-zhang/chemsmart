@@ -29,7 +29,7 @@ from chemsmart.io.orca.route import ORCARoute
 class FileMixin:
     """
     Mixin class for files that can be opened and read.
-    
+
     Provides common file operations and property extraction methods
     for computational chemistry files. Includes path handling,
     content reading, and unit conversion utilities.
@@ -39,7 +39,7 @@ class FileMixin:
     def filepath(self):
         """
         Get the absolute path of the file.
-        
+
         Returns:
             str: Absolute file path.
         """
@@ -49,7 +49,7 @@ class FileMixin:
     def filepath_directory(self):
         """
         Get the directory containing the file.
-        
+
         Returns:
             str: Directory path containing the file.
         """
@@ -59,7 +59,7 @@ class FileMixin:
     def base_filename_with_extension(self):
         """
         Get the filename with extension (no directory path).
-        
+
         Returns:
             str: Filename with extension.
         """
@@ -69,7 +69,7 @@ class FileMixin:
     def basename(self):
         """
         Get the filename without extension.
-        
+
         Returns:
             str: Base filename without extension.
         """
@@ -79,7 +79,7 @@ class FileMixin:
     def contents(self):
         """
         Read and cache file contents as list of stripped lines.
-        
+
         Returns:
             list: List of strings, each representing a line from the file.
         """
@@ -90,7 +90,7 @@ class FileMixin:
     def content_lines_string(self):
         """
         Read and cache file contents as a single string.
-        
+
         Returns:
             str: Complete file contents as a single string.
         """
@@ -101,7 +101,7 @@ class FileMixin:
     def forces_in_eV_per_angstrom(self):
         """
         Convert forces from Hartrees/Bohr to eV/Angstrom.
-        
+
         Returns:
             list: List of force arrays converted to eV/Angstrom units.
         """
@@ -116,7 +116,7 @@ class FileMixin:
     def input_translation_vectors(self):
         """
         Obtain translation vectors from input printed in the output file.
-        
+
         Returns:
             list: Translation vectors from input coordinates block.
         """
@@ -131,7 +131,7 @@ class FileMixin:
     def symbols(self):
         """
         Get chemical symbols from input coordinates block.
-        
+
         Returns:
             list: List of chemical symbols.
         """
@@ -141,7 +141,7 @@ class FileMixin:
     def list_of_pbc_conditions(self):
         """
         Get periodic boundary conditions from input coordinates.
-        
+
         Returns:
             list: Periodic boundary conditions.
         """
@@ -151,7 +151,7 @@ class FileMixin:
     def energies_in_eV(self):
         """
         Convert energies from Hartree to eV.
-        
+
         Returns:
             list: List of energies converted to eV units.
         """
@@ -161,7 +161,7 @@ class FileMixin:
     def num_energies(self):
         """
         Get the number of energy values.
-        
+
         Returns:
             int: Number of energy values.
         """
@@ -171,7 +171,7 @@ class FileMixin:
 class GaussianFileMixin(FileMixin):
     """
     Mixin class for Gaussian computational chemistry files.
-    
+
     Extends FileMixin with Gaussian-specific functionality including
     route string parsing, job type detection, and settings extraction.
     Handles Gaussian input/output file formats and job parameters.
@@ -180,7 +180,7 @@ class GaussianFileMixin(FileMixin):
     def _get_chk(self):
         """
         Check if checkpoint file directive is present.
-        
+
         Returns:
             bool: True if %chk directive found, False otherwise.
         """
@@ -192,7 +192,7 @@ class GaussianFileMixin(FileMixin):
     def _get_mem(self):
         """
         Extract memory allocation from file.
-        
+
         Returns:
             int: Memory allocation in GB (default 20 if not found).
         """
@@ -205,7 +205,7 @@ class GaussianFileMixin(FileMixin):
     def _get_nproc(self):
         """
         Extract number of processors from file.
-        
+
         Returns:
             int: Number of processors (default 16 if not found).
         """
@@ -219,7 +219,7 @@ class GaussianFileMixin(FileMixin):
     def freq(self):
         """
         Get frequency calculation setting from route.
-        
+
         Returns:
             bool: True if frequency calculations are requested.
         """
@@ -229,10 +229,10 @@ class GaussianFileMixin(FileMixin):
     def route_string(self):
         """
         Get the route string for Gaussian file.
-        
+
         Returns the computational route string as defined in the
         Gaussian input file. Implementation is provided by subclasses.
-        
+
         Returns:
             str: Route string for Gaussian calculations.
         """
@@ -241,10 +241,10 @@ class GaussianFileMixin(FileMixin):
     def _get_route(self):
         """
         Get route string from file contents.
-        
+
         Default implementation that must be overridden by subclasses
         to provide specific route string extraction logic.
-        
+
         Raises:
             NotImplementedError: Must be implemented by subclasses.
         """
@@ -254,10 +254,10 @@ class GaussianFileMixin(FileMixin):
     def is_link(self):
         """
         Check if file contains a Gaussian link job.
-        
+
         Searches for link job indicators such as 'stable=opt' in
         route lines to determine if this is a multi-step job.
-        
+
         Returns:
             bool: True if link job detected, False otherwise.
         """
@@ -270,10 +270,10 @@ class GaussianFileMixin(FileMixin):
     def modred(self):
         """
         Get modified redundant coordinate specifications.
-        
+
         Extracts modredundant coordinate definitions from the file
         for constrained optimizations or coordinate scans.
-        
+
         Returns:
             dict or list or None: Modredundant coordinate specifications.
         """
@@ -282,10 +282,10 @@ class GaussianFileMixin(FileMixin):
     def _get_modredundant_conditions(self):
         """
         Extract modredundant coordinate conditions from route.
-        
+
         Parses modredundant coordinate specifications for frozen
         coordinates (F) or scan coordinates (S) from the file.
-        
+
         Returns:
             dict or list or None: Modredundant conditions or None.
         """
@@ -311,13 +311,13 @@ class GaussianFileMixin(FileMixin):
     def _get_modred_frozen_coords(modred_list_of_string):
         """
         Parse frozen coordinate specifications from modredundant block.
-        
+
         Extracts integer coordinate indices for frozen internal
         coordinates from modredundant input lines.
-        
+
         Args:
             modred_list_of_string (list): Raw modredundant input lines.
-            
+
         Returns:
             list: List of frozen coordinate specifications.
         """
@@ -336,13 +336,13 @@ class GaussianFileMixin(FileMixin):
     def _get_modred_scan_coords(modred_list_of_string):
         """
         Parse scan coordinate specifications from modredundant block.
-        
+
         Extracts coordinate scan parameters including atom indices,
         number of steps, and step size from modredundant input.
-        
+
         Args:
             modred_list_of_string (list): Raw modredundant input lines.
-            
+
         Returns:
             dict: Scan coordinate specifications with keys: 'coords',
                   'num_steps', 'step_size'.
@@ -380,10 +380,10 @@ class GaussianFileMixin(FileMixin):
     def route_object(self):
         """
         Get parsed route object from route string.
-        
+
         Creates a GaussianRoute object from the route string to
         provide structured access to calculation parameters.
-        
+
         Returns:
             GaussianRoute or None: Parsed route object or None on error.
         """
@@ -397,10 +397,10 @@ class GaussianFileMixin(FileMixin):
     def dieze_tag(self):
         """
         Get dieze tag from route object.
-        
+
         Returns the dieze tag (calculation level indicator) from
         the parsed route string.
-        
+
         Returns:
             str: Dieze tag indicating calculation level.
         """
@@ -410,10 +410,10 @@ class GaussianFileMixin(FileMixin):
     def job_type(self):
         """
         Get job type from route object.
-        
+
         Returns the type of calculation (e.g., 'opt', 'freq', 'sp')
         as determined from the route string.
-        
+
         Returns:
             str: Job type specification.
         """
@@ -423,10 +423,10 @@ class GaussianFileMixin(FileMixin):
     def job_type(self, value):
         """
         Set job type in route object.
-        
+
         Updates the job type in the route object for dynamic
         job type modification during parsing.
-        
+
         Args:
             value (str): New job type to set.
         """
@@ -436,10 +436,10 @@ class GaussianFileMixin(FileMixin):
     def chk(self):
         """
         Get checkpoint file usage status.
-        
+
         Returns whether checkpoint file directive is specified
         in the input file.
-        
+
         Returns:
             bool: True if checkpoint file is used, False otherwise.
         """
@@ -449,10 +449,10 @@ class GaussianFileMixin(FileMixin):
     def numfreq(self):
         """
         Get numerical frequency calculation setting.
-        
+
         Returns whether numerical frequency calculations are
         requested in the route string.
-        
+
         Returns:
             bool: True if numerical frequencies requested.
         """
@@ -462,10 +462,10 @@ class GaussianFileMixin(FileMixin):
     def ab_initio(self):
         """
         Get ab initio method from route string.
-        
+
         Returns the ab initio quantum chemistry method specified
         in the calculation route.
-        
+
         Returns:
             str or None: Ab initio method name or None if not specified.
         """
@@ -475,10 +475,10 @@ class GaussianFileMixin(FileMixin):
     def functional(self):
         """
         Get DFT functional from route string.
-        
+
         Returns the density functional theory functional specified
         in the calculation route.
-        
+
         Returns:
             str or None: DFT functional name or None if not specified.
         """
@@ -488,10 +488,10 @@ class GaussianFileMixin(FileMixin):
     def basis(self):
         """
         Get basis set from route string.
-        
+
         Returns the basis set specification from the calculation
         route string.
-        
+
         Returns:
             str or None: Basis set name or None if not specified.
         """
@@ -501,10 +501,10 @@ class GaussianFileMixin(FileMixin):
     def semiempirical(self):
         """
         Get semiempirical method from route string.
-        
+
         Returns the semiempirical quantum chemistry method
         specified in the calculation route.
-        
+
         Returns:
             str or None: Semiempirical method or None if not specified.
         """
@@ -514,10 +514,10 @@ class GaussianFileMixin(FileMixin):
     def force(self):
         """
         Get force calculation setting from route string.
-        
+
         Returns whether force calculations are requested in
         the calculation route.
-        
+
         Returns:
             bool: True if force calculations requested.
         """
@@ -527,10 +527,10 @@ class GaussianFileMixin(FileMixin):
     def solvent_on(self):
         """
         Get solvent model activation status.
-        
+
         Returns whether solvent model calculations are enabled
         in the calculation route.
-        
+
         Returns:
             bool: True if solvent model is active.
         """
@@ -540,10 +540,10 @@ class GaussianFileMixin(FileMixin):
     def solvent_model(self):
         """
         Get solvent model type from route string.
-        
+
         Returns the type of implicit solvent model specified
         in the calculation route.
-        
+
         Returns:
             str or None: Solvent model name or None if not specified.
         """
@@ -553,10 +553,10 @@ class GaussianFileMixin(FileMixin):
     def solvent_id(self):
         """
         Get solvent identifier from route string.
-        
+
         Returns the specific solvent identifier used in implicit
         solvent calculations.
-        
+
         Returns:
             str or None: Solvent identifier or None if not specified.
         """
@@ -566,10 +566,10 @@ class GaussianFileMixin(FileMixin):
     def additional_solvent_options(self):
         """
         Get additional solvent options from route string.
-        
+
         Returns any additional solvent-related parameters
         specified in the calculation route.
-        
+
         Returns:
             str or None: Additional solvent options or None.
         """
@@ -579,10 +579,10 @@ class GaussianFileMixin(FileMixin):
     def additional_opt_options_in_route(self):
         """
         Get additional optimization options from route string.
-        
+
         Returns any additional optimization parameters specified
         in the calculation route.
-        
+
         Returns:
             str or None: Additional optimization options or None.
         """
@@ -592,10 +592,10 @@ class GaussianFileMixin(FileMixin):
     def additional_route_parameters(self):
         """
         Get additional route parameters from route string.
-        
+
         Returns any additional calculation parameters not covered
         by standard route parsing.
-        
+
         Returns:
             str or None: Additional route parameters or None.
         """
@@ -604,10 +604,10 @@ class GaussianFileMixin(FileMixin):
     def read_settings(self):
         """
         Create GaussianJobSettings from file parameters.
-        
+
         Extracts all relevant calculation parameters from the file
         and creates a comprehensive settings object for job submission.
-        
+
         Returns:
             GaussianJobSettings: Complete job settings configuration.
         """
@@ -650,7 +650,7 @@ class GaussianFileMixin(FileMixin):
 class ORCAFileMixin(FileMixin):
     """
     Mixin class for ORCA computational chemistry files.
-    
+
     Extends FileMixin with ORCA-specific functionality including
     route string parsing, solvent model detection, and MDCI parameter
     extraction. Handles ORCA input/output file formats and job settings.
@@ -660,7 +660,7 @@ class ORCAFileMixin(FileMixin):
     def contents_string(self):
         """
         Get file contents as a single joined string.
-        
+
         Returns:
             str: Complete file contents with newlines preserved.
         """
@@ -670,10 +670,10 @@ class ORCAFileMixin(FileMixin):
     def mdci_cutoff(self):
         """
         Extract MDCI cutoff parameter from input file.
-        
+
         Searches for MDCI cutoff specification in the %mdci block
         and returns the cutoff value for multireference calculations.
-        
+
         Returns:
             str or None: MDCI cutoff value or None if not found.
         """
@@ -694,10 +694,10 @@ class ORCAFileMixin(FileMixin):
     def mdci_density(self):
         """
         Extract MDCI density parameter from input file.
-        
+
         Searches for MDCI density specification in the %mdci block
         and returns the density value for multireference calculations.
-        
+
         Returns:
             str or None: MDCI density value or None if not found.
         """
@@ -753,13 +753,13 @@ class ORCAFileMixin(FileMixin):
     def solvent_id(self):
         """
         Extract solvent identifier from ORCA input file.
-        
+
         Searches for solvent specification in quoted strings and
         validates that exactly one solvent is specified.
-        
+
         Returns:
             str or None: Solvent identifier or None if not found.
-            
+
         Raises:
             Exception: If solvent not in quotes or multiple solvents found.
         """
@@ -798,10 +798,10 @@ class ORCAFileMixin(FileMixin):
     def route_object(self):
         """
         Get parsed ORCA route object from route string.
-        
+
         Creates an ORCARoute object from the route string to
         provide structured access to calculation parameters.
-        
+
         Returns:
             ORCARoute: Parsed ORCA route object.
         """
@@ -811,10 +811,10 @@ class ORCAFileMixin(FileMixin):
     def route_keywords(self):
         """
         Get route keywords from ORCA route object.
-        
+
         Returns the parsed route keywords from the ORCA
         calculation specification.
-        
+
         Returns:
             list: List of route keywords.
         """
@@ -824,10 +824,10 @@ class ORCAFileMixin(FileMixin):
     def functional(self):
         """
         Get DFT functional from ORCA route string.
-        
+
         Returns the density functional theory functional specified
         in the ORCA calculation route.
-        
+
         Returns:
             str or None: DFT functional name or None if not specified.
         """
@@ -837,10 +837,10 @@ class ORCAFileMixin(FileMixin):
     def ab_initio(self):
         """
         Get ab initio method from ORCA route string.
-        
+
         Returns the ab initio quantum chemistry method specified
         in the ORCA calculation route.
-        
+
         Returns:
             str or None: Ab initio method name or None if not specified.
         """
@@ -850,10 +850,10 @@ class ORCAFileMixin(FileMixin):
     def dispersion(self):
         """
         Get dispersion correction from ORCA route string.
-        
+
         Returns the dispersion correction method specified
         in the ORCA calculation route.
-        
+
         Returns:
             str or None: Dispersion correction or None if not specified.
         """
@@ -863,10 +863,10 @@ class ORCAFileMixin(FileMixin):
     def basis(self):
         """
         Get basis set from ORCA route string.
-        
+
         Returns the basis set specification from the ORCA
         calculation route string.
-        
+
         Returns:
             str or None: Basis set name or None if not specified.
         """
@@ -876,10 +876,10 @@ class ORCAFileMixin(FileMixin):
     def aux_basis(self):
         """
         Get auxiliary basis set from ORCA route string.
-        
+
         Returns the auxiliary basis set for density fitting
         calculations from the ORCA route.
-        
+
         Returns:
             str or None: Auxiliary basis set or None if not specified.
         """
@@ -889,10 +889,10 @@ class ORCAFileMixin(FileMixin):
     def extrapolation_basis(self):
         """
         Get extrapolation basis from ORCA route string.
-        
+
         Returns the basis set used for extrapolation schemes
         in the ORCA calculation route.
-        
+
         Returns:
             str or None: Extrapolation basis or None if not specified.
         """
@@ -902,10 +902,10 @@ class ORCAFileMixin(FileMixin):
     def defgrid(self):
         """
         Get integration grid specification from ORCA route.
-        
+
         Returns the integration grid definition specified
         in the ORCA calculation route.
-        
+
         Returns:
             str or None: Grid specification or None if not specified.
         """
@@ -915,10 +915,10 @@ class ORCAFileMixin(FileMixin):
     def scf_tol(self):
         """
         Get SCF convergence tolerance from ORCA route.
-        
+
         Returns the self-consistent field convergence tolerance
         specified in the ORCA calculation route.
-        
+
         Returns:
             str or None: SCF tolerance or None if not specified.
         """
@@ -928,10 +928,10 @@ class ORCAFileMixin(FileMixin):
     def scf_algorithm(self):
         """
         Get SCF algorithm from ORCA route string.
-        
+
         Returns the self-consistent field algorithm specified
         in the ORCA calculation route.
-        
+
         Returns:
             str or None: SCF algorithm or None if not specified.
         """
@@ -941,10 +941,10 @@ class ORCAFileMixin(FileMixin):
     def job_type(self):
         """
         Get job type from ORCA route string.
-        
+
         Returns the type of calculation (e.g., 'opt', 'freq', 'sp')
         as determined from the ORCA route string.
-        
+
         Returns:
             str: Job type specification.
         """
@@ -954,10 +954,10 @@ class ORCAFileMixin(FileMixin):
     def freq(self):
         """
         Get frequency calculation setting from ORCA route.
-        
+
         Returns whether frequency calculations are requested
         in the ORCA calculation route.
-        
+
         Returns:
             bool: True if frequency calculations requested.
         """
@@ -967,10 +967,10 @@ class ORCAFileMixin(FileMixin):
     def numfreq(self):
         """
         Get numerical frequency calculation setting from ORCA route.
-        
+
         Returns whether numerical frequency calculations are
         requested in the ORCA route string.
-        
+
         Returns:
             bool: True if numerical frequencies requested.
         """
@@ -979,10 +979,10 @@ class ORCAFileMixin(FileMixin):
     def read_settings(self):
         """
         Create ORCAJobSettings from file parameters.
-        
+
         Extracts all relevant ORCA calculation parameters from the file
         and creates a comprehensive settings object for job submission.
-        
+
         Returns:
             ORCAJobSettings: Complete ORCA job settings configuration.
         """
@@ -1028,7 +1028,7 @@ class ORCAFileMixin(FileMixin):
 class YAMLFileMixin(FileMixin):
     """
     Mixin class for YAML file handling and parsing.
-    
+
     Extends FileMixin with YAML-specific functionality including
     content parsing, key/value extraction, and dictionary access.
     Provides convenient methods for working with YAML configuration files.
@@ -1054,10 +1054,10 @@ class YAMLFileMixin(FileMixin):
     def yaml_contents_keys(self):
         """
         Get all keys from the parsed YAML dictionary.
-        
+
         Returns the top-level keys from the YAML file contents
         for iteration and inspection.
-        
+
         Returns:
             dict_keys: Dictionary keys from YAML contents.
         """
@@ -1067,10 +1067,10 @@ class YAMLFileMixin(FileMixin):
     def yaml_contents_values(self):
         """
         Get all values from the parsed YAML dictionary.
-        
+
         Returns the top-level values from the YAML file contents
         for iteration and inspection.
-        
+
         Returns:
             dict_values: Dictionary values from YAML contents.
         """
@@ -1079,13 +1079,13 @@ class YAMLFileMixin(FileMixin):
     def yaml_contents_by_key(self, key):
         """
         Get YAML content value by specific key.
-        
+
         Retrieves the value associated with a specific key from
         the parsed YAML dictionary.
-        
+
         Args:
             key: The key to look up in the YAML dictionary.
-            
+
         Returns:
             Any: Value associated with the key.
         """
@@ -1105,7 +1105,7 @@ class RegistryMeta(type):
     def __init__(cls, name, bases, dct):
         """
         Initialize class and set up registry if needed.
-        
+
         Args:
             name (str): Class name.
             bases (tuple): Base classes.
@@ -1120,7 +1120,7 @@ class RegistryMeta(type):
 class RegistryMixin(metaclass=RegistryMeta):
     """
     Mixin to automatically register subclasses in a shared registry.
-    
+
     Provides automatic subclass registration and discovery functionality.
     Useful for implementing plugin systems and factory patterns where
     subclasses need to be dynamically discovered and instantiated.
@@ -1133,11 +1133,11 @@ class RegistryMixin(metaclass=RegistryMeta):
     def subclasses(cls, allow_abstract=False):
         """
         Get all registered subclasses of this class.
-        
+
         Args:
             allow_abstract (bool): Whether to include abstract classes.
                 Defaults to False.
-                
+
         Returns:
             list: List of subclass types.
         """
@@ -1147,12 +1147,12 @@ class RegistryMixin(metaclass=RegistryMeta):
     def _subclasses(parent_cls, registry, allow_abstract):
         """
         Filter registry for subclasses of the parent class.
-        
+
         Args:
             parent_cls (type): Parent class to filter by.
             registry (list): Registry of all classes.
             allow_abstract (bool): Whether to include abstract classes.
-            
+
         Returns:
             list: Filtered list of subclasses.
         """
@@ -1167,10 +1167,10 @@ class RegistryMixin(metaclass=RegistryMeta):
     def __init_subclass__(cls, **kwargs):
         """
         Automatically register subclass in the registry.
-        
+
         Called when a subclass is created to automatically add it
         to the shared registry if REGISTERABLE is True.
-        
+
         Args:
             **kwargs: Additional keyword arguments passed to parent.
         """
@@ -1190,7 +1190,7 @@ class RegistryMixin(metaclass=RegistryMeta):
 class FolderMixin:
     """
     Mixin class for folder operations and file discovery.
-    
+
     Provides methods for searching and filtering files within directories
     based on file extensions, regular expressions, and other criteria.
     Supports both current directory and recursive subdirectory searches.
@@ -1203,13 +1203,13 @@ class FolderMixin:
     def get_all_files_in_current_folder_by_suffix(self, filetype):
         """
         Obtain a list of files of specified type in the current folder.
-        
+
         Non-recursively lists files in `self.folder` whose names end with
         `filetype`. Empty files are excluded.
-        
+
         Args:
             filetype (str): File name suffix to match (e.g., '.log', '.out').
-            
+
         Returns:
             list[str]: Full file paths matching the suffix.
         """
@@ -1228,14 +1228,14 @@ class FolderMixin:
     ):
         """
         Obtain files of specified type in folder and all subfolders.
-        
+
         Recursively searches `self.folder` for files whose names end with
         `filetype`. Unlike the non-recursive variant, empty files are not
         filtered out here.
-        
+
         Args:
             filetype (str): File name suffix to match.
-            
+
         Returns:
             list[str]: Full file paths matching the suffix.
         """
@@ -1252,15 +1252,15 @@ class FolderMixin:
     ):
         """
         Obtain files matching regex pattern in folder and subfolders.
-        
+
         Recursively searches `self.folder` for files whose names match
         the given regular expression using `re.match` (anchored at the
         beginning of the filename). Empty files are not filtered out here.
-        
+
         Args:
             regex (str | re.Pattern): Regular expression pattern to match
                 against filenames (not full paths).
-            
+
         Returns:
             list[str]: Full file paths whose basenames match the pattern.
         """
@@ -1275,15 +1275,15 @@ class FolderMixin:
     def get_all_files_in_current_folder_matching_regex(self, regex):
         """
         Obtain files matching regex pattern in the current folder only.
-        
+
         Searches only `self.folder` for files whose names match the given
         regular expression using `re.match` (anchored at the beginning of
         the filename). Empty files are excluded.
-        
+
         Args:
             regex (str | re.Pattern): Regular expression pattern to match
                 against filenames (not full paths).
-            
+
         Returns:
             list[str]: Full file paths whose basenames match the pattern.
         """
@@ -1301,7 +1301,7 @@ class FolderMixin:
 class BaseFolder(FolderMixin):
     """
     Base class for folder management with path operations.
-    
+
     Provides basic folder initialization and validation functionality.
     Combines folder path management with file discovery capabilities
     from the FolderMixin class.
@@ -1310,7 +1310,7 @@ class BaseFolder(FolderMixin):
     def __init__(self, folder):
         """
         Initialize the BaseFolder with a specified path.
-        
+
         Args:
             folder (str): Path to the folder to be managed.
         """

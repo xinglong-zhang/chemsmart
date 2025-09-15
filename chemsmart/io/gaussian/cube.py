@@ -9,7 +9,7 @@ class GaussianCubeFile(FileMixin):
     """
     Parser for Gaussian cube files.
     """
-    
+
     def __init__(self, filename):
         """
         Initialize cube file parser.
@@ -18,8 +18,7 @@ class GaussianCubeFile(FileMixin):
 
     @property
     def cube_job_title(self):
-        """Get the job title from the first line of the cube file.
-        """
+        """Get the job title from the first line of the cube file."""
         return self.contents[0]
 
     @property
@@ -125,7 +124,7 @@ class GaussianCubeFile(FileMixin):
 
 class CubeFileOperator:
     """Operator for mathematical operations between two cube files.
-    
+
     Args:
         cubefile1 (str): Path to the first cube file
         cubefile2 (str): Path to the second cube file
@@ -142,7 +141,7 @@ class CubeFileOperator:
         self.cube1 = GaussianCubeFile(filename=self.cubefile1)
         self.cube2 = GaussianCubeFile(filename=self.cubefile2)
         self.operation = operation
-        
+
         # Generate output filename if not provided
         if output_cubefile is None:
             output_cubefile = os.path.join(
@@ -299,9 +298,11 @@ class CubeFileOperator:
         assert (
             self._check_natoms_matched()
             and self._check_coordinate_origin_matched()
-        ), ("Number of atoms and coordinate of the origin should be "
-            "the same!")
-        
+        ), (
+            "Number of atoms and coordinate of the origin should be "
+            "the same!"
+        )
+
         # Write the original 3rd line instead of reconstructing
         f.write(self.cube1.contents[2] + "\n")
 
@@ -309,25 +310,25 @@ class CubeFileOperator:
         """
         Write the grid specification lines.
         """
-        assert (
-            self._check_grid_points_matched()
-        ), ("Grid points should be the same for both cubes but are "
-            "different!")
+        assert self._check_grid_points_matched(), (
+            "Grid points should be the same for both cubes but are "
+            "different!"
+        )
         for line in self.cube1.contents[3:6]:
             f.write(line + "\n")
 
     def _write_geometry(self, f):
         """
         Write the molecular geometry section.
-        
+
         This writes the geometry exactly as it appears in the input cube file
         to preserve the non-standard format where atomic number is repeated
         as a float in the second column.
         """
-        assert (
-            self._check_geometries_matched()
-        ), ("Geometries should be the same for both cubes but are "
-            "different!")
+        assert self._check_geometries_matched(), (
+            "Geometries should be the same for both cubes but are "
+            "different!"
+        )
         for line in self.cube1.contents[6 : 6 + self.cube1.num_atoms]:
             f.write(line + "\n")
 

@@ -18,17 +18,17 @@ import numpy as np
 def is_collinear(coords, tol=1e-5):
     """
     Check if three points are collinear using cross product method.
-    
+
     Determines whether three points lie on the same straight line by
     calculating the cross product of vectors formed by the points.
     Used for identifying linear molecular configurations.
-    
+
     Args:
         coords (array-like): List or array of three coordinate points,
             each containing [x, y, z] coordinates.
-        tol (float, optional): Tolerance for collinearity test. 
+        tol (float, optional): Tolerance for collinearity test.
             Defaults to 1e-5.
-    
+
     Returns:
         bool: True if points are collinear within tolerance, False otherwise.
     """

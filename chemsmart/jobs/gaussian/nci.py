@@ -2,10 +2,10 @@
 Gaussian Non-Covalent Interaction (NCI) job implementation.
 
 This module provides the GaussianNCIJob class for running Gaussian
-job that creates the .wfn file required for NCIPLOT program to 
-generate the associated dens.cube and grad.cube files. 
-NCI analysis identifies and visualizes non-covalent interactions 
-in molecular systems including hydrogen bonds, van der Waals 
+job that creates the .wfn file required for NCIPLOT program to
+generate the associated dens.cube and grad.cube files.
+NCI analysis identifies and visualizes non-covalent interactions
+in molecular systems including hydrogen bonds, van der Waals
 interactions, and steric clashes.
 """
 
@@ -17,7 +17,7 @@ class GaussianNCIJob(GaussianJob):
     """
     Gaussian job class for Non-Covalent Interaction (NCI) cube files
     generation.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16nci').
         molecule (Molecule): Molecular structure for NCI analysis.
@@ -26,15 +26,16 @@ class GaussianNCIJob(GaussianJob):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "g16nci"
 
     def __init__(self, molecule, settings, label, jobrunner=None, **kwargs):
         """
         Initialize a Gaussian NCI analysis job.
-        
+
         Sets up an NCI .wfn file calculation with the specified
-        molecular structure. 
-        
+        molecular structure.
+
         Args:
             molecule (Molecule): Molecular structure for NCI analysis.
             settings (GaussianJobSettings): Calculation configuration.

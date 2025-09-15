@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ThermochemistryJobRunner(JobRunner):
     """
     Job runner for thermochemistry analysis calculations.
-    
+
     This class manages the execution environment for thermochemistry jobs,
     handling file operations, scratch directory management, and process
     execution for both single and Boltzmann-averaged calculations.
@@ -36,9 +36,9 @@ class ThermochemistryJobRunner(JobRunner):
         num_gpus (int): Number of GPUs allocated (from server).
         mem_gb (int): Memory allocation in gigabytes (from server).
     """
-    
+
     JOBTYPES = ["thermochemistry", "boltzmann"]
-    
+
     PROGRAM = "Thermochemistry"
     FAKE = False
     # Thermochemistry jobs are lightweight, scratch typically not needed
@@ -49,7 +49,7 @@ class ThermochemistryJobRunner(JobRunner):
     ):
         """
         Initialize the thermochemistry job runner.
-        
+
         Args:
             server: Server configuration for job execution
             scratch (bool, optional): Whether to use scratch directory
@@ -73,10 +73,10 @@ class ThermochemistryJobRunner(JobRunner):
     def _prerun(self, job):
         """
         Prepare the job environment before execution.
-        
+
         Sets up file paths and directory structure required for
         the thermochemistry calculation.
-        
+
         Args:
             job: Thermochemistry job instance to prepare
         """
@@ -85,11 +85,11 @@ class ThermochemistryJobRunner(JobRunner):
     def _assign_variables(self, job):
         """
         Set up file paths for input, output, and error files.
-        
+
         Configures the necessary file paths for job execution,
         choosing between scratch directory or job directory
         based on runner configuration.
-        
+
         Args:
             job: Thermochemistry job instance to configure
         """
@@ -104,10 +104,10 @@ class ThermochemistryJobRunner(JobRunner):
     def _set_up_variables_in_scratch(self, job):
         """
         Set up file paths in a scratch directory.
-        
+
         Creates a dedicated scratch directory for the job and
         configures all file paths to use the scratch location.
-        
+
         Args:
             job: Thermochemistry job instance to configure
         """
@@ -137,10 +137,10 @@ class ThermochemistryJobRunner(JobRunner):
     def _set_up_variables_in_job_directory(self, job):
         """
         Set up file paths in the job's directory.
-        
+
         Configures file paths to use the job's working directory
         for input, output, and error files.
-        
+
         Args:
             job: Thermochemistry job instance to configure
         """
@@ -153,11 +153,11 @@ class ThermochemistryJobRunner(JobRunner):
     def _write_input(self, job):
         """
         Copy the input file to the running directory if using scratch.
-        
+
         Ensures the input file is available in the working directory
         for thermochemistry analysis, copying from the original location
         if running in scratch mode.
-        
+
         Args:
             job: Thermochemistry job instance with input file
         """
@@ -170,13 +170,13 @@ class ThermochemistryJobRunner(JobRunner):
     def _get_command(self, job):
         """
         Get the command to execute for thermochemistry jobs.
-        
+
         Thermochemistry jobs are executed directly in Python,
         so no external command is needed.
-        
+
         Args:
             job: Thermochemistry job instance
-            
+
         Returns:
             None: No external command required
         """
@@ -185,16 +185,16 @@ class ThermochemistryJobRunner(JobRunner):
     def _create_process(self, job, command, env):
         """
         Run the thermochemistry calculation directly.
-        
+
         Executes the thermochemistry calculation using the job's
         compute method and handles any errors that occur during
         the calculation process.
-        
+
         Args:
             job: Thermochemistry job instance to execute
             command: Command to execute (unused for thermochemistry)
             env: Environment variables (unused for thermochemistry)
-            
+
         Returns:
             int: Exit code (0 for success, 1 for failure)
         """
@@ -212,10 +212,10 @@ class ThermochemistryJobRunner(JobRunner):
     def _run(self, process, **kwargs):
         """
         Run the thermochemistry job.
-        
+
         For thermochemistry jobs, the actual calculation is performed
         in _create_process, so this method is a no-op.
-        
+
         Args:
             process: Process result from _create_process
             **kwargs: Additional keyword arguments (unused)
@@ -225,10 +225,10 @@ class ThermochemistryJobRunner(JobRunner):
     def _get_executable(self):
         """
         Get the executable for thermochemistry jobs.
-        
+
         Thermochemistry jobs run directly in Python without
         external executables.
-        
+
         Returns:
             None: No external executable required
         """
@@ -237,15 +237,15 @@ class ThermochemistryJobRunner(JobRunner):
     def _postrun(self, job):
         """
         Handle post-run tasks, including file management and cleanup.
-        
+
         Manages file copying from scratch directories and cleanup
         operations after job completion. Removes error files for
         successful jobs.
-        
+
         Args:
             job: Thermochemistry job instance that was executed
         """
-        
+
         if self.scratch:
             # Copy output and error files to job folder
             for file in [self.job_outputfile, self.job_errfile]:

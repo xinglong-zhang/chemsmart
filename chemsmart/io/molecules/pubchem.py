@@ -70,7 +70,7 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
 
     # Check for multiple conformers and warn user if applicable
     if field != "conformers":
-        # Set default conformer_ids to len==1, 
+        # Set default conformer_ids to len==1,
         # as there are PubChem structures with no conformer information
         # which would return "HTTPError:PUGREST.NotFound"
         conformer_ids = ["conformer information not found."]

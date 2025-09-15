@@ -85,7 +85,7 @@ class NCIPLOTJobRunner(JobRunner):
 
         Returns:
             NCIPLOTExecutable: Configured executable for NCIPLOT
-        
+
         Raises:
             FileNotFoundError: If server configuration is not found
         """
@@ -188,7 +188,7 @@ class NCIPLOTJobRunner(JobRunner):
         Args:
             job: NCIPLOTJob instance to prepare files for
         """
-        
+
         # Ensure running directory exists
         if job.molecule is not None:
             logger.debug("Writing XYZ from PubChem molecule")
@@ -198,7 +198,7 @@ class NCIPLOTJobRunner(JobRunner):
             assert (
                 job.filenames is not None
             ), "No molecule provided and no filenames specified for NCIPLOT job."
-            
+
             if not isinstance(job.filenames, (list, tuple)):
                 raise TypeError(
                     f"Expected filenames to be a list or tuple, got "
@@ -226,7 +226,7 @@ class NCIPLOTJobRunner(JobRunner):
 
         Args:
             job: NCIPLOTJob instance with files to copy
-        
+
         Raises:
             FileNotFoundError: If any input file doesn't exist
         """
@@ -247,7 +247,7 @@ class NCIPLOTJobRunner(JobRunner):
 
         Args:
             job: NCIPLOTJob instance with files to convert
-        
+
         Raises:
             FileNotFoundError: If any input file doesn't exist
             ValueError: If file conversion fails
@@ -265,7 +265,7 @@ class NCIPLOTJobRunner(JobRunner):
                     output_filetype="xyz",
                 )
                 converter.convert_files()
-                
+
                 with suppress(SameFileError):
                     # Copy the converted .xyz file to running directory
                     xyz_file = filename.rsplit(".", 1)[0] + ".xyz"
@@ -319,7 +319,7 @@ class NCIPLOTJobRunner(JobRunner):
 
         Args:
             job: NCIPLOTJob instance to get command for
-        
+
         Returns:
             str: Command string for execution
         """
@@ -337,7 +337,7 @@ class NCIPLOTJobRunner(JobRunner):
             job: NCIPLOTJob instance being executed
             command: Command string to execute
             env: Environment variables for execution
-        
+
         Returns:
             subprocess.Popen: Process object for the running command
         """
@@ -377,7 +377,7 @@ class NCIPLOTJobRunner(JobRunner):
         Args:
             job: NCIPLOTJob instance that was executed
         """
-        
+
         if self.scratch:
             # If job was run in scratch, copy files to job folder except temp files
             for file in glob(f"{self.running_directory}/*"):
@@ -419,7 +419,7 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
         num_gpus (int): Number of GPUs allocated (from server).
         mem_gb (int): Memory allocation in gigabytes (from server).
     """
-    
+
     FAKE = True
 
     def __init__(
@@ -450,7 +450,7 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
         Args:
             job: NCIPLOTJob instance to run in fake mode
             **kwargs: Additional keyword arguments
-        
+
         Returns:
             int: Return code (always 0 for successful fake runs)
         """
@@ -478,14 +478,14 @@ class FakeNCIPLOT:
         input_filepath (str): Full path to the input file.
         output_filepath (str): Full path to the simulated output file (.nciout).
     """
-    
+
     def __init__(self, file_to_run):
         """
         Initialize FakeNCIPLOT.
 
         Args:
             file_to_run: Path to input file to simulate processing
-        
+
         Raises:
             FileNotFoundError: If input file doesn't exist
         """
@@ -540,7 +540,7 @@ class FakeNCIPLOT:
 
         Creates a mock output file with typical NCIPLOT header and footer
         information to simulate successful program execution.
-        
+
         Returns:
             int: Return code (always 0 for success)
         """

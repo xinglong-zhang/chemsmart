@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class NCIPLOTJob(Job):
     """
-    NCIPLOT job for non-covalent interaction job creating dens.cube 
+    NCIPLOT job for non-covalent interaction job creating dens.cube
     and grad.cube files.
 
     This class handles the setup and execution of NCIPLOT calculations for
@@ -188,7 +188,7 @@ class NCIPLOTJob(Job):
         """
         file_exists = os.path.exists(self.outputfile)
         end_in_last_line_of_file = False
-        
+
         if file_exists:
             with open(self.outputfile) as f:
                 lines = f.readlines()

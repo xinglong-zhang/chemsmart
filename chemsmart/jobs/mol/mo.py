@@ -15,7 +15,7 @@ from chemsmart.jobs.mol.job import PyMOLJob
 class PyMOLMOJob(PyMOLJob):
     """
     PyMOL job for molecular orbital visualization.
-    
+
     Specialized job class for visualizing molecular orbitals using
     PyMOL, supporting HOMO, LUMO, or specific orbital number
     visualization with isosurface generation and coloring.
@@ -31,6 +31,7 @@ class PyMOLMOJob(PyMOLJob):
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "pymol_mo"
 
     def __init__(
@@ -45,12 +46,12 @@ class PyMOLMOJob(PyMOLJob):
     ):
         """
         Initialize a PyMOL molecular orbital visualization job.
-        
+
         Sets up the job with molecular structure and orbital specification.
         At least one of `number`, `homo`, or `lumo` must be provided. If
         multiple are provided, the precedence is number < HOMO < LUMO,
         i.e., LUMO overrides HOMO which overrides number.
-        
+
         Args:
             molecule: Molecule object to visualize.
             label: Job identifier string.
@@ -60,7 +61,7 @@ class PyMOLMOJob(PyMOLJob):
             mo_basename (str, optional): Base name for output files
                 (auto-generated if not provided).
             **kwargs: Additional arguments passed to parent PyMOLJob.
-            
+
         Raises:
             AssertionError: If no orbital specification is provided.
         """
@@ -90,10 +91,10 @@ class PyMOLMOJob(PyMOLJob):
     def _job_is_complete(self):
         """
         Check if the PyMOL molecular orbital job has completed.
-        
+
         Determines job completion by checking for the existence of
         the molecular orbital PyMOL session file.
-        
+
         Returns:
             bool: True if the MO PSE file exists, False otherwise.
         """

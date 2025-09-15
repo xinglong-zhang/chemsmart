@@ -9,7 +9,7 @@ class Gaussian16Input(GaussianFileMixin):
     """
     Parser for Gaussian 16 input files.
     """
-    
+
     def __init__(self, filename):
         """
         Initialize Gaussian input file parser.
@@ -27,13 +27,13 @@ class Gaussian16Input(GaussianFileMixin):
     def content_groups(self):
         """
         Parse Gaussian input file into content groups.
-        
+
         The input file is organized into blocks separated by blank lines:
         - content_groups[0]: Header information and route string
         - content_groups[1]: Job title/description
         - content_groups[2]: Charge/multiplicity and molecular coordinates
         - content_groups[3:]: Additional sections (modred, gen/genecp, solvents)
-        
+
         Note: Structure may vary depending on calculation type and may need
         updates for job-specific sections.
         """
@@ -220,7 +220,7 @@ class Gaussian16Input(GaussianFileMixin):
     def _get_route(self):
         """
         Extract and format route strings from the input file.
-        
+
         Route strings may span multiple lines starting with '#' and are
         terminated by blank lines or non-# lines. All route content is
         converted to lowercase for consistency.
@@ -278,11 +278,11 @@ class Gaussian16Input(GaussianFileMixin):
         # Semi-empirical calculations don't use explicit basis sets
         if self.basis is None:
             return None
-        
+
         # Only applicable for Gen/GenECP calculations
         if "gen" not in self.basis:
             return None
-        
+
         # Determine group position based on additional input features
         if (
             "modred" in self.route_string
@@ -308,13 +308,13 @@ class Gaussian16Input(GaussianFileMixin):
         ):
             # Neither modred nor custom solvent
             return self.content_groups[3:]
-        
+
         return None
 
     def _get_custom_solvent_group(self):
         """
         Extract the custom solvent specification group.
-        
+
         Custom solvent specifications appear as the last content group
         when 'solvent=generic' is specified in the route section.
         """

@@ -21,8 +21,7 @@ def click_thermochemistry_options(f):
         "-d",
         "--directory",
         default=None,
-        help="Directory in which to compute thermochemistry for all "
-        "files.",
+        help="Directory in which to compute thermochemistry for all " "files.",
     )
     @click.option(
         "-t",
@@ -177,19 +176,19 @@ def thermochemistry(
 ):
     """
     CLI for running thermochemistry jobs using the chemsmart framework.
-    
-    This command allows you to compute thermochemistry for Gaussian or ORCA 
+
+    This command allows you to compute thermochemistry for Gaussian or ORCA
     output files.
-    
+
     Examples:
-    `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log 
+    `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log
     -f udc3_mCF3_monomer_c29.log -T 298.15`
-    will save results to `udc3_mCF3_monomer_c9.dat` and 
+    will save results to `udc3_mCF3_monomer_c9.dat` and
     `udc3_mCF3_monomer_c29.dat`.
-    
-    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15 
+
+    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15
     -o thermochemistry_results.dat`
-    will compute thermochemistry for all Gaussian log files in the specified 
+    will compute thermochemistry for all Gaussian log files in the specified
     directory and save to `thermochemistry_results.dat`.
     """
     # validate input
@@ -319,7 +318,7 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
                 logger.error(f"Error processing job for {job.label}: {e}")
 
         if outputfile is None:
-            # If no output file is specified, save results to individual 
+            # If no output file is specified, save results to individual
             # files
             for job in jobs:
                 job.show_results()

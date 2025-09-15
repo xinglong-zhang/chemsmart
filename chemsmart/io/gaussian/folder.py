@@ -12,7 +12,7 @@ class GaussianComFolder(BaseFolder):
     """
     Manager for directories containing Gaussian input files.
     """
-    
+
     def __init__(self, folder):
         """
         Initialize Gaussian input folder manager.

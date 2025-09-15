@@ -9,7 +9,7 @@ from chemsmart.utils.utils import string2index_1based
 class XYZFile(FileMixin):
     """
     Parser for XYZ coordinate files.
-    
+
     This class handles XYZ files containing molecular coordinates, supporting
     both single-molecule files and multi-molecule files (e.g., conformer
     ensembles). It can extract molecular geometries, comments, and energies
@@ -19,7 +19,7 @@ class XYZFile(FileMixin):
     def __init__(self, filename):
         """
         Initialize XYZ file parser.
-        
+
         Args:
             filename (str): Path to the XYZ file to parse
         """
@@ -35,7 +35,7 @@ class XYZFile(FileMixin):
     def num_atoms(self):
         """
         Get number of atoms from the first line of XYZ file.
-        
+
         Returns:
             int: Number of atoms in the molecular structure
         """
@@ -45,7 +45,7 @@ class XYZFile(FileMixin):
     def molecule(self):
         """
         Get the last molecule from the XYZ file.
-        
+
         Returns:
             Molecule: Last molecular structure in the file
         """
@@ -55,7 +55,7 @@ class XYZFile(FileMixin):
     def comments(self):
         """
         Get the last comment line from the XYZ file.
-        
+
         Returns:
             str: Last comment line in the file
         """
@@ -64,17 +64,17 @@ class XYZFile(FileMixin):
     def _get_molecules_and_comments(self, index=":", return_list=False):
         """
         Extract molecules and comments from XYZ file.
-        
+
         The XYZ file can contain a single molecule (conventional format) or
         multiple molecules (e.g., conformer ensembles from CREST).
-        
+
         Args:
             index (str): Index specification for molecule selection
             return_list (bool): Whether to always return lists
-            
+
         Returns:
             tuple: (molecules, comments) - molecules and their comment lines
-            
+
         Raises:
             ValueError: If number of atoms is zero
         """
@@ -111,14 +111,14 @@ class XYZFile(FileMixin):
     def get_molecules(self, index=":", return_list=False):
         """
         Extract molecular structures from XYZ file with energy assignment.
-        
+
         Parses comment lines to extract energy values and assigns them to
         the corresponding Molecule objects.
-        
+
         Args:
             index (str): Index specification for molecule selection
             return_list (bool): Whether to return list format
-            
+
         Returns:
             Molecule or list: Single molecule or list of molecules with energies
         """
@@ -150,11 +150,11 @@ class XYZFile(FileMixin):
     def get_comments(self, index=":", return_list=False):
         """
         Extract comment lines from XYZ file.
-        
+
         Args:
             index (str): Index specification for comment selection
             return_list (bool): Whether to return list format
-            
+
         Returns:
             str or list: Single comment or list of comments
         """

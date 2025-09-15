@@ -17,15 +17,15 @@ logger = logging.getLogger(__name__)
 class GaussianRESPJob(GaussianJob):
     """
     Gaussian job class for RESP charge calculations.
-    
+
     Performs RESP (Restrained Electrostatic Potential) charge
     calculations to derive atomic partial charges fitted to
     the molecular electrostatic potential. These charges are
     particularly useful for molecular dynamics simulations.
-    
+
     RESP charges provide a good balance between accuracy and
     transferability for force field applications.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16resp').
         molecule (Molecule): Molecular structure for RESP calculation.
@@ -34,15 +34,16 @@ class GaussianRESPJob(GaussianJob):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "g16resp"
 
     def __init__(self, molecule, settings, label, jobrunner=None, **kwargs):
         """
         Initialize a Gaussian RESP charge calculation job.
-        
+
         Sets up a RESP charge calculation with the specified
         molecular structure and calculation settings.
-        
+
         Args:
             molecule (Molecule): Molecular structure for RESP calculation.
             settings (GaussianJobSettings): Calculation configuration.

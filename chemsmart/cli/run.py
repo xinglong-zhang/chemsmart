@@ -21,16 +21,12 @@ if system_type == "Darwin":
     try:
         set_start_method("fork")
     except RuntimeError as e:
-        logger.error(
-            f"Failed to set start method to 'fork' on Darwin: {e}"
-        )
+        logger.error(f"Failed to set start method to 'fork' on Darwin: {e}")
 elif system_type == "Windows":
     try:
         set_start_method("spawn")
     except RuntimeError as e:
-        logger.error(
-            f"Failed to set start method to 'spawn' on Windows: {e}"
-        )
+        logger.error(f"Failed to set start method to 'spawn' on Windows: {e}")
 else:
     pass
 
@@ -52,7 +48,7 @@ def run(
 ):
     """
     Main command for running chemsmart jobs.
-    
+
     This command sets up the job runner with specified computational
     resources and executes jobs directly in the current environment.
     """
@@ -88,7 +84,7 @@ def process_pipeline(ctx, *args, **kwargs):
     """
     logger.debug(f"Processing pipeline with args: {args}, kwargs: {kwargs}")
     # will give the following error if without **kwargs:
-    # TypeError: process_pipeline() got an unexpected keyword argument 
+    # TypeError: process_pipeline() got an unexpected keyword argument
     # 'stream'
 
     # Retrieve the jobrunner from context
@@ -99,7 +95,7 @@ def process_pipeline(ctx, *args, **kwargs):
     job = args[0]
     logger.debug(f"Job to be run: {job}")
 
-    # Handle None return (e.g., from post-processing subcommands like 
+    # Handle None return (e.g., from post-processing subcommands like
     # boltzmann)
     if job is None:
         logger.debug(
@@ -112,7 +108,7 @@ def process_pipeline(ctx, *args, **kwargs):
         job = job[0]
 
     # Instantiate a specific jobrunner based on job type
-    # jobrunner at this stage is an instance of specific JobRunner subclass 
+    # jobrunner at this stage is an instance of specific JobRunner subclass
     # to run the job
     if isinstance(job, Job):
         jobrunner = jobrunner.from_job(

@@ -7,16 +7,16 @@ logger = logging.getLogger(__name__)
 class ORCABlock:
     """
     Abstract base class for ORCA input file blocks.
-    
+
     This class provides the interface for handling different types of ORCA
     input blocks. Each block type should inherit from this class and implement
     the write method to output the block content to an input file.
     """
-    
+
     def __init__(self, block_name):
         """
         Initialize ORCA block object.
-        
+
         Args:
             block_name (str): Name of the ORCA input block to handle
         """
@@ -26,11 +26,11 @@ class ORCABlock:
     def write(self, f, **kwargs):
         """
         Abstract method to write block content to file.
-        
+
         Args:
             f: File object to write to
             **kwargs: Block-specific parameters
-            
+
         Raises:
             NotImplementedError: Must be implemented by subclasses
         """
@@ -40,7 +40,7 @@ class ORCABlock:
 class PALORCABlock(ORCABlock):
     """
     ORCA input %pal block for parallel processing specification.
-    
+
     This block controls the number of processors used for ORCA calculations.
     Essential for parallel computation setup in quantum chemistry calculations.
     """
@@ -58,7 +58,7 @@ class PALORCABlock(ORCABlock):
     ):
         """
         Write %pal block to ORCA input file.
-        
+
         Args:
             f: File object to write to
             nprocs (int, optional): Number of processors to use for calculation
@@ -70,7 +70,7 @@ class PALORCABlock(ORCABlock):
 class MaxCoreORCABlock(ORCABlock):
     """
     ORCA input %maxcore block for maximum memory per core specification.
-    
+
     This block controls the maximum amount of memory allocated per core
     for ORCA calculations. Important for managing memory usage in large
     quantum chemistry calculations.
@@ -79,7 +79,7 @@ class MaxCoreORCABlock(ORCABlock):
     def __init__(self, block_name):
         """
         Initialize MaxCore ORCA block.
-        
+
         Args:
             block_name (str): Name of the block (typically 'maxcore')
         """
@@ -92,7 +92,7 @@ class MaxCoreORCABlock(ORCABlock):
     ):
         """
         Write %maxcore block to ORCA input file.
-        
+
         Args:
             f: File object to write to
             maxcore (int, optional): Maximum memory per core in MB
@@ -104,7 +104,7 @@ class MaxCoreORCABlock(ORCABlock):
 class SCFORCABlock(ORCABlock):
     """
     ORCA input %scf block for SCF algorithm parameters and options.
-    
+
     This block controls various Self-Consistent Field (SCF) calculation
     parameters including convergence criteria, orbital manipulation,
     and broken-symmetry solutions for open-shell systems.
@@ -113,7 +113,7 @@ class SCFORCABlock(ORCABlock):
     def __init__(self, block_name):
         """
         Initialize SCF ORCA block.
-        
+
         Args:
             block_name (str): Name of the block (typically 'scf')
         """
@@ -162,7 +162,7 @@ class SCFORCABlock(ORCABlock):
 class MDCIORCABlock(ORCABlock):
     """
     ORCA input %mdci block for Matrix Driven CI methods.
-    
+
     This block controls various correlation methods including CCSD, CISD,
     QCISD, and CEPA methods. It provides extensive options for controlling
     convergence, memory usage, and calculation details.
@@ -171,7 +171,7 @@ class MDCIORCABlock(ORCABlock):
     def __init__(self, block_name):
         """
         Initialize MDCI ORCA block.
-        
+
         Args:
             block_name (str): Name of the block (typically 'mdci')
         """
@@ -358,5 +358,5 @@ class MDCIORCABlock(ORCABlock):
             f.write(f"MaxDIIS {maxdiis}\n")
         if incore is not None:
             f.write(f"InCore {incore}\n")
-            
+
         f.write("end\n\n")

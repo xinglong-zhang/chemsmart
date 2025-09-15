@@ -13,7 +13,7 @@ from chemsmart.jobs.mol.job import PyMOLJob
 class PyMOLVisualizationJob(PyMOLJob):
     """
     PyMOL job for basic molecular visualization.
-    
+
     Provides standard molecular visualization capabilities using PyMOL
     for creating static molecular images with customizable styling,
     labeling, and rendering options for publication-quality figures.
@@ -25,6 +25,7 @@ class PyMOLVisualizationJob(PyMOLJob):
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "pymol_visualization"
 
     def __init__(
@@ -36,11 +37,11 @@ class PyMOLVisualizationJob(PyMOLJob):
     ):
         """
         Initialize a PyMOL visualization job.
-        
+
         Sets up a basic molecular visualization job with standard
         PyMOL rendering capabilities for creating static molecular
         images with professional styling.
-        
+
         Args:
             molecule: Molecule object to visualize.
             label: Job identifier string.

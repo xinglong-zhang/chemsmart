@@ -53,15 +53,15 @@ def to_graph_wrapper(
 ) -> nx.Graph:
     """
     Global helper function to call Molecule.to_graph() for multiprocessing.
-    
+
     Provides a picklable wrapper for the Molecule.to_graph() method that
     can be used with multiprocessing pools.
-    
+
     Args:
         mol (Molecule): Molecule instance to convert to graph.
         bond_cutoff_buffer (float): Buffer for bond cutoff distance.
         adjust_H (bool): Whether to adjust hydrogen bond detection.
-        
+
     Returns:
         networkx.Graph: Molecular graph representation.
     """
@@ -73,11 +73,11 @@ def to_graph_wrapper(
 class StructureGrouperConfig:
     """
     Configuration container for StructureMatcher parameters.
-    
+
     Stores tolerance parameters for structure matching algorithms.
     Default values are optimized for heterogeneous molecular systems
     and may need adjustment for specific molecular types.
-    
+
     Attributes:
         ltol (float): Length tolerance for structure matching.
         stol (float): Site tolerance for atomic position matching.
@@ -87,7 +87,7 @@ class StructureGrouperConfig:
     def __init__(self, ltol=0.1, stol=0.18, angle_tol=1):
         """
         Initialize structure grouper configuration.
-        
+
         Args:
             ltol (float): Length tolerance. Defaults to 0.1.
             stol (float): Site tolerance. Defaults to 0.18.
@@ -101,11 +101,11 @@ class StructureGrouperConfig:
 class MoleculeGrouper(ABC):
     """
     Abstract base class for molecular structure grouping algorithms.
-    
+
     Defines the common interface that all molecular grouping strategies
     must implement. Cannot be directly instantiated and designed to
     ensure consistent behavior across different grouping methods.
-    
+
     Attributes:
         molecules (Iterable[Molecule]): Collection of molecules to group.
         num_procs (int): Number of processes for parallel computation.
@@ -114,7 +114,7 @@ class MoleculeGrouper(ABC):
     def __init__(self, molecules: Iterable[Molecule], num_procs: int = 1):
         """
         Initialize the molecular grouper.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
@@ -128,10 +128,10 @@ class MoleculeGrouper(ABC):
     def _validate_inputs(self) -> None:
         """
         Validate input molecules for grouping.
-        
+
         Ensures that the input is an iterable collection and all items
         are valid Molecule instances.
-        
+
         Raises:
             TypeError: If molecules is not iterable or contains non-Molecule items.
         """
@@ -144,9 +144,9 @@ class MoleculeGrouper(ABC):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Main grouping method to return grouped molecules and their indices.
-        
+
         Must be implemented by subclasses to define specific grouping logic.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -157,10 +157,10 @@ class MoleculeGrouper(ABC):
     def unique(self) -> List[Molecule]:
         """
         Get unique representative molecules from each group.
-        
+
         Returns the first molecule from each group as a representative
         of that structural family.
-        
+
         Returns:
             List[Molecule]: List of unique representative molecules.
         """
@@ -171,12 +171,12 @@ class MoleculeGrouper(ABC):
 class RMSDGrouper(MoleculeGrouper):
     """
     Group molecules based on RMSD (Root Mean Square Deviation) similarity.
-    
+
     Groups molecules based on geometric similarity of atomic positions.
     Effective for precise 3D structural comparisons, ideal in contexts
     like crystallography or drug binding where exact spatial alignment
     is crucial.
-    
+
     Attributes:
         molecules (Iterable[Molecule]): Inherited; collection of molecules to
             group.
@@ -196,7 +196,7 @@ class RMSDGrouper(MoleculeGrouper):
     ):
         """
         Initialize RMSD-based molecular grouper.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): RMSD threshold for grouping. Defaults to 0.5.
@@ -218,10 +218,10 @@ class RMSDGrouper(MoleculeGrouper):
     def _get_heavy_atoms(self, mol: Molecule) -> Tuple[np.ndarray, List[str]]:
         """
         Extract heavy atoms (non-hydrogen) if ignore_hydrogens is enabled.
-        
+
         Args:
             mol (Molecule): Molecule to process.
-            
+
         Returns:
             Tuple[np.ndarray, List[str]]: Tuple containing positions array
                 and chemical symbols list (filtered or full based on settings).
@@ -241,11 +241,11 @@ class RMSDGrouper(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules by geometric similarity using RMSD clustering.
-        
+
         Computes pairwise RMSD values between all molecules and groups
         those within the specified threshold using connected components
         clustering.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -282,13 +282,13 @@ class RMSDGrouper(MoleculeGrouper):
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """
         Calculate RMSD between two molecules.
-        
+
         Computes the Root Mean Square Deviation between atomic positions
         of two molecules, with optional alignment and hydrogen filtering.
-        
+
         Args:
             idx_pair (Tuple[int, int]): Pair of molecule indices to compare.
-            
+
         Returns:
             float: RMSD value between the two molecules, or np.inf if the
                    molecules have different atom counts or different sets of
@@ -316,7 +316,7 @@ class RMSDGrouper(MoleculeGrouper):
 class RMSDGrouperSharedMemory(MoleculeGrouper):
     """
     Group molecules based on RMSD using shared memory optimization.
-    
+
     Optimized version of RMSDGrouper that uses shared memory to reduce
     data copying overhead in multiprocessing scenarios. Provides faster
     computation for large datasets by minimizing memory allocation and
@@ -340,7 +340,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     ):
         """
         Initialize RMSD grouper with shared memory optimization.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): RMSD threshold for grouping. Defaults to 0.5.
@@ -355,11 +355,11 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules using shared memory with optimized parallelism.
-        
+
         Uses RawArray shared memory to minimize data copying between processes.
         Molecular positions are stored once in shared memory and accessed
         by worker processes for RMSD calculations.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -409,10 +409,10 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     def _init_worker(shared_pos, pos_shape):
         """
         Initialize worker process with shared memory access.
-        
+
         Sets up global shared memory access for worker processes,
         allowing them to read molecular positions without data copying.
-        
+
         Args:
             shared_pos: RawArray containing shared position data.
             pos_shape (tuple): Shape tuple for reshaping the shared array.
@@ -425,14 +425,14 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
     def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
         """
         Calculate RMSD efficiently using shared memory.
-        
+
         Computes RMSD between two molecules by reading their positions
         from shared memory and creating local copies to reduce lock
         contention during computation.
-        
+
         Args:
             idx_pair (Tuple[int, int]): Pair of molecule indices to compare.
-            
+
         Returns:
             float: RMSD value between the two molecules, or np.inf if
                    shapes don't match.
@@ -484,7 +484,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     ):
         """
         Initialize Tanimoto similarity-based molecular grouper.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): Tanimoto similarity threshold. Defaults to 0.9.
@@ -507,13 +507,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     ) -> Optional[DataStructs.ExplicitBitVect]:
         """
         Generate an RDKit fingerprint for a molecule.
-        
+
         Creates molecular fingerprints using either RDKit fingerprint
         generator or RDKFingerprint method based on configuration.
-        
+
         Args:
             rdkit_mol (Chem.Mol): RDKit molecule object.
-            
+
         Returns:
             Optional[DataStructs.ExplicitBitVect]: Molecular fingerprint
                 or None if generation fails.
@@ -530,11 +530,11 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Groups molecules based on Tanimoto similarity clustering.
-        
+
         Computes fingerprints for all molecules, calculates pairwise
         Tanimoto similarities, and groups molecules using connected
         components clustering.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -626,7 +626,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
     ):
         """
         Initialize RDKit isomorphism-based molecular grouper.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
@@ -642,14 +642,14 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
     def _get_mol_hash(self, mol: Molecule) -> Optional[str]:
         """
         Generate canonical hash for molecular structure identification.
-        
+
         Creates a canonical hash string for the molecule using RDKit's
         hashing functions. Hash type depends on stereochemistry and
         tautomer configuration settings.
-        
+
         Args:
             mol (Molecule): Molecule to generate hash for.
-            
+
         Returns:
             Optional[str]: Canonical hash string, or None if generation fails.
         """
@@ -675,11 +675,11 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules using structural isomorphism detection.
-        
+
         Uses RDKit molecular hashing for initial grouping, followed by
         detailed isomorphism checks when stereochemistry or tautomer
         considerations are enabled.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -721,11 +721,11 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         lightweight proxy for isomorphism when stereochemistry or tautomer
         checks are enabled; it does not perform an explicit graph
         isomorphism test.
-        
+
         Args:
             mol1 (Molecule): First molecule to compare.
             mol2 (Molecule): Second molecule to compare.
-            
+
         Returns:
             bool: True if InChIKeys match; False otherwise (including on failure).
         """
@@ -741,7 +741,7 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
 class FormulaGrouper(MoleculeGrouper):
     """
     Group molecules by chemical formula.
-    
+
     Groups molecules based solely on their chemical formula composition,
     making it suitable when elemental composition is the primary concern.
     Ideal for initial filtering and broad chemical classification.
@@ -750,11 +750,11 @@ class FormulaGrouper(MoleculeGrouper):
     def group(self):
         """
         Group molecules by chemical formula composition.
-        
+
         Creates groups based on identical chemical formulas, regardless
         of structural or stereochemical differences. Each group contains
         molecules with the same elemental composition.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -780,11 +780,11 @@ class FormulaGrouper(MoleculeGrouper):
 class ConnectivityGrouper(MoleculeGrouper):
     """
     Group molecules based on molecular connectivity (graph isomorphism).
-    
+
     Groups molecules by analyzing their bond connectivity patterns using
     graph isomorphism. Efficient for recognizing similar bond arrangements
     in large datasets regardless of 3D spatial configuration.
-    
+
     Attributes:
         molecules (Iterable[Molecule]): Inherited; collection of molecules to
             group.
@@ -802,7 +802,7 @@ class ConnectivityGrouper(MoleculeGrouper):
     ):
         """
         Initialize connectivity-based molecular grouper.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
@@ -821,11 +821,11 @@ class ConnectivityGrouper(MoleculeGrouper):
         Uses `networkx.is_isomorphic` with attribute-aware matching:
         - Nodes must have equal `element` values.
         - Edges must have equal `bond_order` values.
-        
+
         Args:
             g1 (nx.Graph): First molecular graph.
             g2 (nx.Graph): Second molecular graph.
-            
+
         Returns:
             bool: True if graphs are isomorphic, False otherwise.
         """
@@ -841,14 +841,14 @@ class ConnectivityGrouper(MoleculeGrouper):
     ) -> Tuple[int, int, bool]:
         """
         Check graph isomorphism between two molecules for multiprocessing.
-        
+
         Multiprocessing-compatible function that checks whether two
         molecular graphs are isomorphic based on their connectivity
         patterns and atomic properties.
-        
+
         Args:
             idx_pair (Tuple[int, int]): Pair of molecule indices to compare.
-            
+
         Returns:
             Tuple[int, int, bool]: Original indices and isomorphism result.
         """
@@ -858,11 +858,11 @@ class ConnectivityGrouper(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules by connectivity using parallel isomorphism checks.
-        
+
         Converts molecules to graph representations and performs pairwise
         isomorphism checks in parallel. Uses connected components clustering
         to identify groups of structurally equivalent molecules.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -909,7 +909,7 @@ class ConnectivityGrouper(MoleculeGrouper):
 class ConnectivityGrouperSharedMemory(MoleculeGrouper):
     """
     Group molecules based on molecular connectivity using shared memory.
-    
+
     Optimized version of ConnectivityGrouper that uses shared memory
     for storing molecular graph data to reduce memory overhead in
     multiprocessing scenarios. Particularly useful for large molecular
@@ -932,7 +932,7 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
     ):
         """
         Initialize connectivity grouper with shared memory optimization.
-        
+
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
@@ -990,11 +990,11 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
     def _convert_to_graphs(self):
         """
         Convert molecules to graphs and store in shared memory.
-        
+
         Converts all molecules to NetworkX graph representations in parallel,
         then serializes them using pickle and stores in shared memory for
         efficient access by worker processes.
-        
+
         Returns:
             Tuple[shared_memory.SharedMemory, tuple, np.dtype]: Shared memory
             handle, array shape, and dtype for reconstructing the object array.
@@ -1023,11 +1023,11 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules using connectivity with shared memory optimization.
-        
+
         Groups molecules based on molecular connectivity using multiprocessing
         and shared memory for graph storage. Uses iterative comparison with
         a pivot molecule approach to identify structurally equivalent groups.
-        
+
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
                 - List of molecule groups (each group is a list of molecules)
@@ -1085,11 +1085,11 @@ class StructureGrouperFactory:
     - "isomorphism" or "rdkit": RDKitIsomorphismGrouper
     - "formula": FormulaGrouper
     - "connectivity": ConnectivityGrouper
-    
+
     Additional keyword arguments are forwarded to the specific grouper
     constructors (e.g., thresholds or flags).
     """
-    
+
     @staticmethod
     def create(structures, strategy="rdkit", num_procs=1, **kwargs):
         """

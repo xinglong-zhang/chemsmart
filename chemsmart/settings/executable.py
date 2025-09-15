@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class Executable(RegistryMixin):
     """
     Abstract base class for obtaining program executable paths and configurations.
-    
+
     This class provides a framework for managing executable configurations for
     different computational chemistry programs. It reads configuration from
     server YAML files and handles environment setup including conda environments,
@@ -35,7 +35,7 @@ class Executable(RegistryMixin):
     ):
         """
         Initialize the Executable instance.
-        
+
         Args:
             executable_folder (str, optional): Path to executable directory.
             local_run (bool): Whether to run locally. Defaults to False.
@@ -55,15 +55,15 @@ class Executable(RegistryMixin):
     def from_servername(cls, servername):
         """
         Create an Executable instance from server configuration file.
-        
+
         Reads configuration from a YAML file in the user's server directory
         and creates an instance with the appropriate settings for the specified
         computational chemistry program.
-        
+
         Args:
-            servername (str): Name of the server configuration file (with or 
+            servername (str): Name of the server configuration file (with or
                             without .yaml extension).
-                            
+
         Returns:
             Executable: An instance configured with server-specific settings.
         """
@@ -77,7 +77,7 @@ class Executable(RegistryMixin):
             user_settings.user_server_dir, server_yaml
         )
         server_yaml = YAMLFile(filename=server_yaml_file)
-        
+
         # Extract configuration for the specific program
         executable_folder = os.path.expanduser(
             server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
@@ -97,7 +97,7 @@ class Executable(RegistryMixin):
         envars = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "ENVARS", None
         )
-        
+
         # Strip comments from configuration strings
         if conda_env is not None:
             conda_env = strip_out_comments(conda_env)
@@ -120,7 +120,7 @@ class Executable(RegistryMixin):
     def available_servers(self):
         """
         Get list of available server configurations.
-        
+
         Returns:
             list: List of available server configuration names.
         """
@@ -130,9 +130,9 @@ class Executable(RegistryMixin):
     def scratch_dir(self):
         """
         Extract scratch directory path from environment variables.
-        
+
         Parses the envars configuration to find SCRATCH directory definition.
-        
+
         Returns:
             str or None: Path to scratch directory if defined, None otherwise.
         """
@@ -147,10 +147,10 @@ class Executable(RegistryMixin):
     def env(self):
         """
         Parse environment variables from envars configuration.
-        
+
         Extracts export statements from the envars string and returns them
         as a dictionary of environment variables.
-        
+
         Returns:
             dict or None: Dictionary of environment variables if envars is set,
                          None otherwise.
@@ -170,16 +170,17 @@ class Executable(RegistryMixin):
 class GaussianExecutable(Executable):
     """
     Executable handler for Gaussian quantum chemistry software.
-    
+
     This class provides specific implementation for managing Gaussian 16
     executable paths and configurations.
     """
+
     PROGRAM = "GAUSSIAN"
 
     def __init__(self, executable_folder=None, **kwargs):
         """
         Initialize GaussianExecutable instance.
-        
+
         Args:
             executable_folder (str, optional): Path to Gaussian executable directory.
             **kwargs: Additional arguments passed to parent Executable class.
@@ -189,7 +190,7 @@ class GaussianExecutable(Executable):
     def get_executable(self):
         """
         Get the full path to the Gaussian executable.
-        
+
         Returns:
             str or None: Full path to g16 executable if executable_folder is set,
                         None otherwise.
@@ -202,16 +203,17 @@ class GaussianExecutable(Executable):
 class ORCAExecutable(Executable):
     """
     Executable handler for ORCA quantum chemistry software.
-    
+
     This class provides specific implementation for managing ORCA
     executable paths and configurations.
     """
+
     PROGRAM = "ORCA"
 
     def __init__(self, executable_folder=None, **kwargs):
         """
         Initialize ORCAExecutable instance.
-        
+
         Args:
             executable_folder (str, optional): Path to ORCA executable directory.
             **kwargs: Additional arguments passed to parent Executable class.
@@ -221,7 +223,7 @@ class ORCAExecutable(Executable):
     def get_executable(self):
         """
         Get the full path to the ORCA executable.
-        
+
         Returns:
             str or None: Full path to orca executable if executable_folder is set,
                         None otherwise.
@@ -234,16 +236,17 @@ class ORCAExecutable(Executable):
 class NCIPLOTExecutable(Executable):
     """
     Executable handler for NCIPLOT non-covalent interaction analysis software.
-    
+
     This class provides specific implementation for managing NCIPLOT
     executable paths and configurations.
     """
+
     PROGRAM = "NCIPLOT"
 
     def __init__(self, executable_folder=None, **kwargs):
         """
         Initialize NCIPLOTExecutable instance.
-        
+
         Args:
             executable_folder (str, optional): Path to NCIPLOT executable directory.
             **kwargs: Additional arguments passed to parent Executable class.
@@ -253,7 +256,7 @@ class NCIPLOTExecutable(Executable):
     def get_executable(self):
         """
         Get the full path to the NCIPLOT executable.
-        
+
         Returns:
             str or None: Full path to nciplot executable if executable_folder is set,
                         None otherwise.

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     """
     Job for computing Boltzmann-weighted thermochemical properties.
-    
+
     This class handles thermochemical calculations involving multiple
     conformers or structures, computing population-weighted averages
     of thermodynamic properties based on Boltzmann statistics.
@@ -35,7 +35,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
-    
+
     PROGRAM = "Thermochemistry"
     TYPE = "boltzmann"
 
@@ -47,7 +47,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     ):
         """
         Initialize Boltzmann-averaged thermochemistry job.
-        
+
         Args:
             files (list): List of output files for thermochemical analysis
             energy_type (str): Type of energy for Boltzmann weighting
@@ -75,9 +75,9 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     def settings_class(cls) -> Type[ThermochemistryJobSettings]:
         """
         Return the settings class for thermochemistry jobs.
-        
+
         Returns:
-            Type[ThermochemistryJobSettings]: Settings class for 
+            Type[ThermochemistryJobSettings]: Settings class for
                                             thermochemistry jobs
         """
         return ThermochemistryJobSettings
@@ -86,7 +86,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     def inputfile(self):
         """
         Get the path to the primary input file.
-        
+
         Returns:
             str or None: Absolute path to input file if filename exists,
                         None otherwise
@@ -99,7 +99,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     def outputfile(self):
         """
         Get the path to the Boltzmann average output file.
-        
+
         Returns:
             str: Absolute path to the Boltzmann output file
         """
@@ -110,7 +110,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     def errfile(self):
         """
         Get the path to the error file for the Boltzmann job.
-        
+
         Returns:
             str: Absolute path to the Boltzmann error file
         """
@@ -126,19 +126,19 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     ):
         """
         Create a Boltzmann thermochemistry job from output files.
-        
+
         Creates a job instance from multiple Gaussian or ORCA output files
         for Boltzmann-weighted thermochemical analysis.
-        
+
         Args:
             files (list): List of paths to quantum chemistry output files
-            jobrunner (JobRunner, optional): Job runner instance for 
+            jobrunner (JobRunner, optional): Job runner instance for
                                            execution management
             **kwargs: Additional keyword arguments for job configuration
-            
+
         Returns:
             BoltzmannAverageThermochemistryJob: Configured job instance
-            
+
         Raises:
             ValueError: If files have unsupported extensions
         """
@@ -173,11 +173,11 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
     def compute_boltzmann_averages(self):
         """
         Perform Boltzmann-weighted thermochemistry calculation.
-        
+
         Computes population-weighted thermochemical properties from
         multiple conformers using Boltzmann statistics and saves
         results to the specified output file.
-        
+
         Raises:
             ValueError: If no input files are provided
             Exception: If calculation fails during processing

@@ -40,14 +40,14 @@ os.environ["OMP_NUM_THREADS"] = "1"
     type=int,
     multiple=True,
     help="Atom numbers from which to obtain Hirshfeld Charges and Spins. "
-         "1-indexed.",
+    "1-indexed.",
 )
 def entry_point(filename, numbers):
     """
     Extract and display Hirshfeld charges and spin densities.
     """
     create_logger()
-    
+
     # Parse output file based on extension
     if filename.endswith(".log"):
         outputfile = Gaussian16Output(filename=filename)
@@ -55,7 +55,7 @@ def entry_point(filename, numbers):
         outputfile = ORCAOutput(filename=filename)
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
-        
+
     # Extract and display Hirshfeld charges
     hirshfeld_charges = outputfile.hirshfeld_charges
     logger.info("\nHirshfeld Charges:")

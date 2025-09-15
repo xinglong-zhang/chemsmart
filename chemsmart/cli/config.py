@@ -145,7 +145,7 @@ class Config:
 
 def update_yaml_files(target_directory, value_in_file, user_value):
     """
-    Update YAML files in ~/.chemsmart/server to replace value_in_file 
+    Update YAML files in ~/.chemsmart/server to replace value_in_file
     with the provided user_value.
     """
     target_dir = Path.home() / ".chemsmart" / target_directory
@@ -195,7 +195,7 @@ def add_lines_in_yaml_files(
             for line in yaml_content:
                 updated_content.append(line)
 
-                # Check if the current line matches any line in 
+                # Check if the current line matches any line in
                 # `lines_in_positions`
                 if any(pos_line in line for pos_line in lines_in_positions):
                     if not skip_addition:  # Avoid duplicate additions
@@ -215,9 +215,7 @@ def add_lines_in_yaml_files(
         except yaml.YAMLError as e:
             logger.info(f"Error reading {yaml_file}: {e}")
         except Exception as e:
-            logger.error(
-                f"Unexpected error while processing {yaml_file}: {e}"
-            )
+            logger.error(f"Unexpected error while processing {yaml_file}: {e}")
 
 
 @click.group(name="config", invoke_without_command=True)

@@ -32,15 +32,15 @@ logger = logging.getLogger(__name__)
 class ORCAOutput(ORCAFileMixin):
     """
     Parser for ORCA quantum chemistry output files.
-    
+
     This class provides comprehensive parsing capabilities for ORCA output files,
     extracting energies, molecular properties, geometries, frequencies, and
     calculation statistics. Supports various ORCA calculation types including
     single-point energies, geometry optimizations, and frequency calculations.
-    
+
     Note: ORCA does not support periodic boundary condition (PBC) calculations
     as of version 6.0.1.
-    
+
     Args:
         filename (str): Path to the ORCA output file
     """
@@ -48,7 +48,7 @@ class ORCAOutput(ORCAFileMixin):
     def __init__(self, filename):
         """
         Initialize ORCA output file parser.
-        
+
         Args:
             filename (str): Path to the ORCA output file to parse
         """
@@ -61,7 +61,7 @@ class ORCAOutput(ORCAFileMixin):
 
         Checks each output file line from the last line onwards for
         successful termination indicators.
-        
+
         Returns:
             bool: True if job terminated normally, False otherwise
         """
@@ -82,7 +82,7 @@ class ORCAOutput(ORCAFileMixin):
     def has_forces(self):
         """
         Check if the output file contains force calculations.
-        
+
         Returns:
             bool: True if cartesian gradients/forces are present
         """
@@ -95,7 +95,7 @@ class ORCAOutput(ORCAFileMixin):
     def forces(self):
         """
         Extract forces for all molecular geometries.
-        
+
         Returns:
             list: List of force arrays for each geometry optimization step
         """
@@ -2651,10 +2651,10 @@ class ORCAEngradFile(ORCAFileMixin):
     """
     Class for handling ORCA energy and gradient files (.engrad).
     """
-    
+
     def __init__(self, filename):
         """Initialize ORCA energy and gradient file reader.
-        
+
         Args:
             filename: Path to the ORCA .engrad file
         """

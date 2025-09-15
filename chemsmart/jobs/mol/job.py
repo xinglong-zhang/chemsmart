@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class PyMOLJob(Job):
     """
     Base class for PyMOL molecular visualization jobs.
-    
+
     Provides core functionality for creating and managing PyMOL
     visualization jobs including structure loading, styling options,
     and output management for molecular visualization tasks.
@@ -39,6 +39,7 @@ class PyMOLJob(Job):
         coordinates: Optional coordinates for labeling.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     PROGRAM = "PyMOL"
 
     def __init__(
@@ -57,10 +58,10 @@ class PyMOLJob(Job):
     ):
         """
         Initialize a PyMOL visualization job.
-        
+
         Sets up a PyMOL job with molecular structure, styling options,
         and execution parameters for generating molecular visualizations.
-        
+
         Args:
             molecule: Molecule or list[Molecule] to visualize.
             label: Job identifier string (default: None).
@@ -89,7 +90,7 @@ class PyMOLJob(Job):
     def inputfile(self):
         """
         Get the path to the input XYZ file for PyMOL.
-        
+
         Returns:
             str: Absolute path to the input XYZ coordinate file.
         """
@@ -100,7 +101,7 @@ class PyMOLJob(Job):
     def logfile(self):
         """
         Get the path to the PyMOL log file.
-        
+
         Returns:
             str: Absolute path to the job log file.
         """
@@ -111,7 +112,7 @@ class PyMOLJob(Job):
     def outputfile(self):
         """
         Get the path to the PyMOL session file output.
-        
+
         Returns:
             str: Absolute path to the output PSE session file.
         """
@@ -122,7 +123,7 @@ class PyMOLJob(Job):
     def errfile(self):
         """
         Get the path to the error file for job diagnostics.
-        
+
         Returns:
             str: Absolute path to the error log file.
         """
@@ -132,10 +133,10 @@ class PyMOLJob(Job):
     def _backup_files(self, backup_chk=False, **kwargs):
         """
         Create backup copies of job-related files.
-        
+
         Backs up input, output, and optionally checkpoint files to
         a designated backup folder for data preservation.
-        
+
         Args:
             backup_chk: Whether to backup checkpoint files (default: False).
             **kwargs: Additional arguments for backup operations.
@@ -149,7 +150,7 @@ class PyMOLJob(Job):
     def _output(self):
         """
         Get the absolute path to the job output file if it exists.
-        
+
         Returns:
             str or None: Absolute path to output file, None if not found.
         """
@@ -160,10 +161,10 @@ class PyMOLJob(Job):
     def _job_is_complete(self):
         """
         Check if the PyMOL job has completed successfully.
-        
+
         Determines job completion by checking for the existence of
         the expected output PSE session file.
-        
+
         Returns:
             bool: True if job completed, False otherwise.
         """
@@ -172,7 +173,7 @@ class PyMOLJob(Job):
     def _run(self):
         """
         Execute the PyMOL job using the configured job runner.
-        
+
         Delegates job execution to the assigned jobrunner instance
         which handles the actual PyMOL process management.
         """
@@ -194,10 +195,10 @@ class PyMOLJob(Job):
     ):
         """
         Create a PyMOL job from a molecular structure file.
-        
+
         Reads molecular structures from various file formats and creates
         a PyMOL visualization job with specified parameters and styling.
-        
+
         Args:
             filename: Path to the molecular structure file.
             pymol_script: Custom PyMOL script path (default: None).
@@ -209,7 +210,7 @@ class PyMOLJob(Job):
             quiet_mode: Run PyMOL quietly (default: True).
             command_line_only: Use CLI interface only (default: True).
             **kwargs: Additional arguments for job configuration.
-            
+
         Returns:
             PyMOLJob: Configured PyMOL visualization job instance.
         """
@@ -265,16 +266,16 @@ class PyMOLJob(Job):
     def from_pubchem(cls, identifier, label=None, jobrunner=None, **kwargs):
         """
         Create a PyMOL job from a PubChem molecular database entry.
-        
+
         Downloads molecular structure data from PubChem database and
         creates a PyMOL visualization job for the specified compound.
-        
+
         Args:
             identifier: PubChem identifier (CID, name, etc.).
             label: Job identifier string (default: None).
             jobrunner: Job execution runner (default: auto-created).
             **kwargs: Additional arguments for job configuration.
-            
+
         Returns:
             PyMOLJob: Configured PyMOL job with PubChem structure data.
         """

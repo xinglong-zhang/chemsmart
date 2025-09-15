@@ -45,6 +45,7 @@ class ORCAJobRunner(JobRunner):
         num_gpus (int): Number of GPUs allocated (from server).
         mem_gb (int): Memory allocation in gigabytes (from server).
     """
+
     # creates job runner process
     # combines information about server and program
 
@@ -306,7 +307,7 @@ class ORCAJobRunner(JobRunner):
             job: The completed job object
         """
         logger.debug(f"Scratch: {self.scratch}")
-        
+
         if self.scratch:
             logger.debug(f"Running directory: {self.running_directory}")
             # if job was run in scratch, copy files to job folder except files containing .tmp
@@ -354,6 +355,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
         num_gpus (int): Number of GPUs allocated (from server).
         mem_gb (int): Memory allocation in gigabytes (from server).
     """
+
     # creates job runner process
     # combines information about server and program
     FAKE = True

@@ -12,7 +12,7 @@ from chemsmart.jobs.mol.job import PyMOLJob
 class PyMOLMovieJob(PyMOLJob):
     """
     PyMOL job for creating molecular animation movies.
-    
+
     Specialized job class for generating rotating molecular animations
     using PyMOL, creating frame sequences that can be converted to
     video files for dynamic molecular visualization presentations.
@@ -25,6 +25,7 @@ class PyMOLMovieJob(PyMOLJob):
         overwrite (bool): Overwrite an existing MP4 when post-processing.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "pymol_movie"
 
     def __init__(
@@ -37,11 +38,11 @@ class PyMOLMovieJob(PyMOLJob):
     ):
         """
         Initialize a PyMOL movie generation job.
-        
+
         Sets up the job for creating animated molecular visualizations
         with rotation effects and optional ray tracing for high-quality
         output videos.
-        
+
         Args:
             molecule: Molecule object to animate.
             label: Job identifier string.

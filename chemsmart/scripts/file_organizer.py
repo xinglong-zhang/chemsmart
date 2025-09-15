@@ -2,7 +2,7 @@
 """
 File organization script.
 
-This script provides command-line functionality to organize 
+This script provides command-line functionality to organize
 computational chemistry files into structured directories.
 """
 
@@ -76,7 +76,7 @@ def entry_point(
 ):
     """
     Script for organizing files for supporting information.
-    
+
     Example usage:
         file_organizer.py -f jq.xlsx -n co2 -c B:D -s 2 -r 100
     """

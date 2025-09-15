@@ -62,7 +62,7 @@ def sub(
 ):
     """
     Main command for submitting chemsmart jobs to queuing systems.
-    
+
     This command prepares and submits jobs to cluster schedulers with
     specified resource requirements and queue parameters.
     """
@@ -103,15 +103,16 @@ def sub(
 def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     """
     Process the job for submission to queuing system.
-    
+
     This callback function handles job submission by reconstructing
     command-line arguments and interfacing with the appropriate
     scheduler system.
     """
+
     def _clean_command(ctx):
         """
         Remove keywords used in sub.py but not in run.py.
-        
+
         Specifically: Some keywords/options (like queue, verbose, etc.)
         are only relevant to sub.py and not applicable to run.py.
         """
@@ -145,7 +146,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     def _reconstruct_cli_args(ctx, job):
         """
         Get cli args that reconstruct the command line.
-        
+
         Rebuilds the command-line arguments from the context object
         for job submission purposes.
         """

@@ -15,7 +15,7 @@ import sys
 class LogOnceFilter(logging.Filter):
     """
     Logging filter that prevents duplicate messages from being logged.
-    
+
     Maintains a set of previously logged messages and filters out
     any messages that have already been logged (excluding timestamps).
     Useful for preventing repetitive log entries in long-running processes.
@@ -24,7 +24,7 @@ class LogOnceFilter(logging.Filter):
     def __init__(self):
         """
         Initialize the LogOnceFilter with empty message tracking.
-        
+
         Creates an empty set to store previously logged messages
         for duplicate detection.
         """
@@ -34,13 +34,13 @@ class LogOnceFilter(logging.Filter):
     def filter(self, record):
         """
         Filter duplicate log records.
-        
+
         Checks if a log message (excluding timestamp) has been logged
         before and filters it out if it's a duplicate.
-        
+
         Args:
             record (logging.LogRecord): The log record to evaluate.
-            
+
         Returns:
             bool: True if message should be logged, False if duplicate.
         """
@@ -56,13 +56,13 @@ class LogOnceFilter(logging.Filter):
     def format_record(record):
         """
         Format a log record into a string message.
-        
+
         Applies string formatting to the log record message using
         any provided arguments.
-        
+
         Args:
             record (logging.LogRecord): The log record to format.
-            
+
         Returns:
             str: The formatted message string.
         """
@@ -74,13 +74,13 @@ class LogOnceFilter(logging.Filter):
     def remove_timestamp(message):
         """
         Remove timestamp prefix from log message.
-        
+
         Strips the standard timestamp format from the beginning
         of log messages for duplicate comparison.
-        
+
         Args:
             message (str): The log message potentially with timestamp.
-            
+
         Returns:
             str: The message with timestamp removed.
         """

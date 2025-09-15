@@ -50,11 +50,11 @@ class NCIPLOTInputWriter(InputWriter):
             folder = target_directory
         else:
             folder = self.job.folder
-        
+
         # Construct input file path
         job_inputfile = os.path.join(folder, f"{self.job.label}.nci")
         logger.debug(f"Writing NCIPLOT input file: {job_inputfile}.")
-        
+
         with open(job_inputfile, "w") as f:
             self._write_all(f)
             logger.info(
@@ -69,7 +69,7 @@ class NCIPLOTInputWriter(InputWriter):
             f: File object to write to
         """
         logger.debug("Writing all NCIPLOT input sections.")
-        
+
         # Write input file sections in proper order
         self._write_filenames(f)
         self._write_rthres(f)
@@ -93,7 +93,7 @@ class NCIPLOTInputWriter(InputWriter):
             f: File object to write to
         """
         logger.debug("Writing NCIPLOT input files section.")
-        
+
         if self.job.filenames is None:
             # Case when job is created from PubChem structure
             logger.debug("No filenames provided for NCIPLOT job.")
@@ -110,14 +110,14 @@ class NCIPLOTInputWriter(InputWriter):
                 logger.debug(f"Number of files: {number_of_files}.")
                 f.write(f"{number_of_files}\n")
                 logger.debug(f"Filenames: {self.job.filenames}.")
-                
+
                 for file in self.job.filenames:
                     # Convert non-supported formats to promolecular xyz
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
-                    
+
                     logger.debug(f"Writing filename: {file}.")
-                    
+
                     # Determine file path based on execution mode
                     if self.jobrunner.scratch:
                         file_path = os.path.join(
@@ -130,7 +130,7 @@ class NCIPLOTInputWriter(InputWriter):
                     else:
                         file_path = self.job.folder
                         logger.info(f"Running in job directory: {file_path}")
-                    
+
                     # Validate file existence
                     full_path = os.path.join(file_path, file)
                     if not os.path.exists(full_path):
@@ -161,7 +161,7 @@ class NCIPLOTInputWriter(InputWriter):
         """
         ligand_file_number = self.settings.ligand_file_number
         ligand_radius = self.settings.ligand_radius
-        
+
         # Check that if one is not None, the other is not None
         if ligand_file_number is not None and ligand_radius is not None:
             logger.debug("Writing ligand section.")
@@ -183,23 +183,23 @@ class NCIPLOTInputWriter(InputWriter):
         """
         radius_positions = self.settings.radius_positions
         radius_r = self.settings.radius_r
-        
+
         # Check that if one is not None, the other is not None
         if radius_positions is not None and radius_r is not None:
             logger.debug("Writing radius section.")
             radius_line = "RADIUS "
-            
+
             # Clean up coordinate string format
             radius_positions = radius_positions.replace("(", "")
             radius_positions = radius_positions.replace(")", "")
             logger.debug(f"radius_positions: {radius_positions}.")
-            
+
             coords = radius_positions.split(",")
             if len(coords) != 3:
                 raise ValueError(
                     "Expected exactly 3 coordinates in 'x,y,z' format"
                 )
-            
+
             # Convert to floats to validate numeric values
             for c in coords:
                 try:
@@ -207,7 +207,7 @@ class NCIPLOTInputWriter(InputWriter):
                     radius_line += f"{c} "
                 except ValueError:
                     raise ValueError(f"Invalid coordinate value: {c}")
-            
+
             radius_line += f"{radius_r}\n"
             f.write(radius_line)
         elif radius_positions is not None or radius_r is not None:
@@ -260,7 +260,7 @@ class NCIPLOTInputWriter(InputWriter):
         if increments is not None:
             logger.debug("Writing increments section.")
             increments_line = "INCREMENTS "
-            
+
             # Clean up increment string format
             increments = increments.replace("(", "")
             increments = increments.replace(")", "")
@@ -273,7 +273,7 @@ class NCIPLOTInputWriter(InputWriter):
                     increments_line += f"{i} "
                 except ValueError:
                     raise ValueError(f"Invalid increment value: {i}")
-            
+
             increments_line = increments_line.strip() + "\n"
             f.write(increments_line)
         else:
@@ -324,7 +324,7 @@ class NCIPLOTInputWriter(InputWriter):
         if fragments is not None:
             logger.debug("Writing fragments section.")
             f.write("FRAGMENTS\n")
-            
+
             # Ensure fragments is a dictionary
             if isinstance(fragments, dict):
                 for key, value in fragments.items():
@@ -434,7 +434,7 @@ class NCIPLOTInputWriter(InputWriter):
             default_density = 0.05  # SCF default for r1
             default_rdg = 0.5  # SCF default for r2
 
-        # Check if either cutoff parameter is provided
+        # # Check if either cutoff_density_cube or cutoff_rdg_cube is provided
         if cutoff_density_cube is not None or cutoff_rdg_cube is not None:
             logger.debug("Writing CUTPLOT section.")
 
@@ -505,7 +505,7 @@ class NCIPLOTInputWriter(InputWriter):
             number_of_ranges = len(ranges)
             logger.debug("Writing RANGES section.")
             f.write(f"RANGE {number_of_ranges}\n")
-            
+
             for r in ranges:
                 if isinstance(r, (list, tuple)) and len(r) == 2:
                     # Ensure both values are floats

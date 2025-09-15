@@ -113,7 +113,7 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
         """
         logger.debug("Writing ORCA route section")
-        
+
         if self.job.molecule.is_monoatomic:
             # TODO: need to merge thermo branch into main branch
             logger.info(f"Molecule {self.job.molecule} is monoatomic.")
@@ -124,7 +124,7 @@ class ORCAInputWriter(InputWriter):
             route_string = remove_keyword(self.settings.route_string, "opt")
         else:
             route_string = self.settings.route_string
-            
+
         f.write(route_string + "\n")
 
     def _write_processors(self, f):
@@ -134,7 +134,7 @@ class ORCAInputWriter(InputWriter):
         Args:
             f: File object to write to
         """
-        logger.debug(f"Writing processors.")
+        logger.debug("Writing processors.")
         f.write("# Number of processors\n")
         f.write(f"%pal nprocs {self.jobrunner.num_cores} end\n")
 
@@ -161,7 +161,7 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
         """
         logger.debug("Writing SCF block")
-        
+
         if self.settings.scf_convergence or self.settings.scf_maxiter:
             f.write("%scf\n")
             self._write_scf_maxiter(f)
@@ -233,7 +233,7 @@ class ORCAInputWriter(InputWriter):
         """
         mdci_cutoff = self.settings.mdci_cutoff
         mdci_density = self.settings.mdci_density
-        
+
         if mdci_cutoff is not None:
             logger.debug("Writing MDCI block")
             # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
@@ -257,7 +257,7 @@ class ORCAInputWriter(InputWriter):
                 f.write("  TCutPairs 1e-5\n")
                 f.write("  TCutPNO 1e-7\n")
                 f.write("  TCutMKN 1e-4\n")
-                
+
             if mdci_density is not None:
                 # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
                 assert mdci_density.lower() in [
@@ -285,7 +285,7 @@ class ORCAInputWriter(InputWriter):
         """
         dipole = self.settings.dipole
         quadrupole = self.settings.quadrupole
-        
+
         if dipole or quadrupole:
             logger.debug("Writing elprop block")
             f.write("%elprop\n")

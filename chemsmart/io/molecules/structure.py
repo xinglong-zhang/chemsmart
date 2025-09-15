@@ -128,7 +128,7 @@ class Molecule:
     def __getitem__(self, idx):
         """
         Get subset of molecule using 1-based indexing.
-        
+
         Interprets the input idx as 1-based indices by index adjustment (i - 1).
         The method assumes that idx contains 1-based indices (e.g., [1, 2, 3]),
         so it subtracts 1 to convert them to Python's zero-based indexing.
@@ -636,10 +636,10 @@ class Molecule:
     def _read_orca_inputfile(filepath):
         """
         Read ORCA input file (.inp) format.
-        
+
         Args:
             filepath (str): Path to ORCA input file
-            
+
         Returns:
             Molecule: Molecule object from ORCA input file
         """
@@ -653,14 +653,14 @@ class Molecule:
     def _read_orca_outfile(filepath, index):
         """
         Read ORCA output file (.out) format.
-        
+
         Args:
             filepath (str): Path to ORCA output file
             index (str or int): Index for multi-structure files
-            
+
         Returns:
             Molecule: Molecule object from ORCA output file
-            
+
         Note:
             TODO: Improve ORCAOutput object so that all structures
             can be obtained and returned via index
@@ -716,14 +716,14 @@ class Molecule:
     def from_pubchem(cls, identifier, return_list=False):
         """
         Create molecule object from PubChem database.
-        
+
         Args:
             identifier (str): Compound identifier (name, CID, or SMILES string)
             return_list (bool): Whether to return list format. Default False
-            
+
         Returns:
             Molecule or list or None: Molecule object from PubChem, None if not found
-            
+
         Raises:
             requests.exceptions.RequestException: For network or HTTP-related issues
         """
@@ -830,14 +830,14 @@ class Molecule:
     def write_coordinates(self, f, program=None):
         """
         Write molecular coordinates to file in specified format.
-        
+
         Args:
             f (file): File object to write coordinates to
             program (str, optional): Format to use ('gaussian' or 'orca'). Default 'gaussian'
-            
+
         Raises:
             ValueError: If program format is not supported
-            
+
         Note:
             No empty end line at the end of the file
         """
@@ -859,13 +859,13 @@ class Molecule:
     def write(self, filename, format="xyz", mode="w", **kwargs):
         """
         Write molecule to file in specified format.
-        
+
         Args:
             filename (str): Output file path
             format (str): File format ('xyz' or 'com'). Default 'xyz'
             mode (str): File write mode. Default 'w'
             **kwargs: Additional keyword arguments for format-specific writers
-            
+
         Raises:
             ValueError: If format is not supported
         """
@@ -881,7 +881,7 @@ class Molecule:
     def write_xyz(self, filename, mode, **kwargs):
         """
         Write molecule to XYZ format file.
-        
+
         Args:
             filename (str): Output XYZ file path
             mode (str): File write mode

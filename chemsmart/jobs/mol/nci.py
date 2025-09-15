@@ -14,7 +14,7 @@ from chemsmart.jobs.mol.job import PyMOLJob
 class PyMOLNCIJob(PyMOLJob):
     """
     PyMOL job for Non-Covalent Interactions (NCI) analysis visualization.
-    
+
     Specialized job class for visualizing non-covalent interactions
     using PyMOL with density and gradient cube files, supporting
     different analysis modes and customizable visualization parameters.
@@ -31,6 +31,7 @@ class PyMOLNCIJob(PyMOLJob):
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "pymol_nci"
 
     def __init__(
@@ -46,11 +47,11 @@ class PyMOLNCIJob(PyMOLJob):
     ):
         """
         Initialize a PyMOL NCI analysis visualization job.
-        
+
         Sets up the job for non-covalent interaction analysis with
         customizable isosurface levels, color ranges, and analysis
         modes for comprehensive interaction visualization.
-        
+
         Args:
             molecule: Molecule object to analyze.
             label (str): Job identifier string.
@@ -84,10 +85,10 @@ class PyMOLNCIJob(PyMOLJob):
     def _job_is_complete(self):
         """
         Check if the PyMOL NCI analysis job has completed.
-        
+
         Determines job completion by checking for the existence of
         the NCI analysis PyMOL session file.
-        
+
         Returns:
             bool: True if the NCI PSE file exists, False otherwise.
         """

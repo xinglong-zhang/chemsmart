@@ -18,34 +18,34 @@ logger = logging.getLogger(__name__)
 
 class GaussianRoute:
     """Parser and analyzer for Gaussian route sections.
-    
+
     This class provides comprehensive parsing of Gaussian route sections,
     extracting and organizing information about computational methods,
     basis sets, job types, and various calculation options.
-    
+
     The route section (starting with # or #P, #T, etc.) specifies:
     - Computational method (HF, DFT functional, MP2, etc.)
     - Basis set specification
     - Job type (opt, freq, scan, sp, etc.)
     - Solvation models and parameters
     - Additional calculation options
-    
+
     Args:
-        route_string (str): The complete route section string from 
+        route_string (str): The complete route section string from
                            a Gaussian input file. Multi-line routes
                            are automatically joined.
-    
+
     Attributes:
         route_string (str): Processed route string in lowercase
         route_inputs (list): Individual route keywords/options
-    
+
     Example:
         >>> route = GaussianRoute("#P B3LYP/6-31G(d) opt freq")
         >>> route.method  # 'b3lyp'
         >>> route.basis   # '6-31g(d)'
         >>> route.job_type  # 'opt'
     """
-    
+
     def __init__(self, route_string):
         """
         Initialize the route parser.
@@ -233,7 +233,7 @@ class GaussianRoute:
     def get_frequency(self):
         """
         Check for frequency calculation in route.
-        
+
         Note: Method name has typo (freqeuncy instead of frequency)
         """
         # get freq: T/F
@@ -275,7 +275,7 @@ class GaussianRoute:
                 elif len(func_basis) == 3:  # e.g., tpsstpss/def2tzvp/fit
                     functional = func_basis[0]
                     # note if the basis set for density fitting is written
-                    basis = f"{func_basis[1]}/{func_basis[2]}" 
+                    basis = f"{func_basis[1]}/{func_basis[2]}"
                     # as 'def2tzvp fit', then the job fails to run
             else:  # '/' not in route
                 if any(

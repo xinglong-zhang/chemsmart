@@ -13,15 +13,15 @@ from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 class GaussianCrestJob(GaussianJob):
     """
     Gaussian job class for CREST conformer ensemble calculations.
-    
+
     Manages multiple conformer optimization jobs from a CREST
     conformer ensemble. Handles batch processing of conformers
     with configurable subset selection and completion tracking.
-    
+
     This job type is designed for high-throughput conformer
     optimization workflows where multiple structures need to be
     processed systematically.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16crest').
         all_conformers (list[Molecule]): Conformers to be optimized.
@@ -36,6 +36,7 @@ class GaussianCrestJob(GaussianJob):
         incomplete_conformers_opt_jobs (list[GaussianGeneralJob]): Prepared
             jobs that are not yet complete.
     """
+
     TYPE = "g16crest"
 
     def __init__(
@@ -49,11 +50,11 @@ class GaussianCrestJob(GaussianJob):
     ):
         """
         Initialize a Gaussian CREST conformer ensemble calculation.
-        
+
         Sets up a multi-conformer optimization job from a list of
         conformer structures. Validates input and configures the
         number of conformers to process.
-        
+
         Args:
             molecules (list[Molecule]): List of Molecule objects representing
                 conformers to optimize.
@@ -63,7 +64,7 @@ class GaussianCrestJob(GaussianJob):
             num_confs_to_run (int, optional): Number of conformers to
                 optimize. Defaults to all conformers.
             **kwargs: Additional keyword arguments for parent class.
-                
+
         Raises:
             ValueError: If molecules fails basic list validation.
         """
@@ -88,7 +89,7 @@ class GaussianCrestJob(GaussianJob):
     def num_conformers(self):
         """
         Get the total number of conformers in the ensemble.
-        
+
         Returns:
             int: Total number of conformer structures loaded.
         """
@@ -98,11 +99,11 @@ class GaussianCrestJob(GaussianJob):
     def last_run_job_index(self):
         """
         Get the index of the first incomplete job.
-        
+
         Tracks progress through the conformer ensemble by identifying
         the next job to run. Useful for resuming interrupted
         calculations.
-        
+
         Returns:
             int: Index of the first incomplete job; equals total number
                 of conformers if all jobs are complete.
@@ -113,7 +114,7 @@ class GaussianCrestJob(GaussianJob):
     def all_conformers_opt_jobs(self):
         """
         Get all conformer optimization jobs in the ensemble.
-        
+
         Returns:
             list: List of GaussianGeneralJob objects for all conformers.
         """
@@ -123,10 +124,10 @@ class GaussianCrestJob(GaussianJob):
     def incomplete_conformers_opt_jobs(self):
         """
         Get incomplete conformer optimization jobs.
-        
+
         Filters the job list to return only those jobs that have not
         yet completed successfully. Useful for selective resubmission.
-        
+
         Returns:
             list: List of incomplete GaussianGeneralJob objects.
         """
@@ -139,11 +140,11 @@ class GaussianCrestJob(GaussianJob):
     def _check_last_finished_job_index(self):
         """
         Find the index of the first incomplete job in the sequence.
-        
+
         Iterates through all conformer jobs to identify the last
         point of progress. This is used for progress tracking and
         resuming calculations.
-        
+
         Returns:
             int: Index of the first incomplete job, or total number of
                 conformers if all jobs are complete.
@@ -158,11 +159,11 @@ class GaussianCrestJob(GaussianJob):
     def _prepare_all_jobs(self):
         """
         Create optimization jobs for all conformers in the ensemble.
-        
+
         Generates a list of GaussianGeneralJob objects, one for each
         conformer structure. Each job gets a unique label based on
         the base label and conformer index.
-        
+
         Returns:
             list: List of GaussianGeneralJob objects for all conformers.
         """
@@ -183,7 +184,7 @@ class GaussianCrestJob(GaussianJob):
     def _run_all_jobs(self):
         """
         Execute all conformer optimization jobs up to the specified limit.
-        
+
         Runs the conformer optimization jobs sequentially up to the
         number specified in num_confs_to_opt. This allows for partial
         ensemble processing when needed.
@@ -194,7 +195,7 @@ class GaussianCrestJob(GaussianJob):
     def _run(self):
         """
         Execute the CREST conformer ensemble calculation.
-        
+
         Main execution method that initiates all conformer optimization
         jobs. This is called internally by the job runner framework.
         """
@@ -203,7 +204,7 @@ class GaussianCrestJob(GaussianJob):
     def is_complete(self):
         """
         Check if all conformer optimization jobs are complete.
-        
+
         Returns:
             bool: True if all required conformer optimizations have
                 completed successfully, False otherwise.
@@ -213,10 +214,10 @@ class GaussianCrestJob(GaussianJob):
     def _run_all_crest_opt_jobs_are_complete(self):
         """
         Verify completion status of all required conformer jobs.
-        
+
         Checks the completion status of all conformer optimization
         jobs up to the specified limit (num_confs_to_opt).
-        
+
         Returns:
             bool: True if all required jobs are complete, False otherwise.
         """

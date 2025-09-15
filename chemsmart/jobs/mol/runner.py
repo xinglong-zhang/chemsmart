@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 class PyMOLJobRunner(JobRunner):
     """
     Job runner for executing PyMOL molecular visualization tasks.
-    
+
     Provides comprehensive functionality for running PyMOL jobs including
     molecular visualization, animation creation, and specialized analysis
     visualizations. Handles executable detection, command generation,
@@ -54,6 +54,7 @@ class PyMOLJobRunner(JobRunner):
         num_gpus (int): Number of GPUs allocated (from server).
         mem_gb (int): Memory allocation in gigabytes (from server).
     """
+
     JOBTYPES = []
     PROGRAM = "pymol"
     FAKE = False
@@ -62,11 +63,11 @@ class PyMOLJobRunner(JobRunner):
     def __init__(self, server, scratch=None, fake=False, **kwargs):
         """
         Initialize the PyMOL job runner.
-        
+
         Sets up the runner with server configuration and execution
         parameters, defaulting to no scratch directory usage for
         PyMOL jobs unless explicitly specified.
-        
+
         Args:
             server: Server configuration for job execution.
             scratch: Whether to use scratch directories (default: None).
@@ -89,14 +90,14 @@ class PyMOLJobRunner(JobRunner):
     def executable(self):
         """
         Get the path to the PyMOL executable.
-        
+
         Automatically detects PyMOL installation on the system,
         handling platform-specific executable names (pymol.exe on
         Windows, pymol on Unix-like systems).
-        
+
         Returns:
             str: Path to the PyMOL executable.
-            
+
         Raises:
             FileNotFoundError: If PyMOL is not found in system PATH.
         """
@@ -113,7 +114,7 @@ class PyMOLJobRunner(JobRunner):
     def pymol_templates_path(self):
         """
         Get the path to the PyMOL templates directory.
-        
+
         Returns:
             Path: Absolute path to the templates directory containing
                   PyMOL visualization style scripts.
@@ -123,10 +124,10 @@ class PyMOLJobRunner(JobRunner):
     def _prerun(self, job):
         """
         Perform pre-execution setup for the PyMOL job.
-        
+
         Configures necessary file paths and variables before job
         execution begins.
-        
+
         Args:
             job: PyMOL job object to configure.
         """
@@ -135,10 +136,10 @@ class PyMOLJobRunner(JobRunner):
     def _assign_variables(self, job):
         """
         Set up file paths for PyMOL job execution.
-        
+
         Configures absolute paths for input, output, log, and error
         files based on the job configuration and folder structure.
-        
+
         Args:
             job: PyMOL job object containing file path information.
         """
@@ -153,13 +154,13 @@ class PyMOLJobRunner(JobRunner):
     def _generate_visualization_style_script(self, job):
         """
         Generate or copy the PyMOL visualization style script.
-        
+
         Copies the default Zhang group PyMOL style script to the job
         directory if it doesn't already exist there.
-        
+
         Args:
             job: PyMOL job object containing folder information.
-            
+
         Returns:
             str: Path to the style script file in the job directory.
         """
@@ -171,7 +172,7 @@ class PyMOLJobRunner(JobRunner):
             job.folder, "zhang_group_pymol_style.py"
         )
 
-        # Check if the style file already exists in the current working 
+        # Check if the style file already exists in the current working
         # directory
         if not os.path.exists(dest_style_file):
             logger.debug(
@@ -183,13 +184,13 @@ class PyMOLJobRunner(JobRunner):
     def _generate_fchk_file(self, job):
         """
         Generate the formatted checkpoint file from Gaussian checkpoint.
-        
+
         Uses Gaussian's formchk utility to convert binary checkpoint
         files to formatted checkpoint files required for cube generation.
-        
+
         Args:
             job: Job object containing checkpoint file information.
-            
+
         Raises:
             FileNotFoundError: If the required .chk file is not found.
         """
@@ -206,30 +207,28 @@ class PyMOLJobRunner(JobRunner):
             pass
         else:
             # generate .fchk file from .chk file
-            logger.info(
-                f"Generating .fchk file from {self.job_basename}.chk"
-            )
+            logger.info(f"Generating .fchk file from {self.job_basename}.chk")
             fchk_command = f"{gaussian_exe}/formchk {self.job_basename}.chk"
             run_command(fchk_command)
 
     def _write_input(self, job):
         """
         Write molecular structure data to XYZ input file.
-        
+
         Creates an XYZ coordinate file from the job's molecular data,
         handling both single molecules and lists of molecules with
         appropriate formatting and logging.
-        
+
         Args:
             job: PyMOL job object containing molecular structure data.
-            
+
         Raises:
             ValueError: If the molecule object is not of correct type.
         """
         # write to .xyz file if the supplied file is not .xyz
         if not os.path.exists(job.inputfile):
             mol = job.molecule
-            # if mol is a list of molecules, then write to .xyz for all 
+            # if mol is a list of molecules, then write to .xyz for all
             # molecules
             if isinstance(mol, list):
                 if isinstance(mol[0], Molecule):
@@ -256,10 +255,10 @@ class PyMOLJobRunner(JobRunner):
     def _update_os_environ(self, job):
         """
         Update operating system environment variables.
-        
+
         PyMOL jobs typically don't require special environment
         variable configuration, so this method is a no-op.
-        
+
         Args:
             job: PyMOL job object (unused for PyMOL).
         """
@@ -269,14 +268,14 @@ class PyMOLJobRunner(JobRunner):
     def _get_visualization_command(self, job):
         """
         Generate the base PyMOL visualization command.
-        
+
         Constructs the initial PyMOL command with input file and
         style script parameters, handling file path quoting and
         command-line options.
-        
+
         Args:
             job: PyMOL job object with visualization parameters.
-            
+
         Returns:
             str: Base PyMOL command string for execution.
         """
@@ -316,17 +315,17 @@ class PyMOLJobRunner(JobRunner):
     def _setup_style(self, job, command):
         """
         Configure PyMOL visualization style commands.
-        
+
         Adds style-specific PyMOL commands to the command string,
         supporting different visualization styles like pymol and cylview.
-        
+
         Args:
             job: PyMOL job object with style configuration.
             command: Base command string to extend.
-            
+
         Returns:
             str: Command string with style configuration added.
-            
+
         Raises:
             ValueError: If an unsupported style is specified.
         """
@@ -351,13 +350,13 @@ class PyMOLJobRunner(JobRunner):
     def _setup_viewport(self, command):
         """
         Configure PyMOL viewport dimensions.
-        
+
         Sets the PyMOL viewport to a standard size for consistent
         visualization output across different systems.
-        
+
         Args:
             command: Command string to extend with viewport settings.
-            
+
         Returns:
             str: Command string with viewport configuration added.
         """
@@ -367,14 +366,14 @@ class PyMOLJobRunner(JobRunner):
     def _add_vdw(self, job, command):
         """
         Add van der Waals surface visualization to PyMOL command.
-        
+
         Conditionally adds VDW surface representation to the
         molecular visualization if requested in the job configuration.
-        
+
         Args:
             job: PyMOL job object with VDW settings.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with VDW surface added if requested.
         """
@@ -386,15 +385,15 @@ class PyMOLJobRunner(JobRunner):
     def _add_coordinates_labels(self, job, command):
         """
         Add coordinate labels for distances, angles, and dihedrals.
-        
+
         Parses coordinate specifications from the job and adds
         appropriate PyMOL commands for labeling geometric measurements
         like bond distances, angles, and dihedral angles.
-        
+
         Args:
             job: PyMOL job object with coordinate specifications.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with coordinate labels added.
         """
@@ -432,15 +431,15 @@ class PyMOLJobRunner(JobRunner):
     def _offset_labels(self, job, command, x=-1.2):
         """
         Set label position offset in PyMOL visualization.
-        
+
         Adjusts the position of text labels relative to atoms or
         measurements for better visual clarity in the output.
-        
+
         Args:
             job: PyMOL job object (used for consistency).
             command: Command string to extend.
             x: X-axis offset for label positioning (default: -1.2).
-            
+
         Returns:
             str: Command string with label positioning added.
         """
@@ -450,14 +449,14 @@ class PyMOLJobRunner(JobRunner):
     def _add_zoom_command(self, job, command):
         """
         Add zoom command to fit molecule in PyMOL viewport.
-        
+
         Ensures the molecular structure is properly centered and
         scaled to fit within the visualization viewport.
-        
+
         Args:
             job: PyMOL job object (used for consistency).
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with zoom command added.
         """
@@ -468,14 +467,14 @@ class PyMOLJobRunner(JobRunner):
     def _add_ray_command(self, job, command):
         """
         Add high-resolution ray tracing command if requested.
-        
+
         Conditionally adds ray tracing for high-quality rendering
         when the trace option is enabled in the job configuration.
-        
+
         Args:
             job: PyMOL job object with trace settings.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with ray tracing added if requested.
         """
@@ -487,14 +486,14 @@ class PyMOLJobRunner(JobRunner):
     def _add_refresh_command(self, job, command):
         """
         Add refresh command to ensure command completion.
-        
+
         Forces PyMOL to complete all pending commands before
         proceeding to the next operation.
-        
+
         Args:
             job: PyMOL job object (used for consistency).
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with refresh command added.
         """
@@ -504,14 +503,14 @@ class PyMOLJobRunner(JobRunner):
     def _save_pse_command(self, job, command):
         """
         Add save command to write PyMOL session file.
-        
+
         Appends the command to save the current PyMOL session
         to the specified output file with proper path quoting.
-        
+
         Args:
             job: PyMOL job object with output file path.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with save command added.
         """
@@ -523,14 +522,14 @@ class PyMOLJobRunner(JobRunner):
     def _quit_command(self, job, command):
         """
         Add quit command to terminate PyMOL session.
-        
+
         Appends the final quit command to cleanly exit PyMOL
         after all visualization tasks are completed.
-        
+
         Args:
             job: PyMOL job object (used for consistency).
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with quit command added.
         """
@@ -541,19 +540,19 @@ class PyMOLJobRunner(JobRunner):
     def _create_process(self, job, command, env):
         """
         Create and execute the PyMOL subprocess.
-        
+
         Opens output and error files, starts the PyMOL process with
         the constructed command, and waits for completion while
         handling error conditions and logging.
-        
+
         Args:
             job: PyMOL job object with file paths.
             command: Complete PyMOL command string to execute.
             env: Environment variables for the process.
-            
+
         Returns:
             subprocess.Popen: The completed process object.
-            
+
         Raises:
             subprocess.CalledProcessError: If PyMOL process fails.
         """
@@ -594,24 +593,25 @@ class PyMOLJobRunner(JobRunner):
 class PyMOLVisualizationJobRunner(PyMOLJobRunner):
     """
     Specialized PyMOL job runner for basic molecular visualization.
-    
+
     Extends the base PyMOL runner to provide standard molecular
     visualization capabilities with customizable styling, labeling,
     and rendering options for static molecular images.
     """
+
     JOBTYPES = ["pymol_visualization"]
 
     def _get_command(self, job):
         """
         Build the complete PyMOL command for visualization.
-        
+
         Assembles all visualization components including style setup,
         viewport configuration, labels, and rendering options into
         a single PyMOL command string.
-        
+
         Args:
             job: PyMOL visualization job object.
-            
+
         Returns:
             str: Complete PyMOL command string for execution.
         """
@@ -630,14 +630,14 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
     def _hide_labels(self, job, command):
         """
         Hide atom and measurement labels in PyMOL visualization.
-        
+
         Adds command to hide all labels for cleaner visualization,
         particularly useful for specialized analysis views.
-        
+
         Args:
             job: PyMOL job object (used for consistency).
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with label hiding added.
         """
@@ -647,14 +647,14 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
     def _job_specific_commands(self, job, command):
         """
         Add job-specific commands for basic visualization.
-        
+
         Incorporates visualization-specific commands like ray tracing
         that are unique to basic molecular visualization tasks.
-        
+
         Args:
             job: PyMOL visualization job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with visualization-specific commands.
         """
@@ -665,24 +665,25 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     """
     Specialized PyMOL job runner for creating molecular animations.
-    
+
     Extends the visualization runner to generate rotating molecular
     movies with optional ray tracing, handling frame generation
     and video conversion using FFmpeg.
     """
+
     JOBTYPES = ["pymol_movie"]
 
     def _setup_style(self, job, command):
         """
         Configure PyMOL style specifically for movie generation.
-        
+
         Sets up movie-specific styling that works well for animated
         visualizations, using appropriate templates if available.
-        
+
         Args:
             job: PyMOL movie job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with movie style configuration.
         """
@@ -696,15 +697,15 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     def _job_specific_commands(self, job, command):
         """
         Add movie-specific commands for animation generation.
-        
+
         Includes rotation setup, frame generation, ray tracing
         configuration, and movie export commands specific to
         creating molecular animations.
-        
+
         Args:
             job: PyMOL movie job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with movie-specific commands.
         """
@@ -717,14 +718,14 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     def _get_rotation_command(self, job, command):
         """
         Add rotation commands for creating molecular movies.
-        
+
         Sets up PyMOL animation commands to create a 360-degree
         rotation over 180 frames for smooth molecular visualization.
-        
+
         Args:
             job: PyMOL movie job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with rotation commands added.
         """
@@ -737,14 +738,14 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     def _set_ray_trace_frames(self, job, command):
         """
         Configure ray tracing for movie frames if requested.
-        
+
         Enables high-quality ray tracing for each frame when the
         trace option is enabled, producing higher quality animations.
-        
+
         Args:
             job: PyMOL movie job object with trace settings.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with ray tracing configuration.
         """
@@ -755,14 +756,14 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     def _export_movie_command(self, job, command):
         """
         Add command to export individual movie frames as PNG files.
-        
+
         Configures PyMOL to export each frame of the animation as
         separate PNG files with a consistent naming convention.
-        
+
         Args:
             job: PyMOL movie job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with frame export command.
         """
@@ -773,10 +774,10 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     def _postrun(self, job, framerate=30):
         """
         Perform post-processing to convert frames to MP4 video.
-        
+
         Executes FFmpeg conversion of individual PNG frames into
         a compressed MP4 video file with specified frame rate.
-        
+
         Args:
             job: PyMOL movie job object.
             framerate: Video frame rate in FPS (default: 30).
@@ -786,17 +787,17 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     def _create_movie(self, job, framerate=30, constant_rate_factor=18):
         """
         Create an MP4 movie from exported PNG frames using FFmpeg.
-        
+
         Builds and executes an FFmpeg command to convert the per-frame
         PNG images written by PyMOL (via `mpng`) into a compressed MP4
         video next to the session file. Optionally overwrites existing
         MP4 files and removes PNG frames after successful conversion.
-        
+
         Args:
             job: PyMOL movie job holding folder, label, and overwrite flag.
             framerate (int): Output video framerate in frames per second.
             constant_rate_factor (int): FFmpeg CRF value (0–51, lower = better).
-        
+
         Raises:
             FileNotFoundError: If no PNG frames are found or FFmpeg is missing.
             subprocess.CalledProcessError: If FFmpeg fails to encode the video.
@@ -870,24 +871,25 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
 class PyMOLIRCMovieJobRunner(PyMOLMovieJobRunner):
     """
     Specialized PyMOL job runner for IRC trajectory animations.
-    
+
     Extends the movie runner for visualizing Intrinsic Reaction
     Coordinate (IRC) trajectories without rotation, focusing on
     the molecular changes along the reaction path.
     """
+
     JOBTYPES = ["pymol_ircmovie"]
 
     def _get_rotation_command(self, job, command):
         """
         Override rotation for IRC movies.
-        
+
         IRC movies display reaction trajectories and don't need
         rotation effects, so this method returns the command unchanged.
-        
+
         Args:
             job: PyMOL IRC movie job object.
             command: Command string to return unchanged.
-            
+
         Returns:
             str: Unmodified command string (no rotation for IRC).
         """
@@ -898,25 +900,26 @@ class PyMOLIRCMovieJobRunner(PyMOLMovieJobRunner):
 class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
     """
     Specialized PyMOL job runner for NCI (Non-Covalent Interactions) analysis.
-    
+
     Provides visualization capabilities for non-covalent interaction
     analysis using density and gradient cube files with specialized
     PyMOL commands for isosurface generation and coloring.
     """
+
     JOBTYPES = ["pymol_nci"]
 
     def _job_specific_commands(self, job, command):
         """
         Add NCI-specific visualization commands.
-        
+
         Incorporates commands for loading cube files, hiding labels,
         and generating NCI isosurfaces with appropriate coloring
         for interaction analysis.
-        
+
         Args:
             job: PyMOL NCI job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with NCI-specific commands.
         """
@@ -930,18 +933,18 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
     def _load_cube_files(self, job, command):
         """
         Load density and gradient cube files for NCI analysis.
-        
+
         Loads the required density and gradient cube files that
         contain the electronic structure data needed for NCI
         visualization and analysis.
-        
+
         Args:
             job: PyMOL NCI job object.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with cube file loading commands.
-            
+
         Raises:
             AssertionError: If required cube files are not found.
         """
@@ -962,15 +965,15 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
     def _run_nci_command(self, job, command):
         """
         Execute the appropriate NCI visualization command.
-        
+
         Runs the NCI analysis command with the appropriate mode
         (binary, intermediate, or standard) based on job configuration
         to generate non-covalent interaction visualizations.
-        
+
         Args:
             job: PyMOL NCI job object with analysis mode settings.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with NCI visualization command.
         """
@@ -985,14 +988,14 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
     def _save_pse_command(self, job, command):
         """
         Save NCI analysis session with appropriate filename.
-        
+
         Saves the PyMOL session file using the NCI-specific basename
         to distinguish from other visualization outputs.
-        
+
         Args:
             job: PyMOL NCI job object with output configuration.
             command: Command string to extend.
-            
+
         Returns:
             str: Command string with save command for NCI session.
         """
@@ -1005,24 +1008,25 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
 class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     """
     Specialized PyMOL job runner for molecular orbital visualization.
-    
+
     Provides visualization capabilities for molecular orbitals by
     integrating with Gaussian calculations to generate cube files
     and create isosurface visualizations of HOMO, LUMO, or specific
     molecular orbitals.
     """
+
     JOBTYPES = ["pymol_mo"]
 
     def _get_gaussian_executable(self, job):
         """
         Get the Gaussian executable path for cube file generation.
-        
+
         Retrieves the Gaussian executable configuration needed for
         generating cube files from formatted checkpoint files.
-        
+
         Args:
             job: PyMOL MO job object.
-            
+
         Returns:
             str: Path to the Gaussian executable directory.
         """
@@ -1036,12 +1040,12 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _prerun(self, job):
         """
         Perform pre-execution setup for molecular orbital visualization.
-        
+
         Prepares all required artifacts before launching PyMOL by
         assigning file paths, converting the binary checkpoint to
         a formatted checkpoint (.fchk), generating the MO cube file,
         and writing a PML script that defines the isosurfaces.
-        
+
         Args:
             job: PyMOL MO job object to prepare.
         """
@@ -1053,14 +1057,14 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _generate_mo_cube_file(self, job):
         """
         Generate a molecular orbital cube file via Gaussian's cubegen.
-        
+
         Generates a cube file for either a specific MO number, HOMO,
         or LUMO, based on the job settings. Exactly one of these
         options must be selected; otherwise a ValueError is raised.
-        
+
         Args:
             job: PyMOL MO job object with orbital selection flags.
-        
+
         Raises:
             ValueError: If zero or multiple orbital selections are provided.
         """
@@ -1122,11 +1126,11 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     ):
         """
         Write a PML script to visualize the MO isosurfaces.
-        
+
         Creates a PyMOL script that loads the generated MO cube file
         and defines positive/negative isosurfaces with distinct colors
         and a configurable transparency level.
-        
+
         Args:
             job: PyMOL MO job object.
             isosurface (float): Isosurface value in a.u. (default 0.05).
@@ -1153,14 +1157,14 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _job_specific_commands(self, job, command):
         """
         Add MO-specific commands to the PyMOL command string.
-        
+
         Hides labels, loads the generated PML script, and enables
         ray tracing for higher-quality rendering.
-        
+
         Args:
             job: PyMOL MO job object.
             command: Existing command string to extend.
-        
+
         Returns:
             str: Extended command string with MO-specific commands.
         """
@@ -1172,14 +1176,14 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _offset_labels(self, job, command):
         """
         No label offsetting for MO visualization.
-        
+
         Labels are hidden in MO visualizations, so this method
         returns the command unchanged.
-        
+
         Args:
             job: PyMOL MO job object (unused).
             command: Current command string.
-        
+
         Returns:
             str: Unmodified command string.
         """
@@ -1188,14 +1192,14 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _call_pml(self, job, command):
         """
         Load the generated PML script for MO visualization.
-        
+
         Adds a PyMOL command to load the PML script that configures
         MO isosurfaces and styling.
-        
+
         Args:
             job: PyMOL MO job object.
             command: Current command string to extend.
-        
+
         Returns:
             str: Extended command string with PML load command.
         """
@@ -1206,11 +1210,11 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     def _save_pse_command(self, job, command):
         """
         Append command to save the MO PyMOL session (.pse).
-        
+
         Args:
             job: PyMOL MO job object.
             command: Current command string to extend.
-        
+
         Returns:
             str: Extended command string with save command.
         """
@@ -1222,23 +1226,24 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     """
     PyMOL job runner for spin density visualization.
-    
+
     Specialized runner for creating spin density visualizations using
     PyMOL. Generates spin density cube files from Gaussian calculations
     and creates PyMOL sessions with isosurface representations.
     """
+
     JOBTYPES = ["pymol_spin"]
 
     def _get_gaussian_executable(self, job):
         """
         Get the Gaussian executable for the job.
-        
+
         Retrieves the Gaussian executable path from the server
         configuration for generating spin density cube files.
-        
+
         Args:
             job: PyMOL spin job instance.
-            
+
         Returns:
             str: Path to Gaussian executable folder.
         """
@@ -1252,11 +1257,11 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _prerun(self, job):
         """
         Execute pre-run setup for spin density visualization.
-        
+
         Performs all necessary setup steps including variable assignment,
         fchk file generation, spin cube file generation, and PML script
         creation before PyMOL execution.
-        
+
         Args:
             job: PyMOL spin job instance to prepare.
         """
@@ -1268,10 +1273,10 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _generate_spin_cube_file(self, job):
         """
         Generate the spin density cube file.
-        
+
         Uses Gaussian's cubegen utility to create a cube file containing
         spin density data from the formatted checkpoint file.
-        
+
         Args:
             job: PyMOL spin job instance containing grid parameters.
         """
@@ -1283,11 +1288,11 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _write_spin_density_pml(self, job, isosurface=0.05, transparency=0.2):
         """
         Write the .pml file based on the .cube file.
-        
+
         Creates a PyMOL script file that loads the spin density cube
         file and sets up positive/negative isosurfaces with appropriate
         coloring and transparency settings.
-        
+
         Args:
             job: PyMOL spin job instance.
             isosurface: Isosurface level for visualization (default: 0.05).
@@ -1318,14 +1323,14 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _job_specific_commands(self, job, command):
         """
         Add job-specific commands for spin density visualization.
-        
+
         Configures PyMOL commands specific to spin density visualization
         including label hiding, PML file loading, and ray tracing setup.
-        
+
         Args:
             job: PyMOL spin job instance.
             command: Current command string to extend.
-            
+
         Returns:
             str: Extended command string with spin-specific commands.
         """
@@ -1337,14 +1342,14 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _offset_labels(self, job, command):
         """
         Handle label offset for spin density visualization.
-        
+
         Label offsetting is not needed for spin density visualization
         as labels are typically hidden for this type of visualization.
-        
+
         Args:
             job: PyMOL spin job instance.
             command: Current command string.
-            
+
         Returns:
             str: Unchanged command string.
         """
@@ -1354,14 +1359,14 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _call_pml(self, job, command):
         """
         Call the PML file for spin density visualization.
-        
+
         Adds PyMOL command to load the generated PML script containing
         spin density isosurface setup and visualization settings.
-        
+
         Args:
             job: PyMOL spin job instance.
             command: Current command string to extend.
-            
+
         Returns:
             str: Extended command string with PML loading command.
         """
@@ -1372,14 +1377,14 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     def _save_pse_command(self, job, command):
         """
         Add command to save PyMOL session for spin density.
-        
+
         Appends command to save the PyMOL session file with spin
         density visualization settings and objects.
-        
+
         Args:
             job: PyMOL spin job instance.
             command: Current command string to extend.
-            
+
         Returns:
             str: Extended command string with session save command.
         """

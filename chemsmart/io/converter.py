@@ -45,7 +45,7 @@ class FileConverter:
     def convert_files(self):
         """
         Convert files based on the specified parameters.
-        
+
         Converts either all files in a directory (if directory is specified)
         or a single file (if filename is specified) to the target output format.
         """
@@ -74,7 +74,7 @@ class FileConverter:
     def _convert_all_files(self, directory, type, output_filetype):
         """
         Convert all files of specified type in the directory.
-        
+
         Args:
             directory (str): Directory containing files to convert.
             type (str): File type to convert (log, com, gjf, out, inp, xyz, sdf).
@@ -147,7 +147,7 @@ class FileConverter:
     def _convert_single_file(self, filename, output_filetype):
         """
         Convert single file to specified format.
-        
+
         Args:
             filename (str): Path to the file to convert.
             output_filetype (str): Target output format.

@@ -18,23 +18,23 @@ logger = logging.getLogger(__name__)
 class Server(RegistryMixin):
     """
     Base class for computational server configurations.
-    
+
     Represents a computational server or cluster environment with associated
     settings for job submission, resource allocation, and queue management.
     Provides methods for server comparison, serialization, and configuration
     management.
-    
+
     Attributes:
         name (str): Unique identifier for the server.
         kwargs (dict): Additional server configuration parameters.
         _num_hours (int): Default number of hours for job allocation.
         _queue_name (str): Default queue name for job submission.
     """
-    
+
     def __init__(self, name, **kwargs):
         """
         Initialize a server configuration.
-        
+
         Args:
             name (str): Unique name identifier for the server.
             **kwargs: Additional configuration parameters including:
@@ -50,7 +50,7 @@ class Server(RegistryMixin):
     def __str__(self):
         """
         String representation of the server.
-        
+
         Returns:
             str: Human-readable server description.
         """
@@ -59,10 +59,10 @@ class Server(RegistryMixin):
     def __eq__(self, other):
         """
         Check equality based on server name.
-        
+
         Args:
             other (Server): Another server instance to compare.
-            
+
         Returns:
             bool: True if server names are equal.
         """
@@ -71,7 +71,7 @@ class Server(RegistryMixin):
     def __hash__(self):
         """
         Generate hash based on server name.
-        
+
         Returns:
             int: Hash value for server name.
         """
@@ -80,7 +80,7 @@ class Server(RegistryMixin):
     def __repr__(self):
         """
         Developer representation of the server.
-        
+
         Returns:
             str: Detailed server representation for debugging.
         """
@@ -90,10 +90,10 @@ class Server(RegistryMixin):
     def from_dict(cls, d):
         """
         Create server instance from dictionary.
-        
+
         Args:
             d (dict): Dictionary containing server configuration.
-            
+
         Returns:
             Server: Configured server instance.
         """
@@ -103,13 +103,13 @@ class Server(RegistryMixin):
     def from_yaml(cls, name):
         """
         Create server instance from YAML configuration file.
-        
+
         Args:
             name (str): Path to YAML configuration file.
-            
+
         Returns:
             Server: Server instance loaded from YAML.
-            
+
         Raises:
             ValueError: If no YAML file is provided.
         """
@@ -122,7 +122,7 @@ class Server(RegistryMixin):
     def scheduler(self):
         """
         Get the job scheduler for this server.
-        
+
         Returns:
             str or None: Scheduler type (e.g., 'slurm', 'pbs') or None if not set.
         """
@@ -132,7 +132,7 @@ class Server(RegistryMixin):
     def queue_name(self):
         """
         Get or set the queue name for job submission.
-        
+
         Returns:
             str or None: Queue name for job submission.
         """
@@ -142,7 +142,7 @@ class Server(RegistryMixin):
     def queue_name(self, value):
         """
         Set the queue name for job submission.
-        
+
         Args:
             value (str): Queue name to set.
         """
@@ -152,7 +152,7 @@ class Server(RegistryMixin):
     def num_hours(self):
         """
         Get or set the number of hours for job allocation.
-        
+
         Returns:
             int or None: Number of hours for job time limit.
         """
@@ -162,7 +162,7 @@ class Server(RegistryMixin):
     def num_hours(self, value):
         """
         Set the number of hours for job allocation.
-        
+
         Args:
             value (int): Number of hours for job time limit.
         """
@@ -172,7 +172,7 @@ class Server(RegistryMixin):
     def mem_gb(self):
         """
         Get memory allocation in gigabytes.
-        
+
         Returns:
             int: Memory allocation in GB (default: 64).
         """
@@ -182,7 +182,7 @@ class Server(RegistryMixin):
     def num_cores(self):
         """
         Get number of CPU cores allocation.
-        
+
         Returns:
             int: Number of CPU cores (default: 16).
         """
@@ -192,7 +192,7 @@ class Server(RegistryMixin):
     def num_gpus(self):
         """
         Get number of GPU allocation.
-        
+
         Returns:
             int: Number of GPUs (default: 0).
         """
@@ -202,7 +202,7 @@ class Server(RegistryMixin):
     def num_threads(self):
         """
         Get number of threads for parallel execution.
-        
+
         Returns:
             int: Number of threads (default: 16).
         """
@@ -212,7 +212,7 @@ class Server(RegistryMixin):
     def submit_command(self):
         """
         Get the job submission command for this server.
-        
+
         Returns:
             str: Command used to submit jobs to the scheduler.
         """
@@ -226,7 +226,7 @@ class Server(RegistryMixin):
     def scratch_dir(self):
         """
         Get the scratch directory path for temporary files.
-        
+
         Returns:
             str or None: Path to scratch directory or None if not configured.
         """
@@ -236,7 +236,7 @@ class Server(RegistryMixin):
     def scratch(self):
         """
         Check if scratch directory is available.
-        
+
         Returns:
             bool: True if scratch directory is configured.
         """
@@ -246,7 +246,7 @@ class Server(RegistryMixin):
     def use_hosts(self):
         """
         Get host specification configuration.
-        
+
         Returns:
             str or None: Host specification settings or None if not configured.
         """
@@ -256,7 +256,7 @@ class Server(RegistryMixin):
     def extra_commands(self):
         """
         Get additional commands to execute during job setup.
-        
+
         Returns:
             list or None: List of extra commands or None if not configured.
         """
@@ -265,10 +265,10 @@ class Server(RegistryMixin):
     def _get_submit_command(self):
         """
         Obtain job submission command based on scheduler type.
-        
+
         Maps scheduler types to their corresponding submission commands
         for various cluster management systems.
-        
+
         Returns:
             str or None: Submission command for the scheduler or None if unknown.
         """
@@ -284,10 +284,10 @@ class Server(RegistryMixin):
     def register(self):
         """
         Register this server in the global server registry.
-        
+
         Adds the server to the registry if not already present,
         enabling server lookup and management.
-        
+
         Returns:
             Server: This server instance.
         """
@@ -301,7 +301,7 @@ class Server(RegistryMixin):
     def current(cls):
         """
         Get the current server based on detected scheduler type.
-        
+
         Returns:
             Server: Server instance for the current environment.
         """
@@ -312,14 +312,14 @@ class Server(RegistryMixin):
     def from_scheduler_type(cls):
         """
         Create a Server instance based on the detected scheduler type.
-        
+
         Automatically detects the scheduler type in the current environment
         and creates an appropriate server instance. Falls back to local
         server if no scheduler is detected.
 
         Returns:
             Server: Server instance for the detected scheduler (or local fallback), typically a YamlServerSettings.
-            
+
         Raises:
             ValueError: If no server class is defined for the detected scheduler type.
         """
@@ -344,7 +344,7 @@ class Server(RegistryMixin):
     def detect_server_scheduler():
         """
         Detect the server's job scheduler system.
-        
+
         Checks for environment variables and available commands to identify
         the type of job scheduler running on the current system.
 
@@ -415,13 +415,13 @@ class Server(RegistryMixin):
     def from_servername(cls, servername):
         """
         Obtain server instance from server name.
-        
+
         Loads server configuration from YAML files based on the server name.
         Falls back to current server if no name is specified.
-        
+
         Args:
             servername (str): Name of the server configuration to load.
-            
+
         Returns:
             Server: Configured server instance.
         """
@@ -435,16 +435,16 @@ class Server(RegistryMixin):
     def _from_server_name(cls, server_name):
         """
         Get server settings from YAML file based on server name.
-        
+
         Searches for server configuration files in the user settings directory.
         Provides detailed error messages if the server is not found.
-        
+
         Args:
             server_name (str): Name of the server (with or without .yaml extension).
-            
+
         Returns:
             Server: Configured server instance.
-            
+
         Raises:
             ValueError: If no server configuration is found for the given name.
         """
@@ -476,16 +476,16 @@ class Server(RegistryMixin):
     def _from_servers_manager(cls, manager):
         """
         Load server configuration using a settings manager.
-        
+
         Internal method for loading server settings through a manager instance.
-        
+
         Args:
             manager: Server settings manager instance.
-            
+
         Returns:
             Server or None: Server if loaded; None only when the file is missing.
-        
-        Raises: 
+
+        Raises:
             ValueError: if the YAML is malformed or invalid.
         """
         try:
@@ -496,14 +496,14 @@ class Server(RegistryMixin):
     def get_submitter(self, job, **kwargs):
         """
         Get a job submitter for this server.
-        
+
         Creates an appropriate submitter instance based on the server's
         scheduler type and job requirements.
-        
+
         Args:
             job: Job instance to be submitted.
             **kwargs: Additional submitter configuration parameters.
-            
+
         Returns:
             Submitter: Configured job submitter for this server.
         """
@@ -516,10 +516,10 @@ class Server(RegistryMixin):
     def submit(self, job, test=False, cli_args=None, **kwargs):
         """
         Submit a computational job to the server.
-        
+
         Handles the complete job submission process including validation,
         script writing, and actual submission to the scheduler.
-        
+
         Args:
             job (Job): Job instance to be submitted.
             test (bool): If True, only creates scripts without actual submission.
@@ -539,10 +539,10 @@ class Server(RegistryMixin):
     def _check_running_jobs(job):
         """
         Check if the job is already running or queued.
-        
+
         Prevents duplicate job submissions by checking the scheduler queue
         for jobs with the same label.
-        
+
         Args:
             job: Job instance to check.
         """
@@ -566,10 +566,10 @@ class Server(RegistryMixin):
     def _write_submission_script(self, job, cli_args, **kwargs):
         """
         Write the submission script for the job.
-        
+
         Creates the necessary submission scripts using the appropriate
         submitter for the server's scheduler type.
-        
+
         Args:
             job: Job instance to create submission script for.
             cli_args: Command line arguments for the job.
@@ -581,16 +581,16 @@ class Server(RegistryMixin):
     def _submit_job(self, job):
         """
         Submit the job to the scheduler.
-        
+
         Executes the submission command to queue the job in the scheduler.
         Handles both simple commands and complex shell commands with operators.
-        
+
         Args:
             job: Job instance to submit.
-            
+
         Returns:
             int: Exit code from the submission command.
-            
+
         Raises:
             ValueError: If no submission command is defined for this server.
         """
@@ -614,11 +614,11 @@ class Server(RegistryMixin):
 class YamlServerSettings(Server):
     """
     YAML-based server settings configuration.
-    
+
     Extends the base Server class to provide YAML file-based configuration
     loading for server settings. Allows server configurations to be defined
     in YAML files and loaded dynamically.
-    
+
     Attributes:
         NAME (str): Identifier for YAML-based server settings.
         name (str): YAML file path used as this settings' identifier.
@@ -626,13 +626,13 @@ class YamlServerSettings(Server):
         _num_hours (int or None): Default job time allocation in hours.
         _queue_name (str or None): Default submission queue name.
     """
-    
+
     NAME = "yaml"
 
     def __init__(self, name, **kwargs):
         """
         Initialize YAML-based server settings.
-        
+
         Args:
             name (str): Server identifier; typically the YAML filename when
                 loaded via `from_yaml`, or a logical server name when
@@ -646,10 +646,10 @@ class YamlServerSettings(Server):
     def from_yaml(cls, filename):
         """
         Create server settings from YAML configuration file.
-        
+
         Args:
             filename (str): Path to YAML configuration file.
-            
+
         Returns:
             YamlServerSettings: Server settings loaded from YAML.
         """
@@ -659,7 +659,7 @@ class YamlServerSettings(Server):
     def __repr__(self):
         """
         Developer representation of YAML server settings.
-        
+
         Returns:
             str: Detailed representation for debugging.
         """
@@ -668,7 +668,7 @@ class YamlServerSettings(Server):
     def __str__(self):
         """
         String representation of YAML server settings.
-        
+
         Returns:
             str: Human-readable server description.
         """
@@ -677,10 +677,10 @@ class YamlServerSettings(Server):
     def __eq__(self, other):
         """
         Check equality based on server name.
-        
+
         Args:
             other: Another server instance to compare.
-            
+
         Returns:
             bool: True if server names are equal.
         """
@@ -689,7 +689,7 @@ class YamlServerSettings(Server):
     def __hash__(self):
         """
         Generate hash based on server name.
-        
+
         Returns:
             int: Hash value for server name.
         """
@@ -698,7 +698,7 @@ class YamlServerSettings(Server):
     def __call__(self):
         """
         Make the server settings callable.
-        
+
         Returns:
             YamlServerSettings: This server settings instance.
         """
@@ -707,7 +707,7 @@ class YamlServerSettings(Server):
     def register(self):
         """
         Register this server in the global registry.
-        
+
         Returns:
             YamlServerSettings: This server settings instance.
         """
@@ -717,11 +717,11 @@ class YamlServerSettings(Server):
 class ServerSettingsManager:
     """
     Manager for server settings from YAML configuration files.
-    
+
     Provides management interface for loading server configurations from YAML
     files in a specified folder structure. Handles file validation and server
     settings creation for computational cluster environments.
-    
+
     Attributes:
         filename (str): Absolute path to the YAML configuration file.
     """
@@ -729,11 +729,11 @@ class ServerSettingsManager:
     def __init__(self, filename):
         """
         Initialize the server settings manager.
-        
+
         Args:
             filename (str): Path to YAML configuration file containing
                 server settings.
-                
+
         Raises:
             ValueError: If filename is None or not specified.
         """
@@ -744,13 +744,13 @@ class ServerSettingsManager:
     def create(self):
         """
         Create server settings from the specified YAML file.
-        
+
         Loads and parses the YAML configuration file to create a complete
         server settings instance with all configurations.
-        
+
         Returns:
             YamlServerSettings: Configured server settings loaded from YAML.
-            
+
         Raises:
             FileNotFoundError: If the specified YAML file does not exist.
             ValueError: If the YAML file is malformed or invalid.
@@ -761,11 +761,11 @@ class ServerSettingsManager:
 class SLURMServer(YamlServerSettings):
     """
     SLURM-specific server configuration.
-    
+
     Specialized server class for SLURM (Simple Linux Utility for Resource
     Management) scheduler environments. Provides SLURM-specific defaults
     and configurations for computational clusters.
-    
+
     Attributes:
         NAME (str): Server type identifier ('SLURM').
         SCHEDULER_TYPE (str): Scheduler system type ('SLURM').
@@ -774,14 +774,14 @@ class SLURMServer(YamlServerSettings):
         _num_hours (int or None): Inherited default job time allocation.
         _queue_name (str or None): Inherited default submission queue.
     """
-    
+
     NAME = "SLURM"
     SCHEDULER_TYPE = "SLURM"
 
     def __init__(self, **kwargs):
         """
         Initialize SLURM server configuration.
-        
+
         Args:
             **kwargs: Additional SLURM-specific configuration parameters.
         """
@@ -791,10 +791,10 @@ class SLURMServer(YamlServerSettings):
 class PBSServer(YamlServerSettings):
     """
     PBS-specific server configuration.
-    
+
     Specialized server class for PBS (Portable Batch System) scheduler
     environments. Provides PBS-specific defaults and configurations.
-    
+
     Attributes:
         NAME (str): Server type identifier ('PBS').
         SCHEDULER_TYPE (str): Scheduler system type ('PBS').
@@ -803,14 +803,14 @@ class PBSServer(YamlServerSettings):
         _num_hours (int or None): Inherited default job time allocation.
         _queue_name (str or None): Inherited default submission queue.
     """
-    
+
     NAME = "PBS"
     SCHEDULER_TYPE = "PBS"
 
     def __init__(self, **kwargs):
         """
         Initialize PBS server configuration.
-        
+
         Args:
             **kwargs: Additional PBS-specific configuration parameters.
         """
@@ -820,10 +820,10 @@ class PBSServer(YamlServerSettings):
 class LSFServer(YamlServerSettings):
     """
     LSF-specific server configuration.
-    
+
     Specialized server class for LSF (Load Sharing Facility) scheduler
     environments. Provides LSF-specific defaults and configurations.
-    
+
     Attributes:
         NAME (str): Server type identifier ('LSF').
         SCHEDULER_TYPE (str): Scheduler system type ('LSF').
@@ -832,14 +832,14 @@ class LSFServer(YamlServerSettings):
         _num_hours (int or None): Inherited default job time allocation.
         _queue_name (str or None): Inherited default submission queue.
     """
-    
+
     NAME = "LSF"
     SCHEDULER_TYPE = "LSF"
 
     def __init__(self, **kwargs):
         """
         Initialize LSF server configuration.
-        
+
         Args:
             **kwargs: Additional LSF-specific configuration parameters.
         """
@@ -849,10 +849,10 @@ class LSFServer(YamlServerSettings):
 class SGE_Server(YamlServerSettings):
     """
     SGE-specific server configuration.
-    
+
     Specialized server class for SGE (Sun Grid Engine) scheduler
     environments. Provides SGE-specific defaults and configurations.
-    
+
     Attributes:
         NAME (str): Server type identifier ('SGE').
         SCHEDULER_TYPE (str): Scheduler system type ('SGE').
@@ -861,14 +861,14 @@ class SGE_Server(YamlServerSettings):
         _num_hours (int or None): Inherited default job time allocation.
         _queue_name (str or None): Inherited default submission queue.
     """
-    
+
     NAME = "SGE"
     SCHEDULER_TYPE = "SGE"
 
     def __init__(self, **kwargs):
         """
         Initialize SGE server configuration.
-        
+
         Args:
             **kwargs: Additional SGE-specific configuration parameters.
         """

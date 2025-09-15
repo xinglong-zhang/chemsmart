@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ThermochemistryJobSettings:
     """
     Configuration settings for thermochemistry calculations.
-    
+
     This class manages all parameters needed for thermochemical property
     calculations, including temperature conditions, frequency corrections,
     and output formatting options.
@@ -51,7 +51,7 @@ class ThermochemistryJobSettings:
     ):
         """
         Initialize thermochemistry job settings.
-        
+
         Args:
             temperature (float, optional): Temperature for calculations (K)
             concentration (float, optional): Concentration for calculations
@@ -83,7 +83,7 @@ class ThermochemistryJobSettings:
     def copy(self):
         """
         Create a deep copy of the settings instance.
-        
+
         Returns:
             ThermochemistryJobSettings: New instance with identical settings
         """
@@ -106,13 +106,13 @@ class ThermochemistryJobSettings:
     def from_dict(cls, settings_dict):
         """
         Create settings instance from a dictionary.
-        
+
         Factory method that creates a ThermochemistryJobSettings instance
         from a dictionary containing configuration parameters.
-        
+
         Args:
             settings_dict (dict): Dictionary containing settings parameters
-            
+
         Returns:
             ThermochemistryJobSettings: Configured settings instance
         """

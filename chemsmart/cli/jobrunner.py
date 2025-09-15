@@ -10,6 +10,7 @@ def click_jobrunner_options(f):
     """
     Common job runner configuration options.
     """
+
     @click.option(
         "-s",
         "--server",

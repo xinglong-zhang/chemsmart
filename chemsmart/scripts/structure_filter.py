@@ -31,8 +31,11 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="Directory containing files to filter.",
 )
 @click.option(
-    "-t", "--type", type=str, default=None, 
-    help="Type of files to filter (e.g., 'log', 'out')."
+    "-t",
+    "--type",
+    type=str,
+    default=None,
+    help="Type of files to filter (e.g., 'log', 'out').",
 )
 @click.option(
     "-g",
@@ -49,17 +52,17 @@ os.environ["OMP_NUM_THREADS"] = "1"
     ),
     default="rmsd",
     help="Grouping strategy to use for grouping. \n"
-         "Available options are 'rmsd', 'fingerprint', 'isomorphism', "
-         "'formula', 'connectivity'",
+    "Available options are 'rmsd', 'fingerprint', 'isomorphism', "
+    "'formula', 'connectivity'",
 )
 @click.option(
     "-v",
     "--value",
     default=None,
     help="Threshold for grouping strategies. "
-         "For RMSD, it is the rmsd_threshold value. "
-         "For Tanimoto, it is the similarity_threshold value. "
-         "For connectivity, it is the bond_cutoff_buffer value.",
+    "For RMSD, it is the rmsd_threshold value. "
+    "For Tanimoto, it is the similarity_threshold value. "
+    "For connectivity, it is the bond_cutoff_buffer value.",
 )
 @click.option(
     "-n",
@@ -76,7 +79,7 @@ def entry_point(
     """
     create_logger()
     directory = os.path.abspath(directory)
-    
+
     # Set default file type if not provided
     if type is None:
         logger.info(

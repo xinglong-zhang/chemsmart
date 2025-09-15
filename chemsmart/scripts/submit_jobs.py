@@ -47,7 +47,7 @@ def entry_point(filename, command):
     """
     create_logger()
     logger.info(f"Reading filenames from {filename}")
-    
+
     # Read filenames from the input file
     with open(filename, "r") as f:
         filenames = f.readlines()
@@ -58,7 +58,7 @@ def entry_point(filename, command):
         logger.info(f"Submitting job for {filename}")
         cmd = command.replace("file", filename)
         logger.info(f"Command executed: {cmd}")
-        
+
         # Execute the submission command using subprocess
         p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
         p.communicate()

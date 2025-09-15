@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 class GaussianJob(Job):
     """
     Base class for all Gaussian computational chemistry jobs.
-    
+
     Provides common functionality for Gaussian calculations including
     file management, job execution, output processing, and molecular
     structure handling. All specialized Gaussian job types inherit
     from this base class.
-    
+
     Attributes:
         PROGRAM (str): The computational program name ('Gaussian').
         molecule (Molecule): The molecular structure for calculation.
@@ -42,6 +42,7 @@ class GaussianJob(Job):
         jobrunner (JobRunner): Execution backend (inherited from Job).
         folder (str): Working directory where files are written (inherited).
     """
+
     PROGRAM = "Gaussian"
 
     def __init__(
@@ -49,18 +50,18 @@ class GaussianJob(Job):
     ):
         """
         Initialize a Gaussian job with molecule and calculation settings.
-        
+
         Validates input parameters and sets up the job configuration
         for Gaussian calculations. Handles molecular structure copying
         and settings validation.
-        
+
         Args:
             molecule (Molecule): Molecular structure for calculation.
             settings (GaussianJobSettings): Job configuration (required).
             label (str, optional): Job identifier for file naming.
             jobrunner (JobRunner, optional): Job execution handler.
             **kwargs: Additional keyword arguments for parent class.
-            
+
         Raises:
             ValueError: If settings or molecule types are invalid.
         """
@@ -89,10 +90,10 @@ class GaussianJob(Job):
     def settings_class(cls) -> Type[GaussianJobSettings]:
         """
         Get the settings class used by this job type.
-        
+
         Returns the appropriate settings class for configuring
         Gaussian job parameters and calculation options.
-        
+
         Returns:
             Type[GaussianJobSettings]: Settings class for this job type.
         """
@@ -102,10 +103,10 @@ class GaussianJob(Job):
     def inputfile(self):
         """
         Get the path to the Gaussian input file (.com).
-        
+
         Constructs the full path to the input file using the job
         label and folder location.
-        
+
         Returns:
             str: Full path to the Gaussian input file.
         """
@@ -116,10 +117,10 @@ class GaussianJob(Job):
     def outputfile(self):
         """
         Get the path to the Gaussian output file (.log).
-        
+
         Constructs the full path to the output file using the job
         label and folder location.
-        
+
         Returns:
             str: Full path to the Gaussian output file.
         """
@@ -130,10 +131,10 @@ class GaussianJob(Job):
     def chkfile(self):
         """
         Get the path to the Gaussian checkpoint file (.chk).
-        
+
         Constructs the full path to the checkpoint file using the job
         label and folder location.
-        
+
         Returns:
             str: Full path to the Gaussian checkpoint file.
         """
@@ -144,10 +145,10 @@ class GaussianJob(Job):
     def errfile(self):
         """
         Get the path to the Gaussian error file (.err).
-        
+
         Constructs the full path to the error file using the job
         label and folder location.
-        
+
         Returns:
             str: Full path to the Gaussian error file.
         """
@@ -157,10 +158,10 @@ class GaussianJob(Job):
     def _backup_files(self, backup_chk=False, **kwargs):
         """
         Create backup copies of important job files.
-        
+
         Backs up input and output files, and optionally the checkpoint
         file, to a timestamped backup directory for data preservation.
-        
+
         Args:
             backup_chk (bool): Whether to backup checkpoint files.
             **kwargs: Additional arguments passed to backup_file method.
@@ -174,12 +175,12 @@ class GaussianJob(Job):
     def _output(self):
         """
         Create and return a Gaussian output parser object.
-        
+
         Attempts to parse the output file using appropriate Gaussian
         output readers, with fallback for periodic boundary conditions.
-        
+
         Returns:
-            Gaussian16Output or Gaussian16OutputWithPBC or None: 
+            Gaussian16Output or Gaussian16OutputWithPBC or None:
                 Parsed output object or None if file doesn't exist
                 or parsing fails.
         """
@@ -200,10 +201,10 @@ class GaussianJob(Job):
     def _run(self, **kwargs):
         """
         Execute the Gaussian job using the assigned jobrunner.
-        
+
         Logs the job execution details and delegates the actual
         running to the configured jobrunner instance.
-        
+
         Args:
             **kwargs: Additional keyword arguments passed to jobrunner.
         """
@@ -225,11 +226,11 @@ class GaussianJob(Job):
     ):
         """
         Create a GaussianJob from a file containing molecular data.
-        
+
         Reads molecular structures from various file formats and creates
         a Gaussian job with the specified settings and configuration.
         Supports multiple molecules and index-based selection.
-        
+
         Args:
             filename (str): Path to file containing molecular data.
             settings (GaussianJobSettings, optional): Job configuration.
@@ -238,7 +239,7 @@ class GaussianJob(Job):
             jobrunner (JobRunner, optional): Job execution handler.
             keywords (tuple): Keywords to extract from molecule data.
             **kwargs: Additional keyword arguments.
-            
+
         Returns:
             GaussianJob: Configured Gaussian job instance.
         """
@@ -283,17 +284,17 @@ class GaussianJob(Job):
     ):
         """
         Create a GaussianJob from a PubChem molecular identifier.
-        
+
         Downloads molecular structure data from PubChem database
         and creates a Gaussian job with the specified configuration.
-        
+
         Args:
             identifier (str): PubChem compound identifier (CID, name, etc.).
             settings (GaussianJobSettings, optional): Job configuration.
             label (str, optional): Job identifier for file naming.
             jobrunner (JobRunner, optional): Job execution handler.
             **kwargs: Additional keyword arguments.
-            
+
         Returns:
             GaussianJob: Configured Gaussian job instance.
         """
@@ -335,10 +336,10 @@ class GaussianJob(Job):
     ):
         """
         Create a specific GaussianJob subclass based on job type.
-        
+
         Factory method that creates appropriate job instances based
         on the specified calculation type (e.g., 'opt', 'com', 'g16').
-        
+
         Args:
             jobtype (str): Type of calculation ('opt', 'com', 'g16').
             molecule (Molecule): Molecular structure for calculation.
@@ -346,10 +347,10 @@ class GaussianJob(Job):
             label (str, optional): Job identifier for file naming.
             jobrunner (JobRunner, optional): Job execution handler.
             **kwargs: Additional keyword arguments.
-            
+
         Returns:
             GaussianJob: Appropriate job subclass instance.
-            
+
         Raises:
             ValueError: If jobtype is not recognized.
         """
@@ -437,14 +438,15 @@ class GaussianJob(Job):
 class GaussianComJob(GaussianJob):
     """
     Gaussian job for running existing .com input files as-is.
-    
+
     Specialized job class that takes pre-written Gaussian input files
     and runs them without modification. Useful for running existing
     input files or custom calculations with specific parameters.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16com').
     """
+
     TYPE = "g16com"
 
     def __init__(
@@ -464,18 +466,18 @@ class GaussianComJob(GaussianJob):
     ):
         """
         Create a GaussianComJob from an existing .com input file.
-        
+
         Reads a Gaussian input file and creates a job that will run
         the file exactly as written, preserving all input parameters
         and molecular coordinates.
-        
+
         Args:
             filename (str): Path to the .com input file.
             settings (GaussianJobSettings, optional): Additional settings.
             label (str, optional): Job identifier (defaults to filename).
             jobrunner (JobRunner, optional): Job execution handler.
             **kwargs: Additional keyword arguments.
-            
+
         Returns:
             GaussianComJob: Job configured to run the input file.
         """
@@ -529,15 +531,16 @@ class GaussianComJob(GaussianJob):
 class GaussianGeneralJob(GaussianJob):
     """
     General-purpose Gaussian job class for standard calculations.
-    
+
     Subclasses GaussianJob to prevent recursive loops when other
     job types need to run general Gaussian calculations. For example,
     prevents infinite recursion in specialized jobs like GaussianCrestOptJob
     that need to run standard Gaussian calculations internally.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16').
     """
+
     TYPE = "g16"
 
     def __init__(

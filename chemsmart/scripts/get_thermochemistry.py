@@ -84,7 +84,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     type=float,
     show_default=True,
     help="Pressure in Standard atmosphere (gas phase). "
-         "Ignored if -c/--concentration is provided.",
+    "Ignored if -c/--concentration is provided.",
 )
 @click.option(
     "-t",
@@ -109,8 +109,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default=False,
     show_default=True,
     help="Use natural abundance weighted masses (True) or use most "
-         "abundant masses (False).\nDefault to False, i.e., use single "
-         "isotopic mass.",
+    "abundant masses (False).\nDefault to False, i.e., use single "
+    "isotopic mass.",
 )
 @click.option(
     "-q",

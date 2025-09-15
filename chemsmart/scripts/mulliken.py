@@ -40,14 +40,14 @@ os.environ["OMP_NUM_THREADS"] = "1"
     type=int,
     multiple=True,
     help="Atom numbers from which to obtain Mulliken Charges and Spins. "
-         "1-indexed.",
+    "1-indexed.",
 )
 def entry_point(filename, numbers):
     """
     Extract and display Mulliken charges and spin densities.
     """
     create_logger()
-    
+
     # Parse output file based on extension
     if filename.endswith(".log"):
         outputfile = Gaussian16Output(filename=filename)
@@ -55,7 +55,7 @@ def entry_point(filename, numbers):
         outputfile = ORCAOutput(filename=filename)
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
-        
+
     # Extract and display Mulliken charges
     mulliken_charges = outputfile.mulliken_atomic_charges
     logger.info("\nMulliken Charges:")
@@ -74,9 +74,7 @@ def entry_point(filename, numbers):
     if numbers is not None:
         for n in numbers:
             charge_value = get_value_by_number(n, mulliken_charges)
-            hk = get_key_by_value_and_number(
-                charge_value, n, mulliken_charges
-            )
+            hk = get_key_by_value_and_number(charge_value, n, mulliken_charges)
             logger.info(f"Mulliken Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 

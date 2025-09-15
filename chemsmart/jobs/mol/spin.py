@@ -5,6 +5,7 @@ This module provides specialized PyMOL jobs for visualizing molecular spin
 density distributions. Handles cube file generation and PyMOL session
 creation for spin density analysis.
 """
+
 import os.path
 
 from chemsmart.jobs.mol.job import PyMOLJob
@@ -13,7 +14,7 @@ from chemsmart.jobs.mol.job import PyMOLJob
 class PyMOLSpinJob(PyMOLJob):
     """
     PyMOL job for spin density visualization.
-    
+
     Specialized PyMOL job class for creating spin density visualizations
     from quantum chemistry calculations. Generates cube files and PyMOL
     sessions for analyzing electron spin distribution in molecules.
@@ -28,6 +29,7 @@ class PyMOLSpinJob(PyMOLJob):
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "pymol_spin"
 
     def __init__(
@@ -40,11 +42,11 @@ class PyMOLSpinJob(PyMOLJob):
     ):
         """
         Initialize PyMOL spin density visualization job.
-        
+
         Creates a PyMOL job for generating spin density visualizations
         from quantum chemistry calculations. Configures cube file
         generation parameters and output file naming.
-        
+
         Args:
             molecule: Molecular structure object for visualization.
             label: Unique identifier label for the job.

@@ -16,7 +16,7 @@ class GenGenECPSection:
     """
     Parser and generator for Gaussian Gen/GenECP basis set sections.
     """
-    
+
     def __init__(self, string):
         """
         Initialize Gen/GenECP section parser.
@@ -34,7 +34,7 @@ class GenGenECPSection:
     def light_elements_basis(self):
         """
         Get basis set name for light elements.
-        
+
         The second line typically contains the basis set name for light
         elements (those not using ECPs).
         """
@@ -64,7 +64,7 @@ class GenGenECPSection:
     def light_elements(self):
         """
         Extract light elements that use standard basis sets.
-        
+
         Light elements are listed in the first line, space-separated,
         ending with '0'.
         """
@@ -181,7 +181,7 @@ class GenGenECPSection:
     ):
         """
         Create Gen/GenECP section using Basis Set Exchange API.
-        
+
         This method generates a custom basis set section by combining
         light elements (standard basis sets) with heavy elements
         (basis sets with ECPs) using the Basis Set Exchange library.
@@ -219,7 +219,7 @@ class GenGenECPSection:
             light_elements_basis = light_elements_basis.lower()
             light_atoms_string = " ".join(light_elements) + " 0\n"
             genecp_string += light_atoms_string
-            
+
             # Handle def2- basis set naming convention
             if "def2-" in light_elements_basis:
                 light_elements_basis = light_elements_basis.replace(
@@ -228,7 +228,7 @@ class GenGenECPSection:
 
             genecp_string += light_elements_basis + "\n"
             # separate light atoms basis from beginning of heavy atoms gen/genecp basis
-            genecp_string += "****\n"  
+            genecp_string += "****\n"
         # Generate heavy atom basis set content from BSE API
         # Handle def2 basis set naming convention
         if "def2" in heavy_elements_basis and "-" not in heavy_elements_basis:

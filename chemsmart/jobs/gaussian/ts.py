@@ -13,12 +13,12 @@ from chemsmart.jobs.gaussian.job import GaussianJob
 class GaussianTSJob(GaussianJob):
     """
     Gaussian job class for transition state optimization calculations.
-    
+
     Performs optimization to find transition state structures, which
     are first-order saddle points on the potential energy surface.
     Used for studying chemical reaction mechanisms and computing
     activation barriers.
-    
+
     Attributes:
         TYPE (str): Job type identifier ('g16ts').
         molecule (Molecule): Transition state guess structure.
@@ -27,15 +27,16 @@ class GaussianTSJob(GaussianJob):
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
+
     TYPE = "g16ts"
 
     def __init__(self, molecule, settings, label, jobrunner=None, **kwargs):
         """
         Initialize a Gaussian transition state optimization job.
-        
+
         Sets up a transition state optimization calculation with
         the specified molecular structure and calculation settings.
-        
+
         Args:
             molecule (Molecule): Molecular structure (transition state guess).
             settings (GaussianJobSettings): Calculation configuration.
