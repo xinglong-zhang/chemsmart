@@ -40,7 +40,7 @@ CREST-Specific OPTIONS
 
 .. warning::
 
-   Jobtype must be provided for Crest and Link job!
+   ``-j, --Jobtype`` must be provided for Crest job!
 
 Crest Basic Usage
 =================
@@ -91,9 +91,9 @@ Crest Examples
    the job will continue crest opt job until all ``<n_conformers_to_opt>`` are optimized. Charge and multiplicity need
    to be specified.
 
-*******************************
- Trajectory/Traj-link Analysis
-*******************************
+*********************
+ Trajectory Analysis
+*********************
 
 Trajectory analysis allows you to process molecular dynamics trajectories and extract specific structures for further
 analysis.
@@ -126,6 +126,10 @@ Trajectory-Specific OPTIONS
       -  Proportion of structures from the end of trajectory to use. Values ranges from 0.0 < x <= 1.0. Defaults to 0.1
          (last 10% of structures)
 
+.. warning::
+
+   ``-j, --Jobtype`` must be provided for Trajectory analysis!
+
 Trajectory Basic Usage
 ======================
 
@@ -134,10 +138,6 @@ Trajectory Basic Usage
    .. code:: console
 
       chemsmart sub gaussian -p trajectory -f trajectory.xyz -c 0 -m 1 traj -j opt
-
-.. note::
-
-   The traj job will use rmsd grouper strategy as default.
 
 **Trajectory analysis with specific proportion of structures**
 
@@ -155,7 +155,7 @@ Process the results of the crest/traj task further using multiple molecular simi
 
 .. code:: console
 
-   chemsmart sub gaussian [GAUSSIAN OPTIONS] crest/traj -g <> [SUBCMD_OPTIONS]
+   chemsmart sub gaussian [GAUSSIAN OPTIONS] crest/traj -j <jobtype> -g <> [SUBCMD_OPTIONS]
 
 Grouper-Specific OPTIONS
 ========================
@@ -174,11 +174,11 @@ Grouper-Specific OPTIONS
 
    -  -  ``-i, --ignore-hydrogens``
       -  bool
-      -  Ignore H atoms in the grouping (Default = False)
+      -  Ignore H atoms in the grouping (Default = False, only for "rmsd")
 
    -  -  ``-t, --threshold``
       -  float
-      -  Threshold value for grouping (Default = 0.5 for rmsd, 0.9 for tanimoto, 0.0 for connectivity)
+      -  Threshold value for grouping (Default = 0.5 for "rmsd", 0.9 for "tanimoto" and 0.0 for "connectivity")
 
    -  -  ``-p, --num-procs``
       -  int
@@ -202,12 +202,12 @@ Grouper Basic Usage
 Grouper Examples
 ================
 
-**Use rmsd Grouper for crest job**
+**Use RMSD grouper for crest job**
 
 -  To run crest job in local and save the output files with "grouped" label, tight threshold is used:
 
    .. code:: console
 
-      chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4
+      chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4 -i
 
    Output files will be saved as *grouped_opt_c1.com, grouped_opt_c1.log, ..., grouped_opt_cN.com, grouped_opt_cN.log*
