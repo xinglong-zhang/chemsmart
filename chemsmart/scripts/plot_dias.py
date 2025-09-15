@@ -3,8 +3,8 @@
 DIAS (distortion interaction-activation strain model) plotting script.
 
 This script creates plots and visualizations for DIAS aromaticity analysis
-from Gaussian and ORCA calculations, helping to analyze aromatic character
-in molecular systems.
+from Gaussian and ORCA calculations, helping to analyze non-covalent
+interactions in molecular systems.
 """
 
 import click
