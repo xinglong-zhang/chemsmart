@@ -299,7 +299,6 @@ class TestConverter:
         assert mol.chemical_formula == "C191H241Cu2N59O96P14"
         assert mol.energy == -25900.214629
 
-
     def test_convert_single_comfile_to_xyz(
         self, tmpdir, gaussian_opt_inputfile
     ):
