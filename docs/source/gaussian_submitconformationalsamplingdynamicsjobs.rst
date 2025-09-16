@@ -155,7 +155,7 @@ Process the results of the crest/traj task further using multiple molecular simi
 
 .. code:: console
 
-   chemsmart sub gaussian [GAUSSIAN OPTIONS] crest/traj -j <jobtype> -g <> [SUBCMD_OPTIONS]
+   chemsmart sub gaussian [GAUSSIAN OPTIONS] crest/traj -j <jobtype> -g <grouping_strategy> [SUBCMD_OPTIONS]
 
 Grouper-Specific OPTIONS
 ========================
@@ -183,6 +183,10 @@ Grouper-Specific OPTIONS
    -  -  ``-p, --num-procs``
       -  int
       -  Number of processors to use for grouper (Default=1)
+
+.. note::
+
+   No grouper will be used by default for Crest/Traj jobs, unless the ``-g, --grouping-strategy`` option is specified.
 
 Grouper Basic Usage
 ===================
