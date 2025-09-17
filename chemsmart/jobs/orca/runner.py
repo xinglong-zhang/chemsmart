@@ -6,7 +6,7 @@ import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
-from shutil import copy
+from shutil import copy, rmtree
 
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
@@ -39,7 +39,7 @@ class ORCAJobRunner(JobRunner):
     SCRATCH = True
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=None, fake=False, scratch_dir=None, delete_scratch=False, **kwargs
     ):
         # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
@@ -49,6 +49,7 @@ class ORCAJobRunner(JobRunner):
             scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
+            delete_scratch=delete_scratch,
             **kwargs,
         )
         logger.debug(f"Jobrunner server: {self.server}")
@@ -58,6 +59,7 @@ class ORCAJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -183,10 +185,37 @@ class ORCAJobRunner(JobRunner):
             )
 
     def _get_executable(self):
-        """Get executable for Gaussian."""
+        """Get executable for ORCA."""
         exe = self.executable.get_executable()
         logger.info(f"ORCA executable: {exe}")
         return exe
+
+    def _delete_scratch_directory(self):
+        """
+        Delete the scratch directory if it exists.
+        
+        This method safely removes the scratch directory and all its contents
+        after the job has completed successfully. Only deletes if the 
+        running_directory is actually within the scratch_dir.
+        """
+        if (hasattr(self, 'running_directory') and 
+            hasattr(self, 'scratch_dir') and 
+            self.scratch_dir and
+            os.path.exists(self.running_directory)):
+            
+            # Check if running_directory is actually within scratch_dir
+            # to avoid accidentally deleting non-scratch directories
+            if self.running_directory.startswith(self.scratch_dir):
+                try:
+                    logger.info(f"Deleting scratch directory: {self.running_directory}")
+                    rmtree(self.running_directory)
+                    logger.info(f"Successfully deleted scratch directory: {self.running_directory}")
+                except Exception as e:
+                    logger.error(f"Failed to delete scratch directory {self.running_directory}: {e}")
+            else:
+                logger.debug(f"Running directory {self.running_directory} is not in scratch, skipping deletion")
+        else:
+            logger.debug("No scratch directory to delete or directory does not exist")
 
     def _postrun(self, job):
         logger.debug(f"Scratch: {self.scratch}")
@@ -215,6 +244,11 @@ class ORCAJobRunner(JobRunner):
             #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
+            
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                self._delete_scratch_directory()
 
 
 class FakeORCAJobRunner(ORCAJobRunner):
@@ -222,8 +256,8 @@ class FakeORCAJobRunner(ORCAJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=None, fake=True, **kwargs):
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
+    def __init__(self, server, scratch=None, fake=True, delete_scratch=False, **kwargs):
+        super().__init__(server=server, scratch=scratch, fake=fake, delete_scratch=delete_scratch, **kwargs)
 
     def run(self, job):
         self._prerun(job=job)

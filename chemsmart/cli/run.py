@@ -43,6 +43,7 @@ def run(
     mem_gb,
     fake,
     scratch,
+    delete_scratch,
     debug,
     stream,
 ):
@@ -56,6 +57,7 @@ def run(
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
+        delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
         num_gpus=num_gpus,
@@ -105,6 +107,7 @@ def process_pipeline(ctx, *args, **kwargs):
             server=jobrunner.server,
             scratch=jobrunner.scratch,
             fake=jobrunner.fake,
+            delete_scratch=jobrunner.delete_scratch,
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,

@@ -6,7 +6,7 @@ from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
 from glob import glob
-from shutil import SameFileError, copy
+from shutil import SameFileError, copy, rmtree
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.jobs.runner import JobRunner
@@ -27,7 +27,7 @@ class NCIPLOTJobRunner(JobRunner):
     SCRATCH = True  # default to using scratch for NCIPLOT Jobs
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=None, fake=False, scratch_dir=None, delete_scratch=False, **kwargs
     ):
         """Initialize the NCIPLOTJobRunner."""
         # Use default SCRATCH if scratch is not explicitly set
@@ -38,11 +38,13 @@ class NCIPLOTJobRunner(JobRunner):
             scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
+            delete_scratch=delete_scratch,
             **kwargs,
         )
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
         logger.debug(f"Jobrunner fake mode: {self.fake}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -231,6 +233,33 @@ class NCIPLOTJobRunner(JobRunner):
         logger.info(f"NCIPLOT executable: {exe}")
         return exe
 
+    def _delete_scratch_directory(self):
+        """
+        Delete the scratch directory if it exists.
+        
+        This method safely removes the scratch directory and all its contents
+        after the job has completed successfully. Only deletes if the 
+        running_directory is actually within the scratch_dir.
+        """
+        if (hasattr(self, 'running_directory') and 
+            hasattr(self, 'scratch_dir') and 
+            self.scratch_dir and
+            os.path.exists(self.running_directory)):
+            
+            # Check if running_directory is actually within scratch_dir
+            # to avoid accidentally deleting non-scratch directories
+            if self.running_directory.startswith(self.scratch_dir):
+                try:
+                    logger.info(f"Deleting scratch directory: {self.running_directory}")
+                    rmtree(self.running_directory)
+                    logger.info(f"Successfully deleted scratch directory: {self.running_directory}")
+                except Exception as e:
+                    logger.error(f"Failed to delete scratch directory {self.running_directory}: {e}")
+            else:
+                logger.debug(f"Running directory {self.running_directory} is not in scratch, skipping deletion")
+        else:
+            logger.debug("No scratch directory to delete or directory does not exist")
+
     def _postrun(self, job):
         """Handle post-run tasks, such as copying files from scratch and cleanup."""
         if self.scratch:
@@ -254,6 +283,11 @@ class NCIPLOTJobRunner(JobRunner):
             #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
+            
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                self._delete_scratch_directory()
 
 
 class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
@@ -262,13 +296,14 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
     FAKE = True
 
     def __init__(
-        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
+        self, server, scratch=None, fake=True, scratch_dir=None, delete_scratch=False, **kwargs
     ):
         super().__init__(
             server=server,
             scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
+            delete_scratch=delete_scratch,
             **kwargs,
         )
 

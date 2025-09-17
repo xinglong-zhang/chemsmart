@@ -45,6 +45,7 @@ def sub(
     mem_gb,
     fake,
     scratch,
+    delete_scratch,
     debug,
     stream,
     time_hours,
@@ -72,6 +73,7 @@ def sub(
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
+        delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
         num_gpus=num_gpus,

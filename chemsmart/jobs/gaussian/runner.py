@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy
+from shutil import copy, rmtree
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -52,7 +52,7 @@ class GaussianJobRunner(JobRunner):
     # instance level - set during initialization (__init__).
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
+        self, server, scratch=None, fake=False, scratch_dir=None, delete_scratch=False, **kwargs
     ):
         # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
@@ -61,6 +61,7 @@ class GaussianJobRunner(JobRunner):
             server=server,
             scratch=scratch,
             scratch_dir=scratch_dir,
+            delete_scratch=delete_scratch,
             fake=fake,
             **kwargs,
         )
@@ -71,6 +72,7 @@ class GaussianJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -173,6 +175,33 @@ class GaussianJobRunner(JobRunner):
         logger.info(f"Gaussian executable: {exe}")
         return exe
 
+    def _delete_scratch_directory(self):
+        """
+        Delete the scratch directory if it exists.
+        
+        This method safely removes the scratch directory and all its contents
+        after the job has completed successfully. Only deletes if the 
+        running_directory is actually within the scratch_dir.
+        """
+        if (hasattr(self, 'running_directory') and 
+            hasattr(self, 'scratch_dir') and 
+            self.scratch_dir and
+            os.path.exists(self.running_directory)):
+            
+            # Check if running_directory is actually within scratch_dir
+            # to avoid accidentally deleting non-scratch directories
+            if self.running_directory.startswith(self.scratch_dir):
+                try:
+                    logger.info(f"Deleting scratch directory: {self.running_directory}")
+                    rmtree(self.running_directory)
+                    logger.info(f"Successfully deleted scratch directory: {self.running_directory}")
+                except Exception as e:
+                    logger.error(f"Failed to delete scratch directory {self.running_directory}: {e}")
+            else:
+                logger.debug(f"Running directory {self.running_directory} is not in scratch, skipping deletion")
+        else:
+            logger.debug("No scratch directory to delete or directory does not exist")
+
     def _postrun(self, job):
         if self.scratch:
             # if job was run in scratch, copy files to job folder except files starting with Gau-
@@ -198,6 +227,11 @@ class GaussianJobRunner(JobRunner):
             #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
+            
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                self._delete_scratch_directory()
 
 
 class FakeGaussianJobRunner(GaussianJobRunner):
@@ -206,12 +240,13 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     FAKE = True
 
     def __init__(
-        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
+        self, server, scratch=None, fake=True, scratch_dir=None, delete_scratch=False, **kwargs
     ):
         super().__init__(
             server=server,
             scratch=scratch,
             scratch_dir=scratch_dir,
+            delete_scratch=delete_scratch,
             fake=fake,
             **kwargs,
         )

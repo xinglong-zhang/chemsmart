@@ -35,6 +35,7 @@ class JobRunner(RegistryMixin):
         server,
         scratch=None,
         scratch_dir=None,  # Explicit scratch directory
+        delete_scratch=False,
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -55,6 +56,7 @@ class JobRunner(RegistryMixin):
         self.server = server
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
+        self.delete_scratch = delete_scratch
 
         if self.scratch:
             self._set_scratch()
@@ -216,7 +218,7 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+    def from_job(cls, job, server, scratch=None, fake=False, delete_scratch=False, **kwargs):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -242,7 +244,7 @@ class JobRunner(RegistryMixin):
                     f"Using scratch={scratch} for job runner: {runner}"
                 )
 
-                return runner(server=server, scratch=scratch, **kwargs)
+                return runner(server=server, scratch=scratch, delete_scratch=delete_scratch, **kwargs)
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"
