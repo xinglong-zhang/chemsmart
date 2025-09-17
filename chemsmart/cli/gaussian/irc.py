@@ -1,3 +1,4 @@
+import functools
 import logging
 
 import click
@@ -67,6 +68,7 @@ def click_irc_options(f):
         default=20,
         help="Step size along reaction path, in units of 0.01 Bohr.",
     )
+    @functools.wraps(f)
     def wrapper_irc_options(*args, **kwargs):
         return f(*args, **kwargs)
 
