@@ -48,21 +48,21 @@ def click_irc_options(f):
         "|N| corrector steps if N<0. ",
     )
     @click.option(
-        "-p",
+        "-mp",
         "--maxpoints",
         type=int,
         default=512,
         help="Number of points along reaction path to examine.",
     )
     @click.option(
-        "-c",
+        "-mc",
         "--maxcycles",
         type=int,
         default=128,
         help="Maximum number of steps along IRC to run.",
     )
     @click.option(
-        "-s",
+        "-ss",
         "--stepsize",
         type=int,
         default=20,
