@@ -18,7 +18,8 @@ else
     NULL := /dev/null
 endif
 
-USE_CONDA ?= true  # Default to true if not explicitly set
+# Default to true if not explicitly set
+USE_CONDA ?= true
 MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart$(SEP)cli$(SEP)chemsmart  # Use platform-specific separator
 

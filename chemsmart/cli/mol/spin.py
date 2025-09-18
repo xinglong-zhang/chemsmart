@@ -29,8 +29,10 @@ def spin(
     """CLI for generating spin density and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.log spin
-    This visualizes phenyldioxazolone.log file and saves as phenyldioxazolone_spin.pse.
-    Requires phenyldioxazolone.chk be present together with phenyldioxazolone.log
+    This visualizes phenyldioxazolone.log file and saves as
+    phenyldioxazolone_spin.pse.
+    Requires phenyldioxazolone.chk be present together with
+    phenyldioxazolone.log
     """
 
     # get molecule
@@ -48,7 +50,8 @@ def spin(
                 f"Invalid coordinates input: {coordinates}. Error: {e}"
             )
             raise ValueError(
-                "Invalid coordinates input. Please provide a valid Python literal."
+                "Invalid coordinates input. Please provide a valid Python "
+                "literal."
             )
     from chemsmart.jobs.mol.spin import PyMOLSpinJob
 

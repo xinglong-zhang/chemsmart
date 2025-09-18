@@ -194,6 +194,15 @@ def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_link_modred_output(gaussian_link_outputs_test_directory):
+    gaussian_link_modred_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "fe_ch_quintet_modred_link.log",
+    )
+    return gaussian_link_modred_outfile
+
+
+@pytest.fixture()
 def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
     return os.path.join(
         gaussian_link_outputs_test_directory,
@@ -229,6 +238,13 @@ def gaussian_dppeFeCl2_link_opt_failed_outputfile(
         "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
     )
     return gaussian_link_failed_outfile
+
+
+@pytest.fixture()
+def gaussian_failed_link_output(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory, "failed_link_job.log"
+    )
 
 
 @pytest.fixture()
@@ -281,6 +297,32 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "iron_neutral_quintet.log"
     )
     return gaussian_quintet_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_outfile(gaussian_outputs_test_directory):
+    gaussian_link_outfile = os.path.join(
+        gaussian_outputs_test_directory, "dna_link_sp.log"
+    )
+    return gaussian_link_outfile
+
+
+@pytest.fixture()
+def gaussian_link_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "dppeFeCl2_opt_quintet_link_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_failed_outfile(gaussian_outputs_test_directory):
+    gaussian_link_failed_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
+    )
+    return gaussian_link_failed_outfile
 
 
 # Gaussian output files for genecp

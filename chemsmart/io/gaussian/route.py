@@ -17,7 +17,40 @@ logger = logging.getLogger(__name__)
 
 
 class GaussianRoute:
+    """Parser and analyzer for Gaussian route sections.
+
+    This class provides comprehensive parsing of Gaussian route sections,
+    extracting and organizing information about computational methods,
+    basis sets, job types, and various calculation options.
+
+    The route section (starting with # or #P, #T, etc.) specifies:
+    - Computational method (HF, DFT functional, MP2, etc.)
+    - Basis set specification
+    - Job type (opt, freq, scan, sp, etc.)
+    - Solvation models and parameters
+    - Additional calculation options
+
+    Args:
+        route_string (str): The complete route section string from
+                           a Gaussian input file. Multi-line routes
+                           are automatically joined.
+
+    Attributes:
+        route_string (str): Processed route string in lowercase
+        route_inputs (list): Individual route keywords/options
+
+    Example:
+        >>> route = GaussianRoute("#P B3LYP/6-31G(d) opt freq")
+        >>> route.method  # 'b3lyp'
+        >>> route.basis   # '6-31g(d)'
+        >>> route.job_type  # 'opt'
+    """
+
     def __init__(self, route_string):
+        """
+        Initialize the route parser.
+        """
+        # Handle multi-line routes by joining with spaces
         if "\n" in route_string:
             route_string = route_string.replace("\n", " ")
         self.route_string = route_string.lower()
@@ -25,44 +58,81 @@ class GaussianRoute:
 
     @property
     def dieze_tag(self):
+        """
+        Extract the route prefix tag (#, #P, #T, etc.).
+        """
         return self.get_dieze_tag()
 
     @property
     def job_type(self):
+        """
+        Extract the primary job type from the route.
+        """
         return self.get_job_type()
 
     @job_type.setter
     def job_type(self, value):
+        """
+        Set the job type.
+        """
         self._job_type = value
 
     @property
     def freq(self):
-        return self.get_freqeuncy()
+        """
+        Check if frequency calculation is requested.
+        """
+        return self.get_frequency()
 
     @property
     def numfreq(self):
+        """
+        Extract numerical frequency specification.
+        """
         return self.get_numfreq()
 
     @property
     def force(self):
+        """
+        Check if force calculation is requested.
+        """
         return "force" in self.route_string
 
     @property
     def ab_initio(self):
+        """
+        Extract ab initio method specification.
+        """
         return self.get_ab_initio()
 
     @property
     def functional(self):
+        """
+        Extract DFT functional from the route.
+        """
         functional, _ = self.get_functional_and_basis()
         return functional
 
     @property
     def basis(self):
+        """
+        Extract basis set specification from the route.
+        """
         _, basis = self.get_functional_and_basis()
         return basis
 
     @property
+    def method(self):
+        """
+        Extract the computational method (functional or ab initio).
+        """
+        return self.functional or self.ab_initio or self.semiempirical
+
+    @property
     def semiempirical(self):
+        """
+        Extract semi-empirical method specification.
+        """
         for each_input in self.route_inputs:
             if any(
                 semiemp.lower() in each_input
@@ -73,29 +143,50 @@ class GaussianRoute:
 
     @property
     def solvent_model(self):
+        """
+        Extract solvation model from SCRF specification.
+        """
         return self.get_solvent_model()
 
     @property
     def solvent_id(self):
+        """
+        Extract solvent identity from SCRF specification.
+        """
         return self.get_solvent_id()
 
     @property
     def additional_solvent_options(self):
+        """
+        Extract additional solvation options.
+        """
         return self.get_additional_solvent_options()
 
     @property
     def solv(self):
+        """
+        Check if solvation is specified.
+        """
         return self.solvent_model is not None and self.solvent_id is not None
 
     @property
     def additional_opt_options_in_route(self):
+        """
+        Extract additional optimization options.
+        """
         return self.get_additional_opt_options()
 
     @property
     def additional_route_parameters(self):
+        """
+        Extract additional route parameters.
+        """
         return self.get_additional_route_parameters()
 
     def get_dieze_tag(self):
+        """
+        Extract the job priority tag from route string.
+        """
         dieze_tag = None
         # dieze_tag '# ', '#N', '#P' '#T'
         if "#" in self.route_string and any(
@@ -105,6 +196,9 @@ class GaussianRoute:
         return dieze_tag
 
     def get_job_type(self):
+        """
+        Extract job type from route specification.
+        """
         # get job type: opt/ts/sp/ircf/ircr
         if "ts" in self.route_string:
             job_type = "ts"
@@ -136,14 +230,25 @@ class GaussianRoute:
             job_type = "sp"
         return job_type
 
-    def get_freqeuncy(self):
+    def get_frequency(self):
+        """
+        Check for frequency calculation in route.
+
+        Note: Method name has typo (freqeuncy instead of frequency)
+        """
         # get freq: T/F
         return "freq" in self.route_string
 
     def get_numfreq(self):
+        """
+        Check for numerical frequency calculation.
+        """
         return "freq=numer" in self.route_string
 
     def get_ab_initio(self):
+        """
+        Extract ab initio method from route specification.
+        """
         # get ab initio method by looking through the route string
         ab_initio = None
         for each_input in self.route_inputs:
@@ -152,10 +257,13 @@ class GaussianRoute:
         return ab_initio
 
     def get_functional_and_basis(self):
+        """
+        Extract DFT functional and basis set from route specification.
+        """
         functional = None
         basis = None
         for each_input in self.route_inputs:
-            # obtain functional and basis
+            # Extract functional and basis from method/basis format
             if "/" in each_input:
                 func_basis = each_input.split(
                     "/"
@@ -166,7 +274,8 @@ class GaussianRoute:
                     basis = func_basis[1]
                 elif len(func_basis) == 3:  # e.g., tpsstpss/def2tzvp/fit
                     functional = func_basis[0]
-                    basis = f"{func_basis[1]}/{func_basis[2]}"  # note if the basis set for density fitting is written
+                    # note if the basis set for density fitting is written
+                    basis = f"{func_basis[1]}/{func_basis[2]}"
                     # as 'def2tzvp fit', then the job fails to run
             else:  # '/' not in route
                 if any(
@@ -191,6 +300,9 @@ class GaussianRoute:
         return functional, basis
 
     def get_additional_route_parameters(self):
+        """
+        Extract additional route parameters.
+        """
         additional_route = [
             each_input
             for each_input in self.route_inputs
@@ -205,6 +317,9 @@ class GaussianRoute:
         )
 
     def get_additional_opt_options(self):
+        """
+        Extract additional optimization options from route.
+        """
         additional_opt_options = []
         for each_input in self.route_inputs:
             if "opt" in each_input:
@@ -235,6 +350,9 @@ class GaussianRoute:
         )
 
     def get_solvent_model(self):
+        """
+        Extract solvation model from SCRF specification.
+        """
         if "scrf" in self.route_string:
             scrf_string = ""
             for each_input in self.route_inputs:
@@ -260,6 +378,9 @@ class GaussianRoute:
         return None
 
     def get_solvent_id(self):
+        """
+        Extract solvent identity from SCRF specification.
+        """
         if "scrf" in self.route_string:
             scrf_string = ""
             for each_input in self.route_inputs:
@@ -282,6 +403,9 @@ class GaussianRoute:
         return None
 
     def get_additional_solvent_options(self):
+        """
+        Extract additional solvation options from SCRF specification.
+        """
         if "scrf" in self.route_string:
             scrf_string = ""
             for each_input in self.route_inputs:

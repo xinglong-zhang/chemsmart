@@ -1,3 +1,11 @@
+"""
+ORCA command-line interface subcommands.
+
+This module provides CLI subcommands for various ORCA quantum chemistry calculations,
+including geometry optimizations, transition state searches, IRC calculations,
+single point calculations, and constrained optimizations.
+"""
+
 from .inp import inp
 from .irc import irc
 from .modred import modred

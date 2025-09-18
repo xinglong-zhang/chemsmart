@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Thermochemistry data extraction script.
+
+This script extracts thermochemical properties (enthalpies, entropies,
+Gibbs free energies) from computational chemistry output files and
+performs thermochemical analysis and calculations.
+"""
+
 import glob
 import logging
 import os
@@ -75,7 +83,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default=1.0,
     type=float,
     show_default=True,
-    help="Pressure in Standard atmosphere (gas phase). Ignored if -c/--concentration is provided.",
+    help="Pressure in Standard atmosphere (gas phase). "
+    "Ignored if -c/--concentration is provided.",
 )
 @click.option(
     "-t",
@@ -99,8 +108,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
     is_flag=True,
     default=False,
     show_default=True,
-    help="Use natural abundance weighted masses (True) or use most abundant masses (False).\n"
-    "Default to False, i.e., use single isotopic mass.",
+    help="Use natural abundance weighted masses (True) or use most "
+    "abundant masses (False).\nDefault to False, i.e., use single "
+    "isotopic mass.",
 )
 @click.option(
     "-q",
@@ -208,12 +218,13 @@ def entry_point(
     for file in filenames:
         if not file.endswith((".log", ".out")):
             logger.error(
-                f"Unsupported file extension for '{file}'. Only .log or .out files are accepted."
+                f"Unsupported file extension for '{file}'. "
+                f"Only .log or .out files are accepted."
             )
             logger.error("Try 'get_thermochemistry.py --help' for help.")
             return
 
-    # ASCII Arts for CHEMSMART
+    # Display ChemSmart ASCII banner
     logger.info("\n")
     logger.info(
         "   "
