@@ -1151,16 +1151,16 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             with open(pml_file, "w") as f:
                 f.write(f"load {job.mo_basename}.cube\n")
                 f.write(
-                    f"isosurface pos_iso, {job.mo_basename}, {job.isosurface}\n"
+                    f"isosurface pos_iso, {job.mo_basename}, {job.isosurface_value}\n"
                 )
                 f.write(
-                    f"isosurface neg_iso, {job.mo_basename}, {-job.isosurface}\n"
+                    f"isosurface neg_iso, {job.mo_basename}, {-job.isosurface_value}\n"
                 )
                 f.write("print(pos_iso)\n")
                 f.write("print(neg_iso)\n")
                 f.write("set surface_color, blue, pos_iso\n")
                 f.write("set surface_color, red, neg_iso\n")
-                f.write(f"set transparency, {job.transparency}\n")
+                f.write(f"set transparency, {job.transparency_value}\n")
                 f.write(f"set surface_quality, {job.surface_quality}\n")
                 f.write(f"set antialias, {job.antialias_value}\n")
             logger.info(f"Wrote PML file: {pml_file}")
@@ -1313,17 +1313,17 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
             with open(pml_file, "w") as f:
                 f.write(f"load {job.spin_basename}.cube\n")
                 f.write(
-                    f"isosurface pos_iso_spin, {job.spin_basename}, {job.isosurface}\n"
+                    f"isosurface pos_iso_spin, {job.spin_basename}, {job.isosurface_value}\n"
                 )
                 f.write(
-                    f"isosurface neg_iso_spin, {job.spin_basename}, {-job.isosurface}\n"
+                    f"isosurface neg_iso_spin, {job.spin_basename}, {-job.isosurface_value}\n"
                 )
                 f.write(
-                    f"ramp_new ramp, {job.spin_basename}, [{-job.isosurface},{job.isosurface}], [red, blue]\n"
+                    f"ramp_new ramp, {job.spin_basename}, [{-job.isosurface_value},{job.isosurface_value}], [red, blue]\n"
                 )
                 f.write("set surface_color, ramp, pos_iso_spin\n")
                 f.write("set surface_color, ramp, neg_iso_spin\n")
-                f.write(f"set transparency, {job.transparency}\n")
+                f.write(f"set transparency, {job.transparency_value}\n")
                 f.write(f"set surface_quality, {job.surface_quality}\n")
                 f.write(f"set antialias, {job.antialias_value}\n")
                 f.write(f"set ray_trace_mode, {job.ray_trace_mode}\n")
