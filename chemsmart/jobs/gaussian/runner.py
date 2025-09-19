@@ -326,33 +326,6 @@ class GaussianJobRunner(JobRunner):
         logger.info(f"Gaussian executable: {exe}")
         return exe
 
-    def _delete_scratch_directory(self):
-        """
-        Delete the scratch directory if it exists.
-        
-        This method safely removes the scratch directory and all its contents
-        after the job has completed successfully. Only deletes if the 
-        running_directory is actually within the scratch_dir.
-        """
-        if (hasattr(self, 'running_directory') and 
-            hasattr(self, 'scratch_dir') and 
-            self.scratch_dir and
-            os.path.exists(self.running_directory)):
-            
-            # Check if running_directory is actually within scratch_dir
-            # to avoid accidentally deleting non-scratch directories
-            if self.running_directory.startswith(self.scratch_dir):
-                try:
-                    logger.info(f"Deleting scratch directory: {self.running_directory}")
-                    rmtree(self.running_directory)
-                    logger.info(f"Successfully deleted scratch directory: {self.running_directory}")
-                except Exception as e:
-                    logger.error(f"Failed to delete scratch directory {self.running_directory}: {e}")
-            else:
-                logger.debug(f"Running directory {self.running_directory} is not in scratch, skipping deletion")
-        else:
-            logger.debug("No scratch directory to delete or directory does not exist")
-
     def _postrun(self, job):
         """
         Perform post-execution cleanup and file management.
