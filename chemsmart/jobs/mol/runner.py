@@ -198,6 +198,12 @@ class PyMOLJobRunner(JobRunner):
         )
         shutil.copy(source_style_file, dest_style_file)
 
+        # check if job has attribute of isosurface_value or color_range
+        if not hasattr(job, "isosurface_value"):
+            job.isosurface_value = None
+        if not hasattr(job, "color_range"):
+            job.color_range = None
+
         logger.debug(f"Job isosurface_value: {job.isosurface_value}")
         logger.debug(f"Job color_range: {job.color_range}")
 
