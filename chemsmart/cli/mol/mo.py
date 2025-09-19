@@ -6,6 +6,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
     click_pymol_mo_options,
+    click_pymol_pml_options,
     click_pymol_visualization_options,
     mol,
 )
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_pymol_visualization_options
 @click_pymol_mo_options
+@click_pymol_pml_options
 @click.pass_context
 def mo(
     ctx,
@@ -31,6 +33,10 @@ def mo(
     number,
     homo,
     lumo,
+    isosurface_value,
+    transparency_value,
+    antialias_value,
+    ray_trace_mode,
     skip_completed,
     **kwargs,
 ):
@@ -61,6 +67,18 @@ def mo(
             )
     from chemsmart.jobs.mol.mo import PyMOLMOJob
 
+    # get jobrunner for running Gaussian IRC jobs
+    jobrunner = ctx.obj["jobrunner"]
+    logger.debug(f"Jobrunner for MO job: {jobrunner}")
+    if isosurface_value is not None:
+        jobrunner.isosurface_value = isosurface_value
+    if transparency_value is not None:
+        jobrunner.transparency_value = transparency_value
+    if antialias_value is not None:
+        jobrunner.antialias_value = antialias_value
+    if ray_trace_mode is not None:
+        jobrunner.ray_trace_mode = ray_trace_mode
+
     return PyMOLMOJob(
         molecule=molecules,
         label=label,
@@ -74,6 +92,7 @@ def mo(
         number=number,
         homo=homo,
         lumo=lumo,
+        jobrunner=jobrunner,
         skip_completed=skip_completed,
         **kwargs,
     )
