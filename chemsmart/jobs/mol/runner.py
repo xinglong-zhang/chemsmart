@@ -201,6 +201,8 @@ class PyMOLJobRunner(JobRunner):
         if job.isosurface_value is None and job.color_range is None:
             return dest_style_file
         else:
+            logger.debug(f"Job isosurface_value: {job.isosurface_value}")
+            logger.debug(f"Job color_range: {job.color_range}")
             return self._modify_job_pymol_script(job, dest_style_file)
 
     def _modify_job_pymol_script(self, job, style_file_path=None):

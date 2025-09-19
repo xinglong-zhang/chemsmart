@@ -38,8 +38,8 @@ class PyMOLNCIJob(PyMOLJob):
         self,
         molecule,
         label,
-        isosurface_value=0.5,
-        color_range=1.0,
+        isosurface_value,
+        color_range,
         binary=False,
         intermediate=False,
         nci_basename=None,
@@ -67,6 +67,11 @@ class PyMOLNCIJob(PyMOLJob):
             label=label,
             **kwargs,
         )
+        # set defaults
+        if isosurface_value is None:
+            isosurface_value = 0.5
+        if color_range is None:
+            color_range = 1.0
         self.isosurface_value = isosurface_value
         self.color_range = color_range
         self.binary = binary
