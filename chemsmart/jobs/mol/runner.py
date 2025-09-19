@@ -223,6 +223,10 @@ class PyMOLJobRunner(JobRunner):
         if os.path.exists(
             os.path.join(job.folder, f"{self.job_basename}.fchk")
         ):
+            logger.info(
+                f".fchk file {self.job_basename}.fchk already exists."
+                f"Skipping generation of .fchk file."
+            )
             pass
         else:
             # generate .fchk file from .chk file

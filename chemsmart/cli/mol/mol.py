@@ -184,17 +184,19 @@ def click_pymol_mo_options(f):
 
 
 def click_pymol_pml_options(f):
-    """Common click options for PyMOL .pml files."""
+    """Common click options for PyMOL .pml files.
+    Note that all single-letter flags here use
+    capital letter, to distinguish from other options."""
 
     @click.option(
-        "-i",
+        "-I",
         "--isosurface-value",
         type=float,
         default=None,
         help="Set isosurface value to be used in PyMOL .pml file.",
     )
     @click.option(
-        "-t",
+        "-T",
         "--transparency-value",
         type=int,
         default=None,
@@ -202,7 +204,7 @@ def click_pymol_pml_options(f):
         "Value range: 0.0 – 1.0; 0.0 = fully opaque; 1.0 = fully transparent",
     )
     @click.option(
-        "-a",
+        "-A",
         "--antialias-value",
         type=int,
         default=None,
@@ -213,7 +215,7 @@ def click_pymol_pml_options(f):
         "Some builds allow up to 4.",
     )
     @click.option(
-        "-m",
+        "-M",
         "--ray-trace-mode",
         type=int,
         default=None,
