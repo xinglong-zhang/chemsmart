@@ -204,6 +204,19 @@ def click_pymol_pml_options(f):
         "Value range: 0.0 – 1.0; 0.0 = fully opaque; 1.0 = fully transparent",
     )
     @click.option(
+        "-Q",
+        "--surface-quality",
+        type=int,
+        default=None,
+        help="Set surface quality in PyMOL .pml file. Controls the "
+        "quality of molecular surfaces. Higher values yield smoother "
+        "surfaces but may increase rendering time. 0 → Low quality "
+        "(fast, faceted surfaces); 1 → Medium quality (balanced); "
+        "2 → High quality (smooth surfaces, slower rendering); "
+        "3 → Very high quality (very smooth, longest rendering time);"
+        " 4 → Ultra quality (maximum smoothness, may be very slow)",
+    )
+    @click.option(
         "-A",
         "--antialias-value",
         type=int,

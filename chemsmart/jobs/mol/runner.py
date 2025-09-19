@@ -1132,7 +1132,8 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
                 run_command(cubegen_command)
 
     def _write_molecular_orbital_pml(
-        self, job, isosurface=0.05, transparency=0.2
+        self,
+        job,
     ):
         """
         Write a PML script to visualize the MO isosurfaces.
@@ -1143,8 +1144,6 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 
         Args:
             job: PyMOL MO job object.
-            isosurface (float): Isosurface value in a.u. (default 0.05).
-            transparency (float): Surface transparency (0–1, default 0.2).
         """
 
         pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
@@ -1152,16 +1151,18 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             with open(pml_file, "w") as f:
                 f.write(f"load {job.mo_basename}.cube\n")
                 f.write(
-                    f"isosurface pos_iso, {job.mo_basename}, {isosurface}\n"
+                    f"isosurface pos_iso, {job.mo_basename}, {job.isosurface}\n"
                 )
                 f.write(
-                    f"isosurface neg_iso, {job.mo_basename}, {-isosurface}\n"
+                    f"isosurface neg_iso, {job.mo_basename}, {-job.isosurface}\n"
                 )
                 f.write("print(pos_iso)\n")
                 f.write("print(neg_iso)\n")
                 f.write("set surface_color, blue, pos_iso\n")
                 f.write("set surface_color, red, neg_iso\n")
-                f.write(f"set transparency, {transparency}\n")
+                f.write(f"set transparency, {job.transparency}\n")
+                f.write(f"set surface_quality, {job.surface_quality}\n")
+                f.write(f"set antialias, {job.antialias_value}\n")
             logger.info(f"Wrote PML file: {pml_file}")
 
     def _job_specific_commands(self, job, command):
@@ -1295,7 +1296,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         cubegen_command = f"{gaussian_exe}/cubegen 0 spin {self.job_basename}.fchk {self.job_basename}_spin.cube {job.npts}"
         run_command(cubegen_command)
 
-    def _write_spin_density_pml(self, job, isosurface=0.05, transparency=0.2):
+    def _write_spin_density_pml(self, job):
         """
         Write the .pml file based on the .cube file.
 
@@ -1305,8 +1306,6 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
 
         Args:
             job: PyMOL spin job instance.
-            isosurface: Isosurface level for visualization (default: 0.05).
-            transparency: Surface transparency level (default: 0.2).
         """
 
         pml_file = os.path.join(job.folder, f"{job.spin_basename}.pml")
@@ -1314,20 +1313,20 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
             with open(pml_file, "w") as f:
                 f.write(f"load {job.spin_basename}.cube\n")
                 f.write(
-                    f"isosurface pos_iso_spin, {job.spin_basename}, {isosurface}\n"
+                    f"isosurface pos_iso_spin, {job.spin_basename}, {job.isosurface}\n"
                 )
                 f.write(
-                    f"isosurface neg_iso_spin, {job.spin_basename}, {-isosurface}\n"
+                    f"isosurface neg_iso_spin, {job.spin_basename}, {-job.isosurface}\n"
                 )
                 f.write(
-                    f"ramp_new ramp, {job.spin_basename}, [{-isosurface},{isosurface}], [red, blue]\n"
+                    f"ramp_new ramp, {job.spin_basename}, [{-job.isosurface},{job.isosurface}], [red, blue]\n"
                 )
                 f.write("set surface_color, ramp, pos_iso_spin\n")
                 f.write("set surface_color, ramp, neg_iso_spin\n")
-                f.write(f"set transparency, {transparency}\n")
-                f.write("set surface_quality, 3\n")
-                f.write("set antialias, 3\n")
-                f.write("set ray_trace_mode, 1\n")
+                f.write(f"set transparency, {job.transparency}\n")
+                f.write(f"set surface_quality, {job.surface_quality}\n")
+                f.write(f"set antialias, {job.antialias_value}\n")
+                f.write(f"set ray_trace_mode, {job.ray_trace_mode}\n")
             logger.info(f"Wrote PML file: {pml_file}")
 
     def _job_specific_commands(self, job, command):

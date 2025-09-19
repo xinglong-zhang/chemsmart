@@ -35,6 +35,7 @@ def mo(
     lumo,
     isosurface_value,
     transparency_value,
+    surface_quality,
     antialias_value,
     ray_trace_mode,
     skip_completed,
@@ -67,18 +68,6 @@ def mo(
             )
     from chemsmart.jobs.mol.mo import PyMOLMOJob
 
-    # get jobrunner for running Gaussian IRC jobs
-    jobrunner = ctx.obj["jobrunner"]
-    logger.debug(f"Jobrunner for MO job: {jobrunner}")
-    if isosurface_value is not None:
-        jobrunner.isosurface_value = isosurface_value
-    if transparency_value is not None:
-        jobrunner.transparency_value = transparency_value
-    if antialias_value is not None:
-        jobrunner.antialias_value = antialias_value
-    if ray_trace_mode is not None:
-        jobrunner.ray_trace_mode = ray_trace_mode
-
     return PyMOLMOJob(
         molecule=molecules,
         label=label,
@@ -92,7 +81,11 @@ def mo(
         number=number,
         homo=homo,
         lumo=lumo,
-        jobrunner=jobrunner,
+        isosurface_value=isosurface_value,
+        transparency_value=transparency_value,
+        surface_quality=surface_quality,
+        antialias_value=antialias_value,
+        ray_trace_mode=ray_trace_mode,
         skip_completed=skip_completed,
         **kwargs,
     )
