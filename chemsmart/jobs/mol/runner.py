@@ -199,6 +199,7 @@ class PyMOLJobRunner(JobRunner):
         shutil.copy(source_style_file, dest_style_file)
 
         if job.isosurface_value is None and job.color_range is None:
+            print(job.isosurface_value, job.color_range)
             return dest_style_file
         else:
             logger.debug(f"Job isosurface_value: {job.isosurface_value}")

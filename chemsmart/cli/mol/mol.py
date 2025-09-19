@@ -118,7 +118,7 @@ def click_pymol_nci_options(f):
         "-i",
         "--isosurface-value",
         type=float,
-        default=0.5,
+        default=None,
         help="Isosurface value for NCI plot. Default=0.5",
     )
     @click.option(
