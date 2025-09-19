@@ -95,7 +95,7 @@ class GaussianJobRunner(JobRunner):
     # instance level - set during initialization (__init__).
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, delete_scratch=False, **kwargs
+        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
         """
         Initialize Gaussian job runner with server and execution settings.
