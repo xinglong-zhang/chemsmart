@@ -63,10 +63,6 @@ class PyMOLJobRunner(JobRunner):
     def __init__(
         self,
         server,
-        isosurface_value=None,
-        transparency_value=None,
-        antialias_value=None,
-        ray_trace_mode=None,
         scratch=None,
         fake=False,
         **kwargs,
@@ -80,10 +76,6 @@ class PyMOLJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution.
-            isosurface_value: Isosurface value for NCI visualization (optional).
-            transparency_value: Transparency value for surfaces (optional).
-            antialias_value: Antialiasing level for rendering (optional).
-            ray_trace_mode: Ray tracing mode for rendering (optional).
             scratch: Whether to use scratch directories (default: None).
             fake: Whether this is a fake runner for testing (default: False).
             **kwargs: Additional arguments passed to parent JobRunner.
@@ -99,11 +91,6 @@ class PyMOLJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
-
-        self.isosurface_value = isosurface_value
-        self.transparency_value = transparency_value
-        self.antialias_value = antialias_value
-        self.ray_trace_mode = ray_trace_mode
 
     @property
     def executable(self):

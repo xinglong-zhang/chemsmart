@@ -54,6 +54,10 @@ class PyMOLJob(Job):
         quiet_mode=True,
         command_line_only=True,
         coordinates=None,
+        isosurface_value=None,
+        transparency_value=None,
+        antialias_value=None,
+        ray_trace_mode=None,
         **kwargs,
     ):
         """
@@ -73,6 +77,10 @@ class PyMOLJob(Job):
             quiet_mode: Run PyMOL in quiet mode (default: True).
             command_line_only: Use command line interface only (default: True).
             coordinates: Coordinates for atom labeling (default: None).
+            isosurface_value: Isosurface value for NCI visualization (optional).
+            transparency_value: Transparency value for surfaces (optional).
+            antialias_value: Antialiasing level for rendering (optional).
+            ray_trace_mode: Ray tracing mode for rendering (optional).
             **kwargs: Additional arguments passed to parent Job class.
         """
         super().__init__(
@@ -85,6 +93,26 @@ class PyMOLJob(Job):
         self.quiet_mode = quiet_mode
         self.command_line_only = command_line_only
         self.coordinates = coordinates  # coordinates for labelling
+
+        # Set defaults for pml files
+        if isosurface_value is None:
+            isosurface_value = 0.05
+        if transparency_value is None:
+            transparency_value = 0.02
+        if antialias_value is None:
+            antialias_value = 2
+        if ray_trace_mode is None:
+            ray_trace_mode = 3
+
+        self.isosurface_value = isosurface_value
+        self.transparency_value = transparency_value
+        self.antialias_value = antialias_value
+        self.ray_trace_mode = ray_trace_mode
+
+        logger.debug(f"Isosurface value: {self.isosurface_value}")
+        logger.debug(f"Transparency value: {self.transparency_value}")
+        logger.debug(f"Antialias value: {self.antialias_value}")
+        logger.debug(f"Ray trace mode: {self.ray_trace_mode}")
 
     @property
     def inputfile(self):
