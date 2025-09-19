@@ -231,11 +231,6 @@ class PyMOLJobRunner(JobRunner):
             raise FileNotFoundError(
                 f"Style file {style_file_path} does not exist!"
             )
-        else:
-            logger.warning(
-                f"Modifying style file {style_file_path} "
-                f"for job {job.label}."
-            )
 
         with open(style_file_path, "r") as file:
             style_script = file.read()
