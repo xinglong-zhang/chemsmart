@@ -66,7 +66,7 @@ class ORCAJobRunner(JobRunner):
     SCRATCH = True
 
     def __init__(
-        self, server, scratch=None, fake=False, scratch_dir=None, delete_scratch=False, **kwargs
+        self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
         """
         Initialize the ORCA job runner.
@@ -86,7 +86,6 @@ class ORCAJobRunner(JobRunner):
             scratch=scratch,
             scratch_dir=scratch_dir,
             fake=fake,
-            delete_scratch=delete_scratch,
             **kwargs,
         )
         logger.debug(f"Jobrunner server: {self.server}")
@@ -394,8 +393,8 @@ class FakeORCAJobRunner(ORCAJobRunner):
     # combines information about server and program
     FAKE = True
 
-    def __init__(self, server, scratch=None, fake=True, delete_scratch=False, **kwargs):
-        super().__init__(server=server, scratch=scratch, fake=fake, delete_scratch=delete_scratch, **kwargs)
+    def __init__(self, server, scratch=None, fake=True, **kwargs):
+        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         """
         Initialize the fake ORCA job runner.
 

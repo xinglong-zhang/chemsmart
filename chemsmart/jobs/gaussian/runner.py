@@ -119,7 +119,6 @@ class GaussianJobRunner(JobRunner):
             server=server,
             scratch=scratch,
             scratch_dir=scratch_dir,
-            delete_scratch=delete_scratch,
             fake=fake,
             **kwargs,
         )
@@ -426,7 +425,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
     FAKE = True
 
     def __init__(
-        self, server, scratch=None, fake=True, scratch_dir=None, delete_scratch=False, **kwargs
+        self, server, scratch=None, fake=True, scratch_dir=None, **kwargs
     ):
         """
         Initialize the fake Gaussian job runner.
@@ -445,7 +444,6 @@ class FakeGaussianJobRunner(GaussianJobRunner):
             server=server,
             scratch=scratch,
             scratch_dir=scratch_dir,
-            delete_scratch=delete_scratch,
             fake=fake,
             **kwargs,
         )

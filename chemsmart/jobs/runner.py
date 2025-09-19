@@ -218,7 +218,7 @@ class JobRunner(RegistryMixin):
         return copy.copy(self)
 
     @classmethod
-    def from_job(cls, job, server, scratch=None, fake=False, delete_scratch=False, **kwargs):
+    def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
         runners = cls.subclasses()
         logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
@@ -244,7 +244,7 @@ class JobRunner(RegistryMixin):
                     f"Using scratch={scratch} for job runner: {runner}"
                 )
 
-                return runner(server=server, scratch=scratch, delete_scratch=delete_scratch, **kwargs)
+                return runner(server=server, scratch=scratch, **kwargs)
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"
