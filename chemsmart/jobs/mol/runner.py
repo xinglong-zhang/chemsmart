@@ -556,7 +556,7 @@ class PyMOLJobRunner(JobRunner):
             str: Command string with ray tracing added if requested.
         """
         if job.trace:
-            command += "; ray 2400, 1800"
+            command += "; ray 2400,1800"
 
         return command
 
