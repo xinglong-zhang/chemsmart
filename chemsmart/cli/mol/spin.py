@@ -4,7 +4,11 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.mol.mol import click_pymol_visualization_options, mol
+from chemsmart.cli.mol.mol import (
+    click_pymol_pml_options,
+    click_pymol_visualization_options,
+    mol,
+)
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -13,6 +17,7 @@ logger = logging.getLogger(__name__)
 @mol.command("spin", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
+@click_pymol_pml_options
 @click.pass_context
 def spin(
     ctx,
@@ -23,6 +28,11 @@ def spin(
     quiet,
     command_line_only,
     coordinates,
+    isosurface_value,
+    transparency_value,
+    surface_quality,
+    antialias_value,
+    ray_trace_mode,
     skip_completed,
     **kwargs,
 ):
@@ -65,6 +75,11 @@ def spin(
         quiet_mode=quiet,
         command_line_only=command_line_only,
         coordinates=coordinates,
+        isosurface_value=isosurface_value,
+        transparency_value=transparency_value,
+        surface_quality=surface_quality,
+        antialias_value=antialias_value,
+        ray_trace_mode=ray_trace_mode,
         skip_completed=skip_completed,
         **kwargs,
     )

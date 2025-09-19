@@ -111,3 +111,8 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 
 # filename matches with reactant r1 or r2
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+
+
+# PyMOL strings
+pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"
+pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"

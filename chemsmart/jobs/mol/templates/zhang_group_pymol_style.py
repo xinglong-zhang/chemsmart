@@ -138,7 +138,7 @@ def default_render():
     cmd.set("specular", 0.25)
     cmd.set("spec_power", 300)
     cmd.set("spec_reflect", 0.5)
-    cmd.set("antialias", 1)
+    cmd.set("antialias", 2)
     cmd.set("orthoscopic", 0)
     cmd.set("field_of_view", 45)
     cmd.set("transparency", 0)
@@ -163,7 +163,7 @@ def movie_render():
     cmd.set("spec_reflect", 0.5)
     cmd.util.ray_shadows("none")
 
-    cmd.set("antialias", 1)
+    cmd.set("antialias", 2)
     cmd.set("orthoscopic", 0)
     cmd.set("field_of_view", 45)
     cmd.set("transparency", 0)
