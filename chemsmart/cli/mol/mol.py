@@ -198,7 +198,7 @@ def click_pymol_pml_options(f):
     @click.option(
         "-T",
         "--transparency-value",
-        type=int,
+        type=float,
         default=None,
         help="Set transparency value to be used in PyMOL .pml file."
         "Value range: 0.0 – 1.0; 0.0 = fully opaque; 1.0 = fully transparent",
