@@ -198,12 +198,12 @@ class PyMOLJobRunner(JobRunner):
         )
         shutil.copy(source_style_file, dest_style_file)
 
+        logger.debug(f"Job isosurface_value: {job.isosurface_value}")
+        logger.debug(f"Job color_range: {job.color_range}")
+
         if job.isosurface_value is None and job.color_range is None:
-            print(job.isosurface_value, job.color_range)
             return dest_style_file
         else:
-            logger.debug(f"Job isosurface_value: {job.isosurface_value}")
-            logger.debug(f"Job color_range: {job.color_range}")
             return self._modify_job_pymol_script(job, dest_style_file)
 
     def _modify_job_pymol_script(self, job, style_file_path=None):
@@ -368,18 +368,11 @@ class PyMOLJobRunner(JobRunner):
 
         # Get style file
         if job.pymol_script is None:
-            style_file_path = os.path.join(
-                job.folder, "zhang_group_pymol_style.py"
+            logger.info(
+                f"No style file supplied for job {job.label}."
+                f"Using default zhang_group_pymol_style.py."
             )
-            if os.path.exists(style_file_path):
-                job_pymol_script = style_file_path
-            else:
-                logger.info(
-                    "Using default zhang_group_pymol_style for rendering."
-                )
-                job_pymol_script = self._generate_visualization_style_script(
-                    job
-                )
+            job_pymol_script = self._generate_visualization_style_script(job)
             if os.path.exists(job_pymol_script):
                 command += f" -r {quote_path(job_pymol_script)}"
         else:
