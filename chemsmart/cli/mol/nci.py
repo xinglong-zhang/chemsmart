@@ -28,7 +28,7 @@ def nci(
     quiet,
     command_line_only,
     coordinates,
-    isosurface,
+    isosurface_value,
     color_range,
     binary,
     intermediate,
@@ -68,7 +68,7 @@ def nci(
     return PyMOLNCIJob(
         molecule=molecules,
         label=label,
-        isosurface=isosurface,
+        isosurface_value=isosurface_value,
         color_range=color_range,
         binary=binary,
         intermediate=intermediate,

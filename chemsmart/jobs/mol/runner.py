@@ -12,6 +12,7 @@ commands and post-processing (e.g., FFmpeg movie creation).
 import glob
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -22,6 +23,10 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.repattern import (
+    pymol_color_range_pattern,
+    pymol_isosurface_pattern,
+)
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
     quote_path,
@@ -162,7 +167,11 @@ class PyMOLJobRunner(JobRunner):
         Generate or copy the PyMOL visualization style script.
 
         Copies the default Zhang group PyMOL style script to the job
-        directory if it doesn't already exist there.
+        directory. Modify the PyMOL style script for job (calls
+        self._modify_job_pymol_script() if job.isosurface_value
+        or job.range is not None.
+        Works for using default zhang_group_pymol_style.py.
+        Overwrites existing zhang_group_pymol_style.py style.
 
         Args:
             job: PyMOL job object containing folder information.
@@ -180,12 +189,73 @@ class PyMOLJobRunner(JobRunner):
 
         # Check if the style file already exists in the current working
         # directory
-        if not os.path.exists(dest_style_file):
-            logger.debug(
-                f"Copying file from {source_style_file} to {dest_style_file}."
+        if os.path.exists(dest_style_file):
+            logger.warning(
+                f"Style file {dest_style_file} already exists! Overwriting..."
             )
-            shutil.copy(source_style_file, dest_style_file)
-        return dest_style_file
+        logger.debug(
+            f"Copying file from {source_style_file} to {dest_style_file}."
+        )
+        shutil.copy(source_style_file, dest_style_file)
+
+        if job.isosurface_value is None and job.color_range is None:
+            return dest_style_file
+        else:
+            return self._modify_job_pymol_script(job, dest_style_file)
+
+    def _modify_job_pymol_script(self, job, style_file_path=None):
+        """Modify the PyMOL style script for the job.
+        Modifies the PyMOL style script to set the isosurface value
+        and color range if they are provided in the job.
+        Args:
+            job: PyMOL job object containing isosurface and color range.
+            style_file_path: Path to the style script file to modify.
+            If None, defaults to zhang_group_pymol_style.py in the job folder.
+        Returns:
+            str: Path to the modified style script file."""
+
+        if style_file_path is None:
+            style_file_path = os.path.join(
+                job.folder, "zhang_group_pymol_style.py"
+            )
+        if not os.path.exists(style_file_path):
+            raise FileNotFoundError(
+                f"Style file {style_file_path} does not exist!"
+            )
+        else:
+            logger.warning(
+                f"Modifying style file {style_file_path} "
+                f"for job {job.label}."
+            )
+
+        with open(style_file_path, "r") as file:
+            style_script = file.read()
+
+        new_script = style_script
+
+        if job.isosurface_value is not None:
+            new_script = re.sub(
+                pymol_isosurface_pattern,
+                f"isosurface={job.isosurface_value}",
+                new_script,
+            )
+
+        if job.color_range is not None:
+            new_script = re.sub(
+                pymol_color_range_pattern,
+                f"range={job.color_range}",
+                new_script,
+            )
+
+        if new_script != style_script:
+            logger.warning(
+                f"Modifying style file {style_file_path} "
+                f"for job {job.label}."
+            )
+            with open(style_file_path, "w") as file:
+                file.write(new_script)
+
+        return style_file_path
 
     def _generate_fchk_file(self, job):
         """

@@ -116,7 +116,7 @@ def click_pymol_nci_options(f):
 
     @click.option(
         "-i",
-        "--isosurface",
+        "--isosurface-value",
         type=float,
         default=0.5,
         help="Isosurface value for NCI plot. Default=0.5",
@@ -130,13 +130,13 @@ def click_pymol_nci_options(f):
     )
     @click.option(
         "-b",
-        "--binary",
+        "--binary/--no-binary",
         is_flag=True,
         default=False,
         help="Plot NCI plots with two colors only. Default to False.",
     )
     @click.option(
-        "--intermediate",
+        "--intermediate/--no-intermediate",
         is_flag=True,
         default=False,
         help="Plot NCI plots with intermediate range colors. Default to "
@@ -184,19 +184,17 @@ def click_pymol_mo_options(f):
 
 
 def click_pymol_pml_options(f):
-    """Common click options for PyMOL .pml files.
-    Note that all single-letter flags here use
-    capital letter, to distinguish from other options."""
+    """Common click options for PyMOL .pml files."""
 
     @click.option(
-        "-I",
+        "-i",
         "--isosurface-value",
         type=float,
         default=None,
         help="Set isosurface value to be used in PyMOL .pml file.",
     )
     @click.option(
-        "-T",
+        "-tv",
         "--transparency-value",
         type=float,
         default=None,
@@ -204,7 +202,7 @@ def click_pymol_pml_options(f):
         "Value range: 0.0 – 1.0; 0.0 = fully opaque; 1.0 = fully transparent",
     )
     @click.option(
-        "-Q",
+        "-sq",
         "--surface-quality",
         type=int,
         default=None,
@@ -217,7 +215,7 @@ def click_pymol_pml_options(f):
         " 4 → Ultra quality (maximum smoothness, may be very slow)",
     )
     @click.option(
-        "-A",
+        "-a",
         "--antialias-value",
         type=int,
         default=None,
@@ -228,7 +226,7 @@ def click_pymol_pml_options(f):
         "Some builds allow up to 4.",
     )
     @click.option(
-        "-M",
+        "-m",
         "--ray-trace-mode",
         type=int,
         default=None,

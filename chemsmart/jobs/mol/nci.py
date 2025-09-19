@@ -23,7 +23,7 @@ class PyMOLNCIJob(PyMOLJob):
         TYPE (str): Job type identifier ('pymol_nci').
         molecule: Molecule object to analyze.
         label (str): Job identifier used for file naming and outputs.
-        isosurface (float): Isosurface value for NCI visualization.
+        isosurface_value (float): Isosurface value for NCI visualization.
         color_range (float): Range used for coloring the interaction map.
         binary (bool): Whether to use binary NCI analysis mode.
         intermediate (bool): Whether to use intermediate NCI mode.
@@ -38,7 +38,7 @@ class PyMOLNCIJob(PyMOLJob):
         self,
         molecule,
         label,
-        isosurface=0.5,
+        isosurface_value=0.5,
         color_range=1.0,
         binary=False,
         intermediate=False,
@@ -55,7 +55,7 @@ class PyMOLNCIJob(PyMOLJob):
         Args:
             molecule: Molecule object to analyze.
             label (str): Job identifier string.
-            isosurface (float): Isosurface level for NCI visualization (default 0.5).
+            isosurface_value (float): Isosurface level for NCI visualization (default 0.5).
             color_range (float): Color range for interaction mapping (default 1.0).
             binary (bool): Use binary NCI analysis mode (default False).
             intermediate (bool): Use intermediate NCI analysis mode (default False).
@@ -67,7 +67,7 @@ class PyMOLNCIJob(PyMOLJob):
             label=label,
             **kwargs,
         )
-        self.isosurface = isosurface
+        self.isosurface_value = isosurface_value
         self.color_range = color_range
         self.binary = binary
         self.intermediate = intermediate
