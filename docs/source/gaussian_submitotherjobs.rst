@@ -31,7 +31,7 @@ Link Job Specific OPTIONS
 
    -  -  ``-j, --jobtype``
       -  string
-      -  Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]
+      -  Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp", "irc"]
 
    -  -  ``-st, --stable``
       -  string
