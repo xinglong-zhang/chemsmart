@@ -14,7 +14,7 @@ import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
-from shutil import copy, rmtree
+from shutil import copy
 
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
@@ -326,19 +326,14 @@ class ORCAJobRunner(JobRunner):
                         )
 
         if job.is_complete():
-            # # if job is completed, remove scratch directory
-            # # and err files
-            # if self.scratch:
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}."
-            #     )
-            #     rmtree(self.running_directory)
-
+            # remove .err files if job completed successfully
             self._remove_err_files(job)
-            
+
             # Delete scratch directory if requested and scratch was used
             if self.scratch and self.delete_scratch:
-                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                logger.debug(
+                    "Job completed successfully and delete_scratch is enabled"
+                )
                 self._delete_scratch_directory()
 
 
@@ -375,7 +370,6 @@ class FakeORCAJobRunner(ORCAJobRunner):
             server: Server configuration object
             scratch: Whether to use scratch directory
             fake: Always True for fake runner
-            delete_scratch: Boolean to delete scratch after job finishes normally.
             **kwargs: Additional keyword arguments
         """
 
