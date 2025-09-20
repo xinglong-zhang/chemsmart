@@ -4,6 +4,7 @@ import os
 from abc import abstractmethod
 from contextlib import suppress
 from functools import lru_cache
+from pathlib import Path
 from shutil import rmtree
 
 from chemsmart.settings.server import Server
@@ -23,7 +24,7 @@ class JobRunner(RegistryMixin):
         server (Server): Server to run the job on.
         scratch (bool): Whether to use scratch directory.
         scratch_dir (str): Path to scratch directory.
-        delete_scratch: Boolean to delete scratch after
+        delete_scratch (bool): whether to delete scratch after
             job finishes normally.
         fake (bool): Whether to use fake job runner.
         **kwargs: Additional keyword arguments.
@@ -314,9 +315,22 @@ class JobRunner(RegistryMixin):
 
             # Check if running_directory is actually within scratch_dir
             # to avoid accidentally deleting non-scratch directories
-            rd = os.path.realpath(self.running_directory)
-            sd = os.path.realpath(self.scratch_dir)
-            if os.path.commonpath([rd, sd]) == sd:
+            # use resolve() to handle .. and symlinks
+            rd = Path(self.running_directory).resolve()
+            sd = Path(self.scratch_dir).resolve()
+
+            # Basic sanity checks
+            if not sd.exists() or not sd.is_dir():
+                logger.error(
+                    "scratch_dir %s doesn't exist or is not a directory; "
+                    "refusing to proceed.",
+                    sd,
+                )
+            elif rd == sd:
+                logger.warning(
+                    "Refusing to delete the scratch root itself: %s", sd
+                )
+            elif sd in rd.parents:
                 try:
                     logger.info(
                         f"Deleting scratch directory: {self.running_directory}"
@@ -331,9 +345,10 @@ class JobRunner(RegistryMixin):
                     )
             else:
                 logger.debug(
-                    f"Running directory {self.running_directory} is not in scratch, skipping deletion"
+                    f"Running directory {self.running_directory} is not in scratch, "
+                    f"skipping deletion."
                 )
         else:
             logger.debug(
-                "No scratch directory to delete or directory does not exist"
+                "No scratch directory to delete or directory does not exist."
             )
