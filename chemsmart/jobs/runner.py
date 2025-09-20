@@ -4,6 +4,7 @@ import os
 from abc import abstractmethod
 from contextlib import suppress
 from functools import lru_cache
+from shutil import copy, rmtree
 
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -35,6 +36,7 @@ class JobRunner(RegistryMixin):
         server,
         scratch=None,
         scratch_dir=None,  # Explicit scratch directory
+        delete_scratch=False,
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -55,6 +57,7 @@ class JobRunner(RegistryMixin):
         self.server = server
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
+        self.delete_scratch = delete_scratch
 
         if self.scratch:
             self._set_scratch()
@@ -261,3 +264,30 @@ class JobRunner(RegistryMixin):
             with suppress(FileNotFoundError):
                 logger.info(f"Removing file {file}.")
                 os.remove(file)
+
+    def _delete_scratch_directory(self):
+        """
+        Delete the scratch directory if it exists.
+        
+        This method safely removes the scratch directory and all its contents
+        after the job has completed successfully. Only deletes if the 
+        running_directory is actually within the scratch_dir.
+        """
+        if (hasattr(self, 'running_directory') and 
+            hasattr(self, 'scratch_dir') and 
+            self.scratch_dir and
+            os.path.exists(self.running_directory)):
+            
+            # Check if running_directory is actually within scratch_dir
+            # to avoid accidentally deleting non-scratch directories
+            if self.running_directory.startswith(self.scratch_dir):
+                try:
+                    logger.info(f"Deleting scratch directory: {self.running_directory}")
+                    rmtree(self.running_directory)
+                    logger.info(f"Successfully deleted scratch directory: {self.running_directory}")
+                except Exception as e:
+                    logger.error(f"Failed to delete scratch directory {self.running_directory}: {e}")
+            else:
+                logger.debug(f"Running directory {self.running_directory} is not in scratch, skipping deletion")
+        else:
+            logger.debug("No scratch directory to delete or directory does not exist")

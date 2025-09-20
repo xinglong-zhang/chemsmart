@@ -19,7 +19,7 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy
+from shutil import copy, rmtree
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -129,6 +129,7 @@ class GaussianJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -362,6 +363,11 @@ class GaussianJobRunner(JobRunner):
             #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
+            
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                self._delete_scratch_directory()
 
 
 class FakeGaussianJobRunner(GaussianJobRunner):

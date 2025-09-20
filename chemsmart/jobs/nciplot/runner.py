@@ -13,7 +13,7 @@ from contextlib import suppress
 from datetime import datetime
 from functools import lru_cache
 from glob import glob
-from shutil import SameFileError, copy
+from shutil import SameFileError, copy, rmtree
 
 from chemsmart.io.converter import FileConverter
 from chemsmart.jobs.runner import JobRunner
@@ -76,6 +76,7 @@ class NCIPLOTJobRunner(JobRunner):
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
         logger.debug(f"Jobrunner fake mode: {self.fake}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -400,6 +401,11 @@ class NCIPLOTJobRunner(JobRunner):
             #     rmtree(self.running_directory)
             logger.debug("Job completed successfully, cleaning up error files")
             self._remove_err_files(job)
+            
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                self._delete_scratch_directory()
 
 
 class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):

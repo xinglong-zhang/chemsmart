@@ -14,7 +14,7 @@ import subprocess
 from contextlib import suppress
 from functools import lru_cache
 from glob import glob
-from shutil import copy
+from shutil import copy, rmtree
 
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.jobs.runner import JobRunner
@@ -95,6 +95,7 @@ class ORCAJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -334,6 +335,11 @@ class ORCAJobRunner(JobRunner):
             #     rmtree(self.running_directory)
 
             self._remove_err_files(job)
+            
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(f"Job completed successfully and delete_scratch is enabled")
+                self._delete_scratch_directory()
 
 
 class FakeORCAJobRunner(ORCAJobRunner):
@@ -361,6 +367,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
     FAKE = True
 
     def __init__(self, server, scratch=None, fake=True, **kwargs):
+        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         """
         Initialize the fake ORCA job runner.
 
@@ -368,9 +375,9 @@ class FakeORCAJobRunner(ORCAJobRunner):
             server: Server configuration object
             scratch: Whether to use scratch directory
             fake: Always True for fake runner
+            delete_scratch: Boolean to delete scratch after job finishes normally.
             **kwargs: Additional keyword arguments
         """
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     def run(self, job):
         """
