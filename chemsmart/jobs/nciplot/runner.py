@@ -391,24 +391,6 @@ class NCIPLOTJobRunner(JobRunner):
                         # Copy file to job folder
                         copy(file, job.folder)
 
-        if job.is_complete():
-            # Remove error files if job completed successfully
-            # if job is completed, remove scratch directory
-            # if self.scratch:
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}."
-            #     )
-            #     rmtree(self.running_directory)
-            logger.debug("Job completed successfully, cleaning up error files")
-            self._remove_err_files(job)
-
-            # Delete scratch directory if requested and scratch was used
-            if self.scratch and self.delete_scratch:
-                logger.debug(
-                    "Job completed successfully and delete_scratch is enabled"
-                )
-                self._delete_scratch_directory()
-
 
 class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
     """
@@ -469,6 +451,7 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
         self._write_input(job=job)
         returncode = FakeNCIPLOT(self.job_inputfile).run()
         self._postrun(job=job)
+        self._postrun_cleanup(job=job)
         return returncode
 
 

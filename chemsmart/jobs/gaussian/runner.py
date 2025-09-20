@@ -353,17 +353,6 @@ class GaussianJobRunner(JobRunner):
                             f"{job.folder}: {e}"
                         )
 
-        if job.is_complete():
-            # remove .err files if job completed successfully
-            self._remove_err_files(job)
-
-            # Delete scratch directory if requested and scratch was used
-            if self.scratch and self.delete_scratch:
-                logger.debug(
-                    "Job completed successfully and delete_scratch is enabled"
-                )
-                self._delete_scratch_directory()
-
 
 class FakeGaussianJobRunner(GaussianJobRunner):
     """
@@ -434,6 +423,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         self._write_input(job=job)
         returncode = FakeGaussian(self.job_inputfile).run()
         self._postrun(job=job)
+        self._postrun_cleanup(job=job)
         return returncode
 
     def _set_up_variables_in_scratch(self, job):

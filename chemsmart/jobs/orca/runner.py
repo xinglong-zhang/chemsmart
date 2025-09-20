@@ -325,17 +325,6 @@ class ORCAJobRunner(JobRunner):
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
 
-        if job.is_complete():
-            # remove .err files if job completed successfully
-            self._remove_err_files(job)
-
-            # Delete scratch directory if requested and scratch was used
-            if self.scratch and self.delete_scratch:
-                logger.debug(
-                    "Job completed successfully and delete_scratch is enabled"
-                )
-                self._delete_scratch_directory()
-
 
 class FakeORCAJobRunner(ORCAJobRunner):
     """
@@ -362,7 +351,6 @@ class FakeORCAJobRunner(ORCAJobRunner):
     FAKE = True
 
     def __init__(self, server, scratch=None, fake=True, **kwargs):
-        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
         """
         Initialize the fake ORCA job runner.
 
@@ -372,6 +360,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
             fake: Always True for fake runner
             **kwargs: Additional keyword arguments
         """
+        super().__init__(server=server, scratch=scratch, fake=fake, **kwargs)
 
     def run(self, job):
         """
@@ -387,6 +376,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
         self._write_input(job=job)
         returncode = FakeORCA(self.job_inputfile).run()
         self._postrun(job=job)
+        self._postrun_cleanup(job=job)
         return returncode
 
 

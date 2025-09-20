@@ -177,6 +177,21 @@ class JobRunner(RegistryMixin):
         # Subclasses can implement
         pass
 
+    def _postrun_cleanup(self, job):
+        """Perform cleanup tasks after job completion.
+        This includes removing error files for successful jobs and
+        deleting scratch directories if applicable."""
+        if job.is_complete():
+            logger.debug("Job completed successfully, deleting .err files")
+            self._remove_err_files(job)
+
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(
+                    "Job completed successfully and delete_scratch is enabled"
+                )
+                self._delete_scratch_directory()
+
     @abstractmethod
     def _get_command(self, job):
         raise NotImplementedError
@@ -198,6 +213,19 @@ class JobRunner(RegistryMixin):
         return env
 
     def run(self, job, **kwargs):
+        """Main method to run a job. The run consists of
+        several steps: prerun, write input, get command,
+        create process, run process, postrun, and postrun cleanup.
+        prerun and postrun are hooks for subclasses to implement.
+        prerun consist of any setup needed before running the job,
+        such as creating scratch directories or copying additional
+        files into scratch (e.g., in ORCA copying .xyz files).
+        postrun consist of e.g., copying files back from scratch to job
+        folder (this may be different in different subclasses).
+        Args:
+            job: Job instance to run.
+            **kwargs: Additional keyword arguments for the run method.
+        """
         logger.debug(f"Running job {job} with runner {self}")
         logger.debug(f"Prerunning job: {job}")
         self._prerun(job)
@@ -216,6 +244,8 @@ class JobRunner(RegistryMixin):
         self._run(process, **kwargs)
         logger.debug(f"Postrunning job: {job}")
         self._postrun(job)
+        logger.debug(f"Postrun cleanup for job: {job}")
+        self._postrun_cleanup(job)
 
     def copy(self):
         return copy.copy(self)
