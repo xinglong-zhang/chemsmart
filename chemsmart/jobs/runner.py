@@ -330,7 +330,8 @@ class JobRunner(RegistryMixin):
                 logger.warning(
                     "Refusing to delete the scratch root itself: %s", sd
                 )
-            elif sd in rd.parents:
+            # Python 3.9+: Path.is_relative_to
+            elif rd.is_relative_to(sd):
                 try:
                     logger.info(
                         f"Deleting scratch directory: {self.running_directory}"
