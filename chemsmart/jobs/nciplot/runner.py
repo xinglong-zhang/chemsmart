@@ -76,6 +76,7 @@ class NCIPLOTJobRunner(JobRunner):
         logger.debug(f"Jobrunner server: {self.server}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
         logger.debug(f"Jobrunner fake mode: {self.fake}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -390,17 +391,6 @@ class NCIPLOTJobRunner(JobRunner):
                         # Copy file to job folder
                         copy(file, job.folder)
 
-        if job.is_complete():
-            # Remove error files if job completed successfully
-            # if job is completed, remove scratch directory
-            # if self.scratch:
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}."
-            #     )
-            #     rmtree(self.running_directory)
-            logger.debug("Job completed successfully, cleaning up error files")
-            self._remove_err_files(job)
-
 
 class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
     """
@@ -461,6 +451,7 @@ class FakeNCIPLOTJobRunner(NCIPLOTJobRunner):
         self._write_input(job=job)
         returncode = FakeNCIPLOT(self.job_inputfile).run()
         self._postrun(job=job)
+        self._postrun_cleanup(job=job)
         return returncode
 
 

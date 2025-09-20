@@ -48,6 +48,13 @@ def click_jobrunner_options(f):
         type=bool,
         help="Run in scratch mode or without scratch folder.",
     )
+    @click.option(
+        "--delete-scratch/--no-delete-scratch",
+        default=False,
+        type=bool,
+        help="If job was run in scratch, delete scratch folder after job "
+        "is completed successfully.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)

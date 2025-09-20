@@ -129,6 +129,7 @@ class GaussianJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -352,17 +353,6 @@ class GaussianJobRunner(JobRunner):
                             f"{job.folder}: {e}"
                         )
 
-        if job.is_complete():
-            # if job is completed, remove scratch directory and submit_script
-            # and log.info and log.err files
-            # if self.scratch:
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}."
-            #     )
-            #     rmtree(self.running_directory)
-
-            self._remove_err_files(job)
-
 
 class FakeGaussianJobRunner(GaussianJobRunner):
     """
@@ -433,6 +423,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         self._write_input(job=job)
         returncode = FakeGaussian(self.job_inputfile).run()
         self._postrun(job=job)
+        self._postrun_cleanup(job=job)
         return returncode
 
     def _set_up_variables_in_scratch(self, job):

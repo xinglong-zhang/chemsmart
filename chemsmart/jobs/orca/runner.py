@@ -95,6 +95,7 @@ class ORCAJobRunner(JobRunner):
         logger.debug(f"Jobrunner mem gb: {self.mem_gb}")
         logger.debug(f"Jobrunner num threads: {self.num_threads}")
         logger.debug(f"Jobrunner scratch: {self.scratch}")
+        logger.debug(f"Jobrunner delete_scratch: {self.delete_scratch}")
 
     @property
     @lru_cache(maxsize=12)
@@ -324,17 +325,6 @@ class ORCAJobRunner(JobRunner):
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
 
-        if job.is_complete():
-            # # if job is completed, remove scratch directory
-            # # and err files
-            # if self.scratch:
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}."
-            #     )
-            #     rmtree(self.running_directory)
-
-            self._remove_err_files(job)
-
 
 class FakeORCAJobRunner(ORCAJobRunner):
     """
@@ -386,6 +376,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
         self._write_input(job=job)
         returncode = FakeORCA(self.job_inputfile).run()
         self._postrun(job=job)
+        self._postrun_cleanup(job=job)
         return returncode
 
 
