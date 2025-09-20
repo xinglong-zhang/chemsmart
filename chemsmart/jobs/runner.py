@@ -284,7 +284,9 @@ class JobRunner(RegistryMixin):
 
             # Check if running_directory is actually within scratch_dir
             # to avoid accidentally deleting non-scratch directories
-            if self.running_directory.startswith(self.scratch_dir):
+            rd = os.path.realpath(self.running_directory)
+            sd = os.path.realpath(self.scratch_dir)
+            if os.path.commonpath([rd, sd]) == sd:
                 try:
                     logger.info(
                         f"Deleting scratch directory: {self.running_directory}"
