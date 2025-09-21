@@ -195,7 +195,7 @@ def click_gaussian_irc_options(f):
         help="Step size along reaction path, in units of 0.01 Bohr.",
     )
     @click.option(
-        "--forward-irc/--reverse-irc",
+        "--forward/--reverse",
         type=bool,
         default=None,
         help="Only run the forward or reverse IRC.",

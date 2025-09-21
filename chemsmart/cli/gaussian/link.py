@@ -63,7 +63,7 @@ def link(
     maxpoints,
     maxcycles,
     stepsize,
-    forward_irc,
+    forward,
     **kwargs,
 ):
     """CLI for running Gaussian link jobs."""
@@ -105,7 +105,7 @@ def link(
             "maxcycles": maxcycles if maxcycles is not None else 128,
             "stepsize": stepsize if stepsize is not None else 20,
             "flat_irc": flat_irc if flat_irc is not None else False,
-            "forward_irc": forward_irc,
+            "forward_irc": forward,
         }
         link_kwargs.update(irc_params)
         logger.info(f"Adding IRC parameters to link job: {irc_params}")
