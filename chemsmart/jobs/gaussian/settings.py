@@ -19,6 +19,11 @@ from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
+from chemsmart.utils.repattern import (
+    gaussian_freq_keywords_pattern,
+    gaussian_opt_keywords_pattern,
+    multiple_spaces_pattern,
+)
 
 pt = PeriodicTable()
 
@@ -37,7 +42,10 @@ class GaussianJobSettings(MolecularJobSettings):
     Inherits common calculation fields from `MolecularJobSettings`, such as
     `ab_initio`, `functional`, `basis`, `semiempirical`, `charge`,
     `multiplicity`, `job_type`, `title`, `freq`, `numfreq`, `solvent_model`,
-    `solvent_id`, `custom_solvent`, `forces`, and `input_string`.
+    `solvent_id`, `additional_solvent_options`, `additional_opt_options_in_route`,
+    `append_additional_info`, `gen_genecp_file`, `heavy_elements`,
+    `heavy_elements_basis`, `light_elements_basis`, `custom_solvent`, `forces`,
+    and `input_string`.
 
     Attributes:
         chk (bool): Whether to use checkpoint files.
@@ -884,6 +892,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         maxcycles=128,
         stepsize=20,
         flat_irc=False,
+        forward_irc=None,
         **kwargs,
     ):
         """
@@ -901,6 +910,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             maxcycles (int): Maximum optimization cycles per point.
             stepsize (int): IRC integration step size.
             flat_irc (bool): Enable flat IRC calculations.
+            forward_irc (bool, optional): If True, run only forward IRC; if False, run only reverse IRC; if None, run both.
             **kwargs: Additional arguments for parent class.
         """
         super().__init__(**kwargs)
@@ -912,6 +922,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         self.maxcycles = maxcycles
         self.stepsize = stepsize
         self.flat_irc = flat_irc
+        self.forward_irc = forward_irc
         self.freq = False  # turn off freq calc for IRC jobs
         self.forces = False  # turn off forces calculations
         self.route_to_be_written = None
@@ -1032,6 +1043,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         maxcycles=128,
         stepsize=20,
         flat_irc=False,
+        forward_irc=None,
         **kwargs,
     ):
         """
@@ -1053,6 +1065,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             maxcycles (int): Maximum optimization cycles per IRC point.
             stepsize (int): IRC integration step size.
             flat_irc (bool): Enable flat IRC calculations.
+            forward_irc (bool, optional): If True, run only forward IRC; if False, run only reverse IRC; if None, run both.
             **kwargs: Additional arguments for parent class.
         """
         super().__init__(**kwargs)
@@ -1070,6 +1083,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         self.maxcycles = maxcycles
         self.stepsize = stepsize
         self.flat_irc = flat_irc
+        self.forward_irc = forward_irc
 
     @property
     def link_route_string(self):
@@ -1114,20 +1128,24 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             str: Route string for stability analysis step.
         """
         route_string = super()._get_route_string_from_jobtype()
-        # Remove opt keywords (opt, opt=(...), opt=word)
-        pattern = re.compile(
-            r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*", re.IGNORECASE
-        )
-        route_string_final = re.sub(pattern, " ", route_string)
-        # Remove freq keywords for all job types
+        # Remove opt keywords
         route_string_final = re.sub(
-            r"\bfreq\s*(=\s*\w+)?\s*",
+            gaussian_opt_keywords_pattern,
+            " ",
+            route_string,
+            flags=re.IGNORECASE,
+        )
+        # Remove freq keywords
+        route_string_final = re.sub(
+            gaussian_freq_keywords_pattern,
             " ",
             route_string_final,
             flags=re.IGNORECASE,
         )
         # Clean up multiple spaces
-        route_string_final = re.sub(r"\s+", " ", route_string_final).strip()
+        route_string_final = re.sub(
+            multiple_spaces_pattern, " ", route_string_final
+        ).strip()
 
         if self.stable:
             logger.debug(f"Stable: {self.stable}")
@@ -1150,7 +1168,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             str: Route string for the optimization/IRC step.
         """
         # Special handling for IRC jobs - use GaussianIRCJobSettings
-        if self.job_type in ["irc", "ircf", "ircr"]:
+        if self.job_type in ["ircf", "ircr"]:
             # Create a temporary GaussianIRCJobSettings instance with current settings
             irc_settings = GaussianIRCJobSettings(**self.__dict__)
             # Get the IRC route string from the specialized class

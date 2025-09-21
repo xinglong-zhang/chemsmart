@@ -111,3 +111,16 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 
 # filename matches with reactant r1 or r2
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+
+# Route string cleaning patterns for Gaussian link job settings
+
+# Pattern to find optimization keywords from route string
+# Matches: "opt", "opt=word", "opt=(parameters)", "opt = word", etc.
+gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
+
+# Pattern to find frequency calculation keywords from route string
+# Matches: "freq", "freq=numer", "freq = analytical", etc.
+gaussian_freq_keywords_pattern = r"\bfreq\s*(=\s*\w+)?\s*"
+
+# Pattern to find multiple consecutive spaces in strings
+multiple_spaces_pattern = r"\s+"

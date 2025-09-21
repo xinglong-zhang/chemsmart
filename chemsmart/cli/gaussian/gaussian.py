@@ -137,6 +137,76 @@ def click_gaussian_settings_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_irc_options(f):
+    """Common click options for IRC-related jobs."""
+
+    @click.option(
+        "-fl/",
+        "--flat-irc/--no-flat-irc",
+        type=bool,
+        default=False,
+        help="whether to run flat irc or not",
+    )
+    @click.option(
+        "-pt",
+        "--predictor",
+        type=click.Choice(
+            ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
+        ),
+        default=None,
+        help="Type of predictors used for IRC. Examples include[HPC, EulerPC, "
+        "LQA, DVV, Euler].",
+    )
+    @click.option(
+        "-rc",
+        "--recorrect",
+        type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
+        default=None,
+        help="Recorrection step of HPC and EulerPC IRCs. options are: "
+        '["Never", "Always", "Test"].',
+    )
+    @click.option(
+        "-rs",
+        "--recalc-step",
+        type=int,
+        default=6,
+        help="Compute the Hessian analytically every N predictor steps or every "
+        "|N| corrector steps if N<0. ",
+    )
+    @click.option(
+        "-mp",
+        "--maxpoints",
+        type=int,
+        default=512,
+        help="Number of points along reaction path to examine.",
+    )
+    @click.option(
+        "-mc",
+        "--maxcycles",
+        type=int,
+        default=128,
+        help="Maximum number of steps along IRC to run.",
+    )
+    @click.option(
+        "-ss",
+        "--stepsize",
+        type=int,
+        default=20,
+        help="Step size along reaction path, in units of 0.01 Bohr.",
+    )
+    @click.option(
+        "--forward-irc/--reverse-irc",
+        type=bool,
+        default=None,
+        help="Only run the forward or reverse IRC.",
+    )
+    @functools.wraps(f)
+    def wrapper_irc_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_irc_options
+
+
 def click_gaussian_jobtype_options(f):
     """Common click options for Gaussian link/crest jobs."""
 

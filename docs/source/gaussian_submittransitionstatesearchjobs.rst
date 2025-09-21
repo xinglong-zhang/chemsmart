@@ -157,6 +157,10 @@ IRC-Specific OPTIONS
       -  int
       -  Step size along reaction path, in units of 0.01 Bohr (default=20)
 
+   -  -  ``--forward-irc/--reverse-irc``
+      -  bool
+      -  Only run the forward or reverse IRC (default=None, run both directions)
+
 IRC Basic Usage
 ===============
 

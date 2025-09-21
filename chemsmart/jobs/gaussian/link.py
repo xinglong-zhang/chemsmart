@@ -8,7 +8,6 @@ methods in a single input file, useful for complex workflows.
 """
 
 import logging
-from copy import deepcopy
 from typing import Type
 
 from chemsmart.jobs.gaussian.job import GaussianJob
@@ -80,152 +79,118 @@ class GaussianLinkJob(GaussianJob):
         return GaussianLinkJobSettings
 
     def _is_irc_job(self):
-        """
-        Check if this is an IRC link job.
-
-        Returns:
-            bool: True if job type is IRC, False otherwise.
-        """
+        """Check if this is an IRC link job."""
         return self.settings.job_type == "irc"
 
-    def _ircf_link_job(self):
+    def _create_irc_subjob(self, direction):
         """
-        Create forward IRC link job configuration.
-
-        Sets up the forward IRC link calculation that follows the reaction
-        coordinate from transition state toward products.
-
-        Returns:
-            GaussianLinkJob: Configured forward IRC link job.
-        """
-        if not self._is_irc_job():
-            raise ValueError("This method is only for IRC link jobs")
-
-        # Create IRCf link job
-        ircf_settings = deepcopy(self.settings)
-        label = self.label
-        if self.label is not None:
-            # Append ircf_link to the original label
-            label = f"{self.label}_f"
-            if hasattr(self.settings, "flat_irc") and self.settings.flat_irc:
-                label += "_flat"
-
-        # Set job type for forward IRC
-        ircf_settings.job_type = "ircf"
-
-        return GaussianLinkJob(
-            molecule=self.molecule,
-            settings=ircf_settings,
-            label=label,
-            jobrunner=self.jobrunner,
-            skip_completed=self.skip_completed,
-        )
-
-    def _ircr_link_job(self):
-        """
-        Create reverse IRC link job configuration.
-
-        Sets up the reverse IRC link calculation that follows the reaction
-        coordinate from transition state toward reactants.
-
-        Returns:
-            GaussianLinkJob: Configured reverse IRC link job.
-        """
-        if not self._is_irc_job():
-            raise ValueError("This method is only for IRC link jobs")
-
-        # Create IRCr link job
-        ircr_settings = deepcopy(self.settings)
-        label = self.label
-        if self.label is not None:
-            # Append ircr_link to the original label
-            label = f"{self.label}_r"
-            if hasattr(self.settings, "flat_irc") and self.settings.flat_irc:
-                label += "_flat"
-
-        # Set job type for reverse IRC
-        ircr_settings.job_type = "ircr"
-
-        return GaussianLinkJob(
-            molecule=self.molecule,
-            settings=ircr_settings,
-            label=label,
-            jobrunner=self.jobrunner,
-            skip_completed=self.skip_completed,
-        )
-
-    def _run_forward_irc(self):
-        """
-        Execute the forward IRC link calculation.
-        """
-        logger.debug(
-            f"Running forward IRC link job: {self._ircf_link_job().settings.job_type}"
-        )
-        self._ircf_link_job().run()
-
-    def _run_reverse_irc(self):
-        """
-        Execute the reverse IRC link calculation.
-        """
-        logger.debug(
-            f"Running reverse IRC link job: {self._ircr_link_job().settings.job_type}"
-        )
-        self._ircr_link_job().run()
-
-    def _run(self, **kwargs):
-        """
-        Execute the link calculation.
-
-        For IRC jobs, runs both forward and reverse calculations.
-        For other jobs, runs the standard link calculation.
+        Create IRC subjob for specified direction.
 
         Args:
-            **kwargs: Additional keyword arguments.
+            direction (str): Either 'f' for forward or 'r' for reverse
+
+        Returns:
+            GaussianLinkJob: Configured IRC subjob
         """
-        if self._is_irc_job():
-            # For IRC jobs, run both directions
-            self._run_forward_irc()
-            self._run_reverse_irc()
+        if not self._is_irc_job():
+            raise ValueError("This method is only for IRC link jobs")
+
+        # Create IRC subjob
+        settings_dict = self.settings.__dict__.copy()
+        settings_dict["job_type"] = f"irc{direction}"
+        irc_settings = GaussianLinkJobSettings(**settings_dict)
+
+        label = self.label
+        if self.label is not None:
+            if "irc_link" in label:
+                new_irc_part = f"irc{direction}"
+                if (
+                    hasattr(self.settings, "flat_irc")
+                    and self.settings.flat_irc
+                ):
+                    new_irc_part += "_flat"
+                label = label.replace("irc_link", f"{new_irc_part}_link")
+            else:
+                label = f"{self.label}_{direction}"
+                if (
+                    hasattr(self.settings, "flat_irc")
+                    and self.settings.flat_irc
+                ):
+                    label += "_flat"
+
+        return GaussianLinkJob(
+            molecule=self.molecule,
+            settings=irc_settings,
+            label=label,
+            jobrunner=self.jobrunner,
+            skip_completed=self.skip_completed,
+        )
+
+    def _ircf_link_job(self):
+        """Create forward IRC link job."""
+        return self._create_irc_subjob("f")
+
+    def _ircr_link_job(self):
+        """Create reverse IRC link job."""
+        return self._create_irc_subjob("r")
+
+    def _get_irc_jobs(self):
+        """
+        Get required IRC jobs based on forward_irc setting.
+
+        Returns:
+            list: List of IRC jobs to run/check
+        """
+        if not self._is_irc_job():
+            return []
+
+        if (
+            hasattr(self.settings, "forward_irc")
+            and self.settings.forward_irc is True
+        ):
+            return [self._ircf_link_job()]
+        elif (
+            hasattr(self.settings, "forward_irc")
+            and self.settings.forward_irc is False
+        ):
+            return [self._ircr_link_job()]
         else:
-            # For regular link jobs, use parent implementation
+            return [self._ircf_link_job(), self._ircr_link_job()]
+
+    def _run(self, **kwargs):
+        """Execute the link calculation."""
+        if self._is_irc_job():
+            irc_jobs = self._get_irc_jobs()
+            direction_names = {1: "forward", 2: "both forward and reverse"}
+            logger.info(
+                f"Running {direction_names.get(len(irc_jobs), 'reverse')} IRC link calculation"
+            )
+
+            for job in irc_jobs:
+                logger.debug(f"Running IRC job: {job.settings.job_type}")
+                job.run()
+        else:
             super()._run(**kwargs)
 
     def _job_is_complete(self):
-        """
-        Check if the link calculation is complete.
-
-        For IRC jobs, both forward and reverse must be complete.
-        For other jobs, uses standard completion check.
-
-        Returns:
-            bool: True if job is complete, False otherwise.
-        """
+        """Check if the link calculation is complete."""
         if self._is_irc_job():
-            return (
-                self._ircf_link_job().is_complete()
-                and self._ircr_link_job().is_complete()
+            irc_jobs = self._get_irc_jobs()
+            return all(
+                super(GaussianLinkJob, job)._job_is_complete()
+                for job in irc_jobs
             )
         else:
             return super()._job_is_complete()
 
     def backup_files(self, backup_chk=False):
-        """
-        Create backup copies of link input and output files.
-
-        For IRC jobs, backs up files from both forward and reverse calculations.
-
-        Args:
-            backup_chk (bool): Whether to backup checkpoint files.
-        """
+        """Create backup copies of link files."""
         if self._is_irc_job():
-            # Backup files for both IRC directions
-            self.backup_file(self._ircf_link_job().inputfile)
-            self.backup_file(self._ircr_link_job().inputfile)
-            self.backup_file(self._ircf_link_job().outputfile)
-            self.backup_file(self._ircr_link_job().outputfile)
-            if backup_chk:
-                self.backup_file(self._ircf_link_job().chkfile)
-                self.backup_file(self._ircr_link_job().chkfile)
+            irc_jobs = self._get_irc_jobs()
+            for job in irc_jobs:
+                self.backup_file(job.inputfile)
+                self.backup_file(job.outputfile)
+                if backup_chk:
+                    self.backup_file(job.chkfile)
         else:
-            # Use parent backup method for regular link jobs
             super().backup_files(backup_chk)

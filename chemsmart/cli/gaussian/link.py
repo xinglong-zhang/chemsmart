@@ -3,11 +3,11 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_irc_options,
     click_gaussian_jobtype_options,
     click_gaussian_solvent_options,
     gaussian,
 )
-from chemsmart.cli.gaussian.irc import click_irc_options
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_gaussian_jobtype_options
 @click_gaussian_solvent_options
-@click_irc_options
+@click_gaussian_irc_options
 @click.option(
     "-st",
     "--stable",
@@ -63,6 +63,7 @@ def link(
     maxpoints,
     maxcycles,
     stepsize,
+    forward_irc,
     **kwargs,
 ):
     """CLI for running Gaussian link jobs."""
@@ -104,6 +105,7 @@ def link(
             "maxcycles": maxcycles if maxcycles is not None else 128,
             "stepsize": stepsize if stepsize is not None else 20,
             "flat_irc": flat_irc if flat_irc is not None else False,
+            "forward_irc": forward_irc,
         }
         link_kwargs.update(irc_params)
         logger.info(f"Adding IRC parameters to link job: {irc_params}")
