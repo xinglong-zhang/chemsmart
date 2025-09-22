@@ -136,7 +136,7 @@ class GaussianLinkJob(GaussianJob):
 
     def _get_irc_jobs(self):
         """
-        Get required IRC jobs based on forward_irc setting.
+        Get required IRC jobs based on direction setting.
 
         Returns:
             list: List of IRC jobs to run/check
@@ -145,13 +145,13 @@ class GaussianLinkJob(GaussianJob):
             return []
 
         if (
-            hasattr(self.settings, "forward_irc")
-            and self.settings.forward_irc is True
+            hasattr(self.settings, "direction")
+            and self.settings.direction == "forward"
         ):
             return [self._ircf_link_job()]
         elif (
-            hasattr(self.settings, "forward_irc")
-            and self.settings.forward_irc is False
+            hasattr(self.settings, "direction")
+            and self.settings.direction == "reverse"
         ):
             return [self._ircr_link_job()]
         else:

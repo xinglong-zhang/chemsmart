@@ -174,31 +174,32 @@ def click_gaussian_irc_options(f):
         "|N| corrector steps if N<0. ",
     )
     @click.option(
-        "-mp",
+        "-P",
         "--maxpoints",
         type=int,
         default=512,
         help="Number of points along reaction path to examine.",
     )
     @click.option(
-        "-mc",
+        "-C",
         "--maxcycles",
         type=int,
         default=128,
         help="Maximum number of steps along IRC to run.",
     )
     @click.option(
-        "-ss",
+        "-S",
         "--stepsize",
         type=int,
         default=20,
         help="Step size along reaction path, in units of 0.01 Bohr.",
     )
     @click.option(
-        "--forward/--reverse",
-        type=bool,
+        "-d",
+        "--direction",
+        type=click.Choice(["forward", "reverse"], case_sensitive=False),
         default=None,
-        help="Only run the forward or reverse IRC.",
+        help="Only run the forward or reverse IRC, default to run both directions.",
     )
     @functools.wraps(f)
     def wrapper_irc_options(*args, **kwargs):

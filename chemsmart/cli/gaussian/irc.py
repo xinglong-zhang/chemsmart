@@ -26,7 +26,7 @@ def irc(
     maxpoints,
     maxcycles,
     stepsize,
-    forward,
+    direction,
     skip_completed,
     **kwargs,
 ):
@@ -67,8 +67,8 @@ def irc(
         irc_settings.stepsize = stepsize
     if flat_irc is not None:
         irc_settings.flat_irc = flat_irc
-    if forward is not None:
-        irc_settings.forward_irc = forward
+    if direction is not None:
+        irc_settings.direction = direction
 
     check_charge_and_multiplicity(irc_settings)
 

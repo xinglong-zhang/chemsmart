@@ -892,7 +892,6 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         maxcycles=128,
         stepsize=20,
         flat_irc=False,
-        forward_irc=None,
         **kwargs,
     ):
         """
@@ -905,12 +904,11 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             predictor (str, optional): Predictor method for IRC integration.
             recorrect (str, optional): Recorrection strategy.
             recalc_step (int): Steps between energy recalculations.
-            direction (str, optional): IRC direction ('forward'/'reverse').
+            direction (str, optional): IRC direction ('forward'/'reverse'). If None, run both directions.
             maxpoints (int): Maximum number of IRC points.
             maxcycles (int): Maximum optimization cycles per point.
             stepsize (int): IRC integration step size.
             flat_irc (bool): Enable flat IRC calculations.
-            forward_irc (bool, optional): If True, run only forward IRC; if False, run only reverse IRC; if None, run both.
             **kwargs: Additional arguments for parent class.
         """
         super().__init__(**kwargs)
@@ -922,7 +920,6 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         self.maxcycles = maxcycles
         self.stepsize = stepsize
         self.flat_irc = flat_irc
-        self.forward_irc = forward_irc
         self.freq = False  # turn off freq calc for IRC jobs
         self.forces = False  # turn off forces calculations
         self.route_to_be_written = None
@@ -971,11 +968,15 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             logger.debug("Set IRC direction to reverse")
 
         # Build IRC route string with predictor and recorrection options
+        direction_param = (
+            f",{self.direction}" if self.direction is not None else ""
+        )
+
         if self.predictor is not None and self.recorrect is not None:
             route_string += (
                 f" irc({self.predictor},calcfc,recorrect={self.recorrect},"
                 f"recalc={self.recalc_step},"
-                f"stepsize={self.stepsize},{self.direction},"
+                f"stepsize={self.stepsize}{direction_param},"
                 f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
             )
             logger.debug(
@@ -984,7 +985,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             )
         elif self.predictor is None and self.recorrect is None:
             route_string += (
-                f" irc(calcfc,recalc={self.recalc_step},{self.direction},"
+                f" irc(calcfc,recalc={self.recalc_step}{direction_param},"
                 f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
             )
             logger.debug("Added basic IRC route without predictor/recorrect")
@@ -1043,7 +1044,6 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         maxcycles=128,
         stepsize=20,
         flat_irc=False,
-        forward_irc=None,
         **kwargs,
     ):
         """
@@ -1065,7 +1065,6 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             maxcycles (int): Maximum optimization cycles per IRC point.
             stepsize (int): IRC integration step size.
             flat_irc (bool): Enable flat IRC calculations.
-            forward_irc (bool, optional): If True, run only forward IRC; if False, run only reverse IRC; if None, run both.
             **kwargs: Additional arguments for parent class.
         """
         super().__init__(**kwargs)
@@ -1083,7 +1082,6 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         self.maxcycles = maxcycles
         self.stepsize = stepsize
         self.flat_irc = flat_irc
-        self.forward_irc = forward_irc
 
     @property
     def link_route_string(self):

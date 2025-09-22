@@ -145,21 +145,21 @@ IRC-Specific OPTIONS
       -  int
       -  Compute the Hessian analytically every N predictor steps or every N corrector steps if N<0 (default=6)
 
-   -  -  ``-mp, --maxpoints``
+   -  -  ``-P, --maxpoints``
       -  int
       -  Number of points along reaction path to examine (default=512)
 
-   -  -  ``-mc, --maxcycles``
+   -  -  ``-C, --maxcycles``
       -  int
       -  Maximum number of steps along IRC to run (default=128)
 
-   -  -  ``-ss, --stepsize``
+   -  -  ``-S, --stepsize``
       -  int
       -  Step size along reaction path, in units of 0.01 Bohr (default=20)
 
-   -  -  ``--forward/--reverse``
-      -  bool
-      -  Only run the forward or reverse IRC (default=None, run both directions)
+   -  -  ``-d, --direction``
+      -  string
+      -  Only run the forward or reverse IRC. Options: forward, reverse (default=None, run both directions)
 
 IRC Basic Usage
 ===============

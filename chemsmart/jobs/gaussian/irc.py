@@ -162,21 +162,21 @@ class GaussianIRCJob(GaussianJob):
 
     def _run(self, **kwargs):
         """
-        Execute both forward and reverse IRC calculations by default if forward_irc is None.
+        Execute IRC calculations based on the direction parameter.
 
         Orchestrates the IRC calculation by running forward and/or reverse
-        IRC jobs based on the forward_irc parameter:
-        - If forward_irc is True: run only forward IRC
-        - If forward_irc is False: run only reverse IRC
-        - If forward_irc is None: run both forward and reverse IRC
+        IRC jobs based on the direction parameter:
+        - If direction is 'forward': run only forward IRC
+        - If direction is 'reverse': run only reverse IRC
+        - If direction is None: run both forward and reverse IRC
 
         Args:
             **kwargs: Additional keyword arguments (currently unused).
         """
-        if self.settings.forward_irc is True:
+        if self.settings.direction == "forward":
             logger.info("Running only forward IRC calculation")
             self._run_forward()
-        elif self.settings.forward_irc is False:
+        elif self.settings.direction == "reverse":
             logger.info("Running only reverse IRC calculation")
             self._run_reverse()
         else:
@@ -188,17 +188,17 @@ class GaussianIRCJob(GaussianJob):
         """
         Check if the complete IRC calculation is finished.
 
-        Determines completion status based on the forward_irc parameter:
-        - If forward_irc is True: check only forward IRC completion
-        - If forward_irc is False: check only reverse IRC completion
-        - If forward_irc is None: check both forward and reverse IRC completion
+        Determines completion status based on the direction parameter:
+        - If direction is 'forward': check only forward IRC completion
+        - If direction is 'reverse': check only reverse IRC completion
+        - If direction is None: check both forward and reverse IRC completion
 
         Returns:
             bool: True if the required IRC calculations are complete, False otherwise.
         """
-        if self.settings.forward_irc is True:
+        if self.settings.direction == "forward":
             return self._run_forward_is_complete()
-        elif self.settings.forward_irc is False:
+        elif self.settings.direction == "reverse":
             return self._run_reverse_is_complete()
         else:
             return (
@@ -226,22 +226,22 @@ class GaussianIRCJob(GaussianJob):
 
     def backup_files(self, backup_chk=False):
         """
-        Create backup copies of IRC input and output files based on forward_irc setting.
+        Create backup copies of IRC input and output files based on direction setting.
 
-        Backs up files from the required IRC calculations based on the forward_irc parameter:
-        - If forward_irc is True: backup only forward IRC files
-        - If forward_irc is False: backup only reverse IRC files
-        - If forward_irc is None: backup both forward and reverse IRC files
+        Backs up files from the required IRC calculations based on the direction parameter:
+        - If direction is 'forward': backup only forward IRC files
+        - If direction is 'reverse': backup only reverse IRC files
+        - If direction is None: backup both forward and reverse IRC files
 
         Args:
             backup_chk (bool): Whether to backup checkpoint files.
         """
-        if self.settings.forward_irc is True:
+        if self.settings.direction == "forward":
             self.backup_file(self._ircf_job().inputfile)
             self.backup_file(self._ircf_job().outputfile)
             if backup_chk:
                 self.backup_file(self._ircf_job().chkfile)
-        elif self.settings.forward_irc is False:
+        elif self.settings.direction == "reverse":
             self.backup_file(self._ircr_job().inputfile)
             self.backup_file(self._ircr_job().outputfile)
             if backup_chk:

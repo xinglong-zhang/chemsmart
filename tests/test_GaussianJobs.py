@@ -150,7 +150,7 @@ class TestGaussianlinkIRCJobs:
         settings.charge = -2
         settings.multiplicity = 1
         settings.job_type = "irc"
-        settings.forward_irc = None  # Both forward and reverse IRC
+        settings.direction = None  # Both forward and reverse IRC
 
         # create link IRC job
         job = GaussianLinkJob.from_filename(
@@ -289,7 +289,7 @@ class TestGaussianlinkIRCJobs:
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
     ):
-        """Test IRC job with forward_irc=True (forward only)."""
+        """Test IRC job with direction='forward' (forward only)."""
         # set scratch directory for jobrunner
         gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
 
@@ -301,7 +301,7 @@ class TestGaussianlinkIRCJobs:
         settings.charge = -2
         settings.multiplicity = 1
         settings.job_type = "irc"
-        settings.forward_irc = True
+        settings.direction = "forward"
 
         # create forward-only IRC job
         job = GaussianLinkJob.from_filename(
@@ -323,7 +323,7 @@ class TestGaussianlinkIRCJobs:
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
     ):
-        """Test IRC job with forward_irc=False (reverse only)."""
+        """Test IRC job with direction='reverse' (reverse only)."""
         # set scratch directory for jobrunner
         gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
 
@@ -335,7 +335,7 @@ class TestGaussianlinkIRCJobs:
         settings.charge = -2
         settings.multiplicity = 1
         settings.job_type = "irc"
-        settings.forward_irc = False
+        settings.direction = "reverse"
 
         # create reverse-only IRC job
         job = GaussianLinkJob.from_filename(
@@ -357,7 +357,7 @@ class TestGaussianlinkIRCJobs:
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
     ):
-        """Test IRC job with forward_irc=None (both directions)."""
+        """Test IRC job with direction=None (both directions)."""
         # set scratch directory for jobrunner
         gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
 
@@ -369,7 +369,7 @@ class TestGaussianlinkIRCJobs:
         settings.charge = -2
         settings.multiplicity = 1
         settings.job_type = "irc"
-        settings.forward_irc = None
+        settings.direction = None
 
         # create both-directions IRC job
         job = GaussianLinkJob.from_filename(
