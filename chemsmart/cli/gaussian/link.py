@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
     'options. Defaults to "guess=mix".',
 )
 @click.option(
-    "-r", "--route", type=str, default=None, help="Route for link section."
+    "--route", type=str, default=None, help="Route for link section."
 )
 @click.pass_context
 def link(

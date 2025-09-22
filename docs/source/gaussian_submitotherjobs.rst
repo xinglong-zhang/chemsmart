@@ -41,7 +41,7 @@ Link Job Specific OPTIONS
       -  string
       -  Gaussian guess options (default=mix)
 
-   -  -  ``-r, --route``
+   -  -  ``--route``
       -  string
       -  Route for link section (default=None)
 
