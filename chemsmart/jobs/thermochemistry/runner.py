@@ -252,13 +252,3 @@ class ThermochemistryJobRunner(JobRunner):
                 if not os.path.exists(file):
                     logger.info(f"Copying file {file} to {job.folder}")
                     copy(file, job.folder)
-
-            # Clean up scratch directory
-            # if os.path.exists(self.running_directory):
-            #     logger.info(
-            #         f"Removing scratch directory: {self.running_directory}"
-            #     )
-            #     rmtree(self.running_directory)
-
-        if job.is_complete():
-            self._remove_err_files(job)

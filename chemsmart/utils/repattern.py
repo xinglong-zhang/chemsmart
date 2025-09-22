@@ -112,6 +112,7 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 # filename matches with reactant r1 or r2
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
 
+
 # Route string cleaning patterns for Gaussian link job settings
 
 # Pattern to find optimization keywords from route string
@@ -124,3 +125,8 @@ gaussian_freq_keywords_pattern = r"\bfreq\s*(=\s*\w+)?\s*"
 
 # Pattern to find multiple consecutive spaces in strings
 multiple_spaces_pattern = r"\s+"
+
+
+# PyMOL strings
+pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"
+pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
