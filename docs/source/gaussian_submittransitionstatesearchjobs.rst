@@ -129,15 +129,15 @@ IRC-Specific OPTIONS
       -  Type
       -  Description
 
-   -  -  ``-F, --flat-irc/--no-flat-irc``
+   -  -  ``-fl, --flat-irc/--no-flat-irc``
       -  bool
       -  Whether to run flat IRC or not (default=False)
 
-   -  -  ``--predictor``
+   -  -  ``-pt, --predictor``
       -  string
       -  Type of predictors used for IRC. Options: LQA, HPC, EulerPC, DVV, Euler (default=none)
 
-   -  -  ``--recorrect``
+   -  -  ``-rc, --recorrect``
       -  string
       -  Recorrection step of HPC and EulerPC IRCs. Options: Never, Always, Test (default=none)
 
@@ -145,15 +145,15 @@ IRC-Specific OPTIONS
       -  int
       -  Compute the Hessian analytically every N predictor steps or every N corrector steps if N<0 (default=6)
 
-   -  -  ``-P, --maxpoints``
+   -  -  ``-mp, --maxpoints``
       -  int
       -  Number of points along reaction path to examine (default=512)
 
-   -  -  ``-C, --maxcycles``
+   -  -  ``-mc, --maxcycles``
       -  int
       -  Maximum number of steps along IRC to run (default=128)
 
-   -  -  ``-S, --stepsize``
+   -  -  ``-ss, --stepsize``
       -  int
       -  Step size along reaction path, in units of 0.01 Bohr (default=20)
 

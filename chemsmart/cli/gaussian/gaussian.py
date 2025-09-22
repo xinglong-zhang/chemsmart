@@ -141,13 +141,14 @@ def click_gaussian_irc_options(f):
     """Common click options for IRC-related jobs."""
 
     @click.option(
-        "-F/",
+        "-fl/",
         "--flat-irc/--no-flat-irc",
         type=bool,
         default=False,
         help="whether to run flat irc or not",
     )
     @click.option(
+        "-pt",
         "--predictor",
         type=click.Choice(
             ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
@@ -157,6 +158,7 @@ def click_gaussian_irc_options(f):
         "LQA, DVV, Euler].",
     )
     @click.option(
+        "-rc",
         "--recorrect",
         type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
         default=None,
@@ -172,21 +174,21 @@ def click_gaussian_irc_options(f):
         "|N| corrector steps if N<0. ",
     )
     @click.option(
-        "-P",
+        "-mp",
         "--maxpoints",
         type=int,
         default=512,
         help="Number of points along reaction path to examine.",
     )
     @click.option(
-        "-C",
+        "-mc",
         "--maxcycles",
         type=int,
         default=128,
         help="Maximum number of steps along IRC to run.",
     )
     @click.option(
-        "-S",
+        "-ss",
         "--stepsize",
         type=int,
         default=20,
