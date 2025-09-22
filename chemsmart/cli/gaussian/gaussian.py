@@ -141,14 +141,13 @@ def click_gaussian_irc_options(f):
     """Common click options for IRC-related jobs."""
 
     @click.option(
-        "-fl/",
+        "-F/",
         "--flat-irc/--no-flat-irc",
         type=bool,
         default=False,
         help="whether to run flat irc or not",
     )
     @click.option(
-        "-pt",
         "--predictor",
         type=click.Choice(
             ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
@@ -158,7 +157,6 @@ def click_gaussian_irc_options(f):
         "LQA, DVV, Euler].",
     )
     @click.option(
-        "-rc",
         "--recorrect",
         type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
         default=None,

@@ -129,15 +129,15 @@ IRC-Specific OPTIONS
       -  Type
       -  Description
 
-   -  -  ``-fl, --flat-irc/--no-flat-irc``
+   -  -  ``-F, --flat-irc/--no-flat-irc``
       -  bool
       -  Whether to run flat IRC or not (default=False)
 
-   -  -  ``-pt, --predictor``
+   -  -  ``--predictor``
       -  string
       -  Type of predictors used for IRC. Options: LQA, HPC, EulerPC, DVV, Euler (default=none)
 
-   -  -  ``-rc, --recorrect``
+   -  -  ``--recorrect``
       -  string
       -  Recorrection step of HPC and EulerPC IRCs. Options: Never, Always, Test (default=none)
 
