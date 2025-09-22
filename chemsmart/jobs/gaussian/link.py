@@ -176,10 +176,7 @@ class GaussianLinkJob(GaussianJob):
         """Check if the link calculation is complete."""
         if self._is_irc_job():
             irc_jobs = self._get_irc_jobs()
-            return all(
-                super(GaussianLinkJob, job)._job_is_complete()
-                for job in irc_jobs
-            )
+            return all(job._job_is_complete() for job in irc_jobs)
         else:
             return super()._job_is_complete()
 
@@ -193,4 +190,4 @@ class GaussianLinkJob(GaussianJob):
                 if backup_chk:
                     self.backup_file(job.chkfile)
         else:
-            super().backup_files(backup_chk)
+            super()._backup_files(backup_chk)

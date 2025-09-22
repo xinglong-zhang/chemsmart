@@ -967,16 +967,11 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             self.direction = "reverse"
             logger.debug("Set IRC direction to reverse")
 
-        # Build IRC route string with predictor and recorrection options
-        direction_param = (
-            f",{self.direction}" if self.direction is not None else ""
-        )
-
         if self.predictor is not None and self.recorrect is not None:
             route_string += (
                 f" irc({self.predictor},calcfc,recorrect={self.recorrect},"
                 f"recalc={self.recalc_step},"
-                f"stepsize={self.stepsize}{direction_param},"
+                f"stepsize={self.stepsize},{self.direction},"
                 f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
             )
             logger.debug(
@@ -985,7 +980,7 @@ class GaussianIRCJobSettings(GaussianJobSettings):
             )
         elif self.predictor is None and self.recorrect is None:
             route_string += (
-                f" irc(calcfc,recalc={self.recalc_step}{direction_param},"
+                f" irc(calcfc,recalc={self.recalc_step},{self.direction},"
                 f"maxpoints={self.maxpoints},maxcycle={self.maxcycles})"
             )
             logger.debug("Added basic IRC route without predictor/recorrect")

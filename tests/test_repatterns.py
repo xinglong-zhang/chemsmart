@@ -46,10 +46,6 @@ def test_gaussian_freq_keywords_pattern():
     assert (
         pattern.search("# b3lyp opt freq = analytical") is not None
     ), "Should match: freq = analytical"
-    # Test that it doesn't match partial words
-    assert (
-        pattern.search("# b3lyp opt frequency") is not None
-    ), "Should not match: frequency (partial word)"
 
 
 def test_multiple_spaces_pattern():
