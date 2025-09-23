@@ -68,7 +68,6 @@ class GaussianIRCJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
-        self.settings = settings
         self.settings.freq = False  # turn off freq calc for IRC
 
     @classmethod
@@ -163,30 +162,49 @@ class GaussianIRCJob(GaussianJob):
 
     def _run(self, **kwargs):
         """
-        Execute both forward and reverse IRC calculations.
+        Execute IRC calculations based on the direction parameter.
 
-        Orchestrates the complete IRC calculation by running
-        both forward and reverse IRC jobs sequentially.
+        Orchestrates the IRC calculation by running forward and/or reverse
+        IRC jobs based on the direction parameter:
+        - If direction is 'forward': run only forward IRC
+        - If direction is 'reverse': run only reverse IRC
+        - If direction is None: run both forward and reverse IRC
 
         Args:
             **kwargs: Additional keyword arguments (currently unused).
         """
-        self._run_forward()
-        self._run_reverse()
+        if self.settings.direction == "forward":
+            logger.info("Running only forward IRC calculation")
+            self._run_forward()
+        elif self.settings.direction == "reverse":
+            logger.info("Running only reverse IRC calculation")
+            self._run_reverse()
+        else:
+            logger.info("Running both forward and reverse IRC calculations")
+            self._run_forward()
+            self._run_reverse()
 
     def _job_is_complete(self):
         """
         Check if the complete IRC calculation is finished.
 
-        Determines completion status by verifying that both forward
-        and reverse IRC calculations have completed successfully.
+        Determines completion status based on the direction parameter:
+        - If direction is 'forward': check only forward IRC completion
+        - If direction is 'reverse': check only reverse IRC completion
+        - If direction is None: check both forward and reverse IRC completion
 
         Returns:
-            bool: True if both IRC directions are complete, False otherwise.
+            bool: True if the required IRC calculations are complete, False otherwise.
         """
-        return (
-            self._run_forward_is_complete() and self._run_reverse_is_complete()
-        )
+        if self.settings.direction == "forward":
+            return self._run_forward_is_complete()
+        elif self.settings.direction == "reverse":
+            return self._run_reverse_is_complete()
+        else:
+            return (
+                self._run_forward_is_complete()
+                and self._run_reverse_is_complete()
+            )
 
     def _run_forward_is_complete(self):
         """
@@ -208,18 +226,31 @@ class GaussianIRCJob(GaussianJob):
 
     def backup_files(self, backup_chk=False):
         """
-        Create backup copies of IRC input and output files.
+        Create backup copies of IRC input and output files based on direction setting.
 
-        Backs up all files from both forward and reverse IRC calculations
-        to preserve important calculation data.
+        Backs up files from the required IRC calculations based on the direction parameter:
+        - If direction is 'forward': backup only forward IRC files
+        - If direction is 'reverse': backup only reverse IRC files
+        - If direction is None: backup both forward and reverse IRC files
 
         Args:
             backup_chk (bool): Whether to backup checkpoint files.
         """
-        self.backup_file(self._ircf_job().inputfile)
-        self.backup_file(self._ircr_job().inputfile)
-        self.backup_file(self._ircf_job().outputfile)
-        self.backup_file(self._ircr_job().outputfile)
-        if backup_chk:
-            self.backup_file(self._ircf_job().chkfile)
-            self.backup_file(self._ircr_job().chkfile)
+        if self.settings.direction == "forward":
+            self.backup_file(self._ircf_job().inputfile)
+            self.backup_file(self._ircf_job().outputfile)
+            if backup_chk:
+                self.backup_file(self._ircf_job().chkfile)
+        elif self.settings.direction == "reverse":
+            self.backup_file(self._ircr_job().inputfile)
+            self.backup_file(self._ircr_job().outputfile)
+            if backup_chk:
+                self.backup_file(self._ircr_job().chkfile)
+        else:
+            self.backup_file(self._ircf_job().inputfile)
+            self.backup_file(self._ircr_job().inputfile)
+            self.backup_file(self._ircf_job().outputfile)
+            self.backup_file(self._ircr_job().outputfile)
+            if backup_chk:
+                self.backup_file(self._ircf_job().chkfile)
+                self.backup_file(self._ircr_job().chkfile)

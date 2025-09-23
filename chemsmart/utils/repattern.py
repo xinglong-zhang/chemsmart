@@ -113,6 +113,25 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
 
 
+# Route string cleaning patterns for Gaussian link job settings
+
+# Pattern to find optimization keywords from route string
+# Matches: "opt", "opt=word", "opt=(parameters)", "opt = word", etc.
+gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
+
+# Pattern to find frequency calculation keywords from route string
+# Matches: "freq", "freq=numer", "freq = analytical", etc.
+# The \b ensures that "freq" is matched as a whole word
+# and not part of another word like "frequency"
+# Although note that "frequency" is a valid Gaussian keyword,
+# we'd want to avoid erroneous partial matches, eg.,
+# freqency (spelling error eg)
+gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
+
+# Pattern to find multiple consecutive spaces in strings
+multiple_spaces_pattern = r"\s+"
+
+
 # PyMOL strings
 pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"
 pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"

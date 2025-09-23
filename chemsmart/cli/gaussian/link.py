@@ -3,6 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_irc_options,
     click_gaussian_jobtype_options,
     click_gaussian_solvent_options,
     gaussian,
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_gaussian_jobtype_options
 @click_gaussian_solvent_options
+@click_gaussian_irc_options
 @click.option(
     "-st",
     "--stable",
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
     'options. Defaults to "guess=mix".',
 )
 @click.option(
-    "-r", "--route", type=str, default=None, help="Route for link section."
+    "--route", type=str, default=None, help="Route for link section."
 )
 @click.pass_context
 def link(
@@ -54,6 +56,14 @@ def link(
     solvent_id,
     solvent_options,
     route,
+    flat_irc,
+    predictor,
+    recorrect,
+    recalc_step,
+    maxpoints,
+    maxcycles,
+    stepsize,
+    direction,
     **kwargs,
 ):
     """CLI for running Gaussian link jobs."""
@@ -81,8 +91,25 @@ def link(
     check_charge_and_multiplicity(link_settings)
 
     # convert from GaussianJobSettings instance to GaussianLinkJobSettings
-    # instance
-    link_settings = GaussianLinkJobSettings(**link_settings.__dict__)
+    # instance with IRC parameters
+    link_kwargs = link_settings.__dict__.copy()
+
+    # Add IRC-specific parameters with defaults if this is an IRC job
+    if jobtype in ["irc", "ircf", "ircr"]:
+        irc_params = {
+            "predictor": predictor,
+            "recorrect": recorrect,
+            "recalc_step": recalc_step if recalc_step is not None else 6,
+            "direction": direction,  # Will be set based on job_type
+            "maxpoints": maxpoints if maxpoints is not None else 512,
+            "maxcycles": maxcycles if maxcycles is not None else 128,
+            "stepsize": stepsize if stepsize is not None else 20,
+            "flat_irc": flat_irc if flat_irc is not None else False,
+        }
+        link_kwargs.update(irc_params)
+        logger.info(f"Adding IRC parameters to link job: {irc_params}")
+
+    link_settings = GaussianLinkJobSettings(**link_kwargs)
 
     # populate GaussianLinkJobSettings
     link_settings.stable = stable
