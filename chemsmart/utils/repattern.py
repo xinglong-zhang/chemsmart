@@ -121,7 +121,12 @@ gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
 
 # Pattern to find frequency calculation keywords from route string
 # Matches: "freq", "freq=numer", "freq = analytical", etc.
-gaussian_freq_keywords_pattern = r"\bfreq\s*(=\s*\w+)?\s*"
+# The \b ensures that "freq" is matched as a whole word
+# and not part of another word like "frequency"
+# Although note that "frequency" is a valid Gaussian keyword,
+# we'd want to avoid erroneous partial matches, eg.,
+# freqency (spelling error eg)
+gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
 
 # Pattern to find multiple consecutive spaces in strings
 multiple_spaces_pattern = r"\s+"
