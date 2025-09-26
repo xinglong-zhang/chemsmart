@@ -407,22 +407,31 @@ class PyMOLJobRunner(JobRunner):
             ValueError: If an unsupported style is specified.
         """
         # Handle the -d argument (PyMOL commands)
+
+        job_basename = self._get_job_basename()
+
         if job.style is None:
             # defaults to using zhang_group_pymol_style if not specified
             if os.path.exists("zhang_group_pymol_style.py"):
-                command += f' -d "pymol_style {self.job_basename}'
+                command += f' -d "pymol_style {job_basename}'
             else:
                 # no render style and no style file present
                 command += ' -d "'
         else:
             if job.style.lower() == "pymol":
-                command += f' -d "pymol_style {self.job_basename}'
+                command += f' -d "pymol_style {job_basename}'
             elif job.style.lower() == "cylview":
-                command += f' -d "cylview_style {self.job_basename}'
+                command += f' -d "cylview_style {job_basename}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
         return command
+
+    def _get_job_basename(
+        self,
+    ):
+        job_basename = self.job_basename
+        return job_basename
 
     def _setup_viewport(self, command):
         """
@@ -1397,6 +1406,12 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
             f.write(f"set antialias, {job.antialias_value}\n")
             f.write(f"set ray_trace_mode, {job.ray_trace_mode}\n")
             logger.info(f"Wrote PML file: {pml_file}")
+
+    def _get_job_basename(
+        self,
+    ):
+        job_basename = self.job_basename + "_spin"
+        return job_basename
 
     def _job_specific_commands(self, job, command):
         """
