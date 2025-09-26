@@ -4,6 +4,12 @@
 
 [![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
 [![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
+
+---
+<p align="center">
+  <img src="docs/source/_static/chemsmart_logo.png" alt="CHEMSMART Logo" width="600"/>
+</p>
+
 ---
 Chemsmart is a python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
