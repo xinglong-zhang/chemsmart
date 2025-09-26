@@ -2,7 +2,7 @@
  Introduction
 ##############
 
-.. image:: _static/logo1.png
+.. image:: _static/chemsmart_logo.png
    :width: 400
    :align: center
 
