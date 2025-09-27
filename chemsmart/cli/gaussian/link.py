@@ -135,7 +135,21 @@ def link(
     if jobtype is None:
         label = label
     else:
-        label = f"{label}_{jobtype}_link"
+        label += f"_{jobtype}"
+        if jobtype.lower() == "irc":
+            if link_settings.direction is not None:
+                if link_settings.direction.lower() == "forward":
+                    label += "f"
+                elif link_settings.direction.lower() == "reverse":
+                    label += "r"
+                else:
+                    raise ValueError(
+                        "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
+                    )
+            if link_settings.flat_irc:
+                label += "_flat"
+        else:
+            label += "_link"
 
     logger.debug(f"Label for job: {label}")
 
