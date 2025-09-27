@@ -12,6 +12,7 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
     get_setting_from_jobtype_for_gaussian,
+    update_irc_label,
 )
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -137,17 +138,11 @@ def link(
     else:
         label += f"_{jobtype}"
         if jobtype.lower() == "irc":
-            if link_settings.direction is not None:
-                if link_settings.direction.lower() == "forward":
-                    label += "f"
-                elif link_settings.direction.lower() == "reverse":
-                    label += "r"
-                else:
-                    raise ValueError(
-                        "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
-                    )
-            if link_settings.flat_irc:
-                label += "_flat"
+            label = update_irc_label(
+                label=label,
+                direction=link_settings.direction,
+                flat_irc=link_settings.flat_irc,
+            )
         else:
             label += "_link"
 

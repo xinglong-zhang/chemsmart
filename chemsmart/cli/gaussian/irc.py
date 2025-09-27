@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import MyCommand, update_irc_label
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
@@ -80,17 +80,11 @@ def irc(
 
     # get label for the job
     label = ctx.obj["label"]
-    if irc_settings.direction is not None:
-        if irc_settings.direction.lower() == "forward":
-            label += "f"
-        elif irc_settings.direction.lower() == "reverse":
-            label += "r"
-        else:
-            raise ValueError(
-                "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
-            )
-    if irc_settings.flat_irc:
-        label += "_flat"
+    label = update_irc_label(
+        label=label,
+        direction=irc_settings.direction,
+        flat_irc=irc_settings.flat_irc,
+    )
 
     logger.debug(f"Label for job: {label}")
 
