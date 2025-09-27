@@ -546,3 +546,32 @@ def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
         "Note: all indices should be 1-indexed. Chemsmart has already taken care of converting 0-indexed "
         "(used in ORCA) to 1-indexed (used in visualization software such as PyMOL, Gaussview, etc)."
     )
+
+
+def update_irc_label(label, direction, flat_irc):
+    """
+    Update the job label based on IRC direction and flat IRC flag.
+
+    Appends 'f' for forward direction, 'r' for reverse direction,
+    and '_flat' if flat_irc is True.
+
+    Args:
+        label (str): Original job label.
+        direction (str | None): IRC direction ('forward' or 'reverse').
+        flat_irc (bool): Whether the IRC is flat.
+
+    Returns:
+        str: Updated job label with appropriate suffixes.
+    """
+    if direction is not None:
+        if direction.lower() == "forward":
+            label += "f"
+        elif direction.lower() == "reverse":
+            label += "r"
+        else:
+            raise ValueError(
+                "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
+            )
+    if flat_irc:
+        label += "_flat"
+    return label

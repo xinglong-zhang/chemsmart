@@ -12,6 +12,7 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
     get_setting_from_jobtype_for_gaussian,
+    update_irc_label,
 )
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
@@ -135,7 +136,15 @@ def link(
     if jobtype is None:
         label = label
     else:
-        label = f"{label}_{jobtype}_link"
+        label += f"_{jobtype}"
+        if jobtype.lower() == "irc":
+            label = update_irc_label(
+                label=label,
+                direction=link_settings.direction,
+                flat_irc=link_settings.flat_irc,
+            )
+        else:
+            label += "_link"
 
     logger.debug(f"Label for job: {label}")
 

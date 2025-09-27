@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import MyCommand, update_irc_label
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,12 @@ def irc(
 
     # get label for the job
     label = ctx.obj["label"]
+    label = update_irc_label(
+        label=label,
+        direction=irc_settings.direction,
+        flat_irc=irc_settings.flat_irc,
+    )
+
     logger.debug(f"Label for job: {label}")
 
     logger.info(f"IRC job settings from project: {irc_settings.__dict__}")
