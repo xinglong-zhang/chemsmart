@@ -78,7 +78,7 @@ class PyMOLNCIJob(PyMOLJob):
         self.intermediate = intermediate
 
         if nci_basename is None:
-            nci_basename = self.label
+            nci_basename = f"{self.label}_nci"
 
         if self.binary:
             nci_basename += "_binary"
@@ -98,3 +98,14 @@ class PyMOLNCIJob(PyMOLJob):
             bool: True if the NCI PSE file exists, False otherwise.
         """
         return os.path.exists(f"{self.nci_basename}.pse")
+
+    @property
+    def outputfile(self):
+        """
+        Get the path to the NCI PyMOL session file output.
+
+        Returns:
+            str: Absolute path to the NCI PSE session file.
+        """
+        outputfile = self.nci_basename + ".pse"
+        return os.path.join(self.folder, outputfile)

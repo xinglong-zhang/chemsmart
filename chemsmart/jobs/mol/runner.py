@@ -1407,12 +1407,6 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
             f.write(f"set ray_trace_mode, {job.ray_trace_mode}\n")
             logger.info(f"Wrote PML file: {pml_file}")
 
-    def _get_job_basename(
-        self,
-    ):
-        job_basename = self.job_basename + "_spin"
-        return job_basename
-
     def _job_specific_commands(self, job, command):
         """
         Add job-specific commands for spin density visualization.
