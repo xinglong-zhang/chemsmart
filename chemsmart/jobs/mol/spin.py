@@ -74,3 +74,14 @@ class PyMOLSpinJob(PyMOLJob):
         Job is complete if the spin density .pse session exists.
         """
         return os.path.exists(f"{self.spin_basename}.pse")
+
+    @property
+    def outputfile(self):
+        """
+        Get the path to the spin density PyMOL session file output.
+
+        Returns:
+            str: Absolute path to the spin density PSE session file.
+        """
+        outputfile = self.spin_basename + ".pse"
+        return os.path.join(self.folder, outputfile)
