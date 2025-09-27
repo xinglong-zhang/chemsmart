@@ -89,6 +89,9 @@ def irc(
             raise ValueError(
                 "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
             )
+    if irc_settings.flat_irc:
+        label += "_flat"
+
     logger.debug(f"Label for job: {label}")
 
     logger.info(f"IRC job settings from project: {irc_settings.__dict__}")
