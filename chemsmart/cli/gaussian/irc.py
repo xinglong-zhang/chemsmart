@@ -80,6 +80,15 @@ def irc(
 
     # get label for the job
     label = ctx.obj["label"]
+    if irc_settings.direction is not None:
+        if irc_settings.direction.lower() == "forward":
+            label = label + "f"
+        elif irc_settings.direction.lower() == "reverse":
+            label = label + "r"
+        else:
+            raise ValueError(
+                "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
+            )
     logger.debug(f"Label for job: {label}")
 
     logger.info(f"IRC job settings from project: {irc_settings.__dict__}")
