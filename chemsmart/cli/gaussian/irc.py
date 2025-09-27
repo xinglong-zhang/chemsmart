@@ -82,9 +82,9 @@ def irc(
     label = ctx.obj["label"]
     if irc_settings.direction is not None:
         if irc_settings.direction.lower() == "forward":
-            label = label + "f"
+            label += "f"
         elif irc_settings.direction.lower() == "reverse":
-            label = label + "r"
+            label += "r"
         else:
             raise ValueError(
                 "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
