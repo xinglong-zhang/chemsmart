@@ -682,6 +682,10 @@ class PyMOLJobRunner(JobRunner):
                 )
         return process
 
+    def _get_base_filepath_to_remove(self, job):
+        """Get the base filepath for the job to assist in file removal."""
+        return Path(job.folder) / job.job_basename
+
 
 class PyMOLVisualizationJobRunner(PyMOLJobRunner):
     """
