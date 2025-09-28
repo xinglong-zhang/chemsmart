@@ -469,7 +469,7 @@ class PyMOLJobRunner(JobRunner):
             str: Command string with VDW surface added if requested.
         """
         if job.vdw:
-            command += f"; add_vdw {job.job_basename}"
+            command += f"; add_vdw {job.label}"
 
         return command
 
@@ -1143,6 +1143,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 
         if os.path.exists(f"{job.job_basename}.cube"):
             logger.info(f"cube file {job.job_basename}.cube already exists.")
+            return
 
         mo_type = None
         if job.number:
