@@ -287,16 +287,24 @@ class JobRunner(RegistryMixin):
         )
 
     def _remove_err_files(self, job):
-        # also remove .err and .pbs* and .slurm* files if job is complete
-        err_file = f"{job.folder}/{job.label}.err"
-        pbs_err_file = f"{job.folder}/{job.label}.pbserr"
-        slurm_err_file = f"{job.folder}/{job.label}.slurmerr"
+        """Remove error files associated with the job.
+        Files that end with .err, .pbserr, .slurmerr are removed."""
 
-        files_to_be_removed = [err_file, pbs_err_file, slurm_err_file]
+        basefilepath = self._get_base_filepath_to_remove(job)
+        patterns = [".err", ".pbserr", ".slurmerr"]
+
+        files_to_be_removed = [
+            basefilepath.with_suffix(pattern) for pattern in patterns
+        ]
+
         for file in files_to_be_removed:
             with suppress(FileNotFoundError):
                 logger.info(f"Removing file {file}.")
                 os.remove(file)
+
+    def _get_base_filepath_to_remove(self, job):
+        """Get the base filepath for the job to assist in file removal."""
+        return Path(job.folder) / job.label
 
     def _delete_scratch_directory(self):
         """

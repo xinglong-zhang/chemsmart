@@ -40,7 +40,7 @@ def nci(
         chemsmart run --debug mol -f phenyldioxazolone_nci.log nci
     This visualizes phenyldioxazolone_nci.log file and saves as
     phenyldioxazolone_nci.pse.
-    Note that the phenyldioxazolone-dens.cube and phenyldioxazolone-grad.cube
+    Note that the phenyldioxazolone_nci-dens.cube and phenyldioxazolone_nci-grad.cube
     files should be present for the plotting of nci to work; otherwise,
     an error will be raised.
     """

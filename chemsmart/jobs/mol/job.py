@@ -59,6 +59,7 @@ class PyMOLJob(Job):
         surface_quality=None,
         antialias_value=None,
         ray_trace_mode=None,
+        label_offset=None,
         **kwargs,
     ):
         """
@@ -83,6 +84,7 @@ class PyMOLJob(Job):
             surface_quality: Surface quality setting (optional).
             antialias_value: Antialiasing level for rendering (optional).
             ray_trace_mode: Ray tracing mode for rendering (optional).
+            label_offset: Offset for pymol labels (default: None).
             **kwargs: Additional arguments passed to parent Job class.
         """
         super().__init__(
@@ -113,12 +115,31 @@ class PyMOLJob(Job):
         self.surface_quality = surface_quality
         self.antialias_value = antialias_value
         self.ray_trace_mode = ray_trace_mode
+        self.label_offset = label_offset
 
         logger.debug(f"Isosurface value: {self.isosurface_value}")
         logger.debug(f"Transparency value: {self.transparency_value}")
         logger.debug(f"Surface quality: {self.surface_quality}")
         logger.debug(f"Antialias value: {self.antialias_value}")
         logger.debug(f"Ray trace mode: {self.ray_trace_mode}")
+
+    @property
+    def job_basename(self):
+        """
+        Get the base name for job-related files.
+        Returns:
+            str: Base name derived from _get_job_basename method.
+        """
+        return self._get_job_basename()
+
+    def _get_job_basename(self):
+        """
+        Internal method to derive the job base name.
+
+        Returns:
+            str: Base name derived from the job label.
+        """
+        return self.label
 
     @property
     def inputfile(self):
@@ -139,7 +160,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the job log file.
         """
-        logfile = "log." + self.label
+        logfile = "log." + self.job_basename
         return os.path.join(self.folder, logfile)
 
     @property
@@ -150,7 +171,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the output PSE session file.
         """
-        outputfile = self.label + ".pse"
+        outputfile = self.job_basename + ".pse"
         return os.path.join(self.folder, outputfile)
 
     @property
@@ -161,7 +182,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the error log file.
         """
-        errfile = self.label + ".err"
+        errfile = self.job_basename + ".err"
         return os.path.join(self.folder, errfile)
 
     def _backup_files(self, backup_chk=False, **kwargs):

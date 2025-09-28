@@ -6,8 +6,6 @@ density distributions. Handles cube file generation and PyMOL session
 creation for spin density analysis.
 """
 
-import os.path
-
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
@@ -69,8 +67,12 @@ class PyMOLSpinJob(PyMOLJob):
         self.spin_basename = spin_basename
         self.npts = npts
 
-    def _job_is_complete(self):
+    def _get_job_basename(self):
         """
-        Job is complete if the spin density .pse session exists.
+        Internal method to derive the job base name.
+        Job specific implementation that overrides parent class method.
+
+        Returns:
+            str: Base name derived from the job label.
         """
-        return os.path.exists(f"{self.spin_basename}.pse")
+        return self.spin_basename
