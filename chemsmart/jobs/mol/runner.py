@@ -1127,6 +1127,11 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
 
         Raises:
             ValueError: If zero or multiple orbital selections are provided.
+        Returns:
+            run cubegen_command and returns None
+            cubegen_command generatess the appropriate .cube file
+            based on the job type (job.job_basename; nci/spin etc)
+            from job.label.fchk file.
         """
         gaussian_exe = self._get_gaussian_executable(job)
 
