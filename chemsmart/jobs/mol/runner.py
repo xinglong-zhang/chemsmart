@@ -1097,7 +1097,7 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             str: Command string with save command for NCI session.
         """
         # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.job_basename)}.pse"
+        command += f"; save {quote_path(job.nci_basename)}.pse"
 
         return command
 
