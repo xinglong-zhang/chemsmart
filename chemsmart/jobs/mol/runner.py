@@ -1043,8 +1043,8 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
         Raises:
             AssertionError: If required cube files are not found.
         """
-        dens_file = os.path.join(job.folder, f"{job.job_basename}-dens.cube")
-        grad_file = os.path.join(job.folder, f"{job.job_basename}-grad.cube")
+        dens_file = os.path.join(job.folder, f"{job.label}-dens.cube")
+        grad_file = os.path.join(job.folder, f"{job.label}-grad.cube")
         assert os.path.exists(
             dens_file
         ), f"Density cube file {dens_file} not found!"
@@ -1073,11 +1073,11 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             str: Command string with NCI visualization command.
         """
         if job.binary:
-            command += f"; nci_binary {job.job_basename}"
+            command += f"; nci_binary {job.label}"
         elif job.intermediate:
-            command += f"; nci_intermediate {job.job_basename}"
+            command += f"; nci_intermediate {job.label}"
         else:
-            command += f"; nci {job.job_basename}"
+            command += f"; nci {job.label}"
         return command
 
 
