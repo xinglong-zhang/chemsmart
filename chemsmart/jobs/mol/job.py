@@ -146,7 +146,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the input XYZ coordinate file.
         """
-        inputfile = self.job_basename + ".xyz"
+        inputfile = self.label + ".xyz"
         return os.path.join(self.folder, inputfile)
 
     @property

@@ -156,10 +156,6 @@ class PyMOLJobRunner(JobRunner):
         """
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
-        self.job_inputfile = os.path.abspath(job.inputfile)
-        self.job_logfile = os.path.abspath(job.logfile)
-        self.job_outputfile = os.path.abspath(job.outputfile)
-        self.job_errfile = os.path.abspath(job.errfile)
 
     def _generate_visualization_style_script(self, job):
         """
@@ -652,14 +648,16 @@ class PyMOLJobRunner(JobRunner):
             subprocess.CalledProcessError: If PyMOL process fails.
         """
         # Open files for stdout/stderr
+        job_errfile = os.path.abspath(job.errfile)
+        job_outputfile = os.path.abspath(job.outputfile)
         with (
-            open(self.job_errfile, "w") as err,
-            open(self.job_outputfile, "w") as out,
+            open(job_errfile, "w") as err,
+            open(job_outputfile, "w") as out,
         ):
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {self.job_logfile}\n"
-                f"And err file to: {self.job_errfile}"
+                f"Writing output file to: {os.path.abspath(job.logfile)}\n"
+                f"And err file to: {job_errfile}"
             )
             # Start PyMOL process
             process = subprocess.Popen(
@@ -714,7 +712,7 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         command = self._setup_style(job, command)
         command = self._setup_viewport(command)
         command = self._add_coordinates_labels(job, command)
-        command = self._offset_labels(job, command)
+        command = self._offset_labels(job, command, x=-1.2)
         command = self._add_vdw(job, command)
         command = self._add_zoom_command(job, command)
         command = self._job_specific_commands(job, command)
@@ -1218,7 +1216,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         command = self._add_ray_command(job, command)
         return command
 
-    def _offset_labels(self, job, command):
+    def _offset_labels(self, job, command, x=-1.2):
         """
         No label offsetting for MO visualization.
 
@@ -1368,7 +1366,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         command = self._add_ray_command(job, command)
         return command
 
-    def _offset_labels(self, job, command):
+    def _offset_labels(self, job, command, x=-1.2):
         """
         Handle label offset for spin density visualization.
 
