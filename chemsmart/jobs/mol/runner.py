@@ -302,7 +302,7 @@ class PyMOLJobRunner(JobRunner):
         gaussian_exe = self._get_gaussian_executable(job)
         if os.path.exists(os.path.join(job.folder, f"{job.label}.fchk")):
             logger.info(
-                f".fchk file {job.label}.fchk already exists."
+                f".fchk file {job.label}.fchk already exists.\n"
                 f"Skipping generation of .fchk file."
             )
             pass
