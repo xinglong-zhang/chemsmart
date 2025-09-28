@@ -430,8 +430,8 @@ class PyMOLJobRunner(JobRunner):
     def _get_job_basename(
         self,
     ):
-        job_basename = self.job_basename
-        return job_basename
+        """Return the job basename."""
+        return self.job_basename
 
     def _setup_viewport(self, command):
         """
