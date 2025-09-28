@@ -424,15 +424,15 @@ class PyMOLJobRunner(JobRunner):
         if job.style is None:
             # defaults to using zhang_group_pymol_style if not specified
             if os.path.exists("zhang_group_pymol_style.py"):
-                command += f' -d "pymol_style {job.job_basename}'
+                command += f' -d "pymol_style {job.label}'
             else:
                 # no render style and no style file present
                 command += ' -d "'
         else:
             if job.style.lower() == "pymol":
-                command += f' -d "pymol_style {job.job_basename}'
+                command += f' -d "pymol_style {job.label}'
             elif job.style.lower() == "cylview":
-                command += f' -d "cylview_style {job.job_basename}'
+                command += f' -d "cylview_style {job.label}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
