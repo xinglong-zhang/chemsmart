@@ -104,6 +104,12 @@ def click_pymol_visualization_options(f):
         help="List of coordinates (bonds, angles and dihedrals) for "
         "labelling. 1-indexed.",
     )
+    @click.option(
+        "--label-offset",
+        type=str,
+        default=None,
+        help="Tuple for offsetting label position in mol jobs.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)

@@ -59,6 +59,7 @@ class PyMOLJob(Job):
         surface_quality=None,
         antialias_value=None,
         ray_trace_mode=None,
+        label_offset=None,
         **kwargs,
     ):
         """
@@ -83,6 +84,7 @@ class PyMOLJob(Job):
             surface_quality: Surface quality setting (optional).
             antialias_value: Antialiasing level for rendering (optional).
             ray_trace_mode: Ray tracing mode for rendering (optional).
+            label_offset: Offset for pymol labels (default: None).
             **kwargs: Additional arguments passed to parent Job class.
         """
         super().__init__(
@@ -113,6 +115,7 @@ class PyMOLJob(Job):
         self.surface_quality = surface_quality
         self.antialias_value = antialias_value
         self.ray_trace_mode = ray_trace_mode
+        self.label_offset = label_offset
 
         logger.debug(f"Isosurface value: {self.isosurface_value}")
         logger.debug(f"Transparency value: {self.transparency_value}")

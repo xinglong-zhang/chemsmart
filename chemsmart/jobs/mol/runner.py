@@ -519,7 +519,7 @@ class PyMOLJobRunner(JobRunner):
                 command += f"; dihedral di{i+1}, id {dihedral[0]}, id {dihedral[1]}, id {dihedral[2]}, id {dihedral[3]}"
         return command
 
-    def _offset_labels(self, job, command, x=-1.2):
+    def _offset_labels(self, job, command):
         """
         Set label position offset in PyMOL visualization.
 
@@ -534,7 +534,9 @@ class PyMOLJobRunner(JobRunner):
         Returns:
             str: Command string with label positioning added.
         """
-        command += f"; set label_position, ({x},0,0)"
+        if job.label_offset is None:
+            return
+        command += f"; set label_position, {job.label_offset}"
         return command
 
     def _add_zoom_command(self, job, command):
@@ -716,7 +718,7 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         command = self._setup_style(job, command)
         command = self._setup_viewport(command)
         command = self._add_coordinates_labels(job, command)
-        command = self._offset_labels(job, command, x=-1.2)
+        command = self._offset_labels(job, command)
         command = self._add_vdw(job, command)
         command = self._add_zoom_command(job, command)
         command = self._job_specific_commands(job, command)
@@ -1221,7 +1223,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         command = self._add_ray_command(job, command)
         return command
 
-    def _offset_labels(self, job, command, x=-1.2):
+    def _offset_labels(self, job, command):
         """
         No label offsetting for MO visualization.
 
@@ -1371,7 +1373,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         command = self._add_ray_command(job, command)
         return command
 
-    def _offset_labels(self, job, command, x=-1.2):
+    def _offset_labels(self, job, command):
         """
         Handle label offset for spin density visualization.
 
