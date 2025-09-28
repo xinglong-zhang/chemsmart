@@ -308,8 +308,8 @@ class PyMOLJobRunner(JobRunner):
             pass
         else:
             # generate .fchk file from .chk file
-            logger.info(f"Generating .fchk file from {job.job_basename}.chk")
-            fchk_command = f"{gaussian_exe}/formchk {job.job_basename}.chk"
+            logger.info(f"Generating .fchk file from {job.label}.chk")
+            fchk_command = f"{gaussian_exe}/formchk {job.label}.chk"
             run_command(fchk_command)
 
     def _write_input(self, job):
@@ -1139,43 +1139,30 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
                 "You must specify exactly one of --number, --homo, or --lumo."
             )
 
+        if os.path.exists(f"{job.job_basename}.cube"):
+            logger.info(f"cube file {job.job_basename}.cube already exists.")
+
+        mo_type = None
         if job.number:
-            if os.path.exists(f"{job.job_basename}_MO{job.number}.cube"):
-                logger.info(
-                    f"cube file {job.job_basename}_MO{job.number}.cube already exists."
-                )
-                pass
-            else:
-                cubegen_command = (
-                    f"{gaussian_exe}/cubegen 0 MO={job.number} {job.job_basename}.fchk "
-                    f"{job.job_basename}_MO{job.number}.cube 0 h"
-                )
-                run_command(cubegen_command)
+            mo_type = f"{job.number}"
 
         if job.homo:
-            if os.path.exists(f"{job.job_basename}_HOMO.cube"):
-                logger.info(
-                    f"cube file {job.job_basename}_HOMO.cube already exists."
-                )
-                pass
-            else:
-                cubegen_command = (
-                    f"{gaussian_exe}/cubegen 0 MO=HOMO {job.job_basename}.fchk "
-                    f"{job.job_basename}_HOMO.cube 0 h"
-                )
-                run_command(cubegen_command)
+            mo_type = "HOMO"
+
         if job.lumo:
-            if os.path.exists(f"{job.job_basename}_LUMO.cube"):
-                logger.info(
-                    f"cube file {job.job_basename}_LUMO.cube already exists."
-                )
-                pass
-            else:
-                cubegen_command = (
-                    f"{gaussian_exe}/cubegen 0 MO=LUMO {job.job_basename}.fchk "
-                    f"{job.job_basename}_LUMO.cube 0 h"
-                )
-                run_command(cubegen_command)
+            mo_type = "LUMO"
+
+        if mo_type is None:
+            raise ValueError(
+                f"No MO specified, MO type/number given is: {mo_type}"
+            )
+
+        cubegen_command = (
+            f"{gaussian_exe}/cubegen 0 MO={mo_type} {job.label}.fchk "
+            f"{job.job_basename}.cube 0 h"
+        )
+
+        run_command(cubegen_command)
 
     def _write_molecular_orbital_pml(
         self,
@@ -1325,7 +1312,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         """
         gaussian_exe = self._get_gaussian_executable(job)
 
-        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {job.job_basename}.fchk {job.job_basename}_spin.cube {job.npts}"
+        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {job.label}.fchk {job.job_basename}.cube {job.npts}"
         run_command(cubegen_command)
 
     def _write_spin_density_pml(self, job):
