@@ -1082,25 +1082,6 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             command += f"; nci {job.job_basename}"
         return command
 
-    def _save_pse_command(self, job, command):
-        """
-        Save NCI analysis session with appropriate filename.
-
-        Saves the PyMOL session file using the NCI-specific basename
-        to distinguish from other visualization outputs.
-
-        Args:
-            job: PyMOL NCI job object with output configuration.
-            command: Command string to extend.
-
-        Returns:
-            str: Command string with save command for NCI session.
-        """
-        # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.nci_basename)}.pse"
-
-        return command
-
 
 class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     """
@@ -1286,21 +1267,6 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         command += f"; load {quote_path(pml_file)}"
         return command
 
-    def _save_pse_command(self, job, command):
-        """
-        Append command to save the MO PyMOL session (.pse).
-
-        Args:
-            job: PyMOL MO job object.
-            command: Current command string to extend.
-
-        Returns:
-            str: Extended command string with save command.
-        """
-        command += f"; save {quote_path(job.mo_basename)}.pse"
-
-        return command
-
 
 class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
     """
@@ -1450,23 +1416,4 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         """
         pml_file = os.path.join(job.folder, f"{job.spin_basename}.pml")
         command += f"; load {quote_path(pml_file)}"
-        return command
-
-    def _save_pse_command(self, job, command):
-        """
-        Add command to save PyMOL session for spin density.
-
-        Appends command to save the PyMOL session file with spin
-        density visualization settings and objects.
-
-        Args:
-            job: PyMOL spin job instance.
-            command: Current command string to extend.
-
-        Returns:
-            str: Extended command string with session save command.
-        """
-        # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.spin_basename)}.pse"
-
         return command
