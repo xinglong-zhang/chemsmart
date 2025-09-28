@@ -6,8 +6,6 @@ and reduced gradient data. Works together with PyMOLNCIJobRunner, which
 loads cube files and executes the PyMOL commands to render the analysis.
 """
 
-import os
-
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
@@ -87,25 +85,12 @@ class PyMOLNCIJob(PyMOLJob):
 
         self.nci_basename = nci_basename
 
-    def _job_is_complete(self):
+    def _get_job_basename(self):
         """
-        Check if the PyMOL NCI analysis job has completed.
-
-        Determines job completion by checking for the existence of
-        the NCI analysis PyMOL session file.
+        Internal method to derive the job base name.
+        Job specific implementation that overrides parent class method.
 
         Returns:
-            bool: True if the NCI PSE file exists, False otherwise.
+            str: Base name derived from the job label.
         """
-        return os.path.exists(f"{self.nci_basename}.pse")
-
-    @property
-    def outputfile(self):
-        """
-        Get the path to the NCI PyMOL session file output.
-
-        Returns:
-            str: Absolute path to the NCI PSE session file.
-        """
-        outputfile = self.nci_basename + ".pse"
-        return os.path.join(self.folder, outputfile)
+        return self.nci_basename

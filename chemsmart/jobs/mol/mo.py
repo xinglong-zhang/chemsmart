@@ -7,8 +7,6 @@ conjunction with the PyMOLMOJobRunner, which generates cube files and
 drives the PyMOL rendering workflow.
 """
 
-import os.path
-
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
@@ -88,14 +86,12 @@ class PyMOLMOJob(PyMOLJob):
 
         self.mo_basename = mo_basename
 
-    def _job_is_complete(self):
+    def _get_job_basename(self):
         """
-        Check if the PyMOL molecular orbital job has completed.
-
-        Determines job completion by checking for the existence of
-        the molecular orbital PyMOL session file.
+        Internal method to derive the job base name.
+        Job specific implementation that overrides parent class method.
 
         Returns:
-            bool: True if the MO PSE file exists, False otherwise.
+            str: Base name derived from the job label.
         """
-        return os.path.exists(f"{self.mo_basename}.pse")
+        return self.mo_basename

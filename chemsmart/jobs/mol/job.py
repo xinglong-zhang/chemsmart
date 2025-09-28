@@ -121,6 +121,24 @@ class PyMOLJob(Job):
         logger.debug(f"Ray trace mode: {self.ray_trace_mode}")
 
     @property
+    def job_basename(self):
+        """
+        Get the base name for job-related files.
+        Returns:
+            str: Base name derived from _get_job_basename method.
+        """
+        return self._get_job_basename()
+
+    def _get_job_basename(self):
+        """
+        Internal method to derive the job base name.
+
+        Returns:
+            str: Base name derived from the job label.
+        """
+        return self.label
+
+    @property
     def inputfile(self):
         """
         Get the path to the input XYZ file for PyMOL.
@@ -128,7 +146,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the input XYZ coordinate file.
         """
-        inputfile = self.label + ".xyz"
+        inputfile = self.job_basename + ".xyz"
         return os.path.join(self.folder, inputfile)
 
     @property
@@ -139,7 +157,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the job log file.
         """
-        logfile = "log." + self.label
+        logfile = "log." + self.job_basename
         return os.path.join(self.folder, logfile)
 
     @property
@@ -150,7 +168,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the output PSE session file.
         """
-        outputfile = self.label + ".pse"
+        outputfile = self.job_basename + ".pse"
         return os.path.join(self.folder, outputfile)
 
     @property
@@ -161,7 +179,7 @@ class PyMOLJob(Job):
         Returns:
             str: Absolute path to the error log file.
         """
-        errfile = self.label + ".err"
+        errfile = self.job_basename + ".err"
         return os.path.join(self.folder, errfile)
 
     def _backup_files(self, backup_chk=False, **kwargs):
