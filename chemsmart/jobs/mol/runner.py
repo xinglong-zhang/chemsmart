@@ -535,7 +535,7 @@ class PyMOLJobRunner(JobRunner):
             str: Command string with label positioning added.
         """
         if job.label_offset is None:
-            return
+            return command
         command += f"; set label_position, {job.label_offset}"
         return command
 
