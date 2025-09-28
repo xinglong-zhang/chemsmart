@@ -156,7 +156,6 @@ class PyMOLJobRunner(JobRunner):
         """
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
-        self.job_basename = job.label
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_logfile = os.path.abspath(job.logfile)
         self.job_outputfile = os.path.abspath(job.outputfile)
@@ -261,6 +260,26 @@ class PyMOLJobRunner(JobRunner):
 
         return style_file_path
 
+    def _get_gaussian_executable(self, job):
+        """
+        Get the Gaussian executable path for cube file generation.
+
+        Retrieves the Gaussian executable configuration needed for
+        generating cube files from formatted checkpoint files.
+
+        Args:
+            job: PyMOL MO job object.
+
+        Returns:
+            str: Path to the Gaussian executable directory.
+        """
+        logger.info(
+            f"Obtaining Gaussian executable from server: {self.server.name}"
+        )
+        gaussian_exe = GaussianExecutable.from_servername(self.server.name)
+        gaussian_exe_path = gaussian_exe.executable_folder
+        return gaussian_exe_path
+
     def _generate_fchk_file(self, job):
         """
         Generate the formatted checkpoint file from Gaussian checkpoint.
@@ -274,7 +293,7 @@ class PyMOLJobRunner(JobRunner):
         Raises:
             FileNotFoundError: If the required .chk file is not found.
         """
-        chk_file_path = os.path.join(job.folder, f"{self.job_basename}.chk")
+        chk_file_path = os.path.join(job.folder, f"{job.job_basename}.chk")
         if not os.path.exists(chk_file_path):
             raise FileNotFoundError(
                 f".chk file is required but not found at {chk_file_path}!"
@@ -282,17 +301,17 @@ class PyMOLJobRunner(JobRunner):
 
         gaussian_exe = self._get_gaussian_executable(job)
         if os.path.exists(
-            os.path.join(job.folder, f"{self.job_basename}.fchk")
+            os.path.join(job.folder, f"{job.job_basename}.fchk")
         ):
             logger.info(
-                f".fchk file {self.job_basename}.fchk already exists."
+                f".fchk file {job.job_basename}.fchk already exists."
                 f"Skipping generation of .fchk file."
             )
             pass
         else:
             # generate .fchk file from .chk file
-            logger.info(f"Generating .fchk file from {self.job_basename}.chk")
-            fchk_command = f"{gaussian_exe}/formchk {self.job_basename}.chk"
+            logger.info(f"Generating .fchk file from {job.job_basename}.chk")
+            fchk_command = f"{gaussian_exe}/formchk {job.job_basename}.chk"
             run_command(fchk_command)
 
     def _write_input(self, job):
@@ -408,30 +427,22 @@ class PyMOLJobRunner(JobRunner):
         """
         # Handle the -d argument (PyMOL commands)
 
-        job_basename = self._get_job_basename()
-
         if job.style is None:
             # defaults to using zhang_group_pymol_style if not specified
             if os.path.exists("zhang_group_pymol_style.py"):
-                command += f' -d "pymol_style {job_basename}'
+                command += f' -d "pymol_style {job.job_basename}'
             else:
                 # no render style and no style file present
                 command += ' -d "'
         else:
             if job.style.lower() == "pymol":
-                command += f' -d "pymol_style {job_basename}'
+                command += f' -d "pymol_style {job.job_basename}'
             elif job.style.lower() == "cylview":
-                command += f' -d "cylview_style {job_basename}'
+                command += f' -d "cylview_style {job.job_basename}'
             else:
                 raise ValueError(f"The style {job.style} is not available!")
 
         return command
-
-    def _get_job_basename(
-        self,
-    ):
-        """Return the job basename."""
-        return self.job_basename
 
     def _setup_viewport(self, command):
         """
@@ -464,7 +475,7 @@ class PyMOLJobRunner(JobRunner):
             str: Command string with VDW surface added if requested.
         """
         if job.vdw:
-            command += f"; add_vdw {self.job_basename}"
+            command += f"; add_vdw {job.job_basename}"
 
         return command
 
@@ -774,7 +785,7 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
             str: Command string with movie style configuration.
         """
         if os.path.exists("zhang_group_pymol_style.py"):
-            command += f' -d "movie_style {self.job_basename}'
+            command += f' -d "movie_style {job.job_basename}'
         else:
             # no render style and no style file present
             command += ' -d "'
@@ -853,7 +864,7 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
         Returns:
             str: Command string with frame export command.
         """
-        frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
+        frame_prefix = os.path.join(job.folder, f"{job.job_basename}_frame_")
         command += f"; mpng {frame_prefix}"
         return command
 
@@ -888,7 +899,7 @@ class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
             FileNotFoundError: If no PNG frames are found or FFmpeg is missing.
             subprocess.CalledProcessError: If FFmpeg fails to encode the video.
         """
-        frame_prefix = os.path.join(job.folder, f"{self.job_basename}_frame_")
+        frame_prefix = os.path.join(job.folder, f"{job.job_basename}_frame_")
         frame_pattern = f"{frame_prefix}%04d.png"
         output_mp4 = (
             os.path.splitext(job.outputfile)[0] + ".mp4"
@@ -1034,8 +1045,8 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
         Raises:
             AssertionError: If required cube files are not found.
         """
-        dens_file = os.path.join(job.folder, f"{self.job_basename}-dens.cube")
-        grad_file = os.path.join(job.folder, f"{self.job_basename}-grad.cube")
+        dens_file = os.path.join(job.folder, f"{job.job_basename}-dens.cube")
+        grad_file = os.path.join(job.folder, f"{job.job_basename}-grad.cube")
         assert os.path.exists(
             dens_file
         ), f"Density cube file {dens_file} not found!"
@@ -1064,11 +1075,11 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             str: Command string with NCI visualization command.
         """
         if job.binary:
-            command += f"; nci_binary {self.job_basename}"
+            command += f"; nci_binary {job.job_basename}"
         elif job.intermediate:
-            command += f"; nci_intermediate {self.job_basename}"
+            command += f"; nci_intermediate {job.job_basename}"
         else:
-            command += f"; nci {self.job_basename}"
+            command += f"; nci {job.job_basename}"
         return command
 
     def _save_pse_command(self, job, command):
@@ -1086,7 +1097,7 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             str: Command string with save command for NCI session.
         """
         # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.nci_basename)}.pse"
+        command += f"; save {quote_path(job.job_basename)}.pse"
 
         return command
 
@@ -1102,26 +1113,6 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
     """
 
     JOBTYPES = ["pymol_mo"]
-
-    def _get_gaussian_executable(self, job):
-        """
-        Get the Gaussian executable path for cube file generation.
-
-        Retrieves the Gaussian executable configuration needed for
-        generating cube files from formatted checkpoint files.
-
-        Args:
-            job: PyMOL MO job object.
-
-        Returns:
-            str: Path to the Gaussian executable directory.
-        """
-        logger.info(
-            f"Obtaining Gaussian executable from server: {self.server.name}"
-        )
-        gaussian_exe = GaussianExecutable.from_servername(self.server.name)
-        gaussian_exe_path = gaussian_exe.executable_folder
-        return gaussian_exe_path
 
     def _prerun(self, job):
         """
@@ -1170,40 +1161,40 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             )
 
         if job.number:
-            if os.path.exists(f"{self.job_basename}_MO{job.number}.cube"):
+            if os.path.exists(f"{job.job_basename}_MO{job.number}.cube"):
                 logger.info(
-                    f"cube file {self.job_basename}_MO{job.number}.cube already exists."
+                    f"cube file {job.job_basename}_MO{job.number}.cube already exists."
                 )
                 pass
             else:
                 cubegen_command = (
-                    f"{gaussian_exe}/cubegen 0 MO={job.number} {self.job_basename}.fchk "
-                    f"{self.job_basename}_MO{job.number}.cube 0 h"
+                    f"{gaussian_exe}/cubegen 0 MO={job.number} {job.job_basename}.fchk "
+                    f"{job.job_basename}_MO{job.number}.cube 0 h"
                 )
                 run_command(cubegen_command)
 
         if job.homo:
-            if os.path.exists(f"{self.job_basename}_HOMO.cube"):
+            if os.path.exists(f"{job.job_basename}_HOMO.cube"):
                 logger.info(
-                    f"cube file {self.job_basename}_HOMO.cube already exists."
+                    f"cube file {job.job_basename}_HOMO.cube already exists."
                 )
                 pass
             else:
                 cubegen_command = (
-                    f"{gaussian_exe}/cubegen 0 MO=HOMO {self.job_basename}.fchk "
-                    f"{self.job_basename}_HOMO.cube 0 h"
+                    f"{gaussian_exe}/cubegen 0 MO=HOMO {job.job_basename}.fchk "
+                    f"{job.job_basename}_HOMO.cube 0 h"
                 )
                 run_command(cubegen_command)
         if job.lumo:
-            if os.path.exists(f"{self.job_basename}_LUMO.cube"):
+            if os.path.exists(f"{job.job_basename}_LUMO.cube"):
                 logger.info(
-                    f"cube file {self.job_basename}_LUMO.cube already exists."
+                    f"cube file {job.job_basename}_LUMO.cube already exists."
                 )
                 pass
             else:
                 cubegen_command = (
-                    f"{gaussian_exe}/cubegen 0 MO=LUMO {self.job_basename}.fchk "
-                    f"{self.job_basename}_LUMO.cube 0 h"
+                    f"{gaussian_exe}/cubegen 0 MO=LUMO {job.job_basename}.fchk "
+                    f"{job.job_basename}_LUMO.cube 0 h"
                 )
                 run_command(cubegen_command)
 
@@ -1370,7 +1361,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         """
         gaussian_exe = self._get_gaussian_executable(job)
 
-        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {self.job_basename}.fchk {self.job_basename}_spin.cube {job.npts}"
+        cubegen_command = f"{gaussian_exe}/cubegen 0 spin {job.job_basename}.fchk {job.job_basename}_spin.cube {job.npts}"
         run_command(cubegen_command)
 
     def _write_spin_density_pml(self, job):
