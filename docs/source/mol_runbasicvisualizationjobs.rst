@@ -37,7 +37,7 @@ Visualization-Specific OPTIONS
       -  string
       -  PyMOL render style. Options: pymol, cylview (default=None)
 
-   -  -  ``-t, --trace/--no-trace``
+   -  -  ``--trace/--no-trace``
       -  bool
       -  PyMOL options to ray trace or not (default=True)
 
@@ -113,3 +113,33 @@ Movie Basic Usage
 
 Movie Examples
 ==============
+
+************
+ Align Jobs
+************
+
+Align multiple molecular structures for comparison.
+
+.. code:: console
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] align [SUBCMD_OPTIONS]
+
+Align-Specific OPTIONS
+======================
+
+Can use ``-t, --filetype``, also inherit all options from visualization jobs and use the same parameters.
+
+Align Basic Usage
+=================
+
+**align files**
+
+   .. code:: console
+
+      chemsmart run mol -f molecule1.xyz -f molecule2.gjf -f molecule3.log align
+
+**align all files in same type**
+
+   .. code:: console
+
+      chemsmart run mol -t .xyz align

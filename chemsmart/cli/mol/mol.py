@@ -25,11 +25,11 @@ def click_file_options(f):
         help="filename from which new Gaussian input is prepared.",
     )
     @click.option(
-        "-af",
-        "--add-allfiles",
+        "-t",
+        "--filetype",
         type=str,
         default=None,
-        help="Input file pattern, e.g. '*.xyz', '*.log', '*.gjf', only for align job.",
+        help="Input file type, e.g. '.xyz', '.log', '.gjf', only for align job.",
     )
     @click.option(
         "-l",
@@ -49,7 +49,7 @@ def click_file_options(f):
         "-i",
         "--index",
         type=str,
-        default=None,
+        default="-1",
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
     )
@@ -80,7 +80,6 @@ def click_pymol_visualization_options(f):
         "using zhang_group_pymol_style.",
     )
     @click.option(
-        "-t/",
         "--trace/--no-trace",
         type=bool,
         default=True,
@@ -283,17 +282,18 @@ def click_pymol_save_options(f):
 @click.pass_context
 def mol(
     ctx,
-    add_allfiles,
+    filetype,
     filename,
     label,
     append_label,
     index,
     pubchem,
 ):
-    if add_allfiles:
-        matched_files = glob.glob(add_allfiles)
+    if filetype:
+        filetype = "*" + filetype
+        matched_files = glob.glob(filetype)
         if not matched_files:
-            logger.warning(f"No files matched pattern: {add_allfiles}")
+            logger.warning(f"No files matched pattern: {filetype}")
         else:
             filename = matched_files
     """CLI for running PYMOL visualization jobs using the chemsmart framework.
@@ -365,9 +365,12 @@ def mol(
             )
 
     # if user has specified an index to use to access particular structure
-    # then return that structure as a list
-    if index is not None:
-        logger.debug(f"Using molecule with index: {index}")
+    # Only apply additional index processing for PubChem molecules
+    if index is not None and pubchem:
+        # Only apply index processing for PubChem molecules
+        logger.debug(
+            f"Using molecule with index: {index} for PubChem molecules"
+        )
         try:
             # try to get molecule using python style string indexing,
             # but in 1-based

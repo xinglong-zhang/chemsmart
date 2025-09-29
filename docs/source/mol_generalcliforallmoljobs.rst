@@ -36,6 +36,10 @@ Works for all Mol jobs
       -  string
       -  Filename from which new Gaussian input is prepared (required)
 
+   -  -  ``-t, --filetype``
+      -  string
+      -  Input file pattern, e.g. '.log','.xyz','.gjf' (default=None). Only for align jobs.
+
    -  -  ``-l, --label``
       -  string
       -  Write user input filename for the job (without extension). Will overwrite your original filename (default=None)
