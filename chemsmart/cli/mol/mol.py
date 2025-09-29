@@ -1,4 +1,5 @@
 import functools
+import glob
 import logging
 import os
 
@@ -19,8 +20,16 @@ def click_file_options(f):
         "-f",
         "--filename",
         type=str,
+        multiple=True,
         default=None,
         help="filename from which new Gaussian input is prepared.",
+    )
+    @click.option(
+        "-af",
+        "--add-allfiles",
+        type=str,
+        default=None,
+        help="Input file pattern, e.g. '*.xyz', '*.log', '*.gjf', only for align job.",
     )
     @click.option(
         "-l",
@@ -40,7 +49,7 @@ def click_file_options(f):
         "-i",
         "--index",
         type=str,
-        default="-1",
+        default=None,
         help="Index of molecules to use; 1-based indices. "
         "Default to the last molecule structure. 1-based index.",
     )
@@ -274,12 +283,19 @@ def click_pymol_save_options(f):
 @click.pass_context
 def mol(
     ctx,
+    add_allfiles,
     filename,
     label,
     append_label,
     index,
     pubchem,
 ):
+    if add_allfiles:
+        matched_files = glob.glob(add_allfiles)
+        if not matched_files:
+            logger.warning(f"No files matched pattern: {add_allfiles}")
+        else:
+            filename = matched_files
     """CLI for running PYMOL visualization jobs using the chemsmart framework.
     Example usage:
     chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
@@ -298,15 +314,21 @@ def mol(
             "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
         )
 
-    # if filename is specified, read the file and obtain molecule
+    # if filename is specified, read the file and obtain molecule. use -i ":" to visualize all conformers
     if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
+        molecules = []
+        for file in filename:
+            mols = Molecule.from_filepath(
+                filepath=file,
+                index="-1" if index is None else index,
+                return_list=True,
+            )
+            for mol in mols:
+                mol.name = os.path.splitext(os.path.basename(file))[0]
+            molecules += mols
+        logger.debug(
+            f"Loaded {len(molecules)} molecules from {len(filename)} file(s)"
         )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -322,12 +344,25 @@ def mol(
             "Only give Gaussian input filename or name to be appended, but not both!"
         )
     if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{append_label}"
-    if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if isinstance(filename, (list, tuple)):
+            base_file = filename[0]
+        else:
+            base_file = filename
 
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+        base_label = os.path.splitext(os.path.basename(base_file))[0]
+        label = f"{base_label}_{append_label}"
+    if label is None and append_label is None:
+        if isinstance(filename, (list, tuple)):
+            base_file = filename[0]
+        else:
+            base_file = filename
+
+        label = os.path.splitext(os.path.basename(base_file))[0]
+
+        if "molecules" in locals() and molecules:
+            logger.debug(
+                f"Obtained molecules: {molecules} before applying indices"
+            )
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
