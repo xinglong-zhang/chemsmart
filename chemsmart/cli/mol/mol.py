@@ -19,6 +19,7 @@ def click_file_options(f):
         "-f",
         "--filename",
         type=str,
+        multiple=False,
         default=None,
         help="filename from which new Gaussian input is prepared.",
     )
@@ -55,7 +56,6 @@ def click_pymol_visualization_options(f):
     """Common click options for PyMOL visualization."""
 
     @click.option(
-        "-f",
         "--file",
         type=str,
         default=None,
@@ -71,7 +71,6 @@ def click_pymol_visualization_options(f):
         "using zhang_group_pymol_style.",
     )
     @click.option(
-        "-t/",
         "--trace/--no-trace",
         type=bool,
         default=True,
@@ -109,6 +108,31 @@ def click_pymol_visualization_options(f):
         type=str,
         default=None,
         help="Tuple for offsetting label position in mol jobs.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_align_options(f):
+    """Common click options for PyMOL Align options."""
+
+    @click.option(
+        "-f",
+        "--filenames",
+        type=str,
+        multiple=True,
+        default=None,
+        help="Multiple filenames for alignment. Can be used multiple times.",
+    )
+    @click.option(
+        "-t",
+        "--filetype",
+        type=str,
+        default=None,
+        help="Input file type, e.g. '.xyz', '.log', '.gjf', only for align job.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
