@@ -1455,23 +1455,6 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             job.xyz_absolute_paths.append(abs_xyz_path)
             job.mol_names.append(name)
 
-    def _setup_style(self, job, command):
-        if job.style is None or job.style.lower() == "pymol":
-            molnames = job.mol_names
-            style_cmds = "; ".join(
-                [f"pymol_style {name}" for name in molnames]
-            )
-            command += f' -d "{style_cmds}'
-        elif job.style.lower() == "cylview":
-            molnames = job.mol_names
-            style_cmds = "; ".join(
-                [f"cylview_style {name}" for name in molnames]
-            )
-            command += f' -d "{style_cmds}'
-        else:
-            raise ValueError(f"The style {job.style} is not available!")
-        return command
-
     def _get_visualization_command(self, job):
         exe = quote_path(self.executable)
         xyz_paths = job.xyz_absolute_paths
@@ -1511,6 +1494,23 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
             command += " -q"
         if job.command_line_only:
             command += " -c"
+        return command
+
+    def _setup_style(self, job, command):
+        if job.style is None or job.style.lower() == "pymol":
+            molnames = job.mol_names
+            style_cmds = "; ".join(
+                [f"pymol_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        elif job.style.lower() == "cylview":
+            molnames = job.mol_names
+            style_cmds = "; ".join(
+                [f"cylview_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        else:
+            raise ValueError(f"The style {job.style} is not available!")
         return command
 
     def _job_specific_commands(self, job, command):
