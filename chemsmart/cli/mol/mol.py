@@ -19,7 +19,7 @@ def click_file_options(f):
         "-f",
         "--filename",
         type=str,
-        multiple=False,  # 改为单文件处理
+        multiple=False,
         default=None,
         help="filename from which new Gaussian input is prepared.",
     )
@@ -56,7 +56,6 @@ def click_pymol_visualization_options(f):
     """Common click options for PyMOL visualization."""
 
     @click.option(
-        "-f",
         "--file",
         type=str,
         default=None,

@@ -29,7 +29,7 @@ Visualization-Specific OPTIONS
       -  Type
       -  Description
 
-   -  -  ``-f, --file``
+   -  -  ``--file``
       -  string
       -  PyMOL file script or style. If not specified, defaults to use zhang_group_pymol_style.py (default=None)
 
