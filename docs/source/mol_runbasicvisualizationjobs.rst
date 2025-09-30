@@ -127,6 +127,22 @@ Align multiple molecular structures for comparison.
 Align-Specific OPTIONS
 ======================
 
+.. list-table:: Visualization Job Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filenames``
+      -  string
+      -  Filenames from which new Gaussian inputs are prepared (multiple=True).
+
+   -  -  ``-t, --filetype``
+      -  string
+      -  Input file pattern, e.g. '.log','.xyz','.gjf' (default=None). Only for align jobs.
+
 Can use ``-t, --filetype``, also inherit all options from visualization jobs and use the same parameters.
 
 Align Basic Usage
@@ -136,10 +152,10 @@ Align Basic Usage
 
    .. code:: console
 
-      chemsmart run mol -f molecule1.xyz -f molecule2.gjf -f molecule3.log align
+      chemsmart run mol align -f molecule1.xyz -f molecule2.gjf -f molecule3.log
 
 **align all files in same type**
 
    .. code:: console
 
-      chemsmart run mol -t .xyz align
+      chemsmart run mol align -t .xyz

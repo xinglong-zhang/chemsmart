@@ -685,6 +685,20 @@ class PyMOLJobRunner(JobRunner):
         return process
 
     def _job_specific_commands(self, job, command):
+        """
+        Add job-specific PyMOL commands to the command string.
+
+        This is a base method intended to be overridden by subclasses
+        to add specialized PyMOL commands specific to their job type.
+        The base implementation returns the command unchanged.
+
+        Args:
+            job: PyMOL job object containing job-specific parameters.
+            command: Current PyMOL command string to extend.
+
+        Returns:
+            str: Extended command string with job-specific commands added.
+        """
         return command
 
     def _get_command(self, job):

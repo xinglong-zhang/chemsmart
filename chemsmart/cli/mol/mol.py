@@ -1,5 +1,4 @@
 import functools
-import glob
 import logging
 import os
 
@@ -20,16 +19,9 @@ def click_file_options(f):
         "-f",
         "--filename",
         type=str,
-        multiple=True,
+        multiple=False,  # 改为单文件处理
         default=None,
         help="filename from which new Gaussian input is prepared.",
-    )
-    @click.option(
-        "-t",
-        "--filetype",
-        type=str,
-        default=None,
-        help="Input file type, e.g. '.xyz', '.log', '.gjf', only for align job.",
     )
     @click.option(
         "-l",
@@ -117,6 +109,31 @@ def click_pymol_visualization_options(f):
         type=str,
         default=None,
         help="Tuple for offsetting label position in mol jobs.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_pymol_align_options(f):
+    """Common click options for PyMOL Align options."""
+
+    @click.option(
+        "-f",
+        "--filenames",
+        type=str,
+        multiple=True,
+        default=None,
+        help="Multiple filenames for alignment. Can be used multiple times.",
+    )
+    @click.option(
+        "-t",
+        "--filetype",
+        type=str,
+        default=None,
+        help="Input file type, e.g. '.xyz', '.log', '.gjf', only for align job.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -282,20 +299,12 @@ def click_pymol_save_options(f):
 @click.pass_context
 def mol(
     ctx,
-    filetype,
     filename,
     label,
     append_label,
     index,
     pubchem,
 ):
-    if filetype:
-        filetype = "*" + filetype
-        matched_files = glob.glob(filetype)
-        if not matched_files:
-            logger.warning(f"No files matched pattern: {filetype}")
-        else:
-            filename = matched_files
     """CLI for running PYMOL visualization jobs using the chemsmart framework.
     Example usage:
     chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
@@ -314,21 +323,15 @@ def mol(
             "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
         )
 
-    # if filename is specified, read the file and obtain molecule. use -i ":" to visualize all conformers
+    # if filename is specified, read the file and obtain molecule
     if filename:
-        molecules = []
-        for file in filename:
-            mols = Molecule.from_filepath(
-                filepath=file,
-                index="-1" if index is None else index,
-                return_list=True,
-            )
-            for mol in mols:
-                mol.name = os.path.splitext(os.path.basename(file))[0]
-            molecules += mols
-        logger.debug(
-            f"Loaded {len(molecules)} molecules from {len(filename)} file(s)"
+        molecules = Molecule.from_filepath(
+            filepath=filename, index=":", return_list=True
         )
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from {filename}!"
+        logger.debug(f"Obtained molecule {molecules} from {filename}")
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:
@@ -344,33 +347,17 @@ def mol(
             "Only give Gaussian input filename or name to be appended, but not both!"
         )
     if append_label is not None:
-        if isinstance(filename, (list, tuple)):
-            base_file = filename[0]
-        else:
-            base_file = filename
-
-        base_label = os.path.splitext(os.path.basename(base_file))[0]
-        label = f"{base_label}_{append_label}"
+        label = os.path.splitext(os.path.basename(filename))[0]
+        label = f"{label}_{append_label}"
     if label is None and append_label is None:
-        if isinstance(filename, (list, tuple)):
-            base_file = filename[0]
-        else:
-            base_file = filename
+        label = os.path.splitext(os.path.basename(filename))[0]
 
-        label = os.path.splitext(os.path.basename(base_file))[0]
-
-        if "molecules" in locals() and molecules:
-            logger.debug(
-                f"Obtained molecules: {molecules} before applying indices"
-            )
+    logger.debug(f"Obtained molecules: {molecules} before applying indices")
 
     # if user has specified an index to use to access particular structure
-    # Only apply additional index processing for PubChem molecules
-    if index is not None and pubchem:
-        # Only apply index processing for PubChem molecules
-        logger.debug(
-            f"Using molecule with index: {index} for PubChem molecules"
-        )
+    # then return that structure as a list
+    if index is not None:
+        logger.debug(f"Using molecule with index: {index}")
         try:
             # try to get molecule using python style string indexing,
             # but in 1-based
