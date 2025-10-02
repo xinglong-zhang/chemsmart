@@ -8,6 +8,7 @@ from ase import units
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
     R,
     atm_to_pa,
@@ -141,6 +142,9 @@ class Thermochemistry:
         elif str(self.filename).endswith(".out"):
             # create an OrcaOutput object if .out file
             return ORCAOutput(self.filename)
+        elif str(self.filename).endswith(".xtbout"):
+            # create an XTBOutput object if .xtbout file
+            return XTBOutput(self.filename)
         else:
             # can be added in future to parse other file formats
             raise ValueError(

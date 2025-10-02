@@ -572,6 +572,9 @@ class Molecule:
         if basename.endswith(".out"):
             return cls._read_orca_outfile(filepath, index, **kwargs)
 
+        if basename.endswith(".xtbout"):
+            return cls._read_xtb_outfile(filepath, index, **kwargs)
+
         if basename.endswith(".gro"):
             return cls._read_gromacs_gro(filepath, index, **kwargs)
 

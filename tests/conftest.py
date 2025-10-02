@@ -1042,6 +1042,66 @@ def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "orca")
 
 
+# master xTB test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    xtb_inputs_directory = os.path.join(xtb_test_directory, "inputs")
+    return os.path.abspath(xtb_inputs_directory)
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "default.inp")
+
+
+@pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "alpb_water.inp")
+
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    xtb_outputs_directory = os.path.join(xtb_test_directory, "outputs")
+    return os.path.abspath(xtb_outputs_directory)
+
+
+@pytest.fixture()
+def xtb_sp_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_sp.out")
+
+
+@pytest.fixture()
+def xtb_opt_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_opt.out")
+
+
+@pytest.fixture()
+def xtb_opt_gbsa_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "pyridine_opt_acetonitrile.out")
+
+
+@pytest.fixture()
+def xtb_hess_outfile(xtb_outputs_directory):
+    return os.path.join(
+        xtb_outputs_directory, "pyridine_hess_acetonitrile.out"
+    )
+
+
+@pytest.fixture()
+def xtb_gei_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "pyridine_gei.out")
+
+
+@pytest.fixture()
+def xtb_fukui_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "pyridine_fukui.out")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):

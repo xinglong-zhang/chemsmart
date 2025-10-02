@@ -42,6 +42,38 @@ class XTBOutput(FileMixin):
     def route_string(self):
         return self._get_route()
 
+    @property
+    def job_type(self):
+        """
+        Extract the primary job type from the route.
+        """
+        return self.get_job_type()
+
+    def get_job_type(self):
+        """
+        Extract job type from route specification.
+        """
+        # get job type: opt/sp
+        if "opt" or "ohess" in self.route_string:
+            job_type = "opt"
+        else:
+            job_type = "sp"
+        return job_type
+
+    def get_frequency(self):
+        """
+        Check for frequency calculation in route.
+        """
+        # get freq: T/F
+        return "hess" in self.route_string
+
+    @property
+    def freq(self):
+        """
+        Check if frequency calculation is requested.
+        """
+        return self.get_frequency()
+
     #           ...................................................
     #           :                      SETUP                      :
     #           :.................................................:
@@ -169,6 +201,13 @@ class XTBOutput(FileMixin):
     def unpaired_electrons(self):
         unpaired_electrons = self._get_setup_information("unpaired electrons")
         return int(unpaired_electrons)
+
+    @property
+    def multiplicity(self):
+        """
+        Multiplicity of the molecule.
+        """
+        return self.unpaired_electrons + 1
 
     @property
     def optimization_level(self):
@@ -934,6 +973,24 @@ class XTBOutput(FileMixin):
     def grrho_contribution(self):
         """Contribution of RRHO approximation to free energy in Eh"""
         return self._extract_thermodynamics_information("G(RRHO) contrib.")
+
+    @cached_property
+    def energies(self):
+        """
+        Return energies of the system from xTB output file.
+        """
+        return self._get_energies()
+
+    def _get_energies(self):
+        """
+        Obtain a list of energies for each geometry optimization point.
+        """
+        energies = []
+        for i, line in enumerate(self.contents):
+            if "* total energy  :" in line:
+                energy = float(line.split(":")[1].split()[0].strip())
+                energies.append(energy)
+        return energies or [self.total_energy]
 
     def _extract_final_information(self, keyword):
         for line in reversed(self.contents):
