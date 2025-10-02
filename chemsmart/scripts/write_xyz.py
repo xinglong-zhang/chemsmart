@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+XYZ file writer script.
+
+This script converts molecular structure files to XYZ format, extracting
+specific conformations or frames from multi-structure files and writing
+them in standard XYZ coordinate format.
+"""
+
 import logging
 import os
 
@@ -27,8 +35,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
     type=bool,
     is_flag=True,
     default=True,
-    help="To write all structures to a single .xzy file, if more than one structure is present.\n"
-    "Default is to write all structures to a single file.",
+    help="Write all structures to a single .xyz file if more than one "
+    "structure is present.\nDefault is to write all structures to "
+    "a single file.",
 )
 def entry_point(filename, index, single_file):
     """Script for writing structure to .xyz format.
@@ -37,6 +46,7 @@ def entry_point(filename, index, single_file):
     """
     create_logger()
 
+    # Load molecular structures from the input file
     try:
         molecules = Molecule.from_filepath(
             filepath=filename, index=index, return_list=True
@@ -49,11 +59,14 @@ def entry_point(filename, index, single_file):
     else:
         suffix = f"_idx{index}"
 
+    # Extract base filename for output naming
     file_basename = os.path.splitext(filename)[0]
 
+    # Write structures to XYZ files
     if len(molecules) == 1:
         molecules[0].write_xyz(file_basename + suffix + ".xyz")
     else:
+        # Handle multiple structures
         for i, molecule in enumerate(molecules):
             if single_file:
                 molecule.write_xyz(file_basename + "_all.xyz", mode="a")

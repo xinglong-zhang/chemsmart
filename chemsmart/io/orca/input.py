@@ -11,7 +11,25 @@ logger = logging.getLogger(__name__)
 
 
 class ORCAInput(ORCAFileMixin):
+    """
+    Parser for ORCA quantum chemistry input files.
+
+    This class provides comprehensive parsing capabilities for ORCA input files,
+    extracting molecular coordinates, calculation parameters, job settings, and
+    other computational directives. It handles both embedded coordinates and
+    external coordinate file references.
+
+    Args:
+        filename (str): Path to the ORCA input file
+    """
+
     def __init__(self, filename):
+        """
+        Initialize ORCA input file parser.
+
+        Args:
+            filename (str): Path to the ORCA input file to parse
+        """
         self.filename = filename
 
         try:
@@ -23,7 +41,15 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def route_string(self):
-        """Route string for ORCA file, convert to lower case."""
+        """
+        Extract and format the ORCA route string from input file.
+
+        Combines all lines starting with '!' to form the complete route
+        specification for the ORCA calculation.
+
+        Returns:
+            str: Complete route string in lowercase format
+        """
         route_string_lines = []
         for line in self.contents:
             if line.startswith("!"):
@@ -35,6 +61,13 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def route_object(self):
+        """
+        Create ORCARoute object from the route string.
+
+        Returns:
+            ORCARoute: Parsed route object containing calculation methods
+                      and keywords, or None if parsing fails
+        """
         try:
             route_object = ORCARoute(route_string=self.route_string)
             return route_object
@@ -43,6 +76,12 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def coordinate_type(self):
+        """
+        Extract coordinate specification type from input file.
+
+        Returns:
+            str: Coordinate type (e.g., 'xyz', 'xyzfile') or None if not found
+        """
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:
                 line_elem = line.split()
@@ -51,6 +90,12 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def charge(self):
+        """
+        Extract molecular charge from coordinate specification.
+
+        Returns:
+            int: Molecular charge or None if not specified
+        """
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:
                 line_elem = line.split()
@@ -59,6 +104,12 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def multiplicity(self):
+        """
+        Extract spin multiplicity from coordinate specification.
+
+        Returns:
+            int: Spin multiplicity or None if not specified
+        """
         for line in self.contents:
             if line.startswith("*") and len(line) > 1:
                 line_elem = line.split()
@@ -67,6 +118,15 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def coordinate_lines(self):
+        """
+        Extract coordinate lines from input file.
+
+        Uses regex pattern matching to identify lines containing atomic
+        coordinates in standard format.
+
+        Returns:
+            list: Lines containing atomic coordinate specifications
+        """
         pattern = re.compile(standard_coord_pattern)
         coordinate_lines = []
         for line in self.contents:
@@ -76,6 +136,20 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def molecule(self):
+        """
+        Create Molecule object from coordinate data.
+
+        Attempts to create a Molecule object from embedded coordinates or
+        external coordinate files. Sets charge and multiplicity from the
+        input file specification.
+
+        Returns:
+            Molecule: Molecular structure object with coordinates, charge,
+                     and spin multiplicity, or None if parsing fails
+
+        Raises:
+            FileNotFoundError: If external coordinate file is not found
+        """
         molecule = None
         try:
             molecule = self.cb.molecule
@@ -105,6 +179,15 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def scf_maxiter(self):
+        """
+        Extract SCF maximum iteration count from input file.
+
+        Searches for 'maxiter' keyword in the input file to determine
+        the maximum number of SCF iterations allowed.
+
+        Returns:
+            int: Maximum SCF iterations or None if not specified
+        """
         for i, raw_line in enumerate(self.contents):
             line = raw_line.lower()
             if "maxiter" in line:
@@ -130,7 +213,13 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def scf_convergence(self):
-        """Within %scf block."""
+        """
+        Extract SCF convergence criteria from %scf block.
+
+        Returns:
+            str: SCF convergence criterion (e.g., 'tight', 'loose')
+                 or None if not specified
+        """
         for i, line in enumerate(self.contents):
             if "%scf" not in line:
                 continue
@@ -153,6 +242,12 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def dipole(self):
+        """
+        Extract dipole moment calculation specification from elprop block.
+
+        Returns:
+            str: Dipole calculation setting or None if not specified
+        """
         # in elprop block
         for line in self.contents:
             if "dipole" in line:
@@ -161,6 +256,12 @@ class ORCAInput(ORCAFileMixin):
 
     @property
     def quadrupole(self):
+        """
+        Extract quadrupole moment calculation specification from elprop block.
+
+        Returns:
+            str: Quadrupole calculation setting or None if not specified
+        """
         # in elprop block
         for line in self.contents:
             if "quadrupole" in line:

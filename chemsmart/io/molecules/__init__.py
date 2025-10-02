@@ -1,12 +1,16 @@
-"""Data for molecules"""
+"""
+Data for molecules
+"""
 
 from ase.data import atomic_numbers, covalent_radii
 
-DEFAULT_BUFFER = 0.3  # Default buffer for bond cutoff in Å
+# Default buffer for bond cutoff calculations in Angstroms
+DEFAULT_BUFFER = 0.3
 
 
 def get_covalent_radius(element):
-    """Returns the covalent radius of an element in Å.
+    """
+    Returns the covalent radius of an element in Å.
 
     Args:
         element (str): Atomic symbol (e.g., "C", "O", "H").
@@ -22,7 +26,8 @@ def get_covalent_radius(element):
 
 
 def get_bond_cutoff(element1, element2, buffer=DEFAULT_BUFFER):
-    """Calculates bond cutoff distance based on covalent radii and buffer.
+    """
+    Calculates bond cutoff distance based on covalent radii and buffer.
     A good bond cutoff distance for molecular graphs depends on the type of
     chemical bonds and the elements involved. Here are some guidelines:
 

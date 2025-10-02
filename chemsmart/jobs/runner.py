@@ -4,6 +4,8 @@ import os
 from abc import abstractmethod
 from contextlib import suppress
 from functools import lru_cache
+from pathlib import Path
+from shutil import rmtree
 
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -22,6 +24,8 @@ class JobRunner(RegistryMixin):
         server (Server): Server to run the job on.
         scratch (bool): Whether to use scratch directory.
         scratch_dir (str): Path to scratch directory.
+        delete_scratch (bool): whether to delete scratch after
+            job finishes normally.
         fake (bool): Whether to use fake job runner.
         **kwargs: Additional keyword arguments.
     """
@@ -35,6 +39,7 @@ class JobRunner(RegistryMixin):
         server,
         scratch=None,
         scratch_dir=None,  # Explicit scratch directory
+        delete_scratch=False,
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -55,6 +60,7 @@ class JobRunner(RegistryMixin):
         self.server = server
         self.scratch = scratch
         self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
+        self.delete_scratch = delete_scratch
 
         if self.scratch:
             self._set_scratch()
@@ -172,6 +178,21 @@ class JobRunner(RegistryMixin):
         # Subclasses can implement
         pass
 
+    def _postrun_cleanup(self, job):
+        """Perform cleanup tasks after job completion.
+        This includes removing error files for successful jobs and
+        deleting scratch directories if applicable."""
+        if job.is_complete():
+            logger.debug("Job completed successfully, deleting .err files")
+            self._remove_err_files(job)
+
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(
+                    "Job completed successfully and delete_scratch is enabled"
+                )
+                self._delete_scratch_directory()
+
     @abstractmethod
     def _get_command(self, job):
         raise NotImplementedError
@@ -193,6 +214,19 @@ class JobRunner(RegistryMixin):
         return env
 
     def run(self, job, **kwargs):
+        """Main method to run a job. The run consists of
+        several steps: prerun, write input, get command,
+        create process, run process, postrun, and postrun cleanup.
+        prerun and postrun are hooks for subclasses to implement.
+        prerun consist of any setup needed before running the job,
+        such as creating scratch directories or copying additional
+        files into scratch (e.g., in ORCA copying .xyz files).
+        postrun consist of e.g., copying files back from scratch to job
+        folder (this may be different in different subclasses).
+        Args:
+            job: Job instance to run.
+            **kwargs: Additional keyword arguments for the run method.
+        """
         logger.debug(f"Running job {job} with runner {self}")
         logger.debug(f"Prerunning job: {job}")
         self._prerun(job)
@@ -211,6 +245,8 @@ class JobRunner(RegistryMixin):
         self._run(process, **kwargs)
         logger.debug(f"Postrunning job: {job}")
         self._postrun(job)
+        logger.debug(f"Postrun cleanup for job: {job}")
+        self._postrun_cleanup(job)
 
     def copy(self):
         return copy.copy(self)
@@ -251,13 +287,77 @@ class JobRunner(RegistryMixin):
         )
 
     def _remove_err_files(self, job):
-        # also remove .err and .pbs* and .slurm* files if job is complete
-        err_file = f"{job.folder}/{job.label}.err"
-        pbs_err_file = f"{job.folder}/{job.label}.pbserr"
-        slurm_err_file = f"{job.folder}/{job.label}.slurmerr"
+        """Remove error files associated with the job.
+        Files that end with .err, .pbserr, .slurmerr are removed."""
 
-        files_to_be_removed = [err_file, pbs_err_file, slurm_err_file]
+        basefilepath = self._get_base_filepath_to_remove(job)
+        patterns = [".err", ".pbserr", ".slurmerr"]
+
+        files_to_be_removed = [
+            basefilepath.with_suffix(pattern) for pattern in patterns
+        ]
+
         for file in files_to_be_removed:
             with suppress(FileNotFoundError):
                 logger.info(f"Removing file {file}.")
                 os.remove(file)
+
+    def _get_base_filepath_to_remove(self, job):
+        """Get the base filepath for the job to assist in file removal."""
+        return Path(job.folder) / job.label
+
+    def _delete_scratch_directory(self):
+        """
+        Delete the scratch directory if it exists.
+
+        This method safely removes the scratch directory and all its contents
+        after the job has completed successfully. Only deletes if the
+        running_directory is actually within the scratch_dir.
+        """
+        if (
+            hasattr(self, "running_directory")
+            and hasattr(self, "scratch_dir")
+            and self.scratch_dir
+            and os.path.exists(self.running_directory)
+        ):
+
+            # Check if running_directory is actually within scratch_dir
+            # to avoid accidentally deleting non-scratch directories
+            # use resolve() to handle .. and symlinks
+            rd = Path(self.running_directory).resolve()
+            sd = Path(self.scratch_dir).resolve()
+
+            # Basic sanity checks
+            if not sd.exists() or not sd.is_dir():
+                logger.error(
+                    "scratch_dir %s doesn't exist or is not a directory; "
+                    "refusing to proceed.",
+                    sd,
+                )
+            elif rd == sd:
+                logger.warning(
+                    "Refusing to delete the scratch root itself: %s", sd
+                )
+            # Python 3.9+: Path.is_relative_to
+            elif rd.is_relative_to(sd):
+                try:
+                    logger.info(
+                        f"Deleting scratch directory: {self.running_directory}"
+                    )
+                    rmtree(self.running_directory)
+                    logger.info(
+                        f"Successfully deleted scratch directory: {self.running_directory}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to delete scratch directory {self.running_directory}: {e}"
+                    )
+            else:
+                logger.debug(
+                    f"Running directory {self.running_directory} is not in scratch, "
+                    f"skipping deletion."
+                )
+        else:
+            logger.debug(
+                "No scratch directory to delete or directory does not exist."
+            )

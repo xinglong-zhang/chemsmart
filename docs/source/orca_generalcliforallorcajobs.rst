@@ -64,6 +64,62 @@ Works for all ORCA jobs
       -  string
       -  Get molecule structure from PubChem database using identifier (default=None)
 
+.. note::
+
+   |  ``-p`` is followed by the one of the projects specified in ``~/.chemsmart/project/*.yaml`` files, without
+      ``.yaml`` extension.
+   |  ``-f`` is followed by an input file the user wishes to run job on. Note that this input file can be any format,
+      such as ``.xyz``, Gaussian ``.com``, ``.gjf`` or ``.log`` file or ORCA ``.inp`` or ``.out`` file.
+
+**Specify Name of the File**
+
+-  Users can specify the name of the file to be created for the job, without file extension, they want to run by using
+   the option ``-l``, e.g.:
+
+   .. code:: console
+
+      chemsmart sub -s shared gaussian -p test -f test.com -l custom_job_name opt
+
+   will create input file named ``custom_job_name.com`` instead of the default ``test_opt.com``.
+
+**Append String to Input File Name**
+
+-  Users can also simply append a string to the base name of the filename supplied, e.g.:
+
+   .. code:: console
+
+      chemsmart sub -s shared gaussian -p test -f test.com -a append_string ts
+
+   will create input file named ``test_append_string.com`` instead of the default ``test_ts.com``.
+
+**Select the Particular Structure in file**
+
+-  If one has more than one structure in the supplied file for input preparation, one can select the particular
+   structure to perform job on by using the ``-i/--index`` option, e.g.:
+
+   .. code:: console
+
+      chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt
+
+   will take the 5th structure (1-indexed, as in chemsmart) from ase database file, ``small.db``, to create the input
+   file for geometry optimization.
+
+.. Warning::
+
+   1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for
+   molecules are are 1-indexed.
+
+**Get molecule from pubchem directly**
+
+-  Users can also get the molecule structure directly from PubChem using name, smiles, cid and conformer information,
+   e.g.:
+
+   .. code:: console
+
+      chemsmart sub -s shared gaussian -p test -P 962 -c 0 -m 1 -l water opt
+
+   will create input file named ``water.com`` for optimization calculation of water.
+
 .. list-table:: Molecular Properties Options
    :header-rows: 1
    :widths: 30 15 55

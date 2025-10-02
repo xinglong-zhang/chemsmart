@@ -1,3 +1,11 @@
+"""
+Reference strings and citations for computational chemistry methods.
+
+Contains formatted reference strings for various thermochemistry and
+quantum chemistry methods used in ChemSmart. Includes citations for
+QRRHO approximations, damping functions, and entropy calculations.
+"""
+
 # qrrho_header = f'"   " + "-" * 108 + "\n"'
 #         log(
 #             "   "
