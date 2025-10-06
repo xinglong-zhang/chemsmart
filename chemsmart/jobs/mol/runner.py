@@ -761,6 +761,48 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         return command
 
 
+class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    def _prerun(self, job):
+        """
+        Perform pre-execution setup for the PyMOL job.
+
+        Configures necessary file paths and variables before job
+        execution begins.
+
+        Args:
+            job: PyMOL job object to configure.
+        """
+        self._assign_variables(job)
+        self._write_hybrid_style_pml(job)
+
+    def _job_specific_commands(self, job, command):
+        """
+        Add job-specific commands for basic visualization.
+
+        Incorporates visualization-specific commands like ray tracing
+        that are unique to basic molecular visualization tasks.
+
+        Args:
+            job: PyMOL visualization job object.
+            command: Command string to extend.
+
+        Returns:
+            str: Command string with visualization-specific commands.
+        """
+        command = self._create_hybrid_style(job, command)
+        return command
+
+    def _create_hybrid_style(self, job, command):
+        # write the pml
+        ####job.group1
+        # etc
+        pass
+
+    def _write_hybrid_style_pml(self, job):
+        """Write the hybrid style pml."""
+        pass
+
+
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
     """
     Specialized PyMOL job runner for creating molecular animations.

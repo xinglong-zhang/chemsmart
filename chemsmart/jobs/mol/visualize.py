@@ -54,3 +54,14 @@ class PyMOLVisualizationJob(PyMOLJob):
             jobrunner=jobrunner,
             **kwargs,
         )
+
+
+class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
+
+    def __init__(self, group1, group2, transparency_value1,  **kwargs):
+        super().__init__(**kwargs)
+        self.group1 = group1
+        self.group2 = group2
+        self.transparency_value1 = transparency_value1
+
+
