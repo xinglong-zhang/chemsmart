@@ -9,6 +9,7 @@ from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
 
+
 @mol.command("visualize", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
     "--hybrid",
     is_flag=True,
     default=False,
-    help="Use hybrid visualization mode."
+    help="Use hybrid visualization mode.",
 )
 @click.pass_context
 def visualize(
@@ -62,10 +63,16 @@ def visualize(
                 "Invalid coordinates input. Please provide a valid Python "
                 "literal."
             )
-    from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob, PyMOLHybridVisualizationJob
-    Visualizationjob = PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
+    from chemsmart.jobs.mol.visualize import (
+        PyMOLHybridVisualizationJob,
+        PyMOLVisualizationJob,
+    )
 
-    return Visualizationjob(
+    visualizationjob = (
+        PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
+    )
+
+    return visualizationjob(
         molecule=molecules,
         label=label,
         pymol_script=file,

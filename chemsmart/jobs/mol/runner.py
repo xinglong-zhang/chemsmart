@@ -762,6 +762,8 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 
 
 class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    JOBTYPES = ["pymol_hybrid_visualization"]
+
     def _prerun(self, job):
         """
         Perform pre-execution setup for the PyMOL job.
@@ -772,6 +774,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Args:
             job: PyMOL job object to configure.
         """
+        super()._prerun(job) if hasattr(super(), "_prerun") else None
         self._assign_variables(job)
         self._write_hybrid_style_pml(job)
 
@@ -789,18 +792,77 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Returns:
             str: Command string with visualization-specific commands.
         """
-        command = self._create_hybrid_style(job, command)
+        # get the base class behavior
+        command = super()._job_specific_commands(job, command)
+        # append hybrid-specific customizations
+        if hasattr(job, "custom_pml") and job.custom_pml:
+            command += f"; run {job.custom_pml}"  # load user customizations
+        else:
+            default_pml = self._write_default_hybrid_pml(job)
+            command += f"; run {default_pml}"
         return command
 
-    def _create_hybrid_style(self, job, command):
-        # write the pml
-        ####job.group1
-        # etc
-        pass
+    def _write_default_hybrid_pml(self, job):
+        """Write the default hybrid style pml if no custom pml is provided.
+        Creates a PyMOL script file that set up hybrid visualization style with appropriate
+        coloring and transparency settings
 
-    def _write_hybrid_style_pml(self, job):
-        """Write the hybrid style pml."""
-        pass
+        Args:
+            job: PyMOL hybrid visualization job instance."""
+        default_hybrid_pml = (
+            self.pymol_templates_path / "hybrid_visualization.pml"
+        )
+        pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
+        if os.path.exists(pml_file):
+            logger.warning(f"PML file {pml_file} already exists! Overwriting.")
+        with open(default_hybrid_pml, "r") as f:
+            template_content = f.read()
+
+        with open(pml_file, "w") as f:
+            group_list = []
+            for key, val in self._get_groups(job):
+                f.write(f"select {key},  {val}\n")
+                group_list.append(key)
+            selection_str = " or ".join(group_list)
+            pml_content = template_content.replace("{groups}", selection_str)
+            f.write(pml_content)
+        return pml_file
+
+    def _get_groups(self, job):
+        groups = {}
+        for i in range(1, 5):
+            group_attr = f"group{i}"
+            group_value = getattr(job, group_attr, None)
+            if group_value:
+                groups[group_attr] = [group_value]
+        return groups
+
+    def _write_customized_style_pml(self, job):
+        """Write the customized hybrid style pml.
+        Creates a PyMOL script file that set up hybrid visualization style with customized
+        coloring and transparency settings
+
+        Args:
+            job: PyMOL hybrid visualization job instance."""
+
+        default_hybrid_pml = (
+            self.pymol_templates_path / "hybrid_visualization.pml"
+        )
+        pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
+        if os.path.exists(pml_file):
+            logger.warning(f"PML file {pml_file} already exists! Overwriting.")
+        with open(default_hybrid_pml, "r") as f:
+            template_content = f.read()
+
+        with open(pml_file, "w") as f:
+            group_list = []
+            for key, val in self._get_groups(job):
+                f.write(f"select {key},  {val}\n")
+                group_list.append(key)
+            selection_str = " or ".join(group_list)
+            pml_content = template_content.replace("{groups}", selection_str)
+            f.write(pml_content)
+        return pml_file
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
