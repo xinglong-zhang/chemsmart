@@ -4,7 +4,8 @@ import shutil
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.mol import PyMOLMovieJob, PyMOLNCIJob, PyMOLSpinJob
+from chemsmart.jobs.mol import PyMOLMovieJob, PyMOLNCIJob, PyMOLSpinJob, PyMOLHybridVisualizationJob
+from chemsmart.jobs.mol.runner import PyMOLHybridVisualizationJobRunner
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 from chemsmart.utils.cluster import is_pubchem_network_available
 
@@ -185,6 +186,51 @@ class TestPyMOLJobs:
         assert (
             len(molecules) == 10
         ), f"Expected 1 molecule, but got {len(molecules)}."
+
+    def test_pymol_hybrid_visualization_job_on_xyz_file(
+        self,
+        tmpdir,
+        dna_hybrid_visualized_xyz_file,
+        pymol_hybrid_visualization_jobrunner):
+        group1=['503-523']
+        group2=[336, '397-412','414-422']
+        group3=['467-495','497-500', 502]
+        group4=['524-539']
+        # set up jobs
+        job = PyMOLHybridVisualizationJob.from_filename(
+            dna_hybrid_visualized_xyz_file,
+            jobrunner=pymol_hybrid_visualization_jobrunner,
+            group1=group1,
+            group2=group2,
+            group3=group3,
+            group4=group4,
+        )
+        job.set_folder(tmpdir)
+
+        # run job
+        job.run()
+        assert job.is_complete()
+        style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
+        pse_file = os.path.join(tmpdir, "dna_hybrid.pse")
+        pml_file = os.path.join(tmpdir, "hybrid_visualization.pml")
+        group_selection_commands=['select group1,  id 503-523\n',
+                                  'util.cbap group1\n',
+                                  'select group2,  id 336 or id 397-412 or id 414-422\n',
+                                  'util.cbac group2\n',
+                                  'select group3,  id 467-495 or id 497-500 or id 502\n',
+                                  'util.cbay group3\n',
+                                  'select group4,  id 524-539\n',
+                                  'util.cbag group4\n',
+                                  'set stick_radius, 0.25, (group1 or group2 or group3 or group4)\n',
+                                  'hide everything, (group1 or group2 or group3 or group4)\n',
+                                  'show sticks, (group1 or group2 or group3 or group4)\n',
+                                  'unset stick_color, (group1 or group2 or group3 or group4)\n']
+        with open(pml_file,'r') as f:
+            content=f.readlines()
+            for i in group_selection_commands:
+                assert i in content
+        assert os.path.exists(style_file)
+        assert os.path.exists(pse_file)
 
     def test_pymol_movie_job_on_gaussian_com_file(
         self,

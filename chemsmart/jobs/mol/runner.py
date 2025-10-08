@@ -776,7 +776,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         """
         super()._prerun(job) if hasattr(super(), "_prerun") else None
         self._assign_variables(job)
-        self._write_hybrid_style_pml(job)
+        self._write_customized_hybrid_style_pml(job)
 
     def _job_specific_commands(self, job, command):
         """
@@ -812,7 +812,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         default_hybrid_pml = (
             self.pymol_templates_path / "hybrid_visualization.pml"
         )
-        pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
+        pml_file = os.path.join(job.folder, f"hybrid_visualization.pml")
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
         with open(default_hybrid_pml, "r") as f:
@@ -820,8 +820,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         with open(pml_file, "w") as f:
             group_list = []
-            for key, val in self._get_groups(job):
+            color_scheme=['cbap','cbac','cbay','cbag','cbam', 'cbas', 'cbaw','cbab','cbao','cbap','cbak']
+            for idx, (key, val) in enumerate(self._get_groups(job).items()):
                 f.write(f"select {key},  {val}\n")
+                scheme = color_scheme[idx]
+                f.write(f"util.{scheme} {key}\n")
                 group_list.append(key)
             selection_str = " or ".join(group_list)
             pml_content = template_content.replace("{groups}", selection_str)
@@ -834,10 +837,16 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             group_attr = f"group{i}"
             group_value = getattr(job, group_attr, None)
             if group_value:
-                groups[group_attr] = [group_value]
+                groups[group_attr] = self._get_group_selection_str(group_value)
         return groups
 
-    def _write_customized_style_pml(self, job):
+    def _get_group_selection_str(self, group_value):
+        selection_str=[]
+        for i in group_value:
+            selection_str.append(f"id {str(i)}")
+        return " or ".join(selection_str)
+
+    def _write_customized_hybrid_style_pml(self, job):
         """Write the customized hybrid style pml.
         Creates a PyMOL script file that set up hybrid visualization style with customized
         coloring and transparency settings
@@ -848,7 +857,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         default_hybrid_pml = (
             self.pymol_templates_path / "hybrid_visualization.pml"
         )
-        pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
+        pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
         with open(default_hybrid_pml, "r") as f:
@@ -856,7 +865,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         with open(pml_file, "w") as f:
             group_list = []
-            for key, val in self._get_groups(job):
+            for key, val in self._get_groups(job).items():
                 f.write(f"select {key},  {val}\n")
                 group_list.append(key)
             selection_str = " or ".join(group_list)

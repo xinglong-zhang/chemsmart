@@ -9,7 +9,7 @@ viewport 1356, 1538
 hide everything
 show sticks, all
 set stick_transparency, 0, all
-set stick_radius, 0.25, (sub1 or sub2 or sub3 or sub4)
+set stick_radius, 0.25, ({groups})
 
 #####################################
 # Custom Colors
@@ -28,17 +28,12 @@ color light_O, elem_O
 color light_H, elem_H
 color light_N, elem_N
 #####################################
-# Ligands Display
+# Groups Display
 #####################################
 hide everything, ({groups})
 show sticks, ({groups})
 unset stick_color, ({groups})
 
-# Distinguish ligands with util color schemes
-util.cbap sub1
-util.cbac sub2
-util.cbay sub3
-util.cbag sub4
 #####################################
 # Labels
 #####################################
