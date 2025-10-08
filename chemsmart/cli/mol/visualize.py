@@ -9,10 +9,15 @@ from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
 
-
 @mol.command("visualize", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
+@click.option(
+    "--hybrid",
+    is_flag=True,
+    default=False,
+    help="Use hybrid visualization mode."
+)
 @click.pass_context
 def visualize(
     ctx,
@@ -24,6 +29,7 @@ def visualize(
     command_line_only,
     coordinates,
     skip_completed,
+    hybrid,
     **kwargs,
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
@@ -56,9 +62,10 @@ def visualize(
                 "Invalid coordinates input. Please provide a valid Python "
                 "literal."
             )
-    from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
+    from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob, PyMOLHybridVisualizationJob
+    Visualizationjob = PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
 
-    return PyMOLVisualizationJob(
+    return Visualizationjob(
         molecule=molecules,
         label=label,
         pymol_script=file,
