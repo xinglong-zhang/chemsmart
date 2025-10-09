@@ -11,8 +11,9 @@ from rdkit import Chem
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
+    PyMOLHybridVisualizationJobRunner,
     PyMOLMovieJobRunner,
-    PyMOLVisualizationJobRunner, PyMOLHybridVisualizationJobRunner,
+    PyMOLVisualizationJobRunner,
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
@@ -1077,6 +1078,7 @@ def chemsmart_generated_xyz_file(xyz_directory):
 def extended_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crystal.extxyz")
 
+
 @pytest.fixture()
 def dna_hybrid_visualized_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "dna_hybrid.xyz")
@@ -1127,6 +1129,7 @@ def orca_jobrunner_scratch(tmpdir, pbs_server):
 @pytest.fixture()
 def pymol_visualization_jobrunner(pbs_server):
     return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
+
 
 @pytest.fixture()
 def pymol_hybrid_visualization_jobrunner(pbs_server):
