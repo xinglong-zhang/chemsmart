@@ -197,10 +197,10 @@ class TestPyMOLJobs:
         dna_hybrid_visualized_xyz_file,
         pymol_hybrid_visualization_jobrunner,
     ):
-        group1 = ["503-523"]
-        group2 = [336, "397-412", "414-422"]
-        group3 = ["467-495", "497-500", 502]
-        group4 = ["524-539"]
+        group1 = "503-523"
+        group2 = "336, 397-412, 414-422"
+        group3 = "467-495, 497-500, 502"
+        group4 = "524-539"
         # set up jobs
         job = PyMOLHybridVisualizationJob.from_filename(
             dna_hybrid_visualized_xyz_file,
@@ -219,6 +219,18 @@ class TestPyMOLJobs:
         pse_file = os.path.join(tmpdir, "dna_hybrid.pse")
         pml_file = os.path.join(tmpdir, "hybrid_visualization.pml")
         group_selection_commands = [
+            "pymol_style all\n",
+            "unset stick_color, all\n",
+            "hide everything, all\n",
+            "show sticks, all\n",
+            "set_color light_C, [0.8, 0.8, 0.9]\n",
+            "set_color light_N, [0.6, 0.8, 1.0]\n",
+            "set_color light_O, [1.0, 0.7, 0.7]\n",
+            "set_color light_P, [1.0, 0.85, 0.6]\n",
+            "color light_C, elem C\n",
+            "color light_P, elem P\n",
+            "color light_O, elem O\n",
+            "color light_N, elem N\n",
             "select group1,  id 503-523\n",
             "util.cbap group1\n",
             "select group2,  id 336 or id 397-412 or id 414-422\n",
@@ -228,9 +240,6 @@ class TestPyMOLJobs:
             "select group4,  id 524-539\n",
             "util.cbag group4\n",
             "set stick_radius, 0.25, (group1 or group2 or group3 or group4)\n",
-            "hide everything, (group1 or group2 or group3 or group4)\n",
-            "show sticks, (group1 or group2 or group3 or group4)\n",
-            "unset stick_color, (group1 or group2 or group3 or group4)\n",
         ]
         with open(pml_file, "r") as f:
             content = f.readlines()
