@@ -74,12 +74,13 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         group2=None,
         group3=None,
         group4=None,
-        group1_color=None,
-        group2_color=None,
-        group3_color=None,
-        group4_color=None,
+        color1=None,
+        color2=None,
+        color3=None,
+        color4=None,
         stick_radius=None,
-        surface_transcparency=None,
+        surface_color=None,
+        surface_transparency=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -87,9 +88,10 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.group2 = group2
         self.group3 = group3
         self.group4 = group4
-        self.group1_color = group1_color
-        self.group2_color = group2_color
-        self.group3_color = group3_color
-        self.group4_color = group4_color
+        self.color1 = color1
+        self.color2 = color2
+        self.color3 = color3
+        self.color4 = color4
         self.stick_radius = stick_radius
-        self.surface_transcparency = surface_transcparency
+        self.surface_color = surface_color
+        self.surface_transparency = surface_transparency

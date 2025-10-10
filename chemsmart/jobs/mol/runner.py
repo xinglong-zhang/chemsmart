@@ -820,9 +820,14 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         groups = {}
         for i in range(1, 5):
             group_attr = f"group{i}"
+            group_color_attr = f"color{i}"
             group_value = getattr(job, group_attr, None)
+            group_color_value = getattr(job, group_color_attr, None)
             if group_value and group_attr:
-                groups[group_attr] = self._get_group_index_str(group_value)
+                groups[group_attr] = {
+                    "index": self._get_group_index_str(group_value),
+                    "color": group_color_value or "default",
+                }
         return groups
 
     def _get_group_selection_str(self, job):
@@ -865,6 +870,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         )
 
     def _write_highlighted_colors(self, job, f):
+        # use default coloring style if is not sepecified by user
         color_scheme = [
             "cbap",
             "cbac",
@@ -879,9 +885,13 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             "cbak",
         ]
         for idx, (key, val) in enumerate(self._get_groups(job).items()):
-            f.write(f"select {key},  {val}\n")
+            f.write(f"select {key},  {val["index"]}\n")
         for idx, (key, val) in enumerate(self._get_groups(job).items()):
-            scheme = color_scheme[idx]
+            if val["color"] != "default":
+                # use user specified coloring style
+                scheme = val["color"]
+            else:
+                scheme = color_scheme[idx]
             f.write(f"util.{scheme} {key}\n")
         f.write("set stick_transparency, 0, all\n")
         f.write(
@@ -889,10 +899,18 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         )
 
     def _write_surface_settings(self, job, f):
+        if job.surface_color:
+            surface_color = job.surface_color
+        else:
+            surface_color = "grey"
+        if job.surface_transparency:
+            surface_transparency = job.surface_transparency
+        else:
+            surface_transparency = "0.7"
         f.write(
             "show surface, all\n"
-            "set surface_color, grey, all\n"
-            "set transparency, 0.7, all\n"
+            f"set surface_color, {surface_color}, all\n"
+            f"set transparency, {surface_transparency}, all\n"
         )
 
 

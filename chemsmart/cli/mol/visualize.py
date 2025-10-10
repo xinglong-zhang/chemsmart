@@ -47,6 +47,48 @@ logger = logging.getLogger(__name__)
     default=None,
     help="indexes of atoms to be selected as group 4.",
 )
+@click.option(
+    "-c1",
+    "--color1",
+    type=str,
+    default=None,
+    help="customized coloring style of group 1.",
+)
+@click.option(
+    "-c2",
+    "--color2",
+    type=str,
+    default=None,
+    help="customized coloring style of group 2.",
+)
+@click.option(
+    "-c3",
+    "--color3",
+    type=str,
+    default=None,
+    help="customized coloring style of group 3.",
+)
+@click.option(
+    "-c4",
+    "--color4",
+    type=str,
+    default=None,
+    help="customized coloring style of group 4.",
+)
+@click.option(
+    "-sc",
+    "--surface-color",
+    type=str,
+    default=None,
+    help="customized surface color.",
+)
+@click.option(
+    "-st",
+    "--surface-transparency",
+    type=str,
+    default=None,
+    help="customized surface transparency.",
+)
 @click.pass_context
 def visualize(
     ctx,
@@ -63,6 +105,12 @@ def visualize(
     group2,
     group3,
     group4,
+    color1,
+    color2,
+    color3,
+    color4,
+    surface_color,
+    surface_transparency,
     **kwargs,
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
@@ -100,11 +148,7 @@ def visualize(
         PyMOLVisualizationJob,
     )
 
-    visualizationjob = (
-        PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
-    )
-
-    return visualizationjob(
+    job_kwargs = dict(
         molecule=molecules,
         label=label,
         pymol_script=file,
@@ -115,9 +159,55 @@ def visualize(
         command_line_only=command_line_only,
         coordinates=coordinates,
         skip_completed=skip_completed,
-        group1=group1,
-        group2=group2,
-        group3=group3,
-        group4=group4,
         **kwargs,
     )
+
+    # add hybrid options if hybrid mode is enabled
+    if hybrid:
+
+        visualizationjob = PyMOLHybridVisualizationJob
+        job_kwargs.update(
+            _get_hybrid_options(
+                group1,
+                group2,
+                group3,
+                group4,
+                color1,
+                color2,
+                color3,
+                color4,
+                surface_color,
+                surface_transparency,
+            )
+        )
+    else:
+        visualizationjob = PyMOLVisualizationJob
+
+    return visualizationjob(**job_kwargs)
+
+
+def _get_hybrid_options(
+    group1,
+    group2,
+    group3,
+    group4,
+    color1,
+    color2,
+    color3,
+    color4,
+    surface_color,
+    surface_transparency,
+):
+    """Return a dict of hybrid visualization options."""
+    return {
+        "group1": group1,
+        "group2": group2,
+        "group3": group3,
+        "group4": group4,
+        "color1": color1,
+        "color2": color2,
+        "color3": color3,
+        "color4": color4,
+        "surface_color": surface_color,
+        "surface_transparency": surface_transparency,
+    }
