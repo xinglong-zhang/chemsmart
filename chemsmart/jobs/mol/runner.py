@@ -796,7 +796,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         command = super()._job_specific_commands(job, command)
         # append hybrid-specific customizations
         hybrid_pml = self._write_hybrid_pml(job)
-        command += f"; run {hybrid_pml}"
+        command += f"; @{hybrid_pml}"
         return command
 
     def _write_hybrid_pml(self, job):
@@ -809,35 +809,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
-        # with open(default_hybrid_pml, "r") as f:
-        #     template_content = f.read()
-        self._write_faded_colors(job)
-        self._write_highlighted_colors(job)
-        self._write_surface_settings(job)
-        #
-        # with open(pml_file, "w") as f:
-        #     group_list = []
-        #     color_scheme = [
-        #         "cbap",
-        #         "cbac",
-        #         "cbay",
-        #         "cbag",
-        #         "cbam",
-        #         "cbas",
-        #         "cbaw",
-        #         "cbab",
-        #         "cbao",
-        #         "cbap",
-        #         "cbak",
-        #     ]
-        #     for idx, (key, val) in enumerate(self._get_groups(job).items()):
-        #         f.write(f"select {key},  {val}\n")
-        #         scheme = color_scheme[idx]
-        #         f.write(f"util.{scheme} {key}\n")
-        #         group_list.append(key)
-        #     selection_str = " or ".join(group_list)
-        #     pml_content = template_content.replace("{groups}", selection_str)
-        #     f.write(pml_content)
+        with open(pml_file, "w") as f:
+            self._write_default_pymol_style(job, f)
+            self._write_faded_colors(job, f)
+            self._write_highlighted_colors(job, f)
+            self._write_surface_settings(job, f)
         return pml_file
 
     def _get_groups(self, job):
@@ -845,8 +821,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         for i in range(1, 5):
             group_attr = f"group{i}"
             group_value = getattr(job, group_attr, None)
-            if group_value:
-                # groups[group_attr] = self._get_group_selection_str(job.group_value)
+            if group_value and group_attr:
                 groups[group_attr] = self._get_group_index_str(group_value)
         return groups
 
@@ -855,71 +830,70 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         pattern = re.compile(r"^group\d+$")
         # Get all attributes of the job that start with 'group'
         for attr in dir(job):
-            if pattern.match(attr):
+            if pattern.match(attr) and attr:
+                group_value = getattr(job, attr)
+                if group_value is None:  # skip attributes with None value
+                    continue
                 selection_str.append(attr)
         return " or ".join(selection_str)
 
     def _get_group_index_str(self, index):
         index_list = []
+        index = index.replace(",", " ").split()
         for i in index:
             index_list.append(f"id {i}")
         return " or ".join(index_list)
 
-    def _write_faded_colors(self, job):
-        pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
-        with open(pml_file, "a") as f:
-            f.write(
-                "set_color light_C, [0.8, 0.8, 0.9]\n  "
-                "set_color light_N, [0.6, 0.8, 1.0]\n  "
-                "set_color light_O, [1.0, 0.7, 0.7]\n"
-                "set_color light_P, [1.0, 0.85, 0.6]\n"
-            )
-            f.write(
-                "color light_C, elem_C\n"
-                "color light_P, elem_P\n"
-                "color light_O, elem_O\n"
-                "color light_N, elem_N\n"
-            )
+    def _write_default_pymol_style(self, job, f):
+        f.write("pymol_style all\n")
+        f.write("unset stick_color, all\n")
+        f.write("hide everything, all\n")
+        f.write("show sticks, all\n")
 
-    def _write_highlighted_colors(self, job):
-        pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
-        with open(pml_file, "a") as f:
-            color_scheme = [
-                "cbap",
-                "cbac",
-                "cbay",
-                "cbag",
-                "cbam",
-                "cbas",
-                "cbaw",
-                "cbab",
-                "cbao",
-                "cbap",
-                "cbak",
-            ]
-            for idx, (key, val) in enumerate(self._get_groups(job).items()):
-                f.write(f"select {key},  {val}\n")
-            f.write(
-                f"hide everything, ({self._get_group_selection_str(job)})\n"
-                f"show sticks, ({self._get_group_selection_str(job)})\n"
-                f"unset stick_color, ({self._get_group_selection_str(job)})\n"
-            )
-            for idx, (key, val) in enumerate(self._get_groups(job).items()):
-                scheme = color_scheme[idx]
-                f.write(f"util.{scheme} {key}\n")
-            f.write("set stick_transparency, 0, all\n")
-            f.write(
-                f"set stick_radius, 0.25, ({self._get_group_selection_str(job)})\n"
-            )
+    def _write_faded_colors(self, job, f):
+        f.write(
+            "set_color light_C, [0.8, 0.8, 0.9]\n"
+            "set_color light_N, [0.6, 0.8, 1.0]\n"
+            "set_color light_O, [1.0, 0.7, 0.7]\n"
+            "set_color light_P, [1.0, 0.85, 0.6]\n"
+        )
+        f.write(
+            "color light_C, elem C\n"
+            "color light_P, elem P\n"
+            "color light_O, elem O\n"
+            "color light_N, elem N\n"
+        )
 
-    def _write_surface_settings(self, job):
-        pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
-        with open(pml_file, "a") as f:
-            f.write(
-                "show surface, all\n"
-                "set surface_color, grey, all\n"
-                "set transparency, 0.7, all\n"
-            )
+    def _write_highlighted_colors(self, job, f):
+        color_scheme = [
+            "cbap",
+            "cbac",
+            "cbay",
+            "cbag",
+            "cbam",
+            "cbas",
+            "cbaw",
+            "cbab",
+            "cbao",
+            "cbap",
+            "cbak",
+        ]
+        for idx, (key, val) in enumerate(self._get_groups(job).items()):
+            f.write(f"select {key},  {val}\n")
+        for idx, (key, val) in enumerate(self._get_groups(job).items()):
+            scheme = color_scheme[idx]
+            f.write(f"util.{scheme} {key}\n")
+        f.write("set stick_transparency, 0, all\n")
+        f.write(
+            f"set stick_radius, 0.25, ({self._get_group_selection_str(job)})\n"
+        )
+
+    def _write_surface_settings(self, job, f):
+        f.write(
+            "show surface, all\n"
+            "set surface_color, grey, all\n"
+            "set transparency, 0.7, all\n"
+        )
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):

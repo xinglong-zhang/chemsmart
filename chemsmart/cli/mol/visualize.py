@@ -19,6 +19,34 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Use hybrid visualization mode.",
 )
+@click.option(
+    "-g1",
+    "--group1",
+    type=str,
+    default=None,
+    help="indexes of atoms to be selected as group 1.",
+)
+@click.option(
+    "-g2",
+    "--group2",
+    type=str,
+    default=None,
+    help="indexes of atoms to be selected as group 2.",
+)
+@click.option(
+    "-g3",
+    "--group3",
+    type=str,
+    default=None,
+    help="indexes of atoms to be selected as group 3.",
+)
+@click.option(
+    "-g4",
+    "--group4",
+    type=str,
+    default=None,
+    help="indexes of atoms to be selected as group 4.",
+)
 @click.pass_context
 def visualize(
     ctx,
@@ -31,6 +59,10 @@ def visualize(
     coordinates,
     skip_completed,
     hybrid,
+    group1,
+    group2,
+    group3,
+    group4,
     **kwargs,
 ):
     """CLI for running automatic PyMOL visualization and saving as pse file.
@@ -83,5 +115,9 @@ def visualize(
         command_line_only=command_line_only,
         coordinates=coordinates,
         skip_completed=skip_completed,
+        group1=group1,
+        group2=group2,
+        group3=group3,
+        group4=group4,
         **kwargs,
     )
