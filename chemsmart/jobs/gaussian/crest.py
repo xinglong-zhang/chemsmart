@@ -161,9 +161,7 @@ class GaussianCrestJob(GaussianJob):
             list: List of incomplete GaussianGeneralJob objects.
         """
         return [
-            job
-            for job in self.all_conformers_jobs
-            if not job.is_complete()
+            job for job in self.all_conformers_jobs if not job.is_complete()
         ]
 
     def _check_last_finished_job_index(self):

@@ -206,7 +206,8 @@ class Gaussian16Output(GaussianFileMixin):
         Special handling (as per design):
           - Non-link & normal termination: de-duplicate the terminal (e.g. freq) frame.
           - Non-link & abnormal termination: use safe_min_lengths.
-          - Link & normal termination: drop the first frame, then behave like normal termination (incl. de-dup).
+          - Link & normal termination: drop the first frame, then behave like
+            normal termination (incl. de-dup).
           - Link & abnormal termination:
               * if multiple frames: drop the first (carry-over), then use safe_min_lengths.
               * if single frame: return that only frame (no drop).
@@ -377,7 +378,12 @@ class Gaussian16Output(GaussianFileMixin):
         completed successfully. Useful for analyzing partially converged
         optimizations or error cases.
         """
-        return self.all_structures[-1]
+        last_mol = self.all_structures[-1]
+        # Attach vibrational data to the final structure if available
+        if self.num_vib_frequencies:
+            last_mol = self._attach_vib_metadata(last_mol)
+
+        return last_mol
 
     @property
     def molecule(self):
@@ -712,7 +718,28 @@ class Gaussian16Output(GaussianFileMixin):
         """
         return len(self.vibrational_frequencies)
 
+    def _attach_vib_metadata(self, mol):
+        """Attach vibrational data to a Molecule object as attributes."""
+        vib = {
+            "frequencies": self.vibrational_frequencies or [],
+            "reduced_masses": self.reduced_masses or [],
+            "force_constants": self.force_constants or [],
+            "ir_intensities": self.ir_intensities or [],
+            "mode_symmetries": self.vibrational_mode_symmetries or [],
+            "modes": self.vibrational_modes or [],
+        }
+
+        setattr(mol, "vibrational_frequencies", vib["frequencies"])
+        setattr(mol, "vibrational_reduced_masses", vib["reduced_masses"])
+        setattr(mol, "vibrational_force_constants", vib["force_constants"])
+        setattr(mol, "vibrational_ir_intensities", vib["ir_intensities"])
+        setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
+        setattr(mol, "vibrational_modes", vib["modes"])
+
+        return mol
+
     #### FREQUENCY CALCULATIONS
+
     @cached_property
     def has_frozen_coordinates(self):
         """Check if the calculation includes frozen coordinates.
