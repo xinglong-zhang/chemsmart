@@ -57,11 +57,41 @@ class PyMOLVisualizationJob(PyMOLJob):
 
 
 class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
+    """Pymol job for hybrid visualization
+    Default settings for hybrid visualization of molecules,
+    with selected groups highlighted in different colors,
+    background in faded color and surface style
+    - Group 1: cbap color scheme
+    - Group 2: cbac color scheme
+    - Group 3: cbay color scheme
+    - Group 4: cbag color scheme"""
 
-    def __init__(self, group1, group2, transparency_value1,  **kwargs):
+    TYPE = "pymol_hybrid_visualization"
+
+    def __init__(
+        self,
+        group1,
+        group2=None,
+        group3=None,
+        group4=None,
+        color1=None,
+        color2=None,
+        color3=None,
+        color4=None,
+        stick_radius=None,
+        surface_color=None,
+        surface_transparency=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.group1 = group1
         self.group2 = group2
-        self.transparency_value1 = transparency_value1
-
-
+        self.group3 = group3
+        self.group4 = group4
+        self.color1 = color1
+        self.color2 = color2
+        self.color3 = color3
+        self.color4 = color4
+        self.stick_radius = stick_radius
+        self.surface_color = surface_color
+        self.surface_transparency = surface_transparency

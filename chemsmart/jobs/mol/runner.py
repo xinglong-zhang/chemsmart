@@ -762,6 +762,15 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 
 
 class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """Specialized PyMOL job runner for hybrid molecular visualization.
+
+    Extends the base PyMOL runner to provide hybrid molecular
+    visualization capabilities with customizable styling, labeling.
+
+    Current job runner supports up to four groups."""
+
+    JOBTYPES = ["pymol_hybrid_visualization"]
+
     def _prerun(self, job):
         """
         Perform pre-execution setup for the PyMOL job.
@@ -772,8 +781,9 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Args:
             job: PyMOL job object to configure.
         """
+        super()._prerun(job) if hasattr(super(), "_prerun") else None
         self._assign_variables(job)
-        self._write_hybrid_style_pml(job)
+        self._write_hybrid_pml(job)
 
     def _job_specific_commands(self, job, command):
         """
@@ -789,18 +799,173 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Returns:
             str: Command string with visualization-specific commands.
         """
-        command = self._create_hybrid_style(job, command)
+        # get the base class behavior
+        command = super()._job_specific_commands(job, command)
+        # append hybrid-specific customizations
+        hybrid_pml = self._write_hybrid_pml(job)
+        command += f"; @{hybrid_pml}"
         return command
 
-    def _create_hybrid_style(self, job, command):
-        # write the pml
-        ####job.group1
-        # etc
-        pass
+    def _write_hybrid_pml(self, job):
+        """Write the default hybrid style pml if no custom pml is provided.
+        Creates a PyMOL script file that set up hybrid visualization style with appropriate
+        coloring and transparency settings
 
-    def _write_hybrid_style_pml(self, job):
-        """Write the hybrid style pml."""
-        pass
+        Args:
+            job: PyMOL hybrid visualization job instance.
+
+        Return:
+            str: Path to the generated PML file.
+        """
+        pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
+        if os.path.exists(pml_file):
+            logger.warning(f"PML file {pml_file} already exists! Overwriting.")
+        with open(pml_file, "w") as f:
+            self._write_default_pymol_style(job, f)
+            self._write_faded_colors(job, f)
+            self._write_highlighted_colors(job, f)
+            self._write_surface_settings(job, f)
+        return pml_file
+
+    def _get_groups(self, job):
+        """Get the group information from the job.
+
+        Args:
+            job: PyMOL hybrid visualization job instance.
+
+        Return:
+            dict: Dictionary of group information with group names as keys
+                  and dictionaries with index and color as values.
+            e.g., {
+                "group1": {"index": "3-5,13,17,19-22", "color": "blue"},
+                "group2": {"index": "29-78,79,81,87", "color": "default"}
+            }
+        """
+        groups = {}
+        for i in range(1, 5):
+            group_attr = f"group{i}"
+            group_color_attr = f"color{i}"
+            group_value = getattr(job, group_attr, None)
+            group_color_value = getattr(job, group_color_attr, None)
+            if group_value and group_attr:
+                groups[group_attr] = {
+                    "index": self._get_group_index_str(group_value),
+                    "color": group_color_value or "default",
+                }
+        return groups
+
+    def _get_group_selection_str(self, job):
+        """Get the selection string for all groups in the job.
+        Args:
+            job: PyMOL hybrid visualization job instance.
+
+        Return:
+            str: Selection string for all groups,
+            e.g., "group1 or group2 or group3 or group4"""
+        selection_str = []
+        pattern = re.compile(r"^group\d+$")
+        # Get all attributes of the job that start with 'group'
+        for attr in dir(job):
+            if pattern.match(attr) and attr:
+                group_value = getattr(job, attr)
+                if group_value is None:  # skip attributes with None value
+                    continue
+                selection_str.append(attr)
+        return " or ".join(selection_str)
+
+    def _get_group_index_str(self, index):
+        """Convert a group index string to PyMOL selection format.
+        Args:
+            job: PyMOL hybrid visualization job instance.
+
+        Return:
+            str: pymol style selection range for each group,
+            e.g., "id 467-495 or id 497-500 or id 502"
+        """
+        index_list = []
+        index = index.replace(",", " ").split()
+        for i in index:
+            index_list.append(f"id {i}")
+        return " or ".join(index_list)
+
+    def _write_default_pymol_style(self, job, f):
+        """Write the pymol style without settings for stick color to the pml file."""
+        f.write("pymol_style all\n")
+        f.write("unset stick_color, all\n")
+        f.write("hide everything, all\n")
+        f.write("show sticks, all\n")
+
+    def _write_faded_colors(self, job, f):
+        """Write the faded colors for non-highlighted C, N, O, P in background to the pml file."""
+        f.write(
+            "set_color light_C, [0.8, 0.8, 0.9]\n"
+            "set_color light_N, [0.6, 0.8, 1.0]\n"
+            "set_color light_O, [1.0, 0.7, 0.7]\n"
+            "set_color light_P, [1.0, 0.85, 0.6]\n"
+        )
+        f.write(
+            "color light_C, elem C\n"
+            "color light_P, elem P\n"
+            "color light_O, elem O\n"
+            "color light_N, elem N\n"
+        )
+
+    def _write_highlighted_colors(self, job, f):
+        """
+        Write PyMOL commands to highlight and color the defined groups in a job.
+
+        Args:
+            job: PyMOLHybridVisualizationJob instance containing group and color info.
+
+        Behavior:
+            - Groups are selected using their atom indices (via _get_groups).
+            - Colors are applied according to the user's specification; if no color
+              is specified, a default color scheme is used.
+        Notes:
+            - The order of colors follows the order of defined groups.
+        """
+        color_scheme = [
+            "cbap",
+            "cbac",
+            "cbay",
+            "cbag",
+            "cbam",
+            "cbas",
+            "cbaw",
+            "cbab",
+            "cbao",
+            "cbap",
+            "cbak",
+        ]
+        for idx, (key, val) in enumerate(self._get_groups(job).items()):
+            f.write(f"select {key},  {val["index"]}\n")
+        for idx, (key, val) in enumerate(self._get_groups(job).items()):
+            if val["color"] != "default":
+                # use user specified coloring style
+                scheme = val["color"]
+            else:
+                scheme = color_scheme[idx]
+            f.write(f"util.{scheme} {key}\n")
+        f.write("set stick_transparency, 0, all\n")
+        f.write(
+            f"set stick_radius, 0.25, ({self._get_group_selection_str(job)})\n"
+        )
+
+    def _write_surface_settings(self, job, f):
+        """Write PyMOL commands to display and style the molecular surface."""
+        if job.surface_color:
+            surface_color = job.surface_color
+        else:
+            surface_color = "grey"
+        if job.surface_transparency:
+            surface_transparency = job.surface_transparency
+        else:
+            surface_transparency = "0.7"
+        f.write(
+            "show surface, all\n"
+            f"set surface_color, {surface_color}, all\n"
+            f"set transparency, {surface_transparency}, all\n"
+        )
 
 
 class PyMOLMovieJobRunner(PyMOLVisualizationJobRunner):
