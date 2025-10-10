@@ -762,6 +762,13 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
 
 
 class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
+    """Specialized PyMOL job runner for hybrid molecular visualization.
+
+    Extends the base PyMOL runner to provide hybrid molecular
+    visualization capabilities with customizable styling, labeling.
+
+    Current job runner supports up to four groups."""
+
     JOBTYPES = ["pymol_hybrid_visualization"]
 
     def _prerun(self, job):
@@ -805,7 +812,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         coloring and transparency settings
 
         Args:
-            job: PyMOL hybrid visualization job instance."""
+            job: PyMOL hybrid visualization job instance.
+
+        Return:
+            str: Path to the generated PML file.
+        """
         pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
@@ -817,6 +828,15 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         return pml_file
 
     def _get_groups(self, job):
+        """Get the group information from the job.
+
+        Args:
+            job: PyMOL hybrid visualization job instance.
+
+        Return:
+            dict: Dictionary of group information with group names as keys
+                  and dictionaries with index and color as values.
+        """
         groups = {}
         for i in range(1, 5):
             group_attr = f"group{i}"
