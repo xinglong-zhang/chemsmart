@@ -243,7 +243,6 @@ class TestPyMOLJobs:
         ]
         with open(pml_file, "r") as f:
             content = f.readlines()
-            print(content)
             for i in group_selection_commands:
                 assert i in content
         assert os.path.exists(style_file)
