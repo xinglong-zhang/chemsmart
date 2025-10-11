@@ -113,23 +113,6 @@ def clean_duplicate_structure(orientations):
             orientations.pop(-1)
 
 
-def create_vibrationally_displaced_molecule(molecule, vib_mode, amp=0.5):
-    """
-    Create a displaced Molecule object from a given molecule and
-    vibrational normal mode. Keep all other attributes from the molecule
-    unchanged.
-    Args:
-        molecule: Molecule object
-        vib_mode: vibrational mode
-        amp (float): amplitude of vibrational displacement
-    """
-    symbols = list(molecule.symbols)
-    R0 = np.asarray(molecule.positions, float)
-    M = np.asarray(vib_mode)
-    Rt = R0 + amp * M
-    return Molecule(symbols=symbols, positions=Rt, **molecule)
-
-
 def increment_numbers(s, increment=1):
     """
     Increment all integers in a string by a fixed amount.

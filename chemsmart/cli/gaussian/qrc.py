@@ -78,7 +78,9 @@ def qrc(
     # get label
     label = ctx.obj["label"]
 
-    logger.info(f"QRC {type} settings from project: {qrc_settings.__dict__}")
+    logger.info(
+        f"QRC {jobtype} settings from project: {qrc_settings.__dict__}"
+    )
 
     from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
 

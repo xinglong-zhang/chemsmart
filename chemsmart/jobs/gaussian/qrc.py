@@ -42,8 +42,7 @@ class GaussianQRCJob(GaussianJob):
         Initialize a Gaussian QRC calculation.
 
         Args:
-            molecules (list[Molecule]): List of Molecule objects representing
-                conformers to optimize.
+            molecule: Molecule objects representing the structure for QRC run.
             settings (GaussianJobSettings): Calculation configuration settings.
             label (str, optional): Base label for conformer jobs.
             jobrunner (JobRunner, optional): Job execution handler.
@@ -83,7 +82,7 @@ class GaussianQRCJob(GaussianJob):
     @property
     def both_qrc_jobs(self):
         """
-        Both QRC forward and reverse jobs..
+        Both QRC forward and reverse jobs.
 
         Returns:
             list: List of GaussianGeneralJob objects for QRC.
@@ -107,7 +106,7 @@ class GaussianQRCJob(GaussianJob):
     @property
     def qrcr_molecule(self):
         """
-        QRC forward molecule with vibrational displacement at -ve given amplitude.
+        QRC reverse molecule with vibrational displacement at -ve given amplitude.
         """
         return self.molecule.vibrationally_displaced(
             mode_idx=self.mode_idx,
@@ -148,11 +147,8 @@ class GaussianQRCJob(GaussianJob):
 
     def _run_both_jobs(self):
         """
-        Execute both QRC jobs.
-
-        Runs the conformer optimization jobs sequentially up to the
-        number specified in num_confs_to_opt. This allows for partial
-        ensemble processing when needed.
+        Execute both QRC jobs (forward and reverse) sequentially.
+        Runs the QRC forward and reverse jobs for the current molecule.
         """
         for job in self.both_qrc_jobs:
             job.run()
