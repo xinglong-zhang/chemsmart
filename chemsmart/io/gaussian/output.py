@@ -357,6 +357,16 @@ class Gaussian16Output(GaussianFileMixin):
             ]
 
         logger.debug("Total structures returned: %d", len(all_structures))
+
+        logger.debug(
+            "Attaching vibrational data to the final structure if available..."
+        )
+
+        last_mol = all_structures[-1]
+        # Attach vibrational data to the final structure if available
+        if self.num_vib_frequencies:
+            all_structures[-1] = self._attach_vib_metadata(last_mol)
+
         return all_structures
 
     @cached_property
@@ -378,12 +388,7 @@ class Gaussian16Output(GaussianFileMixin):
         completed successfully. Useful for analyzing partially converged
         optimizations or error cases.
         """
-        last_mol = self.all_structures[-1]
-        # Attach vibrational data to the final structure if available
-        if self.num_vib_frequencies:
-            last_mol = self._attach_vib_metadata(last_mol)
-
-        return last_mol
+        return self.all_structures[-1]
 
     @property
     def molecule(self):
