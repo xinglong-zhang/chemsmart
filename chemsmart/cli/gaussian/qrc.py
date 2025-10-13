@@ -73,7 +73,12 @@ def qrc(
     check_charge_and_multiplicity(qrc_settings)
 
     # get molecule
-    molecule = ctx.obj["molecules"][-1]  # use last structure
+    molecules = ctx.obj["molecules"]
+    if not molecules:
+        raise click.UsageError(
+            "No molecules found in context. Please provide at least one molecule."
+        )
+    molecule = molecules[-1]  # use last structure
 
     # get label
     label = ctx.obj["label"]
