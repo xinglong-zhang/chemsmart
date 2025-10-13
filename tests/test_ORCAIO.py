@@ -559,6 +559,20 @@ class TestORCAOutput:
             0.000239,
             0.000778,
         ]
+        transition_dipole1 = np.array([0.000000, -0.000000, 0.049416])
+        transition_dipole2 = np.array([-0.000000, -0.000000, 0.015460])
+        transition_dipole3 = np.array([0.027888, -0.000000, 0.000000])
+        print(orca_out.transition_dipoles[0])
+        assert np.allclose(
+            orca_out.transition_dipoles[0], transition_dipole1, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[1], transition_dipole2, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[2], transition_dipole3, rtol=1e-4
+        )
+
         assert orca_out.num_translation_and_rotation_modes == 6
         assert orca_out.num_vibration_modes == 3
         assert orca_out.temperature_in_K == 298.15

@@ -2144,7 +2144,8 @@ class ORCAOutput(ORCAFileMixin):
     def integrated_absorption_coefficients(self):
         """Units of km/mol.
 
-        The values under “Int” are the integrated absorption coefficient [J. Comput. Chem., 2002, 23, 895.].
+        The values under “Int” are the integrated absorption coefficient
+        [J. Comput. Chem., 2002, 23, 895.].
         """
         integrated_absorption_coefficients = [
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
@@ -2169,7 +2170,6 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def transition_dipole_deriv_norm(self):
         """Units of a.u.
-
         “T**2” are the norm of the transition dipole derivatives,.
         """
         transition_dipole_deriv_norm = [
@@ -2191,6 +2191,27 @@ class ORCAOutput(ORCAFileMixin):
                         )
                 return transition_dipole_deriv_norm
         return None
+
+    @property
+    def transition_dipoles(self):
+        """Transition dipole for each vibrational mode, (Tx, Ty, Tz)."""
+        transition_dipoles = []
+        for i, line_i in enumerate(self.optimized_output_lines):
+            if line_i == "IR SPECTRUM":
+                for line_j in self.optimized_output_lines[i + 6 :]:
+                    if len(line_j) == 0:
+                        break
+                    line_j_elements = line_j.split()
+                    transition_dipoles.append(
+                        np.array(
+                            [
+                                float(line_j_elements[-3].lstrip("(")),
+                                float(line_j_elements[-2]),
+                                float(line_j_elements[-1].rstrip(")")),
+                            ]
+                        )
+                    )
+        return transition_dipoles
 
     @property
     def num_translation_and_rotation_modes(self):
@@ -2220,6 +2241,29 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements = line_j.split()
                         return int(line_j_elements[-1])
         return None
+
+    def _attach_vib_metadata(self, mol):
+        """Attach vibrational data to a Molecule object as attributes."""
+        vib = {
+            "frequencies": self.vibrational_frequencies or [],
+            "molar_absorption_coefficients": self.molar_absorption_coefficients
+            or [],  # eps
+            "integrated_absorption_coefficients": self.integrated_absorption_coefficients
+            or [],  # Int
+            "transition_dipole_deriv_norm": self.transition_dipole_deriv_norm
+            or [],  # T**2
+            "mode_symmetries": self.vibrational_mode_symmetries or [],
+            "modes": self.vibrational_modes or [],
+        }
+
+        setattr(mol, "vibrational_frequencies", vib["frequencies"])
+        setattr(mol, "vibrational_reduced_masses", vib["reduced_masses"])
+        setattr(mol, "vibrational_force_constants", vib["force_constants"])
+        setattr(mol, "vibrational_ir_intensities", vib["ir_intensities"])
+        setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
+        setattr(mol, "vibrational_modes", vib["modes"])
+
+        return mol
 
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # *     THERMOCHEMISTRY      *
