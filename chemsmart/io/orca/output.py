@@ -1376,7 +1376,6 @@ class ORCAOutput(ORCAFileMixin):
         """
         dfet_embed_energy_hartree = self._get_dfet_embed_energy()
         if dfet_embed_energy_hartree is not None:
-            print(dfet_embed_energy_hartree)
             return dfet_embed_energy_hartree[-1]
 
     @property
@@ -2025,6 +2024,41 @@ class ORCAOutput(ORCAFileMixin):
             vibrational_frequencies = vibrational_frequencies[6:]
 
         return vibrational_frequencies
+
+    @property
+    def normal_modes(self):
+        """
+        Obtain the normal modes for molecule, if calculated.
+        Modes are Cartesian displacements weighted by diagonal matrix
+        M(i,i)=1/sqrt(m[i]) where m[i] is the mass of displaced atom.
+        Thus, these vectors are normalized but *not* orthogonal
+        """
+        normal_modes = []
+        for i, line_i in enumerate(self.optimized_output_lines):
+            if line_i == "NORMAL MODES":
+                for line_j in self.optimized_output_lines[i + 7 :]:
+                    if "----------" in line_j:
+                        break
+                    print(line_j)
+        #             # if 'Rotational constants in MHz :' in line_j:
+        #             line_j_elements = line_j.split()
+        #             if len(line_j_elements) != 0:
+        #                 vibrational_frequencies.append(
+        #                     float(line_j_elements[1])
+        #                 )
+        #
+        # if self.molecule.is_monoatomic:
+        #     # remove the first three frequencies (translations) for  monoatomic molecules
+        #     vibrational_frequencies = vibrational_frequencies[3:]
+        # elif self.molecule.is_linear:
+        #     # remove the first five frequencies (3 trans + 2 rot) for linear molecules
+        #     vibrational_frequencies = vibrational_frequencies[5:]
+        # else:
+        #     # remove the first six frequencies (3 trans + 3 rot) for non-linear molecules
+        #     vibrational_frequencies = vibrational_frequencies[6:]
+        #
+        return normal_modes
+
 
     @property
     def vib_freq_scale_factor(self):

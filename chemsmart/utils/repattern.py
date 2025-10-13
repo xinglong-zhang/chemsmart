@@ -2,6 +2,9 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+integer_pattern = r"^\+?\d+$"  # Non-negative integer (incl. 0)
+                               # optional leading + allowed
+float_pattern_with_exponential = r"^[+-]?(?:(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+(?:[eE][+-]?\d+))$"
 raw_energy_value_pattern = r"(-\d+\.\d+)"
 
 xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"

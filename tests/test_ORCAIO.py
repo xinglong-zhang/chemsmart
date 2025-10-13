@@ -516,6 +516,7 @@ class TestORCAOutput:
             3875.61,
             3971.9,
         ]
+        print(orca_out.normal_modes)
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
             0.012719,
