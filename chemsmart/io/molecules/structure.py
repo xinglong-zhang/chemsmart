@@ -80,19 +80,16 @@ class Molecule:
         Initialize molecular structure with atomic and quantum properties.
         """
         self.symbols = symbols
-        self._positions = None
-        self.positions = positions
+        self._positions = positions
         self.charge = charge
         self.multiplicity = multiplicity
         self.frozen_atoms = frozen_atoms
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
-        self._energy = None
-        self.energy = energy
+        self._energy = energy
         self.forces = forces
         self.velocities = velocities
         self.info = info
-        self._num_atoms = len(self.symbols)
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -198,13 +195,6 @@ class Molecule:
         arr = np.asarray(value, dtype=float)
         if arr.ndim != 2 or arr.shape[1] != 3:
             raise ValueError(f"positions must be (N, 3); got {arr.shape}")
-        # keep num_atoms in sync if needed
-        if getattr(self, "_num_atoms", None) is None:
-            self._num_atoms = arr.shape[0]
-        elif self._num_atoms != arr.shape[0]:
-            raise ValueError(
-                f"positions has {arr.shape[0]} atoms but molecule has {self._num_atoms}"
-            )
         # store a copy to avoid accidental aliasing
         self._positions = arr.copy()
 
@@ -298,14 +288,7 @@ class Molecule:
         """
         Return the number of atoms in the molecule.
         """
-        return self._num_atoms
-
-    @num_atoms.setter
-    def num_atoms(self, value):
-        """
-        Set the number of atoms in the molecule.
-        """
-        self._num_atoms = value
+        return len(self.symbols)
 
     @property
     def pbc(self):
