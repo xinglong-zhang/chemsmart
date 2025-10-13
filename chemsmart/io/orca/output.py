@@ -664,13 +664,13 @@ class ORCAOutput(ORCAFileMixin):
 
         # Prepare energies and forces (adjust for length mismatches)
         energies = (
-            self.energies_in_eV
-            if self.energies_in_eV is not None
+            self.energies
+            if self.energies is not None
             else [None] * len(orientations)
         )
         forces = (
-            self.forces_in_eV_per_angstrom
-            if self.forces_in_eV_per_angstrom is not None
+            self.forces
+            if self.forces is not None
             else [None] * len(orientations)
         )
 
@@ -807,19 +807,25 @@ class ORCAOutput(ORCAFileMixin):
                     if "---------------" in line_j:
                         break
                     line_elements = line_j.split()
+                    optimized_final_value = line_elements[-1]
                     if line_elements[1].lower().startswith("b"):  # bond
                         parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}"
+                        optimized_final_value = line_elements[7]
                     if line_elements[1].lower().startswith("a"):  # angle
                         parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
+                        optimized_final_value = line_elements[8]
                     if line_elements[1].lower().startswith("d"):  # dihedral
                         parameter = (
                             f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
                             f"{line_elements[5]}"
                         )
+                        optimized_final_value = line_elements[9]
                     if parameter is not None:
                         # Convert to 1-indexing
                         parameter = increment_numbers(parameter, 1)
-                    optimized_geometry[parameter] = float(line_elements[-1])
+                    optimized_geometry[parameter] = float(
+                        optimized_final_value
+                    )
         ## the above result will return a dictionary storing the optimized parameters:
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
         return optimized_geometry

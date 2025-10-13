@@ -1002,7 +1002,7 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        if self.frozen_atoms is None:
+        if self.frozen_atoms is None or len(self.frozen_atoms) == 0:
             for i, (s, (x, y, z)) in enumerate(
                 zip(self.chemical_symbols, self.positions)
             ):

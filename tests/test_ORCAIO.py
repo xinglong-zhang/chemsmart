@@ -1806,6 +1806,449 @@ class TestORCAOutput:
             "D(O18,H14,C13,C4)": -125.9028,
         }
 
+    def test_sn2_ts_orca_output(self, orca_sn2_ts_output):
+        orca_out = ORCAOutput(filename=orca_sn2_ts_output)
+        assert orca_out.forces is not None
+        optimized_geometry = orca_out.get_optimized_parameters()
+        assert isinstance(optimized_geometry, dict)
+        assert optimized_geometry["B(Cl2,C1)"] == 2.0226
+        assert optimized_geometry["B(F6,C1)"] == 2.1106
+        molecule = orca_out.molecule
+        assert isinstance(molecule, Molecule)
+        assert molecule.symbols == ["C", "Cl", "H", "H", "H", "F"]
+        assert molecule.empirical_formula == "CH3ClF"
+        print(molecule.positions)
+        assert np.allclose(
+            molecule.positions,
+            np.array(
+                [
+                    [
+                        [-0.000000e00, -1.080000e-03, -4.434500e-02],
+                        [0.000000e00, 1.833000e-03, 1.978187e00],
+                        [-0.000000e00, 1.057065e00, -2.682420e-01],
+                        [9.166220e-01, -5.311370e-01, -2.657160e-01],
+                        [-9.166220e-01, -5.311370e-01, -2.657160e-01],
+                        [1.000000e-06, 4.457000e-03, -2.155338e00],
+                    ]
+                ]
+            ),
+            rtol=1e-4,
+        )
+        assert math.isclose(molecule.energy, -599.599020937503, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.final_nuclear_repulsion, 9.14540060, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.final_electronic_energy, -85.46871161, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.one_electron_energy, -122.99848749, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.two_electron_energy, 37.52977588, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.max_cosx_asymmetry_energy, 0.00000841, rel_tol=1e-2
+        )
+        assert math.isclose(
+            orca_out.potential_energy, -152.15110671, rel_tol=1e-4
+        )
+        assert math.isclose(orca_out.kinetic_energy, 75.82779570, rel_tol=1e-4)
+        assert math.isclose(orca_out.virial_ratio, 2.00653475, rel_tol=1e-4)
+        assert math.isclose(orca_out.xc_energy, -4.482615927956, rel_tol=1e-4)
+        assert orca_out.dfet_embed_energy == 0.0
+        assert orca_out.orbital_occupancy == [
+            2,
+            2,
+            2,
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        orbital_energies = np.array(
+            [
+                -533.6944922825586,
+                -29.80792369019839,
+                -15.936838030119114,
+                -12.224062098182399,
+                -10.252651603489042,
+                2.419962981919028,
+                4.519647950331253,
+                16.859657764363483,
+                18.723882609506855,
+                27.008008125221124,
+                27.26657071522466,
+                29.185381600732917,
+                31.307570385387297,
+                37.97574774204451,
+                39.35882085950502,
+                43.269233088136716,
+                49.80502705178539,
+                62.011537805982066,
+                63.17398100555701,
+                82.40358722432674,
+                83.45748420505049,
+                88.40867752634217,
+                96.38705590868665,
+                105.15657812830358,
+            ]
+        )
+        assert np.allclose(
+            orca_out.orbital_energies, orbital_energies, rtol=1e-6
+        )
+        assert orca_out.homo_energy == -10.252651603489042
+        assert orca_out.lumo_energy == 2.419962981919028
+        assert np.isclose(orca_out.fmo_gap, 12.6726145854, rtol=1e-6)
+
+        # test HOMO LUMO
+
+        assert orca_out.mulliken_atomic_charges == {
+            "O0": -0.32926,
+            "H1": 0.16463,
+            "H2": 0.16463,
+        }
+        assert orca_out.loewdin_atomic_charges == {
+            "O0": -0.155184,
+            "H1": 0.077592,
+            "H2": 0.077592,
+        }
+        assert orca_out.mayer_mulliken_gross_atomic_population == {
+            "O0": 8.3293,
+            "H1": 0.8354,
+            "H2": 0.8354,
+        }
+        assert orca_out.mayer_total_nuclear_charge == {
+            "O0": 8.0,
+            "H1": 1.0,
+            "H2": 1.0,
+        }
+        assert orca_out.mayer_mulliken_gross_atomic_charge == {
+            "O0": -0.3293,
+            "H1": 0.1646,
+            "H2": 0.1646,
+        }
+        assert orca_out.mayer_total_valence == {
+            "O0": 2.0072,
+            "H1": 1.0104,
+            "H2": 1.0104,
+        }
+        assert orca_out.mayer_bonded_valence == {
+            "O0": 2.0072,
+            "H1": 1.0104,
+            "H2": 1.0104,
+        }
+        assert orca_out.mayer_free_valence == {"H1": 0.0, "H2": 0.0, "O0": 0.0}
+        assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
+            "B(O0,H1)": 1.0036,
+            "B(O0,H2)": 1.0036,
+        }
+        assert np.allclose(
+            orca_out.dipole_moment_electric_contribution,
+            np.array([0.0, 0.0, 0.18466]),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            orca_out.dipole_moment_nuclear_contribution,
+            np.array([0.0, 0.0, -0.99386]),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            orca_out.total_dipole_moment,
+            np.array([0.0, 0.0, -0.8092]),
+            rtol=1e-4,
+        )
+        assert orca_out.dipole_moment_in_au == 0.80920
+        assert orca_out.dipole_moment_in_debye == 2.05682
+        assert np.allclose(
+            orca_out.dipole_moment_along_axis_in_au,
+            np.array([0.0, -0.809197, 0.0]),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            orca_out.dipole_moment_along_axis_in_debye,
+            np.array([0.0, -2.056815, 0.0]),
+            rtol=1e-4,
+        )
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            26.416987,
+            14.661432,
+            9.428573,
+        ]
+        assert orca_out.rotational_constants_in_MHz == [
+            791961.33697,
+            439538.666271,
+            282661.493198,
+        ]
+        assert orca_out.vibrational_frequencies == [
+            1625.35,
+            3875.61,
+            3971.9,
+        ]
+        mode1 = np.array(
+            [
+                [-0.0, 0.0, -0.069893],
+                [-0.43577, -0.0, 0.554673],
+                [0.43577, -0.0, 0.554673],
+            ]
+        )
+        mode2 = np.array(
+            [
+                [0.0, -0.0, -0.050918],
+                [0.579153, -0.0, 0.404085],
+                [-0.579154, 0.0, 0.404085],
+            ]
+        )
+        mode3 = np.array(
+            [
+                [
+                    [-0.069728, -0.0, -0.0],
+                    [0.553362, 0.0, 0.437448],
+                    [0.553361, 0.0, -0.437447],
+                ],
+            ]
+        )
+        assert len(orca_out.vibrational_modes) == 3
+        assert np.allclose(orca_out.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[2], mode3, rtol=1e-4)
+
+        # test for molecule obtained from output file
+        mol = orca_out.molecule
+        assert len(mol.vibrational_modes) == 3
+        assert np.allclose(mol.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[2], mode3, rtol=1e-4)
+
+        assert orca_out.vib_freq_scale_factor == 1.0
+        assert orca_out.molar_absorption_coefficients == [
+            0.012719,
+            0.002968,
+            0.009899,
+        ]
+        assert orca_out.integrated_absorption_coefficients == [
+            64.27,
+            15.0,
+            50.03,
+        ]
+        assert orca_out.transition_dipole_deriv_norm == [
+            0.002442,
+            0.000239,
+            0.000778,
+        ]
+        transition_dipole1 = np.array([0.000000, -0.000000, 0.049416])
+        transition_dipole2 = np.array([-0.000000, -0.000000, 0.015460])
+        transition_dipole3 = np.array([0.027888, -0.000000, 0.000000])
+        assert np.allclose(
+            orca_out.transition_dipoles[0], transition_dipole1, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[1], transition_dipole2, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[2], transition_dipole3, rtol=1e-4
+        )
+
+        assert orca_out.num_translation_and_rotation_modes == 6
+        assert orca_out.num_vibration_modes == 3
+        assert orca_out.temperature_in_K == 298.15
+        assert orca_out.pressure_in_atm == 1.0
+        assert orca_out.total_mass_in_amu == 18.02
+        assert math.isclose(
+            orca_out.internal_energy, -76.29889480, rel_tol=1e-4
+        )  # in Hartrees, default unit in ORCA output file
+        assert math.isclose(
+            orca_out.electronic_energy, -76.32331101, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.02158076, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_vibration_correction,
+            0.00000291,
+            rel_tol=1e-8,
+        )
+        assert math.isclose(
+            orca_out.thermal_rotation_correction, 0.00141627, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_translation_correction,
+            0.00141627,
+            rel_tol=1e-8,
+        )
+        assert math.isclose(orca_out.enthalpy, -76.29795059, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.thermal_enthalpy_correction,
+            0.00094421,
+            rel_tol=1e-8,
+        )
+        assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
+        assert math.isclose(
+            orca_out.vibrational_entropy_no_temperature_in_SI,
+            0.028883578,
+            rel_tol=1e-4,
+        )
+        assert math.isclose(
+            orca_out.rotational_entropy_no_temperature_in_SI,
+            43.887276051,
+            rel_tol=1e-4,
+        )
+        assert math.isclose(
+            orca_out.translational_entropy_no_temperature_in_SI,
+            144.8035920,
+            rel_tol=1e-4,
+        )
+        assert math.isclose(orca_out.entropy_TS, 0.5831641766362, rel_tol=1e-4)
+
+        assert orca_out.mulliken_atomic_charges == {
+            "O0": -0.32926,
+            "H1": 0.16463,
+            "H2": 0.16463,
+        }
+        assert orca_out.loewdin_atomic_charges == {
+            "O0": -0.155184,
+            "H1": 0.077592,
+            "H2": 0.077592,
+        }
+        assert orca_out.mayer_mulliken_gross_atomic_population == {
+            "O0": 8.3293,
+            "H1": 0.8354,
+            "H2": 0.8354,
+        }
+        assert orca_out.mayer_total_nuclear_charge == {
+            "O0": 8.0,
+            "H1": 1.0,
+            "H2": 1.0,
+        }
+        assert orca_out.mayer_mulliken_gross_atomic_charge == {
+            "O0": -0.3293,
+            "H1": 0.1646,
+            "H2": 0.1646,
+        }
+        assert orca_out.mayer_total_valence == {
+            "O0": 2.0072,
+            "H1": 1.0104,
+            "H2": 1.0104,
+        }
+        assert orca_out.mayer_bonded_valence == {
+            "O0": 2.0072,
+            "H1": 1.0104,
+            "H2": 1.0104,
+        }
+        assert orca_out.mayer_free_valence == {"H1": 0.0, "H2": 0.0, "O0": 0.0}
+        assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
+            "B(O0,H1)": 1.0036,
+            "B(O0,H2)": 1.0036,
+        }
+        assert np.allclose(
+            orca_out.dipole_moment_electric_contribution,
+            np.array([0.0, 0.0, 0.18466]),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            orca_out.dipole_moment_nuclear_contribution,
+            np.array([0.0, 0.0, -0.99386]),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            orca_out.total_dipole_moment,
+            np.array([0.0, 0.0, -0.8092]),
+            rtol=1e-4,
+        )
+        assert orca_out.dipole_moment_in_au == 0.80920
+        assert orca_out.dipole_moment_in_debye == 2.05682
+        assert np.allclose(
+            orca_out.dipole_moment_along_axis_in_au,
+            np.array([0.0, -0.809197, 0.0]),
+            rtol=1e-4,
+        )
+        assert np.allclose(
+            orca_out.dipole_moment_along_axis_in_debye,
+            np.array([0.0, -2.056815, 0.0]),
+            rtol=1e-4,
+        )
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            26.416987,
+            14.661432,
+            9.428573,
+        ]
+        assert orca_out.rotational_constants_in_MHz == [
+            791961.33697,
+            439538.666271,
+            282661.493198,
+        ]
+        assert orca_out.vibrational_frequencies == [
+            1625.35,
+            3875.61,
+            3971.9,
+        ]
+        assert orca_out.vib_freq_scale_factor == 1.0
+        assert orca_out.molar_absorption_coefficients == [
+            0.012719,
+            0.002968,
+            0.009899,
+        ]
+        assert orca_out.integrated_absorption_coefficients == [
+            64.27,
+            15.0,
+            50.03,
+        ]
+        assert orca_out.transition_dipole_deriv_norm == [
+            0.002442,
+            0.000239,
+            0.000778,
+        ]
+        assert orca_out.num_translation_and_rotation_modes == 6
+        assert orca_out.num_vibration_modes == 3
+        assert orca_out.temperature_in_K == 298.15
+        assert orca_out.pressure_in_atm == 1.0
+        assert orca_out.total_mass_in_amu == 18.02
+
+        entropy_TS_in_J_per_mol = 56266.786841951627
+        TS = orca_out.entropy_in_J_per_mol_per_K * 298.15  # 56266.794 J/mol
+        # converted to 13.448 kcal/mol, as expected from output
+        assert math.isclose(entropy_TS_in_J_per_mol, TS, rel_tol=1e-4)
+        assert (
+            orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K
+            == {
+                1: 49.65043,
+                2: 43.887276,
+                3: 40.516087,
+                4: 38.124122,
+                5: 36.268792,
+                6: 34.752933,
+                7: 33.471224,
+                8: 32.361055,
+                9: 31.381743,
+                10: 30.505726,
+                11: 29.713277,
+                12: 28.989778,
+            }
+        )
+
+        assert math.isclose(
+            orca_out.gibbs_free_energy, -76.31938148, rel_tol=1e-8
+        )
+        assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.total_elapsed_walltime == 0.0
+
 
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
