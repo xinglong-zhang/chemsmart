@@ -74,10 +74,6 @@ def qrc(
 
     # get molecule
     molecules = ctx.obj["molecules"]
-    if not molecules:
-        raise click.UsageError(
-            "No molecules found in context. Please provide at least one molecule."
-        )
     molecule = molecules[-1]  # use last structure
 
     # get label
