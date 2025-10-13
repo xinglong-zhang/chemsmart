@@ -90,6 +90,7 @@ class Molecule:
         self.forces = forces
         self.velocities = velocities
         self.info = info
+        self._num_atoms = len(self.symbols)
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -288,7 +289,14 @@ class Molecule:
         """
         Return the number of atoms in the molecule.
         """
-        return len(self.symbols)
+        return self._num_atoms
+
+    @num_atoms.setter
+    def num_atoms(self, value):
+        """
+        Set the number of atoms in the molecule.
+        """
+        self._num_atoms = value
 
     @property
     def pbc(self):

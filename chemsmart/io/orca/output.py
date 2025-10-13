@@ -12,6 +12,7 @@ from chemsmart.utils.io import (
     clean_duplicate_structure,
     create_molecule_list,
     increment_numbers,
+    line_of_all_integers,
 )
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
@@ -327,7 +328,7 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
-    def natoms(self):
+    def num_atoms(self):
         """
         Get the number of atoms from the ORCA output file.
         """
@@ -2033,32 +2034,73 @@ class ORCAOutput(ORCAFileMixin):
         M(i,i)=1/sqrt(m[i]) where m[i] is the mass of displaced atom.
         Thus, these vectors are normalized but *not* orthogonal
         """
+        from chemsmart.utils.repattern import (
+            orca_line_integer_followed_by_floats,
+        )
+
         normal_modes = []
+
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "NORMAL MODES":
-                for line_j in self.optimized_output_lines[i + 7 :]:
-                    if "----------" in line_j:
+                j = i + 7  # Start after header lines
+
+                while j < len(self.optimized_output_lines):
+                    j_line = self.optimized_output_lines[j]
+
+                    # Check for empty line (end of normal modes section)
+                    if len(j_line.strip()) == 0:
                         break
-                    print(line_j)
-        #             # if 'Rotational constants in MHz :' in line_j:
-        #             line_j_elements = line_j.split()
-        #             if len(line_j_elements) != 0:
-        #                 vibrational_frequencies.append(
-        #                     float(line_j_elements[1])
-        #                 )
-        #
-        # if self.molecule.is_monoatomic:
-        #     # remove the first three frequencies (translations) for  monoatomic molecules
-        #     vibrational_frequencies = vibrational_frequencies[3:]
-        # elif self.molecule.is_linear:
-        #     # remove the first five frequencies (3 trans + 2 rot) for linear molecules
-        #     vibrational_frequencies = vibrational_frequencies[5:]
-        # else:
-        #     # remove the first six frequencies (3 trans + 3 rot) for non-linear molecules
-        #     vibrational_frequencies = vibrational_frequencies[6:]
-        #
+
+                    # Check if this is a mode number line
+                    if line_of_all_integers(j_line):
+                        mode_numbers = [int(x) for x in j_line.split()]
+                        num_modes_in_block = len(mode_numbers)
+
+                        # Read the next 3*num_atoms lines (x, y, z for each atom)
+                        coord_lines_to_read = 3 * self.num_atoms
+
+                        pre_modes = []
+                        for k in range(coord_lines_to_read):
+                            coord_line = self.optimized_output_lines[j + 1 + k]
+
+                            # Check if this line matches the coordinate pattern
+                            if re.fullmatch(
+                                orca_line_integer_followed_by_floats,
+                                coord_line,
+                            ):
+                                values = [
+                                    float(val)
+                                    for val in coord_line.split()[1:]
+                                ]  # Skip coordinate index
+                                pre_modes.append(values)
+
+                        # Convert to numpy array: shape (3N, num_modes_in_block)
+                        pre_modes = np.asarray(pre_modes)
+
+                        # Extract each mode
+                        for mode_col in range(num_modes_in_block):
+                            # Extract the column for this mode: shape (3N,)
+                            mode_column = pre_modes[:, mode_col]
+
+                            # Reshape to (num_atoms, 3) by grouping every 3 consecutive values
+                            mode_data = mode_column.reshape(self.num_atoms, 3)
+                            normal_modes.append(mode_data)
+
+                        # Move past this block
+                        j += (
+                            coord_lines_to_read + 1
+                        )  # +1 to move past the mode number line
+                    else:
+                        j += 1
+
+                break  # Only process first occurrence of "NORMAL MODES"
+
         return normal_modes
 
+    @property
+    def vibrational_modes(self):
+        """Return the vibrational normal modes."""
+        return self.normal_modes[self.num_translation_and_rotation_modes :]
 
     @property
     def vib_freq_scale_factor(self):
@@ -2696,12 +2738,12 @@ class ORCAEngradFile(ORCAFileMixin):
         """
          Obtain energy and gradient of ORCA calculation
         """
-        self.natoms = self._get_natoms()
+        self.num_atoms = self._get_num_atoms()
         self.energy = self._get_energy()
         self.gradient = self._get_gradient()
         self.molecule = self._get_molecule()
 
-    def _get_natoms(self):
+    def _get_num_atoms(self):
         """
         Extract the number of atoms from the .engrad file.
         """
@@ -2740,7 +2782,9 @@ class ORCAEngradFile(ORCAFileMixin):
             if "current gradient" in line:
                 # check 3N + 3 lines following the match, where N is number of atoms
                 grad_data = []
-                for content in self.contents[i + 1 : i + 3 * self.natoms + 4]:
+                for content in self.contents[
+                    i + 1 : i + 3 * self.num_atoms + 4
+                ]:
                     try:
                         grad_value = float(
                             content.split()[0]
@@ -2751,7 +2795,7 @@ class ORCAEngradFile(ORCAFileMixin):
 
                     except ValueError:
                         pass
-                return np.array(grad_data).reshape(self.natoms, 3)
+                return np.array(grad_data).reshape(self.num_atoms, 3)
         return None
 
     def _get_molecule(self):

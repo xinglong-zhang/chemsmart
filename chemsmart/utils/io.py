@@ -165,7 +165,7 @@ def line_of_all_integers(line: str, allow_sign: bool = True) -> bool:
         return False
     try:
         for t in tokens:
-            if not allow_sign and (t.startswith(('+', '-'))):
+            if not allow_sign and (t.startswith(("+", "-"))):
                 return False
             int(t)  # raises ValueError if not an integer literal
         return True

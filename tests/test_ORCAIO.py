@@ -214,7 +214,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.extrapolation_basis is None
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         assert orca_out.num_basis_functions == 24
         assert orca_out.num_shells == 12
         assert orca_out.max_ang_mom == 2
@@ -516,7 +516,33 @@ class TestORCAOutput:
             3875.61,
             3971.9,
         ]
-        print(orca_out.normal_modes)
+        mode1 = np.array(
+            [
+                [-0.0, 0.0, -0.069893],
+                [-0.43577, -0.0, 0.554673],
+                [0.43577, -0.0, 0.554673],
+            ]
+        )
+        mode2 = np.array(
+            [
+                [0.0, -0.0, -0.050918],
+                [0.579153, -0.0, 0.404085],
+                [-0.579154, 0.0, 0.404085],
+            ]
+        )
+        mode3 = np.array(
+            [
+                [
+                    [-0.069728, -0.0, -0.0],
+                    [0.553362, 0.0, 0.437448],
+                    [0.553361, 0.0, -0.437447],
+                ],
+            ]
+        )
+        assert np.allclose(orca_out.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[2], mode3, rtol=1e-4)
+        assert len(orca_out.vibrational_modes) == 3
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
             0.012719,
@@ -727,7 +753,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
         assert orca_out.aux_basis == "AutoAux".lower()
         assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         assert orca_out.num_basis_functions == 30
         assert orca_out.num_shells == 18
         assert orca_out.max_ang_mom == 2
@@ -769,7 +795,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
         assert orca_out.aux_basis == "AutoAux".lower()
         assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()
-        assert orca_out.natoms == 78
+        assert orca_out.num_atoms == 78
         assert orca_out.num_basis_functions == 1200
         assert orca_out.num_shells == 720
         assert orca_out.max_ang_mom == 2
@@ -810,7 +836,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.extrapolation_basis is None
-        assert orca_out.natoms == 78
+        assert orca_out.num_atoms == 78
         assert orca_out.num_basis_functions == 876
         assert orca_out.num_shells == 396
         assert orca_out.max_ang_mom == 2
@@ -1730,7 +1756,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.extrapolation_basis is None
-        assert orca_out.natoms == 27
+        assert orca_out.num_atoms == 27
         assert orca_out.normal_termination is False
 
     def test_get_constrained_atoms(
@@ -1763,7 +1789,7 @@ class TestORCAOutput:
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
         orca_engrad = ORCAEngradFile(filename=water_engrad_path)
-        assert orca_engrad.natoms == 3
+        assert orca_engrad.num_atoms == 3
         assert math.isclose(
             orca_engrad.energy, -76.323311011349, rel_tol=1e-4
         )  # energy in Hartree
