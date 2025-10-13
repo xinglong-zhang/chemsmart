@@ -718,6 +718,15 @@ class ORCAOutput(ORCAFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
+        logger.debug(
+            "Attaching vibrational data to the final structure if available..."
+        )
+
+        last_mol = all_structures[-1]
+        # Attach vibrational data to the final structure if available
+        if self.vibrational_modes is not None:
+            all_structures[-1] = self._attach_vib_metadata(last_mol)
+
         logger.info(
             f"Total number of structures located: {len(all_structures)}"
         )
@@ -2014,16 +2023,9 @@ class ORCAOutput(ORCAFileMixin):
                             float(line_j_elements[1])
                         )
 
-        if self.molecule.is_monoatomic:
-            # remove the first three frequencies (translations) for  monoatomic molecules
-            vibrational_frequencies = vibrational_frequencies[3:]
-        elif self.molecule.is_linear:
-            # remove the first five frequencies (3 trans + 2 rot) for linear molecules
-            vibrational_frequencies = vibrational_frequencies[5:]
-        else:
-            # remove the first six frequencies (3 trans + 3 rot) for non-linear molecules
-            vibrational_frequencies = vibrational_frequencies[6:]
-
+        vibrational_frequencies = vibrational_frequencies[
+            self.num_translation_and_rotation_modes :
+        ]
         return vibrational_frequencies
 
     @property
@@ -2100,7 +2102,9 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def vibrational_modes(self):
         """Return the vibrational normal modes."""
-        return self.normal_modes[self.num_translation_and_rotation_modes :]
+        if len(self.normal_modes) != 0:
+            return self.normal_modes[self.num_translation_and_rotation_modes :]
+        return None
 
     @property
     def vib_freq_scale_factor(self):
@@ -2252,15 +2256,27 @@ class ORCAOutput(ORCAFileMixin):
             or [],  # Int
             "transition_dipole_deriv_norm": self.transition_dipole_deriv_norm
             or [],  # T**2
-            "mode_symmetries": self.vibrational_mode_symmetries or [],
+            "transition_dipoles": self.transition_dipoles or [],
             "modes": self.vibrational_modes or [],
         }
 
         setattr(mol, "vibrational_frequencies", vib["frequencies"])
-        setattr(mol, "vibrational_reduced_masses", vib["reduced_masses"])
-        setattr(mol, "vibrational_force_constants", vib["force_constants"])
-        setattr(mol, "vibrational_ir_intensities", vib["ir_intensities"])
-        setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
+        setattr(
+            mol,
+            "molar_absorption_coefficients",
+            vib["molar_absorption_coefficients"],
+        )
+        setattr(
+            mol,
+            "integrated_absorption_coefficients",
+            vib["integrated_absorption_coefficients"],
+        )
+        setattr(
+            mol,
+            "transition_dipole_deriv_norm",
+            vib["transition_dipole_deriv_norm"],
+        )
+        setattr(mol, "transition_dipoles", vib["transition_dipoles"])
         setattr(mol, "vibrational_modes", vib["modes"])
 
         return mol

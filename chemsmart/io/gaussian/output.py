@@ -356,8 +356,6 @@ class Gaussian16Output(GaussianFileMixin):
                 all_structures[i] for i in self.optimized_steps_indices
             ]
 
-        logger.debug("Total structures returned: %d", len(all_structures))
-
         logger.debug(
             "Attaching vibrational data to the final structure if available..."
         )
@@ -367,6 +365,7 @@ class Gaussian16Output(GaussianFileMixin):
         if self.num_vib_frequencies:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
 
+        logger.debug("Total structures returned: %d", len(all_structures))
         return all_structures
 
     @cached_property

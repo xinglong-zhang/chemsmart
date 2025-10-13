@@ -539,10 +539,18 @@ class TestORCAOutput:
                 ],
             ]
         )
+        assert len(orca_out.vibrational_modes) == 3
         assert np.allclose(orca_out.vibrational_modes[0], mode1, rtol=1e-4)
         assert np.allclose(orca_out.vibrational_modes[1], mode2, rtol=1e-4)
         assert np.allclose(orca_out.vibrational_modes[2], mode3, rtol=1e-4)
-        assert len(orca_out.vibrational_modes) == 3
+
+        # test for molecule obtained from output file
+        mol = orca_out.molecule
+        assert len(mol.vibrational_modes) == 3
+        assert np.allclose(mol.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[2], mode3, rtol=1e-4)
+
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
             0.012719,
@@ -562,7 +570,6 @@ class TestORCAOutput:
         transition_dipole1 = np.array([0.000000, -0.000000, 0.049416])
         transition_dipole2 = np.array([-0.000000, -0.000000, 0.015460])
         transition_dipole3 = np.array([0.027888, -0.000000, 0.000000])
-        print(orca_out.transition_dipoles[0])
         assert np.allclose(
             orca_out.transition_dipoles[0], transition_dipole1, rtol=1e-4
         )
