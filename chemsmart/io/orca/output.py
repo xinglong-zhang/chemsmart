@@ -1513,6 +1513,7 @@ class ORCAOutput(ORCAFileMixin):
     def mulliken_atomic_charges(self):
         """
         Get the Mulliken atomic charges from the ORCA output file.
+        Use 1-indexed.
         """
         all_mulliken_atomic_charges = []
         for i, line_i in enumerate(self.contents):
@@ -1524,7 +1525,9 @@ class ORCAOutput(ORCAFileMixin):
                     line_j_elements = line_j.split()
                     element = p.to_element(line_j_elements[1])
                     element_num = f"{element}{line_j_elements[0]}"
-                    mulliken_atomic_charges[element_num] = float(
+                    # use 1-indexed
+                    element_num_1idx = increment_numbers(element_num, 1)
+                    mulliken_atomic_charges[element_num_1idx] = float(
                         line_j_elements[-1]
                     )
                 all_mulliken_atomic_charges.append(mulliken_atomic_charges)
@@ -1546,7 +1549,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 4:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        loewdin_atomic_charges[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        loewdin_atomic_charges[element_num_1idx] = float(
                             line_j_elements[-1]
                         )
                 all_loewdin_atomic_charges.append(loewdin_atomic_charges)
@@ -1571,9 +1575,10 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_mulliken_gross_atomic_population[element_num] = (
-                            float(line_j_elements[2])
-                        )
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_mulliken_gross_atomic_population[
+                            element_num_1idx
+                        ] = float(line_j_elements[2])
                 all_mayer_mulliken_gross_atomic_population.append(
                     mayer_mulliken_gross_atomic_population
                 )
@@ -1595,7 +1600,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_total_nuclear_charge[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_total_nuclear_charge[element_num_1idx] = float(
                             line_j_elements[3]
                         )
                 all_mayer_total_nuclear_charge.append(
@@ -1619,9 +1625,10 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_mulliken_gross_atomic_charge[element_num] = (
-                            float(line_j_elements[4])
-                        )
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_mulliken_gross_atomic_charge[
+                            element_num_1idx
+                        ] = float(line_j_elements[4])
                 all_mayer_mulliken_gross_atomic_charge.append(
                     mayer_mulliken_gross_atomic_charge
                 )
@@ -1643,7 +1650,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_total_valence[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_total_valence[element_num_1idx] = float(
                             line_j_elements[5]
                         )
                 all_mayer_total_valence.append(mayer_total_valence)
@@ -1665,7 +1673,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_bonded_valence[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_bonded_valence[element_num_1idx] = float(
                             line_j_elements[6]
                         )
                 all_mayer_bonded_valence.append(mayer_bonded_valence)
@@ -1687,7 +1696,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_free_valence[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_free_valence[element_num_1idx] = float(
                             line_j_elements[-1]
                         )
                 all_mayer_free_valence.append(mayer_free_valence)
@@ -1719,9 +1729,12 @@ class ORCAOutput(ORCAFileMixin):
                         formatted_key = (
                             f"B({match[1]}{match[0]},{match[3]}{match[2]})"
                         )
+                        formatted_key_1idx = increment_numbers(
+                            formatted_key, 1
+                        )
                         formatted_value = float(match[4])
                         mayer_bond_orders_larger_than_zero_point_one[
-                            formatted_key
+                            formatted_key_1idx
                         ] = formatted_value
                 all_mayer_bond_orders_larger_than_zero_point_one.append(
                     mayer_bond_orders_larger_than_zero_point_one

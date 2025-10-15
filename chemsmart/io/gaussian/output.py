@@ -1193,6 +1193,7 @@ class Gaussian16Output(GaussianFileMixin):
     def alpha_virtual_eigenvalues(self):
         """
         Obtain all eigenenergies of the alpha unoccuplied orbitals.
+        Units of eV, as for orbital energies.
         """
 
         # Iterate through lines in reverse to find the last block of eigenvalues
@@ -1232,6 +1233,7 @@ class Gaussian16Output(GaussianFileMixin):
     def beta_occ_eigenvalues(self):
         """
         Obtain all eigenenergies of the beta occuplied orbitals.
+        Units of eV, as for orbital energies.
         """
         # Iterate through lines in reverse to find the last block of eigenvalues
         eigenvalue_blocks = []
@@ -1270,6 +1272,7 @@ class Gaussian16Output(GaussianFileMixin):
     def beta_virtual_eigenvalues(self):
         """
         Obtain all eigenenergies of the beta unoccuplied orbitals.
+        Units of eV, as for orbital energies.
         """
 
         # Iterate through lines in reverse to find the last block of eigenvalues
