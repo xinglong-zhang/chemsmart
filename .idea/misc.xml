@@ -5,5 +5,5 @@
     <option name="pathToExecutable" value="$USER_HOME$/miniconda3/bin/black" />
     <option name="sdkName" value="Python 3.9 (pyatoms-dev)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="chemsmart" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (chemsmart)" project-jdk-type="Python SDK" />
 </project>

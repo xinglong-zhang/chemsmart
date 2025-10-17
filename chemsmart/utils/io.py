@@ -195,4 +195,4 @@ def line_of_integer_followed_by_floats(line) -> bool:
         return False
 
     # Remaining tokens: floats
-    return all(float_pattern.match(t) for t in tokens[1:])
+    return all(float_pattern.fullmatch(t) for t in tokens[1:])
