@@ -12,6 +12,9 @@ orca_line_integer_followed_by_floats = (
 )
 raw_energy_value_pattern = r"(-\d+\.\d+)"
 
+element_token = r"[A-Z][a-z]?"
+orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
+
 xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
 # \b ensures that the match ends right after xyz
 # and is not followed by something like: xyz1, xyzabc xyz_thing

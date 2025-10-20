@@ -1523,7 +1523,8 @@ class ORCAOutput(ORCAFileMixin):
                     if "Sum of atomic charges" in line_j:
                         break
                     line_j_elements = line_j.split()
-                    element = p.to_element(line_j_elements[1])
+                    element = line_j_elements[1].strip(":")
+                    element = p.to_element(element)
                     element_num = f"{element}{line_j_elements[0]}"
                     # use 1-indexed
                     element_num_1idx = increment_numbers(element_num, 1)
@@ -1543,16 +1544,19 @@ class ORCAOutput(ORCAFileMixin):
             loewdin_atomic_charges = {}
             if "LOEWDIN ATOMIC CHARGES" in line_i:
                 for line_j in self.contents[i + 2 :]:
-                    if "LOEWDIN REDUCED ORBITAL CHARGES" in line_j:
-                        break
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) == 4:
-                        element = p.to_element(line_j_elements[1])
-                        element_num = f"{element}{line_j_elements[0]}"
-                        element_num_1idx = increment_numbers(element_num, 1)
-                        loewdin_atomic_charges[element_num_1idx] = float(
-                            line_j_elements[-1]
-                        )
+                    if (
+                        len(line_j_elements) == 0
+                        or "LOEWDIN REDUCED ORBITAL CHARGES" in line_j
+                    ):
+                        break
+                    element = line_j_elements[1].strip(":")
+                    element = p.to_element(element)
+                    element_num = f"{element}{line_j_elements[0]}"
+                    element_num_1idx = increment_numbers(element_num, 1)
+                    loewdin_atomic_charges[element_num_1idx] = float(
+                        line_j_elements[-1]
+                    )
                 all_loewdin_atomic_charges.append(loewdin_atomic_charges)
         return all_loewdin_atomic_charges[-1]
 
@@ -1564,6 +1568,10 @@ class ORCAOutput(ORCAFileMixin):
         """
         Get Mayer Mulliken gross atomic population from the ORCA output file.
         """
+        from chemsmart.utils.repattern import (
+            orca_mayer_population_analysis_line_pattern,
+        )
+
         all_mayer_mulliken_gross_atomic_population = []
         for i, line_i in enumerate(self.contents):
             mayer_mulliken_gross_atomic_population = {}
@@ -1572,7 +1580,9 @@ class ORCAOutput(ORCAFileMixin):
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) == 8:
+                    if len(line_j_elements) == 8 and re.fullmatch(
+                        orca_mayer_population_analysis_line_pattern, line_j
+                    ):
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
                         element_num_1idx = increment_numbers(element_num, 1)
@@ -2025,27 +2035,32 @@ class ORCAOutput(ORCAFileMixin):
         return all_rotational_constants_in_MHz[-1]
 
     @property
-    def vibrational_frequencies(self):
+    def all_vibrational_frequencies(self):
         """
         Get vibrational frequencies from the ORCA output file.
+        Including translational and rotational modes.
         """
         vibrational_frequencies = []
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "VIBRATIONAL FREQUENCIES":
                 for line_j in self.optimized_output_lines[i + 5 :]:
-                    if "----------" in line_j:
+                    if len(line_j) == 0:
                         break
                     # if 'Rotational constants in MHz :' in line_j:
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) != 0:
-                        vibrational_frequencies.append(
-                            float(line_j_elements[1])
-                        )
+                    vibrational_frequencies.append(float(line_j_elements[1]))
+        logger.debug(
+            f"Vibrational frequencies, including translations and rotations: "
+            f"{vibrational_frequencies}"
+        )
+        if len(vibrational_frequencies) != 0:
+            return vibrational_frequencies
+        return None
 
-        vibrational_frequencies = vibrational_frequencies[
-            self.num_translation_and_rotation_modes :
-        ]
-        return vibrational_frequencies
+    @property
+    def vibrational_frequencies(self):
+        """Return vibrational frequencies without translational and rotational modes."""
+        return [x for x in self.all_vibrational_frequencies if x != 0.0]
 
     @property
     def normal_modes(self):
@@ -2139,9 +2154,10 @@ class ORCAOutput(ORCAFileMixin):
     def molar_absorption_coefficients(self):
         """Eps  in units L/(mol*cm).
 
-        The value under “eps” is the molar absorption coefficient, usually represented as ε.
-        This number is directly proportional to the intensity of a given fundamental in an IR spectrum
-        and is what is plotted by orca mapspc.
+        The value under “eps” is the molar absorption coefficient,
+        usually represented as ε.
+        This number is directly proportional to the intensity of a given
+        fundamental in an IR spectrum and is what is plotted by orca mapspc.
         """
         molar_absorption_coefficients = [
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
@@ -2238,31 +2254,19 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def num_translation_and_rotation_modes(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
-            if line_i == "IR SPECTRUM":
-                for line_j in self.optimized_output_lines[i + 6 :]:
-                    if (
-                        "The first frequency considered to be a vibration is"
-                        in line_j
-                    ):
-                        line_j_elements = line_j.split()
-                        return int(line_j_elements[-1])
-        return None
+        """Return number of translation and rotation modes
+        by checking for number of zero vibrational frequencies."""
+        if self.all_vibrational_frequencies:
+            return self.all_vibrational_frequencies.count(0.0)
 
     @property
     def num_vibration_modes(self):
         """
         Get the number of vibration modes from the ORCA output file.
+        Includes imaginary frequencies as well.
         """
-        for i, line_i in enumerate(self.contents):
-            if line_i == "IR SPECTRUM":
-                for line_j in self.contents[i + 6 :]:
-                    if (
-                        "The total number of vibrations considered is"
-                        in line_j
-                    ):
-                        line_j_elements = line_j.split()
-                        return int(line_j_elements[-1])
+        if self.vibrational_frequencies:
+            return len(self.vibrational_frequencies)
         return None
 
     def _attach_vib_metadata(self, mol):
@@ -2668,7 +2672,8 @@ class ORCAOutput(ORCAFileMixin):
         """The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
 
         ALREADY MULTIPLIED BY TEMPERATURE.
-        The entropies will be listed as multiplied by the temperature to get units of energy.
+        The entropies will be listed as multiplied by the temperature
+        to get units of energy, in Hartree.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTROPY":
@@ -2676,40 +2681,45 @@ class ORCAOutput(ORCAFileMixin):
                     if "Final entropy term" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-4])
-                        return entropy_hartree * units.Hartree
+                        return entropy_hartree
         return None
 
     @property
     def rotational_entropy_symmetry_correction_J_per_mol_per_K(self):
         """
-        Return rotational entropy in J/mol/K for different symmetry numbers sn=1-12.
+        Return rotational entropy in J/mol/K for different symmetry numbers.
         """
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
         for i, line_i in enumerate(self.optimized_output_lines):
-            if "rotational entropy values for sn=1,12 :" in line_i:
+            if "rotational entropy values for sn=1,12" in line_i:
                 for line_j in self.optimized_output_lines[
                     i + 2 :
                 ]:  # i+2 onwards
-                    if "-------------------" in line_j:
+                    if len(line_j) == 0:
                         break
-                    new_line = line_j.replace("=", " ")
-                    line_j_elements = new_line.split()
-                    rotational_entropy_hartree = float(line_j_elements[-4])
-                    rotational_entropy_J_per_mol = (
-                        rotational_entropy_hartree
-                        * units.Hartree
-                        * units.mol
-                        / units.J
-                    )
-                    rotational_entropy_J_per_mol_per_K = (
-                        rotational_entropy_J_per_mol / self.temperature_in_K
-                    )
-                    rotational_entropy_J_per_mol_per_K = round(
-                        rotational_entropy_J_per_mol_per_K, 6
-                    )
-                    rotational_entropy_symmetry_correction_J_per_mol_per_K[
-                        int(line_j_elements[2])
-                    ] = rotational_entropy_J_per_mol_per_K
+                    if "S(rot)" in line_j:
+                        line_j_elements = line_j.split("|")
+                        print(line_j_elements)
+                        rotational_entropy_hartree = float(
+                            line_j_elements[2].strip().split()[1]
+                        )
+                        rotational_entropy_J_per_mol = (
+                            rotational_entropy_hartree
+                            * units.Hartree
+                            * units.mol
+                            / units.J
+                        )
+                        rotational_entropy_J_per_mol_per_K = round(
+                            rotational_entropy_J_per_mol
+                            / self.temperature_in_K,
+                            6,
+                        )
+                        rotational_entropy_symmetry_correction_J_per_mol_per_K[
+                            str(line_j_elements[1].strip().replace(" ", ""))
+                        ] = rotational_entropy_J_per_mol_per_K
+
+                    else:
+                        continue
                 return rotational_entropy_symmetry_correction_J_per_mol_per_K
         return None
 
