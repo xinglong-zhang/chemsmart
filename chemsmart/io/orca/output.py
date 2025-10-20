@@ -2061,7 +2061,7 @@ class ORCAOutput(ORCAFileMixin):
     def vibrational_frequencies(self):
         """Return vibrational frequencies without translational and rotational modes."""
         if self.all_vibrational_frequencies is None:
-            return None
+            return []
         return [x for x in self.all_vibrational_frequencies if x != 0.0]
 
     @property
@@ -2269,7 +2269,7 @@ class ORCAOutput(ORCAFileMixin):
         """
         if self.vibrational_frequencies:
             return len(self.vibrational_frequencies)
-        return None
+        return 0
 
     def _attach_vib_metadata(self, mol):
         """Attach vibrational data to a Molecule object as attributes."""
