@@ -2060,6 +2060,8 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def vibrational_frequencies(self):
         """Return vibrational frequencies without translational and rotational modes."""
+        if self.all_vibrational_frequencies is None:
+            return None
         return [x for x in self.all_vibrational_frequencies if x != 0.0]
 
     @property
