@@ -1,5 +1,7 @@
 import ast
 import logging
+import re
+import sys
 
 import click
 
@@ -10,7 +12,11 @@ from chemsmart.utils.cli import MyCommand
 logger = logging.getLogger(__name__)
 
 
-@mol.command("visualize", cls=MyCommand)
+@mol.command(
+    "visualize",
+    cls=MyCommand,
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+)
 @click_job_options
 @click_pymol_visualization_options
 @click.option(
@@ -18,62 +24,6 @@ logger = logging.getLogger(__name__)
     is_flag=True,
     default=False,
     help="Use hybrid visualization mode.",
-)
-@click.option(
-    "-g1",
-    "--group1",
-    type=str,
-    default=None,
-    help="indexes of atoms to be selected as group 1.",
-)
-@click.option(
-    "-g2",
-    "--group2",
-    type=str,
-    default=None,
-    help="indexes of atoms to be selected as group 2.",
-)
-@click.option(
-    "-g3",
-    "--group3",
-    type=str,
-    default=None,
-    help="indexes of atoms to be selected as group 3.",
-)
-@click.option(
-    "-g4",
-    "--group4",
-    type=str,
-    default=None,
-    help="indexes of atoms to be selected as group 4.",
-)
-@click.option(
-    "-c1",
-    "--color1",
-    type=str,
-    default=None,
-    help="customized coloring style of group 1.",
-)
-@click.option(
-    "-c2",
-    "--color2",
-    type=str,
-    default=None,
-    help="customized coloring style of group 2.",
-)
-@click.option(
-    "-c3",
-    "--color3",
-    type=str,
-    default=None,
-    help="customized coloring style of group 3.",
-)
-@click.option(
-    "-c4",
-    "--color4",
-    type=str,
-    default=None,
-    help="customized coloring style of group 4.",
 )
 @click.option(
     "-sc",
@@ -94,6 +44,20 @@ logger = logging.getLogger(__name__)
     is_flag=True,
     default=False,
     help="Use hybrid visualization mode.",
+)
+@click.option(
+    "-g",
+    "--group",
+    multiple=True,
+    type=str,
+    help="Indexes of atoms to select for a group. Repeatable for multiple groups, e.g., -g '1-5' -g '6,7,8'.",
+)
+@click.option(
+    "-c",
+    "--color",
+    multiple=True,
+    type=str,
+    help="Color for each group. Repeatable to match -g options.",
 )
 # all other click options removed here to simplify CLI parsing via **kwargs
 @click.pass_context
@@ -149,25 +113,33 @@ def visualize(
         PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
     )
 
-    # dynamically extract hybrid options from ctx.params
     hybrid_opts = {}
-    if hybrid:
-        for key in [
-            "group1",
-            "group2",
-            "group3",
-            "group4",
-            "color1",
-            "color2",
-            "color3",
-            "color4",
-            "surface_color",
-            "surface_transparency",
-        ]:
-            value = ctx.params.get(key)
-            if value is not None:
-                hybrid_opts[key] = value
-            kwargs.pop(key, None)
+    pattern = re.compile(r"^--?(g|group|c|color)(\d+)$")
+
+    raw_args = sys.argv  # ✅ use sys.argv instead of ctx.args
+    for i in range(len(raw_args) - 1):
+        match = pattern.match(raw_args[i])
+        if match:
+            kind, idx = match.groups()
+            value = raw_args[i + 1]
+            key = f"{'group' if kind in ['g', 'group'] else 'color'}{idx}"
+            hybrid_opts[key] = value
+
+    groups = kwargs.pop("group", ())
+    colors = kwargs.pop("color", ())
+    for i, grp in enumerate(groups):
+        hybrid_opts[f"group{i + 1}"] = grp
+        color_i = colors[i] if i < len(colors) else None
+        if color_i:
+            hybrid_opts[f"color{i + 1}"] = color_i
+
+    # Include surface options if specified
+    if kwargs.get("surface_color"):
+        hybrid_opts["surface_color"] = kwargs.pop("surface_color")
+    if kwargs.get("surface_transparency"):
+        hybrid_opts["surface_transparency"] = kwargs.pop(
+            "surface_transparency"
+        )
 
     job = visualizationjob(
         molecule=molecules,
