@@ -43,7 +43,7 @@ class ORCAQRCJob(ORCAJob):
 
         Args:
             molecule: Molecule objects representing the structure for QRC run.
-            settings (GaussianJobSettings): Calculation configuration settings.
+            settings (ORCAJobSettings): Calculation configuration settings.
             label (str, optional): Base label for conformer jobs.
             jobrunner (JobRunner, optional): Job execution handler.
             mode_idx (int): vibrational mode number to be used.
