@@ -650,6 +650,7 @@ class TestORCAOutput:
             np.array([0.0, -2.056815, 0.0]),
             rtol=1e-4,
         )
+        assert orca_out.rotational_symmetry_number == 2
         assert orca_out.rotational_constants_in_wavenumbers == [
             26.416987,
             14.661432,
@@ -714,6 +715,17 @@ class TestORCAOutput:
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
+
+    def test_he_freq_output(self, orca_he_output_freq):
+        orca_out = ORCAOutput(filename=orca_he_output_freq)
+        assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.rotational_symmetry_number == 1
+        assert orca_out.rotational_constants_in_wavenumbers == [0, 0, 0]
+        assert orca_out.rotational_constants_in_MHz == [0, 0, 0]
+        assert orca_out.num_vibration_modes == 0
+        assert orca_out.temperature_in_K == 298.15
+        assert orca_out.pressure_in_atm == 1.00
+        assert orca_out.total_mass_in_amu == 4.00
 
     def test_read_sp_output(self, water_sp_gas_path):
         orca_out = ORCAOutput(filename=water_sp_gas_path)
