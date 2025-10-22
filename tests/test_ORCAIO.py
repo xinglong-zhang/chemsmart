@@ -1452,7 +1452,6 @@ class TestORCAOutput:
             "F77": -0.0,
             "F78": -0.0,
         }
-        print(orca_out.mayer_bond_orders_larger_than_zero_point_one)
         assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
             "B(O1,C4)": 1.0348,
             "B(O1,C5)": 0.8825,
@@ -2063,7 +2062,7 @@ class TestORCAOutput:
                     -1.62414e-01,
                     8.02020e-02,
                     -1.18726e-01,
-                ],  # ← fixed comma here
+                ],
                 [1.62414e-01, 8.02010e-02, -1.18726e-01],
                 [0.00000e00, 3.54200e-03, -3.02689e-01],
             ],
@@ -2119,7 +2118,6 @@ class TestORCAOutput:
             0.000125,
             0.000119,
         ]
-        print(orca_out.transition_dipole_deriv_norm)
         assert orca_out.integrated_absorption_coefficients == [
             17.62,
             17.56,
@@ -2216,7 +2214,6 @@ class TestORCAOutput:
         TS = orca_out.entropy_in_J_per_mol_per_K * 298.15  # 56266.794 J/mol
         # converted to 13.448 kcal/mol, as expected from output
         assert math.isclose(entropy_TS_in_J_per_mol, TS, rel_tol=1e-4)
-        print(orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K)
         assert (
             orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K
             == {
