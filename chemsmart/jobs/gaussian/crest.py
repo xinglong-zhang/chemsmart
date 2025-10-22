@@ -35,9 +35,9 @@ class GaussianCrestJob(GaussianJob):
         num_conformers (int): Total number of conformers in the ensemble.
         last_run_job_index (int): Index of the first incomplete job; equals
             total number if all jobs are complete.
-        all_conformers_opt_jobs (list[GaussianGeneralJob]): Prepared jobs for
+        all_conformers_jobs (list[GaussianGeneralJob]): Prepared jobs for
             all conformers.
-        incomplete_conformers_opt_jobs (list[GaussianGeneralJob]): Prepared
+        incomplete_conformers_jobs (list[GaussianGeneralJob]): Prepared
             jobs that are not yet complete.
     """
 
@@ -140,7 +140,7 @@ class GaussianCrestJob(GaussianJob):
         return self._check_last_finished_job_index()
 
     @property
-    def all_conformers_opt_jobs(self):
+    def all_conformers_jobs(self):
         """
         Get all conformer optimization jobs in the ensemble.
 
@@ -150,7 +150,7 @@ class GaussianCrestJob(GaussianJob):
         return self._prepare_all_jobs()
 
     @property
-    def incomplete_conformers_opt_jobs(self):
+    def incomplete_conformers_jobs(self):
         """
         Get incomplete conformer optimization jobs.
 
@@ -161,9 +161,7 @@ class GaussianCrestJob(GaussianJob):
             list: List of incomplete GaussianGeneralJob objects.
         """
         return [
-            job
-            for job in self.all_conformers_opt_jobs
-            if not job.is_complete()
+            job for job in self.all_conformers_jobs if not job.is_complete()
         ]
 
     def _check_last_finished_job_index(self):
@@ -178,7 +176,7 @@ class GaussianCrestJob(GaussianJob):
             int: Index of the first incomplete job, or total number of
                 conformers if all jobs are complete.
         """
-        for i, job in enumerate(self.all_conformers_opt_jobs):
+        for i, job in enumerate(self.all_conformers_jobs):
             if not job.is_complete():
                 return i
 
@@ -218,7 +216,7 @@ class GaussianCrestJob(GaussianJob):
         number specified in num_confs_to_opt. This allows for partial
         ensemble processing when needed.
         """
-        for job in self.all_conformers_opt_jobs[: self.num_confs_to_opt]:
+        for job in self.all_conformers_jobs[: self.num_confs_to_opt]:
             job.run()
 
     def _run(self):
@@ -238,9 +236,9 @@ class GaussianCrestJob(GaussianJob):
             bool: True if all required conformer optimizations have
                 completed successfully, False otherwise.
         """
-        return self._run_all_crest_opt_jobs_are_complete()
+        return self._run_all_crest_jobs_are_complete()
 
-    def _run_all_crest_opt_jobs_are_complete(self):
+    def _run_all_crest_jobs_are_complete(self):
         """
         Verify completion status of all required conformer jobs.
 
@@ -252,5 +250,5 @@ class GaussianCrestJob(GaussianJob):
         """
         return all(
             job.is_complete()
-            for job in self.all_conformers_opt_jobs[: self.num_confs_to_opt]
+            for job in self.all_conformers_jobs[: self.num_confs_to_opt]
         )

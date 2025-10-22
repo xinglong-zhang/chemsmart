@@ -206,7 +206,8 @@ class Gaussian16Output(GaussianFileMixin):
         Special handling (as per design):
           - Non-link & normal termination: de-duplicate the terminal (e.g. freq) frame.
           - Non-link & abnormal termination: use safe_min_lengths.
-          - Link & normal termination: drop the first frame, then behave like normal termination (incl. de-dup).
+          - Link & normal termination: drop the first frame, then behave like
+            normal termination (incl. de-dup).
           - Link & abnormal termination:
               * if multiple frames: drop the first (carry-over), then use safe_min_lengths.
               * if single frame: return that only frame (no drop).
@@ -354,6 +355,15 @@ class Gaussian16Output(GaussianFileMixin):
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+
+        logger.debug(
+            "Attaching vibrational data to the final structure if available..."
+        )
+
+        last_mol = all_structures[-1]
+        # Attach vibrational data to the final structure if available
+        if self.num_vib_frequencies:
+            all_structures[-1] = self._attach_vib_metadata(last_mol)
 
         logger.debug("Total structures returned: %d", len(all_structures))
         return all_structures
@@ -712,7 +722,28 @@ class Gaussian16Output(GaussianFileMixin):
         """
         return len(self.vibrational_frequencies)
 
+    def _attach_vib_metadata(self, mol):
+        """Attach vibrational data to a Molecule object as attributes."""
+        vib = {
+            "frequencies": self.vibrational_frequencies or [],
+            "reduced_masses": self.reduced_masses or [],
+            "force_constants": self.force_constants or [],
+            "ir_intensities": self.ir_intensities or [],
+            "mode_symmetries": self.vibrational_mode_symmetries or [],
+            "modes": self.vibrational_modes or [],
+        }
+
+        setattr(mol, "vibrational_frequencies", vib["frequencies"])
+        setattr(mol, "vibrational_reduced_masses", vib["reduced_masses"])
+        setattr(mol, "vibrational_force_constants", vib["force_constants"])
+        setattr(mol, "vibrational_ir_intensities", vib["ir_intensities"])
+        setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
+        setattr(mol, "vibrational_modes", vib["modes"])
+
+        return mol
+
     #### FREQUENCY CALCULATIONS
+
     @cached_property
     def has_frozen_coordinates(self):
         """Check if the calculation includes frozen coordinates.
@@ -1162,6 +1193,7 @@ class Gaussian16Output(GaussianFileMixin):
     def alpha_virtual_eigenvalues(self):
         """
         Obtain all eigenenergies of the alpha unoccuplied orbitals.
+        Units of eV, as for orbital energies.
         """
 
         # Iterate through lines in reverse to find the last block of eigenvalues
@@ -1201,6 +1233,7 @@ class Gaussian16Output(GaussianFileMixin):
     def beta_occ_eigenvalues(self):
         """
         Obtain all eigenenergies of the beta occuplied orbitals.
+        Units of eV, as for orbital energies.
         """
         # Iterate through lines in reverse to find the last block of eigenvalues
         eigenvalue_blocks = []
@@ -1239,6 +1272,7 @@ class Gaussian16Output(GaussianFileMixin):
     def beta_virtual_eigenvalues(self):
         """
         Obtain all eigenenergies of the beta unoccuplied orbitals.
+        Units of eV, as for orbital energies.
         """
 
         # Iterate through lines in reverse to find the last block of eigenvalues
