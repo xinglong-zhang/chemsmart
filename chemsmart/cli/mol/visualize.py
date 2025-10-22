@@ -8,6 +8,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import click_pymol_visualization_options, mol
 from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.repattern import pymol_hybrid_selection_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +109,9 @@ def visualize(
     )
 
     hybrid_opts = {}
-    pattern = re.compile(r"^--?(g|group|c|color)(\d+)$")
-
-    raw_args = sys.argv  # ✅ use sys.argv instead of ctx.args
+    pattern = re.compile(pymol_hybrid_selection_pattern)
+    # zip group indices and color style from command line args
+    raw_args = sys.argv
     for i in range(len(raw_args) - 1):
         match = pattern.match(raw_args[i])
         if match:
