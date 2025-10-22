@@ -40,12 +40,6 @@ logger = logging.getLogger(__name__)
     help="customized surface transparency.",
 )
 @click.option(
-    "--hybrid",
-    is_flag=True,
-    default=False,
-    help="Use hybrid visualization mode.",
-)
-@click.option(
     "-g",
     "--group",
     multiple=True,

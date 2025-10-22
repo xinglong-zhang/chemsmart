@@ -25,7 +25,6 @@ set_color light_P, [1.0, 0.85, 0.6]  # light orange for phosphorus
 color light_C, elem_C
 color light_P, elem_P
 color light_O, elem_O
-color light_H, elem_H
 color light_N, elem_N
 #####################################
 # Groups Display

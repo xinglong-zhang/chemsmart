@@ -781,7 +781,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Args:
             job: PyMOL job object to configure.
         """
-        super()._prerun(job) if hasattr(super(), "_prerun") else None
+        super()._prerun(job)
         self._assign_variables(job)
         self._write_hybrid_pml(job)
 
@@ -847,7 +847,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             group_color_attr = f"color{i}"
             group_value = getattr(job, group_attr, None)
             group_color_value = getattr(job, group_color_attr, None)
-            if group_value and group_attr:
+            if group_value:
                 groups[group_attr] = {
                     "index": self._get_group_index_str(group_value),
                     "color": group_color_value or "default",
@@ -876,7 +876,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
     def _get_group_index_str(self, index):
         """Convert a group index string to PyMOL selection format.
         Args:
-            job: PyMOL hybrid visualization job instance.
+            index (str): A string containing group indices, separated by commas or spaces.
 
         Return:
             str: pymol style selection range for each group,
@@ -938,7 +938,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             "cbak",
         ]
         for idx, (key, val) in enumerate(self._get_groups(job).items()):
-            f.write(f"select {key},  {val["index"]}\n")
+            f.write(f"select {key},  {val['index']}\n")
         for idx, (key, val) in enumerate(self._get_groups(job).items()):
             if val["color"] != "default":
                 # use user specified coloring style
