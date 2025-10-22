@@ -2150,9 +2150,9 @@ class ORCAOutput(ORCAFileMixin):
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def temperature_in_K(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Temperature" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
@@ -2160,9 +2160,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def pressure_in_atm(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Pressure" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
