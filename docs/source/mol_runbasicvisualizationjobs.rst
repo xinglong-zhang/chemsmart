@@ -122,7 +122,7 @@ Align multiple molecular structures for comparison.
 
 .. code:: console
 
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] align [SUBCMD_OPTIONS]
+   chemsmart run [OPTIONS] mol align [SUBCMD_OPTIONS]
 
 Align-Specific OPTIONS
 ======================
@@ -141,7 +141,7 @@ Align-Specific OPTIONS
 
    -  -  ``-t, --filetype``
       -  string
-      -  Input file pattern, e.g. '.log','.xyz','.gjf' (default=None). Only for align jobs.
+      -  Input file pattern, e.g. 'log','xyz','gjf' (default=None). Only for align jobs.
 
 Can use ``-t, --filetype``, also inherit all options from visualization jobs and use the same parameters.
 

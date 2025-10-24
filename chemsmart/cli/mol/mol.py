@@ -132,7 +132,7 @@ def click_pymol_align_options(f):
         "--filetype",
         type=str,
         default=None,
-        help="Input file type, e.g. '.xyz', '.log', '.gjf', only for align job.",
+        help="Input file type, e.g. 'xyz', 'log', 'gjf', only for align job.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

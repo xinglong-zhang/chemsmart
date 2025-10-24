@@ -11,6 +11,7 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,7 @@ logger = logging.getLogger(__name__)
 @click_file_options
 @click_pymol_visualization_options
 @click_pymol_align_options
-@click.pass_context
 def align(
-    ctx,
     filenames,
     label,
     append_label,
@@ -42,13 +41,12 @@ def align(
     """CLI for PyMOL alignment of multiple molecule files.
     Example:
         chemsmart run mol align -f a.log -f b.xyz -f c.gjf
-        chemsmart run mol align -t .log
+        chemsmart run mol align -t log
     """
 
     if filetype:
-        from chemsmart.io.molecules.structure import Molecule
 
-        filetype_pattern = "*" + filetype
+        filetype_pattern = "*." + filetype
         matched_files = glob.glob(filetype_pattern)
         if not matched_files:
             logger.warning(f"No files matched pattern: {filetype_pattern}")
@@ -60,7 +58,7 @@ def align(
         for file_path in matched_files:
             mols = Molecule.from_filepath(
                 filepath=file_path,
-                index=index if index is not None else ":",
+                index=index,
                 return_list=True,
             )
             for mol in mols:
@@ -75,7 +73,6 @@ def align(
             label = os.path.splitext(os.path.basename(base_file))[0]
 
     elif filenames:
-        from chemsmart.io.molecules.structure import Molecule
 
         logger.debug(f"Received filename parameter: {filenames}")
         logger.debug(f"Type of filename: {type(filenames)}")
@@ -105,7 +102,7 @@ def align(
             try:
                 mols = Molecule.from_filepath(
                     filepath=file_path,
-                    index=index if index is not None else ":",
+                    index=index,
                     return_list=True,
                 )
                 for mol in mols:
@@ -126,11 +123,6 @@ def align(
             base_file = filenames[0]
             if label is None:
                 label = os.path.splitext(os.path.basename(base_file))[0]
-
-    else:
-        molecules = ctx.obj.get("molecules", [])
-        if label is None:
-            label = ctx.obj.get("label")
 
     if append_label is not None:
         if label:
