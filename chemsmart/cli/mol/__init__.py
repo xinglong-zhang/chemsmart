@@ -1,3 +1,4 @@
+from .align import align
 from .irc import irc
 from .mo import mo
 from .mol import (
@@ -9,6 +10,7 @@ from .spin import spin
 from .visualize import visualize
 
 __all__ = [
+    "align",
     "irc",
     "mol",
     "mo",

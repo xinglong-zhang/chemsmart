@@ -34,7 +34,7 @@ Works for all Mol jobs
 
    -  -  ``-f, --filename``
       -  string
-      -  Filename from which new Gaussian input is prepared (required)
+      -  Filename from which new Gaussian input is prepared.
 
    -  -  ``-l, --label``
       -  string
