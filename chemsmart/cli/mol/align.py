@@ -1,12 +1,12 @@
 import glob
 import logging
 import os
+from pathlib import Path
 
 import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
-    click_file_options,
     click_pymol_align_options,
     click_pymol_visualization_options,
     mol,
@@ -19,14 +19,12 @@ logger = logging.getLogger(__name__)
 
 @mol.command("align", cls=MyCommand)
 @click_job_options
-@click_file_options
 @click_pymol_visualization_options
 @click_pymol_align_options
+@click.pass_context
 def align(
+    ctx,
     filenames,
-    label,
-    append_label,
-    index,
     file,
     style,
     trace,
@@ -40,13 +38,16 @@ def align(
 ):
     """CLI for PyMOL alignment of multiple molecule files.
     Example:
-        chemsmart run mol align -f a.log -f b.xyz -f c.gjf
-        chemsmart run mol align -t log
+        chemsmart run mol align -F a.log -f b.xyz -F c.gjf
+        chemsmart run mol align -T log
     """
+
+    index = ctx.obj["index"]
+    label = ctx.obj["label"]
 
     if filetype:
 
-        filetype_pattern = "*." + filetype
+        filetype_pattern = f"*.{filetype}"
         matched_files = glob.glob(filetype_pattern)
         if not matched_files:
             logger.warning(f"No files matched pattern: {filetype_pattern}")
@@ -56,13 +57,21 @@ def align(
 
         molecules = []
         for file_path in matched_files:
+            # Pass index to per-file reader in user string form so each file
+            # yields the structure(s) corresponding to that index.
             mols = Molecule.from_filepath(
                 filepath=file_path,
                 index=index,
                 return_list=True,
             )
-            for mol in mols:
-                mol.name = os.path.splitext(os.path.basename(file_path))[0]
+            # assign unique names per-structure when file contains multiple structures
+            base = os.path.splitext(os.path.basename(file_path))[0]
+            if isinstance(mols, list) and len(mols) > 1:
+                for j, mol in enumerate(mols, start=1):
+                    mol.name = f"{base}_{j}"
+            else:
+                for mol in mols:
+                    mol.name = base
             molecules += mols
         logger.debug(
             f"Loaded {len(molecules)} molecules from {len(matched_files)} files using filetype pattern with index={index}"
@@ -91,13 +100,18 @@ def align(
                 f"Processing file {i+1}/{len(filenames)}: {file_path}"
             )
 
-            if not file_path or not isinstance(file_path, str):
+            if not file_path:
                 logger.warning(f"Skipping invalid file path: {file_path}")
                 continue
 
-            if not os.path.exists(file_path):
-                logger.error(f"File not found: {file_path}")
+            p = Path(file_path)
+            if not p.is_file():
+                logger.error(
+                    f"File not found or not a regular file: {file_path}"
+                )
                 raise FileNotFoundError(f"File not found: {file_path}")
+
+            file_path = str(p)
 
             try:
                 mols = Molecule.from_filepath(
@@ -105,8 +119,14 @@ def align(
                     index=index,
                     return_list=True,
                 )
-                for mol in mols:
-                    mol.name = os.path.splitext(os.path.basename(file_path))[0]
+                # assign unique names per-structure when file contains multiple structures
+                base = os.path.splitext(os.path.basename(file_path))[0]
+                if isinstance(mols, list) and len(mols) > 1:
+                    for j, mol in enumerate(mols, start=1):
+                        mol.name = f"{base}_{j}"
+                else:
+                    for mol in mols:
+                        mol.name = base
                 molecules += mols
                 logger.debug(
                     f"Successfully loaded {len(mols)} molecules from {file_path}"
@@ -123,12 +143,6 @@ def align(
             base_file = filenames[0]
             if label is None:
                 label = os.path.splitext(os.path.basename(base_file))[0]
-
-    if append_label is not None:
-        if label:
-            label = f"{label}_{append_label}"
-        else:
-            raise ValueError("Cannot append label without a base label")
 
     if not isinstance(molecules, list) or len(molecules) < 2:
         raise click.BadParameter("Need at least two molecules for alignment")

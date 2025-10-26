@@ -56,6 +56,7 @@ def click_pymol_visualization_options(f):
     """Common click options for PyMOL visualization."""
 
     @click.option(
+        "-f",
         "--file",
         type=str,
         default=None,
@@ -71,6 +72,7 @@ def click_pymol_visualization_options(f):
         "using zhang_group_pymol_style.",
     )
     @click.option(
+        "-t",
         "--trace/--no-trace",
         type=bool,
         default=True,
@@ -120,7 +122,7 @@ def click_pymol_align_options(f):
     """Common click options for PyMOL Align options."""
 
     @click.option(
-        "-f",
+        "-F",
         "--filenames",
         type=str,
         multiple=True,
@@ -128,7 +130,7 @@ def click_pymol_align_options(f):
         help="Multiple filenames for alignment. Can be used multiple times.",
     )
     @click.option(
-        "-t",
+        "-T",
         "--filetype",
         type=str,
         default=None,
@@ -310,11 +312,12 @@ def mol(
     """
     # obtain molecule structure
     if filename is None and pubchem is None:
-        # this is fine for PyMOL IRC Movie Job
+        # this is fine for PyMOL IRC Movie Job and Align job
         logger.warning("[filename] or [pubchem] has not been specified!")
         ctx.obj["molecules"] = None
         ctx.obj["label"] = None
         ctx.obj["filename"] = None
+        ctx.obj["index"] = index
         return
     # if both filename and pubchem are specified, raise error
     if filename and pubchem:

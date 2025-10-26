@@ -29,7 +29,7 @@ Visualization-Specific OPTIONS
       -  Type
       -  Description
 
-   -  -  ``--file``
+   -  -  ``-f, --file``
       -  string
       -  PyMOL file script or style. If not specified, defaults to use zhang_group_pymol_style.py (default=None)
 
@@ -37,7 +37,7 @@ Visualization-Specific OPTIONS
       -  string
       -  PyMOL render style. Options: pymol, cylview (default=None)
 
-   -  -  ``--trace/--no-trace``
+   -  -  ``-t, --trace/--no-trace``
       -  bool
       -  PyMOL options to ray trace or not (default=True)
 
@@ -135,15 +135,15 @@ Align-Specific OPTIONS
       -  Type
       -  Description
 
-   -  -  ``-f, --filenames``
+   -  -  ``-F, --filenames``
       -  string
       -  Filenames from which new Gaussian inputs are prepared (multiple=True).
 
-   -  -  ``-t, --filetype``
+   -  -  ``-T, --filetype``
       -  string
       -  Input file pattern, e.g. 'log','xyz','gjf' (default=None). Only for align jobs.
 
-Can use ``-t, --filetype``, also inherit all options from visualization jobs and use the same parameters.
+Can use ``-T, --filetype``, also inherit all options from visualization jobs and use the same parameters.
 
 Align Basic Usage
 =================
@@ -152,10 +152,10 @@ Align Basic Usage
 
    .. code:: console
 
-      chemsmart run mol align -f molecule1.xyz -f molecule2.gjf -f molecule3.log
+      chemsmart run mol align -F molecule1.xyz -F molecule2.gjf -F molecule3.log
 
 **align all files in same type**
 
    .. code:: console
 
-      chemsmart run mol align -t .xyz
+      chemsmart run mol align -T xyz
