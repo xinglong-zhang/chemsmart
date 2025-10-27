@@ -44,6 +44,7 @@ def align(
 
     index = ctx.obj["index"]
     label = ctx.obj["label"]
+    molecules = []  # Initialize molecules list
 
     if filetype:
 
@@ -55,7 +56,6 @@ def align(
                 f"No files found matching pattern: {filetype_pattern}"
             )
 
-        molecules = []
         for file_path in matched_files:
             # Pass index to per-file reader in user string form so each file
             # yields the structure(s) corresponding to that index.
@@ -94,7 +94,6 @@ def align(
         if isinstance(filenames, str):
             filenames = [filenames]
 
-        molecules = []
         for i, file_path in enumerate(filenames):
             logger.debug(
                 f"Processing file {i+1}/{len(filenames)}: {file_path}"
@@ -119,14 +118,20 @@ def align(
                     index=index,
                     return_list=True,
                 )
+
                 # assign unique names per-structure when file contains multiple structures
                 base = os.path.splitext(os.path.basename(file_path))[0]
                 if isinstance(mols, list) and len(mols) > 1:
                     for j, mol in enumerate(mols, start=1):
                         mol.name = f"{base}_{j}"
                 else:
-                    for mol in mols:
-                        mol.name = base
+                    # If user specified a specific index (not ':'), add index suffix for clarity
+                    if index != ":" and index != "-1":
+                        for mol in mols:
+                            mol.name = f"{base}_idx{index}"
+                    else:
+                        for mol in mols:
+                            mol.name = base
                 molecules += mols
                 logger.debug(
                     f"Successfully loaded {len(mols)} molecules from {file_path}"
