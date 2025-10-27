@@ -216,7 +216,6 @@ def match_outfile_pattern(line) -> str | None:
         ],
         "gaussian": [
             "Entering Gaussian System",
-            "SCF Done:",
             "Normal termination of Gaussian",
         ],
         "orca": [
