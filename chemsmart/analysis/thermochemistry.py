@@ -14,6 +14,7 @@ from chemsmart.utils.constants import (
     energy_conversion,
     hartree_to_joules,
 )
+from chemsmart.utils.io import outfile_format
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -135,17 +136,14 @@ class Thermochemistry:
     @property
     def file_object(self):
         """Open the file and return the file object."""
-        if str(self.filename).endswith(".log"):
-            # create a Gaussian16Output object if .log file
+        program = outfile_format(self.filename)
+        if program == "gaussian":
             return Gaussian16Output(self.filename)
-        elif str(self.filename).endswith(".out"):
-            # create an OrcaOutput object if .out file
+        elif program == "orca":
             return ORCAOutput(self.filename)
         else:
             # can be added in future to parse other file formats
-            raise ValueError(
-                "Unsupported file format. Use .log or .out files."
-            )
+            raise ValueError("Unsupported file format.")
 
     @property
     def job_type(self):

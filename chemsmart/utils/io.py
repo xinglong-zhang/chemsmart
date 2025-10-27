@@ -196,3 +196,59 @@ def line_of_integer_followed_by_floats(line) -> bool:
 
     # Remaining tokens: floats
     return all(float_pattern.fullmatch(t) for t in tokens[1:])
+
+
+def match_outfile_pattern(line) -> str | None:
+    """
+    Match a line of text to known quantum chemistry program signatures.
+
+    Args:
+        line (str): Line from an output file.
+
+    Returns:
+        str | None: Program name ("gaussian", "orca", "xtb", "crest") if matched, else None.
+    """
+    patterns = {
+        "crest": [
+            "C R E S T",
+            "Conformer-Rotamer Ensemble Sampling Tool",
+            "CREST terminated normally.",
+        ],
+        "gaussian": [
+            "Entering Gaussian System",
+            "SCF Done:",
+            "Normal termination of Gaussian",
+        ],
+        "orca": [
+            "* O   R   C   A *",
+            "ORCA versions",
+            "****ORCA TERMINATED NORMALLY****",
+        ],
+        "xtb": ["x T B", "xtb version"],
+    }
+    for program, keywords in patterns.items():
+        if any(keyword in line for keyword in keywords):
+            return program
+    return None
+
+
+def outfile_format(filepath) -> str:
+    """
+    Detect the type of quantum chemistry output file.
+
+    Scans the file for characteristic keywords of major QC packages.
+    Returns one of {"gaussian", "orca", "xtb", "crest", "unknown"}.
+    """
+    with open(filepath, "r") as f:
+        lines = [line.strip() for line in f.readlines()]
+
+    # Only scan first and last 100 lines for performance
+    sample_lines = lines[:100] + lines[-100:] if len(lines) > 200 else lines
+
+    for line in sample_lines:
+        if program := match_outfile_pattern(line):
+            logger.debug(f"Detected output format: {program}")
+            return program
+
+    logger.debug("Output format unknown.")
+    return "unknown"
