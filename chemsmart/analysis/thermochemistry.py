@@ -1348,16 +1348,19 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
         Parameters
         ----------
         files : list of str
-            List of file paths (.log or .out) containing thermochemistry data for conformers.
+            List of file paths containing thermochemistry data for conformers.
         energy_type : str, optional
             Energy type to use for Boltzmann weighting ("electronic" or "gibbs"). Default is "gibbs".
         """
         if not files:
             raise ValueError("List of files cannot be empty.")
         if not all(
-            isinstance(f, str) and f.endswith((".log", ".out")) for f in files
+            isinstance(f, str) and outfile_format(f) in {"gaussian", "orca"}
+            for f in files
         ):
-            raise ValueError("All files must be .log or .out files.")
+            raise ValueError(
+                "All files must be Gaussian or ORCA output files."
+            )
 
         # Check that all files have the same molecular structure
         molecules = [Molecule.from_filepath(f) for f in files]

@@ -8,6 +8,7 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.io import outfile_format
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,9 @@ def click_thermochemistry_options(f):
         "-t",
         "--filetype",
         default=None,
-        help="Type of file to calculate thermochemistry for, if directory "
-        "is specified.",
+        type=click.Choice(["gaussian", "orca"], case_sensitive=False),
+        help="Type of quantum chemistry output file to calculate thermochemistry for, "
+        "if directory is specified.",
     )
     @click.option(
         "-f",
@@ -186,9 +188,9 @@ def thermochemistry(
     will save results to `udc3_mCF3_monomer_c9.dat` and
     `udc3_mCF3_monomer_c29.dat`.
 
-    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15
+    `chemsmart run thermochemistry -d /path/to/directory -t gaussian -T 298.15
     -o thermochemistry_results.dat`
-    will compute thermochemistry for all Gaussian log files in the specified
+    will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
     """
     # validate input
@@ -240,19 +242,25 @@ def thermochemistry(
         logger.info(
             f"Obtaining thermochemistry of files in directory: {directory}"
         )
-        if filetype == "log":
+        if filetype == "gaussian":
             from chemsmart.io.gaussian.folder import GaussianLogFolder
 
             folder = GaussianLogFolder(directory)
-            files = folder.all_logfiles
-        elif filetype == "out":
+            logfiles = folder.all_logfiles
+            files = [
+                file for file in logfiles if outfile_format(file) == "gaussian"
+            ]
+        elif filetype == "orca":
             from chemsmart.io.orca.folder import ORCAOutFolder
 
             folder = ORCAOutFolder(directory)
-            files = folder.all_outfiles
+            outfiles = folder.all_outfiles
+            files = [
+                file for file in outfiles if outfile_format(file) == "orca"
+            ]
         else:
             raise ValueError(
-                f"Unsupported filetype '{filetype}'. Use 'log' or 'out'."
+                f"Unsupported filetype '{filetype}'. Use 'gaussian' or 'orca'."
             )
         for file in files:
             job = ThermochemistryJob.from_filename(
@@ -266,10 +274,10 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if not file.endswith((".log", ".out")):
+            if outfile_format(file) not in {"gaussian", "orca"}:
                 raise ValueError(
-                    f"Unsupported file extension for '{file}'. Use .log or "
-                    f".out."
+                    f"Unsupported output file type for '{file}'. Use Gaussian or "
+                    f"ORCA output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,
