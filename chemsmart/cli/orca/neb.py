@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "-s",
-    "--strating-xyzfile",
+    "--starting-xyzfile",
     type=str,
     help="Filename of starting geometry.",
 )
@@ -76,6 +76,19 @@ logger = logging.getLogger(__name__)
     type=int,
     help="Multiplicity of the starting geometries.",
 )
+@click.option(
+    "-A",
+    "--semiempirical",
+    type=click.Choice(
+        [
+            "XTB0",
+            "XTB1",
+            "XTB2",
+        ],
+        case_sensitive=False,
+    ),
+    help="Option to run NEB jobs.",
+)
 @click.pass_context
 def neb(
     ctx,
@@ -85,6 +98,7 @@ def neb(
     intermediate_xyzfile,
     restarting_xyzfile,
     pre_optimization,
+    semiempirical,
     **kwargs,
 ):
     """
@@ -120,6 +134,8 @@ def neb(
         neb_settings.restarting_xyzfile = restarting_xyzfile
     if pre_optimization:
         neb_settings.preopt_ends = pre_optimization
+    if semiempirical:
+        neb_settings.semiempirical = semiempirical
 
     check_charge_and_multiplicity(neb_settings)
 

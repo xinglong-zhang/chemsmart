@@ -315,10 +315,9 @@ class TestORCAInputWriter:
         # the current code cannot read from neb.yml file
         # todo: need to fix this
         settings = project_settings.neb_settings()
-        # settings.route_string = "1111"
         settings.basis = "6-31G"
         settings.functional = "B3LYP"
-        settings.semiempirical = "GFN2-xTB"
+        #settings.semiempirical = "GFN2-xTB"
         settings.jobtype = "NEB-TS"
         settings.nimages = 5
         settings.charge = 0

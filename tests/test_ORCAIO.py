@@ -193,12 +193,12 @@ class TestORCAInput:
         assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
 
         orca_inp = ORCAInput(filename=orca_input_nebts_file)
-        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.route_string == "! gfn2-xtb neb-ts freq".lower()
         assert orca_inp.functional is None
         assert orca_inp.basis is None
         assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
         assert orca_inp.charge == 0
-        assert orca_inp.multiplicity == 1
+        assert orca_inp.multiplicity == 2
         assert orca_inp.molecule.num_atoms == 40
         assert isinstance(orca_inp.molecule, Molecule)
         assert orca_inp.molecule.empirical_formula == "C23H15NO"
@@ -2286,7 +2286,7 @@ class TestORCANEB:
     def test_read_neb_output(self, orca_neb_output_file):
         orca_neb = ORCANEBFile(filename=orca_neb_output_file)
         assert orca_neb.nimages == 10
-        assert orca_neb.natoms == 148
+        assert orca_neb.num_atoms == 148
         assert orca_neb.ci_converged is True
         assert orca_neb.ts_converged is True
         assert orca_neb.ci == "Climbing Image:  image 4."

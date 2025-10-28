@@ -977,6 +977,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
         self.starting_xyz = starting_xyz
         self.restarting_xyzfile = restarting_xyzfile
         self.preopt_ends = preopt_ends
+        self.semiempirical = semiempirical
 
     # populate attribute from parent class (optional)
     @property
