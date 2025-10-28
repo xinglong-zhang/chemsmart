@@ -1,3 +1,15 @@
+"""
+Gaussian Intrinsic Reaction Coordinate (IRC) job implementation.
+
+This module provides the GaussianIRCJob class for performing
+IRC calculations using Gaussian. IRC calculations trace reaction
+paths from transition states to reactants and products by following
+the steepest descent path on the potential energy surface.
+
+The implementation manages both forward and reverse IRC calculations
+automatically, providing complete reaction path characterization.
+"""
+
 import logging
 from copy import deepcopy
 from typing import Type
@@ -9,11 +21,46 @@ logger = logging.getLogger(__name__)
 
 
 class GaussianIRCJob(GaussianJob):
+    """
+    Gaussian job class for Intrinsic Reaction Coordinate calculations.
+
+    Performs IRC calculations to trace reaction paths from transition
+    states to reactants and products. Automatically manages both forward
+    and reverse IRC calculations to provide complete reaction path
+    characterization.
+
+    IRC calculations follow the steepest descent path on the potential
+    energy surface in mass-weighted coordinates, providing the minimum
+    energy pathway connecting transition state to stable products.
+
+    Attributes:
+        TYPE (str): Job type identifier ('g16irc').
+        molecule (Molecule): Transition state structure used as the IRC start.
+        settings (GaussianIRCJobSettings): IRC-specific configuration options.
+        label (str): Job identifier used for file naming.
+        jobrunner (JobRunner): Execution backend that runs the job.
+        skip_completed (bool): If True, completed jobs are not rerun.
+    """
+
     TYPE = "g16irc"
 
     def __init__(
         self, molecule, settings=None, label=None, jobrunner=None, **kwargs
     ):
+        """
+        Initialize a Gaussian IRC calculation job.
+
+        Sets up an IRC calculation with the specified transition state
+        structure and calculation settings. Automatically disables
+        frequency calculations for the IRC steps.
+
+        Args:
+            molecule (Molecule): Transition state structure for IRC.
+            settings (GaussianIRCJobSettings, optional): IRC configuration.
+            label (str, optional): Job identifier for file naming.
+            jobrunner (JobRunner, optional): Job execution handler.
+            **kwargs: Additional keyword arguments for parent class.
+        """
         super().__init__(
             molecule=molecule,
             settings=settings,
@@ -21,14 +68,31 @@ class GaussianIRCJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
-        self.settings = settings
         self.settings.freq = False  # turn off freq calc for IRC
 
     @classmethod
     def settings_class(cls) -> Type[GaussianIRCJobSettings]:
+        """
+        Get the settings class used by this IRC job type.
+
+        Returns the appropriate settings class for configuring
+        IRC-specific parameters and calculation options.
+
+        Returns:
+            Type[GaussianIRCJobSettings]: Settings class for IRC jobs.
+        """
         return GaussianIRCJobSettings
 
     def _ircf_job(self):
+        """
+        Create forward IRC job configuration.
+
+        Sets up the forward IRC calculation that follows the reaction
+        coordinate from transition state toward products.
+
+        Returns:
+            GaussianGeneralJob: Configured forward IRC job.
+        """
         # create IRCf job:
         ircf_settings = deepcopy(self.settings)
         label = self.label
@@ -47,6 +111,15 @@ class GaussianIRCJob(GaussianJob):
         )
 
     def _ircr_job(self):
+        """
+        Create reverse IRC job configuration.
+
+        Sets up the reverse IRC calculation that follows the reaction
+        coordinate from transition state toward reactants.
+
+        Returns:
+            GaussianGeneralJob: Configured reverse IRC job.
+        """
         # create IRCr job:
         ircr_settings = deepcopy(self.settings)
         label = self.label
@@ -64,39 +137,120 @@ class GaussianIRCJob(GaussianJob):
         )
 
     def _run_forward(self):
+        """
+        Execute the forward IRC calculation.
+
+        Runs the forward IRC job that traces the reaction path
+        from transition state toward products.
+        """
         logger.debug(
             f"Running forward IRC job: {self._ircf_job().settings.job_type}"
         )
         self._ircf_job().run()
 
     def _run_reverse(self):
+        """
+        Execute the reverse IRC calculation.
+
+        Runs the reverse IRC job that traces the reaction path
+        from transition state toward reactants.
+        """
         logger.debug(
             f"Running reverse IRC job: {self._ircr_job().settings.job_type}"
         )
         self._ircr_job().run()
 
     def _run(self, **kwargs):
-        self._run_forward()
-        self._run_reverse()
+        """
+        Execute IRC calculations based on the direction parameter.
+
+        Orchestrates the IRC calculation by running forward and/or reverse
+        IRC jobs based on the direction parameter:
+        - If direction is 'forward': run only forward IRC
+        - If direction is 'reverse': run only reverse IRC
+        - If direction is None: run both forward and reverse IRC
+
+        Args:
+            **kwargs: Additional keyword arguments (currently unused).
+        """
+        if self.settings.direction == "forward":
+            logger.info("Running only forward IRC calculation")
+            self._run_forward()
+        elif self.settings.direction == "reverse":
+            logger.info("Running only reverse IRC calculation")
+            self._run_reverse()
+        else:
+            logger.info("Running both forward and reverse IRC calculations")
+            self._run_forward()
+            self._run_reverse()
 
     def _job_is_complete(self):
-        """private method for checking that the IRC job is complete.
-        Job is complete when both ircf and ircr jobs are complete#"""
-        return (
-            self._run_forward_is_complete() and self._run_reverse_is_complete()
-        )
+        """
+        Check if the complete IRC calculation is finished.
+
+        Determines completion status based on the direction parameter:
+        - If direction is 'forward': check only forward IRC completion
+        - If direction is 'reverse': check only reverse IRC completion
+        - If direction is None: check both forward and reverse IRC completion
+
+        Returns:
+            bool: True if the required IRC calculations are complete, False otherwise.
+        """
+        if self.settings.direction == "forward":
+            return self._run_forward_is_complete()
+        elif self.settings.direction == "reverse":
+            return self._run_reverse_is_complete()
+        else:
+            return (
+                self._run_forward_is_complete()
+                and self._run_reverse_is_complete()
+            )
 
     def _run_forward_is_complete(self):
+        """
+        Check if the forward IRC calculation is complete.
+
+        Returns:
+            bool: True if forward IRC is complete, False otherwise.
+        """
         return self._ircf_job().is_complete()
 
     def _run_reverse_is_complete(self):
+        """
+        Check if the reverse IRC calculation is complete.
+
+        Returns:
+            bool: True if reverse IRC is complete, False otherwise.
+        """
         return self._ircr_job().is_complete()
 
     def backup_files(self, backup_chk=False):
-        self.backup_file(self._ircf_job().inputfile)
-        self.backup_file(self._ircr_job().inputfile)
-        self.backup_file(self._ircf_job().outputfile)
-        self.backup_file(self._ircr_job().outputfile)
-        if backup_chk:
-            self.backup_file(self._ircf_job().chkfile)
-            self.backup_file(self._ircr_job().chkfile)
+        """
+        Create backup copies of IRC input and output files based on direction setting.
+
+        Backs up files from the required IRC calculations based on the direction parameter:
+        - If direction is 'forward': backup only forward IRC files
+        - If direction is 'reverse': backup only reverse IRC files
+        - If direction is None: backup both forward and reverse IRC files
+
+        Args:
+            backup_chk (bool): Whether to backup checkpoint files.
+        """
+        if self.settings.direction == "forward":
+            self.backup_file(self._ircf_job().inputfile)
+            self.backup_file(self._ircf_job().outputfile)
+            if backup_chk:
+                self.backup_file(self._ircf_job().chkfile)
+        elif self.settings.direction == "reverse":
+            self.backup_file(self._ircr_job().inputfile)
+            self.backup_file(self._ircr_job().outputfile)
+            if backup_chk:
+                self.backup_file(self._ircr_job().chkfile)
+        else:
+            self.backup_file(self._ircf_job().inputfile)
+            self.backup_file(self._ircr_job().inputfile)
+            self.backup_file(self._ircf_job().outputfile)
+            self.backup_file(self._ircr_job().outputfile)
+            if backup_chk:
+                self.backup_file(self._ircf_job().chkfile)
+                self.backup_file(self._ircr_job().chkfile)

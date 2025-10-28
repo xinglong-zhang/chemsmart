@@ -1,6 +1,5 @@
 from .com import com
 from .crest import crest
-from .crestopt import crestopt
 from .custom import userjob
 from .dias import dias
 from .gaussian import gaussian
@@ -9,6 +8,7 @@ from .link import link
 from .modred import modred
 from .nci import nci
 from .opt import opt
+from .qrc import qrc
 from .resp import resp
 from .scan import scan
 from .singlepoint import sp
@@ -20,7 +20,6 @@ from .wbi import wbi
 __all__ = [
     "com",
     "crest",
-    "crestopt",
     "userjob",
     "dias",
     "gaussian",
@@ -29,6 +28,7 @@ __all__ = [
     "modred",
     "nci",
     "opt",
+    "qrc",
     "resp",
     "scan",
     "traj",

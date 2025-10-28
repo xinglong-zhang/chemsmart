@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.1.0"  # Update this dynamically if needed
+version = "0.1.5"  # Update this dynamically if needed
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -37,7 +37,6 @@ dependencies = [
     "tenacity>=9.1.2",
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
-    "scikit_learn>=1.7.0",
     "pytest_mock>=3.14.0",
 ]
 
@@ -55,7 +54,16 @@ dev = [
     "black",
     "isort",
     "gitchangelog",
-    "mkdocs",
+    "types-PyYAML",
+]
+docs = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+    "sphinx-rtd-theme",
+    "doc8",
+    "rstcheck",
+    "rstfmt",
 ]
 
 [project.urls]
@@ -94,8 +102,4 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
-
-[tool.mkdocs]
-site_name = "chemsmart"
-theme = "readthedocs"
 

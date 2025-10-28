@@ -1,3 +1,12 @@
+"""
+ORCA Command Line Interface
+
+This module provides the main CLI interface for ORCA quantum chemistry
+calculations. It defines common options, settings configurations, and the
+main ORCA command group that serves as the entry point for all ORCA-related
+operations.
+"""
+
 import functools
 import logging
 import os
@@ -7,15 +16,18 @@ import click
 from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import (
-    return_objects_from_string_index,
-)
+from chemsmart.utils.utils import return_objects_from_string_index
 
 logger = logging.getLogger(__name__)
 
 
 def click_orca_options(f):
-    """Common click options for ORCA jobs."""
+    """
+    Common click options decorator for ORCA jobs.
+
+    This decorator adds common command-line options that are shared across
+    different ORCA job types, specifically project settings.
+    """
 
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
@@ -28,7 +40,14 @@ def click_orca_options(f):
 
 
 def click_orca_settings_options(f):
-    """Common click options for ORCA Settings."""
+    """
+    Common click options decorator for ORCA computational settings.
+
+    This decorator adds comprehensive command-line options for configuring
+    ORCA calculations including file I/O, molecular properties, computational
+    methods, basis sets, SCF settings, and various quantum chemistry
+    parameters.
+    """
 
     @click.option(
         "-f",
@@ -109,7 +128,8 @@ def click_orca_settings_options(f):
             ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
         ),
         default="defgrid2",  # default used in ORCA is defgrid2
-        help="Grid for numerical integration. Choices are ['defgrid1', 'defgrid2', 'defgrid3']",
+        help="Grid for numerical integration. Choices are "
+        "['defgrid1', 'defgrid2', 'defgrid3']",
     )
     @click.option(
         "--scf-tol",
@@ -131,9 +151,10 @@ def click_orca_settings_options(f):
         "--scf-algorithm",
         type=click.Choice(
             ["GDIIS", "DIIS", "SOSCF", "AutoTRAH"], case_sensitive=False
-        ),  # SOSCF is an approximately quadratically convergent variant of the SCF procedure
-        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle, we invoke TRAH-SCF
-        # automatically (AutoTRAH).
+        ),  # SOSCF is an approximately quadratically convergent variant of
+        # the SCF procedure
+        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle,
+        # we invoke TRAH-SCF automatically (AutoTRAH).
         default=None,
         help="SCF algorithm to use.",
     )
@@ -180,7 +201,8 @@ def click_orca_settings_options(f):
         "--index",
         type=str,
         default=None,
-        help="index of molecule to use; default to the last molecule structure.",
+        help="index of molecule to use; default to the last molecule "
+        "structure.",
     )
     @click.option(
         "-r",
@@ -200,7 +222,13 @@ def click_orca_settings_options(f):
 
 
 def click_orca_jobtype_options(f):
-    """Common click options for ORCA link/crest jobs."""
+    """
+    Common click options decorator for ORCA job type specifications.
+
+    This decorator adds command-line options for specifying ORCA job types
+    and related parameters for geometry optimizations, transition state
+    searches, scans, and coordinate constraints.
+    """
 
     @click.option(
         "-j",
@@ -213,7 +241,8 @@ def click_orca_jobtype_options(f):
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates to be fixed for modred or scan job. "
+        "1-indexed.",
     )
     @click.option(
         "-x",
@@ -274,33 +303,47 @@ def orca(
     forces,
     pubchem,
 ):
-    """CLI for running ORCA jobs using the chemsmart framework."""
+    """
+    Main CLI command group for running ORCA jobs using the chemsmart framework.
+
+    This function serves as the primary entry point for all ORCA quantum
+    chemistry calculations. It processes command-line arguments, configures
+    job settings, loads molecular structures, and prepares the context for
+    subcommands.
+    """
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
 
     # get project settings
     project_settings = ORCAProjectSettings.from_project(project)
+    logger.debug(f"Loaded project settings: {project_settings}")
 
-    # obtain ORCA Settings from filename, if supplied; otherwise return defaults
+    # obtain ORCA Settings from filename, if supplied; otherwise return
+    # defaults
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filename is not supplied, eg, get structure from
+        # pubchem
         job_settings = ORCAJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filename supplied, using ORCA default settings: "
+            f"{job_settings.__dict__}"
         )
     elif filename.endswith((".com", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
+        # filename supplied - we would want to use the settings from here and
+        # do not use any defaults!
         job_settings = ORCAJobSettings.from_filepath(filename)
+        logger.info(f"Loaded ORCA settings from file: {filename}")
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
+        logger.info(f"Using default ORCA settings for XYZ file: {filename}")
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"
         )
 
-    # Update keywords
+    # Update keywords based on command-line arguments
     keywords = (
         "charge",
         "multiplicity",
@@ -364,15 +407,17 @@ def orca(
         job_settings.forces = forces
         keywords += ("forces",)
 
-    # obtain molecule structure
+    # obtain molecule structure from file or PubChem
     molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
+            "[filename] or [pubchem] has not been specified!\n"
+            "Please specify one of them!"
         )
     if filename and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filename] and [pubchem] have been specified!\n"
+            "Please specify only one of them."
         )
 
     if filename:
@@ -391,17 +436,20 @@ def orca(
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
-    # update labels
+    # update job labels for output file naming
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give ORCA input filename or name to be be appended, but not both!"
+            "Only give ORCA input filename or name to be appended, "
+            "but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{append_label}"
+        logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
+        logger.debug(f"Created default label: {label}")
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list
@@ -413,9 +461,10 @@ def orca(
     if not isinstance(molecules, list):
         molecules = [molecules]
 
-    logger.debug(f"Obtained molecules: {molecules}")
+    logger.debug(f"Final molecules list: {molecules}")
+    logger.debug(f"Job settings keywords: {keywords}")
 
-    # store objects
+    # store objects in context for subcommands
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
     ctx.obj["keywords"] = keywords
@@ -427,6 +476,16 @@ def orca(
 @orca.result_callback()
 @click.pass_context
 def orca_process_pipeline(ctx, *args, **kwargs):
+    """
+    Result callback function for processing ORCA command pipeline.
+
+    This function is executed after the ORCA subcommand completes and
+    handles the final processing of results. It updates the context
+    with subcommand information and returns the processed results.
+    """
     kwargs.update({"subcommand": ctx.invoked_subcommand})
     ctx.obj[ctx.info_name] = kwargs
+    logger.debug(
+        f"Pipeline completed for subcommand: {ctx.invoked_subcommand}"
+    )
     return args[0]

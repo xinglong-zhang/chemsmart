@@ -7,9 +7,7 @@ import click
 from chemsmart.cli.job import click_pubchem_options
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import (
-    return_objects_from_string_index,
-)
+from chemsmart.utils.utils import return_objects_from_string_index
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +137,77 @@ def click_gaussian_settings_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_irc_options(f):
+    """Common click options for IRC-related jobs."""
+
+    @click.option(
+        "-fl/",
+        "--flat-irc/--no-flat-irc",
+        type=bool,
+        default=False,
+        help="whether to run flat irc or not",
+    )
+    @click.option(
+        "-pt",
+        "--predictor",
+        type=click.Choice(
+            ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
+        ),
+        default=None,
+        help="Type of predictors used for IRC. Examples include[HPC, EulerPC, "
+        "LQA, DVV, Euler].",
+    )
+    @click.option(
+        "-rc",
+        "--recorrect",
+        type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
+        default=None,
+        help="Recorrection step of HPC and EulerPC IRCs. options are: "
+        '["Never", "Always", "Test"].',
+    )
+    @click.option(
+        "-rs",
+        "--recalc-step",
+        type=int,
+        default=6,
+        help="Compute the Hessian analytically every N predictor steps or every "
+        "|N| corrector steps if N<0. ",
+    )
+    @click.option(
+        "-mp",
+        "--maxpoints",
+        type=int,
+        default=512,
+        help="Number of points along reaction path to examine.",
+    )
+    @click.option(
+        "-mc",
+        "--maxcycles",
+        type=int,
+        default=128,
+        help="Maximum number of steps along IRC to run.",
+    )
+    @click.option(
+        "-ss",
+        "--stepsize",
+        type=int,
+        default=20,
+        help="Step size along reaction path, in units of 0.01 Bohr.",
+    )
+    @click.option(
+        "-d",
+        "--direction",
+        type=click.Choice(["forward", "reverse"], case_sensitive=False),
+        default=None,
+        help="Only run the forward or reverse IRC, default to run both directions.",
+    )
+    @functools.wraps(f)
+    def wrapper_irc_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_irc_options
+
+
 def click_gaussian_jobtype_options(f):
     """Common click options for Gaussian link/crest jobs."""
 
@@ -147,13 +216,15 @@ def click_gaussian_jobtype_options(f):
         "--jobtype",
         type=str,
         default=None,
-        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", '
+        '"sp", "irc"]',
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates to be fixed for modred or scan job. "
+        "1-indexed.",
     )
     @click.option(
         "-s",
@@ -174,6 +245,47 @@ def click_gaussian_jobtype_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_grouper_options(f):
+    """Common click options for Gaussian grouper jobs."""
+
+    @click.option(
+        "-g",
+        "--grouping-strategy",
+        type=click.Choice(
+            ["rmsd", "tanimoto", "isomorphism", "formula", "connectivity"],
+            case_sensitive=False,
+        ),
+        default=None,
+        help="Grouping strategy to use for Gaussian jobs.",
+    )
+    @click.option(
+        "-t",
+        "--threshold",
+        type=float,
+        default=None,
+        help="Threshold for grouping. If not specified, uses strategy-specific defaults: RMSD=0.5, Tanimoto=0.9, Connectivity=0.0.",
+    )
+    @click.option(
+        "-i",
+        "--ignore-hydrogens",
+        is_flag=True,
+        default=False,
+        help="Whether to ignore hydrogens in the grouping.",
+    )
+    @click.option(
+        "-p",
+        "--num-procs",
+        type=int,
+        default=1,
+        help="Number of processors to use for grouper.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_gaussian_solvent_options(f):
     """Common click solvent options for Gaussian jobs."""
 
@@ -182,7 +294,8 @@ def click_gaussian_solvent_options(f):
         "-r/ ",
         type=bool,
         default=False,
-        help="Whether to use solvent model in the job. Defaults to project settings.",
+        help="Whether to use solvent model in the job. Defaults to project "
+        "settings.",
     )
     @click.option(
         "-sm",
@@ -205,7 +318,8 @@ def click_gaussian_solvent_options(f):
         default=None,
         help="Additional solvent options in scrf=() route. "
         "E.g., `iterative` in scrf=(smd,water,iterative) via"
-        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp -so iterative",
+        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp "
+        "-so iterative",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -291,18 +405,23 @@ def gaussian(
     # get project settings
     project_settings = GaussianProjectSettings.from_project(project)
 
-    # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
+    # obtain Gaussian Settings from filename, if supplied;
+    #  otherwise return defaults
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filename is not supplied, eg,
+        #  get structure from pubchem
         job_settings = GaussianJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filename is supplied and Gaussian default settings are used:\n"
+            f"{job_settings.__dict__} "
         )
     elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
+        # filename supplied - we would want to use the settings from here
+        #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
-    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi", ".cif", ".traj", ".gro", ".db")):
+    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
+    #  ".cif", ".traj", ".gro", ".db")):
     else:
         job_settings = GaussianJobSettings.default()
     # else:
@@ -354,11 +473,13 @@ def gaussian(
     molecules = None
     if filename is None and pubchem is None:
         raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
+            "[filename] or [pubchem] has not been specified!\n"
+            "Please specify one of them!"
         )
     if filename and pubchem:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
+            "Both [filename] and [pubchem] have been specified!\n"
+            "Please specify only one of them."
         )
 
     if filename:
@@ -382,7 +503,8 @@ def gaussian(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give Gaussian input filename or name to be be appended, but not both!"
+            "Only give Gaussian input filename or name to be be appended,"
+            "but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]

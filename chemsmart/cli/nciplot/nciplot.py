@@ -21,7 +21,8 @@ def click_nciplot_job_options(f):
         type=str,
         multiple=True,
         default=None,
-        help="Input files for the NCIPLOT job. Can be specified multiple times.",
+        help="Input files for the NCIPLOT job. Can be specified multiple "
+        "times.",
     )
     @click.option(
         "-l",
@@ -45,8 +46,9 @@ def click_nciplot_settings_options(f):
         "--rthres",
         type=float,
         default=None,
-        help="r distance along a cubic box. This extends the grid to include a larger "
-        "region around the molecule for capturing NCIs that extend further out.",
+        help="r distance along a cubic box. This extends the grid to include "
+        "a larger region around the molecule for capturing NCIs that extend "
+        "further out.",
     )
     @click.option(
         "--ligand-file-number",
@@ -101,7 +103,8 @@ def click_nciplot_settings_options(f):
         "--fragments",
         type=str,
         default=None,
-        help="Fragments in a dictionary-type string.\n E.g., {1: [1, 2, 3], 2: [4, 5, 6]}",
+        help="Fragments in a dictionary-type string.\n E.g., "
+        "{1: [1, 2, 3], 2: [4, 5, 6]}",
     )
     @click.option(
         "-cdd",
@@ -115,7 +118,8 @@ def click_nciplot_settings_options(f):
         "--cutoff-rdg-dat",
         type=float,
         default=None,
-        help="Cutoff for RDG (reduced density gradient) used in creating the dat file.",
+        help="Cutoff for RDG (reduced density gradient) used in creating the "
+        "dat file.",
     )
     @click.option(
         "-cdc",
@@ -129,16 +133,18 @@ def click_nciplot_settings_options(f):
         "--cutoff-rdg-cube",
         type=float,
         default=None,
-        help="Cutoff for RDG (reduced density gradient) used in creating the cube file.",
+        help="Cutoff for RDG (reduced density gradient) used in creating the "
+        "cube file.",
     )
     @click.option(
         "--dgrid/--no-dgrid",
         type=bool,
         default=False,
-        help="Turn on Radial grids for promolecular densities. Default is exponential fits.\n"
-        "Exponential fits are available up to Z=18 (Ar); radial grids are available up to Pu (Z=94).\n "
-        "Defaults to exponential fits unless the molecule contains some atom with Z>18 "
-        "or there are charged atoms (cations). Using DGRID, only radial grids are used to "
+        help="Turn on Radial grids for promolecular densities. Default is "
+        "exponential fits.\nExponential fits are available up to Z=18 (Ar); "
+        "radial grids are available up to Pu (Z=94).\nDefaults to exponential "
+        "fits unless the molecule contains some atom with Z>18 or there are "
+        "charged atoms (cations). Using DGRID, only radial grids are used to "
         "calculate promolecular densities. ",
     )
     @click.option(
@@ -202,7 +208,8 @@ def nciplot(
 ):
     """CLI for running NCIPLOT jobs using the chemsmart framework.
     Example usage:
-    chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test --fragments "{1: [1,4,5], 2: [3,4,5]}"
+    chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
+    --fragments "{1: [1,4,5], 2: [3,4,5]}"
     """
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
@@ -258,6 +265,8 @@ def nciplot(
         assert (
             label is not None
         ), "Label for file is required since creating molecule from PubChem!"
+        if not label.endswith("promolecular"):
+            label = f"{label}_promolecular"
     else:
         if filenames is None:
             raise ValueError(
@@ -266,14 +275,21 @@ def nciplot(
         else:
             if not isinstance(filenames, (list, tuple)):
                 raise TypeError(
-                    f"Expected filenames to be a list or tuple, got {type(filenames).__name__}"
+                    f"Expected filenames to be a list or tuple, got "
+                    f"{type(filenames).__name__}"
                 )
             if len(filenames) == 0:
                 raise ValueError(
-                    "No filenames provided for NCIPLOT job. Please provide at least one file."
+                    "No filenames provided for NCIPLOT job. Please provide "
+                    "at least one file."
                 )
             elif len(filenames) == 1:
                 label = filenames[0].split(".")[0] if label is None else label
+                if not filenames[0].endswith((".wfn", ".wfx")):
+                    if label is not None and not label.endswith(
+                        "promolecular"
+                    ):
+                        label = f"{label}_promolecular"
             else:
                 # add filenames together
                 label = (

@@ -6,6 +6,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
     click_pymol_mo_options,
+    click_pymol_pml_options,
     click_pymol_visualization_options,
     mol,
 )
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_pymol_visualization_options
 @click_pymol_mo_options
+@click_pymol_pml_options
 @click.pass_context
 def mo(
     ctx,
@@ -31,13 +33,19 @@ def mo(
     number,
     homo,
     lumo,
+    isosurface_value,
+    transparency_value,
+    surface_quality,
+    antialias_value,
+    ray_trace_mode,
     skip_completed,
     **kwargs,
 ):
     """CLI for generating molecular orbitals (MOs) and saving as pse file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com mo --homo
-    This visualizes the HOMO of phenyldioxazolone.com file and saves as phenyldioxazolone_HOMO.pse
+    This visualizes the HOMO of phenyldioxazolone.com file and saves as
+    phenyldioxazolone_HOMO.pse
     """
 
     # get molecule
@@ -55,7 +63,8 @@ def mo(
                 f"Invalid coordinates input: {coordinates}. Error: {e}"
             )
             raise ValueError(
-                "Invalid coordinates input. Please provide a valid Python literal."
+                "Invalid coordinates input. Please provide a valid Python "
+                "literal."
             )
     from chemsmart.jobs.mol.mo import PyMOLMOJob
 
@@ -72,6 +81,11 @@ def mo(
         number=number,
         homo=homo,
         lumo=lumo,
+        isosurface_value=isosurface_value,
+        transparency_value=transparency_value,
+        surface_quality=surface_quality,
+        antialias_value=antialias_value,
+        ray_trace_mode=ray_trace_mode,
         skip_completed=skip_completed,
         **kwargs,
     )
