@@ -245,17 +245,12 @@ def outfile_format(filepath) -> str:
     # Only scan first and last 100 lines for performance
     sample_lines = lines[:100] + lines[-100:] if len(lines) > 200 else lines
 
-    detected_program = None
     for line in sample_lines:
         if program := match_outfile_pattern(line):
-            detected_program = program
-            break  # stop scanning after first match
-
-    if detected_program:
-        logger.debug(
-            f"Detected output format for '{os.path.basename(filepath)}': {detected_program}"
-        )
-        return detected_program
+            logger.debug(
+                f"Detected output format for '{os.path.basename(filepath)}': {program}"
+            )
+            return program
 
     logger.debug(
         f"Could not detect output format for '{os.path.basename(filepath)}'."
