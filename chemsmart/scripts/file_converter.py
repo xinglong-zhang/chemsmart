@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+File format converter script.
+
+This script provides command-line functionality to convert molecular
+structure files between different formats (e.g., XYZ, SDF, MOL).
+"""
+
 import logging
 import os
 
@@ -22,7 +29,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-t",
     "--type",
     default=None,
-    help="Type of file to be converted, if direcotry is specified.",
+    help="Type of file to be converted, if directory is specified.",
 )
 @click.option(
     "-f", "--filename", default=None, help="Input filename to be converted."
@@ -31,7 +38,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-o",
     "--output-filetype",
     default="xyz",
-    help="Type of files to convert to, defaults to .xzy",
+    help="Type of files to convert to, defaults to .xyz",
 )
 @click.option(
     "-i/",
@@ -44,7 +51,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def entry_point(
     directory, type, filename, output_filetype, include_intermediate_structures
 ):
-    """Script for converting structures in different formats."""
+    """
+    Script for converting structures in different formats.
+    """
     create_logger()
     if directory is not None:
         logger.info(f"Converting files in directory: {directory}")

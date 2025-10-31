@@ -12,6 +12,7 @@ from chemsmart.io.gaussian.output import (
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.molecules.structure import Molecule
 
 
 class TestRouteString:
@@ -202,6 +203,12 @@ class TestRouteString:
         assert r4d.solvent_id == "toluene"
         assert r4d.additional_solvent_options == "iterative"
 
+        s4e = "# opt=(recalcfc=5) freq mn15 def2svp\n scrf=(cpcm,iterative,solvent=toluene)"
+        r4e = GaussianRoute(s4e)
+        assert r4e.solvent_model == "cpcm"
+        assert r4e.solvent_id == "toluene"
+        assert r4e.additional_solvent_options == "iterative"
+
 
 class TestGaussian16Input:
     def test_read_gaussian_input(self, gaussian_opt_inputfile):
@@ -328,6 +335,60 @@ class TestGaussian16Input:
         assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
         assert g16_genecp.molecule.frozen_atoms is None
 
+    def test_read_gaussian_link_opt_input(self, gaussian_link_opt_input):
+        assert os.path.exists(gaussian_link_opt_input)
+        g16_link_opt = Gaussian16Input(filename=gaussian_link_opt_input)
+        assert g16_link_opt.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_opt.is_link
+        assert (
+            g16_link_opt.route_string
+            == "# opt freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_opt.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_opt.additional_opt_options_in_route is None
+        assert g16_link_opt.job_type == "opt"
+        assert g16_link_opt.functional == "um062x"
+        assert g16_link_opt.basis == "def2svp"
+        assert g16_link_opt.molecule.frozen_atoms is None
+
+    def test_read_gaussian_link_ts_input(self, gaussian_link_ts_input):
+        assert os.path.exists(gaussian_link_ts_input)
+        g16_link_ts = Gaussian16Input(filename=gaussian_link_ts_input)
+        assert g16_link_ts.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_ts.is_link
+        assert (
+            g16_link_ts.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_ts.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_ts.additional_opt_options_in_route is None
+        assert g16_link_ts.job_type == "ts"
+        assert g16_link_ts.functional == "um062x"
+        assert g16_link_ts.basis == "def2svp"
+        assert g16_link_ts.molecule.frozen_atoms is None
+
+    def test_read_gausssian_link_sp_input(self, gaussian_link_sp_input):
+        assert os.path.exists(gaussian_link_sp_input)
+        g16_link_sp = Gaussian16Input(filename=gaussian_link_sp_input)
+        assert g16_link_sp.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_sp.is_link
+        assert (
+            g16_link_sp.route_string
+            == "# um062x def2tzvp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_sp.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_sp.additional_opt_options_in_route is None
+        assert g16_link_sp.job_type == "sp"
+        assert g16_link_sp.functional == "um062x"
+        assert g16_link_sp.basis == "def2tzvp"
+        assert g16_link_sp.molecule.frozen_atoms is None
+
     def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
         g16_pbc_1d = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
@@ -447,6 +508,8 @@ class TestGaussian16Output:
             == 361.7
         )
         assert g16_output.total_elapsed_walltime == 6.4
+        mol = g16_output.molecule
+        assert not mol.has_vibrations
 
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
@@ -479,6 +542,56 @@ class TestGaussian16Output:
             [0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9],
         )
         assert g16_output.rotational_symmetry_number == 1
+        mol = g16_output.molecule
+        assert mol.has_vibrations
+        assert mol.num_vib_frequencies == mol.num_vib_modes == 114
+        vibrational_mode1 = [
+            [0.0, 0.08, 0.03],
+            [0.01, 0.01, 0.04],
+            [0.01, 0.03, 0.04],
+            [0.02, 0.09, 0.06],
+            [0.0, 0.01, 0.03],
+            [0.0, 0.06, 0.02],
+            [0.01, 0.05, 0.04],
+            [0.01, -0.05, 0.06],
+            [0.02, -0.06, 0.07],
+            [-0.02, -0.08, 0.05],
+            [0.06, -0.06, 0.1],
+            [0.06, -0.06, 0.09],
+            [-0.05, -0.12, 0.0],
+            [-0.05, -0.02, -0.04],
+            [-0.11, 0.03, -0.14],
+            [-0.16, -0.03, -0.21],
+            [-0.16, -0.13, -0.16],
+            [-0.11, -0.18, -0.06],
+            [0.02, -0.15, 0.11],
+            [-0.11, 0.11, -0.17],
+            [-0.21, -0.18, -0.21],
+            [-0.11, -0.26, -0.03],
+            [-0.02, -0.25, 0.15],
+            [0.08, -0.14, 0.18],
+            [0.01, 0.04, 0.01],
+            [0.04, 0.03, 0.03],
+            [-0.01, 0.01, -0.01],
+            [0.05, -0.0, 0.02],
+            [-0.0, -0.02, -0.03],
+            [0.03, -0.02, -0.01],
+            [0.07, -0.01, 0.03],
+            [-0.02, -0.04, -0.05],
+            [0.14, -0.05, 0.13],
+            [-0.21, 0.0, -0.29],
+            [0.07, 0.07, 0.05],
+            [-0.06, 0.02, -0.03],
+            [0.04, -0.06, -0.03],
+            [0.02, -0.07, -0.03],
+            [0.07, -0.06, -0.04],
+            [0.03, -0.08, -0.03],
+        ]
+
+        assert np.allclose(
+            mol.vibrational_modes[0], vibrational_mode1, atol=1e-4
+        )
+        assert mol.vibrational_frequencies[0] == 11.9481
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
@@ -509,7 +622,9 @@ class TestGaussian16Output:
         )
         assert g16_output.homo_energy is None
         assert g16_output.lumo_energy is None
-        assert g16_output.somo_energy == -0.15673 * units.Hartree
+        assert g16_output.num_unpaired_electrons == 2
+        assert g16_output.multiplicity == 3
+        assert g16_output.somo_energy == -0.19177 * units.Hartree
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -537,8 +652,227 @@ class TestGaussian16Output:
         assert (
             g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
         )
-        assert g16_output.somo_energy == -0.18764 * units.Hartree
         assert g16_output.fmo_gap is None
+        assert g16_output.num_unpaired_electrons == 4
+        assert g16_output.multiplicity == 5
+        assert np.isclose(
+            g16_output.somo_energy, -0.22065 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_opt_output_file(
+        self, gaussian_link_opt_outputfile
+    ):
+        assert os.path.exists(gaussian_link_opt_outputfile)
+        g16_link_opt = Gaussian16Output(filename=gaussian_link_opt_outputfile)
+        assert (
+            g16_link_opt.route_string
+            == "# opt freq um062x def2svp geom=check guess=read"
+        )
+        assert g16_link_opt.is_link
+        assert g16_link_opt.job_type == "opt"
+        assert g16_link_opt.normal_termination
+        assert isinstance(g16_link_opt.molecule, Molecule)
+        assert g16_link_opt.tddft_transitions == []
+        assert len(g16_link_opt.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_opt.alpha_occ_eigenvalues[0] == -19.77692 * units.Hartree
+        )
+        assert (
+            g16_link_opt.alpha_occ_eigenvalues[-1] == -0.36639 * units.Hartree
+        )
+        assert len(g16_link_opt.alpha_virtual_eigenvalues) == 20
+        assert (
+            g16_link_opt.alpha_virtual_eigenvalues[0]
+            == -0.06479 * units.Hartree
+        )
+        assert (
+            g16_link_opt.alpha_virtual_eigenvalues[-1]
+            == 3.87784 * units.Hartree
+        )
+        assert len(g16_link_opt.beta_occ_eigenvalues) == 8
+        assert (
+            g16_link_opt.beta_occ_eigenvalues[0] == -19.77692 * units.Hartree
+        )
+        assert (
+            g16_link_opt.beta_occ_eigenvalues[-1] == -0.36639 * units.Hartree
+        )
+        assert len(g16_link_opt.beta_virtual_eigenvalues) == 20
+        assert (
+            g16_link_opt.beta_virtual_eigenvalues[0]
+            == -0.06479 * units.Hartree
+        )
+        assert (
+            g16_link_opt.beta_virtual_eigenvalues[-1]
+            == 3.87784 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_opt.fmo_gap, 0.3016 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_ts_output_file(
+        self, gaussian_link_ts_outputfile
+    ):
+        assert os.path.exists(gaussian_link_ts_outputfile)
+        g16_link_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
+        assert not g16_link_ts.normal_termination  # Error termination
+        assert (
+            g16_link_ts.route_string
+            == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
+        )
+        assert g16_link_ts.is_link
+        assert g16_link_ts.job_type == "ts"
+        assert len(g16_link_ts.vibrational_frequencies) == 0
+        assert (
+            g16_link_ts.num_vib_modes == g16_link_ts.num_vib_frequencies == 0
+        )
+        assert len(g16_link_ts.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_ts.alpha_occ_eigenvalues[0] == -19.78334 * units.Hartree
+        )
+        assert (
+            g16_link_ts.alpha_occ_eigenvalues[-1] == -0.38325 * units.Hartree
+        )
+        assert len(g16_link_ts.alpha_virtual_eigenvalues) == 20
+        assert (
+            g16_link_ts.alpha_virtual_eigenvalues[0]
+            == -0.08312 * units.Hartree
+        )
+        assert (
+            g16_link_ts.alpha_virtual_eigenvalues[-1]
+            == 3.85967 * units.Hartree
+        )
+        assert len(g16_link_ts.beta_occ_eigenvalues) == 8
+        assert g16_link_ts.beta_occ_eigenvalues[0] == -19.78334 * units.Hartree
+        assert g16_link_ts.beta_occ_eigenvalues[-1] == -0.38325 * units.Hartree
+        assert len(g16_link_ts.beta_virtual_eigenvalues) == 20
+        assert (
+            g16_link_ts.beta_virtual_eigenvalues[0] == -0.08312 * units.Hartree
+        )
+        assert (
+            g16_link_ts.beta_virtual_eigenvalues[-1] == 3.85967 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_ts.fmo_gap, 0.30013 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_modred_output_file(
+        self, gaussian_link_modred_output
+    ):
+        assert os.path.exists(gaussian_link_modred_output)
+        g16_link_modred = Gaussian16Output(
+            filename=gaussian_link_modred_output
+        )
+        assert g16_link_modred.normal_termination
+        assert (
+            g16_link_modred.route_string
+            == "# opt=modredundant freq umn15 def2svp geom=check guess=read"
+        )
+        assert g16_link_modred.is_link
+        assert g16_link_modred.job_type == "modred"
+        assert isinstance(g16_link_modred.molecule, Molecule)
+        assert len(g16_link_modred.vibrational_frequencies) == 126
+        assert (
+            g16_link_modred.num_vib_modes
+            == g16_link_modred.num_vib_frequencies
+            == 126
+        )
+        assert len(g16_link_modred.alpha_occ_eigenvalues) == 97
+        assert (
+            g16_link_modred.alpha_occ_eigenvalues[0]
+            == -254.07064 * units.Hartree
+        )
+        assert (
+            g16_link_modred.alpha_occ_eigenvalues[-1]
+            == -0.24253 * units.Hartree
+        )
+        assert len(g16_link_modred.alpha_virtual_eigenvalues) == 339
+        assert (
+            g16_link_modred.alpha_virtual_eigenvalues[0]
+            == 0.01660 * units.Hartree
+        )
+        assert (
+            g16_link_modred.alpha_virtual_eigenvalues[-1]
+            == 4.09404 * units.Hartree
+        )
+        assert len(g16_link_modred.beta_occ_eigenvalues) == 93
+        assert (
+            g16_link_modred.beta_occ_eigenvalues[0]
+            == -254.07343 * units.Hartree
+        )
+        assert (
+            g16_link_modred.beta_occ_eigenvalues[-1]
+            == -0.26404 * units.Hartree
+        )
+        assert len(g16_link_modred.beta_virtual_eigenvalues) == 343
+        assert (
+            g16_link_modred.beta_virtual_eigenvalues[0]
+            == -0.03779 * units.Hartree
+        )
+        assert (
+            g16_link_modred.beta_virtual_eigenvalues[-1]
+            == 4.21075 * units.Hartree
+        )
+        assert g16_link_modred.multiplicity == 5
+        assert g16_link_modred.num_unpaired_electrons == 4
+        assert np.isclose(
+            g16_link_modred.somo_energy, -0.30450 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_sp_output_file(
+        self, gaussian_link_sp_outputfile
+    ):
+        assert os.path.exists(gaussian_link_sp_outputfile)
+        g16_link_sp = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert g16_link_sp.normal_termination
+        assert (
+            g16_link_sp.route_string
+            == "# um062x def2tzvp scrf=(smd,solvent=chloroform) geom=check guess=read"
+        )
+        assert g16_link_sp.is_link
+        assert g16_link_sp.job_type == "sp"
+        assert len(g16_link_sp.vibrational_frequencies) == 0
+        assert (
+            g16_link_sp.num_vib_modes == g16_link_sp.num_vib_frequencies == 0
+        )
+        assert len(g16_link_sp.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_sp.alpha_occ_eigenvalues[0] == -19.78515 * units.Hartree
+        )
+        assert (
+            g16_link_sp.alpha_occ_eigenvalues[-1] == -0.38742 * units.Hartree
+        )
+        assert len(g16_link_sp.alpha_virtual_eigenvalues) == 54
+        assert (
+            g16_link_sp.alpha_virtual_eigenvalues[0]
+            == -0.08907 * units.Hartree
+        )
+        assert (
+            g16_link_sp.alpha_virtual_eigenvalues[-1]
+            == 43.63078 * units.Hartree
+        )
+        assert len(g16_link_sp.beta_occ_eigenvalues) == 8
+        assert g16_link_sp.beta_occ_eigenvalues[0] == -19.78515 * units.Hartree
+        assert g16_link_sp.beta_occ_eigenvalues[-1] == -0.38742 * units.Hartree
+        assert len(g16_link_sp.beta_virtual_eigenvalues) == 54
+        assert (
+            g16_link_sp.beta_virtual_eigenvalues[0] == -0.08907 * units.Hartree
+        )
+        assert (
+            g16_link_sp.beta_virtual_eigenvalues[-1]
+            == 43.63078 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_sp.fmo_gap, 0.29835 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_failed_link_job(self, gaussian_failed_link_output):
+        assert os.path.exists(gaussian_failed_link_output)
+        g16_failed_link = Gaussian16Output(
+            filename=gaussian_failed_link_output
+        )
+        assert not g16_failed_link.normal_termination
+        molecule = Molecule.from_filepath(gaussian_failed_link_output)
+        assert isinstance(molecule, Molecule)
 
     def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
         assert os.path.exists(gaussian_ts_genecp_outfile)
@@ -589,60 +923,61 @@ class TestGaussian16Output:
         assert (
             g16_genecp.num_vib_modes == g16_genecp.num_vib_frequencies == 138
         )
+        vibrational_mode1 = np.array(
+            [
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, 0.0],
+                [0.0, -0.0, -0.01],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.06, 0.01],
+                [-0.03, 0.06, 0.01],
+                [0.0, -0.01, 0.0],
+                [-0.01, 0.02, 0.0],
+                [-0.0, -0.0, 0.01],
+                [0.84, -0.47, 0.23],
+                [-0.03, 0.05, -0.01],
+                [0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, -0.0],
+                [0.01, -0.0, 0.0],
+                [0.01, 0.01, 0.0],
+                [-0.06, 0.01, -0.02],
+                [0.01, -0.02, -0.0],
+                [0.0, 0.0, 0.0],
+                [-0.01, 0.01, -0.0],
+                [0.02, 0.05, 0.01],
+                [-0.01, -0.01, -0.0],
+                [-0.0, -0.01, -0.0],
+                [-0.01, -0.01, -0.01],
+                [-0.01, -0.01, -0.0],
+                [0.0, -0.01, 0.0],
+                [-0.01, -0.01, -0.0],
+                [-0.0, -0.0, -0.0],
+            ]
+        )
         assert np.allclose(
             g16_genecp.vibrational_modes[0],
-            np.array(
-                [
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, 0.0],
-                    [0.0, -0.0, -0.01],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.06, 0.01],
-                    [-0.03, 0.06, 0.01],
-                    [0.0, -0.01, 0.0],
-                    [-0.01, 0.02, 0.0],
-                    [-0.0, -0.0, 0.01],
-                    [0.84, -0.47, 0.23],
-                    [-0.03, 0.05, -0.01],
-                    [0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, -0.0],
-                    [0.01, -0.0, 0.0],
-                    [0.01, 0.01, 0.0],
-                    [-0.06, 0.01, -0.02],
-                    [0.01, -0.02, -0.0],
-                    [0.0, 0.0, 0.0],
-                    [-0.01, 0.01, -0.0],
-                    [0.02, 0.05, 0.01],
-                    [-0.01, -0.01, -0.0],
-                    [-0.0, -0.01, -0.0],
-                    [-0.01, -0.01, -0.01],
-                    [-0.01, -0.01, -0.0],
-                    [0.0, -0.01, 0.0],
-                    [-0.01, -0.01, -0.0],
-                    [-0.0, -0.0, -0.0],
-                ]
-            ),
+            vibrational_mode1,
             rtol=1e-4,
         )
         assert len(g16_genecp.forces) == 11
@@ -942,6 +1277,18 @@ class TestGaussian16Output:
             [3.69135800, -0.83587500, -0.25754700],
         )
         assert len(g16_genecp.get_molecule(index="4:")) == 8
+
+        mol = g16_genecp.molecule
+        assert np.allclose(mol.positions, last_structure_positions, rtol=1e-4)
+        mol2 = mol.vibrationally_displaced(mode_idx=1, amp=0.5)
+        assert np.allclose(
+            mol2.positions[29], [-1.668781, 1.679069, 0.38199], rtol=1e-4
+        )
+
+        mol3 = mol.vibrationally_displaced(mode_idx=1, amp=-0.5)
+        assert np.allclose(
+            mol3.positions[29], [-2.505441, 2.147201, 0.152904], rtol=1e-4
+        )
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
@@ -1395,8 +1742,11 @@ class TestGaussian16Output:
         assert g16_pm6.functional is None
         assert g16_pm6.basis is None
         assert g16_pm6.job_type == "opt"
+        assert g16_pm6.route_string == "# opt freq pm6"
         assert g16_pm6.freq
-        assert g16_pm6.semiempirical == "PM6"
+        assert (
+            g16_pm6.semiempirical == "PM6"
+        )  # changed to upper case in route_object.semiempirical
 
 
 class TestGaussianWBIOutput:

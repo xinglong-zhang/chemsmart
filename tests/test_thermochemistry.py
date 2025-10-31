@@ -8,9 +8,7 @@ from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
     Thermochemistry,
 )
-from chemsmart.io.gaussian.output import (
-    Gaussian16Output,
-)
+from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
@@ -771,7 +769,7 @@ class TestThermochemistryCO2:
         orca_out = ORCAOutput(filename=orca_co2_output)
         assert orca_out.normal_termination
         assert orca_out.job_type == "opt"
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         mol = orca_out.molecule
         assert mol.empirical_formula == "CO2"
         assert orca_out.multiplicity == 1
@@ -815,6 +813,7 @@ class TestThermochemistryCO2:
             use_weighted_mass=False,
             h_freq_cutoff=100,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
 
         # when arguments are not specified, the quasi-rrho calculation use
@@ -1184,6 +1183,7 @@ class TestThermochemistryCO2:
             use_weighted_mass=False,
             h_freq_cutoff=100,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         # In Goodvibes, if no concentration is specified, the default pressure is 1 atmosphere.
         assert np.isclose(
@@ -1268,6 +1268,7 @@ class TestThermochemistryCO2:
             use_weighted_mass=False,
             h_freq_cutoff=100,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         assert np.isclose(
             qrrho_thermochem_co2_2.electronic_energy
@@ -1323,6 +1324,7 @@ class TestThermochemistryCO2:
             temperature=298.15,
             concentration=1.0,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         # the cutoff frequency for both entropy and enthalpy is specified as 1000 cm^-1
@@ -1565,7 +1567,7 @@ class TestThermochemistryHe:
         orca_out = ORCAOutput(filename=orca_he_output_freq)
         assert orca_out.normal_termination
         #        assert orca_out.job_type == "opt"
-        assert orca_out.natoms == 1
+        assert orca_out.num_atoms == 1
         mol = orca_out.molecule
         assert mol.empirical_formula == "He"
         assert orca_out.multiplicity == 1
@@ -1601,6 +1603,7 @@ class TestThermochemistryHe:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         assert np.isclose(
@@ -1861,7 +1864,7 @@ class TestThermochemistryH2O:
         orca_out = ORCAOutput(filename=water_output_gas_path)
         assert orca_out.normal_termination
         assert orca_out.job_type == "opt"
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         mol = orca_out.molecule
         assert mol.empirical_formula == "H2O"
         assert orca_out.multiplicity == 1
@@ -1902,6 +1905,7 @@ class TestThermochemistryH2O:
             temperature=1298.15,
             concentration=2.0,
             s_freq_cutoff=500,
+            entropy_method="grimme",
             h_freq_cutoff=500,
         )
         vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
@@ -2145,6 +2149,227 @@ class TestThermochemistryPressure:
         )
 
 
+class TestThermochemistryEntropyMethod:
+
+    def test_thermochemistry_grimme_method(self, gaussian_singlet_opt_outfile):
+        """Values from Goodvibes, as a reference:
+                goodvibes --fs 500 -t 298.15 --qs grimme --bav "conf" nhc_neutral_singlet.log
+        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+           ********************************************************************************************************************************
+        o  nhc_neutral_singlet                      -1864.040180   0.284336  -1863.732135   0.082255   0.078764  -1863.814390  -1863.810899
+           ********************************************************************************************************************************
+        """
+        assert os.path.exists(gaussian_singlet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.normal_termination
+        mol = g16_output.molecule
+        vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
+        moments_of_inertia = np.array(
+            mol.moments_of_inertia_most_abundant_mass
+        )
+        expected_theta = (
+            6.62606957
+            * 1e-34
+            * vibrational_frequencies
+            * 2.99792458
+            * 1e10
+            / (1.3806488 * 1e-23)
+        )
+        expected_entropy_damping_function = 1 / (
+            1 + (500 / vibrational_frequencies) ** 4
+        )
+        expected_mu = (
+            6.62606957
+            * 1e-34
+            / (8 * np.pi**2 * vibrational_frequencies * 2.99792458 * 1e10)
+        )
+        expected_i = moments_of_inertia / (6.02214129 * 1e23 * 1000) * 1e-10**2
+        expected_b = 6.62606957 * 1e-34 / (8 * np.pi**2 * expected_i)
+        expected_average_rotational_constant = sum(expected_b) / len(
+            expected_b
+        )
+        expected_bav = (
+            6.62606957 * 1e-34 / expected_average_rotational_constant
+        )
+        expected_mu_prime = (
+            expected_mu * expected_bav / (expected_mu + expected_bav)
+        )
+        expected_free_rotor_entropy = 8.314462145468951 * (
+            1 / 2
+            + np.log(
+                (
+                    8
+                    * np.pi**3
+                    * expected_mu_prime
+                    * 1.3806488
+                    * 1e-23
+                    * 298.15
+                    / (6.62606957 * 1e-34) ** 2
+                )
+                ** (1 / 2)
+            )
+        )
+        expected_rrho_entropy = 8.314462145468951 * (
+            (expected_theta / 298.15) / (np.exp(expected_theta / 298.15) - 1)
+            - np.log(1 - np.exp(-expected_theta / 298.15))
+        )
+        expected_qrrho_vibrational_entropy = np.sum(
+            expected_entropy_damping_function * expected_rrho_entropy
+            + (1 - expected_entropy_damping_function)
+            * expected_free_rotor_entropy
+        )
+
+        qrrho_thermochem_nhc_grimme = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=500,
+            entropy_method="grimme",
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.qrrho_vibrational_entropy,
+            expected_qrrho_vibrational_entropy,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.electronic_energy
+            / (hartree_to_joules * units._Nav),
+            -1864.040180,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.zero_point_energy
+            / (hartree_to_joules * units._Nav),
+            0.284336,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.enthalpy
+            / (hartree_to_joules * units._Nav),
+            -1863.732135,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.082255,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.078764,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -1863.814390,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_grimme.qrrho_gibbs_free_energy_qs
+            / (hartree_to_joules * units._Nav),
+            -1863.810899,
+            atol=1e-6,
+        )
+
+    def test_thermochemistry_truhlar_method(
+        self, gaussian_singlet_opt_outfile
+    ):
+        """Values from Goodvibes, as a reference:
+                goodvibes --fs 500 -t 298.15 --qs truhlar --bav "conf" nhc_neutral_singlet.log
+        Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
+           ********************************************************************************************************************************
+        o  nhc_neutral_singlet                      -1864.040180   0.284336  -1863.732135   0.082255   0.052926  -1863.814390  -1863.785062
+           ********************************************************************************************************************************
+        """
+        assert os.path.exists(gaussian_singlet_opt_outfile)
+        g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.normal_termination
+        vibrational_frequencies = np.array(g16_output.vibrational_frequencies)
+        expected_theta_cutoff = (
+            6.62606957 * 1e-34 * 500 * 2.99792458 * 1e10 / (1.3806488 * 1e-23)
+        )
+        expected_rrho_entropy_cutoff = 8.314462145468951 * (
+            (expected_theta_cutoff / 298.15)
+            / (np.exp(expected_theta_cutoff / 298.15) - 1)
+            - np.log(1 - np.exp(-expected_theta_cutoff / 298.15))
+        )
+        expected_qrrho_vibrational_entropy = 0
+        for v_k in vibrational_frequencies:
+            expected_theta_vk = (
+                6.62606957
+                * 1e-34
+                * v_k
+                * 2.99792458
+                * 1e10
+                / (1.3806488 * 1e-23)
+            )
+            expected_rrho_entropy_vk = 8.314462145468951 * (
+                (expected_theta_vk / 298.15)
+                / (np.exp(expected_theta_vk / 298.15) - 1)
+                - np.log(1 - np.exp(-expected_theta_vk / 298.15))
+            )
+            if v_k > 500:
+                expected_qrrho_vibrational_entropy += expected_rrho_entropy_vk
+            else:
+                expected_qrrho_vibrational_entropy += (
+                    expected_rrho_entropy_cutoff
+                )
+
+        qrrho_thermochem_nhc_truhlar = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=500,
+            entropy_method="truhlar",
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.qrrho_vibrational_entropy,
+            expected_qrrho_vibrational_entropy,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.electronic_energy
+            / (hartree_to_joules * units._Nav),
+            -1864.040180,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.zero_point_energy
+            / (hartree_to_joules * units._Nav),
+            0.284336,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.enthalpy
+            / (hartree_to_joules * units._Nav),
+            -1863.732135,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.082255,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.qrrho_entropy_times_temperature
+            / (hartree_to_joules * units._Nav),
+            0.052926,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.gibbs_free_energy
+            / (hartree_to_joules * units._Nav),
+            -1863.814390,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            qrrho_thermochem_nhc_truhlar.qrrho_gibbs_free_energy_qs
+            / (hartree_to_joules * units._Nav),
+            -1863.785062,
+            atol=1e-6,
+        )
+
+
 class TestBoltzmannWeightedAverage:
 
     def test_thermochemistry_boltzmann_electronic(
@@ -2238,6 +2463,7 @@ class TestBoltzmannWeightedAverage:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         thermochem_conformer2 = Thermochemistry(
@@ -2246,6 +2472,7 @@ class TestBoltzmannWeightedAverage:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
         )
         """Values from Goodvibes, as a reference:
@@ -2333,6 +2560,7 @@ class TestBoltzmannWeightedAverage:
             concentration=0.5,
             use_weighted_mass=False,
             s_freq_cutoff=1000,
+            entropy_method="grimme",
             h_freq_cutoff=1000,
             energy_type="gibbs",
         )
@@ -2516,6 +2744,7 @@ class TestBoltzmannWeightedAverage:
             concentration=1.0,
             use_weighted_mass=False,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         thermochem2_conformer2 = Thermochemistry(
             filename=gaussian_conformer2_outfile,
@@ -2523,6 +2752,7 @@ class TestBoltzmannWeightedAverage:
             concentration=1.0,
             use_weighted_mass=False,
             s_freq_cutoff=100,
+            entropy_method="grimme",
         )
         """Values from Goodvibes, as a reference:
                 goodvibes --fs 100 -c 1.0 -t 298.15 --qs grimme --bav "conf" udc3_mCF3_monomer_c1.log udc3_mCF3_monomer_c4.log
@@ -2607,6 +2837,7 @@ class TestBoltzmannWeightedAverage:
             concentration=1.0,
             use_weighted_mass=False,
             s_freq_cutoff=100,
+            entropy_method="grimme",
             energy_type="gibbs",
         )
         boltzmannthermochem_gibbs2.compute_boltzmann_averages()
