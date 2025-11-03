@@ -107,6 +107,10 @@ orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
 # filename matches with reactant r1 or r2
 orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
+orca_date_pattern = (
+    r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+)
+
 
 # filename pattern for gaussian output files
 
@@ -138,6 +142,8 @@ gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
 # we'd want to avoid erroneous partial matches, eg.,
 # freqency (spelling error eg)
 gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
+
+gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."
 
 # Pattern to find multiple consecutive spaces in strings
 multiple_spaces_pattern = r"\s+"

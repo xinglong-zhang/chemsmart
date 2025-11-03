@@ -54,6 +54,12 @@ class Molecule:
         The velocities of the atoms in the molecule.
     info: dict
         A dictionary containing additional information about the molecule.
+    structure_index_in_file: int | None
+        1-based index of this structure within the source file, if applicable.
+    rotational_symmetry_number: int | None
+        Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
+    mulliken_atomic_charges: dict[str, float] | None
+        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
     """
 
     def __init__(
@@ -75,6 +81,9 @@ class Molecule:
         vibrational_mode_symmetries=None,
         vibrational_modes=None,
         info=None,
+        structure_index_in_file=None,
+        rotational_symmetry_number=None,
+        mulliken_atomic_charges=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -90,7 +99,9 @@ class Molecule:
         self.forces = forces
         self.velocities = velocities
         self.info = info
+        self.structure_index_in_file = structure_index_in_file
         self._num_atoms = len(self.symbols)
+        self.rotational_symmetry_number = rotational_symmetry_number
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
@@ -153,6 +164,12 @@ class Molecule:
         # modes is a list of (num_atoms x 3) arrays; keep as-is if provided
         self.vibrational_modes = (
             [] if vibrational_modes is None else vibrational_modes
+        )
+
+        self.mulliken_atomic_charges = (
+            mulliken_atomic_charges
+            if mulliken_atomic_charges is not None
+            else None
         )
 
     def __len__(self):

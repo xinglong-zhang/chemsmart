@@ -2308,6 +2308,22 @@ class ORCAOutput(ORCAFileMixin):
         setattr(mol, "transition_dipoles", vib["transition_dipoles"])
         setattr(mol, "vibrational_modes", vib["modes"])
 
+        # Also attach Mulliken charges and rotational symmetry number, if available
+        try:
+            setattr(
+                mol, "mulliken_atomic_charges", self.mulliken_atomic_charges
+            )
+        except Exception:
+            pass
+        try:
+            setattr(
+                mol,
+                "rotational_symmetry_number",
+                self.rotational_symmetry_number,
+            )
+        except Exception:
+            pass
+
         return mol
 
     @cached_property

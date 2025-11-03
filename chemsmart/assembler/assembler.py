@@ -20,6 +20,7 @@ class BaseAssembler:
             self.filename, index=self.index, return_list=True
         )
 
+    @cached_property
     def assemble(self):
         if not self.molecules_list:
             logger.warning(f"No molecules parsed from {self.filename}.")
@@ -35,22 +36,25 @@ class BaseAssembler:
                 **self.get_calculation_results(),
             }
             assemble_data.append(entry)
-        elif self.index == ":":
-            for i, mol in enumerate(self.molecules_list):
-                entry = {
-                    "structure_index": i,
-                    **self.get_meta_data(),
-                    **self.get_molecule_info(mol),
-                }
-                assemble_data.append(entry)
-        else:
+        elif len(self.molecules_list) == 1:
             mol = self.molecules_list[0]
             entry = {
-                "structure_index": self.index,
                 **self.get_meta_data(),
                 **self.get_molecule_info(mol),
             }
             assemble_data.append(entry)
+        else:
+            for i, mol in enumerate(self.molecules_list):
+                if i == 0:
+                    entry = {
+                        **self.get_meta_data(),
+                        **self.get_molecule_info(mol),
+                    }
+                else:
+                    entry = {
+                        **self.get_molecule_info(mol),
+                    }
+                assemble_data.append(entry)
         return assemble_data
 
     def get_meta_data(self):
@@ -64,27 +68,28 @@ class BaseAssembler:
             "num_basis_functions": self.output.num_basis_functions,
             "job_type": self.output.job_type,
             "solvent_on": self.output.solvent_on,
-            "solvent_model": self.output.solvent_model,
-            "solvent_id": self.output.solvent_id,
             "route_string": self.output.route_string,
         }
+        if self.output.solvent_on:
+            meta_data.update = {
+                "solvent_model": self.output.solvent_model,
+                "solvent_id": self.output.solvent_id,
+            }
         return meta_data
 
     def get_molecule_info(self, mol):
         molecule_info = {
+            "structure_index_in_file": mol.structure_index_in_file,
             "charge": mol.charge,
             "multiplicity": mol.multiplicity,
-            "chemical_symbols": mol.chemical_symbols,
-            "positions": mol.positions,
+            "coordinates": list(zip(mol.chemical_symbols, mol.positions)),
             "chemical_formula": mol.chemical_formula,
-            "empirical_formula": mol.empirical_formula,
             "number_of_atoms": mol.num_atoms,
             "mass": mol.mass,
             "elements": mol.elements,
             "element_counts": mol.element_counts,
             "center_of_mass": mol.center_of_mass,
             "is_chiral": mol.is_chiral,
-            #           'is_aromatic': mol.is_aromatic,
             "is_ring": mol.is_ring,
             "is_monoatomic": mol.is_monoatomic,
             "is_diatomic": mol.is_diatomic,
@@ -95,35 +100,32 @@ class BaseAssembler:
             "energy": mol.energy,
             "forces": mol.forces,
         }
+        if mol.mulliken_atomic_charges is not None:
+            molecule_info["mulliken_atomic_charges"] = (
+                mol.mulliken_atomic_charges
+            )
+        if mol.rotational_symmetry_number is not None:
+            molecule_info["rotational_symmetry_number"] = (
+                mol.rotational_symmetry_number
+            )
+        if mol.has_vibrations:
+            molecule_info.update(
+                {
+                    "num_vibrational_modes": mol.num_vib_modes,
+                    "vibrational_frequencies": mol.vibrational_frequencies,
+                    "vibrational_modes": mol.vibrational_modes,
+                }
+            )
         return molecule_info
 
     def get_calculation_results(self):
         calculation_results = {
-            "input_coordinates_block": self.output.input_coordinates_block,
-            "all_structures": self.output.all_structures,
-            "optimized_structure": self.output.optimized_structure,
-            "last_structure": self.output.last_structure,
-            "molecule": self.output.molecule,
-            "optimized_steps_indices": self.output.optimized_steps_indices,
             "zero_point_energy": self.output.zero_point_energy,
             "homo_energy": self.output.homo_energy,
             "lumo_energy": self.output.lumo_energy,
             "fmo_gap": self.output.fmo_gap,
-            "cpu_runtime_by_jobs_core_hours": self.output.cpu_runtime_by_jobs_core_hours,
-            "service_units_by_jobs": self.output.service_units_by_jobs,
             "total_core_hours": self.output.total_core_hours,
-            "total_service_unit": self.output.total_service_unit,
-            "elapsed_walltime_by_jobs": self.output.elapsed_walltime_by_jobs,
             "total_elapsed_walltime": self.output.total_elapsed_walltime,
-            "vibrational_frequencies": self.output.vibrational_frequencies,
-            "num_vib_frequencies": self.output.num_vib_frequencies,
-            "rotational_symmetry_number": self.output.rotational_symmetry_number,
-            "energies": self.output.energies,
-            "has_forces": self.output.has_forces,
-            "num_forces": self.output.num_forces,
-            "mulliken_atomic_charges": self.output.mulliken_atomic_charges,
-            "hirshfeld_charges": self.output.hirshfeld_charges,
-            "hirshfeld_spin_densities": self.output.hirshfeld_spin_densities,
         }
         return calculation_results
 
@@ -166,7 +168,7 @@ class GaussianAssembler(BaseAssembler):
                 "frozen_atoms_masks": self.output.frozen_atoms_masks,
                 "scf_energies": self.output.scf_energies,
                 "mp2_energies": self.output.mp2_energies,
-                "oniom_energies": self.output.onionom_energies,
+                "oniom_energies": self.output.oniom_energies,
                 "convergence_criterion_not_met": self.output.convergence_criterion_not_met,
                 "input_orientations": self.output.input_orientations,
                 "input_orientations_pbc": self.output.input_orientations_pbc,
@@ -185,13 +187,6 @@ class GaussianAssembler(BaseAssembler):
                 "num_unpaired_electrons": self.output.num_unpaired_electrons,
                 "somo_energy": self.output.somo_energy,
                 "mulliken_spin_densities": self.output.mulliken_spin_densities,
-                "mulliken_atomic_charges_heavy_atoms": self.output.mulliken_atomic_charges_heavy_atoms,
-                "mulliken_spin_densities_heavy_atoms": self.output.mulliken_spin_densities_heavy_atoms,
-                "hirshfeld_dipoles": self.output.hirshfeld_dipoles,
-                "hirshfeld_cm5_charges": self.output.hirshfeld_cm5_charges,
-                "hirshfeld_charges_heavy_atoms": self.output.hirshfeld_charges_heavy_atoms,
-                "hirshfeld_spin_densities_heavy_atoms": self.output.hirshfeld_spin_densities_heavy_atoms,
-                "hirshfeld_cm5_charges_heavy_atoms": self.output.hirshfeld_cm5_charges_heavy_atoms,
                 "moments_of_inertia_principal_axes": self.output.moments_of_inertia_principal_axes,
                 "rotational_temperatures": self.output.rotational_temperatures,
                 "rotational_constants_in_Hz": self.output.rotational_constants_in_Hz,
@@ -338,7 +333,7 @@ class SingleFileAssembler:
     def assemble_data(self):
         assembler = self._get_assembler(self.filename)
         try:
-            data = assembler.assemble()
+            data = assembler.assemble
         except Exception as e:
             logger.error(f"Error assembling {self.filename}: {e}")
             return []
