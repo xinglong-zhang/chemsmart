@@ -23,39 +23,19 @@ class BaseAssembler:
     @cached_property
     def assemble(self):
         if not self.molecules_list:
-            logger.warning(f"No molecules parsed from {self.filename}.")
-            return []
+            logger.error(f"No molecules parsed from {self.filename}.")
+            return {}
 
-        assemble_data = []
+        data = {"meta": self.get_meta_data(), "molecules": []}
 
-        if self.index == "-1" and self.output.normal_termination:
-            mol = self.molecules_list[0]
-            entry = {
-                **self.get_meta_data(),
-                **self.get_molecule_info(mol),
-                **self.get_calculation_results(),
-            }
-            assemble_data.append(entry)
-        elif len(self.molecules_list) == 1:
-            mol = self.molecules_list[0]
-            entry = {
-                **self.get_meta_data(),
-                **self.get_molecule_info(mol),
-            }
-            assemble_data.append(entry)
-        else:
-            for i, mol in enumerate(self.molecules_list):
-                if i == 0:
-                    entry = {
-                        **self.get_meta_data(),
-                        **self.get_molecule_info(mol),
-                    }
-                else:
-                    entry = {
-                        **self.get_molecule_info(mol),
-                    }
-                assemble_data.append(entry)
-        return assemble_data
+        for i, mol in enumerate(self.molecules_list):
+            mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
+            data["molecules"].append(mol_entry)
+
+        if self.output.normal_termination:
+            data["results"] = self.get_calculation_results()
+
+        return data
 
     def get_meta_data(self):
         meta_data = {
