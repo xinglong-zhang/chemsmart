@@ -8,6 +8,7 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
+from chemsmart.utils.constants import joule_per_mol_to_hartree
 from chemsmart.utils.io import (
     clean_duplicate_structure,
     create_molecule_list,
@@ -552,6 +553,26 @@ class ORCAOutput(ORCAFileMixin):
             if pattern.search(line):
                 return int(line.split()[-1])
         return None
+
+    @property
+    def spin(self):
+        """
+        Determine if calculation uses restricted or unrestricted spin.
+
+        Analyzes the SCF method specification to determine whether
+        the calculation uses restricted (R) or unrestricted (U) spin.
+        """
+        for line in self.contents:
+            if "Kohn-Sham wavefunction type" in line:
+                wavefunction_type = line.split(" ")[-1].lower()
+                # Determine if the job is restricted or unrestricted
+                if wavefunction_type.startswith("r"):
+                    spin = "restricted"
+                elif wavefunction_type.startswith("u"):
+                    spin = "unrestricted"
+                else:
+                    spin = None
+                return spin
 
     @property
     def num_electrons(self):
@@ -2038,6 +2059,32 @@ class ORCAOutput(ORCAFileMixin):
                         )
         return all_rotational_constants_in_MHz[-1]
 
+    @cached_property
+    def rotational_constants_in_Hz(self):
+        """
+        Rotational constants in Hz, as a list.
+        """
+        if self.rotational_constants_in_MHz is None:
+            return None
+        rotational_constants_in_Hz = [
+            rotational_constant_in_MHz * 1e6
+            for rotational_constant_in_MHz in self.rotational_constants_in_MHz
+        ]
+        return rotational_constants_in_Hz
+
+    @cached_property
+    def rotational_temperatures(self):
+        """
+        Rotational temperatures in Kelvin, as a list.
+        """
+        if self.rotational_constants_in_Hz is None:
+            return None
+        rotational_temperatures = []
+        for rotational_constant_in_Hz in self.rotational_constants_in_Hz:
+            theta_rot = (units._hplanck * rotational_constant_in_Hz) / units._k
+            rotational_temperatures.append(theta_rot)
+        return rotational_temperatures
+
     @property
     def all_vibrational_frequencies(self):
         """
@@ -2391,8 +2438,8 @@ class ORCAOutput(ORCAFileMixin):
 
         E(el) = E(kin-el) + E(nuc-el) + E(el-el) + E(nuc-nuc)  is the total energy from the electronic structure
             calculation
-        E(ZPE)  - the the zero temperature vibrational energy from the frequency calculation
-        E(vib)  - the the finite temperature correction to E(ZPE) due to population of excited vibrational states
+        E(ZPE)  - is the zero temperature vibrational energy from the frequency calculation
+        E(vib)  - is the finite temperature correction to E(ZPE) due to population of excited vibrational states
         E(rot)  - is the rotational thermal energy
         E(trans)- is the translational thermal energy.
         Default units are Hartree.
@@ -2529,16 +2576,20 @@ class ORCAOutput(ORCAFileMixin):
         )
 
     @property
-    def total_correction(self):
+    def thermal_energy_correction(self):
         """
         Total correction due to Thermal (trans, rot, vib) + ZPE.
         """
-        return (
-            self.thermal_translation_correction
-            + self.thermal_rotation_correction
-            + self.thermal_vibration_correction
-            + self.zero_point_energy
-        )
+        for i, line_i in enumerate(self.optimized_output_lines):
+            if "INNER ENERGY" in line_i:
+                for line_j in self.optimized_output_lines[i:]:
+                    if "Total correction" in line_j:
+                        line_j_elements = line_j.split()
+                        thermal_energy_correction_in_Hartree = float(
+                            line_j_elements[2]
+                        )
+                        return thermal_energy_correction_in_Hartree
+        return None
 
     @property
     def enthalpy(self):
@@ -2578,7 +2629,10 @@ class ORCAOutput(ORCAFileMixin):
                         thermal_enthalpy_correction_in_Hartree = float(
                             line_j_elements[-4]
                         )
-                        return thermal_enthalpy_correction_in_Hartree
+                        return (
+                            thermal_enthalpy_correction_in_Hartree
+                            + self.thermal_energy_correction
+                        )
         return None
 
     @property
@@ -2611,6 +2665,19 @@ class ORCAOutput(ORCAFileMixin):
                         )
         return None
 
+    @cached_property
+    def electronic_entropy(self):
+        """
+        Electronic entropy in Hartree.
+        """
+        if self.electronic_entropy_no_temperature_in_SI is not None:
+            electronic_entropy_hartree = (
+                self.electronic_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return electronic_entropy_hartree
+        return None
+
     @property
     def vibrational_entropy_no_temperature_in_SI(self):
         """
@@ -2636,6 +2703,19 @@ class ORCAOutput(ORCAFileMixin):
                         )
         return None
 
+    @cached_property
+    def vibrational_entropy(self):
+        """
+        Vibrational entropy in Hartree.
+        """
+        if self.vibrational_entropy_no_temperature_in_SI is not None:
+            vibrational_entropy_hartree = (
+                self.vibrational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return vibrational_entropy_hartree
+        return None
+
     @property
     def rotational_entropy_no_temperature_in_SI(self):
         """
@@ -2657,6 +2737,19 @@ class ORCAOutput(ORCAFileMixin):
                             rotational_entropy_J_per_mol
                             / self.temperature_in_K
                         )
+        return None
+
+    @cached_property
+    def rotational_entropy(self):
+        """
+        Rotational entropy in Hartree.
+        """
+        if self.rotational_entropy_no_temperature_in_SI is not None:
+            rotational_entropy_hartree = (
+                self.rotational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return rotational_entropy_hartree
         return None
 
     @property
@@ -2684,6 +2777,19 @@ class ORCAOutput(ORCAFileMixin):
                         )
         return None
 
+    @cached_property
+    def translational_entropy(self):
+        """
+        Translational entropy in Hartree.
+        """
+        if self.translational_entropy_no_temperature_in_SI is not None:
+            translational_entropy_hartree = (
+                self.translational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return translational_entropy_hartree
+        return None
+
     @property
     def entropy_in_J_per_mol_per_K(self):
         return (
@@ -2693,8 +2799,20 @@ class ORCAOutput(ORCAFileMixin):
             + self.vibrational_entropy_no_temperature_in_SI
         )
 
+    @cached_property
+    def entropy(self):
+        """
+        Total entropy in Hartree.
+        """
+        if self.entropy_in_J_per_mol_per_K is not None:
+            total_entropy_hartree = (
+                self.entropy_in_J_per_mol_per_K * joule_per_mol_to_hartree
+            )
+            return total_entropy_hartree
+        return None
+
     @property
-    def entropy_TS(self):
+    def entropy_times_temperature(self):
         """The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
 
         ALREADY MULTIPLIED BY TEMPERATURE.
@@ -2769,6 +2887,23 @@ class ORCAOutput(ORCAFileMixin):
         Get Gibbs free energy in eV.
         """
         return self.gibbs_free_energy * units.Hartree
+
+    @cached_property
+    def thermal_gibbs_free_energy_correction(self):
+        """
+        the Gibbs free energy minus the electronic energy, G - E(el).
+        Default units are Hartree.
+        """
+        for i, line_i in enumerate(self.optimized_output_lines):
+            if line_i == "GIBBS FREE ENERGY":
+                for line_j in self.optimized_output_lines[i:]:
+                    if "G-E(el)" in line_j:
+                        line_j_elements = line_j.split()
+                        thermal_gibbs_free_energy_correction_in_Hartree = (
+                            float(line_j_elements[-4])
+                        )
+                        return thermal_gibbs_free_energy_correction_in_Hartree
+        return None
 
     # Below gives computing time/resources used by ORCA
     @cached_property

@@ -7,6 +7,11 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock
+from chemsmart.utils.constants import (
+    cal_to_joules,
+    joule_per_mol_to_hartree,
+    kcal_per_mol_to_hartree,
+)
 from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
 from chemsmart.utils.mixins import GaussianFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
@@ -916,6 +921,253 @@ class Gaussian16Output(GaussianFileMixin):
                 return float(line.split()[2])
         return None
 
+    @cached_property
+    def thermal_vibration_correction(self):
+        """
+        Thermal vibration correction in Hartree.
+        """
+        if self.zero_point_energy is not None:
+            for i, line_i in enumerate(self.contents):
+                if "E (Thermal)" in line_i and "CV" in line_i:
+                    for line_j in self.contents[i + 1 :]:
+                        if "Vibrational" in line_j:
+                            return (
+                                float(line_j.split()[1])
+                                * kcal_per_mol_to_hartree
+                                - self.zero_point_energy
+                            )
+        return None
+
+    @cached_property
+    def thermal_rotation_correction(self):
+        """
+        Thermal rotation correction in Hartree.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Rotational" in line_j:
+                        return (
+                            float(line_j.split()[1]) * kcal_per_mol_to_hartree
+                        )
+        return None
+
+    @cached_property
+    def thermal_translation_correction(self):
+        """
+        Thermal translation correction in Hartree.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Translational" in line_j:
+                        return (
+                            float(line_j.split()[1]) * kcal_per_mol_to_hartree
+                        )
+        return None
+
+    @cached_property
+    def thermal_energy_correction(self):
+        """
+        thermal correction to energy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Energy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def thermal_enthalpy_correction(self):
+        """
+        thermal correction to enthalpy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Enthalpy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def thermal_gibbs_free_energy_correction(self):
+        """
+        thermal correction to Gibbs free energy in Hartree.
+        """
+        for line in self.contents:
+            if "Thermal correction to Gibbs Free Energy=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def internal_energy(self):
+        """
+        Sum of electronic and thermal energies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Energies=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def enthalpy(self):
+        """
+        Sum of electronic and thermal enthalpies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Enthalpies=" in line:
+                return float(line.split()[-1])
+        return None
+
+    @cached_property
+    def electronic_entropy_no_temperature_in_SI(self):
+        """
+        Electronic entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Electronic" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def electronic_entropy(self):
+        """
+        Electronic entropy in Hartree.
+        """
+        if self.electronic_entropy_no_temperature_in_SI is not None:
+            electronic_entropy_hartree = (
+                self.electronic_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return electronic_entropy_hartree
+        return None
+
+    @cached_property
+    def vibrational_entropy_no_temperature_in_SI(self):
+        """
+        Vibrational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Vibrational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def vibrational_entropy(self):
+        """
+        Vibrational entropy in Hartree.
+        """
+        if self.vibrational_entropy_no_temperature_in_SI is not None:
+            vibrational_entropy_hartree = (
+                self.vibrational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return vibrational_entropy_hartree
+        return None
+
+    @cached_property
+    def rotational_entropy_no_temperature_in_SI(self):
+        """
+        Rotational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Rotational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def rotational_entropy(self):
+        """
+        Rotational entropy in Hartree.
+        """
+        if self.rotational_entropy_no_temperature_in_SI is not None:
+            rotational_entropy_hartree = (
+                self.rotational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return rotational_entropy_hartree
+        return None
+
+    @cached_property
+    def translational_entropy_no_temperature_in_SI(self):
+        """
+        Translational entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Translational" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def translational_entropy(self):
+        """
+        Translational entropy in Hartree.
+        """
+        if self.translational_entropy_no_temperature_in_SI is not None:
+            translational_entropy_hartree = (
+                self.translational_entropy_no_temperature_in_SI
+                * joule_per_mol_to_hartree
+            )
+            return translational_entropy_hartree
+        return None
+
+    @cached_property
+    def entropy_in_J_per_mol_per_K(self):
+        """
+        Total entropy in J/mol/K.
+        """
+        for i, line_i in enumerate(self.contents):
+            if "E (Thermal)" in line_i and "CV" in line_i:
+                for line_j in self.contents[i + 1 :]:
+                    if "Total" in line_j:
+                        return float(line_j.split()[-1]) * cal_to_joules
+        return None
+
+    @cached_property
+    def entropy(self):
+        """
+        Total entropy in Hartree.
+        """
+        if self.entropy_in_J_per_mol_per_K is not None:
+            total_entropy_hartree = (
+                self.entropy_in_J_per_mol_per_K * joule_per_mol_to_hartree
+            )
+            return total_entropy_hartree
+        return None
+
+    @cached_property
+    def entropy_times_temperature(self):
+        """
+        The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
+        Return value in Hartree.
+        """
+        if (
+            self.temperature_in_K
+            and self.entropy_in_J_per_mol_per_K is not None
+        ):
+            entropy_ts_hartree = (
+                self.entropy_in_J_per_mol_per_K
+                * joule_per_mol_to_hartree
+                * self.temperature_in_K
+            )
+            return entropy_ts_hartree
+        return None
+
+    @cached_property
+    def gibbs_free_energy(self):
+        """
+        Sum of electronic and thermal free energies in Hartree.
+        """
+        for line in self.contents:
+            if "Sum of electronic and thermal Free Energies=" in line:
+                return float(line.split()[-1])
+        return None
+
     # check for convergence criterion not met (happens for some output files)
     @property
     def convergence_criterion_not_met(self):
@@ -1645,6 +1897,18 @@ class Gaussian16Output(GaussianFileMixin):
     def get_molecule(self, index="-1"):
         index = string2index_1based(index)
         return self.all_structures[index]
+
+    @cached_property
+    def temperature_in_K(self):
+        for line in self.contents:
+            if "Temperature" and "Kelvin." in line:
+                return float(line.split()[1])
+
+    @cached_property
+    def pressure_in_atm(self):
+        for line in self.contents:
+            if "Pressure" and "Atm." in line:
+                return float(line.split()[-2])
 
     @property
     def mass(self):
