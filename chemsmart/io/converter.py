@@ -8,8 +8,8 @@ from chemsmart.io.molecules.structure import SDFFile
 from chemsmart.io.orca.folder import ORCAInpFolder, ORCAOutFolder
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.xyz.file import XYZFile
 from chemsmart.io.xyz.folder import XYZFolder
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.logger import create_logger
 from chemsmart.utils.mixins import BaseFolder
 
@@ -43,6 +43,12 @@ class FileConverter:
         self.include_intermediate_structures = include_intermediate_structures
 
     def convert_files(self):
+        """
+        Convert files based on the specified parameters.
+
+        Converts either all files in a directory (if directory is specified)
+        or a single file (if filename is specified) to the target output format.
+        """
         if self.directory is not None:
             logger.info(f"Converting files in directory: {self.directory}")
             assert (
@@ -57,13 +63,23 @@ class FileConverter:
                 self.type = self.filename.split(".")[-1]
                 logger.info(f"Converting file: {self.filename}")
                 self._convert_single_file(self.filename, self.output_filetype)
+                logger.info(
+                    f"File converted from {self.filename} to .{self.output_filetype}"
+                )
             else:
                 raise ValueError(
                     "Either directory or filename must be specified."
                 )
 
     def _convert_all_files(self, directory, type, output_filetype):
-        """Convert all files of specified type in the directory."""
+        """
+        Convert all files of specified type in the directory.
+
+        Args:
+            directory (str): Directory containing files to convert.
+            type (str): File type to convert (log, com, gjf, out, inp, xyz, sdf).
+            output_filetype (str): Target output format.
+        """
         if type == "log":
             g16_folder = GaussianLogFolder(folder=directory)
             all_files = g16_folder.all_logfiles
@@ -129,7 +145,13 @@ class FileConverter:
                 mol.write(output_filepath, format=output_filetype)
 
     def _convert_single_file(self, filename, output_filetype):
-        """Convert single file to specified format."""
+        """
+        Convert single file to specified format.
+
+        Args:
+            filename (str): Path to the file to convert.
+            output_filetype (str): Target output format.
+        """
         logger.info(f"Converting file type: {self.type}")
         if self.type == "log":
             outfile = Gaussian16Output(filename=filename)

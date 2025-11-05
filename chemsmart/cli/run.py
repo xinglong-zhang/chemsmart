@@ -43,9 +43,16 @@ def run(
     mem_gb,
     fake,
     scratch,
+    delete_scratch,
     debug,
     stream,
 ):
+    """
+    Main command for running chemsmart jobs.
+
+    This command sets up the job runner with specified computational
+    resources and executes jobs directly in the current environment.
+    """
     # Set up logging
     create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
@@ -56,6 +63,7 @@ def run(
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
+        delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
         num_gpus=num_gpus,
@@ -73,10 +81,13 @@ def run(
 @run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
-    """Process the job returned by subcommands."""
+    """
+    Process the job returned by subcommands.
+    """
     logger.debug(f"Processing pipeline with args: {args}, kwargs: {kwargs}")
     # will give the following error if without **kwargs:
-    # TypeError: process_pipeline() got an unexpected keyword argument 'stream'
+    # TypeError: process_pipeline() got an unexpected keyword argument
+    # 'stream'
 
     # Retrieve the jobrunner from context
     # jobrunner at this stage is an instance of JobRunner class
@@ -86,7 +97,8 @@ def process_pipeline(ctx, *args, **kwargs):
     job = args[0]
     logger.debug(f"Job to be run: {job}")
 
-    # Handle None return (e.g., from post-processing subcommands like boltzmann)
+    # Handle None return (e.g., from post-processing subcommands like
+    # boltzmann)
     if job is None:
         logger.debug(
             "No job to process (None returned). Skipping job execution."
@@ -98,13 +110,15 @@ def process_pipeline(ctx, *args, **kwargs):
         job = job[0]
 
     # Instantiate a specific jobrunner based on job type
-    # jobrunner at this stage is an instance of specific JobRunner subclass to run the job
+    # jobrunner at this stage is an instance of specific JobRunner subclass
+    # to run the job
     if isinstance(job, Job):
         jobrunner = jobrunner.from_job(
             job=job,
             server=jobrunner.server,
             scratch=jobrunner.scratch,
             fake=jobrunner.fake,
+            delete_scratch=jobrunner.delete_scratch,
             num_cores=jobrunner.num_cores,
             num_gpus=jobrunner.num_gpus,
             mem_gb=jobrunner.mem_gb,

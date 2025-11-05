@@ -4,7 +4,7 @@ import shutil
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.mol import PyMOLMovieJob
+from chemsmart.jobs.mol import PyMOLMovieJob, PyMOLNCIJob, PyMOLSpinJob
 from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 from chemsmart.utils.cluster import is_pubchem_network_available
 
@@ -197,6 +197,10 @@ class TestPyMOLJobs:
             gaussian_opt_inputfile, jobrunner=pymol_movie_jobrunner
         )
         job.set_folder(tmpdir)
+        assert job.job_basename == "model_opt_input_movie"
+        assert job.outputfile == os.path.join(
+            tmpdir, "model_opt_input_movie.pse"
+        )
 
         # run job
         job.run()
@@ -209,3 +213,41 @@ class TestPyMOLJobs:
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)
         assert os.path.exists(movie_file)
+
+    def test_pymol_nci_job_on_gaussian_com_file(
+        self,
+        tmpdir,
+        gaussian_opt_inputfile,
+        pymol_movie_jobrunner,
+    ):
+        # set up jobs
+        job = PyMOLNCIJob.from_filename(
+            gaussian_opt_inputfile,
+            jobrunner=pymol_movie_jobrunner,
+            isosurface_value=0.5,
+            color_range=1.2,
+        )
+        job.set_folder(tmpdir)
+        assert job.job_basename == "model_opt_input_nci"
+        assert job.outputfile == os.path.join(
+            tmpdir, "model_opt_input_nci.pse"
+        )
+
+    def test_pymol_spin_job_on_gaussian_com_file(
+        self,
+        tmpdir,
+        gaussian_opt_inputfile,
+        pymol_movie_jobrunner,
+    ):
+        # set up jobs
+        job = PyMOLSpinJob.from_filename(
+            gaussian_opt_inputfile,
+            jobrunner=pymol_movie_jobrunner,
+            isosurface_value=0.5,
+            color_range=1.2,
+        )
+        job.set_folder(tmpdir)
+        assert job.job_basename == "model_opt_input_spin"
+        assert job.outputfile == os.path.join(
+            tmpdir, "model_opt_input_spin.pse"
+        )

@@ -3,6 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_grouper_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
@@ -20,44 +21,14 @@ logger = logging.getLogger(__name__)
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click_gaussian_grouper_options
 @click.option(
     "-N",  # avoid conflict with num_steps if scan
     "--num-structures-to-run",
     type=int,
     default=None,
-    help="Number of structures from the list of unique structures to run the job on.",
-)
-@click.option(
-    "-g",
-    "--grouping-strategy",
-    type=click.Choice(
-        [
-            "rmsd",
-            "rcm",
-            "fingerprint",
-            "isomorphism",
-            "formula",
-            "connectivity",
-        ],
-        case_sensitive=False,
-    ),
-    default="rmsd",
-    help="Grouping strategy to use for grouping. \n"
-    "Available options are 'rmsd', 'tanimoto', 'isomorphism', 'formula', 'connectivity'",
-)
-@click.option(
-    "-i/",
-    "--ignore-hydrogens/--no-ignore-hydrogens",
-    type=bool,
-    default=False,
-    help="Ignore H atoms in the grouping.",
-)
-@click.option(
-    "-p",
-    "--num-procs",
-    type=int,
-    default=4,
-    help="Number of processors to use for grouper.",
+    help="Number of structures from the list of unique structures to "
+    "run the job on.",
 )
 @click.option(
     "-x",
@@ -65,7 +36,8 @@ logger = logging.getLogger(__name__)
     type=float,
     default=0.1,
     help="Proportion of structures from the end of trajectory to use. \n"
-    "Values ranges from 0.0 < x <=1.0. Defaults to 0.1 (last 10% of structures).",
+    "Values ranges from 0.0 < x <=1.0. Defaults to 0.1 (last 10% of "
+    "structures).",
 )
 @click.pass_context
 def traj(
@@ -77,6 +49,7 @@ def traj(
     num_steps,
     num_structures_to_run,
     grouping_strategy,
+    threshold,
     ignore_hydrogens,
     num_procs,
     proportion_structures_to_use,
@@ -93,7 +66,8 @@ def traj(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
@@ -115,7 +89,8 @@ def traj(
     logger.debug(f"Label for job: {label}")
 
     logger.info(
-        f"Simulated annealing {type} settings from project: {structure_set_settings.__dict__}"
+        f"Simulated annealing {type} settings from project: "
+        f"{structure_set_settings.__dict__}"
     )
 
     return GaussianTrajJob(
@@ -128,6 +103,7 @@ def traj(
         proportion_structures_to_use=proportion_structures_to_use,
         num_structures_to_run=num_structures_to_run,
         ignore_hydrogens=ignore_hydrogens,
+        threshold=threshold,
         skip_completed=skip_completed,
         **kwargs,
     )
