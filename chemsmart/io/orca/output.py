@@ -752,6 +752,25 @@ class ORCAOutput(ORCAFileMixin):
         if self.vibrational_modes is not None:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
 
+        # Tag optimized structures
+        try:
+            for m in all_structures:
+                setattr(m, "is_optimized_structure", False)
+
+            if (
+                hasattr(self, "optimized_steps_indices")
+                and self.optimized_steps_indices
+                and not hasattr(self, "include_intermediate")
+            ):
+                # if we filtered to only optimized steps, mark all as optimized
+                for m in all_structures:
+                    setattr(m, "is_optimized_structure", True)
+            elif self.normal_termination and all_structures:
+                # otherwise, mark the last as optimized when job finished normally
+                setattr(all_structures[-1], "is_optimized_structure", True)
+        except Exception:
+            pass
+
         logger.info(
             f"Total number of structures located: {len(all_structures)}"
         )

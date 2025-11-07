@@ -70,6 +70,7 @@ class BaseAssembler:
     def get_molecule_info(self, mol):
         molecule_info = {
             "structure_index_in_file": mol.structure_index_in_file,
+            "is_optimized_structure": mol.is_optimized_structure,
             "charge": mol.charge,
             "multiplicity": mol.multiplicity,
             "coordinates": list(zip(mol.chemical_symbols, mol.positions)),
@@ -151,12 +152,12 @@ class GaussianAssembler(BaseAssembler):
         meta_data = super().get_meta_data()
         meta_data.update(
             {
-                # "gen_genecp": self.output.gen_genecp,
-                # "modredundant_group": self.output.modredundant_group,
                 "num_primitive_gaussians": self.output.num_primitive_gaussians,
                 "num_cartesian_basis_functions": self.output.num_cartesian_basis_functions,
             }
         )
+        if self.output.modredundant_group is not None:
+            meta_data["modredundant_group"] = self.output.modredundant_group
         return meta_data
 
     def get_calculation_results(self):

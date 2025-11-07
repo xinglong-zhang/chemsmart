@@ -60,6 +60,8 @@ class Molecule:
         Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
     mulliken_atomic_charges: dict[str, float] | None
         Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
+    is_optimized_structure: bool | None
+        Whether this structure corresponds to an optimized step/final optimized geometry.
     """
 
     def __init__(
@@ -84,6 +86,7 @@ class Molecule:
         structure_index_in_file=None,
         rotational_symmetry_number=None,
         mulliken_atomic_charges=None,
+        is_optimized_structure=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -102,6 +105,7 @@ class Molecule:
         self.structure_index_in_file = structure_index_in_file
         self._num_atoms = len(self.symbols)
         self.rotational_symmetry_number = rotational_symmetry_number
+        self.is_optimized_structure = is_optimized_structure
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond lengths from J. Phys. Chem. 1959, 63, 8, 1346
