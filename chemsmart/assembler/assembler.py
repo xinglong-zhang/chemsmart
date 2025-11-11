@@ -22,18 +22,24 @@ class BaseAssembler:
 
     @cached_property
     def assemble(self):
+        if not self.output.normal_termination:
+            logger.warning(
+                f"Calculation in {self.filename} did not terminate normally, skip assembling..."
+            )
+            return {}
         if not self.molecules_list:
             logger.error(f"No molecules parsed from {self.filename}.")
             return {}
 
-        data = {"meta": self.get_meta_data(), "molecules": []}
+        data = {
+            "meta": self.get_meta_data(),
+            "results": self.get_calculation_results(),
+            "molecules": [],
+        }
 
         for i, mol in enumerate(self.molecules_list):
             mol_entry = {"index": i + 1, **self.get_molecule_info(mol)}
             data["molecules"].append(mol_entry)
-
-        if self.output.normal_termination:
-            data["results"] = self.get_calculation_results()
 
         return data
 
@@ -111,6 +117,7 @@ class BaseAssembler:
 
     def get_calculation_results(self):
         calculation_results = {
+            "total_energy": self.output.energies[-1],
             "homo_energy": self.output.homo_energy,
             "lumo_energy": self.output.lumo_energy,
             "fmo_gap": self.output.fmo_gap,
@@ -122,7 +129,6 @@ class BaseAssembler:
                 {
                     "rotational_temperatures_in_K": self.output.rotational_temperatures,
                     "rotational_constants_in_Hz": self.output.rotational_constants_in_Hz,
-                    "electronic_energy": self.output.energies[-1],
                     "zero_point_energy": self.output.zero_point_energy,
                     "thermal_vibration_correction": self.output.thermal_vibration_correction,
                     "thermal_rotation_correction": self.output.thermal_rotation_correction,
@@ -301,10 +307,9 @@ class ORCAAssembler(BaseAssembler):
 
 
 class SingleFileAssembler:
-    def __init__(self, filename, index="-1", database_file="database"):
+    def __init__(self, filename, index="-1"):
         self.filename = filename
         self.index = index
-        self.database_file = database_file
 
     @cached_property
     def assemble_data(self):
