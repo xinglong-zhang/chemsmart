@@ -12,6 +12,7 @@ from chemsmart.utils.io import (
     clean_duplicate_structure,
     create_molecule_list,
     increment_numbers,
+    line_of_all_integers,
 )
 from chemsmart.utils.mixins import ORCAFileMixin
 from chemsmart.utils.periodictable import PeriodicTable
@@ -327,7 +328,7 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
-    def natoms(self):
+    def num_atoms(self):
         """
         Get the number of atoms from the ORCA output file.
         """
@@ -663,13 +664,13 @@ class ORCAOutput(ORCAFileMixin):
 
         # Prepare energies and forces (adjust for length mismatches)
         energies = (
-            self.energies_in_eV
-            if self.energies_in_eV is not None
+            self.energies
+            if self.energies is not None
             else [None] * len(orientations)
         )
         forces = (
-            self.forces_in_eV_per_angstrom
-            if self.forces_in_eV_per_angstrom is not None
+            self.forces
+            if self.forces is not None
             else [None] * len(orientations)
         )
 
@@ -716,6 +717,15 @@ class ORCAOutput(ORCAFileMixin):
             all_structures = [
                 all_structures[i] for i in self.optimized_steps_indices
             ]
+
+        logger.debug(
+            "Attaching vibrational data to the final structure if available..."
+        )
+
+        last_mol = all_structures[-1]
+        # Attach vibrational data to the final structure if available
+        if self.vibrational_modes is not None:
+            all_structures[-1] = self._attach_vib_metadata(last_mol)
 
         logger.info(
             f"Total number of structures located: {len(all_structures)}"
@@ -797,19 +807,25 @@ class ORCAOutput(ORCAFileMixin):
                     if "---------------" in line_j:
                         break
                     line_elements = line_j.split()
+                    optimized_final_value = line_elements[-1]
                     if line_elements[1].lower().startswith("b"):  # bond
                         parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}"
+                        optimized_final_value = line_elements[7]
                     if line_elements[1].lower().startswith("a"):  # angle
                         parameter = f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
+                        optimized_final_value = line_elements[8]
                     if line_elements[1].lower().startswith("d"):  # dihedral
                         parameter = (
                             f"{line_elements[1]}{line_elements[2]}{line_elements[3]}{line_elements[4]}"
                             f"{line_elements[5]}"
                         )
+                        optimized_final_value = line_elements[9]
                     if parameter is not None:
                         # Convert to 1-indexing
                         parameter = increment_numbers(parameter, 1)
-                    optimized_geometry[parameter] = float(line_elements[-1])
+                    optimized_geometry[parameter] = float(
+                        optimized_final_value
+                    )
         ## the above result will return a dictionary storing the optimized parameters:
         ## optimized_geometry = { b(h1,o0) : 0.9627,  b(h2,o0) : 0.9627,  a(h1,o0, h2) : 103.35 }
         return optimized_geometry
@@ -1376,7 +1392,6 @@ class ORCAOutput(ORCAFileMixin):
         """
         dfet_embed_energy_hartree = self._get_dfet_embed_energy()
         if dfet_embed_energy_hartree is not None:
-            print(dfet_embed_energy_hartree)
             return dfet_embed_energy_hartree[-1]
 
     @property
@@ -1498,6 +1513,7 @@ class ORCAOutput(ORCAFileMixin):
     def mulliken_atomic_charges(self):
         """
         Get the Mulliken atomic charges from the ORCA output file.
+        Use 1-indexed.
         """
         all_mulliken_atomic_charges = []
         for i, line_i in enumerate(self.contents):
@@ -1507,9 +1523,12 @@ class ORCAOutput(ORCAFileMixin):
                     if "Sum of atomic charges" in line_j:
                         break
                     line_j_elements = line_j.split()
-                    element = p.to_element(line_j_elements[1])
+                    element = line_j_elements[1].strip(":")
+                    element = p.to_element(element)
                     element_num = f"{element}{line_j_elements[0]}"
-                    mulliken_atomic_charges[element_num] = float(
+                    # use 1-indexed
+                    element_num_1idx = increment_numbers(element_num, 1)
+                    mulliken_atomic_charges[element_num_1idx] = float(
                         line_j_elements[-1]
                     )
                 all_mulliken_atomic_charges.append(mulliken_atomic_charges)
@@ -1525,15 +1544,19 @@ class ORCAOutput(ORCAFileMixin):
             loewdin_atomic_charges = {}
             if "LOEWDIN ATOMIC CHARGES" in line_i:
                 for line_j in self.contents[i + 2 :]:
-                    if "LOEWDIN REDUCED ORBITAL CHARGES" in line_j:
-                        break
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) == 4:
-                        element = p.to_element(line_j_elements[1])
-                        element_num = f"{element}{line_j_elements[0]}"
-                        loewdin_atomic_charges[element_num] = float(
-                            line_j_elements[-1]
-                        )
+                    if (
+                        len(line_j_elements) == 0
+                        or "LOEWDIN REDUCED ORBITAL CHARGES" in line_j
+                    ):
+                        break
+                    element = line_j_elements[1].strip(":")
+                    element = p.to_element(element)
+                    element_num = f"{element}{line_j_elements[0]}"
+                    element_num_1idx = increment_numbers(element_num, 1)
+                    loewdin_atomic_charges[element_num_1idx] = float(
+                        line_j_elements[-1]
+                    )
                 all_loewdin_atomic_charges.append(loewdin_atomic_charges)
         return all_loewdin_atomic_charges[-1]
 
@@ -1545,6 +1568,10 @@ class ORCAOutput(ORCAFileMixin):
         """
         Get Mayer Mulliken gross atomic population from the ORCA output file.
         """
+        from chemsmart.utils.repattern import (
+            orca_mayer_population_analysis_line_pattern,
+        )
+
         all_mayer_mulliken_gross_atomic_population = []
         for i, line_i in enumerate(self.contents):
             mayer_mulliken_gross_atomic_population = {}
@@ -1553,12 +1580,15 @@ class ORCAOutput(ORCAFileMixin):
                     if "TIMINGS" in line_j:
                         break
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) == 8:
+                    if len(line_j_elements) == 8 and re.fullmatch(
+                        orca_mayer_population_analysis_line_pattern, line_j
+                    ):
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_mulliken_gross_atomic_population[element_num] = (
-                            float(line_j_elements[2])
-                        )
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_mulliken_gross_atomic_population[
+                            element_num_1idx
+                        ] = float(line_j_elements[2])
                 all_mayer_mulliken_gross_atomic_population.append(
                     mayer_mulliken_gross_atomic_population
                 )
@@ -1580,7 +1610,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_total_nuclear_charge[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_total_nuclear_charge[element_num_1idx] = float(
                             line_j_elements[3]
                         )
                 all_mayer_total_nuclear_charge.append(
@@ -1604,9 +1635,10 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_mulliken_gross_atomic_charge[element_num] = (
-                            float(line_j_elements[4])
-                        )
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_mulliken_gross_atomic_charge[
+                            element_num_1idx
+                        ] = float(line_j_elements[4])
                 all_mayer_mulliken_gross_atomic_charge.append(
                     mayer_mulliken_gross_atomic_charge
                 )
@@ -1628,7 +1660,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_total_valence[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_total_valence[element_num_1idx] = float(
                             line_j_elements[5]
                         )
                 all_mayer_total_valence.append(mayer_total_valence)
@@ -1650,7 +1683,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_bonded_valence[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_bonded_valence[element_num_1idx] = float(
                             line_j_elements[6]
                         )
                 all_mayer_bonded_valence.append(mayer_bonded_valence)
@@ -1672,7 +1706,8 @@ class ORCAOutput(ORCAFileMixin):
                     if len(line_j_elements) == 8:
                         element = p.to_element(line_j_elements[1])
                         element_num = f"{element}{line_j_elements[0]}"
-                        mayer_free_valence[element_num] = float(
+                        element_num_1idx = increment_numbers(element_num, 1)
+                        mayer_free_valence[element_num_1idx] = float(
                             line_j_elements[-1]
                         )
                 all_mayer_free_valence.append(mayer_free_valence)
@@ -1704,9 +1739,12 @@ class ORCAOutput(ORCAFileMixin):
                         formatted_key = (
                             f"B({match[1]}{match[0]},{match[3]}{match[2]})"
                         )
+                        formatted_key_1idx = increment_numbers(
+                            formatted_key, 1
+                        )
                         formatted_value = float(match[4])
                         mayer_bond_orders_larger_than_zero_point_one[
-                            formatted_key
+                            formatted_key_1idx
                         ] = formatted_value
                 all_mayer_bond_orders_larger_than_zero_point_one.append(
                     mayer_bond_orders_larger_than_zero_point_one
@@ -1997,34 +2035,112 @@ class ORCAOutput(ORCAFileMixin):
         return all_rotational_constants_in_MHz[-1]
 
     @property
-    def vibrational_frequencies(self):
+    def all_vibrational_frequencies(self):
         """
         Get vibrational frequencies from the ORCA output file.
+        Including translational and rotational modes.
         """
         vibrational_frequencies = []
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "VIBRATIONAL FREQUENCIES":
                 for line_j in self.optimized_output_lines[i + 5 :]:
-                    if "----------" in line_j:
+                    if len(line_j) == 0:
                         break
                     # if 'Rotational constants in MHz :' in line_j:
                     line_j_elements = line_j.split()
-                    if len(line_j_elements) != 0:
-                        vibrational_frequencies.append(
-                            float(line_j_elements[1])
-                        )
+                    vibrational_frequencies.append(float(line_j_elements[1]))
+        logger.debug(
+            f"Vibrational frequencies, including translations and rotations: "
+            f"{vibrational_frequencies}"
+        )
+        if len(vibrational_frequencies) != 0:
+            return vibrational_frequencies
+        return None
 
-        if self.molecule.is_monoatomic:
-            # remove the first three frequencies (translations) for  monoatomic molecules
-            vibrational_frequencies = vibrational_frequencies[3:]
-        elif self.molecule.is_linear:
-            # remove the first five frequencies (3 trans + 2 rot) for linear molecules
-            vibrational_frequencies = vibrational_frequencies[5:]
-        else:
-            # remove the first six frequencies (3 trans + 3 rot) for non-linear molecules
-            vibrational_frequencies = vibrational_frequencies[6:]
+    @property
+    def vibrational_frequencies(self):
+        """Return vibrational frequencies without translational and rotational modes."""
+        if self.all_vibrational_frequencies is None:
+            return []
+        return [x for x in self.all_vibrational_frequencies if x != 0.0]
 
-        return vibrational_frequencies
+    @property
+    def normal_modes(self):
+        """
+        Obtain the normal modes for molecule, if calculated.
+        Modes are Cartesian displacements weighted by diagonal matrix
+        M(i,i)=1/sqrt(m[i]) where m[i] is the mass of displaced atom.
+        Thus, these vectors are normalized but *not* orthogonal
+        """
+        from chemsmart.utils.repattern import (
+            orca_line_integer_followed_by_floats,
+        )
+
+        normal_modes = []
+
+        for i, line_i in enumerate(self.optimized_output_lines):
+            if line_i == "NORMAL MODES":
+                j = i + 7  # Start after header lines
+
+                while j < len(self.optimized_output_lines):
+                    j_line = self.optimized_output_lines[j]
+
+                    # Check for empty line (end of normal modes section)
+                    if len(j_line.strip()) == 0:
+                        break
+
+                    # Check if this is a mode number line
+                    if line_of_all_integers(j_line):
+                        mode_numbers = [int(x) for x in j_line.split()]
+                        num_modes_in_block = len(mode_numbers)
+
+                        # Read the next 3*num_atoms lines (x, y, z for each atom)
+                        coord_lines_to_read = 3 * self.num_atoms
+
+                        pre_modes = []
+                        for k in range(coord_lines_to_read):
+                            coord_line = self.optimized_output_lines[j + 1 + k]
+
+                            # Check if this line matches the coordinate pattern
+                            if re.fullmatch(
+                                orca_line_integer_followed_by_floats,
+                                coord_line,
+                            ):
+                                values = [
+                                    float(val)
+                                    for val in coord_line.split()[1:]
+                                ]  # Skip coordinate index
+                                pre_modes.append(values)
+
+                        # Convert to numpy array: shape (3N, num_modes_in_block)
+                        pre_modes = np.asarray(pre_modes)
+
+                        # Extract each mode
+                        for mode_col in range(num_modes_in_block):
+                            # Extract the column for this mode: shape (3N,)
+                            mode_column = pre_modes[:, mode_col]
+
+                            # Reshape to (num_atoms, 3) by grouping every 3 consecutive values
+                            mode_data = mode_column.reshape(self.num_atoms, 3)
+                            normal_modes.append(mode_data)
+
+                        # Move past this block
+                        j += (
+                            coord_lines_to_read + 1
+                        )  # +1 to move past the mode number line
+                    else:
+                        j += 1
+
+                break  # Only process first occurrence of "NORMAL MODES"
+
+        return normal_modes
+
+    @property
+    def vibrational_modes(self):
+        """Return the vibrational normal modes."""
+        if len(self.normal_modes) != 0:
+            return self.normal_modes[self.num_translation_and_rotation_modes :]
+        return None
 
     @property
     def vib_freq_scale_factor(self):
@@ -2040,9 +2156,10 @@ class ORCAOutput(ORCAFileMixin):
     def molar_absorption_coefficients(self):
         """Eps  in units L/(mol*cm).
 
-        The value under “eps” is the molar absorption coefficient, usually represented as ε.
-        This number is directly proportional to the intensity of a given fundamental in an IR spectrum
-        and is what is plotted by orca mapspc.
+        The value under “eps” is the molar absorption coefficient,
+        usually represented as ε.
+        This number is directly proportional to the intensity of a given
+        fundamental in an IR spectrum and is what is plotted by orca mapspc.
         """
         molar_absorption_coefficients = [
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
@@ -2068,7 +2185,8 @@ class ORCAOutput(ORCAFileMixin):
     def integrated_absorption_coefficients(self):
         """Units of km/mol.
 
-        The values under “Int” are the integrated absorption coefficient [J. Comput. Chem., 2002, 23, 895.].
+        The values under “Int” are the integrated absorption coefficient
+        [J. Comput. Chem., 2002, 23, 895.].
         """
         integrated_absorption_coefficients = [
             0.0 for freq in self.vibrational_frequencies if freq == 0.0
@@ -2093,7 +2211,6 @@ class ORCAOutput(ORCAFileMixin):
     @property
     def transition_dipole_deriv_norm(self):
         """Units of a.u.
-
         “T**2” are the norm of the transition dipole derivatives,.
         """
         transition_dipole_deriv_norm = [
@@ -2117,42 +2234,86 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
-    def num_translation_and_rotation_modes(self):
+    def transition_dipoles(self):
+        """Transition dipole for each vibrational mode, (Tx, Ty, Tz)."""
+        transition_dipoles = []
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "IR SPECTRUM":
                 for line_j in self.optimized_output_lines[i + 6 :]:
-                    if (
-                        "The first frequency considered to be a vibration is"
-                        in line_j
-                    ):
-                        line_j_elements = line_j.split()
-                        return int(line_j_elements[-1])
-        return None
+                    if len(line_j) == 0:
+                        break
+                    line_j_elements = line_j.split()
+                    transition_dipoles.append(
+                        np.array(
+                            [
+                                float(line_j_elements[-3].lstrip("(")),
+                                float(line_j_elements[-2]),
+                                float(line_j_elements[-1].rstrip(")")),
+                            ]
+                        )
+                    )
+        return transition_dipoles
+
+    @property
+    def num_translation_and_rotation_modes(self):
+        """Return number of translation and rotation modes
+        by checking for number of zero vibrational frequencies."""
+        if self.all_vibrational_frequencies:
+            return self.all_vibrational_frequencies.count(0.0)
 
     @property
     def num_vibration_modes(self):
         """
         Get the number of vibration modes from the ORCA output file.
+        Includes imaginary frequencies as well.
         """
-        for i, line_i in enumerate(self.contents):
-            if line_i == "IR SPECTRUM":
-                for line_j in self.contents[i + 6 :]:
-                    if (
-                        "The total number of vibrations considered is"
-                        in line_j
-                    ):
-                        line_j_elements = line_j.split()
-                        return int(line_j_elements[-1])
-        return None
+        if self.vibrational_frequencies:
+            return len(self.vibrational_frequencies)
+        return 0
+
+    def _attach_vib_metadata(self, mol):
+        """Attach vibrational data to a Molecule object as attributes."""
+        vib = {
+            "frequencies": self.vibrational_frequencies or [],
+            "molar_absorption_coefficients": self.molar_absorption_coefficients
+            or [],  # eps
+            "integrated_absorption_coefficients": self.integrated_absorption_coefficients
+            or [],  # Int
+            "transition_dipole_deriv_norm": self.transition_dipole_deriv_norm
+            or [],  # T**2
+            "transition_dipoles": self.transition_dipoles or [],
+            "modes": self.vibrational_modes or [],
+        }
+
+        setattr(mol, "vibrational_frequencies", vib["frequencies"])
+        setattr(
+            mol,
+            "molar_absorption_coefficients",
+            vib["molar_absorption_coefficients"],
+        )
+        setattr(
+            mol,
+            "integrated_absorption_coefficients",
+            vib["integrated_absorption_coefficients"],
+        )
+        setattr(
+            mol,
+            "transition_dipole_deriv_norm",
+            vib["transition_dipole_deriv_norm"],
+        )
+        setattr(mol, "transition_dipoles", vib["transition_dipoles"])
+        setattr(mol, "vibrational_modes", vib["modes"])
+
+        return mol
 
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # *     THERMOCHEMISTRY      *
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     @property
     def temperature_in_K(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Temperature" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
@@ -2160,9 +2321,9 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def pressure_in_atm(self):
-        for i, line_i in enumerate(self.optimized_output_lines):
+        for i, line_i in enumerate(self.contents):
             if "THERMOCHEMISTRY" in line_i:
-                for line_j in self.optimized_output_lines[i + 3 :]:
+                for line_j in self.contents[i + 3 :]:
                     if "Pressure" in line_j:
                         line_j_elements = line_j.split()
                         return float(line_j_elements[-2])
@@ -2513,7 +2674,8 @@ class ORCAOutput(ORCAFileMixin):
         """The entropy contributions are T*S = T*(S(el)+S(vib)+S(rot)+S(trans)).
 
         ALREADY MULTIPLIED BY TEMPERATURE.
-        The entropies will be listed as multiplied by the temperature to get units of energy.
+        The entropies will be listed as multiplied by the temperature
+        to get units of energy, in Hartree.
         """
         for i, line_i in enumerate(self.optimized_output_lines):
             if line_i == "ENTROPY":
@@ -2521,40 +2683,45 @@ class ORCAOutput(ORCAFileMixin):
                     if "Final entropy term" in line_j:
                         line_j_elements = line_j.split()
                         entropy_hartree = float(line_j_elements[-4])
-                        return entropy_hartree * units.Hartree
+                        return entropy_hartree
         return None
 
     @property
     def rotational_entropy_symmetry_correction_J_per_mol_per_K(self):
         """
-        Return rotational entropy in J/mol/K for different symmetry numbers sn=1-12.
+        Return rotational entropy in J/mol/K for different symmetry numbers.
         """
         rotational_entropy_symmetry_correction_J_per_mol_per_K = {}
         for i, line_i in enumerate(self.optimized_output_lines):
-            if "rotational entropy values for sn=1,12 :" in line_i:
+            if "rotational entropy values for sn=1,12" in line_i:
                 for line_j in self.optimized_output_lines[
                     i + 2 :
                 ]:  # i+2 onwards
-                    if "-------------------" in line_j:
+                    if len(line_j) == 0:
                         break
-                    new_line = line_j.replace("=", " ")
-                    line_j_elements = new_line.split()
-                    rotational_entropy_hartree = float(line_j_elements[-4])
-                    rotational_entropy_J_per_mol = (
-                        rotational_entropy_hartree
-                        * units.Hartree
-                        * units.mol
-                        / units.J
-                    )
-                    rotational_entropy_J_per_mol_per_K = (
-                        rotational_entropy_J_per_mol / self.temperature_in_K
-                    )
-                    rotational_entropy_J_per_mol_per_K = round(
-                        rotational_entropy_J_per_mol_per_K, 6
-                    )
-                    rotational_entropy_symmetry_correction_J_per_mol_per_K[
-                        int(line_j_elements[2])
-                    ] = rotational_entropy_J_per_mol_per_K
+                    if "S(rot)" in line_j:
+                        line_j_elements = line_j.split("|")
+                        print(line_j_elements)
+                        rotational_entropy_hartree = float(
+                            line_j_elements[2].strip().split()[1]
+                        )
+                        rotational_entropy_J_per_mol = (
+                            rotational_entropy_hartree
+                            * units.Hartree
+                            * units.mol
+                            / units.J
+                        )
+                        rotational_entropy_J_per_mol_per_K = round(
+                            rotational_entropy_J_per_mol
+                            / self.temperature_in_K,
+                            6,
+                        )
+                        rotational_entropy_symmetry_correction_J_per_mol_per_K[
+                            str(line_j_elements[1].strip().replace(" ", ""))
+                        ] = rotational_entropy_J_per_mol_per_K
+
+                    else:
+                        continue
                 return rotational_entropy_symmetry_correction_J_per_mol_per_K
         return None
 
@@ -2662,12 +2829,12 @@ class ORCAEngradFile(ORCAFileMixin):
         """
          Obtain energy and gradient of ORCA calculation
         """
-        self.natoms = self._get_natoms()
+        self.num_atoms = self._get_num_atoms()
         self.energy = self._get_energy()
         self.gradient = self._get_gradient()
         self.molecule = self._get_molecule()
 
-    def _get_natoms(self):
+    def _get_num_atoms(self):
         """
         Extract the number of atoms from the .engrad file.
         """
@@ -2706,7 +2873,9 @@ class ORCAEngradFile(ORCAFileMixin):
             if "current gradient" in line:
                 # check 3N + 3 lines following the match, where N is number of atoms
                 grad_data = []
-                for content in self.contents[i + 1 : i + 3 * self.natoms + 4]:
+                for content in self.contents[
+                    i + 1 : i + 3 * self.num_atoms + 4
+                ]:
                     try:
                         grad_value = float(
                             content.split()[0]
@@ -2717,7 +2886,7 @@ class ORCAEngradFile(ORCAFileMixin):
 
                     except ValueError:
                         pass
-                return np.array(grad_data).reshape(self.natoms, 3)
+                return np.array(grad_data).reshape(self.num_atoms, 3)
         return None
 
     def _get_molecule(self):
