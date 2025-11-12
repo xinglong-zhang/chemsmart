@@ -78,20 +78,25 @@ def entry_point(
     charge_for_radical_anion = None
 
     program = outfile_format(neutral_filename)
+    cation_program = outfile_format(radical_cation_filename)
+    anion_program = outfile_format(radical_anion_filename)
 
     if program == "gaussian":
         neutral_output = Gaussian16WBIOutput(neutral_filename)
-        if radical_cation_filename is not None:
+        if (
+            radical_cation_filename is not None
+            and cation_program == "gaussian"
+        ):
             radical_cation_output = Gaussian16WBIOutput(
                 radical_cation_filename
             )
-        if radical_anion_filename is not None:
+        if radical_anion_filename is not None and anion_program == "gaussian":
             radical_anion_output = Gaussian16WBIOutput(radical_anion_filename)
     elif program == "orca":
         neutral_output = ORCAOutput(neutral_filename)
-        if radical_cation_filename is not None:
+        if radical_cation_filename is not None and cation_program == "orca":
             radical_cation_output = ORCAOutput(radical_cation_filename)
-        if radical_anion_filename is not None:
+        if radical_anion_filename is not None and anion_program == "orca":
             radical_anion_output = ORCAOutput(radical_anion_filename)
     else:
         raise TypeError(f"File {neutral_filename} is of unknown filetype.")

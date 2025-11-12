@@ -1354,13 +1354,6 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
         """
         if not files:
             raise ValueError("List of files cannot be empty.")
-        if not all(
-            isinstance(f, str) and outfile_format(f) in {"gaussian", "orca"}
-            for f in files
-        ):
-            raise ValueError(
-                "All files must be Gaussian or ORCA output files."
-            )
 
         # Check that all files have the same molecular structure
         molecules = [Molecule.from_filepath(f) for f in files]

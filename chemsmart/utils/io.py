@@ -247,8 +247,8 @@ def outfile_format(filepath) -> str:
     try:
         with open(filepath, "r") as f:
             lines = [line.strip() for line in f.readlines()]
-    except (FileNotFoundError, PermissionError, UnicodeDecodeError) as e:
-        logger.error(f"Error reading file '{filepath}': {e}")
+    except Exception as e:
+        logger.error(f"Error reading file '{filepath}': {e}.")
         return "unknown"
 
     # Only scan first and last 100 lines for performance
@@ -260,7 +260,7 @@ def outfile_format(filepath) -> str:
     for line in sample_lines:
         if program := match_outfile_pattern(line):
             logger.debug(
-                f"Detected output format for '{os.path.basename(filepath)}': {program}"
+                f"Detected output format for '{os.path.basename(filepath)}': {program}."
             )
             return program
 
