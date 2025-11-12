@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 from ase import units
+from functools import cached_property
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
@@ -133,7 +134,7 @@ class Thermochemistry:
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
 
-    @property
+    @cached_property
     def file_object(self):
         """Open the file and return the file object."""
         program = outfile_format(self.filename)
