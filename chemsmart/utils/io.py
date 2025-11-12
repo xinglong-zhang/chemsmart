@@ -237,7 +237,12 @@ def outfile_format(filepath) -> str:
     Detect the type of quantum chemistry output file.
 
     Scans the file for characteristic keywords of major QC packages.
-    Returns one of {"gaussian", "orca", "xtb", "crest", "unknown"}.
+
+    Args:
+        filepath (str): Path to the quantum chemistry output file.
+
+    Returns:
+        str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
     """
     with open(filepath, "r") as f:
         lines = [line.strip() for line in f.readlines()]
