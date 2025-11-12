@@ -248,7 +248,10 @@ def outfile_format(filepath) -> str:
         lines = [line.strip() for line in f.readlines()]
 
     # Only scan first and last 100 lines for performance
-    sample_lines = lines[:100] + lines[-100:] if len(lines) > 200 else lines
+    if len(lines) <= 200:
+        sample_lines = lines
+    else:
+        sample_lines = lines[:100] + lines[-100:]
 
     for line in sample_lines:
         if program := match_outfile_pattern(line):
