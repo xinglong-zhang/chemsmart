@@ -244,8 +244,12 @@ def outfile_format(filepath) -> str:
     Returns:
         str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
     """
-    with open(filepath, "r") as f:
-        lines = [line.strip() for line in f.readlines()]
+    try:
+        with open(filepath, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+    except (FileNotFoundError, PermissionError, UnicodeDecodeError) as e:
+        logger.error(f"Error reading file '{filepath}': {e}")
+        return "unknown"
 
     # Only scan first and last 100 lines for performance
     if len(lines) <= 200:
