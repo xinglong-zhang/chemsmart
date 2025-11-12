@@ -152,9 +152,9 @@ Align Basic Usage
 
    .. code:: console
 
-      chemsmart run mol align -F molecule1.xyz -F molecule2.gjf -F molecule3.log
+      chemsmart run mol align -F mol1.xyz -F mol2.gjf -F mol3.log
 
-This command will align the subsequent molecules to the first molecule sequentially.
+This command will align the subsequent molecules to the first molecule sequentially (align mol2 and mol3 to mol1).
 
 **align all files in same type**
 
