@@ -7,7 +7,6 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.mol.mol import (
-    click_pymol_align_options,
     click_pymol_visualization_options,
     mol,
 )
@@ -20,11 +19,9 @@ logger = logging.getLogger(__name__)
 @mol.command("align", cls=MyCommand)
 @click_job_options
 @click_pymol_visualization_options
-@click_pymol_align_options
 @click.pass_context
 def align(
     ctx,
-    filenames,
     file,
     style,
     trace,
@@ -32,54 +29,61 @@ def align(
     quiet,
     command_line_only,
     label_offset,
-    filetype,
     skip_completed,
     **kwargs,
 ):
     """CLI for PyMOL alignment of multiple molecule files.
     Example:
-        chemsmart run mol align -F a.log -f b.xyz -F c.gjf
-        chemsmart run mol align -T log
+        chemsmart run mol  -f a.log -f b.xyz -f c.gjf align
+        chemsmart run mol -t log -d . align
     """
 
     index = ctx.obj["index"]
     label = ctx.obj["label"]
+    filenames = ctx.obj["filenames"]
+    directory = ctx.obj["directory"]
+    filetype = ctx.obj["filetype"]
+    user_provided_label = ctx.obj.get("user_provided_label", False)
     molecules = []  # Initialize molecules list
 
-    if filetype:
-
-        filetype_pattern = f"*.{filetype}"
-        matched_files = glob.glob(filetype_pattern)
-        if not matched_files:
-            logger.warning(f"No files matched pattern: {filetype_pattern}")
-            raise click.BadParameter(
-                f"No files found matching pattern: {filetype_pattern}"
-            )
-
-        for file_path in matched_files:
-            # Pass index to per-file reader in user string form so each file
-            # yields the structure(s) corresponding to that index.
-            mols = Molecule.from_filepath(
-                filepath=file_path,
-                index=index,
-                return_list=True,
-            )
-            # assign unique names per-structure when file contains multiple structures
-            base = os.path.splitext(os.path.basename(file_path))[0]
-            if isinstance(mols, list) and len(mols) > 1:
-                for j, mol in enumerate(mols, start=1):
-                    mol.name = f"{base}_{j}"
-            else:
-                for mol in mols:
-                    mol.name = base
-            molecules += mols
-        logger.debug(
-            f"Loaded {len(molecules)} molecules from {len(matched_files)} files using filetype pattern with index={index}"
+    if directory:
+        directory = os.path.abspath(directory)
+        logger.info(
+            f"Obtaining files in directory: {directory} for alignment."
         )
+        if filetype:
+            filetype_pattern = os.path.join(directory, f"*.{filetype}")
+            matched_files = glob.glob(filetype_pattern)
+            if not matched_files:
+                logger.warning(f"No files matched pattern: {filetype_pattern}")
+                raise click.BadParameter(
+                    f"No files found matching pattern: {filetype_pattern}"
+                )
 
-        base_file = matched_files[0]
-        if label is None:
-            label = os.path.splitext(os.path.basename(base_file))[0]
+            for file_path in matched_files:
+                # Pass index to per-file reader in user string form so each file
+                # yields the structure(s) corresponding to that index.
+                mols = Molecule.from_filepath(
+                    filepath=file_path,
+                    index=index,
+                    return_list=True,
+                )
+                # assign unique names per-structure when file contains multiple structures
+                base = os.path.splitext(os.path.basename(file_path))[0]
+                if isinstance(mols, list) and len(mols) > 1:
+                    for j, mol in enumerate(mols, start=1):
+                        mol.name = f"{base}_{j}"
+                else:
+                    for mol in mols:
+                        mol.name = base
+                molecules += mols
+            logger.debug(
+                f"Loaded {len(molecules)} molecules from {len(matched_files)} files using filetype pattern with index={index}"
+            )
+
+            base_file = matched_files[0]
+            if label is None:
+                label = os.path.splitext(os.path.basename(base_file))[0]
 
     elif filenames:
 
@@ -157,6 +161,7 @@ def align(
     return PyMOLAlignJob(
         molecule=molecules,
         label=label,
+        use_raw_label=user_provided_label,
         pymol_script=file,
         style=style,
         trace=trace,

@@ -127,23 +127,7 @@ Align multiple molecular structures for comparison.
 Align-Specific OPTIONS
 ======================
 
-.. list-table:: Visualization Job Options
-   :header-rows: 1
-   :widths: 30 15 55
-
-   -  -  Option
-      -  Type
-      -  Description
-
-   -  -  ``-F, --filenames``
-      -  string
-      -  Filenames from which new Gaussian inputs are prepared (multiple=True).
-
-   -  -  ``-T, --filetype``
-      -  string
-      -  Input file pattern, e.g. 'log','xyz','gjf' (default=None). Only for align jobs.
-
-Can use ``-T, --filetype``, also inherit all options from visualization jobs and use the same parameters.
+Inherit all options from visualization jobs and use the same parameters.
 
 Align Basic Usage
 =================
@@ -152,7 +136,7 @@ Align Basic Usage
 
    .. code:: console
 
-      chemsmart run mol align -F mol1.xyz -F mol2.gjf -F mol3.log
+      chemsmart run mol -f mol1.xyz -f mol2.gjf -f mol3.log -i 1 align
 
 This command will align the subsequent molecules to the first molecule sequentially (align mol2 and mol3 to mol1).
 
@@ -160,4 +144,8 @@ This command will align the subsequent molecules to the first molecule sequentia
 
    .. code:: console
 
-      chemsmart run mol align -T xyz
+      chemsmart run mol -t xyz -l xyz_alignment align
+
+.. note::
+
+   When using the ``-i n`` option, user should ensure that every input file contains the n-th molecule.

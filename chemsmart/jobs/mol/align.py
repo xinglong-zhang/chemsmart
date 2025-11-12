@@ -9,6 +9,7 @@ class PyMOLAlignJob(PyMOLJob):
         molecule,
         label,
         align_basename=None,
+        use_raw_label=False,
         jobrunner=None,
         **kwargs,
     ):
@@ -22,13 +23,20 @@ class PyMOLAlignJob(PyMOLJob):
         )
 
         if align_basename is None:
-            n_molecules = len(molecule) if isinstance(molecule, list) else 1
-            if n_molecules > 2:
-                align_basename = (
-                    f"{self.label}_and_{n_molecules-1}_molecules_align"
-                )
+            if use_raw_label:
+                # Use the label directly without modification
+                align_basename = self.label
             else:
-                align_basename = f"{self.label}_and_1_molecule_align"
+                # Use the original logic with molecule count suffix
+                n_molecules = (
+                    len(molecule) if isinstance(molecule, list) else 1
+                )
+                if n_molecules > 2:
+                    align_basename = (
+                        f"{self.label}_and_{n_molecules-1}_molecules_align"
+                    )
+                else:
+                    align_basename = f"{self.label}_and_1_molecule_align"
 
         self.align_basename = align_basename
 
