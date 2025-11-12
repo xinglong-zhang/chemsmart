@@ -90,6 +90,7 @@
    :caption: Tutorials for Auxiliary Scripts
 
    scripts_overview
+   scripts_data_management
 
 .. toctree::
    :maxdepth: 2
