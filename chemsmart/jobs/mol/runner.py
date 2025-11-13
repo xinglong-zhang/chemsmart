@@ -783,7 +783,6 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         """
         super()._prerun(job)
         self._assign_variables(job)
-        self._write_hybrid_pml(job)
 
     def _job_specific_commands(self, job, command):
         """
@@ -817,7 +816,10 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Return:
             str: Path to the generated PML file.
         """
-        pml_file = os.path.join(job.folder, "hybrid_visualization.pml")
+        pml_file = os.path.join(
+            job.folder,
+            f"{os.path.basename(job.folder)}_hybrid_visualization.pml",
+        )
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
         with open(pml_file, "w") as f:

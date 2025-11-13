@@ -6,7 +6,11 @@ import sys
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.mol.mol import click_pymol_visualization_options, mol
+from chemsmart.cli.mol.mol import (
+    click_pymol_hybrid_visualization_options,
+    click_pymol_visualization_options,
+    mol,
+)
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.repattern import pymol_hybrid_selection_pattern
 
@@ -16,44 +20,11 @@ logger = logging.getLogger(__name__)
 @mol.command(
     "visualize",
     cls=MyCommand,
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    context_settings=dict(allow_extra_args=True),
 )
 @click_job_options
 @click_pymol_visualization_options
-@click.option(
-    "--hybrid",
-    is_flag=True,
-    default=False,
-    help="Use hybrid visualization mode.",
-)
-@click.option(
-    "-sc",
-    "--surface-color",
-    type=str,
-    default=None,
-    help="customized surface color.",
-)
-@click.option(
-    "-st",
-    "--surface-transparency",
-    type=str,
-    default=None,
-    help="customized surface transparency.",
-)
-@click.option(
-    "-g",
-    "--group",
-    multiple=True,
-    type=str,
-    help="Indexes of atoms to select for a group. Repeatable for multiple groups, e.g., -g '1-5' -g '6,7,8'.",
-)
-@click.option(
-    "-c",
-    "--color",
-    multiple=True,
-    type=str,
-    help="Color for each group. Repeatable to match -g options.",
-)
+@click_pymol_hybrid_visualization_options
 # all other click options removed here to simplify CLI parsing via **kwargs
 @click.pass_context
 def visualize(
@@ -79,7 +50,12 @@ def visualize(
         [[1,2],[3,4,5],[1,3,4,5],[4,5],[4,6,9]]
     This visualizes vhr_ox_modred_ts10.log file and saves as
     vhr_ox_modred_ts10_visualize.pse and add in additional coordinates
-    (bonds, angles and dihedrals) for labelling."""
+    (bonds, angles and dihedrals) for labelling.
+
+    When --hybrid flag is used, the hybrid visualization mode is enabled, which allows the user to draw different groups in different styles.
+    Example usage:
+    chemsmart run mol -f 'structure_file' visualize -g  '233,468-512' -g '308,397-414,416-423'
+    """
 
     # get molecule
     molecules = ctx.obj["molecules"]
@@ -122,6 +98,12 @@ def visualize(
 
     groups = kwargs.pop("group", ())
     colors = kwargs.pop("color", ())
+    # raise error if -g/-c is provided when --hybrid is false
+    if groups and not hybrid:
+        raise click.UsageError(
+            "The '-g/--group' option can only be used with '--hybrid'. "
+            "Please enable hybrid visualization mode with '--hybrid'."
+        )
     for i, grp in enumerate(groups):
         hybrid_opts[f"group{i + 1}"] = grp
         color_i = colors[i] if i < len(colors) else None
