@@ -1,10 +1,10 @@
 import logging
 import math
 import os
+from functools import cached_property
 
 import numpy as np
 from ase import units
-from functools import cached_property
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
