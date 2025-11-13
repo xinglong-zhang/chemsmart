@@ -13,7 +13,7 @@ from typing import Type
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
-from chemsmart.utils.io import outfile_format
+from chemsmart.utils.io import get_outfile_format
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
 
         # Validate output file type
         for file in files:
-            if outfile_format(file) not in {"gaussian", "orca"}:
+            if get_outfile_format(file) not in {"gaussian", "orca"}:
                 raise ValueError(
                     f"Unsupported file type for '{file}'. "
                     f"Only Gaussian or ORCA output files are accepted."

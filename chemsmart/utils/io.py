@@ -232,7 +232,7 @@ def match_outfile_pattern(line) -> str | None:
     return None
 
 
-def outfile_format(filepath) -> str:
+def get_outfile_format(filepath) -> str:
     """
     Detect the type of quantum chemistry output file.
 

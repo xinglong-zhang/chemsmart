@@ -8,7 +8,7 @@ from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.io import outfile_format
+from chemsmart.utils.io import get_outfile_format
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +248,9 @@ def thermochemistry(
             folder = GaussianLogFolder(directory)
             logfiles = folder.all_logfiles
             files = [
-                file for file in logfiles if outfile_format(file) == "gaussian"
+                file
+                for file in logfiles
+                if get_outfile_format(file) == "gaussian"
             ]
         elif filetype == "orca":
             from chemsmart.io.orca.folder import ORCAOutFolder
@@ -256,7 +258,7 @@ def thermochemistry(
             folder = ORCAOutFolder(directory)
             outfiles = folder.all_outfiles
             files = [
-                file for file in outfiles if outfile_format(file) == "orca"
+                file for file in outfiles if get_outfile_format(file) == "orca"
             ]
         else:
             raise ValueError(
@@ -274,7 +276,7 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if outfile_format(file) not in {"gaussian", "orca"}:
+            if get_outfile_format(file) not in {"gaussian", "orca"}:
                 raise ValueError(
                     f"Unsupported output file type for '{file}'. Use Gaussian or "
                     f"ORCA output files."
