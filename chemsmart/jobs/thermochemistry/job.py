@@ -15,7 +15,6 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
-from chemsmart.utils.io import get_outfile_format
 
 logger = logging.getLogger(__name__)
 
@@ -223,12 +222,6 @@ class ThermochemistryJob(Job):
         Raises:
             ValueError: If output file type is not supported
         """
-        # Validate file type
-        if get_outfile_format(filename) not in {"gaussian", "orca"}:
-            raise ValueError(
-                f"Unsupported file type for '{filename}'. "
-                f"Only Gaussian or ORCA output files are accepted."
-            )
 
         logger.info(f"Reading molecule from file: {filename}")
         molecule = Molecule.from_filepath(filename)
