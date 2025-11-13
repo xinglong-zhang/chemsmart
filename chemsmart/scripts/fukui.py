@@ -78,8 +78,8 @@ def entry_point(
     charge_for_radical_anion = None
 
     program = outfile_format(neutral_filename)
-    cation_program = outfile_format(radical_cation_filename)
-    anion_program = outfile_format(radical_anion_filename)
+    cation_program = outfile_format(radical_cation_filename) if radical_cation_filename is not None else None
+    anion_program = outfile_format(radical_anion_filename) if radical_anion_filename is not None else None
 
     if program == "gaussian":
         neutral_output = Gaussian16WBIOutput(neutral_filename)
