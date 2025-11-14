@@ -145,63 +145,66 @@ Visualization-Specific OPTIONS
       -  bool
       -  Enable hybrid visualization mode. Allows drawing different groups in different styles (default=False).
 
-   -  -  ``-g, --group <string>``
+   -  -  ``-g, --group``
       -  string, multiple
-      -  Indexes of atoms to select for a group. Repeatable for multiple groups, e.g., -g '1-5' -g '6,7,8'.
+      -  Indexes of atoms to select for a group. Repeatable for multiple groups.
 
-   -  -  ``-C, --color <string>``
+   -  -  ``-C, --color``
       -  string, multiple
-      -  Color for each group. Repeatable to match -g options. Example color schemes: ['cbap', 'cbac', 'cbay', 'cbag', ...].
+      -  Color for each group. Repeatable to match -g options. Default = ['cbap', 'cbac', 'cbay', 'cbag', ...].
 
-   -  -  ``-sc, --surface-color <string>``
+   -  -  ``-sc, --surface-color``
       -  string
-      -  Customize the surface color of the molecule (default=None).
+      -  Customize the surface color (default=grey).
 
-   -  -  ``-st, --surface-transparency <string>``
+   -  -  ``-st, --surface-transparency``
       -  string
-      -  Customize the surface transparency of the molecule (default=None).
+      -  Customize the surface transparency (default=0.7).
 
-   -  -  ``-nc, --new-color-carbon <string>``
+   -  -  ``-nc, --new-color-carbon``
       -  string
-      -  Set a custom color for carbon atoms. Example: -nc [0.8, 0.8, 0.9] (default=None).
+      -  Set a custom color for carbon atoms. (default=[0.8, 0.8, 0.9]).
 
-   -  -  ``-nn, --new-color-nitrogen <string>``
+   -  -  ``-nn, --new-color-nitrogen``
       -  string
-      -  Set a custom color for nitrogen atoms. Example: -nn [0.6, 0.8, 1.0] (default=None).
+      -  Set a custom color for nitrogen atoms. (default=[0.6, 0.8, 1.0]).
 
-   -  -  ``-no, --new-color-oxygen <string>``
+   -  -  ``-no, --new-color-oxygen``
       -  string
-      -  Set a custom color for oxygen atoms. Example: -no [1.0, 0.7, 0.7] (default=None).
+      -  Set a custom color for oxygen atoms. (default=[1.0, 0.7, 0.7]).
 
-   -  -  ``-ns, --new-color-sulfur <string>``
+   -  -  ``-ns, --new-color-sulfur``
       -  string
-      -  Set a custom color for sulfur atoms. Example: -ns [0.8, 0.8, 0.9] (default=None).
+      -  Set a custom color for sulfur atoms. (default=[0.8, 0.8, 0.9]).
 
-   -  -  ``-np, --new-color-phosphorus <string>``
+   -  -  ``-np, --new-color-phosphorus``
       -  string
-      -  Set a custom color for phosphorus atoms. Example: -np [1.0, 0.85, 0.6] (default=None).
+      -  Set a custom color for phosphorus atoms. (default=[1.0, 0.85, 0.6]).
 
-Visualization Basic Usage
+Hybrid Visualization Basic Usage
 =========================
 
 **Basic hybrid visualization**
 
    .. code:: console
 
-      chemsmart run mol -f molecule.xyz visualize --hybrid -g [1,2,3]
-This is the minimal command needed for hybrid visualization job. Only the highlighted groups is specified, others will be assigned by default.
+      chemsmart run mol -f molecule.xyz visualize --hybrid -g '[1,2,3]'
+This is the minimal command needed for hybrid visualization job. Only the highlighted group is specified, others will be assigned by default.
 
 **Hybrid visualization with customized color scheme**
 
    .. code:: console
 
-      chemsmart run mol -f calculation.log visualize --hybrid -g [1,2,3] -g [4,5,6] -c cbay -c cbak
+      chemsmart run mol -f calculation.log visualize --hybrid -g '[1,2,3]' -g '[4,5,6]' -C cbay -C cbak
+This will assigned customized color scheme to different groups. Note that the color/group is assigned by input order, i.e., the first color ('cbay')
+will be assigned to the first group ([1,2,3]), etc. A default color scheme will be used if a group is not assigned customized colors.
 
-**Visualization with coordinate labeling**
+**Hybrid Visualization with customized background settings**
 
    .. code:: console
 
-      chemsmart run mol -f structure.xyz visualize -c [[1,2,3]]
+      chemsmart run mol -f structure.xyz visualize --hybrid -g '[1,2,3]' -g '[4,5,6]' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
+Color options except for color schemes, such as surface color, customized carbon color can be specified by a list containing their RGB values.
 
 **Visualization using custom style or script file**
 
@@ -209,32 +212,15 @@ This is the minimal command needed for hybrid visualization job. Only the highli
 
       chemsmart run mol -f molecule.log visualize -f custom_style.py
 
-Visualization Examples
+Hybrid Visualization Examples
 ======================
 
-************
- Movie Jobs
-************
+running a command like:
+ .. code:: console
 
-Generate rotating movie animations of molecular structures.
+      chemsmart run mol -f molecule.xyz visualize --hybrid -g  '417-418,422-424,429-447,463-464' -g '336,397-412,414-416,419-421' -g '494-529'
+will generate the below visualization style.
 
-.. code:: console
-
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] movie [SUBCMD_OPTIONS]
-
-Movie-Specific OPTIONS
-======================
-
-Movie jobs inherit all options from visualization jobs and use the same parameters.
-
-Movie Basic Usage
-=================
-
-**Basic rotating movie**
-
-   .. code:: console
-
-      chemsmart run mol -f molecule.xyz movie
-
-Movie Examples
-==============
+.. image:: _static/B_in_R.png
+   :width: 60%
+   :align: center

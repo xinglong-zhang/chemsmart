@@ -81,6 +81,11 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         stick_radius=None,
         surface_color=None,
         surface_transparency=None,
+        new_color_carbon=None,
+        new_color_nitrogen=None,
+        new_color_oxygen=None,
+        new_color_phosphorus=None,
+        new_color_sulfur=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -95,3 +100,8 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.stick_radius = stick_radius
         self.surface_color = surface_color
         self.surface_transparency = surface_transparency
+        self.new_color_carbon = new_color_carbon
+        self.new_color_nitrogen = new_color_nitrogen
+        self.new_color_oxygen = new_color_oxygen
+        self.new_color_phosphorus = new_color_phosphorus
+        self.new_color_sulfur = new_color_sulfur

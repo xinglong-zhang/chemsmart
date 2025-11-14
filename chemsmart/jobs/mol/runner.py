@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sympy.plotting.pygletplot import color_scheme
+
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
@@ -899,17 +901,39 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_faded_colors(self, job, f):
         """Write the faded colors for non-highlighted C, N, O, P in background to the pml file."""
+        if job.new_color_carbon:
+            new_color_carbon = job.new_color_carbon
+        else:
+            new_color_carbon = "[0.8, 0.8, 0.9]"
+        if job.new_color_nitrogen:
+            new_color_nitrogen = job.new_color_nitrogen
+        else:
+            new_color_nitrogen = "[0.6, 0.8, 1.0]"
+        if job.new_color_oxygen:
+            new_color_oxygen = job.new_color_oxygen
+        else:
+            new_color_oxygen = "[1.0, 0.7, 0.7]"
+        if job.new_color_phosphorus:
+            new_color_phosphorus = job.new_color_phosphorus
+        else:
+            new_color_phosphorus = "[1.0, 0.85, 0.6]"
+        if job.new_color_sulfur:
+            new_color_sulfur = job.new_color_sulfur
+        else:
+            new_color_sulfur = "[1.0, 0.7, 0.7]"
         f.write(
-            "set_color light_C, [0.8, 0.8, 0.9]\n"
-            "set_color light_N, [0.6, 0.8, 1.0]\n"
-            "set_color light_O, [1.0, 0.7, 0.7]\n"
-            "set_color light_P, [1.0, 0.85, 0.6]\n"
+            f"set_color light_C, {new_color_carbon}\n"
+            f"set_color light_N, {new_color_nitrogen}\n"
+            f"set_color light_O, {new_color_oxygen}\n"
+            f"set_color light_P, {new_color_phosphorus}\n"
+            f"set_color light_S, {new_color_sulfur}\n"
         )
         f.write(
             "color light_C, elem C\n"
             "color light_P, elem P\n"
             "color light_O, elem O\n"
             "color light_N, elem N\n"
+            "color light_S, elem S\n"
         )
 
     def _write_highlighted_colors(self, job, f):
