@@ -550,6 +550,25 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
+    def spin(self):
+        """
+        Determine if calculation uses restricted or unrestricted spin.
+        Analyzes the SCF method specification to determine whether
+        the calculation uses restricted (R) or unrestricted (U) spin.
+        """
+        for line in self.contents:
+            if "Kohn-Sham wavefunction type" in line:
+                wavefunction_type = line.split(" ")[-1].lower()
+                # Determine if the job is restricted or unrestricted
+                if wavefunction_type.startswith("r"):
+                    spin = "restricted"
+                elif wavefunction_type.startswith("u"):
+                    spin = "unrestricted"
+                else:
+                    spin = None
+                return spin
+
+    @property
     def num_electrons(self):
         """
         Get the number of electrons from the ORCA output file.
