@@ -309,11 +309,12 @@ class GaussianInputWriter(InputWriter):
                         f"{self.settings.modred['num_steps']} "
                         f"{self.settings.modred['step_size']}\n"
                     )
-                if 'const_coords' in modredundant:
+                if "const_coords" in modredundant:
                     if isinstance(modredundant["const_coords"], list):
-                        logger.debug("Writing modredundant constraints "
-                        "for scan job")
-                        const_coords_list = modredundant['const_coords']
+                        logger.debug(
+                            "Writing modredundant constraints " "for scan job"
+                        )
+                        const_coords_list = modredundant["const_coords"]
                         prepend_string_list = (
                             get_prepend_string_list_from_modred_free_format(
                                 input_modred=const_coords_list
