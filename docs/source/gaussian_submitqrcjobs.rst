@@ -162,7 +162,7 @@ This will prepare two guess structures that are obtained from displacement along
 
 .. code-block:: console
 
-   chemsmart sub gaussian -p my_project -f ts.log qrc -m 2 -a 1.2
+   chemsmart sub gaussian -p my_project -f ts.log qrc -m 2 -a 1.2 -j ts
 
 Here:
 
