@@ -150,9 +150,9 @@ At a high level, a QRC job in Chemsmart automates a standard
      TS.
      Advanced use: if suppose you have a geometry optimization but has one imaginary frequency (a properly optimized structure should have no imaginary frequency) and you want to remove it. You may submit the job by creating initial guess structures by displacement along the imaginary frequency and subjecting the resulting guess structures for geometry optimization, via
 
- .. code:: console
+    .. code:: console
 
-   chemsmart sub [OPTIONS] gaussian -p <project_settings> -f <erroneous_opt_with_one_im_freq.log> qrc -m 1 -a 0.8 -j opt
+       chemsmart sub [OPTIONS] gaussian -p <project_settings> -f <erroneous_opt_with_one_im_freq.log> qrc -m 1 -a 0.8 -j opt
 
 This will prepare two guess structures that are obtained from displacement along the vibrational mode 1 (``-m 1``) with an amplitude of ±0.8 and subjecting those structures for geometry optimization (``-j opt``), with the intended results of successfully optimized structure with no imaginary frequency.
 
