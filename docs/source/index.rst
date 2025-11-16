@@ -51,6 +51,7 @@
    gaussian_submitconformationalsamplingdynamicsjobs
    gaussian_submitstructureoptimizationjobs
    gaussian_submittransitionstatesearchjobs
+   gaussian_submitqrcjobs.rst
    gaussian_submitelectronicstructurepropertiesanalysesjobs
    gaussian_submitotherjobs
 
