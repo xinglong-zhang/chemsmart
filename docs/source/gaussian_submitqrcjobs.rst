@@ -202,7 +202,7 @@ and tracking filenames for each guess.
 ***************************
 
 Given an output file with extraneous imaginary frequencies, we can use this file as input for direct job submission, aiming to remove the extra imaginary frequencies after submission of the QRC job. 
-For example, suppose we have a geometry optimisation output file with one imaginary frequency, which should not be there, we can run QRC to displace along that vibration to generate new guess structures and submit them for further geometry optimization, with the desired outcome of re-optimized structures reaching a PES minimum without any imaginary frequency.
+For example, suppose we have a geometry optimization output file with one imaginary frequency, which should not be there, we can run QRC to displace along that vibration to generate new guess structures and submit them for further geometry optimization, with the desired outcome of re-optimized structures reaching a PES minimum without any imaginary frequency.
 Similarly, we can do this to remove the second imaginary frequency of a TS-like structure with the correct first imaginary frequency mode, but with an extra second imaginary mode that we intend to remove, by using displacement along the second imaginary mode and creating new input structures for TS re-optimization automatically. 
 
 Summary
