@@ -17,7 +17,7 @@ The core idea is that one can start from a TS with a frequency calculation done 
 (the Hessian eigenvector with a negative eigenvalue) in the + and - directions by a small amplitude to make two perturbed geometries, which can be optimized and fall into the basin of the adjacent minimum. The energy vs a distance measure (often mass-weighted RMS displacement from the TS) can be plotted to get a quick reaction profile and to confirm connectivity.
 
 Chemsmart is able to use a located TS with frequencies calculation file (such as Gaussian or ORCA output) and submit the
-QRC job directly, so that two optimization jobs (or other job types) can be created.
+QRC job directly, so that two optimization jobs can be created and run.
 
 
 .. code:: console
@@ -114,7 +114,7 @@ At a high level, a QRC job in Chemsmart automates a standard
 
 1. **Read TS geometry and modes**
 
-   You supply a Gaussian output (e.g. ``ts.log``) that already contains:
+   You supply a Gaussian output (e.g. ``ts.log``) or an ORCA output (e.g. ``ts.out``) that already contains:
    (i) an optimized transition structure (first-order saddle point) and
    (ii) a frequency calculation.
 
@@ -123,7 +123,7 @@ At a high level, a QRC job in Chemsmart automates a standard
    Chemsmart extracts the vibrational eigenvectors from that output file.
    By default, it chooses mode index ``1``, which in a well-characterized TS
    corresponds to the single imaginary mode (negative curvature direction).
-   You can override this using ``-m/--mode-idx``.
+   You can change this using ``-m/--mode-idx``.
 
 3. **Generate displaced guesses**
 
@@ -148,19 +148,35 @@ At a high level, a QRC job in Chemsmart automates a standard
      Relax the geometry downhill into the nearest minimum. This typically lands
      you in the "reactant-like" and "product-like" wells on either side of the
      TS.
+     Advanced use: if suppose you have a geometry optimization but has one imaginary frequency (a properly optimized structure should have no imaginary frequency) and you want to remove it. You may submit the job by creating initial guess structures by displacement along the imaginary frequency and subjecting the resulting guess structures for geometry optimization, via
+
+ .. code:: console
+
+   chemsmart sub [OPTIONS] gaussian -p <project_settings> -f <erroneous_opt_with_one_im_freq.log> qrc -m 1 -a 0.8 -j opt
+
+This will prepare two guess structures that are obtained from displacement along the vibrational mode 1 (``-m 1``) with an amplitude of ±0.8 and subjecting those structures for geometry optimization (``-just opt``), with the intended results of successfully optimized structure with no imaginary frequency.
 
    - ``ts``:
      Attempt a transition-state (TS) optimization from both + and − guesses.
-     This is helpful if you suspect your current TS is not fully converged or
-     if you want to test robustness of the TS.
+     This is helpful if you want to locate a TS but instead obtain a TS output file having e.g., two imaginary frequencies, in which case, you would want to displace along the second imaginary frequency (via ``-m 2`` or ``--mode-idx 2``) to create new input structures to redo the TS optimization, in hopes of removing the second imaginary frequency mode.
+
+.. code-block:: console
+
+   chemsmart sub gaussian -p my_project -f ts.log qrc -m 2 -a 1.2
+
+Here:
+
+* ``-m 2`` selects vibrational mode #2 (1-indexed).
+* ``-a 1.2`` increases the displacement magnitude to 1.2 Å in both + and −
+  directions.
+
 
    - ``modred`` / ``scan``:
      Prepare constrained optimizations or relaxed scans along specified
-     internal coordinates. Useful for mapping approximate reaction coordinates
-     or enforcing specific bond distances.
+     internal coordinates. Again, useful when there is any imaginary frequency modes that one wishes to remove.
 
    - ``sp``:
-     Single-point energy only, no geometry change.
+     Single-point energy only, no geometry optimization after displacement.
 
    - ``irc``:
      Launch a full IRC calculation from each displaced guess, if you want
@@ -171,7 +187,7 @@ At a high level, a QRC job in Chemsmart automates a standard
    If you provide ``--nframes``, Chemsmart samples multiple evenly spaced
    points along that vibrational mode (using trigonometric sampling of a phase
    angle; ``--phase`` sets the offset). With ``--return-xyz``, it produces a
-   multi-frame XYZ block that you can visualize to confirm that the selected
+   multi-frame XYZ block that you can visualize (e.g., via ``chemsmart run mol``) to confirm that the selected
    mode actually corresponds to bond formation / cleavage, rather than e.g.
    rotation of a remote substituent.
 
@@ -181,241 +197,18 @@ hand-editing multiple Gaussian input files for the "+" and "−" directions,
 and tracking filenames for each guess.
 
 
-Basic Usage
-===========
+***************************
+ Extension of the QRC Jobs
+***************************
 
-Goal: starting from an existing Gaussian transition state ``ts.log`` (which
-already contains a frequency calculation), generate ± displaced structures
-along the first imaginary mode and run standard geometry optimizations.
-
-.. code-block:: console
-
-   chemsmart sub gaussian \
-      -p my_project \
-      -f ts.log \
-      qrc
-
-Explanation:
-
-* ``sub gaussian``:
-  Submit Gaussian jobs through Chemsmart.
-
-* ``-p my_project``:
-  Name of your Chemsmart project / working directory. Inputs and outputs
-  will be organized there.
-
-* ``-f ts.log``:
-  Path to the Gaussian log file that holds the TS geometry and its
-  vibrational analysis.
-
-* ``qrc``:
-  Activates the QRC workflow.
-
-With no further flags:
-
-* ``jobtype`` defaults to ``opt``.
-* ``mode-idx`` defaults to ``1``.
-* ``amp`` defaults to ``0.5`` Å.
-
-Chemsmart will:
-
-1. Displace the TS coordinates along mode 1 by +0.5 Å and −0.5 Å.
-2. Write two Gaussian input files for geometry optimization (``opt``).
-3. Submit both jobs under ``my_project``.
-
-After completion, you typically obtain two relaxed structures that
-approximate the reactant- and product-like minima connected by your TS.
-
-
-Choosing a Different Mode or Amplitude
-======================================
-
-If you suspect the first imaginary mode mixes irrelevant motion, or you
-want to push harder along a particular coordinate, you can override the
-mode index and amplitude:
-
-.. code-block:: console
-
-   chemsmart sub gaussian \
-      -p my_project \
-      -f ts.log \
-      qrc \
-      -m 2 \
-      -a 1.2
-
-Here:
-
-* ``-m 2`` selects vibrational mode #2 (1-indexed).
-* ``-a 1.2`` increases the displacement magnitude to 1.2 Å in both + and −
-  directions.
-
-Larger amplitudes can help "kick" the structure more clearly into
-separate wells, but overly large values can lead to distorted or
-chemically unreasonable geometries. Always visualize the displaced
-structures if you increase ``--amp`` significantly.
-
-
-TS Refinement From Both Sides
-=============================
-
-Instead of downhill optimizations to minima, you can ask Chemsmart to
-re-optimize the TS starting from both displaced guesses. This is useful
-to check whether the TS you found is robust:
-
-.. code-block:: console
-
-   chemsmart sub gaussian \
-      -p my_project \
-      -f ts.log \
-      qrc \
-      -j ts \
-      -m 2 \
-      -a 1.5
-
-Notes:
-
-* ``-j ts`` changes the downstream Gaussian job type from ``opt`` to
-  ``ts`` (TS optimization).
-* ``-m 2`` and ``-a 1.5`` are shown here for illustration; you can
-  keep the defaults if you prefer.
-
-If both + and − guesses converge back to essentially the same TS
-(geometry, energy, imaginary frequency), that is a strong indication
-your TS is a proper first-order saddle and not just a shoulder on a
-flatter surface.
-
-
-Constrained Coordinates: ``modred`` and ``scan``
-================================================
-
-For mechanistic mapping, you may want constrained optimizations
-(``modred``) or relaxed scans (``scan``) of specific internal
-coordinates. This is commonly used to approximate a reaction coordinate
-by controlling key bond distances or dihedrals.
-
-``modred`` example (freeze internal coordinates during optimization):
-
-.. code-block:: console
-
-   chemsmart sub gaussian \
-      -p my_project \
-      -f ts.log \
-      qrc \
-      -j modred \
-      -c [1,2] \
-      -m 2 \
-      -a 1.5
-
-Explanation:
-
-* ``-j modred`` requests a constrained optimization using Gaussian's
-  "modredundant" style input.
-* ``-c [1,2]`` is a Python-like list of internal coordinate indices
-  (1-indexed) to be constrained/fixed.
-* ``-m`` and ``-a`` again control which mode is used for the initial ±
-  displacements.
-
-``scan`` example (relaxed scan over one coordinate):
-
-.. code-block:: console
-
-   chemsmart sub gaussian \
-      -p my_project \
-      -f ts.log \
-      qrc \
-      -j scan \
-      -c [1] \
-      -s 0.05 \
-      -n 10 \
-      -m 1 \
-      -a 0.5
-
-Explanation:
-
-* ``-j scan`` enables a coordinate scan job.
-* ``-c [1]`` chooses the internal coordinate to scan.
-* ``-s 0.05`` sets the scan step size for that coordinate.
-* ``-n 10`` requests 10 steps.
-* ``-m 1 -a 0.5`` control displacement along the selected vibrational
-  mode as before.
-
-A relaxed scan from the + and − displaced structures can generate a
-coarse reaction profile suitable for mechanism discussion and SI
-figures, at the cost of launching multiple Gaussian jobs in series.
-
-
-Generating a Vibrational Movie
-==============================
-
-You can also generate multiple frames along the vibrational mode
-purely for visualization or sanity checking. This does *not* submit
-Gaussian jobs for each frame unless you explicitly do so; instead it
-samples along the eigenvector and can write a multi-frame XYZ.
-
-.. code-block:: console
-
-   chemsmart sub gaussian \
-      -p my_project \
-      -f ts.log \
-      qrc \
-      -m 1 \
-      -a 0.5 \
-      -N 20 \
-      --return-xyz
-
-Here:
-
-* ``-N 20`` tells Chemsmart to generate 20 evenly spaced frames along
-  the vibrational mode by scanning a phase angle.
-* ``--return-xyz`` instructs Chemsmart to output a concatenated
-  multi-frame XYZ trajectory. You can save this to a file such as
-  ``mode1_movie.xyz`` and open it in any molecular viewer that supports
-  trajectories (VMD, IQmol, Avogadro, etc.).
-* ``--phase`` (optional) can shift the starting phase if you want your
-  first frame to be at some particular displacement rather than the
-  maximum.
-
-
-Practical Recommendations
-=========================
-
-1. Always visualize the displaced guesses
-   --------------------------------------
-
-   Before trusting any optimization, inspect the ``+amp`` and ``-amp``
-   structures. If you see clearly unphysical bond lengths or severe
-   steric clashes, reduce ``--amp``.
-
-2. Use ``--normalize`` for cross-comparisons
-   -----------------------------------------
-
-   Vibrational eigenvectors from different levels of theory (different
-   basis sets / solvents / functionals) can have different absolute
-   scales. With ``--normalize``, the largest per-atom displacement is
-   rescaled to 1.0 Å before applying ``--amp``. This makes
-   ``--amp`` values more comparable across multiple TS calculations.
-
-3. ``scan`` is slower but gives a figure
-   -------------------------------------
-
-   A relaxed scan produces an energy profile along a chosen coordinate,
-   which is very convenient for supporting mechanistic claims in a
-   manuscript or SI. But note that it can explode into many Gaussian
-   jobs, especially if you run scans from both + and − displacements.
-
-4. ``ts`` from ± is a robustness test
-   ----------------------------------
-
-   If both the ``+amp`` and ``-amp`` starting guesses re-converge to
-   essentially the same TS (same geometry, same imaginary frequency),
-   that's strong evidence you have located the correct first-order
-   saddle for that step.
-
+Given an output file with extraneous imaginary frequencies, we can use this file as input for direct job submission, aiming to remove the extra imaginary frequencies after submission of the QRC job. 
+For example, suppose we have a geometry optimisation output file with one imaginary frequency, which should not be there, we can run QRC to displace along that vibration to generate new guess structures and submit them for further geometry optimization, with the desired outcome of re-optimized structures reaching a PES minimum without any imaginary frequency.
+Similarly, we can do this to remove the second imaginary frequency of a TS-like structure with the correct first imaginary frequency mode, but with an extra second imaginary mode that we intend to remove, by using displacement along the second imaginary mode and creating new input structures for TS re-optimization automatically. 
 
 Summary
 =======
-
-* Chemsmart QRC takes an existing TS + frequency calculation and
+ 
+* Chemsmart QRC takes an existing TS + frequency calculation (or erroneous optimization job with spurious imaginary frequency)  and
   automatically:
   
   - extracts a vibrational mode,
@@ -439,15 +232,3 @@ Summary
   - constrained scans suitable for mechanistic discussion,
   - and ready-to-visualize mode animations.
 
-Future sections can document:
-``Project layout and output files``, i.e. how Chemsmart names the
-``+`` and ``-`` jobs in ``-p my_project``, and
-``Troubleshooting``, e.g. what to do if Gaussian fails to converge or
-if the displaced guess is too distorted.
-
-***************************
- Extension of the QRC Jobs
-***************************
-
-Given an output file with extraneous imaginary frequencies, we can use this file as input for direct job submission, aiming to remove the extra imaginary frequencies after submission of the QRC job. 
-For example, suppose we have a geometry optimisation output file with one imaginary frequency, which should not be there, we can run QRC to displace along the vibration and submit it for further geometry optimization, with the desired outcome of re-optimized structures reaching a PES minimum without any imaginary frequency.
