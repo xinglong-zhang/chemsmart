@@ -2,7 +2,18 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+integer_pattern = r"^\+?\d+$"  # Non-negative integer (incl. 0)
+# optional leading + allowed
+float_pattern_with_exponential = (
+    r"[+-]?(?:(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+(?:[eE][+-]?\d+))"
+)
+orca_line_integer_followed_by_floats = (
+    rf"^\s*[+-]?\d+(?:\s+{float_pattern_with_exponential})+\s*$"
+)
 raw_energy_value_pattern = r"(-\d+\.\d+)"
+
+element_token = r"[A-Z][a-z]?"
+orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
 
 xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
 # \b ensures that the match ends right after xyz

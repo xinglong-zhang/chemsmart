@@ -8,6 +8,7 @@ from .link import link
 from .modred import modred
 from .nci import nci
 from .opt import opt
+from .qrc import qrc
 from .resp import resp
 from .scan import scan
 from .singlepoint import sp
@@ -27,6 +28,7 @@ __all__ = [
     "modred",
     "nci",
     "opt",
+    "qrc",
     "resp",
     "scan",
     "traj",

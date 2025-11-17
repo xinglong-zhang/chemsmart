@@ -17,6 +17,7 @@ import re
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +152,47 @@ def remove_keyword(text, keyword):
     return re.sub(
         r"\b" + re.escape(keyword) + r"\b", "", text, flags=re.IGNORECASE
     )
+
+
+def line_of_all_integers(line: str, allow_sign: bool = True) -> bool:
+    """
+    Return True iff the line has 1+ whitespace-separated tokens
+    and every token is an integer.
+    Examples return True: "0 1 23", "+3 -5 0" (when allow_sign=True)
+    """
+    tokens = line.strip().split()
+    if not tokens:
+        return False
+    try:
+        for t in tokens:
+            if not allow_sign and (t.startswith(("+", "-"))):
+                return False
+            int(t)  # raises ValueError if not an integer literal
+        return True
+    except ValueError:
+        return False
+
+
+def line_of_integer_followed_by_floats(line) -> bool:
+    """
+    Return True iff the line has tokens and:
+      - first token is an integer (± allowed),
+      - remaining tokens are floats.
+    Options:
+      strict_float=True  -> require decimal point or exponent in floats
+      min_floats=1       -> require at least this many float tokens after the integer
+    """
+    float_pattern = re.compile(float_pattern_with_exponential)
+    tokens = line.split()
+
+    if len(tokens) < 2:
+        return False
+
+    # First token: integer (allows + / -)
+    try:
+        int(tokens[0])
+    except ValueError:
+        return False
+
+    # Remaining tokens: floats
+    return all(float_pattern.fullmatch(t) for t in tokens[1:])

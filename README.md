@@ -514,7 +514,7 @@ Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
 
 ## 📖 Citations
 
-If you use **CHEMSMART** in your work, please kindly cite: [https://arxiv.org/abs/2508.20042](https://arxiv.org/abs/2508.20042)
+If you use **CHEMSMART** in your work, please follow good scholarly practice and kindly cite our work: [https://arxiv.org/abs/2508.20042](https://arxiv.org/abs/2508.20042). 
 
 ### Plain Text (ACS Style)
 

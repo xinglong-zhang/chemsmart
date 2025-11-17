@@ -906,6 +906,11 @@ def orca_co2_output(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_sn2_ts_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "sn2_ts.out")
+
+
+@pytest.fixture()
 def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"
