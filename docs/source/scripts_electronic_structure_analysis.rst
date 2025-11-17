@@ -177,3 +177,75 @@ Compute Mulliken charges and spin densities from an unrestricted Gaussian output
    Mulliken Charge at P3 is 0.481.
 
    Mulliken Spin density at P3 is -0.058.
+
+**************************************
+ Hirshfeld Population Analysis Script
+**************************************
+
+The ``hirshfeld.py`` script extracts Hirshfeld charges and Hirshfeld spin densities from **Gaussian** and **ORCA**
+output files.
+
+USAGE
+=====
+
+.. code:: console
+
+   hirshfeld.py [-f filename] [-n atom_number]
+
+OPTIONS
+=======
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  |  **Required**. Specifies the file name to be analysed.
+
+   -  -  ``-n, --numbers``
+      -  string
+      -  |  Specifies the atom number (1-indexed) for reporting the Hirshfeld charges and spins.
+
+EXAMPLE
+=======
+
+Obtain Hirshfeld charges and spins from an ORCA output file that explicitly includes a Hirshfeld population analysis:
+
+.. code:: console
+
+   hirshfeld.py -f udc3_ts1_c15_sp_hirshfeld.out
+
+   Hirshfeld Charges:
+   O1      :    -0.177
+   O2      :    -0.319
+   O3      :    -0.328
+   C4      :     0.307
+   C5      :     0.323
+   O6      :    -0.188
+   O7      :    -0.219
+   O8      :    -0.357
+   C9      :     0.341
+   C10     :     0.337
+   C11     :    -0.007
+   C12     :    -0.009
+   ...
+
+   Hirshfeld Spins:
+   O1      :     0.000
+   O2      :     0.000
+   O3      :     0.000
+   C4      :     0.000
+   C5      :     0.000
+   O6      :     0.000
+   O7      :     0.000
+   O8      :     0.000
+   C9      :     0.000
+   C10     :     0.000
+   C11     :     0.000
+   C12     :     0.000
+   ...
