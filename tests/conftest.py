@@ -11,6 +11,9 @@ from rdkit import Chem
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
+    PyMOLAlignJobRunner,
+    PyMOLIRCMovieJobRunner,
+    PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
@@ -1145,6 +1148,21 @@ def nciplot_jobrunner_scratch(tmpdir, pbs_server):
     return FakeNCIPLOTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
+
+
+@pytest.fixture()
+def pymol_align_jobrunner(pbs_server):
+    return PyMOLAlignJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_ircmovie_jobrunner(pbs_server):
+    return PyMOLIRCMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_mo_jobrunner(pbs_server):
+    return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing
