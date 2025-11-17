@@ -71,7 +71,7 @@ def entry_point(filename, numbers):
             logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
         logger.info("\n")
 
-    # Display specific atom charges and spin densities if requested
+    # Display specific atom charges if requested
     if numbers:
         for n in numbers:
             charge_value = get_value_by_number(n, mulliken_charges)
