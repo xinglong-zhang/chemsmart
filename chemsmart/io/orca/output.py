@@ -567,6 +567,7 @@ class ORCAOutput(ORCAFileMixin):
                 else:
                     spin = None
                 return spin
+        return None
 
     @property
     def num_electrons(self):
