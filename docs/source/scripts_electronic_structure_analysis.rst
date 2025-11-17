@@ -51,8 +51,8 @@ OPTIONS
          |  Options include ``eV`` and ``kcal/mol``.
          |  The default unit is ``eV``.
 
-EXAMPLE
-=======
+EXAMPLES
+========
 
 Compute FMO values from a Gaussian file in eV (default unit):
 
@@ -79,3 +79,101 @@ Output the results in kcal/mol:
    Chemical potential, mu: -150.8 kcal/mol
    Chemical hardness, eta: 169.3 kcal/mol
    Electrophilicity Index, omega: 67.21 kcal/mol
+
+*************************************
+ Mulliken Population Analysis Script
+*************************************
+
+The ``mulliken.py`` script extracts Mulliken atomic charges and, for unrestricted calculations, Mulliken spin densities.
+It supports both **Gaussian** and **ORCA** output formats.
+
+USAGE
+=====
+
+.. code:: console
+
+   mulliken.py [-f filename] [-n atom_number]
+
+OPTIONS
+=======
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  |  **Required**. Specifies the file name to be analysed.
+
+   -  -  ``-n, --numbers``
+      -  string
+      -  |  Specifies the atom number (1-indexed) for reporting the Mulliken charge and, if applicable, the Mulliken
+         |  spin density.
+
+EXAMPLES
+========
+
+Compute Mulliken charges from a restricted Gaussian output file:
+
+.. code:: console
+
+   mulliken.py -f nhc_neutral_singlet.log
+
+   Mulliken Charges:
+   C1      :     0.062
+   C2      :    -0.008
+   C3      :     0.074
+   H4      :     0.078
+   N5      :    -0.060
+   N6      :    -0.263
+   N7      :    -0.265
+   C8      :     0.317
+   H9      :     0.068
+   H10     :     0.065
+   C11     :     0.115
+   O12     :    -0.405
+   ...
+
+Compute Mulliken charges and spin densities from an unrestricted Gaussian output file, displaying values for atom 3:
+
+.. code:: console
+
+   mulliken.py -f iron_neutral_triplet.log -n 3
+
+   Mulliken Charges:
+   Fe1     :    -0.295
+   P2      :     0.434
+   P3      :     0.481
+   C4      :     0.040
+   H5      :     0.008
+   C6      :     0.036
+   H7      :    -0.017
+   C8      :     0.026
+   H9      :    -0.020
+   C10     :     0.019
+   H11     :    -0.023
+   C12     :     0.008
+   ...
+
+   Mulliken Spin densities:
+   Fe1     :    -0.002
+   P2      :    -0.011
+   P3      :    -0.058
+   C4      :    -0.000
+   H5      :    -0.000
+   C6      :    -0.000
+   H7      :    -0.000
+   C8      :    -0.000
+   H9      :    -0.000
+   C10     :    -0.000
+   H11     :    -0.000
+   C12     :     0.000
+   ...
+
+   Mulliken Charge at P3 is 0.481.
+
+   Mulliken Spin density at P3 is -0.058.
