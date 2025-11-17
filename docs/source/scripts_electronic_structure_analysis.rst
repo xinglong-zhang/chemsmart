@@ -212,8 +212,8 @@ OPTIONS
       -  |  Specifies the atom number(s) (1-indexed) for reporting the Hirshfeld charge(s)
          |  and spin(s).
 
-EXAMPLE
-=======
+EXAMPLES
+========
 
 Obtain Hirshfeld charges and spins from an ORCA output file that explicitly includes a Hirshfeld population analysis:
 
