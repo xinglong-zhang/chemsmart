@@ -71,7 +71,7 @@ def click_pymol_visualization_options(f):
         "using zhang_group_pymol_style.",
     )
     @click.option(
-        "-t",
+        "-t/",
         "--trace/--no-trace",
         type=bool,
         default=True,
@@ -292,16 +292,12 @@ def mol(
 
     # obtain molecule structure
     if directory is not None and filetype is not None:
-        # Store whether user explicitly provided label
-        user_provided_label = label is not None
-
         ctx.obj["directory"] = directory
         ctx.obj["filetype"] = filetype
         ctx.obj["index"] = index
         ctx.obj["filenames"] = None
         ctx.obj["molecules"] = None
         ctx.obj["label"] = label
-        ctx.obj["user_provided_label"] = user_provided_label
         return
 
     if filenames is None and pubchem is None:
@@ -328,9 +324,6 @@ def mol(
             ), f"Could not obtain molecule from {filenames}!"
             logger.debug(f"Obtained molecule {molecules} from {filenames}")
         else:
-            # Store whether user explicitly provided label
-            user_provided_label = label is not None
-
             # Multiple filenames - pass to align command
             ctx.obj["filenames"] = filenames
             ctx.obj["index"] = index
@@ -338,7 +331,6 @@ def mol(
             ctx.obj["filetype"] = None
             ctx.obj["molecules"] = None
             ctx.obj["label"] = label
-            ctx.obj["user_provided_label"] = user_provided_label
             return
 
     # if pubchem is specified, obtain molecule from PubChem

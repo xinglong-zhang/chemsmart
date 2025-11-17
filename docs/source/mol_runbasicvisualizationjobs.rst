@@ -37,7 +37,7 @@ Visualization-Specific OPTIONS
       -  string
       -  PyMOL render style. Options: pymol, cylview (default=None)
 
-   -  -  ``-t, --trace/--no-trace``
+   -  -  ``-t/, --trace/--no-trace``
       -  bool
       -  PyMOL options to ray trace or not (default=True)
 

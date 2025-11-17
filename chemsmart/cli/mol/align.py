@@ -43,8 +43,10 @@ def align(
     filenames = ctx.obj["filenames"]
     directory = ctx.obj["directory"]
     filetype = ctx.obj["filetype"]
-    user_provided_label = ctx.obj.get("user_provided_label", False)
     molecules = []  # Initialize molecules list
+
+    # Variable to store the base file for label generation
+    base_file_for_label = None
 
     if directory:
         directory = os.path.abspath(directory)
@@ -81,9 +83,7 @@ def align(
                 f"Loaded {len(molecules)} molecules from {len(matched_files)} files using filetype pattern with index={index}"
             )
 
-            base_file = matched_files[0]
-            if label is None:
-                label = os.path.splitext(os.path.basename(base_file))[0]
+            base_file_for_label = matched_files[0]
 
     elif filenames:
 
@@ -148,20 +148,36 @@ def align(
             f"Loaded {len(molecules)} molecules from {len(filenames)} files using align-specific filenames with index={index}"
         )
 
-        if filenames:
-            base_file = filenames[0]
-            if label is None:
-                label = os.path.splitext(os.path.basename(base_file))[0]
+        base_file_for_label = filenames[0]
 
     if not isinstance(molecules, list) or len(molecules) < 2:
         raise click.BadParameter("Need at least two molecules for alignment")
+
+    # Generate align-specific label if user didn't provide one
+    if label is not None:
+        # User provided label - use it directly
+        align_label = label
+    else:
+        # Generate label based on first file and molecule count
+        if base_file_for_label:
+            base_label = os.path.splitext(
+                os.path.basename(base_file_for_label)
+            )[0]
+        else:
+            base_label = "molecules"
+
+        # Generate align-specific naming
+        n_molecules = len(molecules)
+        if n_molecules > 2:
+            align_label = f"{base_label}_and_{n_molecules-1}_molecules_align"
+        else:
+            align_label = f"{base_label}_and_1_molecule_align"
 
     from chemsmart.jobs.mol.align import PyMOLAlignJob
 
     return PyMOLAlignJob(
         molecule=molecules,
-        label=label,
-        use_raw_label=user_provided_label,
+        label=align_label,
         pymol_script=file,
         style=style,
         trace=trace,

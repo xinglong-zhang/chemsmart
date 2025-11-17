@@ -8,8 +8,6 @@ class PyMOLAlignJob(PyMOLJob):
         self,
         molecule,
         label,
-        align_basename=None,
-        use_raw_label=False,
         jobrunner=None,
         **kwargs,
     ):
@@ -22,30 +20,12 @@ class PyMOLAlignJob(PyMOLJob):
             **kwargs,
         )
 
-        if align_basename is None:
-            if use_raw_label:
-                # Use the label directly without modification
-                align_basename = self.label
-            else:
-                # Use the original logic with molecule count suffix
-                n_molecules = (
-                    len(molecule) if isinstance(molecule, list) else 1
-                )
-                if n_molecules > 2:
-                    align_basename = (
-                        f"{self.label}_and_{n_molecules-1}_molecules_align"
-                    )
-                else:
-                    align_basename = f"{self.label}_and_1_molecule_align"
-
-        self.align_basename = align_basename
-
     def _get_job_basename(self):
         """
         Internal method to derive the job base name.
         Job specific implementation that overrides parent class method.
 
         Returns:
-            str: Base name derived from the align basename.
+            str: Base name derived from the label.
         """
-        return self.align_basename
+        return self.label
