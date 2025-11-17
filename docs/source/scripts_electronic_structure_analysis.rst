@@ -280,7 +280,7 @@ OPTIONS
 
    -  -  ``-f, --filename``
       -  string
-      -  |  **Required**. Specifies the file name of Wiberg Bond Index output to be analysed.
+      -  |  **Required**. Specifies the Wiberg Bond Index output file to be analysed.
 
    -  -  ``-n, --numbers``
       -  int
