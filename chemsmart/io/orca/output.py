@@ -558,7 +558,7 @@ class ORCAOutput(ORCAFileMixin):
         """
         for line in self.contents:
             if "Kohn-Sham wavefunction type" in line:
-                wavefunction_type = line.split(" ")[-1].lower()
+                wavefunction_type = line.split()[-1].lower()
                 # Determine if the job is restricted or unrestricted
                 if wavefunction_type.startswith("r"):
                     spin = "restricted"
