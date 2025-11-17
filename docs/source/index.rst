@@ -91,6 +91,7 @@
 
    scripts_overview
    scripts_data_management
+   scripts_electronic_structure_analysis
 
 .. toctree::
    :maxdepth: 2
