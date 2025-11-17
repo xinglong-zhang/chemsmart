@@ -557,7 +557,10 @@ class ORCAOutput(ORCAFileMixin):
         the calculation uses restricted (R) or unrestricted (U) spin.
         """
         for line in self.contents:
-            if "Kohn-Sham wavefunction type" in line:
+            if (
+                "Kohn-Sham wavefunction type" in line
+                or "Hartree-Fock type" in line
+            ):
                 wavefunction_type = line.split()[-1].lower()
                 # Determine if the job is restricted or unrestricted
                 if wavefunction_type.startswith("r"):

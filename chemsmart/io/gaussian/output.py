@@ -165,6 +165,7 @@ class Gaussian16Output(GaussianFileMixin):
                 else:
                     spin = None
                 return spin
+        return None
 
     @cached_property
     def input_coordinates_block(self):
