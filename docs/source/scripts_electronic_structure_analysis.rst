@@ -110,9 +110,9 @@ OPTIONS
       -  |  **Required**. Specifies the file name to be analysed.
 
    -  -  ``-n, --numbers``
-      -  string
-      -  |  Specifies the atom number (1-indexed) for reporting the Mulliken charge and, if applicable, the Mulliken
-         |  spin density.
+      -  int
+      -  |  Specifies the atom number(s) (1-indexed) for reporting the Mulliken charge(s)
+         |  and, if applicable, the Mulliken spin density(s).
 
 EXAMPLES
 ========
@@ -205,11 +205,13 @@ OPTIONS
 
    -  -  ``-f, --filename``
       -  string
-      -  |  **Required**. Specifies the file name to be analysed.
+      -  |  **Required**. Specifies the file name of Hirshfeld charges output file to be
+         |  analysed.
 
    -  -  ``-n, --numbers``
-      -  string
-      -  |  Specifies the atom number (1-indexed) for reporting the Hirshfeld charges and spins.
+      -  int
+      -  |  Specifies the atom number(s) (1-indexed) for reporting the Hirshfeld charge(s)
+         |  and spin(s).
 
 EXAMPLE
 =======
@@ -249,3 +251,66 @@ Obtain Hirshfeld charges and spins from an ORCA output file that explicitly incl
    C11     :     0.000
    C12     :     0.000
    ...
+
+***********************************
+ Wiberg Bond Index Analysis Script
+***********************************
+
+The ``wbi_analysis.py`` script extracts Natural Population Analysis (NPA) data from **Gaussian** and **ORCA** output
+files that include a Wiberg Bond Index (WBI) calculation. WBI values provide quantitative insights into bond orders
+between atom pairs in a molecule. For details on running WBI calculations, see the section :ref:`wbi-jobs`.
+
+USAGE
+=====
+
+.. code:: console
+
+   wbi_analysis.py [-f filename] [-n atom_number]
+
+OPTIONS
+=======
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  |  **Required**. Specifies the file name of Wiberg Bond Index output to be analysed.
+
+   -  -  ``-n, --numbers``
+      -  int
+      -  |  Specifies the atom number(s) (1-indexed) for printing the natural charge(s) at the
+         |  end.
+
+EXAMPLES
+========
+
+Print full natural charges extracted from the Gaussian WBI analysis and display the natural charges for atoms 2 and 5:
+
+.. code:: console
+
+   wbi_analysis.py -f TS_5coord_XIII_wbi.log -n 2 -n 5
+
+   Natural Charges:
+   Ni1     :     0.528
+   P2      :     0.930
+   O3      :    -0.567
+   O4      :    -0.571
+   O5      :    -0.562
+   O6      :    -0.553
+   O7      :    -0.726
+   C8      :     0.385
+   C9      :     0.448
+   C10     :    -0.397
+   C11     :    -0.413
+   C12     :    -0.385
+   ...
+
+   Natural Charge at atom 2 is 0.930.
+
+   Natural Charge at atom 5 is -0.562.
