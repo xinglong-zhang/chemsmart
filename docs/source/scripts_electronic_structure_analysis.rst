@@ -205,8 +205,7 @@ OPTIONS
 
    -  -  ``-f, --filename``
       -  string
-      -  |  **Required**. Specifies the file name of Hirshfeld charges output file to be
-         |  analysed.
+      -  |  **Required**. Specifies the Hirshfeld charges output file to be analysed.
 
    -  -  ``-n, --numbers``
       -  int
