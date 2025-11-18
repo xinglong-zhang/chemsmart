@@ -51,6 +51,7 @@
    gaussian_submitconformationalsamplingdynamicsjobs
    gaussian_submitstructureoptimizationjobs
    gaussian_submittransitionstatesearchjobs
+   gaussian_submitqrcjobs.rst
    gaussian_submitelectronicstructurepropertiesanalysesjobs
    gaussian_submitotherjobs
 
@@ -91,6 +92,7 @@
 
    scripts_overview
    scripts_data_management
+   scripts_electronic_structure_analysis
 
 .. toctree::
    :maxdepth: 2

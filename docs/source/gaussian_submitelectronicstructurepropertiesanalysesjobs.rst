@@ -256,6 +256,8 @@ TD-DFT Basic Usage
 
       chemsmart sub gaussian -p td_mixed -f molecule.xyz td -s 50-50 -n 4
 
+.. _wbi-jobs:
+
 **********
  WBI Jobs
 **********
