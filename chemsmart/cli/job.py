@@ -80,8 +80,8 @@ def click_folder_options(f):
         return f(*args, **kwargs)
 
     return wrapper_common_options
-      
-    
+
+
 def click_molecule_vibrational_displacement_options(f):
     """
     CLI options for vibrationally_displaced() method of Molecule object.
