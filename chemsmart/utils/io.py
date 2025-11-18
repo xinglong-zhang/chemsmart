@@ -269,3 +269,37 @@ def get_outfile_format(filepath) -> str:
         f"Could not detect output format for '{os.path.basename(filepath)}'."
     )
     return "unknown"
+
+
+def find_output_files_in_directory(directory, program):
+    """
+    Find quantum chemistry output files in a directory by program.
+
+    Args:
+        directory (str): Path to the directory to search.
+        program (str): Target QC program, e.g., "gaussian", "orca", "xtb", "crest".
+
+    Returns:
+        list[str]: List of file paths matching the specified program.
+    """
+    PROGRAM_SUFFIXES = {
+        "gaussian": [".log", ".out"],
+        "orca": [".out"],
+        "xtb": [".out"],
+        "crest": [".out"],
+    }
+
+    directory = os.path.abspath(directory)
+    logger.info(f"Obtaining {program} output files in directory: {directory}")
+    suffixes = PROGRAM_SUFFIXES.get(program)
+
+    outfiles = []
+    for subdir, _dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(tuple(suffixes)):
+                outfiles.append(os.path.join(subdir, file))
+
+    matched_files = [
+        file for file in outfiles if get_outfile_format(file) == program
+    ]
+    return matched_files
