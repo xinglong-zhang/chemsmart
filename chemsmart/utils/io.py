@@ -213,18 +213,20 @@ def match_outfile_pattern(line) -> str | None:
         "crest": [
             "C R E S T",
             "Conformer-Rotamer Ensemble Sampling Tool",
-            "CREST terminated normally.",
+            "https://crest-lab.github.io/crest-docs/",
+            "$ crest",
         ],
         "gaussian": [
             "Entering Gaussian System",
-            "Normal termination of Gaussian",
+            "Gaussian, Inc.",
+            "Gaussian(R)",
         ],
         "orca": [
             "* O   R   C   A *",
+            "Your ORCA version",
             "ORCA versions",
-            "****ORCA TERMINATED NORMALLY****",
         ],
-        "xtb": ["x T B", "xtb version"],
+        "xtb": ["x T B", "xtb version", "xtb is free software:"],
     }
     for program, keywords in patterns.items():
         if any(keyword in line for keyword in keywords):
@@ -236,7 +238,8 @@ def get_outfile_format(filepath) -> str:
     """
     Detect the type of quantum chemistry output file.
 
-    Scans the file for characteristic keywords of major QC packages.
+    Reads only the first 200 lines and scans for characteristic keywords
+    of major QC packages to improve efficiency on large output files.
 
     Args:
         filepath (str): Path to the quantum chemistry output file.
@@ -244,25 +247,23 @@ def get_outfile_format(filepath) -> str:
     Returns:
         str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
     """
+    max_lines = 200
     try:
         with open(filepath, "r") as f:
-            lines = [line.strip() for line in f.readlines()]
+            for i, line in enumerate(f):
+                if i >= max_lines:
+                    break
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if program := match_outfile_pattern(stripped):
+                    logger.debug(
+                        f"Detected output format for '{os.path.basename(filepath)}': {program}."
+                    )
+                    return program
     except Exception as e:
         logger.error(f"Error reading file '{filepath}': {e}.")
         return "unknown"
-
-    # Only scan first and last 100 lines for performance
-    if len(lines) <= 200:
-        sample_lines = lines
-    else:
-        sample_lines = lines[:100] + lines[-100:]
-
-    for line in sample_lines:
-        if program := match_outfile_pattern(line):
-            logger.debug(
-                f"Detected output format for '{os.path.basename(filepath)}': {program}."
-            )
-            return program
 
     logger.debug(
         f"Could not detect output format for '{os.path.basename(filepath)}'."
