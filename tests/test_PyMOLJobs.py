@@ -208,11 +208,10 @@ class TestPyMOLJobs:
 
         job = PyMOLAlignJob(
             molecule=[mol1, mol2, mol3],
-            label="R-1a_opt",
+            label="R-1a_opt_and_2_molecules_align",
             jobrunner=pymol_align_jobrunner,
         )
         job.set_folder(tmpdir)
-
         job.run()
 
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
