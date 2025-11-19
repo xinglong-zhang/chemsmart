@@ -703,11 +703,11 @@ class PyMOLJobRunner(JobRunner):
 
     def _get_command(self, job):
         """
-        Build the complete PyMOL command for visualization/alignment.
+        Build the complete PyMOL command for the given job.
 
-        Assembles all visualization components including style setup,
-        viewport configuration, labels, and rendering options into
-        a single PyMOL command string.
+        Assembles all required components and commands for the job,
+        including style setup, configuration, labels, and any job-specific
+        options, into a single PyMOL command string.
 
         Args:
             job: PyMOL job object.
