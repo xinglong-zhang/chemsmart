@@ -4,8 +4,11 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_folder_options, click_job_options
-from chemsmart.cli.mol.mol import click_file_options
+from chemsmart.cli.job import (
+    click_file_options,
+    click_folder_options,
+    click_job_options,
+)
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup

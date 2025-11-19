@@ -4,51 +4,16 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_folder_options, click_pubchem_options
+from chemsmart.cli.job import (
+    click_file_options,
+    click_folder_options,
+    click_pubchem_options,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
-
-
-def click_file_options(f):
-    """Common click options for PyMOL CLI."""
-
-    @click.option(
-        "-f",
-        "--filenames",
-        multiple=True,
-        default=None,
-        help="filename from which new Gaussian input is prepared.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="write user input filename for the job (without extension)",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
-    @click.option(
-        "-i",
-        "--index",
-        type=str,
-        default="-1",
-        help="Index of molecules to use; 1-based indices. "
-        "Default to the last molecule structure. 1-based index.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
 
 
 def click_pymol_visualization_options(f):
