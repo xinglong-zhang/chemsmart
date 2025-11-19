@@ -12,11 +12,11 @@ Key functionality includes:
 """
 
 import logging
-import re
 import os
+import re
+from pathlib import Path
 
 import numpy as np
-from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
@@ -254,4 +254,3 @@ def load_molecules_from_paths(
             raise
 
     return loaded
-

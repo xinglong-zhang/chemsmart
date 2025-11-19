@@ -1,7 +1,6 @@
 import glob
 import logging
 import os
-from pathlib import Path
 
 import click
 
@@ -10,7 +9,6 @@ from chemsmart.cli.mol.mol import (
     click_pymol_visualization_options,
     mol,
 )
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import load_molecules_from_paths
 
@@ -89,7 +87,7 @@ def align(
             filenames = [filenames]
 
         if not filenames or (
-                isinstance(filenames, (list, tuple)) and len(filenames) == 0
+            isinstance(filenames, (list, tuple)) and len(filenames) == 0
         ):
             raise click.BadParameter("No valid filenames provided")
 
