@@ -31,7 +31,13 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def scan(
-    ctx, jobtype, coordinates, step_size, num_steps, const_coord=None, **kwargs
+    ctx,
+    jobtype,
+    coordinates,
+    step_size,
+    num_steps,
+    constraint_coordinates=None,
+    **kwargs,
 ):
     """CLI for running Gaussian scan jobs."""
 
@@ -58,8 +64,8 @@ def scan(
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(scan_settings)
 
-    if const_coord is not None:
-        const_coord_info = ast.literal_eval(const_coord)
+    if constraint_coordinates is not None:
+        const_coord_info = ast.literal_eval(constraint_coordinates)
         scan_settings.modred["const_coords"] = const_coord_info
     # get molecule
     molecules = ctx.obj["molecules"]
