@@ -207,7 +207,7 @@ Scan-Specific OPTIONS
       -  int
       -  Number of steps to scan (default=None)
 
-   -  -  ``-cc, --constraint-coordinates``
+   -  -  ``-cc, --constrained-coordinates``
       -  string
       -  List of coordinates to be fixed in scan job (1-based indexing)
 
