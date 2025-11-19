@@ -206,7 +206,27 @@ def load_molecules_from_paths(
     add_index_suffix_for_single=False,
     check_exists=False,
 ):
-    """Load molecules from a list of file paths and assign names."""
+    """
+    Load molecules from a list of file paths, assigning unique names to each molecule.
+
+    For each file in `file_paths`, this function loads one or more molecular structures
+    using `Molecule.from_filepath`, assigns a unique name to each molecule based on the
+    file name and structure index, and returns a list of all loaded molecules.
+
+    Args:
+        file_paths (list of str or Path): List of file paths to load molecules from.
+        index (int or str): Index or slice to select specific structures from each file.
+        add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
+            the molecule name even if only a single structure is loaded from a file.
+        check_exists (bool, optional): If True, checks that each file exists before loading.
+
+    Returns:
+        list of Molecule: List of loaded Molecule objects, each with a unique name.
+
+    Raises:
+        FileNotFoundError: If `check_exists` is True and a file does not exist.
+        Exception: If an error occurs during molecule loading from a file.
+    """
     loaded = []
 
     for i, file_path in enumerate(file_paths):
