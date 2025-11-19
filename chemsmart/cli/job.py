@@ -165,7 +165,7 @@ def click_filename_options(f):
         "--filename",
         type=str,
         default=None,
-        help="filename from which new Gaussian input is prepared.",
+        help="Filename from which new input is prepared.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
