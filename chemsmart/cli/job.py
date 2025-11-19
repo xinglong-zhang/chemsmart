@@ -59,7 +59,7 @@ def click_pubchem_options(f):
 
 def click_folder_options(f):
     """
-    Common click options for Thermochemistry.
+    Common click options for specifying directories and file types via CLI.
     """
 
     @click.option(
@@ -175,7 +175,7 @@ def click_filename_options(f):
 
 
 def click_file_label_and_index_options(f):
-    """Common click options for specifying filenames via CLI."""
+    """Common click options for specifying file label, append-label, and index via CLI."""
 
     @click.option(
         "-l",

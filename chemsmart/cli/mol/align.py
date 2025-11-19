@@ -86,11 +86,6 @@ def align(
         if isinstance(filenames, str):
             filenames = [filenames]
 
-        if not filenames or (
-            isinstance(filenames, (list, tuple)) and len(filenames) == 0
-        ):
-            raise click.BadParameter("No valid filenames provided")
-
         molecules += load_molecules_from_paths(
             filenames,
             index=index,

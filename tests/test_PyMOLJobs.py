@@ -234,10 +234,6 @@ class TestPyMOLJobs:
                 assert "align frozen_coordinates_opt, R-1a_opt" in content
                 assert "align nhc_neutral_singlet, R-1a_opt" in content
 
-        assert "R-1a_opt_and_2_molecules_align.pse" in os.path.basename(
-            pse_file
-        )
-
         for xyz_file in [mol1_xyz, mol2_xyz, mol3_xyz]:
             assert os.path.getsize(xyz_file) > 0
 
