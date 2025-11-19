@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @click_gaussian_jobtype_options
 @click.option(
     "-cc",
-    "--const-coord",
+    "--constraint-coordinates",
     default=None,
     help="Additional modredundant constraints for scan job. "
     "Format: List of constraints separated by semicolons. "
