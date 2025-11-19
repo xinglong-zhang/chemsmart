@@ -140,16 +140,43 @@ def click_molecule_vibrational_displacement_options(f):
     return wrapper_common_options
 
 
-def click_file_options(f):
-    """Common click options for specifying filename/basename via CLI."""
+def click_filenames_options(f):
+    """Common click options for specifying filenames via CLI."""
 
     @click.option(
         "-f",
         "--filenames",
         multiple=True,
         default=None,
+        help="Filename to be supplied to the job. Accepts multiple values.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_filename_options(f):
+    """Common click options for specifying filenames via CLI."""
+
+    @click.option(
+        "-f",
+        "--filename",
+        type=str,
+        default=None,
         help="filename from which new Gaussian input is prepared.",
     )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_file_label_and_index_options(f):
+    """Common click options for specifying filenames via CLI."""
+
     @click.option(
         "-l",
         "--label",
