@@ -225,7 +225,14 @@ Scan Basic Usage
 
 **Coordinate scan with additional constraints**
 
--  To submit the PES scan job along bond between atom 2 and atom 3 while keeping bond between atom 5 and atom 8 fixed:
+-  To submit the PES scan job along bond between atom 2 and atom 3 while keeping bond distance between atom 5 and atom 8
+   fixed:
+
+   .. code:: console
+
+      chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [2,3] -s 0.1 -n 10 -cc [5,8]
+
+   or
 
    .. code:: console
 
