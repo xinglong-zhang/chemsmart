@@ -12,6 +12,7 @@ from chemsmart.cli.mol.mol import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.io import load_molecules_from_paths
 
 logger = logging.getLogger(__name__)
 
@@ -62,23 +63,12 @@ def align(
                     f"No files found matching pattern: {filetype_pattern}"
                 )
 
-            for file_path in matched_files:
-                # Pass index to per-file reader in user string form so each file
-                # yields the structure(s) corresponding to that index.
-                mols = Molecule.from_filepath(
-                    filepath=file_path,
-                    index=index,
-                    return_list=True,
-                )
-                # assign unique names per-structure when file contains multiple structures
-                base = os.path.splitext(os.path.basename(file_path))[0]
-                if isinstance(mols, list) and len(mols) > 1:
-                    for j, mol in enumerate(mols, start=1):
-                        mol.name = f"{base}_{j}"
-                else:
-                    for mol in mols:
-                        mol.name = base
-                molecules += mols
+            molecules += load_molecules_from_paths(
+                matched_files,
+                index=index,
+                add_index_suffix_for_single=False,
+                check_exists=False,
+            )
             logger.debug(
                 f"Loaded {len(molecules)} molecules from {len(matched_files)} files using filetype pattern with index={index}"
             )
@@ -98,51 +88,17 @@ def align(
         if isinstance(filenames, str):
             filenames = [filenames]
 
-        for i, file_path in enumerate(filenames):
-            logger.debug(
-                f"Processing file {i+1}/{len(filenames)}: {file_path}"
-            )
+        if not filenames or (
+                isinstance(filenames, (list, tuple)) and len(filenames) == 0
+        ):
+            raise click.BadParameter("No valid filenames provided")
 
-            if not file_path:
-                logger.warning(f"Skipping invalid file path: {file_path}")
-                continue
-
-            p = Path(file_path)
-            if not p.is_file():
-                logger.error(
-                    f"File not found or not a regular file: {file_path}"
-                )
-                raise FileNotFoundError(f"File not found: {file_path}")
-
-            file_path = str(p)
-
-            try:
-                mols = Molecule.from_filepath(
-                    filepath=file_path,
-                    index=index,
-                    return_list=True,
-                )
-
-                # assign unique names per-structure when file contains multiple structures
-                base = os.path.splitext(os.path.basename(file_path))[0]
-                if isinstance(mols, list) and len(mols) > 1:
-                    for j, mol in enumerate(mols, start=1):
-                        mol.name = f"{base}_{j}"
-                else:
-                    # If user specified a specific index (not ':'), add index suffix for clarity
-                    if index != ":" and index != "-1":
-                        for mol in mols:
-                            mol.name = f"{base}_idx{index}"
-                    else:
-                        for mol in mols:
-                            mol.name = base
-                molecules += mols
-                logger.debug(
-                    f"Successfully loaded {len(mols)} molecules from {file_path}"
-                )
-            except Exception as e:
-                logger.error(f"Error loading molecules from {file_path}: {e}")
-                raise
+        molecules += load_molecules_from_paths(
+            filenames,
+            index=index,
+            add_index_suffix_for_single=True,
+            check_exists=True,
+        )
 
         logger.debug(
             f"Loaded {len(molecules)} molecules from {len(filenames)} files using align-specific filenames with index={index}"

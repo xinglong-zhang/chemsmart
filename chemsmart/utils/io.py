@@ -13,8 +13,10 @@ Key functionality includes:
 
 import logging
 import re
+import os
 
 import numpy as np
+from pathlib import Path
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
@@ -196,3 +198,60 @@ def line_of_integer_followed_by_floats(line) -> bool:
 
     # Remaining tokens: floats
     return all(float_pattern.fullmatch(t) for t in tokens[1:])
+
+
+def load_molecules_from_paths(
+    file_paths,
+    index,
+    add_index_suffix_for_single=False,
+    check_exists=False,
+):
+    """Load molecules from a list of file paths and assign names."""
+    loaded = []
+
+    for i, file_path in enumerate(file_paths):
+        logger.debug(f"Processing file {i+1}/{len(file_paths)}: {file_path}")
+
+        if not file_path:
+            logger.warning(f"Skipping invalid file path: {file_path}")
+            continue
+
+        p = Path(file_path)
+
+        if check_exists and not p.is_file():
+            logger.error(f"File not found or not a regular file: {file_path}")
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        file_path = str(p)
+
+        try:
+            mols = Molecule.from_filepath(
+                filepath=file_path,
+                index=index,
+                return_list=True,
+            )
+
+            # assign unique names per-structure when file contains multiple structures
+            base = os.path.splitext(os.path.basename(file_path))[0]
+            if isinstance(mols, list) and len(mols) > 1:
+                for j, mol in enumerate(mols, start=1):
+                    mol.name = f"{base}_{j}"
+            else:
+                # Optional suffix for single-structure files (filenames branch).
+                if add_index_suffix_for_single and index not in (":", "-1"):
+                    for mol in mols:
+                        mol.name = f"{base}_idx{index}"
+                else:
+                    for mol in mols:
+                        mol.name = base
+
+            loaded += mols
+            logger.debug(
+                f"Successfully loaded {len(mols)} molecules from {file_path}"
+            )
+        except Exception as e:
+            logger.error(f"Error loading molecules from {file_path}: {e}")
+            raise
+
+    return loaded
+
