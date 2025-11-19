@@ -4,7 +4,11 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_pubchem_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filename_options,
+    click_pubchem_options,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import return_objects_from_string_index
@@ -28,27 +32,6 @@ def click_gaussian_options(f):
 def click_gaussian_settings_options(f):
     """Common click options for Gaussian Settings."""
 
-    @click.option(
-        "-f",
-        "--filename",
-        type=str,
-        default=None,
-        help="filename from which new Gaussian input is prepared.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="write user input filename for the job (without extension)",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
     @click.option(
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
@@ -78,14 +61,6 @@ def click_gaussian_settings_options(f):
         type=str,
         default=None,
         help="Semiempirical method to run.",
-    )
-    @click.option(
-        "-i",
-        "--index",
-        type=str,
-        default=None,
-        help="Index of molecules to use; 1-based indices. "
-        "Default to the last molecule structure. 1-based index.",
     )
     @click.option(
         "-o",
@@ -373,6 +348,8 @@ def click_gaussian_td_options(f):
 
 @click.group(cls=MyGroup)
 @click_gaussian_options
+@click_filename_options
+@click_file_label_and_index_options
 @click_gaussian_settings_options
 @click_pubchem_options
 @click.pass_context
