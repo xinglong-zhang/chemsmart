@@ -1485,9 +1485,8 @@ class PyMOLAlignJobRunner(PyMOLJobRunner):
                 command += f" -r {quote_path(job_pymol_script)}"
         else:
             # using user-defined style file
-            assert os.path.exists(
-                job.pymol_script
-            ), f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
+            if not os.path.exists(job.pymol_script):
+                raise FileNotFoundError(f"Supplied PyMOL Style file {job.pymol_script} does not exist!")
             command += f" -r {quote_path(job.pymol_script)}"
 
         if job.quiet_mode:
