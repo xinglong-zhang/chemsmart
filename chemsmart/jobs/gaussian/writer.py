@@ -309,6 +309,20 @@ class GaussianInputWriter(InputWriter):
                         f"{self.settings.modred['num_steps']} "
                         f"{self.settings.modred['step_size']}\n"
                     )
+                if "constrained_coordinates" in modredundant:
+                    logger.debug(
+                        "Writing modredundant constraints for scan job"
+                    )
+                    constrained_coordinates_list = modredundant[
+                        "constrained_coordinates"
+                    ]
+                    prepend_string_list = (
+                        get_prepend_string_list_from_modred_free_format(
+                            input_modred=constrained_coordinates_list
+                        )
+                    )
+                    for prepend_string in prepend_string_list:
+                        f.write(f"{prepend_string} F\n")
                 f.write("\n")
             else:
                 logger.error(

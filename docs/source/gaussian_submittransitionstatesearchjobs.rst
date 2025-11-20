@@ -207,6 +207,10 @@ Scan-Specific OPTIONS
       -  int
       -  Number of steps to scan (default=None)
 
+   -  -  ``-cc, --constrained-coordinates``
+      -  string
+      -  List of coordinates to be fixed in scan job (1-based indexing)
+
 Scan Basic Usage
 ================
 
@@ -218,3 +222,24 @@ Scan Basic Usage
    .. code:: console
 
       chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10
+
+**Coordinate scan with additional constraints**
+
+-  To submit the PES scan job along bond between atom 2 and atom 3 while keeping bond distance between atom 5 and atom 8
+   fixed:
+
+   .. code:: console
+
+      chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [2,3] -s 0.1 -n 10 -cc [5,8]
+
+   or
+
+   .. code:: console
+
+      chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10 -cc [[5,8]]
+
+-  You can also specify multiple constraints (distance, angle, dihedral) as follows:
+
+   .. code:: console
+
+      chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10 -cc [[5,8],[1,4,6],[2,3,5,7]]
