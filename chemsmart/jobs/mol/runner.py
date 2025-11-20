@@ -684,32 +684,33 @@ class PyMOLJobRunner(JobRunner):
                 )
         return process
 
-    def _get_base_filepath_to_remove(self, job):
-        """Get the base filepath for the job to assist in file removal."""
-        return Path(job.folder) / job.job_basename
+    def _job_specific_commands(self, job, command):
+        """
+        Add job-specific PyMOL commands to the command string.
 
+        This is a base method intended to be overridden by subclasses
+        to add specialized PyMOL commands specific to their job type.
+        The base implementation returns the command unchanged.
 
-class PyMOLVisualizationJobRunner(PyMOLJobRunner):
-    """
-    Specialized PyMOL job runner for basic molecular visualization.
+        Args:
+            job: PyMOL job object containing job-specific parameters.
+            command: Current PyMOL command string to extend.
 
-    Extends the base PyMOL runner to provide standard molecular
-    visualization capabilities with customizable styling, labeling,
-    and rendering options for static molecular images.
-    """
-
-    JOBTYPES = ["pymol_visualization"]
+        Returns:
+            str: Extended command string with job-specific commands added.
+        """
+        return command
 
     def _get_command(self, job):
         """
-        Build the complete PyMOL command for visualization.
+        Build the complete PyMOL command for the given job.
 
-        Assembles all visualization components including style setup,
-        viewport configuration, labels, and rendering options into
-        a single PyMOL command string.
+        Assembles all required components and commands for the job,
+        including style setup, configuration, labels, and any job-specific
+        options, into a single PyMOL command string.
 
         Args:
-            job: PyMOL visualization job object.
+            job: PyMOL job object.
 
         Returns:
             str: Complete PyMOL command string for execution.
@@ -742,6 +743,22 @@ class PyMOLVisualizationJobRunner(PyMOLJobRunner):
         """
         command += "; hide labels"
         return command
+
+    def _get_base_filepath_to_remove(self, job):
+        """Get the base filepath for the job to assist in file removal."""
+        return Path(job.folder) / job.job_basename
+
+
+class PyMOLVisualizationJobRunner(PyMOLJobRunner):
+    """
+    Specialized PyMOL job runner for basic molecular visualization.
+
+    Extends the base PyMOL runner to provide standard molecular
+    visualization capabilities with customizable styling, labeling,
+    and rendering options for static molecular images.
+    """
+
+    JOBTYPES = ["pymol_visualization"]
 
     def _job_specific_commands(self, job, command):
         """
@@ -1453,4 +1470,101 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         """
         pml_file = os.path.join(job.folder, f"{job.spin_basename}.pml")
         command += f"; load {quote_path(pml_file)}"
+        return command
+
+
+class PyMOLAlignJobRunner(PyMOLJobRunner):
+    JOBTYPES = ["pymol_align"]
+
+    def _write_input(self, job):
+        job.xyz_absolute_paths = []
+        job.mol_names = []
+        mol = job.molecule
+        mol_list = mol if isinstance(mol, list) else [mol]
+        for m in mol_list:
+            if not isinstance(m, Molecule):
+                raise ValueError(f"Object {m} is not of Molecule type!")
+            if not hasattr(m, "name"):
+                raise ValueError("Molecule object missing .name attribute!")
+            name = m.name
+            xyz_path = os.path.join(job.folder, f"{name}.xyz")
+            abs_xyz_path = os.path.abspath(xyz_path)
+            if os.path.exists(abs_xyz_path):
+                logger.info(f"File {abs_xyz_path} exists, skipping write.")
+            else:
+                m.write(abs_xyz_path, format="xyz", mode="w")
+                logger.info(f"Writing molecule {name} to {abs_xyz_path}")
+            job.xyz_absolute_paths.append(abs_xyz_path)
+            job.mol_names.append(name)
+
+    def _get_visualization_command(self, job):
+        exe = quote_path(self.executable)
+        xyz_paths = job.xyz_absolute_paths
+        if not xyz_paths:
+            raise ValueError(
+                "No XYZ files found. Ensure _write_input is called first."
+            )
+        first_mol = quote_path(xyz_paths[0])
+        load_cmds = [f"{quote_path(path)}" for path in xyz_paths[1:]]
+        command = f"{exe} {first_mol}"
+        if load_cmds:
+            command += f" {' '.join(load_cmds)}"
+
+        if job.pymol_script is None:
+            style_file_path = os.path.join(
+                job.folder, "zhang_group_pymol_style.py"
+            )
+            if os.path.exists(style_file_path):
+                job_pymol_script = style_file_path
+            else:
+                logger.info(
+                    "Using default zhang_group_pymol_style for rendering."
+                )
+                job_pymol_script = self._generate_visualization_style_script(
+                    job
+                )
+            if os.path.exists(job_pymol_script):
+                command += f" -r {quote_path(job_pymol_script)}"
+        else:
+            # using user-defined style file
+            if not os.path.exists(job.pymol_script):
+                raise FileNotFoundError(
+                    f"Supplied PyMOL Style file {job.pymol_script} does not exist!"
+                )
+            command += f" -r {quote_path(job.pymol_script)}"
+
+        if job.quiet_mode:
+            command += " -q"
+        if job.command_line_only:
+            command += " -c"
+        return command
+
+    def _setup_style(self, job, command):
+        if job.style is None or job.style.lower() == "pymol":
+            molnames = job.mol_names
+            style_cmds = "; ".join(
+                [f"pymol_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        elif job.style.lower() == "cylview":
+            molnames = job.mol_names
+            style_cmds = "; ".join(
+                [f"cylview_style {name}" for name in molnames]
+            )
+            command += f' -d "{style_cmds}'
+        else:
+            raise ValueError(f"The style {job.style} is not available!")
+        return command
+
+    def _job_specific_commands(self, job, command):
+        command = self._align_command(job, command)
+        return command
+
+    def _align_command(self, job, command):
+        molnames = job.mol_names
+        align_cmds = []
+        for i in range(1, len(molnames)):
+            align_cmds.append(f"align {molnames[i]}, {molnames[0]}")
+        pymol_cmds = "; ".join(align_cmds)
+        command += f"; {pymol_cmds}"
         return command

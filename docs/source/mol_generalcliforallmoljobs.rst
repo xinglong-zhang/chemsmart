@@ -32,9 +32,17 @@ Works for all Mol jobs
       -  Type
       -  Description
 
-   -  -  ``-f, --filename``
+   -  -  ``-f, --filenames``
       -  string
-      -  Filename from which new Gaussian input is prepared (required)
+      -  Filename from which new Gaussian input is prepared (Multiple usage is only for align job)
+
+   -  -  ``-d, --directory``
+      -  string
+      -  Directory in which to run mol align job (only for align job)
+
+   -  -  ``-t, --filetype``
+      -  string
+      -  Type of file to run mol align job, if directory is specified (only for align job)
 
    -  -  ``-l, --label``
       -  string
