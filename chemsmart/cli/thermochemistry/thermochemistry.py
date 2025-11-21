@@ -4,7 +4,12 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_job_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filenames_options,
+    click_folder_options,
+    click_job_options,
+)
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
@@ -17,27 +22,6 @@ def click_thermochemistry_options(f):
     Common click options for Thermochemistry.
     """
 
-    @click.option(
-        "-d",
-        "--directory",
-        default=None,
-        help="Directory in which to compute thermochemistry for all " "files.",
-    )
-    @click.option(
-        "-t",
-        "--filetype",
-        default=None,
-        help="Type of file to calculate thermochemistry for, if directory "
-        "is specified.",
-    )
-    @click.option(
-        "-f",
-        "--filenames",
-        type=str,
-        multiple=True,
-        default=None,
-        help="Gaussian or ORCA output files for parsing thermochemistry.",
-    )
     @click.option(
         "-csg",
         "--cutoff-entropy-grimme",
@@ -153,6 +137,9 @@ def click_thermochemistry_options(f):
 @click.group(cls=MyGroup, invoke_without_command=True)
 @click_thermochemistry_options
 @click_job_options
+@click_folder_options
+@click_filenames_options
+@click_file_label_and_index_options
 @click.pass_context
 def thermochemistry(
     ctx,

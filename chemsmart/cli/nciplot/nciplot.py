@@ -4,38 +4,17 @@ import logging
 
 import click
 
-from chemsmart.cli.job import click_job_options, click_pubchem_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filenames_options,
+    click_job_options,
+    click_pubchem_options,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.utils.cli import MyCommand
 
 logger = logging.getLogger(__name__)
-
-
-def click_nciplot_job_options(f):
-    """Common click options for NCIPLOT Job."""
-
-    @click.option(
-        "-f",
-        "--filenames",
-        type=str,
-        multiple=True,
-        default=None,
-        help="Input files for the NCIPLOT job. Can be specified multiple "
-        "times.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="Label for the NCIPLOT job, used to name output files.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
 
 
 def click_nciplot_settings_options(f):
@@ -178,7 +157,8 @@ def click_nciplot_settings_options(f):
 
 @click.command(cls=MyCommand)
 @click_job_options
-@click_nciplot_job_options
+@click_filenames_options
+@click_file_label_and_index_options
 @click_nciplot_settings_options
 @click_pubchem_options
 @click.pass_context
