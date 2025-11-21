@@ -13,7 +13,11 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_pubchem_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filename_options,
+    click_pubchem_options,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import return_objects_from_string_index
@@ -49,27 +53,6 @@ def click_orca_settings_options(f):
     parameters.
     """
 
-    @click.option(
-        "-f",
-        "--filename",
-        type=str,
-        default=None,
-        help="filename from which new ORCA input is prepared.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="write user input filename for the job (without extension)",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
     @click.option(
         "-t", "--title", type=str, default=None, help="ORCA job title."
     )
@@ -197,14 +180,6 @@ def click_orca_settings_options(f):
         help="MDCI density. Choices are ['none', 'unrelaxed', 'relaxed']",
     )
     @click.option(
-        "-i",
-        "--index",
-        type=str,
-        default=None,
-        help="index of molecule to use; default to the last molecule "
-        "structure.",
-    )
-    @click.option(
         "-r",
         "--additional-route-parameters",
         type=str,
@@ -271,6 +246,8 @@ def click_orca_jobtype_options(f):
 
 @click.group(cls=MyGroup)
 @click_orca_options
+@click_filename_options
+@click_file_label_and_index_options
 @click_orca_settings_options
 @click_pubchem_options
 @click.pass_context

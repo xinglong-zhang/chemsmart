@@ -19,7 +19,7 @@ codes in this package.
  Citation
 ##########
 
-If you use **CHEMSMART** in your research, please kindly cite our paper:
+If you use **CHEMSMART** in your work, please follow good scholarly practice and kindly cite our work
 
 📄 **Paper URL**: https://arxiv.org/abs/2508.20042
 
