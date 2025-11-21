@@ -175,8 +175,8 @@ class TestGaussianInputWriter:
         settings.multiplicity = 1
         settings.modred = {
             "coords": [[1, 2], [3, 4, 5]],
-            "num_steps": 10,
-            "step_size": 0.1,
+            "num_steps": [10, 18],
+            "step_size": [0.1, 5.0],
         }
         job = GaussianScanJob.from_filename(
             filename=single_molecule_xyz_file,
