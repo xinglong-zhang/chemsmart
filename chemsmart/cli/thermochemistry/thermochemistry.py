@@ -1,6 +1,5 @@
 import functools
 import logging
-import os
 
 import click
 
@@ -13,6 +12,10 @@ from chemsmart.cli.job import (
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.io import (
+    find_output_files_in_directory,
+    get_outfile_format,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,9 +176,9 @@ def thermochemistry(
     will save results to `udc3_mCF3_monomer_c9.dat` and
     `udc3_mCF3_monomer_c29.dat`.
 
-    `chemsmart run thermochemistry -d /path/to/directory -t log -T 298.15
+    `chemsmart run thermochemistry -d /path/to/directory -t gaussian -T 298.15
     -o thermochemistry_results.dat`
-    will compute thermochemistry for all Gaussian log files in the specified
+    will compute thermochemistry for all Gaussian output files in the specified
     directory and save to `thermochemistry_results.dat`.
     """
     # validate input
@@ -223,24 +226,7 @@ def thermochemistry(
     files = []
 
     if directory:
-        directory = os.path.abspath(directory)
-        logger.info(
-            f"Obtaining thermochemistry of files in directory: {directory}"
-        )
-        if filetype == "log":
-            from chemsmart.io.gaussian.folder import GaussianLogFolder
-
-            folder = GaussianLogFolder(directory)
-            files = folder.all_logfiles
-        elif filetype == "out":
-            from chemsmart.io.orca.folder import ORCAOutFolder
-
-            folder = ORCAOutFolder(directory)
-            files = folder.all_outfiles
-        else:
-            raise ValueError(
-                f"Unsupported filetype '{filetype}'. Use 'log' or 'out'."
-            )
+        files = find_output_files_in_directory(directory, filetype)
         for file in files:
             job = ThermochemistryJob.from_filename(
                 filename=file,
@@ -253,10 +239,10 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if not file.endswith((".log", ".out")):
+            if get_outfile_format(file) not in {"gaussian", "orca"}:
                 raise ValueError(
-                    f"Unsupported file extension for '{file}'. Use .log or "
-                    f".out."
+                    f"Unsupported output file type for '{file}'. Use Gaussian or "
+                    f"ORCA output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,

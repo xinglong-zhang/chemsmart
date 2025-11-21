@@ -14,6 +14,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.io import get_outfile_format
 from chemsmart.utils.logger import create_logger
 from chemsmart.utils.utils import (
     get_key_by_value_and_number,
@@ -49,9 +50,10 @@ def entry_point(filename, numbers):
     create_logger()
 
     # Parse output file based on extension
-    if filename.endswith(".log"):
+    program = get_outfile_format(filename)
+    if program == "gaussian":
         outputfile = Gaussian16Output(filename=filename)
-    elif filename.endswith(".out"):
+    elif program == "orca":
         outputfile = ORCAOutput(filename=filename)
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
