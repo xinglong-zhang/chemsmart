@@ -58,6 +58,10 @@ def entry_point(filename, numbers):
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
 
+    spin = outputfile.spin
+    if spin is None:
+        raise ValueError("No spin information found in output file.")
+
     # Extract and display Mulliken charges
     mulliken_charges = outputfile.mulliken_atomic_charges
     logger.info("\nMulliken Charges:")
@@ -66,28 +70,33 @@ def entry_point(filename, numbers):
     logger.info("\n")
 
     # Extract and display Mulliken spin densities
-    mulliken_spins = outputfile.mulliken_spin_densities
-    logger.info("\nMulliken Spin densities:")
-    for hkey, hvalue in mulliken_spins.items():
-        logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
-    logger.info("\n")
+    if spin == "unrestricted":
+        mulliken_spins = outputfile.mulliken_spin_densities
+        logger.info("\nMulliken Spin densities:")
+        for hkey, hvalue in mulliken_spins.items():
+            logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
+        logger.info("\n")
+    else:
+        logger.info("\nNo Mulliken Spin Densities Found.")
 
     # Display specific atom charges if requested
-    if numbers is not None:
+    if numbers:
         for n in numbers:
             charge_value = get_value_by_number(n, mulliken_charges)
             hk = get_key_by_value_and_number(charge_value, n, mulliken_charges)
             logger.info(f"Mulliken Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 
-    if numbers is not None:
-        for n in numbers:
-            spin_value = get_value_by_number(n, mulliken_spins)
-            hk = get_key_by_value_and_number(spin_value, n, mulliken_spins)
-            logger.info(
-                f"Mulliken Spin densities at {hk} is {mulliken_spins:.3f}."
-            )
-        logger.info("\n")
+        if spin == "unrestricted":
+            for n in numbers:
+                spin_value = get_value_by_number(n, mulliken_spins)
+                hk = get_key_by_value_and_number(spin_value, n, mulliken_spins)
+                logger.info(
+                    f"Mulliken Spin density at {hk} is {spin_value:.3f}."
+                )
+            logger.info("\n")
+        else:
+            logger.info("\nNo Mulliken Spin Densities Found.")
 
 
 if __name__ == "__main__":
