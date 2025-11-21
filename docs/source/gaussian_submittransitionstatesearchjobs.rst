@@ -223,6 +223,16 @@ Scan Basic Usage
 
       chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10
 
+**Multi-coordinate scan**
+
+-  To scan multiple coordinates simultaneously with different step sizes and numbers:
+
+   .. code:: console
+
+      chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3],[5,6]] -s [0.1,0.15] -n [10,12]
+
+   Here, bond 2-3 is scanned with 0.1Å steps for 10 points, and bond 5-6 with 0.15Å steps for 12 points.
+
 **Coordinate scan with additional constraints**
 
 -  To submit the PES scan job along bond between atom 2 and atom 3 while keeping bond distance between atom 5 and atom 8
@@ -245,3 +255,14 @@ Scan Basic Usage
    .. code:: console
 
       chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3]] -s 0.1 -n 10 -cc [[5,8],[1,4,6],[2,3,5,7]]
+
+**Multi-coordinate scan with constraints**
+
+-  Combine multi-coordinate scanning with constraints:
+
+   .. code:: console
+
+      chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[1,2],[3,4,5]] -s [0.1,5.0] -n [10,18] -cc [[6,7],[8,9,10]]
+
+   Here, bond 1-2 is scanned with 0.1Å steps for 10 points and angle 3-4-5 with 5.0° steps for 18 points, while bond 6-7
+   and angle 8-9-10 are kept fixed.
