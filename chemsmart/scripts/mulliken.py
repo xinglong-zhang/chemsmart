@@ -56,6 +56,10 @@ def entry_point(filename, numbers):
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
 
+    spin = outputfile.spin
+    if spin is None:
+        raise ValueError("No spin information found in output file.")
+
     # Extract and display Mulliken charges
     mulliken_charges = outputfile.mulliken_atomic_charges
     logger.info("\nMulliken Charges:")
@@ -64,7 +68,7 @@ def entry_point(filename, numbers):
     logger.info("\n")
 
     # Extract and display Mulliken spin densities
-    if outputfile.spin == "unrestricted":
+    if spin == "unrestricted":
         mulliken_spins = outputfile.mulliken_spin_densities
         logger.info("\nMulliken Spin densities:")
         for hkey, hvalue in mulliken_spins.items():
@@ -79,7 +83,7 @@ def entry_point(filename, numbers):
             logger.info(f"Mulliken Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 
-        if outputfile.spin == "unrestricted":
+        if spin == "unrestricted":
             for n in numbers:
                 spin_value = get_value_by_number(n, mulliken_spins)
                 hk = get_key_by_value_and_number(spin_value, n, mulliken_spins)
