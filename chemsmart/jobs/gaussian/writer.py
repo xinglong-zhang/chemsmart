@@ -298,17 +298,17 @@ class GaussianInputWriter(InputWriter):
                 #           'coords': [[1,2], [3,4]]}
                 logger.debug("Writing coordinate scan specifications")
                 coords_list = modredundant["coords"]
-                prepend_string_list = (
+                scan_prepend_string_list = (
                     get_prepend_string_list_from_modred_free_format(
                         input_modred=coords_list
                     )
                 )
-                for prepend_string in prepend_string_list:
-                    f.write(
-                        f"{prepend_string} S "
-                        f"{self.settings.modred['num_steps']} "
-                        f"{self.settings.modred['step_size']}\n"
-                    )
+                for prepend_string, num_step, step_size in zip(
+                    scan_prepend_string_list,
+                    self.settings.modred["num_steps"],
+                    self.settings.modred["step_size"],
+                ):
+                    f.write(f"{prepend_string} S {num_step} {step_size}\n")
                 if "constrained_coordinates" in modredundant:
                     logger.debug(
                         "Writing modredundant constraints for scan job"

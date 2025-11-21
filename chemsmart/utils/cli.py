@@ -367,8 +367,8 @@ def get_setting_from_jobtype_for_gaussian(
         project_settings: Gaussian project settings object.
         jobtype (str): Type of calculation (opt, ts, modred, irc, scan, etc.).
         coordinates: Coordinate specification for modred/scan jobs.
-        step_size (float): Step size for scan calculations.
-        num_steps (int): Number of steps for scan calculations.
+        step_size: Step size for scan calculations.
+        num_steps: Number of steps for scan calculations.
 
     Returns:
         GaussianJobSettings or None: Configured settings object for the job
@@ -411,10 +411,19 @@ def get_setting_from_jobtype_for_gaussian(
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":
+            num_steps_info = ast.literal_eval(num_steps)
+            step_size_info = ast.literal_eval(step_size)
+            if not isinstance(num_steps_info, list):
+                num_steps_info = [num_steps_info]
+            if not isinstance(step_size_info, list):
+                step_size_info = [step_size_info]
+            check_scan_parameters_consistency(
+                modred_info, step_size_info, num_steps_info
+            )
             scan_info = {
                 "coords": modred_info,
-                "num_steps": int(num_steps),
-                "step_size": float(step_size),
+                "num_steps": num_steps_info,
+                "step_size": step_size_info,
             }
             settings.modred = scan_info
 
@@ -431,8 +440,8 @@ def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
 
     Args:
         coordinates: Coordinate specification for the scan.
-        step_size (float): Step size for the scan.
-        num_steps (int): Number of scan steps.
+        step_size: Step size for the scan.
+        num_steps: Number of scan steps.
 
     Raises:
         AssertionError: If any required parameter is None, with detailed
@@ -444,6 +453,51 @@ def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
         "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
         "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
     )
+
+
+def check_scan_parameters_consistency(
+    coords: list, step_size: list, num_steps: list
+):
+    """
+    Validate consistency between scan coordinates and their parameters.
+
+    Ensures that the number of coordinates matches the number of step_size
+    and num_steps values provided. Handles both single coordinate and
+    multi-coordinate scan scenarios.
+
+    Args:
+        coords: Coordinate specification - list[int] for single coordinate
+                or list[list[int]] for multiple coordinates.
+        step_size: List of step sizes - must match number of coordinates.
+        num_steps: List of step counts - must match number of coordinates.
+
+    Raises:
+        ValueError: If the number of coordinates doesn't match the number
+                   of step_size or num_steps values, with detailed error
+                   message showing the mismatch.
+
+    Examples:
+        # Valid single coordinate
+        check_scan_parameters_consistency([1,2], [0.1], [10])
+
+        # Valid multiple coordinates
+        check_scan_parameters_consistency([[1,2],[3,4]], [0.1,0.2], [10,15])
+
+        # Invalid - mismatched counts
+        check_scan_parameters_consistency([[1,2],[3,4]], [0.1], [10,15])
+        # Raises ValueError
+    """
+    if isinstance(coords[0], list):
+        coords_num = len(coords)
+    elif isinstance(coords[0], int):
+        coords_num = 1
+    else:
+        raise ValueError("Invalid format for coordinates.")
+    if len(step_size) != coords_num or len(num_steps) != coords_num:
+        raise ValueError(
+            f"Mismatch in number of coordinates and step parameters: "
+            f"coords={coords_num}, step_size={len(step_size)}, num_steps={len(num_steps)}"
+        )
 
 
 def get_setting_from_jobtype_for_orca(
