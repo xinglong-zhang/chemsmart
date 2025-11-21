@@ -74,6 +74,8 @@ def entry_point(filename, numbers):
         for hkey, hvalue in mulliken_spins.items():
             logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
         logger.info("\n")
+    else:
+        logger.info("\nNo Mulliken Spin Densities Found.")
 
     # Display specific atom charges if requested
     if numbers:
@@ -91,6 +93,8 @@ def entry_point(filename, numbers):
                     f"Mulliken Spin density at {hk} is {spin_value:.3f}."
                 )
             logger.info("\n")
+        else:
+            logger.info("\nNo Mulliken Spin Densities Found.")
 
 
 if __name__ == "__main__":
