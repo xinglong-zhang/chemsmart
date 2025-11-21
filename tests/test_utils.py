@@ -5,7 +5,12 @@ import pytest
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.io import clean_duplicate_structure, create_molecule_list
+from chemsmart.utils.io import (
+    clean_duplicate_structure,
+    create_molecule_list,
+    line_of_all_integers,
+    line_of_integer_followed_by_floats,
+)
 from chemsmart.utils.utils import (
     cmp_with_ignore,
     content_blocks_by_paragraph,
@@ -470,6 +475,77 @@ class TestIOUtilities:
         assert isinstance(molecules[1], Molecule)
         assert molecules[0].energy == 1.0
         assert molecules[1].energy == 2.0
+
+    @pytest.mark.parametrize(
+        "line,allow_sign,expected",
+        [
+            ("0", True, True),
+            ("1 2 3", True, True),
+            ("+1 -2 +003 0", True, True),
+            ("   10    20   30   ", True, True),
+            ("+0 -0 0", True, True),
+            ("+1 -2", False, False),  # signs not allowed
+            ("1 2 3", False, True),
+            ("001 0002 3", False, True),
+            ("", True, False),  # empty
+            ("   ", True, False),  # whitespace only
+            ("1.0 2 3", True, False),  # float present
+            ("1e3 2 3", True, False),  # scientific notation is not int()
+            ("1 two 3", True, False),  # non-numeric
+        ],
+    )
+    def test_line_of_all_integers(self, line, allow_sign, expected):
+        assert line_of_all_integers(line, allow_sign=allow_sign) is expected
+
+    @pytest.mark.parametrize(
+        "line,expected",
+        [
+            # Valid: first token int; remaining are proper floats (decimal or exponent)
+            ("3 1.0 -2.3 4e-2", True),
+            ("0 .5 5. 5.0 -0.3E+2", True),
+            ("-1 +.3 -0.5e2", True),
+            ("+4  .7", True),
+            # Invalid: remaining tokens are plain integers (assuming your float pattern requires decimal/exponent)
+            ("3 1 2 3", False),
+            # Invalid: not enough floats (only an integer). Recommended behavior = False.
+            ("+4", False),
+            ("7   ", False),
+            # Invalid: bad first token or malformed floats
+            ("3.0 1.0 2.0", False),  # first token is not an integer
+            ("x 1.0 2.0", False),  # first token non-numeric
+            ("2 1.0 nope", False),  # invalid float token
+            ("2 1.0 2.0e", False),  # malformed exponent
+            # Whitespace / empty
+            ("   ", False),
+            ("", False),
+        ],
+    )
+    def test_line_of_integer_followed_by_floats(self, line, expected):
+        assert line_of_integer_followed_by_floats(line) is expected
+
+    def test_header_like_then_data_like(self):
+        # Typical ORCA header/data pattern
+        header = "0 1 2 3 4 5"
+        data = "0   0.123   -0.456   7.89   1e-2   .3"
+        assert line_of_all_integers(header) is True
+        assert line_of_integer_followed_by_floats(data) is True
+
+    def test_trailing_and_leading_spaces(self):
+        assert line_of_all_integers("   1   2   3   ") is True
+        assert (
+            line_of_integer_followed_by_floats("   5    1.0   2e0   .3   ")
+            is True
+        )
+
+    def test_reject_plain_ints_as_floats(self):
+        # Ensures your float regex isn't too permissive
+        assert line_of_integer_followed_by_floats("2 3") is False
+        assert (
+            line_of_integer_followed_by_floats("2 3.") is True
+        )  # decimal present
+        assert (
+            line_of_integer_followed_by_floats("2 3e0") is True
+        )  # exponent present
 
 
 class TestNaturallySorted:

@@ -54,6 +54,7 @@ class ORCAJobRunner(JobRunner):
         "orcainp",
         "orcaopt",
         "orcamodred",
+        "orcaqrc",
         "orcascan",
         "orcats",
         "orcasp",
