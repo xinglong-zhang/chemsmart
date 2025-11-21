@@ -69,6 +69,13 @@ class ThermochemistryJob(Job):
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
 
+        # Validate file extension
+        if not filename.endswith((".log", ".out")):
+            raise ValueError(
+                f"Unsupported file extension for '{filename}'. "
+                f"Only .log or .out files are accepted."
+            )
+
         # Validate settings type
         if settings is not None and not isinstance(
             settings, ThermochemistryJobSettings

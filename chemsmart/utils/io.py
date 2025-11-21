@@ -305,7 +305,7 @@ def find_output_files_in_directory(directory, program):
     ]
     return matched_files
 
-  
+
 def load_molecules_from_paths(
     file_paths,
     index,
