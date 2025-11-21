@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+from functools import cached_property
 
 import numpy as np
 from ase import units
@@ -14,6 +15,7 @@ from chemsmart.utils.constants import (
     energy_conversion,
     hartree_to_joules,
 )
+from chemsmart.utils.io import get_outfile_format
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -132,20 +134,17 @@ class Thermochemistry:
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
 
-    @property
+    @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        if str(self.filename).endswith(".log"):
-            # create a Gaussian16Output object if .log file
+        program = get_outfile_format(self.filename)
+        if program == "gaussian":
             return Gaussian16Output(self.filename)
-        elif str(self.filename).endswith(".out"):
-            # create an OrcaOutput object if .out file
+        elif program == "orca":
             return ORCAOutput(self.filename)
         else:
             # can be added in future to parse other file formats
-            raise ValueError(
-                "Unsupported file format. Use .log or .out files."
-            )
+            raise ValueError("Unsupported file format.")
 
     @property
     def job_type(self):
@@ -1350,16 +1349,12 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
         Parameters
         ----------
         files : list of str
-            List of file paths (.log or .out) containing thermochemistry data for conformers.
+            List of file paths containing thermochemistry data for conformers.
         energy_type : str, optional
             Energy type to use for Boltzmann weighting ("electronic" or "gibbs"). Default is "gibbs".
         """
         if not files:
             raise ValueError("List of files cannot be empty.")
-        if not all(
-            isinstance(f, str) and f.endswith((".log", ".out")) for f in files
-        ):
-            raise ValueError("All files must be .log or .out files.")
 
         # Check that all files have the same molecular structure
         molecules = [Molecule.from_filepath(f) for f in files]

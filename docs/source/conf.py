@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 project = "chemsmart"
 author = "Zhang Lab, The Chinese University of Hong Kong"
 copyright = f"{datetime.now():%Y}, {author}"
-release = "0.1.6"
+release = "0.1.8"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
