@@ -633,7 +633,17 @@ class Molecule:
             return cls._read_orca_inputfile(filepath, **kwargs)
 
         if basename.endswith(".out"):
-            return cls._read_orca_outfile(filepath, index, **kwargs)
+            from chemsmart.utils.io import get_outfile_format
+
+            program = get_outfile_format(filepath)
+            if program == "orca":
+                return cls._read_orca_outfile(filepath, index, **kwargs)
+            if program == "gaussian":
+                return cls._read_gaussian_logfile(filepath, index, **kwargs)
+            raise ValueError(
+                f"Unsupported .out file program type: {program}. "
+                "Only Gaussian and ORCA are currently supported."
+            )
 
         if basename.endswith(".gro"):
             return cls._read_gromacs_gro(filepath, index, **kwargs)

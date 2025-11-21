@@ -220,14 +220,8 @@ class ThermochemistryJob(Job):
             ThermochemistryJob: Configured thermochemistry job instance
 
         Raises:
-            ValueError: If file extension is not supported
+            ValueError: If output file type is not supported
         """
-        # Validate file extension
-        if not filename.endswith((".log", ".out")):
-            raise ValueError(
-                f"Unsupported file extension for '{filename}'. "
-                f"Only .log or .out files are accepted."
-            )
 
         logger.info(f"Reading molecule from file: {filename}")
         molecule = Molecule.from_filepath(filename)
