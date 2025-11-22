@@ -1,4 +1,4 @@
-%chk=gaussian_scan.chk
+%chk=gaussian_scan_multiple_degrees_of_freedom.chk
 %nprocshared=64
 %mem=400GB
 # opt=modredundant b3lyp empiricaldispersion=gd3bj def2svp

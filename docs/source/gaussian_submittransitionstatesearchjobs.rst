@@ -231,9 +231,10 @@ Scan Basic Usage
 
       chemsmart sub gaussian -p pes_scan -f molecule.xyz scan -c [[2,3],[5,6]] -s [0.1,0.15] -n [10,12]
 
-   Here, bond 2-3 is scanned with 0.1Å steps for 10 points, and bond 5-6 with 0.15Å steps for 12 points.
-   Note that the number of distances/angles/dihedrals being scanned should be the same as the number of steps/step-sizes supplied,
-   such that the first degree of freedom being scanned takes the first scanning step and step-size, and so on sequentially.
+   Here, bond 2-3 is scanned with 0.1Å steps for 10 points, and bond 5-6 with 0.15Å steps for 12 points. Note that the
+   number of distances/angles/dihedrals being scanned should be the same as the number of steps/step-sizes supplied,
+   such that the first degree of freedom being scanned takes the first scanning step and step-size, and so on
+   sequentially.
 
 **Coordinate scan with additional constraints**
 
