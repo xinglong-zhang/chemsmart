@@ -608,8 +608,33 @@ def gaussian_written_modred_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
-def gaussian_written_scan_file(gaussian_written_files_directory):
-    return os.path.join(gaussian_written_files_directory, "gaussian_scan.com")
+def gaussian_written_scan_single_degree_of_freedom_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_single_degree_of_freedom.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_multiple_degrees_of_freedom_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_multiple_degrees_of_freedom.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_multiple_degrees_of_freedom_with_constraints_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_multiple_degrees_of_freedom_with_constraints.com",
+    )
 
 
 @pytest.fixture()
