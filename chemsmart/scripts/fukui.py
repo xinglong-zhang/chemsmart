@@ -14,6 +14,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.io import get_outfile_format
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -69,13 +70,6 @@ def entry_point(
             "be provided."
         )
 
-    if neutral_filename.endswith(".log"):
-        file = "gaussian"
-    elif neutral_filename.endswith(".out"):
-        file = "orca"
-    else:
-        raise TypeError(f"File {neutral_filename} is of unknown filetype.")
-
     neutral_output = None
     radical_cation_output = None
     radical_anion_output = None
@@ -83,20 +77,37 @@ def entry_point(
     charge_for_radical_cation = None
     charge_for_radical_anion = None
 
-    if file == "gaussian":
+    program = get_outfile_format(neutral_filename)
+    cation_program = (
+        get_outfile_format(radical_cation_filename)
+        if radical_cation_filename is not None
+        else None
+    )
+    anion_program = (
+        get_outfile_format(radical_anion_filename)
+        if radical_anion_filename is not None
+        else None
+    )
+
+    if program == "gaussian":
         neutral_output = Gaussian16WBIOutput(neutral_filename)
-        if radical_cation_filename is not None:
+        if (
+            radical_cation_filename is not None
+            and cation_program == "gaussian"
+        ):
             radical_cation_output = Gaussian16WBIOutput(
                 radical_cation_filename
             )
-        if radical_anion_filename is not None:
+        if radical_anion_filename is not None and anion_program == "gaussian":
             radical_anion_output = Gaussian16WBIOutput(radical_anion_filename)
-    elif file == "orca":
+    elif program == "orca":
         neutral_output = ORCAOutput(neutral_filename)
-        if radical_cation_filename is not None:
+        if radical_cation_filename is not None and cation_program == "orca":
             radical_cation_output = ORCAOutput(radical_cation_filename)
-        if radical_anion_filename is not None:
+        if radical_anion_filename is not None and anion_program == "orca":
             radical_anion_output = ORCAOutput(radical_anion_filename)
+    else:
+        raise TypeError(f"File {neutral_filename} is of unknown filetype.")
 
     if mode == "mulliken":
         logger.info(
@@ -136,7 +147,7 @@ def entry_point(
             "\nUsing CM5 Charges for computing Fukui Reactivity Indices."
         )
         assert (
-            file == "gaussian"
+            program == "gaussian"
         ), "CM5 charges are only available for Gaussian outputs."
         charge_for_neutral = neutral_output.hirshfeld_cm5_charges
         if radical_cation_filename is not None:
