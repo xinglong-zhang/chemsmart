@@ -188,7 +188,7 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-sulfur",
         type=str,
         default=None,
-        help="Color carbon atoms with user-specified color."
+        help="Color sulfur atoms with user-specified color."
         "e.g. -ns [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(

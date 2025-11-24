@@ -85,16 +85,6 @@ def visualize(
     )
 
     hybrid_opts = {}
-    pattern = re.compile(pymol_hybrid_selection_pattern)
-    # zip group indices and color style from command line args
-    raw_args = sys.argv
-    for i in range(len(raw_args) - 1):
-        match = pattern.match(raw_args[i])
-        if match:
-            kind, idx = match.groups()
-            value = raw_args[i + 1]
-            key = f"{'group' if kind in ['g', 'group'] else 'color'}{idx}"
-            hybrid_opts[key] = value
 
     groups = kwargs.pop("group", ())
     colors = kwargs.pop("color", ())
