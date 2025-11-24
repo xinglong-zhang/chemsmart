@@ -1009,8 +1009,32 @@ def orca_written_modred_file(orca_written_files_directory):
 
 
 @pytest.fixture()
-def orca_written_scan_file(orca_written_files_directory):
-    return os.path.join(orca_written_files_directory, "orca_scan.inp")
+def orca_written_scan_single_degree_of_freedom_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory, "orca_scan_single_degree_of_freedom.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_scan_multiple_degrees_of_freedom_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory,
+        "orca_scan_multiple_degrees_of_freedom.inp",
+    )
+
+
+@pytest.fixture()
+def orca_written_scan_multiple_degrees_of_freedom_with_constraints_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory,
+        "orca_scan_multiple_degrees_of_freedom_with_constraints.inp",
+    )
 
 
 @pytest.fixture()
