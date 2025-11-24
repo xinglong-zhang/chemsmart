@@ -189,7 +189,7 @@ Hybrid Visualization Basic Usage
    .. code:: console
 
       chemsmart run mol -f molecule.xyz visualize --hybrid -g '1,2,3'
-This is the minimal command needed for hybrid visualization job. Only the highlighted group is specified, others will be assigned by default.
+This is the minimal command needed for hybrid visualization job. Only the highlighted groups are specified, others will be assigned by default.
 
 **Hybrid visualization with customized color scheme**
 

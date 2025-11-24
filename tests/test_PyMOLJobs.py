@@ -217,7 +217,9 @@ class TestPyMOLJobs:
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         pse_file = os.path.join(tmpdir, "dna_hybrid.pse")
-        pml_file = os.path.join(tmpdir, "hybrid_visualization.pml")
+        pml_file = os.path.join(
+            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
+        )
         group_selection_commands = [
             "pymol_style all\n",
             "unset stick_color, all\n",
