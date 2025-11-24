@@ -341,7 +341,7 @@ def version(ctx, version_number: str):
     Automatically update chemsmart version in chemsmart/VERSION,
     pyproject.toml and docs/source/conf.py.
     """
-    logger.info("Updating dependencies...")
+    logger.info("Updating version number...")
     ctx.obj["updater"].update_version_number(version_number)
     logger.info("Update complete.")
 
