@@ -37,7 +37,7 @@ Visualization-Specific OPTIONS
       -  string
       -  PyMOL render style. Options: pymol, cylview (default=None)
 
-   -  -  ``-t, --trace/--no-trace``
+   -  -  ``-t/, --trace/--no-trace``
       -  bool
       -  PyMOL options to ray trace or not (default=True)
 
@@ -131,7 +131,6 @@ Create static PyMOL visualizations and interactive session files.
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize [SUBCMD_OPTIONS] --hybrid [SUBCMD_OPTIONS]
 
 Visualization-Specific OPTIONS
-==============================
 
 .. list-table:: Hybrid Visualization Job Options
    :header-rows: 1
@@ -182,7 +181,6 @@ Visualization-Specific OPTIONS
       -  Set a custom color for phosphorus atoms. (default=[1.0, 0.85, 0.6]).
 
 Hybrid Visualization Basic Usage
-=========================
 
 **Basic hybrid visualization**
 
@@ -213,7 +211,6 @@ Color options except for color schemes, such as surface color, customized carbon
       chemsmart run mol -f molecule.log visualize -f custom_style.py
 
 Hybrid Visualization Examples
-======================
 
 running a command like:
  .. code:: console
@@ -224,3 +221,37 @@ will generate the below visualization style.
 .. image:: _static/B_in_R.png
    :width: 60%
    :align: center
+
+************
+ Align Jobs
+************
+
+Align multiple molecular structures for comparison.
+
+.. code:: console
+
+   chemsmart run [OPTIONS] mol align [SUBCMD_OPTIONS]
+
+Align-Specific OPTIONS
+
+Inherit all options from visualization jobs and use the same parameters.
+
+Align Basic Usage
+
+**align files**
+
+   .. code:: console
+
+      chemsmart run mol -f mol1.xyz -f mol2.gjf -f mol3.log -i 1 align
+
+This command will align the subsequent molecules to the first molecule sequentially (align mol2 and mol3 to mol1).
+
+**align all files in same type**
+
+   .. code:: console
+
+      chemsmart run mol -t xyz -l xyz_alignment align
+
+.. note::
+
+   When using the ``-i n`` option, user should ensure that every input file contains the n-th molecule.

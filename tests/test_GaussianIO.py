@@ -419,6 +419,7 @@ class TestGaussian16Output:
             g16_output.route_string
             == "# cam-b3lyp gen td(singlets,nstates=50,root=1)"
         )
+        assert g16_output.spin == "unrestricted"
         assert g16_output.num_atoms == 49
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
@@ -508,11 +509,14 @@ class TestGaussian16Output:
             == 361.7
         )
         assert g16_output.total_elapsed_walltime == 6.4
+        mol = g16_output.molecule
+        assert not mol.has_vibrations
 
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.spin == "restricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116
         assert g16_output.alpha_occ_eigenvalues[0] == -25.29096 * units.Hartree
@@ -538,11 +542,62 @@ class TestGaussian16Output:
             [0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9],
         )
         assert g16_output.rotational_symmetry_number == 1
+        mol = g16_output.molecule
+        assert mol.has_vibrations
+        assert mol.num_vib_frequencies == mol.num_vib_modes == 114
+        vibrational_mode1 = [
+            [0.0, 0.08, 0.03],
+            [0.01, 0.01, 0.04],
+            [0.01, 0.03, 0.04],
+            [0.02, 0.09, 0.06],
+            [0.0, 0.01, 0.03],
+            [0.0, 0.06, 0.02],
+            [0.01, 0.05, 0.04],
+            [0.01, -0.05, 0.06],
+            [0.02, -0.06, 0.07],
+            [-0.02, -0.08, 0.05],
+            [0.06, -0.06, 0.1],
+            [0.06, -0.06, 0.09],
+            [-0.05, -0.12, 0.0],
+            [-0.05, -0.02, -0.04],
+            [-0.11, 0.03, -0.14],
+            [-0.16, -0.03, -0.21],
+            [-0.16, -0.13, -0.16],
+            [-0.11, -0.18, -0.06],
+            [0.02, -0.15, 0.11],
+            [-0.11, 0.11, -0.17],
+            [-0.21, -0.18, -0.21],
+            [-0.11, -0.26, -0.03],
+            [-0.02, -0.25, 0.15],
+            [0.08, -0.14, 0.18],
+            [0.01, 0.04, 0.01],
+            [0.04, 0.03, 0.03],
+            [-0.01, 0.01, -0.01],
+            [0.05, -0.0, 0.02],
+            [-0.0, -0.02, -0.03],
+            [0.03, -0.02, -0.01],
+            [0.07, -0.01, 0.03],
+            [-0.02, -0.04, -0.05],
+            [0.14, -0.05, 0.13],
+            [-0.21, 0.0, -0.29],
+            [0.07, 0.07, 0.05],
+            [-0.06, 0.02, -0.03],
+            [0.04, -0.06, -0.03],
+            [0.02, -0.07, -0.03],
+            [0.07, -0.06, -0.04],
+            [0.03, -0.08, -0.03],
+        ]
+
+        assert np.allclose(
+            mol.vibrational_modes[0], vibrational_mode1, atol=1e-4
+        )
+        assert mol.vibrational_frequencies[0] == 11.9481
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_triplet_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.spin == "unrestricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 215
         assert (
@@ -575,6 +630,7 @@ class TestGaussian16Output:
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        assert g16_output.spin == "unrestricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 216
         assert (
@@ -869,60 +925,61 @@ class TestGaussian16Output:
         assert (
             g16_genecp.num_vib_modes == g16_genecp.num_vib_frequencies == 138
         )
+        vibrational_mode1 = np.array(
+            [
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, 0.0],
+                [0.0, -0.0, -0.01],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.06, 0.01],
+                [-0.03, 0.06, 0.01],
+                [0.0, -0.01, 0.0],
+                [-0.01, 0.02, 0.0],
+                [-0.0, -0.0, 0.01],
+                [0.84, -0.47, 0.23],
+                [-0.03, 0.05, -0.01],
+                [0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, -0.0],
+                [0.01, -0.0, 0.0],
+                [0.01, 0.01, 0.0],
+                [-0.06, 0.01, -0.02],
+                [0.01, -0.02, -0.0],
+                [0.0, 0.0, 0.0],
+                [-0.01, 0.01, -0.0],
+                [0.02, 0.05, 0.01],
+                [-0.01, -0.01, -0.0],
+                [-0.0, -0.01, -0.0],
+                [-0.01, -0.01, -0.01],
+                [-0.01, -0.01, -0.0],
+                [0.0, -0.01, 0.0],
+                [-0.01, -0.01, -0.0],
+                [-0.0, -0.0, -0.0],
+            ]
+        )
         assert np.allclose(
             g16_genecp.vibrational_modes[0],
-            np.array(
-                [
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, 0.0],
-                    [0.0, -0.0, -0.01],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.06, 0.01],
-                    [-0.03, 0.06, 0.01],
-                    [0.0, -0.01, 0.0],
-                    [-0.01, 0.02, 0.0],
-                    [-0.0, -0.0, 0.01],
-                    [0.84, -0.47, 0.23],
-                    [-0.03, 0.05, -0.01],
-                    [0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, -0.0],
-                    [0.01, -0.0, 0.0],
-                    [0.01, 0.01, 0.0],
-                    [-0.06, 0.01, -0.02],
-                    [0.01, -0.02, -0.0],
-                    [0.0, 0.0, 0.0],
-                    [-0.01, 0.01, -0.0],
-                    [0.02, 0.05, 0.01],
-                    [-0.01, -0.01, -0.0],
-                    [-0.0, -0.01, -0.0],
-                    [-0.01, -0.01, -0.01],
-                    [-0.01, -0.01, -0.0],
-                    [0.0, -0.01, 0.0],
-                    [-0.01, -0.01, -0.0],
-                    [-0.0, -0.0, -0.0],
-                ]
-            ),
+            vibrational_mode1,
             rtol=1e-4,
         )
         assert len(g16_genecp.forces) == 11
@@ -1222,6 +1279,18 @@ class TestGaussian16Output:
             [3.69135800, -0.83587500, -0.25754700],
         )
         assert len(g16_genecp.get_molecule(index="4:")) == 8
+
+        mol = g16_genecp.molecule
+        assert np.allclose(mol.positions, last_structure_positions, rtol=1e-4)
+        mol2 = mol.vibrationally_displaced(mode_idx=1, amp=0.5)
+        assert np.allclose(
+            mol2.positions[29], [-1.668781, 1.679069, 0.38199], rtol=1e-4
+        )
+
+        mol3 = mol.vibrationally_displaced(mode_idx=1, amp=-0.5)
+        assert np.allclose(
+            mol3.positions[29], [-2.505441, 2.147201, 0.152904], rtol=1e-4
+        )
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)

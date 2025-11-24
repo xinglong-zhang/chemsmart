@@ -12,6 +12,9 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLHybridVisualizationJobRunner,
+    PyMOLAlignJobRunner,
+    PyMOLIRCMovieJobRunner,
+    PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
@@ -904,6 +907,11 @@ def orca_co2_output(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_sn2_ts_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "sn2_ts.out")
+
+
+@pytest.fixture()
 def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"
@@ -1151,6 +1159,21 @@ def nciplot_jobrunner_scratch(tmpdir, pbs_server):
     return FakeNCIPLOTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
+
+
+@pytest.fixture()
+def pymol_align_jobrunner(pbs_server):
+    return PyMOLAlignJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_ircmovie_jobrunner(pbs_server):
+    return PyMOLIRCMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_mo_jobrunner(pbs_server):
+    return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing
