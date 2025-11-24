@@ -7,6 +7,7 @@ coordinates (bonds, angles, dihedrals) while optimizing the rest of the
 structure, creating potential energy surfaces along reaction coordinates.
 """
 
+import ast
 import logging
 
 import click
@@ -22,8 +23,26 @@ logger = logging.getLogger(__name__)
 @orca.command("scan", cls=MyCommand)
 @click_job_options
 @click_orca_jobtype_options
+@click.option(
+    "-cc",
+    "--constrained-coordinates",
+    default=None,
+    help="Additional modredundant constraints for scan job. "
+    "Format: List of constraints separated by semicolons. "
+    "Example: [[1,2],[3,4,5],[1,2,3,4]]. "
+    "1-indexed.",
+)
 @click.pass_context
-def scan(ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs):
+def scan(
+    ctx,
+    jobtype,
+    coordinates,
+    dist_start,
+    dist_end,
+    num_steps,
+    constrained_coordinates=None,
+    **kwargs,
+):
     """
     Run ORCA coordinate scan calculations.
 
@@ -64,6 +83,14 @@ def scan(ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs):
     # validate charge and multiplicity consistency
     check_charge_and_multiplicity(scan_settings)
 
+    if constrained_coordinates is not None:
+        constrained_coordinates_info = ast.literal_eval(
+            constrained_coordinates
+        )
+        scan_settings.modred["constrained_coordinates"] = (
+            constrained_coordinates_info
+        )
+
     # get molecule from context (use the last molecule if multiple)
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]
@@ -76,7 +103,10 @@ def scan(ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs):
     from chemsmart.jobs.orca.scan import ORCAScanJob
 
     job = ORCAScanJob(
-        molecule=molecule, settings=scan_settings, label=label, **kwargs
+        molecule=molecule,
+        settings=scan_settings,
+        label=label,
+        **kwargs,
     )
     logger.debug(f"Created ORCA scan job: {job}")
     return job

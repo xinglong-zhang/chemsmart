@@ -417,7 +417,12 @@ def get_setting_from_jobtype_for_gaussian(
                 num_steps_info = [num_steps_info]
             if not isinstance(step_size_info, list):
                 step_size_info = [step_size_info]
-            check_scan_parameters_consistency(
+
+            # explicit type conversion
+            step_size_info = [float(size) for size in step_size_info]
+            num_steps_info = [int(num) for num in num_steps_info]
+
+            check_scan_parameters_consistency_gaussian(
                 modred_info, step_size_info, num_steps_info
             )
             scan_info = {
@@ -455,7 +460,7 @@ def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
     )
 
 
-def check_scan_parameters_consistency(
+def check_scan_parameters_consistency_gaussian(
     coords: list, step_size: list, num_steps: list
 ):
     """
@@ -561,11 +566,29 @@ def get_setting_from_jobtype_for_orca(
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":
+            dist_start_info = ast.literal_eval(dist_start)
+            dist_end_info = ast.literal_eval(dist_end)
+            num_steps_info = ast.literal_eval(num_steps)
+            if not isinstance(dist_start_info, list):
+                dist_start_info = [dist_start_info]
+            if not isinstance(dist_end_info, list):
+                dist_end_info = [dist_end_info]
+            if not isinstance(num_steps_info, list):
+                num_steps_info = [num_steps_info]
+
+            # explicit type conversion
+            dist_start_info = [float(dist) for dist in dist_start_info]
+            dist_end_info = [float(dist) for dist in dist_end_info]
+            num_steps_info = [int(num) for num in num_steps_info]
+
+            check_scan_parameters_consistency_orca(
+                modred_info, dist_start_info, dist_end_info, num_steps_info
+            )
             scan_info = {
                 "coords": modred_info,
-                "dist_start": float(dist_start),
-                "dist_end": float(dist_end),
-                "num_steps": int(num_steps),
+                "dist_start": dist_start_info,
+                "dist_end": dist_end_info,
+                "num_steps": num_steps_info,
             }
             settings.modred = scan_info
 
@@ -600,6 +623,57 @@ def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
         "Note: all indices should be 1-indexed. Chemsmart has already taken care of converting 0-indexed "
         "(used in ORCA) to 1-indexed (used in visualization software such as PyMOL, Gaussview, etc)."
     )
+
+
+def check_scan_parameters_consistency_orca(
+    coords: list, dist_start: list, dist_end: list, num_steps: list
+):
+    """
+    Validate consistency between scan coordinates and their parameters for ORCA.
+
+    Ensures that the number of coordinates matches the number of dist_start,
+    dist_end and num_steps values provided. Handles both single coordinate and
+    multi-coordinate scan scenarios.
+
+    Args:
+        coords: Coordinate specification - list[int] for single coordinate
+                or list[list[int]] for multiple coordinates.
+        dist_start: List of starting distances - must match number of coordinates.
+        dist_end: List of ending distances - must match number of coordinates.
+        num_steps: List of step counts - must match number of coordinates.
+
+    Raises:
+        ValueError: If the number of coordinates doesn't match the number
+                   of dist_start, dist_end or num_steps values, with detailed
+                   error message showing the mismatch.
+
+    Examples:
+        # Valid single coordinate
+        check_scan_parameters_consistency_orca([1,2], [3.0], [1.2], [10])
+
+        # Valid multiple coordinates
+        check_scan_parameters_consistency_orca([[1,2],[3,4]], [3.0,2.5], [1.2,1.0], [10,15])
+
+        # Invalid - mismatched counts
+        check_scan_parameters_consistency_orca([[1,2],[3,4]], [3.0], [1.2,1.0], [10,15])
+        # Raises ValueError
+    """
+    if isinstance(coords[0], list):
+        coords_num = len(coords)
+    elif isinstance(coords[0], int):
+        coords_num = 1
+    else:
+        raise ValueError("Invalid format for coordinates.")
+    if (
+        len(dist_start) != coords_num
+        or len(dist_end) != coords_num
+        or len(num_steps) != coords_num
+    ):
+        raise ValueError(
+            f"Mismatch in number of coordinates and scan parameters: "
+            f"coords={coords_num}, dist_start={len(dist_start)}, "
+            f"dist_end={len(dist_end)}, num_steps={len(num_steps)}"
+        )
 
 
 def update_irc_label(label, direction, flat_irc):

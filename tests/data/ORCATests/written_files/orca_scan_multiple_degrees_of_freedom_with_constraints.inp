@@ -4,9 +4,14 @@
 # Memory per core
 %maxcore 4687
 %geom
+  Constraints
+  {B 4 5 C}
+  {A 6 7 8 C}
+  end
+
   Scan
   B 0 1 = 1.5, 3.5, 10  # Scanning bond distance from 1.5 Angstrom to 3.5 Angstrom in 10 steps. 
-  B 2 3 = 1.5, 3.5, 10  # Scanning bond distance from 1.5 Angstrom to 3.5 Angstrom in 10 steps. 
+  A 2 3 4 = 70.0, 85.0, 15  # Scanning angle from 70.0 degree to 85.0 degree in 15 steps. 
   end
 end
 * xyz 0 1

@@ -322,6 +322,10 @@ Scan-Specific OPTIONS
       -  string
       -  Number of steps for coordinate scanning (default=None)
 
+   -  -  ``-cc, --constrained-coordinates``
+      -  string
+      -  List of coordinates to be fixed in scan job (1-based indexing)
+
 Scan Basic Usage
 ================
 
@@ -336,3 +340,50 @@ Scan Basic Usage
    .. code:: console
 
       chemsmart sub orca -p modred_opt -f molecule.xyz scan -j modred -c [[1,2]]
+
+**Multi-coordinate scan**:
+
+-  To scan three coordinates simultaneously (bond, angle, and dihedral):
+
+   .. code:: console
+
+      chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c [[1,2],[3,4,5],[6,7,8,9]] -x [1.5,70.0,80.0] -y [3.5,85.0,60.0] -n [10,15,20]
+
+   Here, bond 1-2 is scanned from 1.5 Å to 3.5 Å in 10 steps, angle 3-4-5 from 70° to 85° in 15 steps, and dihedral
+   6-7-8-9 from 80° to 60° in 20 steps. Note that the number of distances/angles/dihedrals being scanned should be the
+   same as the number of steps/dist-start/dist-end supplied, such that the first degree of freedom being scanned takes
+   the first scanning step, dist-start and dist-end information, and so on sequentially.
+
+**Coordinate scan with additional constraints**:
+
+-  To submit the PES scan job along bond between atom 1 and atom 2 from 1.0 Å to 3.0 Å for 20 steps while keeping bond
+   distance between atom 5 and atom 8 fixed, one may use
+
+   .. code:: console
+
+      chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c [1,2] -x 1.0 -y 3.0 -n 20 -cc [5,8]
+
+   where a single pair of bonding atoms is enclosed by a pair of square brackets, or
+
+   .. code:: console
+
+      chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c [[1,2]] -x 1.0 -y 3.0 -n 20 -cc [[5,8]]
+
+   where the pair of bonding atoms is enclosed as a list of list.
+
+-  You can also specify multiple constraints (distance, angle, dihedral) as follows:
+
+   .. code:: console
+
+      chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c [[1,2]] -x 1.0 -y 3.0 -n 20 -cc [[5,8],[1,4,6],[2,3,5,7]]
+
+**Multi-coordinate scan with constraints**:
+
+-  Combine multi-coordinate scanning with constraints:
+
+   .. code:: console
+
+      chemsmart sub orca -p scan_job -f molecule.xyz scan -j scan -c [[1,2],[3,4,5]] -x [1.5,70.0] -y [3.5,85.0] -n [10,15] -cc [[6,9],[2,3,7]]
+
+   Here, bond 1-2 is scanned from 1.5 Å to 3.5 Å in 10 steps, and angle 3-4-5 from 70° to 85° in 15 steps, while keeping
+   bond 6-9 and angle 2-3-7 fixed.
