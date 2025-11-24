@@ -188,14 +188,14 @@ Hybrid Visualization Basic Usage
 
    .. code:: console
 
-      chemsmart run mol -f molecule.xyz visualize --hybrid -g '[1,2,3]'
+      chemsmart run mol -f molecule.xyz visualize --hybrid -g '1,2,3'
 This is the minimal command needed for hybrid visualization job. Only the highlighted group is specified, others will be assigned by default.
 
 **Hybrid visualization with customized color scheme**
 
    .. code:: console
 
-      chemsmart run mol -f calculation.log visualize --hybrid -g '[1,2,3]' -g '[4,5,6]' -C cbay -C cbak
+      chemsmart run mol -f calculation.log visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak
 This will assigned customized color scheme to different groups. Note that the color/group is assigned by input order, i.e., the first color ('cbay')
 will be assigned to the first group ([1,2,3]), etc. A default color scheme will be used if a group is not assigned customized colors.
 
@@ -203,7 +203,7 @@ will be assigned to the first group ([1,2,3]), etc. A default color scheme will 
 
    .. code:: console
 
-      chemsmart run mol -f structure.xyz visualize --hybrid -g '[1,2,3]' -g '[4,5,6]' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
+      chemsmart run mol -f structure.xyz visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
 Color options except for color schemes, such as surface color, customized carbon color can be specified by a list containing their RGB values.
 
 **Visualization using custom style or script file**
