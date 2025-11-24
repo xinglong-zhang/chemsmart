@@ -809,7 +809,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_hybrid_pml(self, job):
         """Write the default hybrid style pml if no custom pml is provided.
-        Creates a PyMOL script file that set up hybrid visualization style with appropriate
+        Creates a PyMOL script file that sets up hybrid visualization style with appropriate
         coloring and transparency settings
 
         Args:
@@ -973,8 +973,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
                 scheme = color_scheme[idx]
             f.write(f"util.{scheme} {key}\n")
         f.write("set stick_transparency, 0, all\n")
+        stick_radius = getattr(job, "stick_radius", 0.25)
+        if stick_radius is None:
+            stick_radius = 0.25
         f.write(
-            f"set stick_radius, 0.25, ({self._get_group_selection_str(job)})\n"
+            f"set stick_radius, {stick_radius}, ({self._get_group_selection_str(job)})\n"
         )
 
     def _write_surface_settings(self, job, f):

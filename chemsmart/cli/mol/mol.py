@@ -164,7 +164,7 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-carbon",
         type=str,
         default=None,
-        help="Color carbon atoms with user-specified color."
+        help="Color carbon atoms with user-specified color. "
         "e.g. -nc [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(
@@ -189,7 +189,7 @@ def click_pymol_hybrid_visualization_options(f):
         type=str,
         default=None,
         help="Color sulfur atoms with user-specified color."
-        "e.g. -ns [0.8, 0.8, 0.9]",
+        " e.g. -ns [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(
         "-np",
@@ -197,7 +197,7 @@ def click_pymol_hybrid_visualization_options(f):
         type=str,
         default=None,
         help="Color carbon atoms with user-specified color."
-        "e.g. -np  [1.0, 0.85, 0.6]",
+        " e.g. -np  [1.0, 0.85, 0.6]",
     )(f)
 
     @functools.wraps(f)

@@ -117,7 +117,7 @@ Movie Examples
  Run Hybrid Visualization Jobs
 ##############################
 
-Apart from basic visualization jobs, Chemsmart can also creating graphics with different substrates displayed
+Apart from basic visualization jobs, Chemsmart can also create graphics with different substrates displayed
 in different style (what 'hybrid' refers to).
 
 ********************
