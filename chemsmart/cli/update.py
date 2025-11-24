@@ -23,9 +23,9 @@ class Updater:
     def __init__(self):
         self._package_path = Path(__file__).resolve().parent.parent.parent
         self._pyproject_path = self._package_path / "pyproject.toml"
-        self._version_file_path = self.package_path / "chemsmart" / "VERSION"
+        self._version_file_path = self._package_path / "chemsmart" / "VERSION"
         self._docs_conf_file_path = (
-            self.package_path / "docs" / "source" / "conf.py"
+            self._package_path / "docs" / "source" / "conf.py"
         )
 
     @property
