@@ -934,7 +934,9 @@ def quote_path(path):
     if sys.platform == "win32":
         # Double-quote paths on Windows to preserve spaces
         return f'"{path}"'
-    return path
+    else:
+        return shlex.quote(path)
+    # return path
 
 
 def kabsch_align(

@@ -1,7 +1,5 @@
 import ast
 import logging
-import re
-import sys
 
 import click
 
@@ -12,7 +10,6 @@ from chemsmart.cli.mol.mol import (
     mol,
 )
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.repattern import pymol_hybrid_selection_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +85,12 @@ def visualize(
 
     groups = kwargs.pop("group", ())
     colors = kwargs.pop("color", ())
-    # raise error if -g/-c is provided when --hybrid is false
-    if groups and not hybrid:
+    # raise error if -g/-c/-sc/-st is provided when --hybrid is false
+    hybrid_only_opts = ["groups", "colors", "surface_color", "surface_transparency"]
+    if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
-            "The '-g/--group' option can only be used with '--hybrid'. "
+            "The options '-g/--group', '--colors', '--surface-color', and "
+            "'--surface-transparency' can only be used with '--hybrid'. "
             "Please enable hybrid visualization mode with '--hybrid'."
         )
     for i, grp in enumerate(groups):
