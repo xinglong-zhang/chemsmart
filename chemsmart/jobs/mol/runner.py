@@ -19,7 +19,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable

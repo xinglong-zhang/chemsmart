@@ -86,7 +86,12 @@ def visualize(
     groups = kwargs.pop("group", ())
     colors = kwargs.pop("color", ())
     # raise error if -g/-c/-sc/-st is provided when --hybrid is false
-    hybrid_only_opts = ["groups", "colors", "surface_color", "surface_transparency"]
+    hybrid_only_opts = [
+        "groups",
+        "colors",
+        "surface_color",
+        "surface_transparency",
+    ]
     if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
             "The options '-g/--group', '--colors', '--surface-color', and "
