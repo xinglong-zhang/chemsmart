@@ -769,7 +769,7 @@ class TestThermochemistryCO2:
         orca_out = ORCAOutput(filename=orca_co2_output)
         assert orca_out.normal_termination
         assert orca_out.job_type == "opt"
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         mol = orca_out.molecule
         assert mol.empirical_formula == "CO2"
         assert orca_out.multiplicity == 1
@@ -1567,7 +1567,7 @@ class TestThermochemistryHe:
         orca_out = ORCAOutput(filename=orca_he_output_freq)
         assert orca_out.normal_termination
         #        assert orca_out.job_type == "opt"
-        assert orca_out.natoms == 1
+        assert orca_out.num_atoms == 1
         mol = orca_out.molecule
         assert mol.empirical_formula == "He"
         assert orca_out.multiplicity == 1
@@ -1864,7 +1864,7 @@ class TestThermochemistryH2O:
         orca_out = ORCAOutput(filename=water_output_gas_path)
         assert orca_out.normal_termination
         assert orca_out.job_type == "opt"
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         mol = orca_out.molecule
         assert mol.empirical_formula == "H2O"
         assert orca_out.multiplicity == 1

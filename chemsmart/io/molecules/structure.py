@@ -68,19 +68,25 @@ class Molecule:
         energy=None,
         forces=None,
         velocities=None,
+        vibrational_frequencies=None,
+        vibrational_reduced_masses=None,
+        vibrational_force_constants=None,
+        vibrational_ir_intensities=None,
+        vibrational_mode_symmetries=None,
+        vibrational_modes=None,
         info=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
         """
         self.symbols = symbols
-        self.positions = positions
+        self._positions = positions
         self.charge = charge
         self.multiplicity = multiplicity
         self.frozen_atoms = frozen_atoms
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
-        self.energy = energy
+        self._energy = energy
         self.forces = forces
         self.velocities = velocities
         self.info = info
@@ -119,6 +125,36 @@ class Molecule:
                 "The number of symbols and positions should be the same!"
             )
 
+        self.vibrational_frequencies = (
+            []
+            if vibrational_frequencies is None
+            else list(vibrational_frequencies)
+        )
+        self.vibrational_reduced_masses = (
+            []
+            if vibrational_reduced_masses is None
+            else list(vibrational_reduced_masses)
+        )
+        self.vibrational_force_constants = (
+            []
+            if vibrational_force_constants is None
+            else list(vibrational_force_constants)
+        )
+        self.vibrational_ir_intensities = (
+            []
+            if vibrational_ir_intensities is None
+            else list(vibrational_ir_intensities)
+        )
+        self.vibrational_mode_symmetries = (
+            []
+            if vibrational_mode_symmetries is None
+            else list(vibrational_mode_symmetries)
+        )
+        # modes is a list of (num_atoms x 3) arrays; keep as-is if provided
+        self.vibrational_modes = (
+            [] if vibrational_modes is None else vibrational_modes
+        )
+
     def __len__(self):
         """
         Return the number of atoms in the molecule.
@@ -150,6 +186,18 @@ class Molecule:
         Set the molecular energy.
         """
         self._energy = value
+
+    @property
+    def positions(self):
+        return self._positions
+
+    @positions.setter
+    def positions(self, value):
+        arr = np.asarray(value, dtype=float)
+        if arr.ndim != 2 or arr.shape[1] != 3:
+            raise ValueError(f"positions must be (N, 3); got {arr.shape}")
+        # store a copy to avoid accidental aliasing
+        self._positions = arr.copy()
 
     @property
     def empirical_formula(self):
@@ -496,6 +544,21 @@ class Molecule:
         """
         return copy.deepcopy(self)
 
+    @property
+    def has_vibrations(self) -> bool:
+        """True if any vibrational frequencies are present."""
+        return bool(self.vibrational_frequencies)
+
+    @property
+    def num_vib_frequencies(self) -> int:
+        """Number of vibrational frequencies available."""
+        return len(self.vibrational_frequencies)
+
+    @property
+    def num_vib_modes(self) -> int:
+        """Number of normal modes available."""
+        return len(self.vibrational_modes)
+
     @classmethod
     def from_coordinate_block_text(cls, coordinate_block):
         """
@@ -570,7 +633,17 @@ class Molecule:
             return cls._read_orca_inputfile(filepath, **kwargs)
 
         if basename.endswith(".out"):
-            return cls._read_orca_outfile(filepath, index, **kwargs)
+            from chemsmart.utils.io import get_outfile_format
+
+            program = get_outfile_format(filepath)
+            if program == "orca":
+                return cls._read_orca_outfile(filepath, index, **kwargs)
+            if program == "gaussian":
+                return cls._read_gaussian_logfile(filepath, index, **kwargs)
+            raise ValueError(
+                f"Unsupported .out file program type: {program}. "
+                "Only Gaussian and ORCA are currently supported."
+            )
 
         if basename.endswith(".gro"):
             return cls._read_gromacs_gro(filepath, index, **kwargs)
@@ -939,7 +1012,7 @@ class Molecule:
         assert (
             self.positions is not None
         ), "Positions to write should not be None!"
-        if self.frozen_atoms is None:
+        if self.frozen_atoms is None or len(self.frozen_atoms) == 0:
             for i, (s, (x, y, z)) in enumerate(
                 zip(self.chemical_symbols, self.positions)
             ):
@@ -1444,6 +1517,101 @@ class Molecule:
             X = np.hstack([X, bond_orders])
 
         return X
+
+    def vibrationally_displaced(
+        self,
+        mode_idx,
+        amp: float = 0.1,
+        nframes: int | None = None,
+        phase: float = np.pi / 2,
+        normalize: bool = False,
+        return_xyz: bool = False,
+    ):
+        """
+        Create a geometry (or trajectory) displaced along a *mass-weighted* normal mode.
+
+        Args:
+            mode_idx (int): Mode index (1-based, negatives allowed)
+            amp (float): Target maximum atomic displacement in Å after normalization.
+            nframes (int | None): If provided, generate that many frames over one period
+                [0, 2π); else return a single frame at `phase`.
+            phase (float): Phase angle (radians) for the single-frame case.
+                Defaults to pi/2 so that sin(phase) = 1.
+            normalize (bool): If True, scale the (un-weighted) mode so its largest
+                per-atom displacement is 1.0, making `amp` the max displacement.
+            return_xyz (bool): If True and `nframes` is set, return a multi-frame XYZ string.
+
+        Returns:
+            Molecule | list[Molecule] | str
+        """
+
+        if isinstance(mode_idx, (int, np.integer)):
+            idx = int(mode_idx)
+            logger.debug(f"Displacing vibrational mode number #{idx}")
+            if idx < 0:
+                mw_mode = np.asarray(self.vibrational_modes[idx], dtype=float)
+            else:
+                # accept 1-based indices
+                mw_mode = np.asarray(
+                    self.vibrational_modes[idx - 1], dtype=float
+                )
+        else:
+            raise ValueError("Vibrational mode number should be integer.")
+
+        if mw_mode.shape != (self.num_atoms, 3):
+            raise ValueError(
+                f"vibrational mode must have shape ({self.num_atoms}, 3); "
+                f"got {mw_mode.shape} instead!"
+            )
+
+        logger.debug(
+            "Convert from mass-weighted mode to Cartesian mode: \n"
+            "multiplying by M^{-1/2} * mode"
+        )
+        cart_mode = mw_mode / np.sqrt(self.masses)[:, None]  # masses in amu
+
+        if normalize:
+            logger.debug("normalize so max per-atom displacement = 1")
+            per_atom = np.linalg.norm(cart_mode, axis=1)
+            max_disp = float(per_atom.max())
+            if max_disp == 0.0:
+                raise ValueError("Provided vibrational mode has zero norm.")
+            cart_mode = cart_mode / max_disp
+
+        R0 = np.asarray(self.positions, float)
+        logger.debug(f"Original positions: {R0}")
+        symbols = list(self.symbols)
+
+        def make_mol(theta: float):
+            """Function to change the positions of the molecule by
+            displacing along the vibrational mode."""
+            Rt = R0 + (amp * np.sin(theta)) * cart_mode
+            Rt_rounded = np.round(Rt, decimals=6)
+            logger.debug(f"New positions: {Rt_rounded}")
+            m = self.copy()
+            m.positions = Rt_rounded
+            return m
+
+        if nframes is None:
+            logger.debug(f"Return single frame/molecule with phase: {phase}")
+            return make_mol(phase)
+
+        thetas = np.linspace(0.0, 2.0 * np.pi, int(nframes), endpoint=False)
+        frames = [make_mol(t) for t in thetas]
+        logger.debug(
+            f"Return {len(frames)} number of frames/molecules as a list."
+        )
+
+        if return_xyz:
+            lines = []
+            for t, m in zip(thetas, frames):
+                lines.append(str(len(symbols)))
+                lines.append(f"vib frame t={t:.6f} rad, amp={amp:.4f} Å")
+                for s, (x, y, z) in zip(symbols, m.positions):
+                    lines.append(f"{s:4s} {x: .6f} {y: .6f} {z: .6f}")
+            return "\n".join(lines)
+
+        return frames
 
 
 class CoordinateBlock:
