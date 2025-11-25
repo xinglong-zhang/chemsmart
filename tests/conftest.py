@@ -11,8 +11,8 @@ from rdkit import Chem
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
-    PyMOLHybridVisualizationJobRunner,
     PyMOLAlignJobRunner,
+    PyMOLHybridVisualizationJobRunner,
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,

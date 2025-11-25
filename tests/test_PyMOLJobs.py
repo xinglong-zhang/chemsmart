@@ -250,6 +250,7 @@ class TestPyMOLJobs:
                 assert i in content
         assert os.path.exists(style_file)
         assert os.path.exists(pse_file)
+
     def test_pymol_align_job_on_three_files(
         self,
         tmpdir,
