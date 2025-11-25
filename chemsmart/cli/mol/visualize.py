@@ -12,7 +12,6 @@ from chemsmart.cli.mol.mol import (
     mol,
 )
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.repattern import pymol_hybrid_selection_pattern
 
 logger = logging.getLogger(__name__)
 
