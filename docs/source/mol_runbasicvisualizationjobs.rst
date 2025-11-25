@@ -174,7 +174,7 @@ Visualization-Specific OPTIONS
 
    -  -  ``-ns, --new-color-sulfur``
       -  string
-      -  Set a custom color for sulfur atoms. (default=[0.8, 0.8, 0.9]).
+      -  Set a custom color for sulfur atoms. (default=[1.0, 0.7, 0.7]).
 
    -  -  ``-np, --new-color-phosphorus``
       -  string
