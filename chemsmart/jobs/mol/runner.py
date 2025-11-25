@@ -608,7 +608,7 @@ class PyMOLJobRunner(JobRunner):
             str: Command string with save command added.
         """
         # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.outputfile)}"
+        command += f"; cmd.save( {quote_path(job.outputfile)})"
 
         return command
 

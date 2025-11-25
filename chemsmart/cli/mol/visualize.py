@@ -78,7 +78,7 @@ def visualize(
     )
 
     if hybrid:
-        command_line_only = False
+        command_line_only = True
 
     visualizationjob = (
         PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
