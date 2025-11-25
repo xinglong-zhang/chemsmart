@@ -180,7 +180,9 @@ Visualization-Specific OPTIONS
       -  string
       -  Set a custom color for phosphorus atoms. (default=[1.0, 0.85, 0.6]).
 
+***********************
 Hybrid Visualization Basic Usage
+***********************
 
 **Basic hybrid visualization**
 
