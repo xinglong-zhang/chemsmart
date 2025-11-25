@@ -1,6 +1,5 @@
 import ast
 import logging
-import re
 
 import click
 
