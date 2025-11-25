@@ -194,7 +194,7 @@ This is the minimal command needed for hybrid visualization job. Only the highli
    .. code:: console
 
       chemsmart run mol -f calculation.log visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak
-This will assigned customized color scheme to different groups. Note that the color/group is assigned by input order, i.e., the first color ('cbay')
+This will assign a customized color scheme to different groups. Note that the color/group is assigned by input order, i.e., the first color ('cbay')
 will be assigned to the first group ([1,2,3]), etc. A default color scheme will be used if a group is not assigned customized colors.
 
 **Hybrid Visualization with customized background settings**
