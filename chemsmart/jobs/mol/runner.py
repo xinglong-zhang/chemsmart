@@ -886,7 +886,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         pattern = re.compile(r"^group\d+$")
         # Get all attributes of the job that start with 'group'
         for attr in dir(job):
-            if pattern.match(attr) and attr:
+            if pattern.match(attr):
                 group_value = getattr(job, attr)
                 if group_value is None:  # skip attributes with None value
                     continue
