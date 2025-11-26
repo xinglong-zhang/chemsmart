@@ -1,9 +1,33 @@
-import os.path
+"""
+PyMOL Spin Density Visualization Jobs Module.
+
+This module provides specialized PyMOL jobs for visualizing molecular spin
+density distributions. Handles cube file generation and PyMOL session
+creation for spin density analysis.
+"""
 
 from chemsmart.jobs.mol.job import PyMOLJob
 
 
 class PyMOLSpinJob(PyMOLJob):
+    """
+    PyMOL job for spin density visualization.
+
+    Specialized PyMOL job class for creating spin density visualizations
+    from quantum chemistry calculations. Generates cube files and PyMOL
+    sessions for analyzing electron spin distribution in molecules.
+
+    Attributes:
+        TYPE (str): Job type identifier ('pymol_spin').
+        molecule: Molecular structure object to visualize.
+        label (str): Job identifier used for file naming and outputs.
+        spin_basename (str): Basename used for spin density outputs
+            (e.g., cube and session files).
+        npts (int): Grid points per side used for cube generation.
+        jobrunner (JobRunner): Execution backend for running the job.
+        skip_completed (bool): If True, completed jobs are not rerun.
+    """
+
     TYPE = "pymol_spin"
 
     def __init__(
@@ -15,12 +39,21 @@ class PyMOLSpinJob(PyMOLJob):
         **kwargs,
     ):
         """
-        PyMOL spin density job.
+        Initialize PyMOL spin density visualization job.
+
+        Creates a PyMOL job for generating spin density visualizations
+        from quantum chemistry calculations. Configures cube file
+        generation parameters and output file naming.
+
         Args:
-            npts: Number of points per side in the cube.
-            A value of 0 selects default of 80^3 points distributed evenly over a rectangular grid.
-            Positive values of npts specify the number of points per “side”;
-            e.g., 100 specified a grid of 1,000,000 (100^3) points.
+            molecule: Molecular structure object for visualization.
+            label: Unique identifier label for the job.
+            spin_basename: Base name for spin density output files.
+                Defaults to "{label}_spin" if not provided.
+            npts: Number of grid points per side for cube generation
+                (default: 80). Positive values specify points per side
+                (e.g., 100 => 100^3 total grid points).
+            **kwargs: Additional keyword arguments passed to parent class.
         """
         super().__init__(
             molecule=molecule,
@@ -34,6 +67,12 @@ class PyMOLSpinJob(PyMOLJob):
         self.spin_basename = spin_basename
         self.npts = npts
 
-    def _job_is_complete(self):
-        """PyMOL MO job is complete if the corresponding .pse file exists."""
-        return os.path.exists(f"{self.spin_basename}.pse")
+    def _get_job_basename(self):
+        """
+        Internal method to derive the job base name.
+        Job specific implementation that overrides parent class method.
+
+        Returns:
+            str: Base name derived from the job label.
+        """
+        return self.spin_basename

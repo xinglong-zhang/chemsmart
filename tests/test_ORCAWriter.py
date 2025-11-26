@@ -113,13 +113,13 @@ class TestORCAInputWriter:
         assert os.path.isfile(orca_file)
         assert cmp(orca_file, orca_written_modred_file, shallow=False)
 
-    def test_write_scan_job(
+    def test_write_scan_single_degree_of_freedom_job(
         self,
         tmpdir,
         single_molecule_xyz_file,
         orca_yaml_settings_gas_solv_project_name,
         orca_jobrunner_no_scratch,
-        orca_written_scan_file,
+        orca_written_scan_single_degree_of_freedom_file,
     ):
         # get project settings
         project_settings = ORCAProjectSettings.from_project(
@@ -129,10 +129,10 @@ class TestORCAInputWriter:
         settings.charge = 0
         settings.multiplicity = 1
         settings.modred = {
-            "coords": [[1, 2], [3, 4]],
-            "num_steps": 10,
-            "dist_start": 1.5,
-            "dist_end": 3.5,
+            "coords": [[1, 2]],
+            "num_steps": [10],
+            "dist_start": [1.5],
+            "dist_end": [3.5],
         }
         job = ORCAScanJob.from_filename(
             filename=single_molecule_xyz_file,
@@ -147,7 +147,92 @@ class TestORCAInputWriter:
         orca_writer.write(target_directory=tmpdir)
         orca_file = os.path.join(tmpdir, "orca_scan.inp")
         assert os.path.isfile(orca_file)
-        assert cmp(orca_file, orca_written_scan_file, shallow=False)
+        assert cmp(
+            orca_file,
+            orca_written_scan_single_degree_of_freedom_file,
+            shallow=False,
+        )
+
+    def test_write_scan_multiple_degrees_of_freedom_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_gas_solv_project_name,
+        orca_jobrunner_no_scratch,
+        orca_written_scan_multiple_degrees_of_freedom_file,
+    ):
+        # get project settings
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.scan_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.modred = {
+            "coords": [[1, 2], [3, 4, 5], [6, 7, 8, 9]],
+            "num_steps": [10, 15, 20],
+            "dist_start": [1.5, 70.0, 80.0],
+            "dist_end": [3.5, 85.0, 60.0],
+        }
+        job = ORCAScanJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_scan",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        assert isinstance(job, ORCAScanJob)
+        orca_writer = ORCAInputWriter(job=job)
+
+        # write input file
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_scan.inp")
+        assert os.path.isfile(orca_file)
+        assert cmp(
+            orca_file,
+            orca_written_scan_multiple_degrees_of_freedom_file,
+            shallow=False,
+        )
+
+    def test_write_scan_multiple_degrees_of_freedom_with_constraints_job(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_gas_solv_project_name,
+        orca_jobrunner_no_scratch,
+        orca_written_scan_multiple_degrees_of_freedom_with_constraints_file,
+    ):
+        # get project settings
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.scan_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.modred = {
+            "coords": [[1, 2], [3, 4, 5]],
+            "num_steps": [10, 15],
+            "dist_start": [1.5, 70.0],
+            "dist_end": [3.5, 85.0],
+            "constrained_coordinates": [[5, 6], [7, 8, 9]],
+        }
+        job = ORCAScanJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_scan",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        assert isinstance(job, ORCAScanJob)
+        orca_writer = ORCAInputWriter(job=job)
+
+        # write input file
+        orca_writer.write(target_directory=tmpdir)
+        orca_file = os.path.join(tmpdir, "orca_scan.inp")
+        assert os.path.isfile(orca_file)
+        assert cmp(
+            orca_file,
+            orca_written_scan_multiple_degrees_of_freedom_with_constraints_file,
+            shallow=False,
+        )
 
     def test_write_ts_job(
         self,

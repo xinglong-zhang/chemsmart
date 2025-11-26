@@ -34,12 +34,14 @@ def userjob(ctx, route, append_info, **kwargs):
     opt_settings = project_settings.opt_settings()
     opt_settings.route_to_be_written = route
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project opt settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
     check_charge_and_multiplicity(opt_settings)
@@ -49,8 +51,10 @@ def userjob(ctx, route, append_info, **kwargs):
     molecule = molecules[
         -1
     ]  # get last molecule from list of molecules from cli.gaussian.py subcommands
-    # index = '-1' would access the right structure from the list of molecule returned from cli.gaussian.py subcommands
-    # user specified index was used there to return the right molecule and store it as a list of single element/itself
+    # index = '-1' would access the right structure from the list of molecule
+    # returned from cli.gaussian.py subcommands
+    # user specified index was used there to return the right molecule and
+    # store it as a list of single element/itself
 
     # get label for the job
     label = ctx.obj["label"]

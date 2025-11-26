@@ -159,13 +159,13 @@ class TestGaussianInputWriter:
         assert os.path.isfile(g16_file)
         assert cmp(g16_file, gaussian_written_modred_file, shallow=False)
 
-    def test_write_scan_job(
+    def test_write_scan_job_multiple_degrees_of_freedom(
         self,
         tmpdir,
         single_molecule_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
-        gaussian_written_scan_file,
+        gaussian_written_scan_multiple_degrees_of_freedom_file,
     ):
         # get project settings
         project_settings = GaussianProjectSettings.from_project(
@@ -176,13 +176,13 @@ class TestGaussianInputWriter:
         settings.multiplicity = 1
         settings.modred = {
             "coords": [[1, 2], [3, 4, 5]],
-            "num_steps": 10,
-            "step_size": 0.1,
+            "num_steps": [10, 18],
+            "step_size": [0.1, 5.0],
         }
         job = GaussianScanJob.from_filename(
             filename=single_molecule_xyz_file,
             settings=settings,
-            label="gaussian_scan",
+            label="gaussian_scan_multiple_degrees_of_freedom",
             jobrunner=gaussian_jobrunner_no_scratch,
         )
         assert isinstance(job, GaussianScanJob)
@@ -190,9 +190,104 @@ class TestGaussianInputWriter:
 
         # write input file
         g16_writer.write(target_directory=tmpdir)
-        g16_file = os.path.join(tmpdir, "gaussian_scan.com")
+        g16_file = os.path.join(
+            tmpdir, "gaussian_scan_multiple_degrees_of_freedom.com"
+        )
         assert os.path.isfile(g16_file)
-        assert cmp(g16_file, gaussian_written_scan_file, shallow=False)
+        assert cmp(
+            g16_file,
+            gaussian_written_scan_multiple_degrees_of_freedom_file,
+            shallow=False,
+        )
+
+    def test_write_scan_job_single_degree_of_freedom(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        gaussian_written_scan_single_degree_of_freedom_file,
+    ):
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.scan_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.modred = {
+            "coords": [1, 2],
+            "num_steps": [10],
+            "step_size": [0.1],
+        }
+        job = GaussianScanJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_scan_single_degree_of_freedom",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert isinstance(job, GaussianScanJob)
+        g16_writer = GaussianInputWriter(job=job)
+
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(
+            tmpdir, "gaussian_scan_single_degree_of_freedom.com"
+        )
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_scan_single_degree_of_freedom_file,
+            shallow=False,
+        )
+
+    def test_write_scan_job_multiple_degrees_of_freedom_with_constraints(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+        gaussian_written_scan_multiple_degrees_of_freedom_with_constraints_file,
+    ):
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.scan_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.modred = {
+            "coords": [
+                [1, 2],
+                [3, 4],
+                [5, 6, 7],
+                [8, 9, 10],
+                [11, 12, 13, 14],
+            ],
+            "num_steps": [10, 12, 18, 15, 36],
+            "step_size": [0.1, 0.2, 3.0, 4.0, 10.0],
+        }
+        job = GaussianScanJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="gaussian_scan_multiple_degrees_of_freedom_with_constraints",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        assert isinstance(job, GaussianScanJob)
+        g16_writer = GaussianInputWriter(job=job)
+
+        # write input file
+        g16_writer.write(target_directory=tmpdir)
+        g16_file = os.path.join(
+            tmpdir,
+            "gaussian_scan_multiple_degrees_of_freedom_with_constraints.com",
+        )
+        assert os.path.isfile(g16_file)
+        assert cmp(
+            g16_file,
+            gaussian_written_scan_multiple_degrees_of_freedom_with_constraints_file,
+            shallow=False,
+        )
 
     def test_write_ts_job(
         self,

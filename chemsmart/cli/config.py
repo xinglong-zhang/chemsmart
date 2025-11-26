@@ -17,7 +17,9 @@ class Config:
 
     @property
     def chemsmart_template(self):
-        """Define the source path for the .chemsmart templates."""
+        """
+        Define the source path for the .chemsmart templates.
+        """
         return (
             Path(__file__).resolve().parent
             / ".."
@@ -28,12 +30,16 @@ class Config:
 
     @property
     def chemsmart_dest(self):
-        """Define the destination path for the .chemsmart configuration."""
+        """
+        Define the destination path for the .chemsmart configuration.
+        """
         return Path.home() / ".chemsmart"
 
     @property
     def shell_config(self):
-        """Define the shell configuration file path."""
+        """
+        Define the shell configuration file path.
+        """
         if os.environ.get("SHELL", "").endswith("bash"):
             bashrc_filepath = Path.home() / ".bashrc"
             if bashrc_filepath.exists():
@@ -46,7 +52,9 @@ class Config:
 
     @property
     def chemsmart_package_path(self):
-        """Define the path for the chemsmart package."""
+        """
+        Define the path for the chemsmart package.
+        """
         chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
         chemsmart_path = os.path.abspath(chemsmart_path)
         logger.debug(f"chemsmart package path: {chemsmart_path}")
@@ -69,7 +77,9 @@ class Config:
 
     @property
     def conda_path(self):
-        """Define the path for the conda environment."""
+        """
+        Define the path for the conda environment.
+        """
         conda_path = shutil.which("conda")
         if conda_path is None or not os.path.exists(conda_path):
             raise FileNotFoundError(
@@ -79,22 +89,29 @@ class Config:
 
     @property
     def conda_folder(self):
-        """Define the path to the conda folder."""
+        """
+        Define the path to the conda folder.
+        """
         # Go up 2 directories from the conda path
         return os.path.dirname(os.path.dirname(self.conda_path))
 
     @property
     def env_vars(self):
-        """Define the environment variables to be added to the shell config."""
+        """
+        Define the environment variables to be added to the shell config.
+        """
         return [
             f'export PATH="{self.chemsmart_package_path}:$PATH"',
             f'export PATH="{self.chemsmart_package_path}/chemsmart/cli:$PATH"',
-            f'export PATH="{self.chemsmart_package_path}/chemsmart/scripts:$PATH"',
+            f'export PATH="{self.chemsmart_package_path}/chemsmart/scripts:'
+            f'$PATH"',
             f'export PYTHONPATH="{self.chemsmart_package_path}:$PYTHONPATH"',
         ]
 
     def setup_environment(self):
-        """Set up configuration files and environment variables."""
+        """
+        Set up configuration files and environment variables.
+        """
         # Copy templates to ~/.chemsmart
         if not self.chemsmart_dest.exists():
             shutil.copytree(self.chemsmart_template, self.chemsmart_dest)
@@ -127,8 +144,10 @@ class Config:
 
 
 def update_yaml_files(target_directory, value_in_file, user_value):
-    """Update YAML files in ~/.chemsmart/server to replace
-    value_in_file with the provided user_value."""
+    """
+    Update YAML files in ~/.chemsmart/server to replace value_in_file
+    with the provided user_value.
+    """
     target_dir = Path.home() / ".chemsmart" / target_directory
     if not target_dir.exists():
         logger.info(f"Server directory not found: {target_dir}")
@@ -154,8 +173,10 @@ def update_yaml_files(target_directory, value_in_file, user_value):
 def add_lines_in_yaml_files(
     target_directory, lines_in_positions, lines_to_add, prepend_string=""
 ):
-    """Add lines (lines_to_add) to at specific positions after given lines
-    (lines_in_positions) in all yaml files in a target directory."""
+    """
+    Add lines (lines_to_add) to at specific positions after given lines
+    (lines_in_positions) in all yaml files in a target directory.
+    """
     if not target_directory.exists():
         logger.info(f"Target directory not found: {target_directory}")
         return
@@ -174,7 +195,8 @@ def add_lines_in_yaml_files(
             for line in yaml_content:
                 updated_content.append(line)
 
-                # Check if the current line matches any line in `lines_in_positions`
+                # Check if the current line matches any line in
+                # `lines_in_positions`
                 if any(pos_line in line for pos_line in lines_in_positions):
                     if not skip_addition:  # Avoid duplicate additions
                         for new_line in lines_to_add:
@@ -204,7 +226,9 @@ def config(ctx):
         dict
     )  # Initialize the Click context object if not already initialized
     ctx.obj["cfg"] = cfg
-    """Set up configuration files and environment variables."""
+    """
+    Set up configuration files and environment variables.
+    """
     if ctx.invoked_subcommand is None:
         # Run the default environment setup when no subcommand is provided
         cfg.setup_environment()
@@ -213,7 +237,8 @@ def config(ctx):
 @config.command()
 @click.pass_context
 def server(ctx):
-    """Configures server settings in ~/.chemsmart/server/*yaml files.
+    """
+    Configures server settings in ~/.chemsmart/server/*yaml files.
 
     Add conda env vars after the lines
     EXTRA_COMMANDS: |
@@ -228,7 +253,8 @@ def server(ctx):
     add_lines_in_yaml_files(
         cfg.chemsmart_server,
         [
-            "#extra commands to activate chemsmart environment in submission script"
+            "#extra commands to activate chemsmart environment in "
+            "submission script"
         ],
         cfg.env_vars,
         prepend_string=" " * 8,
@@ -248,7 +274,8 @@ def server(ctx):
     help="Path to the Gaussian g16 folder.",
 )
 def gaussian(ctx, folder):
-    """Configures paths to g16 folder.
+    """
+    Configures paths to g16 folder.
 
     Replaces '~/bin/g16' with the specified folder in YAML files.
 
@@ -260,7 +287,7 @@ def gaussian(ctx, folder):
         g16_folder = os.path.expanduser(folder)
         assert os.path.exists(
             os.path.abspath(g16_folder)
-        ), f"Folder not found: {g16_folder}"
+        ), f"Gaussian folder not found: {g16_folder}"
     logger.info(f"Configuring Gaussian with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/bin/g16", folder)
 
@@ -275,26 +302,56 @@ def gaussian(ctx, folder):
     help="Path to the ORCA folder.",
 )
 def orca(ctx, folder):
-    """Configures paths to g16 folder.
+    """
+    Configures paths to ORCA folder.
 
-    Replaces '~/bin/g16' with the specified folder in YAML files.
+    Replaces '~/bin/orca' with the specified folder in YAML files.
 
     Examples:
-        chemsmart config gaussian --folder <G16FOLDER>
+        chemsmart config orca --folder <ORCAFOLDER>
     """
     cfg = ctx.obj["cfg"]
     if "~" in folder:
         orca_folder = os.path.expanduser(folder)
         assert os.path.exists(
             os.path.abspath(orca_folder)
-        ), f"Folder not found: {orca_folder}"
-    logger.info(f"Configuring Gaussian with folder: {folder}")
+        ), f"ORCA folder not found: {orca_folder}"
+    logger.info(f"Configuring ORCA with folder: {folder}")
     update_yaml_files(cfg.chemsmart_server, "~/bin/orca_6_0_0", folder)
+
+
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=True,
+    help="Path to the NCIPLOT folder.",
+)
+def nciplot(ctx, folder):
+    """
+    Configures paths to NCIPLOT folder.
+
+    Replaces '~/bin/nciplot' with the specified folder in YAML files.
+
+    Examples:
+        chemsmart config nciplot --folder <NCIPLOTFOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+    if "~" in folder:
+        nciplot_folder = os.path.expanduser(folder)
+        assert os.path.exists(
+            os.path.abspath(nciplot_folder)
+        ), f"NCIPLOT folder not found: {nciplot_folder}"
+    logger.info(f"Configuring NCIPLOT with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
+config.add_command(nciplot)
 
 if __name__ == "__main__":
     config()
