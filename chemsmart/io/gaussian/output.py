@@ -1153,7 +1153,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def alpha_occ_eigenvalues(self):
         """
-        Obtain all eigenenergies of the alpha occuplied orbitals and convert to eV.
+        Obtain all eigenenergies of the alpha occupied orbitals and convert to eV.
         """
         alpha_occ_eigenvalues = []
 
@@ -1193,7 +1193,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def alpha_virtual_eigenvalues(self):
         """
-        Obtain all eigenenergies of the alpha unoccuplied orbitals.
+        Obtain all eigenenergies of the alpha unoccupied orbitals.
         Units of eV, as for orbital energies.
         """
 
@@ -1233,7 +1233,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def beta_occ_eigenvalues(self):
         """
-        Obtain all eigenenergies of the beta occuplied orbitals.
+        Obtain all eigenenergies of the beta occupied orbitals.
         Units of eV, as for orbital energies.
         """
         # Iterate through lines in reverse to find the last block of eigenvalues
@@ -1272,7 +1272,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def beta_virtual_eigenvalues(self):
         """
-        Obtain all eigenenergies of the beta unoccuplied orbitals.
+        Obtain all eigenenergies of the beta unoccupied orbitals.
         Units of eV, as for orbital energies.
         """
 
@@ -1336,17 +1336,20 @@ class Gaussian16Output(GaussianFileMixin):
         lowest-energy singly occupied molecular orbital (SOMO), which is
         the first α orbital above the doubly-occupied manifold.
 
+        For closed-shell systems (multiplicity == 1), returns None.
+
         For a complete picture of all SOMOs, use `somo_energies` property.
         """
-        if self.multiplicity != 1:
-            # the multiplicity is the number of unpaired electrons + 1
-            assert (
-                len(self.alpha_occ_eigenvalues)
-                - len(self.beta_occ_eigenvalues)
-                + 1
-                == self.multiplicity
-            )
-            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons]
+        if self.multiplicity == 1:
+            return None
+        # the multiplicity is the number of unpaired electrons + 1
+        assert (
+            len(self.alpha_occ_eigenvalues)
+            - len(self.beta_occ_eigenvalues)
+            + 1
+            == self.multiplicity
+        )
+        return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons]
 
     @cached_property
     def somo_energies(self):
