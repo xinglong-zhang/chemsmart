@@ -285,6 +285,106 @@ class Molecule:
             return list(self.symbols)
 
     @property
+    def atomic_radii_list(self):
+        """Return a list of atomic radii for each atom in the molecule."""
+        return [p.covalent_radius(symbol) for symbol in self.symbols]
+
+    @property
+    def vdw_radii_list(self):
+        """Return a list of van der Waals radii for each atom in the molecule."""
+        return [p.vdw_radius(symbol) for symbol in self.symbols]
+
+    @property
+    def estimated_dispersion(self):
+        """Estimated dispersion parameter for Voronoi tessellation.
+        Returns:
+        - dispersion (float): Estimated maximum distance for adjacent points.
+        """
+        n_points = self.distance_matrix.shape[0]
+        max_distance = np.max(
+            self.distance_matrix[np.triu_indices(n_points, k=1)]
+        )
+
+        max_radii_sum = 0.0
+        radii = np.array(self.vdw_radii_list)
+        if len(radii) != n_points:
+            raise ValueError("Number of radii must match number of points.")
+        for i in range(n_points):
+            for j in range(i + 1, n_points):
+                radii_sum = radii[i] + radii[j]
+                max_radii_sum = max(max_radii_sum, radii_sum)
+
+        # Use a factor of 1.5 to ensure sufficient dispersion for Voronoi tessellation
+        dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
+        return dispersion
+
+    @property
+    def voronoi_dirichlet_occupied_volume(self):
+        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet tessellation.
+
+        Note: This method requires the pyvoro package, which can be installed with:
+            pip install chemsmart[voronoi]
+        Note: pyvoro requires Python < 3.12
+        """
+        from chemsmart.utils.geometry import (
+            calculate_voronoi_dirichlet_occupied_volume,
+        )
+
+        return calculate_voronoi_dirichlet_occupied_volume(
+            coords=self.positions,
+            radii=self.vdw_radii_list,
+            dispersion=self.estimated_dispersion,
+        )
+
+    @property
+    def voronoi_dirichlet_polyhedra_occupied_volume(self):
+        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet Polyhedra (VDP)."""
+        from chemsmart.utils.geometry import (
+            calculate_molecular_volume_vdp,
+        )
+
+        return calculate_molecular_volume_vdp(
+            coordinates=self.positions,
+            vdw_radii=self.vdw_radii_list,
+        )
+
+    @property
+    def crude_volume_by_atomic_radii(self):
+        """Calculate the crude occupied volume of the molecule using atomic radii."""
+        from chemsmart.utils.geometry import calculate_crude_occupied_volume
+
+        return calculate_crude_occupied_volume(
+            coords=self.positions, radii=self.atomic_radii_list
+        )
+
+    @property
+    def crude_volume_by_vdw_radii(self):
+        """Calculate the crude occupied volume of the molecule using van der Waals radii."""
+        from chemsmart.utils.geometry import calculate_crude_occupied_volume
+
+        return calculate_crude_occupied_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def vdw_volume(self):
+        """Calculate the occupied volume of the molecule using van der Waals radii."""
+        from chemsmart.utils.geometry import calculate_vdw_volume
+
+        return calculate_vdw_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def vdw_volume_from_rdkit(self):
+        """Calculate the van der Waals volume of the molecule using RDKit."""
+        from rdkit.Chem.rdMolDescriptors import DoubleCubicLatticeVolume
+
+        dclv = DoubleCubicLatticeVolume(self.to_rdkit())
+        volume = dclv.GetVDWVolume()
+        return volume
+
+    @property
     def num_atoms(self):
         """
         Return the number of atoms in the molecule.
@@ -318,7 +418,8 @@ class Molecule:
         """
         Check if molecule is aromatic or not.
         """
-        return Chem.GetAromaticAtoms(self.to_rdkit()) != []
+        mol = self.to_rdkit()
+        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
 
     @property
     def is_ring(self):

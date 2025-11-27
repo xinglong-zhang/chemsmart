@@ -9,6 +9,7 @@ from chemsmart.utils.constants import (
     hartree_to_joules,
     joule_per_mol_to_eV,
 )
+from chemsmart.utils.geometry import is_collinear
 
 # Define conversion factors for reference (in J/mol)
 HARTREE_TO_J_MOL = hartree_to_joules * units._Nav  # ~2625.499639 kJ/mol
@@ -27,6 +28,15 @@ class TestUnits:
         assert np.isclose(bohr_to_meter, 0.52917721067e-10, atol=1e-10)
         assert amu_to_kg == 1 * units._amu
         assert np.isclose(amu_to_kg, 1.66053906660e-27, atol=1e-27)
+
+
+class TestGeometry:
+    def test_is_collinear(self):
+        coords = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])
+        assert is_collinear(coords) == True
+
+        coords = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 3]])
+        assert is_collinear(coords) == False
 
 
 class TestEnergyConversion:
