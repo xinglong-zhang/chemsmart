@@ -53,6 +53,30 @@ When you generate a command, output ONLY the command starting with "chemsmart" \
 without any explanation. If you cannot generate a command, explain why.
 """
 
+# Pre-compiled regex patterns for performance
+_FILE_PATTERN = re.compile(r"(\S+\.(com|xyz|log|gjf|inp|out|traj|db))")
+_SERVER_PATTERN = re.compile(r"server\s+(\w+)")
+_PROJECT_PATTERN = re.compile(r"project\s+(\w+)")
+_FILE_KEYWORD_PATTERN = re.compile(r"file\s+(\S+)")
+
+# Pre-compiled job type patterns
+_JOB_TYPE_PATTERNS = [
+    (re.compile(r"\birc\b"), "irc"),
+    (re.compile(r"\bts\b"), "ts"),
+    (re.compile(r"\bsp\b"), "sp"),
+    (re.compile(r"\bscan\b"), "scan"),
+    (re.compile(r"\bmodred\b"), "modred"),
+    (re.compile(r"\bfrozen\b"), "modred"),
+    (re.compile(r"\bnci\b"), "nci"),
+    (re.compile(r"\bresp\b"), "resp"),
+    (re.compile(r"\bcrest\b"), "crest"),
+    (re.compile(r"\bconformer"), "crest"),
+    (re.compile(r"\bdias\b"), "dias"),
+    (re.compile(r"\bdistortion"), "dias"),
+    (re.compile(r"\boptimiz"), "opt"),
+    (re.compile(r"\bopt\b"), "opt"),
+]
+
 
 class LLM:
     """LLM interface that supports OpenAI API or offline mode."""
@@ -117,9 +141,9 @@ class LLM:
         # If we found explicit patterns (file, server, project), use constructed
         # command as it will be more accurate to user's intent
         has_explicit_params = (
-            re.search(r"(\S+\.(com|xyz|log|gjf|inp|out|traj|db))", user_lower)
-            or re.search(r"server\s+\w+", user_lower)
-            or re.search(r"project\s+\w+", user_lower)
+            _FILE_PATTERN.search(user_lower)
+            or _SERVER_PATTERN.search(user_lower)
+            or _PROJECT_PATTERN.search(user_lower)
         )
 
         if has_explicit_params:
@@ -166,51 +190,32 @@ class LLM:
                 job_type = job
                 break
         else:
-            # Check for single-word patterns with word boundaries
-            single_word_mappings = [
-                (r"\birc\b", "irc"),
-                (r"\bts\b", "ts"),
-                (r"\bsp\b", "sp"),
-                (r"\bscan\b", "scan"),
-                (r"\bmodred\b", "modred"),
-                (r"\bfrozen\b", "modred"),
-                (r"\bnci\b", "nci"),
-                (r"\bresp\b", "resp"),
-                (r"\bcrest\b", "crest"),
-                (r"\bconformer", "crest"),
-                (r"\bdias\b", "dias"),
-                (r"\bdistortion", "dias"),
-                (r"\boptimiz", "opt"),
-                (r"\bopt\b", "opt"),
-            ]
-
-            for pattern, job in single_word_mappings:
-                if re.search(pattern, user_lower):
+            # Check for single-word patterns with pre-compiled regexes
+            for pattern, job in _JOB_TYPE_PATTERNS:
+                if pattern.search(user_lower):
                     job_type = job
                     break
 
-        # Detect server
+        # Detect server using pre-compiled pattern
         server = "shared"  # default
-        server_match = re.search(r"server\s+(\w+)", user_lower)
+        server_match = _SERVER_PATTERN.search(user_lower)
         if server_match:
             server = server_match.group(1)
 
-        # Detect project
+        # Detect project using pre-compiled pattern
         project = "test"  # default
-        project_match = re.search(r"project\s+(\w+)", user_lower)
+        project_match = _PROJECT_PATTERN.search(user_lower)
         if project_match:
             project = project_match.group(1)
 
-        # Detect input file
+        # Detect input file using pre-compiled patterns
         input_file = "input.com"  # default
-        file_match = re.search(r"file\s+(\S+)", user_lower)
+        file_match = _FILE_KEYWORD_PATTERN.search(user_lower)
         if file_match:
             input_file = file_match.group(1)
         else:
             # Look for common file extensions
-            file_ext_match = re.search(
-                r"(\S+\.(com|xyz|log|gjf|inp|out))", user_lower
-            )
+            file_ext_match = _FILE_PATTERN.search(user_lower)
             if file_ext_match:
                 input_file = file_ext_match.group(1)
 
