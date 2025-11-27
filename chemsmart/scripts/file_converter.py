@@ -1,9 +1,17 @@
 #!/usr/bin/env python
+"""
+File format converter script.
+
+This script provides command-line functionality to convert molecular
+structure files between different formats (e.g., XYZ, SDF, MOL).
+"""
+
 import logging
 import os
 
 import click
 
+from chemsmart.cli.logger import logger_options
 from chemsmart.io.converter import FileConverter
 from chemsmart.utils.logger import create_logger
 
@@ -22,7 +30,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-t",
     "--type",
     default=None,
-    help="Type of file to be converted, if direcotry is specified.",
+    help="Type of file to be converted, if directory is specified.",
 )
 @click.option(
     "-f", "--filename", default=None, help="Input filename to be converted."
@@ -31,7 +39,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "-o",
     "--output-filetype",
     default="xyz",
-    help="Type of files to convert to, defaults to .xzy",
+    help="Type of files to convert to, defaults to .xyz",
 )
 @click.option(
     "-i/",
@@ -41,11 +49,20 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default=False,
     help="Include intermediate structures in the conversion.",
 )
+@logger_options
 def entry_point(
-    directory, type, filename, output_filetype, include_intermediate_structures
+    directory,
+    type,
+    filename,
+    output_filetype,
+    include_intermediate_structures,
+    debug,
+    stream,
 ):
-    """Script for converting structures in different formats."""
-    create_logger()
+    """
+    Script for converting structures in different formats.
+    """
+    create_logger(debug=debug, stream=stream)
     if directory is not None:
         logger.info(f"Converting files in directory: {directory}")
         assert (

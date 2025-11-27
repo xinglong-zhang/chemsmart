@@ -25,7 +25,7 @@ GAUSSIAN:
         module load craype-x86-rome
         module load libfabric/1.11.0.4.125
     SCRIPTS: |
-        tcsh -c "source ~/programs/g16/bsd/g16.login"
+        tcsh -c "source ~/bin/g16/bsd/g16.login"
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export GAUSS_EXEDIR=~/bin/g16
@@ -36,6 +36,24 @@ ORCA:
     LOCAL_RUN: False  # local run False to use parallel_command
     SCRATCH: True  # set scratch to False to run in job folder
     CONDA_ENV: |   # program-specific conda env
-        source ~/anaconda3/etc/profile.d/conda.sh
-        conda activate ~/anaconda3/envs/chemsmart
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: |
+        module purge
+        module load libfabric
+        module load openmpi
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
 
+NCIPLOT:
+    EXEFOLDER: ~/bin/nciplot
+    LOCAL_RUN: False  # local run True to use serial_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: |
+        module purge
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+        export NCIPLOT_HOME=~/bin/nciplot

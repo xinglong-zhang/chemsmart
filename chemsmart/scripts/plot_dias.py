@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+DIAS (distortion interaction-activation strain model) plotting script.
+
+This script creates plots and visualizations for DIAS aromaticity analysis
+from Gaussian and ORCA calculations, helping to analyze non-covalent
+interactions in molecular systems.
+"""
+
 import click
 
 from chemsmart.analysis.dias import GaussianDIASLogFolder, ORCADIASOutFolder
@@ -23,7 +31,7 @@ from chemsmart.utils.logger import create_logger
     "-o",
     "--outputname",
     default="dias",
-    help="output file name for dias data to be written",
+    help="Output file name for DIAS data to be written",
 )
 @click.option("-e", "--extrapolate", default=True)
 @click.option("-r", "--reverse/--no-reverse", default=False)
@@ -33,7 +41,8 @@ from chemsmart.utils.logger import create_logger
     "--k-value",
     type=int,
     default=3,
-    help="Degree of the smoothing spline. Must be 1 <= k <= 5. k = 3 is a cubic spline. Default is 3.",
+    help="Degree of the smoothing spline. Must be 1 <= k <= 5. "
+    "k = 3 is a cubic spline. Default is 3.",
 )
 @click.option(
     "-a",
@@ -71,8 +80,14 @@ def entry_point(
     atom_number2,
     ref_file,
 ):
-    """Example usage: plot_dias.py -p orca -z  -a 5 -b 7 -r."""
+    """
+    Analyze and plot DIAS data from quantum chemistry calculations.
+
+    Example usage: plot_dias.py -p orca -z -a 5 -b 7 -r
+    """
     create_logger(debug=True, stream=True)
+
+    # Initialize DIAS analysis based on program type
     if program.lower() == "gaussian":
         dias_folder = GaussianDIASLogFolder(
             folder=folder,
@@ -93,8 +108,11 @@ def entry_point(
         )
     else:
         raise TypeError(
-            "Unknown program output files to plot DIAS. Supported outputs are from Gaussian or ORCA."
+            "Unknown program output files to plot DIAS. "
+            "Supported outputs are from Gaussian or ORCA."
         )
+
+    # Generate DIAS data and plots
     dias_folder.write_data()
     dias_folder.plot_dias(
         extrapolate=extrapolate,

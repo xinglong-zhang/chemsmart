@@ -1,5 +1,6 @@
 import math
 import os
+from shutil import copy
 
 import numpy as np
 import pytest
@@ -155,7 +156,52 @@ class TestORCAInput:
             match="Your input file specifies solvent but solvent is not in quotes, "
             "thus, your input file is not valid to run for ORCA!",
         ):
-            orca_inp.solvent_id  # noqa: B018
+            orca_inp.solvent_id
+
+    def test_orca_input_with_xyz_files_specified(
+        self,
+        tmpdir,
+        orca_input_nebts_file,
+        orca_input_nebts_reactant_xyz_file,
+        orca_input_nebts_product_xyz_file,
+        orca_input_nebts_ts_xyz_file,
+    ):
+        # copy all files to tmpdir
+        orca_input_nebts_file_tmp = os.path.join(
+            tmpdir, "orca_input_nebts.inp"
+        )
+        orca_input_nebts_reactant_xyz_file_tmp = os.path.join(
+            tmpdir, "reactant.xyz"
+        )
+        orca_input_nebts_product_xyz_file_tmp = os.path.join(
+            tmpdir, "product.xyz"
+        )
+        orca_input_nebts_ts_xyz_file_tmp = os.path.join(tmpdir, "ts.xyz")
+        copy(orca_input_nebts_file, orca_input_nebts_file_tmp)
+        copy(
+            orca_input_nebts_reactant_xyz_file,
+            orca_input_nebts_reactant_xyz_file_tmp,
+        )
+        copy(
+            orca_input_nebts_product_xyz_file,
+            orca_input_nebts_product_xyz_file_tmp,
+        )
+        copy(orca_input_nebts_ts_xyz_file, orca_input_nebts_ts_xyz_file_tmp)
+        assert os.path.exists(orca_input_nebts_file_tmp)
+        assert os.path.exists(orca_input_nebts_reactant_xyz_file_tmp)
+        assert os.path.exists(orca_input_nebts_product_xyz_file_tmp)
+        assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
+
+        orca_inp = ORCAInput(filename=orca_input_nebts_file)
+        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.functional is None
+        assert orca_inp.basis is None
+        assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
+        assert orca_inp.charge == 0
+        assert orca_inp.multiplicity == 1
+        assert orca_inp.molecule.num_atoms == 40
+        assert isinstance(orca_inp.molecule, Molecule)
+        assert orca_inp.molecule.empirical_formula == "C23H15NO"
 
 
 class TestORCAOutput:
@@ -165,10 +211,11 @@ class TestORCAOutput:
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"
         assert orca_out.basis == "def2-svp"
+        assert orca_out.spin == "restricted"
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.extrapolation_basis is None
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         assert orca_out.num_basis_functions == 24
         assert orca_out.num_shells == 12
         assert orca_out.max_ang_mom == 2
@@ -389,44 +436,44 @@ class TestORCAOutput:
         # test HOMO LUMO
 
         assert orca_out.mulliken_atomic_charges == {
-            "O0": -0.32926,
-            "H1": 0.16463,
+            "O1": -0.32926,
             "H2": 0.16463,
+            "H3": 0.16463,
         }
         assert orca_out.loewdin_atomic_charges == {
-            "O0": -0.155184,
-            "H1": 0.077592,
+            "O1": -0.155184,
             "H2": 0.077592,
+            "H3": 0.077592,
         }
         assert orca_out.mayer_mulliken_gross_atomic_population == {
-            "O0": 8.3293,
-            "H1": 0.8354,
+            "O1": 8.3293,
             "H2": 0.8354,
+            "H3": 0.8354,
         }
         assert orca_out.mayer_total_nuclear_charge == {
-            "O0": 8.0,
-            "H1": 1.0,
+            "O1": 8.0,
             "H2": 1.0,
+            "H3": 1.0,
         }
         assert orca_out.mayer_mulliken_gross_atomic_charge == {
-            "O0": -0.3293,
-            "H1": 0.1646,
+            "O1": -0.3293,
             "H2": 0.1646,
+            "H3": 0.1646,
         }
         assert orca_out.mayer_total_valence == {
-            "O0": 2.0072,
-            "H1": 1.0104,
+            "O1": 2.0072,
             "H2": 1.0104,
+            "H3": 1.0104,
         }
         assert orca_out.mayer_bonded_valence == {
-            "O0": 2.0072,
-            "H1": 1.0104,
+            "O1": 2.0072,
             "H2": 1.0104,
+            "H3": 1.0104,
         }
-        assert orca_out.mayer_free_valence == {"H1": 0.0, "H2": 0.0, "O0": 0.0}
+        assert orca_out.mayer_free_valence == {"H2": 0.0, "H3": 0.0, "O1": 0.0}
         assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
-            "B(O0,H1)": 1.0036,
-            "B(O0,H2)": 1.0036,
+            "B(O1,H2)": 1.0036,
+            "B(O1,H3)": 1.0036,
         }
         assert np.allclose(
             orca_out.dipole_moment_electric_contribution,
@@ -470,6 +517,41 @@ class TestORCAOutput:
             3875.61,
             3971.9,
         ]
+        mode1 = np.array(
+            [
+                [-0.0, 0.0, -0.069893],
+                [-0.43577, -0.0, 0.554673],
+                [0.43577, -0.0, 0.554673],
+            ]
+        )
+        mode2 = np.array(
+            [
+                [0.0, -0.0, -0.050918],
+                [0.579153, -0.0, 0.404085],
+                [-0.579154, 0.0, 0.404085],
+            ]
+        )
+        mode3 = np.array(
+            [
+                [
+                    [-0.069728, -0.0, -0.0],
+                    [0.553362, 0.0, 0.437448],
+                    [0.553361, 0.0, -0.437447],
+                ],
+            ]
+        )
+        assert len(orca_out.vibrational_modes) == 3
+        assert np.allclose(orca_out.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[2], mode3, rtol=1e-4)
+
+        # test for molecule obtained from output file
+        mol = orca_out.molecule
+        assert len(mol.vibrational_modes) == 3
+        assert np.allclose(mol.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[2], mode3, rtol=1e-4)
+
         assert orca_out.vib_freq_scale_factor == 1.0
         assert orca_out.molar_absorption_coefficients == [
             0.012719,
@@ -486,6 +568,19 @@ class TestORCAOutput:
             0.000239,
             0.000778,
         ]
+        transition_dipole1 = np.array([0.000000, -0.000000, 0.049416])
+        transition_dipole2 = np.array([-0.000000, -0.000000, 0.015460])
+        transition_dipole3 = np.array([0.027888, -0.000000, 0.000000])
+        assert np.allclose(
+            orca_out.transition_dipoles[0], transition_dipole1, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[1], transition_dipole2, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[2], transition_dipole3, rtol=1e-4
+        )
+
         assert orca_out.num_translation_and_rotation_modes == 6
         assert orca_out.num_vibration_modes == 3
         assert orca_out.temperature_in_K == 298.15
@@ -535,47 +630,47 @@ class TestORCAOutput:
             144.8035920,
             rel_tol=1e-4,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.5831641766362, rel_tol=1e-4)
+        assert math.isclose(orca_out.entropy_TS, 0.02143089, rel_tol=1e-4)
 
         assert orca_out.mulliken_atomic_charges == {
-            "O0": -0.32926,
-            "H1": 0.16463,
+            "O1": -0.32926,
             "H2": 0.16463,
+            "H3": 0.16463,
         }
         assert orca_out.loewdin_atomic_charges == {
-            "O0": -0.155184,
-            "H1": 0.077592,
+            "O1": -0.155184,
             "H2": 0.077592,
+            "H3": 0.077592,
         }
         assert orca_out.mayer_mulliken_gross_atomic_population == {
-            "O0": 8.3293,
-            "H1": 0.8354,
+            "O1": 8.3293,
             "H2": 0.8354,
+            "H3": 0.8354,
         }
         assert orca_out.mayer_total_nuclear_charge == {
-            "O0": 8.0,
-            "H1": 1.0,
+            "O1": 8.0,
             "H2": 1.0,
+            "H3": 1.0,
         }
         assert orca_out.mayer_mulliken_gross_atomic_charge == {
-            "O0": -0.3293,
-            "H1": 0.1646,
+            "O1": -0.3293,
             "H2": 0.1646,
+            "H3": 0.1646,
         }
         assert orca_out.mayer_total_valence == {
-            "O0": 2.0072,
-            "H1": 1.0104,
+            "O1": 2.0072,
             "H2": 1.0104,
+            "H3": 1.0104,
         }
         assert orca_out.mayer_bonded_valence == {
-            "O0": 2.0072,
-            "H1": 1.0104,
+            "O1": 2.0072,
             "H2": 1.0104,
+            "H3": 1.0104,
         }
-        assert orca_out.mayer_free_valence == {"H1": 0.0, "H2": 0.0, "O0": 0.0}
+        assert orca_out.mayer_free_valence == {"H2": 0.0, "H3": 0.0, "O1": 0.0}
         assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
-            "B(O0,H1)": 1.0036,
-            "B(O0,H2)": 1.0036,
+            "B(O1,H2)": 1.0036,
+            "B(O1,H3)": 1.0036,
         }
         assert np.allclose(
             orca_out.dipole_moment_electric_contribution,
@@ -604,6 +699,7 @@ class TestORCAOutput:
             np.array([0.0, -2.056815, 0.0]),
             rtol=1e-4,
         )
+        assert orca_out.rotational_symmetry_number == 2
         assert orca_out.rotational_constants_in_wavenumbers == [
             26.416987,
             14.661432,
@@ -648,18 +744,18 @@ class TestORCAOutput:
         assert (
             orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K
             == {
-                1: 49.65043,
-                2: 43.887276,
-                3: 40.516087,
-                4: 38.124122,
-                5: 36.268792,
-                6: 34.752933,
-                7: 33.471224,
-                8: 32.361055,
-                9: 31.381743,
-                10: 30.505726,
-                11: 29.713277,
-                12: 28.989778,
+                "sn=1": 49.65043,
+                "sn=2": 43.887276,
+                "sn=3": 40.516087,
+                "sn=4": 38.124122,
+                "sn=5": 36.268792,
+                "sn=6": 34.752933,
+                "sn=7": 33.471224,
+                "sn=8": 32.361055,
+                "sn=9": 31.381743,
+                "sn=10": 30.505726,
+                "sn=11": 29.713277,
+                "sn=12": 28.989778,
             }
         )
 
@@ -669,8 +765,21 @@ class TestORCAOutput:
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
 
+    def test_he_freq_output(self, orca_he_output_freq):
+        orca_out = ORCAOutput(filename=orca_he_output_freq)
+        assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.spin == "restricted"
+        assert orca_out.rotational_symmetry_number == 1
+        assert orca_out.rotational_constants_in_wavenumbers == [0, 0, 0]
+        assert orca_out.rotational_constants_in_MHz == [0, 0, 0]
+        assert orca_out.num_vibration_modes == 0
+        assert orca_out.temperature_in_K == 298.15
+        assert orca_out.pressure_in_atm == 1.00
+        assert orca_out.total_mass_in_amu == 4.00
+
     def test_read_sp_output(self, water_sp_gas_path):
         orca_out = ORCAOutput(filename=water_sp_gas_path)
+        assert orca_out.spin == "restricted"
         assert (
             orca_out.route_string
             == "!  DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
@@ -680,7 +789,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
         assert orca_out.aux_basis == "AutoAux".lower()
         assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()
-        assert orca_out.natoms == 3
+        assert orca_out.num_atoms == 3
         assert orca_out.num_basis_functions == 30
         assert orca_out.num_shells == 18
         assert orca_out.max_ang_mom == 2
@@ -717,12 +826,13 @@ class TestORCAOutput:
             orca_out.route_string
             == "! CPCM DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
         )
+        assert orca_out.spin == "restricted"
         assert orca_out.functional is None
         assert orca_out.basis is None
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
         assert orca_out.aux_basis == "AutoAux".lower()
         assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()
-        assert orca_out.natoms == 78
+        assert orca_out.num_atoms == 78
         assert orca_out.num_basis_functions == 1200
         assert orca_out.num_shells == 720
         assert orca_out.max_ang_mom == 2
@@ -758,12 +868,13 @@ class TestORCAOutput:
     def test_read_hirshfeld_full_print_output(self, hirshfeld_full_print):
         orca_out = ORCAOutput(filename=hirshfeld_full_print)
         assert orca_out.route_string == "! Hirshfeld".lower()
+        assert orca_out.spin == "restricted"
         assert orca_out.functional is None
         assert orca_out.basis is None
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.extrapolation_basis is None
-        assert orca_out.natoms == 78
+        assert orca_out.num_atoms == 78
         assert orca_out.num_basis_functions == 876
         assert orca_out.num_shells == 396
         assert orca_out.max_ang_mom == 2
@@ -799,233 +910,232 @@ class TestORCAOutput:
         assert np.isclose(orca_out.final_energy, -3017.439958087227, rtol=1e-4)
         assert np.isclose(orca_out.final_energy, -3017.44162461, rtol=1e-4)
         assert orca_out.mulliken_atomic_charges == {
-            "O0": -0.544377,
-            "O1": -0.409137,
-            "O2": -0.606993,
-            "C3": 0.677261,
-            "C4": 0.867621,
-            "O5": -0.528054,
-            "O6": -0.567098,
-            "O7": -0.379967,
-            "C8": 0.817666,
-            "C9": 0.693779,
-            "C10": -0.203223,
-            "C11": 0.011123,
-            "C12": 0.046179,
-            "C13": -0.002551,
-            "H14": 0.063852,
-            "C15": -0.00488,
-            "H16": 0.084111,
-            "C17": -0.208516,
-            "H18": 0.042411,
-            "H19": 0.040349,
-            "C20": -0.197355,
-            "C21": 0.029296,
-            "C22": 0.059636,
-            "C23": -0.003394,
-            "H24": 0.047614,
-            "C25": -0.006339,
-            "H26": 0.069309,
-            "C27": -0.208924,
-            "H28": 0.039999,
-            "H29": 0.042263,
-            "C30": -0.265534,
-            "C31": 0.061251,
-            "C32": 0.057398,
-            "C33": -0.002789,
-            "H34": 0.078851,
-            "C35": -0.002288,
-            "H36": 0.069767,
-            "C37": -0.19645,
-            "H38": 0.051254,
-            "H39": 0.05065,
-            "C40": -0.294612,
-            "C41": 0.040797,
-            "C42": 0.052521,
-            "C43": 0.000933,
-            "H44": 0.073947,
-            "C45": 0.000287,
-            "H46": 0.076551,
-            "C47": -0.20139,
-            "H48": 0.048462,
-            "H49": 0.049734,
-            "C50": -0.029678,
-            "H51": 0.079891,
-            "H52": 0.081113,
-            "C53": 0.898756,
-            "C54": -0.027638,
-            "H55": 0.074581,
-            "H56": 0.075537,
-            "C57": 0.898419,
-            "C58": -0.0271,
-            "H59": 0.0765,
-            "H60": 0.075212,
-            "C61": 0.897581,
-            "C62": -0.03138,
-            "H63": 0.081663,
-            "H64": 0.08177,
-            "C65": 0.899537,
-            "F66": -0.300158,
-            "F67": -0.298385,
-            "F68": -0.300066,
-            "F69": -0.301256,
-            "F70": -0.299519,
-            "F71": -0.301222,
-            "F72": -0.301847,
-            "F73": -0.30405,
-            "F74": -0.30104,
-            "F75": -0.303988,
-            "F76": -0.300916,
-            "F77": -0.30332,
+            "O1": -0.544377,
+            "O2": -0.409137,
+            "O3": -0.606993,
+            "C4": 0.677261,
+            "C5": 0.867621,
+            "O6": -0.528054,
+            "O7": -0.567098,
+            "O8": -0.379967,
+            "C9": 0.817666,
+            "C10": 0.693779,
+            "C11": -0.203223,
+            "C12": 0.011123,
+            "C13": 0.046179,
+            "C14": -0.002551,
+            "H15": 0.063852,
+            "C16": -0.00488,
+            "H17": 0.084111,
+            "C18": -0.208516,
+            "H19": 0.042411,
+            "H20": 0.040349,
+            "C21": -0.197355,
+            "C22": 0.029296,
+            "C23": 0.059636,
+            "C24": -0.003394,
+            "H25": 0.047614,
+            "C26": -0.006339,
+            "H27": 0.069309,
+            "C28": -0.208924,
+            "H29": 0.039999,
+            "H30": 0.042263,
+            "C31": -0.265534,
+            "C32": 0.061251,
+            "C33": 0.057398,
+            "C34": -0.002789,
+            "H35": 0.078851,
+            "C36": -0.002288,
+            "H37": 0.069767,
+            "C38": -0.19645,
+            "H39": 0.051254,
+            "H40": 0.05065,
+            "C41": -0.294612,
+            "C42": 0.040797,
+            "C43": 0.052521,
+            "C44": 0.000933,
+            "H45": 0.073947,
+            "C46": 0.000287,
+            "H47": 0.076551,
+            "C48": -0.20139,
+            "H49": 0.048462,
+            "H50": 0.049734,
+            "C51": -0.029678,
+            "H52": 0.079891,
+            "H53": 0.081113,
+            "C54": 0.898756,
+            "C55": -0.027638,
+            "H56": 0.074581,
+            "H57": 0.075537,
+            "C58": 0.898419,
+            "C59": -0.0271,
+            "H60": 0.0765,
+            "H61": 0.075212,
+            "C62": 0.897581,
+            "C63": -0.03138,
+            "H64": 0.081663,
+            "H65": 0.08177,
+            "C66": 0.899537,
+            "F67": -0.300158,
+            "F68": -0.298385,
+            "F69": -0.300066,
+            "F70": -0.301256,
+            "F71": -0.299519,
+            "F72": -0.301222,
+            "F73": -0.301847,
+            "F74": -0.30405,
+            "F75": -0.30104,
+            "F76": -0.303988,
+            "F77": -0.300916,
+            "F78": -0.30332,
         }
         assert orca_out.loewdin_atomic_charges == {
-            "O0": -0.153581,
-            "O1": -0.246133,
-            "O2": -0.333881,
-            "C3": 0.232162,
-            "C4": 0.303606,
-            "O5": -0.169518,
-            "O6": -0.204746,
-            "O7": -0.271108,
-            "C8": 0.294594,
-            "C9": 0.315946,
-            "C10": -0.075941,
-            "C11": 0.016906,
-            "C12": 0.029775,
-            "C13": -0.025404,
-            "H14": 0.040526,
-            "C15": -0.024275,
-            "H16": 0.041787,
-            "C17": -0.03112,
-            "H18": 0.028985,
-            "H19": 0.028792,
-            "C20": -0.069475,
-            "C21": 0.010548,
-            "C22": 0.032577,
-            "C23": -0.025207,
-            "H24": 0.031748,
-            "C25": -0.019802,
-            "H26": 0.040965,
-            "C27": -0.032088,
-            "H28": 0.028071,
-            "H29": 0.029927,
-            "C30": -0.09081,
-            "C31": 0.042271,
-            "C32": 0.040749,
-            "C33": -0.0233,
-            "H34": 0.045632,
-            "C35": -0.023676,
-            "H36": 0.041708,
-            "C37": -0.009317,
-            "H38": 0.033282,
-            "H39": 0.033126,
-            "C40": -0.097899,
-            "C41": 0.033678,
-            "C42": 0.026727,
-            "C43": -0.022871,
-            "H44": 0.043848,
-            "C45": -0.022604,
-            "H46": 0.042688,
-            "C47": -0.016927,
-            "H48": 0.032007,
-            "H49": 0.032482,
-            "C50": -0.02776,
-            "H51": 0.045321,
-            "H52": 0.045782,
-            "C53": 0.294505,
-            "C54": -0.028567,
-            "H55": 0.043014,
-            "H56": 0.043381,
-            "C57": 0.294417,
-            "C58": -0.028161,
-            "H59": 0.044058,
-            "H60": 0.043151,
-            "C61": 0.294271,
-            "C62": -0.027717,
-            "H63": 0.046041,
-            "H64": 0.046117,
-            "C65": 0.294476,
-            "F66": -0.114027,
-            "F67": -0.113991,
-            "F68": -0.113914,
-            "F69": -0.115055,
-            "F70": -0.115092,
-            "F71": -0.114978,
-            "F72": -0.11563,
-            "F73": -0.119358,
-            "F74": -0.114803,
-            "F75": -0.117527,
-            "F76": -0.114716,
-            "F77": -0.118666,
+            "O1": -0.153581,
+            "O2": -0.246133,
+            "O3": -0.333881,
+            "C4": 0.232162,
+            "C5": 0.303606,
+            "O6": -0.169518,
+            "O7": -0.204746,
+            "O8": -0.271108,
+            "C9": 0.294594,
+            "C10": 0.315946,
+            "C11": -0.075941,
+            "C12": 0.016906,
+            "C13": 0.029775,
+            "C14": -0.025404,
+            "H15": 0.040526,
+            "C16": -0.024275,
+            "H17": 0.041787,
+            "C18": -0.03112,
+            "H19": 0.028985,
+            "H20": 0.028792,
+            "C21": -0.069475,
+            "C22": 0.010548,
+            "C23": 0.032577,
+            "C24": -0.025207,
+            "H25": 0.031748,
+            "C26": -0.019802,
+            "H27": 0.040965,
+            "C28": -0.032088,
+            "H29": 0.028071,
+            "H30": 0.029927,
+            "C31": -0.09081,
+            "C32": 0.042271,
+            "C33": 0.040749,
+            "C34": -0.0233,
+            "H35": 0.045632,
+            "C36": -0.023676,
+            "H37": 0.041708,
+            "C38": -0.009317,
+            "H39": 0.033282,
+            "H40": 0.033126,
+            "C41": -0.097899,
+            "C42": 0.033678,
+            "C43": 0.026727,
+            "C44": -0.022871,
+            "H45": 0.043848,
+            "C46": -0.022604,
+            "H47": 0.042688,
+            "C48": -0.016927,
+            "H49": 0.032007,
+            "H50": 0.032482,
+            "C51": -0.02776,
+            "H52": 0.045321,
+            "H53": 0.045782,
+            "C54": 0.294505,
+            "C55": -0.028567,
+            "H56": 0.043014,
+            "H57": 0.043381,
+            "C58": 0.294417,
+            "C59": -0.028161,
+            "H60": 0.044058,
+            "H61": 0.043151,
+            "C62": 0.294271,
+            "C63": -0.027717,
+            "H64": 0.046041,
+            "H65": 0.046117,
+            "C66": 0.294476,
+            "F67": -0.114027,
+            "F68": -0.113991,
+            "F69": -0.113914,
+            "F70": -0.115055,
+            "F71": -0.115092,
+            "F72": -0.114978,
+            "F73": -0.11563,
+            "F74": -0.119358,
+            "F75": -0.114803,
+            "F76": -0.117527,
+            "F77": -0.114716,
+            "F78": -0.118666,
         }
         assert orca_out.mayer_total_nuclear_charge == {
-            "O0": 8.0,
             "O1": 8.0,
             "O2": 8.0,
-            "C3": 6.0,
+            "O3": 8.0,
             "C4": 6.0,
-            "O5": 8.0,
+            "C5": 6.0,
             "O6": 8.0,
             "O7": 8.0,
-            "C8": 6.0,
+            "O8": 8.0,
             "C9": 6.0,
             "C10": 6.0,
             "C11": 6.0,
             "C12": 6.0,
             "C13": 6.0,
-            "H14": 1.0,
-            "C15": 6.0,
-            "H16": 1.0,
-            "C17": 6.0,
-            "H18": 1.0,
+            "C14": 6.0,
+            "H15": 1.0,
+            "C16": 6.0,
+            "H17": 1.0,
+            "C18": 6.0,
             "H19": 1.0,
-            "C20": 6.0,
+            "H20": 1.0,
             "C21": 6.0,
             "C22": 6.0,
             "C23": 6.0,
-            "H24": 1.0,
-            "C25": 6.0,
-            "H26": 1.0,
-            "C27": 6.0,
-            "H28": 1.0,
+            "C24": 6.0,
+            "H25": 1.0,
+            "C26": 6.0,
+            "H27": 1.0,
+            "C28": 6.0,
             "H29": 1.0,
-            "C30": 6.0,
+            "H30": 1.0,
             "C31": 6.0,
             "C32": 6.0,
             "C33": 6.0,
-            "H34": 1.0,
-            "C35": 6.0,
-            "H36": 1.0,
-            "C37": 6.0,
-            "H38": 1.0,
+            "C34": 6.0,
+            "H35": 1.0,
+            "C36": 6.0,
+            "H37": 1.0,
+            "C38": 6.0,
             "H39": 1.0,
-            "C40": 6.0,
+            "H40": 1.0,
             "C41": 6.0,
             "C42": 6.0,
             "C43": 6.0,
-            "H44": 1.0,
-            "C45": 6.0,
-            "H46": 1.0,
-            "C47": 6.0,
-            "H48": 1.0,
+            "C44": 6.0,
+            "H45": 1.0,
+            "C46": 6.0,
+            "H47": 1.0,
+            "C48": 6.0,
             "H49": 1.0,
-            "C50": 6.0,
-            "H51": 1.0,
+            "H50": 1.0,
+            "C51": 6.0,
             "H52": 1.0,
-            "C53": 6.0,
+            "H53": 1.0,
             "C54": 6.0,
-            "H55": 1.0,
+            "C55": 6.0,
             "H56": 1.0,
-            "C57": 6.0,
+            "H57": 1.0,
             "C58": 6.0,
-            "H59": 1.0,
+            "C59": 6.0,
             "H60": 1.0,
-            "C61": 6.0,
+            "H61": 1.0,
             "C62": 6.0,
-            "H63": 1.0,
+            "C63": 6.0,
             "H64": 1.0,
-            "C65": 6.0,
-            "F66": 9.0,
+            "H65": 1.0,
+            "C66": 6.0,
             "F67": 9.0,
             "F68": 9.0,
             "F69": 9.0,
@@ -1037,410 +1147,411 @@ class TestORCAOutput:
             "F75": 9.0,
             "F76": 9.0,
             "F77": 9.0,
+            "F78": 9.0,
         }
         assert orca_out.mayer_mulliken_gross_atomic_charge == {
-            "O0": -0.5444,
-            "O1": -0.4091,
-            "O2": -0.607,
-            "C3": 0.6773,
-            "C4": 0.8676,
-            "O5": -0.5281,
-            "O6": -0.5671,
-            "O7": -0.38,
-            "C8": 0.8177,
-            "C9": 0.6938,
-            "C10": -0.2032,
-            "C11": 0.0111,
-            "C12": 0.0462,
-            "C13": -0.0026,
-            "H14": 0.0639,
-            "C15": -0.0049,
-            "H16": 0.0841,
-            "C17": -0.2085,
-            "H18": 0.0424,
-            "H19": 0.0403,
-            "C20": -0.1974,
-            "C21": 0.0293,
-            "C22": 0.0596,
-            "C23": -0.0034,
-            "H24": 0.0476,
-            "C25": -0.0063,
-            "H26": 0.0693,
-            "C27": -0.2089,
-            "H28": 0.04,
-            "H29": 0.0423,
-            "C30": -0.2655,
-            "C31": 0.0613,
-            "C32": 0.0574,
-            "C33": -0.0028,
-            "H34": 0.0789,
-            "C35": -0.0023,
-            "H36": 0.0698,
-            "C37": -0.1965,
-            "H38": 0.0513,
-            "H39": 0.0507,
-            "C40": -0.2946,
-            "C41": 0.0408,
-            "C42": 0.0525,
-            "C43": 0.0009,
-            "H44": 0.0739,
-            "C45": 0.0003,
-            "H46": 0.0766,
-            "C47": -0.2014,
-            "H48": 0.0485,
-            "H49": 0.0497,
-            "C50": -0.0297,
-            "H51": 0.0799,
-            "H52": 0.0811,
-            "C53": 0.8988,
-            "C54": -0.0276,
-            "H55": 0.0746,
-            "H56": 0.0755,
-            "C57": 0.8984,
-            "C58": -0.0271,
-            "H59": 0.0765,
-            "H60": 0.0752,
-            "C61": 0.8976,
-            "C62": -0.0314,
-            "H63": 0.0817,
-            "H64": 0.0818,
-            "C65": 0.8995,
-            "F66": -0.3002,
-            "F67": -0.2984,
-            "F68": -0.3001,
-            "F69": -0.3013,
-            "F70": -0.2995,
-            "F71": -0.3012,
-            "F72": -0.3018,
-            "F73": -0.304,
-            "F74": -0.301,
-            "F75": -0.304,
-            "F76": -0.3009,
-            "F77": -0.3033,
+            "O1": -0.5444,
+            "O2": -0.4091,
+            "O3": -0.607,
+            "C4": 0.6773,
+            "C5": 0.8676,
+            "O6": -0.5281,
+            "O7": -0.5671,
+            "O8": -0.38,
+            "C9": 0.8177,
+            "C10": 0.6938,
+            "C11": -0.2032,
+            "C12": 0.0111,
+            "C13": 0.0462,
+            "C14": -0.0026,
+            "H15": 0.0639,
+            "C16": -0.0049,
+            "H17": 0.0841,
+            "C18": -0.2085,
+            "H19": 0.0424,
+            "H20": 0.0403,
+            "C21": -0.1974,
+            "C22": 0.0293,
+            "C23": 0.0596,
+            "C24": -0.0034,
+            "H25": 0.0476,
+            "C26": -0.0063,
+            "H27": 0.0693,
+            "C28": -0.2089,
+            "H29": 0.04,
+            "H30": 0.0423,
+            "C31": -0.2655,
+            "C32": 0.0613,
+            "C33": 0.0574,
+            "C34": -0.0028,
+            "H35": 0.0789,
+            "C36": -0.0023,
+            "H37": 0.0698,
+            "C38": -0.1965,
+            "H39": 0.0513,
+            "H40": 0.0507,
+            "C41": -0.2946,
+            "C42": 0.0408,
+            "C43": 0.0525,
+            "C44": 0.0009,
+            "H45": 0.0739,
+            "C46": 0.0003,
+            "H47": 0.0766,
+            "C48": -0.2014,
+            "H49": 0.0485,
+            "H50": 0.0497,
+            "C51": -0.0297,
+            "H52": 0.0799,
+            "H53": 0.0811,
+            "C54": 0.8988,
+            "C55": -0.0276,
+            "H56": 0.0746,
+            "H57": 0.0755,
+            "C58": 0.8984,
+            "C59": -0.0271,
+            "H60": 0.0765,
+            "H61": 0.0752,
+            "C62": 0.8976,
+            "C63": -0.0314,
+            "H64": 0.0817,
+            "H65": 0.0818,
+            "C66": 0.8995,
+            "F67": -0.3002,
+            "F68": -0.2984,
+            "F69": -0.3001,
+            "F70": -0.3013,
+            "F71": -0.2995,
+            "F72": -0.3012,
+            "F73": -0.3018,
+            "F74": -0.304,
+            "F75": -0.301,
+            "F76": -0.304,
+            "F77": -0.3009,
+            "F78": -0.3033,
         }
         assert orca_out.mayer_total_valence == {
-            "O0": 1.9052,
-            "O1": 2.0594,
-            "O2": 1.7735,
-            "C3": 3.9521,
-            "C4": 3.7926,
-            "O5": 1.9317,
-            "O6": 1.9052,
-            "O7": 2.1188,
-            "C8": 3.787,
-            "C9": 3.976,
-            "C10": 3.7922,
-            "C11": 3.9566,
-            "C12": 3.9143,
-            "C13": 3.89,
-            "H14": 1.0025,
-            "C15": 3.8948,
-            "H16": 1.0121,
-            "C17": 3.8309,
-            "H18": 0.9961,
-            "H19": 0.9958,
-            "C20": 3.8656,
-            "C21": 3.9155,
-            "C22": 3.9648,
-            "C23": 3.9025,
-            "H24": 0.999,
-            "C25": 3.9074,
-            "H26": 1.0074,
-            "C27": 3.8315,
-            "H28": 0.9961,
-            "H29": 0.9954,
-            "C30": 3.8275,
-            "C31": 3.9196,
-            "C32": 3.934,
-            "C33": 3.8981,
-            "H34": 0.9991,
-            "C35": 3.9001,
-            "H36": 1.0001,
-            "C37": 3.8314,
-            "H38": 0.9962,
+            "O1": 1.9052,
+            "O2": 2.0594,
+            "O3": 1.7735,
+            "C4": 3.9521,
+            "C5": 3.7926,
+            "O6": 1.9317,
+            "O7": 1.9052,
+            "O8": 2.1188,
+            "C9": 3.787,
+            "C10": 3.976,
+            "C11": 3.7922,
+            "C12": 3.9566,
+            "C13": 3.9143,
+            "C14": 3.89,
+            "H15": 1.0025,
+            "C16": 3.8948,
+            "H17": 1.0121,
+            "C18": 3.8309,
+            "H19": 0.9961,
+            "H20": 0.9958,
+            "C21": 3.8656,
+            "C22": 3.9155,
+            "C23": 3.9648,
+            "C24": 3.9025,
+            "H25": 0.999,
+            "C26": 3.9074,
+            "H27": 1.0074,
+            "C28": 3.8315,
+            "H29": 0.9961,
+            "H30": 0.9954,
+            "C31": 3.8275,
+            "C32": 3.9196,
+            "C33": 3.934,
+            "C34": 3.8981,
+            "H35": 0.9991,
+            "C36": 3.9001,
+            "H37": 1.0001,
+            "C38": 3.8314,
             "H39": 0.9962,
-            "C40": 3.7756,
-            "C41": 3.9398,
-            "C42": 3.9018,
-            "C43": 3.8946,
-            "H44": 1.0026,
-            "C45": 3.8959,
-            "H46": 1.0001,
-            "C47": 3.8302,
-            "H48": 0.996,
-            "H49": 0.9962,
-            "C50": 3.8917,
-            "H51": 0.9901,
-            "H52": 0.9896,
-            "C53": 3.9948,
-            "C54": 3.8931,
-            "H55": 0.9907,
-            "H56": 0.9899,
-            "C57": 3.9901,
-            "C58": 3.8928,
-            "H59": 0.9908,
-            "H60": 0.9896,
-            "C61": 3.989,
-            "C62": 3.8918,
-            "H63": 0.9897,
-            "H64": 0.9898,
-            "C65": 3.9981,
-            "F66": 0.9947,
-            "F67": 0.9985,
-            "F68": 0.9948,
-            "F69": 0.9935,
-            "F70": 0.9972,
-            "F71": 0.9934,
-            "F72": 0.9931,
-            "F73": 0.9916,
-            "F74": 0.9938,
-            "F75": 0.9905,
-            "F76": 0.9939,
-            "F77": 0.9925,
+            "H40": 0.9962,
+            "C41": 3.7756,
+            "C42": 3.9398,
+            "C43": 3.9018,
+            "C44": 3.8946,
+            "H45": 1.0026,
+            "C46": 3.8959,
+            "H47": 1.0001,
+            "C48": 3.8302,
+            "H49": 0.996,
+            "H50": 0.9962,
+            "C51": 3.8917,
+            "H52": 0.9901,
+            "H53": 0.9896,
+            "C54": 3.9948,
+            "C55": 3.8931,
+            "H56": 0.9907,
+            "H57": 0.9899,
+            "C58": 3.9901,
+            "C59": 3.8928,
+            "H60": 0.9908,
+            "H61": 0.9896,
+            "C62": 3.989,
+            "C63": 3.8918,
+            "H64": 0.9897,
+            "H65": 0.9898,
+            "C66": 3.9981,
+            "F67": 0.9947,
+            "F68": 0.9985,
+            "F69": 0.9948,
+            "F70": 0.9935,
+            "F71": 0.9972,
+            "F72": 0.9934,
+            "F73": 0.9931,
+            "F74": 0.9916,
+            "F75": 0.9938,
+            "F76": 0.9905,
+            "F77": 0.9939,
+            "F78": 0.9925,
         }
         assert orca_out.mayer_bonded_valence == {
-            "O0": 1.9052,
-            "O1": 2.0594,
-            "O2": 1.7735,
-            "C3": 3.9521,
-            "C4": 3.7926,
-            "O5": 1.9317,
-            "O6": 1.9052,
-            "O7": 2.1188,
-            "C8": 3.787,
-            "C9": 3.976,
-            "C10": 3.7922,
-            "C11": 3.9566,
-            "C12": 3.9143,
-            "C13": 3.89,
-            "H14": 1.0025,
-            "C15": 3.8948,
-            "H16": 1.0121,
-            "C17": 3.8309,
-            "H18": 0.9961,
-            "H19": 0.9958,
-            "C20": 3.8656,
-            "C21": 3.9155,
-            "C22": 3.9648,
-            "C23": 3.9025,
-            "H24": 0.999,
-            "C25": 3.9074,
-            "H26": 1.0074,
-            "C27": 3.8315,
-            "H28": 0.9961,
-            "H29": 0.9954,
-            "C30": 3.8275,
-            "C31": 3.9196,
-            "C32": 3.934,
-            "C33": 3.8981,
-            "H34": 0.9991,
-            "C35": 3.9001,
-            "H36": 1.0001,
-            "C37": 3.8314,
-            "H38": 0.9962,
+            "O1": 1.9052,
+            "O2": 2.0594,
+            "O3": 1.7735,
+            "C4": 3.9521,
+            "C5": 3.7926,
+            "O6": 1.9317,
+            "O7": 1.9052,
+            "O8": 2.1188,
+            "C9": 3.787,
+            "C10": 3.976,
+            "C11": 3.7922,
+            "C12": 3.9566,
+            "C13": 3.9143,
+            "C14": 3.89,
+            "H15": 1.0025,
+            "C16": 3.8948,
+            "H17": 1.0121,
+            "C18": 3.8309,
+            "H19": 0.9961,
+            "H20": 0.9958,
+            "C21": 3.8656,
+            "C22": 3.9155,
+            "C23": 3.9648,
+            "C24": 3.9025,
+            "H25": 0.999,
+            "C26": 3.9074,
+            "H27": 1.0074,
+            "C28": 3.8315,
+            "H29": 0.9961,
+            "H30": 0.9954,
+            "C31": 3.8275,
+            "C32": 3.9196,
+            "C33": 3.934,
+            "C34": 3.8981,
+            "H35": 0.9991,
+            "C36": 3.9001,
+            "H37": 1.0001,
+            "C38": 3.8314,
             "H39": 0.9962,
-            "C40": 3.7756,
-            "C41": 3.9398,
-            "C42": 3.9018,
-            "C43": 3.8946,
-            "H44": 1.0026,
-            "C45": 3.8959,
-            "H46": 1.0001,
-            "C47": 3.8302,
-            "H48": 0.996,
-            "H49": 0.9962,
-            "C50": 3.8917,
-            "H51": 0.9901,
-            "H52": 0.9896,
-            "C53": 3.9948,
-            "C54": 3.8931,
-            "H55": 0.9907,
-            "H56": 0.9899,
-            "C57": 3.9901,
-            "C58": 3.8928,
-            "H59": 0.9908,
-            "H60": 0.9896,
-            "C61": 3.989,
-            "C62": 3.8918,
-            "H63": 0.9897,
-            "H64": 0.9898,
-            "C65": 3.9981,
-            "F66": 0.9947,
-            "F67": 0.9985,
-            "F68": 0.9948,
-            "F69": 0.9935,
-            "F70": 0.9972,
-            "F71": 0.9934,
-            "F72": 0.9931,
-            "F73": 0.9916,
-            "F74": 0.9938,
-            "F75": 0.9905,
-            "F76": 0.9939,
-            "F77": 0.9925,
+            "H40": 0.9962,
+            "C41": 3.7756,
+            "C42": 3.9398,
+            "C43": 3.9018,
+            "C44": 3.8946,
+            "H45": 1.0026,
+            "C46": 3.8959,
+            "H47": 1.0001,
+            "C48": 3.8302,
+            "H49": 0.996,
+            "H50": 0.9962,
+            "C51": 3.8917,
+            "H52": 0.9901,
+            "H53": 0.9896,
+            "C54": 3.9948,
+            "C55": 3.8931,
+            "H56": 0.9907,
+            "H57": 0.9899,
+            "C58": 3.9901,
+            "C59": 3.8928,
+            "H60": 0.9908,
+            "H61": 0.9896,
+            "C62": 3.989,
+            "C63": 3.8918,
+            "H64": 0.9897,
+            "H65": 0.9898,
+            "C66": 3.9981,
+            "F67": 0.9947,
+            "F68": 0.9985,
+            "F69": 0.9948,
+            "F70": 0.9935,
+            "F71": 0.9972,
+            "F72": 0.9934,
+            "F73": 0.9931,
+            "F74": 0.9916,
+            "F75": 0.9938,
+            "F76": 0.9905,
+            "F77": 0.9939,
+            "F78": 0.9925,
         }
         assert orca_out.mayer_free_valence == {
-            "O0": -0.0,
             "O1": -0.0,
             "O2": -0.0,
-            "C3": 0.0,
-            "C4": -0.0,
-            "O5": 0.0,
+            "O3": -0.0,
+            "C4": 0.0,
+            "C5": -0.0,
             "O6": 0.0,
             "O7": 0.0,
-            "C8": 0.0,
+            "O8": 0.0,
             "C9": 0.0,
             "C10": 0.0,
-            "C11": -0.0,
+            "C11": 0.0,
             "C12": -0.0,
-            "C13": 0.0,
-            "H14": 0.0,
-            "C15": -0.0,
-            "H16": -0.0,
-            "C17": -0.0,
-            "H18": 0.0,
-            "H19": -0.0,
-            "C20": -0.0,
+            "C13": -0.0,
+            "C14": 0.0,
+            "H15": 0.0,
+            "C16": -0.0,
+            "H17": -0.0,
+            "C18": -0.0,
+            "H19": 0.0,
+            "H20": -0.0,
             "C21": -0.0,
-            "C22": 0.0,
+            "C22": -0.0,
             "C23": 0.0,
-            "H24": -0.0,
-            "C25": -0.0,
-            "H26": 0.0,
-            "C27": 0.0,
-            "H28": -0.0,
-            "H29": 0.0,
-            "C30": 0.0,
+            "C24": 0.0,
+            "H25": -0.0,
+            "C26": -0.0,
+            "H27": 0.0,
+            "C28": 0.0,
+            "H29": -0.0,
+            "H30": 0.0,
             "C31": 0.0,
-            "C32": -0.0,
+            "C32": 0.0,
             "C33": -0.0,
-            "H34": -0.0,
-            "C35": -0.0,
-            "H36": 0.0,
-            "C37": -0.0,
-            "H38": -0.0,
+            "C34": -0.0,
+            "H35": -0.0,
+            "C36": -0.0,
+            "H37": 0.0,
+            "C38": -0.0,
             "H39": -0.0,
-            "C40": -0.0,
+            "H40": -0.0,
             "C41": -0.0,
-            "C42": 0.0,
-            "C43": -0.0,
-            "H44": -0.0,
-            "C45": -0.0,
-            "H46": 0.0,
-            "C47": -0.0,
-            "H48": -0.0,
+            "C42": -0.0,
+            "C43": 0.0,
+            "C44": -0.0,
+            "H45": -0.0,
+            "C46": -0.0,
+            "H47": 0.0,
+            "C48": -0.0,
             "H49": -0.0,
-            "C50": 0.0,
-            "H51": 0.0,
-            "H52": -0.0,
-            "C53": -0.0,
-            "C54": 0.0,
-            "H55": 0.0,
-            "H56": -0.0,
-            "C57": -0.0,
+            "H50": -0.0,
+            "C51": 0.0,
+            "H52": 0.0,
+            "H53": -0.0,
+            "C54": -0.0,
+            "C55": 0.0,
+            "H56": 0.0,
+            "H57": -0.0,
             "C58": -0.0,
-            "H59": -0.0,
+            "C59": -0.0,
             "H60": -0.0,
-            "C61": 0.0,
+            "H61": -0.0,
             "C62": 0.0,
-            "H63": -0.0,
-            "H64": 0.0,
-            "C65": 0.0,
-            "F66": 0.0,
+            "C63": 0.0,
+            "H64": -0.0,
+            "H65": 0.0,
+            "C66": 0.0,
             "F67": 0.0,
             "F68": 0.0,
-            "F69": -0.0,
+            "F69": 0.0,
             "F70": -0.0,
-            "F71": 0.0,
-            "F72": -0.0,
+            "F71": -0.0,
+            "F72": 0.0,
             "F73": -0.0,
-            "F74": 0.0,
+            "F74": -0.0,
             "F75": 0.0,
-            "F76": -0.0,
+            "F76": 0.0,
             "F77": -0.0,
+            "F78": -0.0,
         }
         assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
-            "B(O0,C3)": 1.0348,
-            "B(O0,C4)": 0.8825,
-            "B(O1,C3)": 1.949,
-            "B(O2,C4)": 1.3485,
-            "B(O2,C9)": 0.4023,
-            "B(C3,C40)": 0.9896,
-            "B(C4,O6)": 0.523,
-            "B(C4,C20)": 0.9928,
-            "B(O5,C8)": 1.3616,
-            "B(O5,C9)": 0.5414,
-            "B(O6,C8)": 1.3566,
-            "B(O7,C9)": 2.0474,
-            "B(C8,C30)": 1.0372,
-            "B(C9,C10)": 0.9694,
-            "B(C10,C11)": 1.4585,
-            "B(C10,C12)": 1.3794,
-            "B(C11,C13)": 1.4076,
-            "B(C11,H14)": 0.9993,
-            "B(C12,C15)": 1.4513,
-            "B(C12,H16)": 0.992,
-            "B(C13,C17)": 1.4249,
-            "B(C13,H18)": 1.0007,
-            "B(C15,C17)": 1.3845,
-            "B(C15,H19)": 1.0017,
-            "B(C17,C54)": 1.0073,
-            "B(C20,C21)": 1.3659,
-            "B(C20,C22)": 1.4737,
-            "B(C21,C23)": 1.4569,
-            "B(C21,H24)": 1.0024,
-            "B(C22,C25)": 1.4132,
-            "B(C22,H26)": 0.9894,
-            "B(C23,C27)": 1.3856,
-            "B(C23,H28)": 0.9999,
-            "B(C25,C27)": 1.4263,
-            "B(C25,H29)": 1.0007,
-            "B(C27,C58)": 1.0067,
-            "B(C30,C31)": 1.3915,
-            "B(C30,C32)": 1.3908,
-            "B(C31,C33)": 1.4404,
-            "B(C31,H34)": 0.995,
-            "B(C32,C35)": 1.4461,
-            "B(C32,H36)": 0.9956,
-            "B(C33,C37)": 1.4007,
-            "B(C33,H38)": 0.9997,
-            "B(C35,C37)": 1.3964,
-            "B(C35,H39)": 0.9999,
-            "B(C37,C62)": 1.0052,
-            "B(C40,C41)": 1.4046,
-            "B(C40,C42)": 1.3898,
-            "B(C41,C43)": 1.4423,
-            "B(C41,H44)": 0.9961,
-            "B(C42,C45)": 1.4366,
-            "B(C42,H46)": 0.996,
-            "B(C43,C47)": 1.3967,
-            "B(C43,H48)": 1.0006,
-            "B(C45,C47)": 1.4039,
-            "B(C45,H49)": 0.9998,
-            "B(C47,C50)": 1.0057,
-            "B(C50,H51)": 0.962,
-            "B(C50,H52)": 0.9619,
-            "B(C50,C53)": 1.0319,
-            "B(C53,F69)": 0.9887,
-            "B(C53,F70)": 0.9915,
-            "B(C53,F71)": 0.9887,
-            "B(C54,H55)": 0.9626,
-            "B(C54,H56)": 0.9623,
-            "B(C54,C57)": 1.0315,
-            "B(C57,F72)": 0.9887,
-            "B(C57,F73)": 0.9862,
-            "B(C57,F74)": 0.9898,
-            "B(C58,H59)": 0.9621,
-            "B(C58,H60)": 0.9622,
-            "B(C58,C61)": 1.0317,
-            "B(C61,F75)": 0.9857,
-            "B(C61,F76)": 0.9904,
-            "B(C61,F77)": 0.9871,
-            "B(C62,H63)": 0.962,
-            "B(C62,H64)": 0.9619,
-            "B(C62,C65)": 1.0319,
-            "B(C65,F66)": 0.9897,
-            "B(C65,F67)": 0.9927,
-            "B(C65,F68)": 0.9897,
+            "B(O1,C4)": 1.0348,
+            "B(O1,C5)": 0.8825,
+            "B(O2,C4)": 1.949,
+            "B(O3,C5)": 1.3485,
+            "B(O3,C10)": 0.4023,
+            "B(C4,C41)": 0.9896,
+            "B(C5,O7)": 0.523,
+            "B(C5,C21)": 0.9928,
+            "B(O6,C9)": 1.3616,
+            "B(O6,C10)": 0.5414,
+            "B(O7,C9)": 1.3566,
+            "B(O8,C10)": 2.0474,
+            "B(C9,C31)": 1.0372,
+            "B(C10,C11)": 0.9694,
+            "B(C11,C12)": 1.4585,
+            "B(C11,C13)": 1.3794,
+            "B(C12,C14)": 1.4076,
+            "B(C12,H15)": 0.9993,
+            "B(C13,C16)": 1.4513,
+            "B(C13,H17)": 0.992,
+            "B(C14,C18)": 1.4249,
+            "B(C14,H19)": 1.0007,
+            "B(C16,C18)": 1.3845,
+            "B(C16,H20)": 1.0017,
+            "B(C18,C55)": 1.0073,
+            "B(C21,C22)": 1.3659,
+            "B(C21,C23)": 1.4737,
+            "B(C22,C24)": 1.4569,
+            "B(C22,H25)": 1.0024,
+            "B(C23,C26)": 1.4132,
+            "B(C23,H27)": 0.9894,
+            "B(C24,C28)": 1.3856,
+            "B(C24,H29)": 0.9999,
+            "B(C26,C28)": 1.4263,
+            "B(C26,H30)": 1.0007,
+            "B(C28,C59)": 1.0067,
+            "B(C31,C32)": 1.3915,
+            "B(C31,C33)": 1.3908,
+            "B(C32,C34)": 1.4404,
+            "B(C32,H35)": 0.995,
+            "B(C33,C36)": 1.4461,
+            "B(C33,H37)": 0.9956,
+            "B(C34,C38)": 1.4007,
+            "B(C34,H39)": 0.9997,
+            "B(C36,C38)": 1.3964,
+            "B(C36,H40)": 0.9999,
+            "B(C38,C63)": 1.0052,
+            "B(C41,C42)": 1.4046,
+            "B(C41,C43)": 1.3898,
+            "B(C42,C44)": 1.4423,
+            "B(C42,H45)": 0.9961,
+            "B(C43,C46)": 1.4366,
+            "B(C43,H47)": 0.996,
+            "B(C44,C48)": 1.3967,
+            "B(C44,H49)": 1.0006,
+            "B(C46,C48)": 1.4039,
+            "B(C46,H50)": 0.9998,
+            "B(C48,C51)": 1.0057,
+            "B(C51,H52)": 0.962,
+            "B(C51,H53)": 0.9619,
+            "B(C51,C54)": 1.0319,
+            "B(C54,F70)": 0.9887,
+            "B(C54,F71)": 0.9915,
+            "B(C54,F72)": 0.9887,
+            "B(C55,H56)": 0.9626,
+            "B(C55,H57)": 0.9623,
+            "B(C55,C58)": 1.0315,
+            "B(C58,F73)": 0.9887,
+            "B(C58,F74)": 0.9862,
+            "B(C58,F75)": 0.9898,
+            "B(C59,H60)": 0.9621,
+            "B(C59,H61)": 0.9622,
+            "B(C59,C62)": 1.0317,
+            "B(C62,F76)": 0.9857,
+            "B(C62,F77)": 0.9904,
+            "B(C62,F78)": 0.9871,
+            "B(C63,H64)": 0.962,
+            "B(C63,H65)": 0.9619,
+            "B(C63,C66)": 1.0319,
+            "B(C66,F67)": 0.9897,
+            "B(C66,F68)": 0.9927,
+            "B(C66,F69)": 0.9897,
         }
         assert all(
             np.isclose(
@@ -1683,7 +1794,7 @@ class TestORCAOutput:
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.extrapolation_basis is None
-        assert orca_out.natoms == 27
+        assert orca_out.num_atoms == 27
         assert orca_out.normal_termination is False
 
     def test_get_constrained_atoms(
@@ -1712,11 +1823,446 @@ class TestORCAOutput:
             "D(O18,H14,C13,C4)": -125.9028,
         }
 
+    def test_sn2_ts_orca_output(self, orca_sn2_ts_output):
+        orca_out = ORCAOutput(filename=orca_sn2_ts_output)
+        assert orca_out.spin == "restricted"
+        assert orca_out.forces is not None
+        optimized_geometry = orca_out.get_optimized_parameters()
+        assert isinstance(optimized_geometry, dict)
+        assert optimized_geometry["B(Cl2,C1)"] == 2.0226
+        assert optimized_geometry["B(F6,C1)"] == 2.1106
+        molecule = orca_out.molecule
+        assert isinstance(molecule, Molecule)
+        assert molecule.symbols == ["C", "Cl", "H", "H", "H", "F"]
+        assert molecule.empirical_formula == "CH3ClF"
+        assert np.allclose(
+            molecule.positions,
+            np.array(
+                [
+                    [
+                        [-0.000000e00, -1.080000e-03, -4.434500e-02],
+                        [0.000000e00, 1.833000e-03, 1.978187e00],
+                        [-0.000000e00, 1.057065e00, -2.682420e-01],
+                        [9.166220e-01, -5.311370e-01, -2.657160e-01],
+                        [-9.166220e-01, -5.311370e-01, -2.657160e-01],
+                        [1.000000e-06, 4.457000e-03, -2.155338e00],
+                    ]
+                ]
+            ),
+            rtol=1e-4,
+        )
+        assert math.isclose(molecule.energy, -599.599020937503, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.final_nuclear_repulsion, 86.95944182533995, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.final_electronic_energy, -686.55844243196202, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.one_electron_energy, -1010.54352403257508, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.two_electron_energy, 323.98508160061300, rel_tol=1e-4
+        )
+        assert orca_out.max_cosx_asymmetry_energy is None
+        assert math.isclose(
+            orca_out.potential_energy, -1197.54777156261616, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.kinetic_energy, 597.94875062511289, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.virial_ratio, 2.00275988587762, rel_tol=1e-4
+        )
+        assert math.isclose(orca_out.xc_energy, -21.652294220893, rel_tol=1e-4)
+        assert orca_out.dfet_embed_energy is None
+        assert orca_out.orbital_occupancy == [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        orbital_energies = np.array(
+            [
+                -2786.2790,
+                -674.8933,
+                -283.4531,
+                -260.2004,
+                -198.3255,
+                -198.2058,
+                -198.2058,
+                -22.5055,
+                -18.7812,
+                -15.0033,
+                -8.3983,
+                -8.3973,
+                -6.1101,
+                -4.2133,
+                -4.2132,
+                -2.2556,
+                -2.2539,
+                -1.8648,
+                7.2164,
+                8.2028,
+                9.7068,
+                9.7163,
+                18.0067,
+                18.0069,
+                20.3332,
+                22.5511,
+                24.8903,
+                24.8961,
+                25.9780,
+            ]
+        )
+        assert np.allclose(
+            orca_out.orbital_energies, orbital_energies, rtol=1e-4
+        )
+
+        # test HOMO LUMO
+
+        assert np.isclose(orca_out.homo_energy, -1.8648, rtol=1e-4)
+        assert np.isclose(orca_out.lumo_energy, 7.2164, rtol=1e-4)
+        assert np.isclose(orca_out.fmo_gap, 9.08117, rtol=1e-4)
+
+        assert orca_out.mulliken_atomic_charges == {
+            "C1": 0.074477,
+            "Cl2": -0.503787,
+            "H3": 0.059299,
+            "H4": 0.058549,
+            "H5": 0.058549,
+            "F6": -0.747088,
+        }
+        assert orca_out.loewdin_atomic_charges == {
+            "C1": 0.007991,
+            "Cl2": -0.333494,
+            "H3": 0.015310,
+            "H4": 0.015231,
+            "H5": 0.015231,
+            "F6": -0.720269,
+        }
+        assert orca_out.mayer_mulliken_gross_atomic_population == {
+            "C1": 5.9255,
+            "Cl2": 17.5038,
+            "H3": 0.9407,
+            "H4": 0.9415,
+            "H5": 0.9415,
+            "F6": 9.7471,
+        }
+        assert orca_out.mayer_total_nuclear_charge == {
+            "C1": 6.0000,
+            "Cl2": 17.0000,
+            "H3": 1.0000,
+            "H4": 1.0000,
+            "H5": 1.0000,
+            "F6": 9.0000,
+        }
+        assert orca_out.mayer_mulliken_gross_atomic_charge == {
+            "C1": 0.0745,
+            "Cl2": -0.5038,
+            "H3": 0.0593,
+            "H4": 0.0585,
+            "H5": 0.0585,
+            "F6": -0.7471,
+        }
+        assert orca_out.mayer_total_valence == {
+            "C1": 3.8739,
+            "Cl2": 0.7224,
+            "H3": 1.0198,
+            "H4": 1.0190,
+            "H5": 1.0190,
+            "F6": 0.4499,
+        }
+        assert orca_out.mayer_bonded_valence == {
+            "C1": 3.8739,
+            "Cl2": 0.7224,
+            "H3": 1.0198,
+            "H4": 1.0190,
+            "H5": 1.0190,
+            "F6": 0.4499,
+        }
+        assert orca_out.mayer_free_valence == {
+            "C1": 0.0000,
+            "Cl2": 0.0000,
+            "H3": 0.0000,
+            "H4": 0.0000,
+            "H5": 0.0000,
+            "F6": 0.0000,
+        }
+        assert orca_out.mayer_bond_orders_larger_than_zero_point_one == {
+            "B(C1,H3)": 0.9819,
+            "B(C1,H4)": 0.9823,
+            "B(C1,H5)": 0.9823,
+            "B(C1,F6)": 0.2871,
+        }
+        assert np.allclose(
+            orca_out.dipole_moment_electric_contribution,
+            np.array([0.000000936, 0.007520938, 3.440735059]),
+            rtol=1e-9,
+        )
+        assert np.allclose(
+            orca_out.dipole_moment_nuclear_contribution,
+            np.array([-0.000001417, -0.01222165, -1.626726359]),
+            rtol=1e-9,
+        )
+        assert np.allclose(
+            orca_out.total_dipole_moment,
+            np.array([-0.000000481, -0.004700712, 1.814008700]),
+            rtol=1e-9,
+        )
+        assert orca_out.dipole_moment_in_au == 1.814014790
+        assert orca_out.dipole_moment_in_debye == 4.610859166
+        assert np.allclose(
+            orca_out.dipole_moment_along_axis_in_au,
+            np.array([1.814011, -0.003782, 0.000001]),
+            rtol=1e-6,
+        )
+        assert np.allclose(
+            orca_out.dipole_moment_along_axis_in_debye,
+            np.array([4.610849, -0.009613, 0.000003]),
+            rtol=1e-6,
+        )
+        assert orca_out.rotational_constants_in_wavenumbers == [
+            4.973563,
+            0.077423,
+            0.077423,
+        ]
+        assert orca_out.rotational_constants_in_MHz == [
+            149103.667270,
+            2321.080687,
+            2321.072706,
+        ]
+        assert molecule.vibrational_frequencies == [
+            -407.58,
+            212.75,
+            214.67,
+            308.27,
+            882.84,
+            884.88,
+            1062.79,
+            1361.79,
+            1363.05,
+            3209.04,
+            3397.13,
+            3398.56,
+        ]
+        mode1 = np.array(
+            [
+                [-0.00000e00, -4.79000e-03, 8.59726e-01],
+                [-0.00000e00, 7.86000e-04, -1.18060e-01],
+                [1.00000e-06, -1.97735e-01, -1.49549e-01],
+                [
+                    -1.62414e-01,
+                    8.02020e-02,
+                    -1.18726e-01,
+                ],
+                [1.62414e-01, 8.02010e-02, -1.18726e-01],
+                [0.00000e00, 3.54200e-03, -3.02689e-01],
+            ],
+            dtype=float,
+        )
+        mode2 = np.array(
+            [
+                [4.28110e-01, 3.00000e-06, -1.00000e-06],
+                [-9.02300e-02, -1.00000e-06, 1.00000e-06],
+                [4.82113e-01, 4.00000e-06, 2.00000e-06],
+                [4.79999e-01, -1.44490e-02, 2.03671e-01],
+                [4.79998e-01, 1.44560e-02, -2.03671e-01],
+                [-1.78795e-01, -1.00000e-06, -2.00000e-06],
+            ]
+        )
+        last_mode = np.array(
+            [
+                [
+                    [-1.01365e-01, -2.20000e-05, -0.00000e00],
+                    [4.64000e-04, 0.00000e00, -0.00000e00],
+                    [-9.63800e-03, 1.71000e-04, -3.50000e-05],
+                    [5.94810e-01, -3.49328e-01, -1.37333e-01],
+                    [5.94964e-01, 3.49413e-01, 1.37368e-01],
+                    [6.04000e-04, 0.00000e00, 0.00000e00],
+                ],
+            ]
+        )
+        assert len(orca_out.vibrational_modes) == 12
+        assert np.allclose(orca_out.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(orca_out.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(
+            orca_out.vibrational_modes[-1], last_mode, rtol=1e-4
+        )
+
+        # test for molecule obtained from output file
+        mol = orca_out.molecule
+        assert len(mol.vibrational_modes) == 12
+        assert np.allclose(mol.vibrational_modes[0], mode1, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[1], mode2, rtol=1e-4)
+        assert np.allclose(mol.vibrational_modes[-1], last_mode, rtol=1e-4)
+
+        assert orca_out.vib_freq_scale_factor == 1.0
+        assert orca_out.molar_absorption_coefficients == [
+            0.003487,
+            0.003475,
+            0.000119,
+            0.000054,
+            0.000062,
+            0.001142,
+            0.001459,
+            0.001641,
+            0.000142,
+            0.000125,
+            0.000119,
+        ]
+        assert orca_out.integrated_absorption_coefficients == [
+            17.62,
+            17.56,
+            0.6,
+            0.27,
+            0.31,
+            5.77,
+            7.38,
+            8.29,
+            0.72,
+            0.63,
+            0.6,
+        ]
+        assert orca_out.transition_dipole_deriv_norm == [
+            0.005115,
+            0.005052,
+            0.00012,
+            1.9e-05,
+            2.2e-05,
+            0.000335,
+            0.000334,
+            0.000376,
+            1.4e-05,
+            1.2e-05,
+            1.1e-05,
+        ]
+        transition_dipole1 = np.array([0.071520, 0.000001, -0.000000])
+        transition_dipole2 = np.array([0.000001, -0.070961, -0.004067])
+        transition_dipole3 = np.array([0.000000, 0.000216, 0.010974])
+        assert np.allclose(
+            orca_out.transition_dipoles[0], transition_dipole1, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[1], transition_dipole2, rtol=1e-4
+        )
+        assert np.allclose(
+            orca_out.transition_dipoles[2], transition_dipole3, rtol=1e-4
+        )
+
+        assert orca_out.num_translation_and_rotation_modes == 6
+        assert orca_out.num_vibration_modes == 12
+        assert orca_out.temperature_in_K == 298.15
+        assert orca_out.pressure_in_atm == 1.0
+        assert orca_out.total_mass_in_amu == 69.49
+        assert math.isclose(
+            orca_out.internal_energy, -599.55741380, rel_tol=1e-4
+        )  # in Hartrees, default unit in ORCA output file
+        assert math.isclose(
+            orca_out.electronic_energy, -599.59902094, rel_tol=1e-4
+        )
+        assert math.isclose(
+            orca_out.zero_point_energy, 0.03712451, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_vibration_correction,
+            0.00165009,
+            rel_tol=1e-8,
+        )
+        assert math.isclose(
+            orca_out.thermal_rotation_correction, 0.00141627, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_translation_correction,
+            0.00141627,
+            rel_tol=1e-8,
+        )
+        assert math.isclose(orca_out.enthalpy, -599.55646959, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.thermal_enthalpy_correction,
+            0.00094421,
+            rel_tol=1e-8,
+        )
+        assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
+        assert math.isclose(
+            orca_out.vibrational_entropy_no_temperature_in_SI,
+            0.00276525 * units.Hartree / (units.J / units.mol) / 298.15,
+            rel_tol=1e-4,
+        )
+        assert math.isclose(
+            orca_out.rotational_entropy_no_temperature_in_SI,
+            0.01116917 * units.Hartree / (units.J / units.mol),
+            rel_tol=1,
+        )
+        assert math.isclose(
+            orca_out.translational_entropy_no_temperature_in_SI,
+            0.01835566 * units.Hartree / (units.J / units.mol),
+            rel_tol=1,
+        )
+        assert math.isclose(orca_out.entropy_TS, 0.03229008, rel_tol=1e-4)
+
+        entropy_TS_in_J_per_mol = (
+            0.03229008 * units.Hartree / (units.J / units.mol)
+        )
+        TS = orca_out.entropy_in_J_per_mol_per_K * 298.15  # 56266.794 J/mol
+        # converted to 13.448 kcal/mol, as expected from output
+        assert math.isclose(entropy_TS_in_J_per_mol, TS, rel_tol=1e-4)
+        assert (
+            orca_out.rotational_entropy_symmetry_correction_J_per_mol_per_K
+            == {
+                "sn=1": 98.355364,
+                "sn=2": 92.592298,
+                "sn=3": 89.221109,
+                "sn=4": 86.829143,
+                "sn=5": 84.973814,
+                "sn=6": 83.457954,
+                "sn=7": 82.176245,
+                "sn=8": 81.065989,
+                "sn=9": 80.086765,
+                "sn=10": 79.210747,
+                "sn=11": 78.418298,
+                "sn=12": 77.6948,
+                "Dinfh": 68.171144,
+                "Cinfv": 73.934299,
+            }
+        )
+
+        assert math.isclose(
+            orca_out.gibbs_free_energy, -599.58875967, rel_tol=1e-8
+        )
+        assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.total_elapsed_walltime == 0.0
+
 
 class TestORCAEngrad:
     def test_read_water_output(self, water_engrad_path):
         orca_engrad = ORCAEngradFile(filename=water_engrad_path)
-        assert orca_engrad.natoms == 3
+        assert orca_engrad.num_atoms == 3
         assert math.isclose(
             orca_engrad.energy, -76.323311011349, rel_tol=1e-4
         )  # energy in Hartree

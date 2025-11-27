@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+"""
+Fukui function analysis script.
 
-"""Script for calculating Fukui reactivity indices based on charges.
-Structures for the neutral, radical cationic and radical anionic
- systems should be based on the optimised neural system."""
+This script calculates Fukui functions for molecular reactivity analysis
+from neutral, cationic, and anionic electronic structure calculations,
+providing insights into electrophilic and nucleophilic reaction sites.
+"""
+
 import logging
 import os
 
@@ -10,6 +14,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.io import get_outfile_format
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -54,19 +59,16 @@ def entry_point(
     radical_anion_filename=None,
     mode="mulliken",
 ):
+    """
+    Calculate Fukui reactivity indices from charge analysis.
+    """
     create_logger()
 
     if radical_cation_filename is None and radical_anion_filename is None:
         raise ValueError(
-            "At least one of radical cation or radical anion files must be provided."
+            "At least one of radical cation or radical anion files must "
+            "be provided."
         )
-
-    if neutral_filename.endswith(".log"):
-        file = "gaussian"
-    elif neutral_filename.endswith(".out"):
-        file = "orca"
-    else:
-        raise TypeError(f"File {neutral_filename} is of unknown filetype.")
 
     neutral_output = None
     radical_cation_output = None
@@ -75,24 +77,42 @@ def entry_point(
     charge_for_radical_cation = None
     charge_for_radical_anion = None
 
-    if file == "gaussian":
+    program = get_outfile_format(neutral_filename)
+    cation_program = (
+        get_outfile_format(radical_cation_filename)
+        if radical_cation_filename is not None
+        else None
+    )
+    anion_program = (
+        get_outfile_format(radical_anion_filename)
+        if radical_anion_filename is not None
+        else None
+    )
+
+    if program == "gaussian":
         neutral_output = Gaussian16WBIOutput(neutral_filename)
-        if radical_cation_filename is not None:
+        if (
+            radical_cation_filename is not None
+            and cation_program == "gaussian"
+        ):
             radical_cation_output = Gaussian16WBIOutput(
                 radical_cation_filename
             )
-        if radical_anion_filename is not None:
+        if radical_anion_filename is not None and anion_program == "gaussian":
             radical_anion_output = Gaussian16WBIOutput(radical_anion_filename)
-    elif file == "orca":
+    elif program == "orca":
         neutral_output = ORCAOutput(neutral_filename)
-        if radical_cation_filename is not None:
+        if radical_cation_filename is not None and cation_program == "orca":
             radical_cation_output = ORCAOutput(radical_cation_filename)
-        if radical_anion_filename is not None:
+        if radical_anion_filename is not None and anion_program == "orca":
             radical_anion_output = ORCAOutput(radical_anion_filename)
+    else:
+        raise TypeError(f"File {neutral_filename} is of unknown filetype.")
 
     if mode == "mulliken":
         logger.info(
-            "\nUsing Mulliken Charges for computing Fukui Reactivity Indices."
+            "\nUsing Mulliken Charges for computing Fukui Reactivity "
+            "Indices."
         )
         charge_for_neutral = neutral_output.mulliken_atomic_charges
         if radical_cation_filename is not None:
@@ -114,7 +134,8 @@ def entry_point(
             charge_for_radical_anion = radical_anion_output.natural_charges
     elif mode == "hirshfeld":
         logger.info(
-            "\nUsing Hirshfeld Charges for computing Fukui Reactivity Indices."
+            "\nUsing Hirshfeld Charges for computing Fukui Reactivity "
+            "Indices."
         )
         charge_for_neutral = neutral_output.hirshfeld_charges
         if radical_cation_filename is not None:
@@ -126,7 +147,7 @@ def entry_point(
             "\nUsing CM5 Charges for computing Fukui Reactivity Indices."
         )
         assert (
-            file == "gaussian"
+            program == "gaussian"
         ), "CM5 charges are only available for Gaussian outputs."
         charge_for_neutral = neutral_output.hirshfeld_cm5_charges
         if radical_cation_filename is not None:
@@ -139,7 +160,8 @@ def entry_point(
             )
     else:
         raise ValueError(
-            f"Unknown mode {mode}. Supported modes are: mulliken, nbo, hirshfeld, cm5."
+            f"Unknown mode {mode}. Supported modes are: mulliken, nbo, "
+            f"hirshfeld, cm5."
         )
 
     logger.info("\nNeutral System Charges:")

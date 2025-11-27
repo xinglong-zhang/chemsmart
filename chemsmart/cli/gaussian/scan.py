@@ -1,3 +1,4 @@
+import ast
 import logging
 
 import click
@@ -19,8 +20,25 @@ logger = logging.getLogger(__name__)
 @gaussian.command("scan", cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click.option(
+    "-cc",
+    "--constrained-coordinates",
+    default=None,
+    help="Additional modredundant constraints for scan job. "
+    "Format: List of constraints separated by semicolons. "
+    "Example: [[1,2],[3,4,5],[1,2,3,4]]. "
+    "1-indexed.",
+)
 @click.pass_context
-def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
+def scan(
+    ctx,
+    jobtype,
+    coordinates,
+    step_size,
+    num_steps,
+    constrained_coordinates=None,
+    **kwargs,
+):
     """CLI for running Gaussian scan jobs."""
 
     # get jobrunner for running Gaussian scan jobs
@@ -35,15 +53,24 @@ def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(scan_settings)
 
+    if constrained_coordinates is not None:
+        constrained_coordinates_info = ast.literal_eval(
+            constrained_coordinates
+        )
+        scan_settings.modred["constrained_coordinates"] = (
+            constrained_coordinates_info
+        )
     # get molecule
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]

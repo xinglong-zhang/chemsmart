@@ -1,10 +1,40 @@
+"""
+Geometric calculations and molecular structure analysis utilities.
+
+This module provides functions for geometric analysis of molecular structures,
+including collinearity testing and moment of inertia calculations. These
+utilities are essential for computational chemistry applications involving
+molecular geometry optimization and thermochemical property calculations.
+
+Key functionality includes:
+- Collinearity detection for three-point systems
+- Moment of inertia tensor calculations for molecular systems
+- Principal axis determination for rotational analysis
+- Molecular volume calculations using various methods
+"""
+
 import math
 
 import numpy as np
 
 
 def is_collinear(coords, tol=1e-5):
-    """Check if three points are collinear using cross product method."""
+    """
+    Check if three points are collinear using cross product method.
+
+    Determines whether three points lie on the same straight line by
+    calculating the cross product of vectors formed by the points.
+    Used for identifying linear molecular configurations.
+
+    Args:
+        coords (array-like): List or array of three coordinate points,
+            each containing [x, y, z] coordinates.
+        tol (float, optional): Tolerance for collinearity test.
+            Defaults to 1e-5.
+
+    Returns:
+        bool: True if points are collinear within tolerance, False otherwise.
+    """
     a = coords[0]
     b = coords[1]
     c = coords[2]
@@ -79,20 +109,36 @@ def is_collinear(coords, tol=1e-5):
 #     print(f'moi_tensor: {moi_tensor}')
 #
 #     evals, evecs = np.linalg.eigh(moi_tensor)  # Eigenvalues and eigenvectors
-#     # instead of returning evecs.T as in ase, we return evecs directly, as in Gaussian
+#     # Instead of returning evecs.T as in ASE, we return evecs directly, as in Gaussian
 #     return moi_tensor, evals, evecs
 
 
 def calculate_moments_of_inertia(mass, coords):
-    """Calculate the moment of inertia tensor and principal moments of inertia.
+    """
+    Calculate the moment of inertia tensor and principal moments of inertia.
 
-    Parameters:
-    - mass (list or np.array): Atomic masses corresponding to each coordinate.
-    - coords (list or np.array): Nx3 array of atomic coordinates.
+    Computes the moment of inertia tensor for a molecular system and
+    determines the principal moments of inertia through eigenvalue
+    decomposition. Essential for rotational analysis and thermochemical
+    property calculations.
 
-    Returns:
-    - moments_of_inertia_principal_axes (np.array): Sorted eigenvalues of moi_tensor.
-    - moi_tensor (np.array): 3x3 moment of inertia tensor.
+    Parameters
+    ----------
+    mass : array-like
+        Atomic masses corresponding to each coordinate. Must have same
+        length as coords array.
+    coords : array-like
+        Nx3 array of atomic coordinates in Cartesian space.
+
+    Returns
+    -------
+    moi_tensor : np.ndarray
+        3x3 moment of inertia tensor about the center of mass.
+    evals : np.ndarray
+        Principal moments of inertia (eigenvalues) sorted in ascending order.
+    evecs : np.ndarray
+        Principal axes (eigenvectors) as row vectors, transposed from
+        NumPy's column format for compatibility with ASE conventions.
     """
     # Convert inputs to NumPy arrays
     mass = np.array(mass)
