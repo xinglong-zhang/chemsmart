@@ -294,18 +294,22 @@ class GaussianFileMixin(FileMixin):
             "modred" in self.route_string
             and self.modredundant_group is not None
         ):
+            # Check if any line is a scan coordinate
+            is_scan = False
             for line in self.modredundant_group:
-                if "F" in line or "f" in line:
-                    modred = self._get_modred_frozen_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "modred"
-                elif "S" in line or "s" in line:
-                    modred = self._get_modred_scan_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "scan"
-                return modred
+                if "S" in line or "s" in line:
+                    is_scan = True
+                    break
+
+            if is_scan:
+                modred = self._get_modred_scan_coords(self.modredundant_group)
+                self.job_type = "scan"
+            else:
+                modred = self._get_modred_frozen_coords(
+                    self.modredundant_group
+                )
+                self.job_type = "modred"
+            return modred
 
     @staticmethod
     def _get_modred_frozen_coords(modred_list_of_string):
@@ -351,6 +355,8 @@ class GaussianFileMixin(FileMixin):
         coords = []
         # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
         for raw_line in modred_list_of_string:
+            if "S" not in raw_line and "s" not in raw_line:
+                continue
             line = raw_line.strip()[2:]
             line_elems = line.split("S")
 
