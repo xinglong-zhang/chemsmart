@@ -345,12 +345,23 @@ def calculate_vdw_volume(coords, radii):
     """
     Calculate VDW volume from atomic coordinates and VDW radii.
 
+    Uses the sum of spherical volumes minus pairwise overlap corrections.
+    The overlap volume between two spheres with radii r_i and r_j at distance d
+    is computed using the exact lens-shaped intersection formula derived from
+    spherical cap volumes.
+
     Parameters:
     - coords: List of [x, y, z] coordinates in Ångstroms for each atom.
     - radii: List of VDW radii in Ångstroms for each atom.
 
     Returns:
     - Volume in cubic Ångstroms (Å³).
+
+    Note:
+        This method only corrects for pairwise overlaps and does not account
+        for higher-order overlaps (three or more spheres overlapping at the
+        same point), which may lead to slight overcounting of the overlap
+        correction for densely packed molecules.
     """
     if len(coords) != len(radii):
         raise ValueError("Number of coordinates must match number of radii")
@@ -360,27 +371,34 @@ def calculate_vdw_volume(coords, radii):
     for radius in radii:
         volume += (4 / 3) * math.pi * (radius**3)
 
-    # Overlap correction
+    # Overlap correction using the exact lens-shaped intersection formula
     overlap_volume = 0.0
     for i in range(len(coords)):
         for j in range(i + 1, len(coords)):
             # Calculate distance between atoms i and j
             x1, y1, z1 = coords[i]
             x2, y2, z2 = coords[j]
-            distance = math.sqrt(
+            d = math.sqrt(
                 (x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2
             )
             r_i, r_j = radii[i], radii[j]
             sum_radii = r_i + r_j
+            diff_radii = r_i - r_j
 
             # Check for overlap
-            if distance < sum_radii:
-                # Approximate overlap volume using spherical cap formula
-                overlap = (
-                    math.pi
-                    * (sum_radii - distance) ** 2
-                    * (distance + 2 * sum_radii)
-                ) / (12 * distance)
+            if d < sum_radii and d > 0:
+                # Check if one sphere is completely inside the other
+                if d <= abs(diff_radii):
+                    # Smaller sphere is completely inside the larger
+                    overlap = (4 / 3) * math.pi * min(r_i, r_j) ** 3
+                else:
+                    # Partial overlap: use exact lens-shaped intersection formula
+                    # V = π(r_i + r_j - d)² × [d² + 2d(r_i + r_j) - 3(r_i - r_j)²] / (12d)
+                    overlap = (
+                        math.pi
+                        * (sum_radii - d) ** 2
+                        * (d**2 + 2 * d * sum_radii - 3 * diff_radii**2)
+                    ) / (12 * d)
                 overlap_volume += overlap
 
     return volume - overlap_volume
