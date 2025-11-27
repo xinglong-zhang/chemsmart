@@ -327,8 +327,6 @@ class GaussianFileMixin(FileMixin):
         """
         modred = []
         for raw_line in modred_list_of_string:
-            if "F" not in raw_line and "f" not in raw_line:
-                continue
             line = raw_line[2:-2]
             line_elems = line.split()
             assert all(
