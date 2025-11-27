@@ -33,10 +33,10 @@ class TestUnits:
 class TestGeometry:
     def test_is_collinear(self):
         coords = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])
-        assert is_collinear(coords) == True
+        assert is_collinear(coords)
 
         coords = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 3]])
-        assert is_collinear(coords) == False
+        assert not is_collinear(coords)
 
 
 class TestEnergyConversion:
