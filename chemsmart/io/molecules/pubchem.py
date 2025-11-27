@@ -1,4 +1,6 @@
-"""Functions for querying PubChem for structures, adapted from ASE's pubchem.py module."""
+"""
+Functions for querying PubChem for structures, adapted from ASE's pubchem.py module.
+"""
 
 import logging
 import os
@@ -56,32 +58,35 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
     suffix = "sdf?record_type=" + suffix
 
     if field == "conformers":
-        # We don't use the "compound" flag when looking for conformers
+        # Conformer searches don't use the "compound" endpoint
         url = f"{base_url}/{field}/{search}/{suffix}"
     else:
+        # Standard compound searches use the "compound" endpoint
         url = f"{base_url}/compound/{field}/{search}/{suffix}"
 
-    # Use requests with timeout
+    # Execute the HTTP request with timeout protection
     response = requests.get(url, timeout=timeout)
-    response.raise_for_status()  # Raises HTTPError for 400, 404, etc.
+    response.raise_for_status()  # Raises HTTPError for 4xx/5xx status codes
 
-    # Check if there are conformers and warn them if there are
+    # Check for multiple conformers and warn user if applicable
     if field != "conformers":
-        # Set default conformer_ids to len==1, as there are PubChem structures with no conformer information
+        # Set default conformer_ids to len==1,
+        # as there are PubChem structures with no conformer information
         # which would return "HTTPError:PUGREST.NotFound"
         conformer_ids = ["conformer information not found."]
 
         with suppress(RequestsHTTPError, RequestException):
-            # Test if there is any conformer information of the structure
+            # Attempt to retrieve conformer information for the structure
             conformer_json = search_pubchem_raw(
                 search, field, suffix="conformers/JSON", timeout=timeout
             )
-            # Parse JSON to check for conformers (assuming a list or dict response)
+            # Parse the JSON response to extract conformer list
             import json
 
             conformer_data = json.loads(conformer_json)
             conformer_ids = conformer_data.get("Conformers", conformer_ids)
 
+        # Warn user if multiple conformers are available
         if len(conformer_ids) > 1:
             warnings.warn(
                 f'The structure "{search}" has more than one '
@@ -105,11 +110,13 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
     ),  # Wait 2, 4, then 8 seconds
     retry=retry_if_exception_type(Timeout),  # Retry on timeout
     before_sleep=lambda retry_state: logger.debug(
-        f"Retrying PubChem search (attempt {retry_state.attempt_number}) after {retry_state.idle_for}s..."
+        f"Retrying PubChem search (attempt {retry_state.attempt_number}) "
+        f"after {retry_state.idle_for}s..."
     ),
 )
 def pubchem_search(*args, fail_silently=True, **kwargs):
-    """Search PubChem for structure.
+    """
+    Search PubChem for structure.
 
     Changelog:
     1. Try suffix =='3d' and '2d'.
@@ -129,6 +136,9 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
     """
 
     def _pubchem_search():
+        """
+        Internal function to perform PubChem search with 3D/2D fallback.
+        """
         search, field = analyze_input(*args, **kwargs)
 
         try:
@@ -193,14 +203,20 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
 
 
 def _pubchem_2d_to_3d(data):
-    """Transform 2D SDF into 3D. Assumes only one molecule in data."""
+    """
+    Transform 2D SDF into 3D. Assumes only one molecule in data.
+    """
     if rdkit is None:
         raise ImportError(
-            "rdkit package needed to convert PubChem 2d structures into 3d structures. "
-            "Please install rdkit via `pip install rdkit to continue using StructureBuilder."
+            "RDKit package is required to convert PubChem 2D structures "
+            "to 3D coordinates. Please install RDKit via "
+            "`pip install rdkit` to continue using this functionality."
         )
 
     def _embed_molecule(mol, use_random_coords=False):
+        """
+        Embed molecule with 3D coordinates using RDKit algorithms.
+        """
         return EmbedMolecule(
             mol2,
             randomSeed=0xF00D,
@@ -209,21 +225,24 @@ def _pubchem_2d_to_3d(data):
         )
 
     with TemporaryDirectory() as tempdir:
+        # Write 2D SDF data to temporary file for RDKit processing
         raw_pubchem_sdf = os.path.join(tempdir, "raw.sdf")
         with open(raw_pubchem_sdf, "w") as f:
             f.write(data)
 
+        # Load molecule from SDF file
         suppl = list(Chem.SDMolSupplier(raw_pubchem_sdf))
-        assert len(suppl) == 1
+        assert len(suppl) == 1, "Expected exactly one molecule in SDF data"
         mol = suppl[0]
 
-        # Check if the molecule has multiple components. If so, embedding will fail to give a reasonable result.
+        # Validate molecule is suitable for embedding
         props = mol.GetPropsAsDict()
         if props["PUBCHEM_COMPONENT_COUNT"] > 1:
             raise RuntimeError(
                 f'Cannot convert multi-component molecule: "{mol.GetProp("_Name")}"'
             )
 
+        # Add explicit hydrogens for complete molecular representation
         mol2 = Chem.AddHs(mol)
 
         # RDKit can fail to embed molecules, which would return a returncode of -1.
@@ -231,6 +250,9 @@ def _pubchem_2d_to_3d(data):
         # https://github.com/rdkit/rdkit/issues/2996#issuecomment-606464769
         returncode = _embed_molecule(mol2, use_random_coords=False)
         if returncode != 0:
+            # Second try: Random coordinate initialization
+            # This can help with challenging molecular geometries
+            # See: https://github.com/rdkit/rdkit/issues/2996#issuecomment-606464769
             returncode = _embed_molecule(mol2, use_random_coords=True)
 
         if returncode != 0:
@@ -238,4 +260,5 @@ def _pubchem_2d_to_3d(data):
                 f'Could not embed molecule {mol2.GetProp("_Name")}'
             )
 
+        # Convert embedded molecule back to SDF format
         return str(Chem.MolToMolBlock(mol2))

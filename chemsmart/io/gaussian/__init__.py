@@ -1,4 +1,11 @@
 class GaussianRefs:
+    """Reference data for Gaussian quantum chemistry calculations.
+
+    This class contains lists of supported methods, basis sets, solvation
+    models, and other parameters available in Gaussian software.
+    """
+
+    # Ab initio methods supported by Gaussian
     g_ab_initio = [
         "hf",
         "uhf",
@@ -11,6 +18,8 @@ class GaussianRefs:
         "ccsd",
         "ccsd(t)",
     ]
+
+    # Density functional theory (DFT) functionals
     g_functionals = [
         "pbe",
         "tpss",
@@ -24,7 +33,11 @@ class GaussianRefs:
         "m06",
         "mn15",
     ]
+
+    # Basis set families and prefixes
     g_bases = ["3-", "6-", "def", "def2", "lan", "cc", "aug", "gen", "genecp"]
+
+    # Semi-empirical methods
     g_semiempirical = [
         "AM1",
         "PM3",
@@ -35,6 +48,8 @@ class GaussianRefs:
         "MNDO",
         "MINDO3",
     ]
+
+    # Solvation models available in Gaussian
     g_solvation_models = [
         "smd",
         "cpcm",
@@ -44,13 +59,18 @@ class GaussianRefs:
         "ipcm",
         "dipole",
     ]
+
+    # Additional route line parameters
     g_additional_route_parameters = [
         "force",
         "nosymm",
         "guess",
         "stable",
         "scf",
+        "geom",  # Used for geom=check keyword when reading checkpoint files
     ]
+
+    # Additional optimization options
     g_additional_opt_options = [
         "maxstep",
         "maxcycles",
@@ -70,42 +90,56 @@ class GaussianRefs:
         "micro",
         "quadmacro",
     ]
+
+    # Gaussian route line verbosity tags
     g_dieze_tags = ["#n", "#p", "#t"]
 
     @property
     def gaussian_ab_initio(self):
+        """Get list of ab initio methods."""
         return self.g_ab_initio
 
     @property
     def gaussian_dft_fuctionals(self):
+        """Get list of DFT functionals."""
         return self.g_functionals
 
     @property
     def gaussian_basis_sets(self):
+        """Get list of basis set families."""
         return self.g_bases
 
     @property
     def gaussian_semiempirical_methods(self):
+        """Get list of semi-empirical methods."""
         return self.g_semiempirical
 
     @property
     def gaussian_solvation_models(self):
+        """Get list of solvation models."""
         return self.g_solvation_models
 
     @property
     def gaussian_additional_route_parameters(self):
+        """Get list of additional route parameters."""
         return self.g_additional_route_parameters
 
     @property
     def gaussian_additional_opt_options(self):
+        """Get list of additional optimization options."""
         return self.g_additional_opt_options
 
     @property
     def gaussian_dieze_tags(self):
+        """Get list of route line verbosity tags."""
         return self.g_dieze_tags
 
 
 class BSEMetadata:
+    """
+    Basis Set Exchange metadata and interface.
+    """
+
     def __init__(self):
         try:
             import basis_set_exchange as bse
@@ -114,51 +148,69 @@ class BSEMetadata:
         except ImportError as e:
             raise ImportError(
                 "basis_set_exchange module needed.\n"
-                "see https://github.com/MolSSI-BSE/basis_set_exchange for installation."
+                "See https://github.com/MolSSI-BSE/basis_set_exchange "
+                "for installation."
             ) from e
 
     def all_bases_names(self):
+        """Get all available basis set names in lowercase.
+
+        Returns:
+            list: List of all basis set names converted to lowercase
+        """
         all_bases = self.bse.get_all_basis_names()
-        # convert all to lower case
+        # Convert all to lowercase for consistency
         return [s.lower() for s in all_bases]
 
     def all_formats(self):
+        """Get all available output formats.
+
+        Returns:
+            dict: Dictionary mapping format keys to format names
+        """
         return self.bse.get_formats()
-        # all formats = {
-        # 'nwchem': 'NWChem',
-        # 'gaussian94': 'Gaussian',
-        # 'psi4': 'Psi4',
-        # 'molcas': 'Molcas',
-        # 'qchem': 'Q-Chem',
-        # 'orca': 'ORCA',
-        # 'dalton': 'Dalton',
-        # 'qcschema': 'QCSchema',
-        # 'cp2k': 'CP2K',
-        # 'pqs': 'PQS',
-        # 'demon2k': 'deMon2K',
-        # 'gamess_us': 'GAMESS US',
-        # 'turbomole': 'Turbomole',
-        # 'gamess_uk': 'GAMESS UK',
-        # 'molpro': 'Molpro',
-        # 'cfour': 'CFOUR',
-        # 'acesii': 'ACES II',
-        # 'xtron': 'xTron',
-        # 'bsedebug': 'BSE Debug',
-        # 'json': 'JSON',
-        # 'bdf': 'BDF'
+        # Available formats include:
+        # {
+        #     'nwchem': 'NWChem',
+        #     'gaussian94': 'Gaussian',
+        #     'psi4': 'Psi4',
+        #     'molcas': 'Molcas',
+        #     'qchem': 'Q-Chem',
+        #     'orca': 'ORCA',
+        #     'dalton': 'Dalton',
+        #     'qcschema': 'QCSchema',
+        #     'cp2k': 'CP2K',
+        #     'pqs': 'PQS',
+        #     'demon2k': 'deMon2K',
+        #     'gamess_us': 'GAMESS US',
+        #     'turbomole': 'Turbomole',
+        #     'gamess_uk': 'GAMESS UK',
+        #     'molpro': 'Molpro',
+        #     'cfour': 'CFOUR',
+        #     'acesii': 'ACES II',
+        #     'xtron': 'xTron',
+        #     'bsedebug': 'BSE Debug',
+        #     'json': 'JSON',
+        #     'bdf': 'BDF'
         # }
 
     def list_of_available_formats(self):
-        """Available formats.
+        """Get list of available output format keys.
 
-        list_of_formats = ['nwchem', 'gaussian94', 'psi4', 'molcas', 'qchem', 'orca', 'dalton', 'qcschema', 'cp2k',
-        'pqs', 'demon2k', 'gamess_us', 'turbomole', 'gamess_uk', 'molpro', 'cfour', 'acesii',
-        'xtron', 'bsedebug', 'json', 'bdf']
+        Available formats include: nwchem, gaussian94, psi4, molcas, qchem,
+        orca, dalton, qcschema, cp2k, pqs, demon2k, gamess_us, turbomole,
+        gamess_uk, molpro, cfour, acesii, xtron, bsedebug, json, bdf.
+
+        Returns:
+            list: List of format keys
         """
         return list(self.all_formats().keys())
 
 
+# Initialize Gaussian reference data
 gaussian_ref = GaussianRefs()
+
+# Export commonly used reference lists for easy access
 GAUSSIAN_AB_INITIO = gaussian_ref.gaussian_ab_initio
 GAUSSIAN_FUNCTIONALS = gaussian_ref.gaussian_dft_fuctionals
 GAUSSIAN_BASES = gaussian_ref.gaussian_basis_sets

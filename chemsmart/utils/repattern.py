@@ -2,6 +2,24 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+integer_pattern = r"^\+?\d+$"  # Non-negative integer (incl. 0)
+# optional leading + allowed
+float_pattern_with_exponential = (
+    r"[+-]?(?:(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+(?:[eE][+-]?\d+))"
+)
+orca_line_integer_followed_by_floats = (
+    rf"^\s*[+-]?\d+(?:\s+{float_pattern_with_exponential})+\s*$"
+)
+raw_energy_value_pattern = r"(-\d+\.\d+)"
+
+element_token = r"[A-Z][a-z]?"
+orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
+
+xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
+# \b ensures that the match ends right after xyz
+# and is not followed by something like: xyz1, xyzabc xyz_thing
+# It will match if .xyz is followed by: a space, a quote, end of line, punctuation
+
 normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
 frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
@@ -9,6 +27,7 @@ frozen_coordinates_pattern = (
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
+xyz_energy_pattern = r"Energy\(Hartree\):\s*(-?\d+\.\d+)"
 
 # standard coordinate pattern with (symbol x y z)
 standard_coord_pattern = (
@@ -103,3 +122,32 @@ gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
 
 # filename matches with reactant r1 or r2
 gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+
+
+# Route string cleaning patterns for Gaussian link job settings
+
+# Pattern to find optimization keywords from route string
+# Matches: "opt", "opt=word", "opt=(parameters)", "opt = word", etc.
+gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
+
+# Pattern to find frequency calculation keywords from route string
+# Matches: "freq", "freq=numer", "freq = analytical", etc.
+# The \b ensures that "freq" is matched as a whole word
+# and not part of another word like "frequency"
+# Although note that "frequency" is a valid Gaussian keyword,
+# we'd want to avoid erroneous partial matches, eg.,
+# freqency (spelling error eg)
+gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
+
+# Pattern to find multiple consecutive spaces in strings
+multiple_spaces_pattern = r"\s+"
+
+
+# PyMOL strings
+pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"
+pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
+
+
+# version release
+version_pattern = r'(version\s*=\s*")[^"]+(")'
+release_pattern = r'(release\s*=\s*")[^"]+(")'

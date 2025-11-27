@@ -1,6 +1,17 @@
+"""
+Gaussian computational chemistry job classes and utilities.
+
+This module provides a comprehensive collection of Gaussian job types
+for various computational chemistry calculations including optimization,
+frequency analysis, single point calculations, IRC, NCI analysis,
+and more. All job classes inherit from the base GaussianJob class
+and provide specialized functionality for different calculation types.
+
+The module also includes job runners and utilities for managing
+Gaussian calculations in computational workflows.
+"""
+
 from .crest import GaussianCrestJob
-from .crestopt import GaussianCrestOptJob
-from .crestts import GaussianCrestTSJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
 from .irc import GaussianIRCJob
@@ -9,6 +20,7 @@ from .link import GaussianLinkJob
 from .modred import GaussianModredJob
 from .nci import GaussianNCIJob
 from .opt import GaussianOptJob
+from .qrc import GaussianQRCJob
 from .resp import GaussianRESPJob
 from .runner import GaussianJobRunner
 from .scan import GaussianScanJob
@@ -19,15 +31,13 @@ from .ts import GaussianTSJob
 from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
 
+# Dynamically collect all registered Gaussian job subclasses
 jobs = GaussianJob.subclasses()
 
 __all__ = [
     "GaussianCrestJob",
-    "GaussianCrestOptJob",
-    "GaussianCrestTSJob",
     "GaussianCustomJob",
     "GaussianDIASJob",
-    "GaussianOptJob",
     "GaussianIRCJob",
     "GaussianComJob",
     "GaussianGeneralJob",
@@ -35,6 +45,8 @@ __all__ = [
     "GaussianLinkJob",
     "GaussianModredJob",
     "GaussianNCIJob",
+    "GaussianOptJob",
+    "GaussianQRCJob",
     "GaussianRESPJob",
     "GaussianJobRunner",
     "GaussianTrajJob",

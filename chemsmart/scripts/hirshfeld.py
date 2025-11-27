@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Hirshfeld charge analysis script.
+
+This script extracts and analyzes Hirshfeld atomic charges from
+Gaussian and ORCA output files, providing atomic charge distributions
+and population analysis for molecular systems.
+"""
+
 import logging
 import os
 
@@ -6,6 +14,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.utils.io import get_outfile_format
 from chemsmart.utils.logger import create_logger
 from chemsmart.utils.utils import (
     get_key_by_value_and_number,
@@ -31,29 +40,40 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default=None,
     type=int,
     multiple=True,
-    help="Atom numbers from which to obtain Hirshfeld Charges and Spins. 1-indexed.",
+    help="Atom numbers from which to obtain Hirshfeld Charges and Spins. "
+    "1-indexed.",
 )
 def entry_point(filename, numbers):
+    """
+    Extract and display Hirshfeld charges and spin densities.
+    """
     create_logger()
-    if filename.endswith(".log"):
+
+    # Parse output file based on extension
+    program = get_outfile_format(filename)
+    if program == "gaussian":
         outputfile = Gaussian16Output(filename=filename)
-    elif filename.endswith(".out"):
+    elif program == "orca":
         outputfile = ORCAOutput(filename=filename)
     else:
         raise TypeError(f"File {filename} is of unknown filetype.")
+
+    # Extract and display Hirshfeld charges
     hirshfeld_charges = outputfile.hirshfeld_charges
     logger.info("\nHirshfeld Charges:")
     for hkey, hvalue in hirshfeld_charges.items():
         logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
     logger.info("\n")
 
+    # Extract and display Hirshfeld spin densities
     hirshfeld_spins = outputfile.hirshfeld_spin_densities
     logger.info("\nHirshfeld Spins:")
     for hkey, hvalue in hirshfeld_spins.items():
         logger.info(f"{hkey:<6}  :  {hvalue:>8.3f}")
     logger.info("\n")
 
-    if numbers is not None:
+    # Display specific atom charges if requested
+    if numbers:
         for n in numbers:
             charge_value = get_value_by_number(n, hirshfeld_charges)
             hk = get_key_by_value_and_number(
@@ -62,7 +82,8 @@ def entry_point(filename, numbers):
             logger.info(f"Hirshfeld Charge at {hk} is {charge_value:.3f}.")
         logger.info("\n")
 
-    if numbers is not None:
+    # Display specific atom spins if requested
+    if numbers:
         for n in numbers:
             spin_value = get_value_by_number(n, hirshfeld_spins)
             hk = get_key_by_value_and_number(spin_value, n, hirshfeld_spins)
