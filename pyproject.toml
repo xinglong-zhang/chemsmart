@@ -24,7 +24,7 @@ dependencies = [
     "pytest~=8.3.4",
     "pyyaml",
     "pymatgen>=2024.8.9",
-    "rdkit~=2024.09.4",
+    "rdkit>=2024.9.0",
     "scipy~=1.15.1",
     "setuptools>=70.1.1",
 ]
