@@ -1090,7 +1090,8 @@ class TestChemicalFeatures:
         assert np.isclose(
             ozone.crude_volume_by_atomic_radii, 3.612781286145805, rtol=0.01
         )
-        assert np.isclose(ozone.vdw_volume, 32.95091895666134, rtol=0.01)
+        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
         assert np.isclose(
             ozone.vdw_volume_from_rdkit, 25.533471711063285, rtol=0.01
         )
@@ -1122,7 +1123,8 @@ class TestChemicalFeatures:
             12.369068467588548,
             rtol=0.01,
         )
-        assert np.isclose(acetone.vdw_volume, 63.328380116290674, rtol=0.01)
+        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
         assert np.isclose(
             acetone.vdw_volume_from_rdkit, 61.98249809788294, rtol=0.01
         )
