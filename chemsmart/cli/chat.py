@@ -1,3 +1,5 @@
+"""CLI interface for ChemSmart chatbot."""
+
 import contextlib
 import logging
 import platform
@@ -16,14 +18,26 @@ if system_type in ("Darwin", "Windows"):
 logger = logging.getLogger(__name__)
 
 
-@click.group(name="chat")
+@click.group(name="chat", invoke_without_command=True)
+@click.option(
+    "--auto-execute/--no-auto-execute",
+    default=False,
+    help="Automatically execute generated commands",
+)
 @click.pass_context
-def chat(ctx):
-    """Start the chatbot."""
-    chatbot = Chatbot()
-    ctx.ensure_object(
-        dict
-    )  # Initialize the Click context object if not already initialized
+def chat(ctx, auto_execute):
+    """Start the ChemSmart chatbot for interactive command generation.
+
+    The chatbot helps you create chemistry simulation job commands
+    using natural language. Describe what you want to do, and it
+    will generate the appropriate chemsmart command.
+
+    Examples:
+        chemsmart chat
+        chemsmart chat --auto-execute
+    """
+    ctx.ensure_object(dict)
+    chatbot = Chatbot(auto_execute=auto_execute)
     ctx.obj["chatbot"] = chatbot
 
     if ctx.invoked_subcommand is None:
@@ -31,19 +45,57 @@ def chat(ctx):
 
 
 @chat.command()
+@click.argument("description", nargs=-1, required=True)
+@click.option(
+    "--execute/--no-execute",
+    default=False,
+    help="Execute the generated command",
+)
+@click.pass_context
+def generate(ctx, description, execute):
+    """Generate a command from a natural language description.
+
+    Examples:
+        chemsmart chat generate "submit optimization job for molecule.xyz"
+        chemsmart chat generate --execute "run single point on test.com"
+    """
+    chatbot = ctx.obj.get("chatbot")
+    if not chatbot:
+        chatbot = Chatbot(auto_execute=execute)
+
+    description_text = " ".join(description)
+    command = chatbot.generate_command(description_text)
+
+    if command:
+        click.echo(f"Generated command: {command}")
+        if execute:
+            click.echo("Executing...")
+            output = chatbot.executor.execute(command)
+            click.echo(f"Output:\n{output}")
+    else:
+        click.echo("Could not generate a command from the description.")
+        click.echo("Please try a more specific description.")
+
+
+@chat.command()
 @click.pass_context
 def train(ctx):
-    """Train the chatbot.
+    """Train the chatbot model (requires additional dependencies).
+
+    This command fine-tunes the LLM on chemsmart commands.
+    Requires: transformers, torch, datasets
 
     Examples:
         chemsmart chat train
     """
-    chatbot = ctx.obj["chatbot"]
+    chatbot = ctx.obj.get("chatbot")
+    if not chatbot:
+        chatbot = Chatbot()
     chatbot.train()
 
 
 if __name__ == "__main__":
     try:
         chat()
-    except KeyboardInterrupt as e:
-        raise e
+    except KeyboardInterrupt:
+        pass

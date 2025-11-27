@@ -20,7 +20,3 @@ CHEMSMART_MODEL = os.path.join(
     os.path.dirname(__file__),
     "models/chemsmart-llm",
 )
-
-print(MODEL_PATH)
-print(MODEL_NAME)
-print(COMMANDS_DATASET)

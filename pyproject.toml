@@ -24,7 +24,7 @@ dependencies = [
     "pytest~=8.3.4",
     "pyyaml",
     "pymatgen>=2024.8.9",
-    "rdkit~=2024.09.4",
+    "rdkit>=2024.9.0",
     "scipy~=1.15.1",
     "setuptools>=70.1.1",
 ]
@@ -40,6 +40,14 @@ test = [
     "pytest-cov",
     "gitchangelog",
     "mkdocs",
+]
+chat = [
+    "openai>=1.0.0",
+]
+train = [
+    "transformers>=4.37.0",
+    "torch",
+    "datasets",
 ]
 
 [project.urls]

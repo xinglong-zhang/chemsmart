@@ -491,6 +491,78 @@ chemsmart sub orca --help
 ```
 to find out more.
 
+## LLM Chatbot Integration
+
+ChemSmart includes an LLM-powered chatbot that helps users create job submission commands using natural language. Instead of memorizing command syntax, you can simply describe what you want to do.
+
+### Starting the Chatbot
+
+To start an interactive chat session:
+
+```bash
+chemsmart chat
+```
+
+The chatbot will help you create commands by understanding your natural language descriptions.
+
+### Generating Commands Directly
+
+To generate a command from a description without entering interactive mode:
+
+```bash
+chemsmart chat generate "submit optimization job for molecule.xyz on shared server"
+```
+
+To generate and execute the command immediately:
+
+```bash
+chemsmart chat generate --execute "run single point on test.com"
+```
+
+### Examples
+
+Here are some example descriptions the chatbot can understand:
+
+- "Submit a geometry optimization job for molecule.xyz on server shared with project test"
+- "Run transition state search on ts.com"
+- "Submit a single point calculation on test.log"
+- "Run IRC job on ts.log"
+- "Run a PES scan on molecule.xyz"
+- "Optimize conformers from crest_conformers.xyz"
+
+### LLM Configuration
+
+The chatbot supports multiple LLM backends:
+
+1. **OpenAI API** (default): Set `OPENAI_API_KEY` environment variable
+2. **OpenAI-compatible APIs**: Set both `OPENAI_API_BASE` and `OPENAI_API_KEY`
+3. **Offline mode**: If no API key is set, the chatbot uses pattern matching
+
+To use OpenAI:
+```bash
+export OPENAI_API_KEY="your-api-key"
+chemsmart chat
+```
+
+To use a custom OpenAI-compatible endpoint (e.g., local Ollama):
+```bash
+export OPENAI_API_BASE="http://localhost:11434/v1"
+export OPENAI_API_KEY="ollama"
+chemsmart chat
+```
+
+### Installing Chat Dependencies
+
+For full LLM support:
+```bash
+pip install chemsmart[chat]
+```
+
+For model training (advanced):
+```bash
+pip install chemsmart[train]
+```
+
 ## Development
 
 Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
