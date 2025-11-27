@@ -1330,8 +1330,14 @@ class Gaussian16Output(GaussianFileMixin):
 
     @cached_property
     def somo_energy(self):
-        """The SOMO energy should be the next alpha occ. orbital after
-        same number of alpha and beta orbitals."""
+        """Returns the lowest SOMO energy for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), this returns the
+        lowest-energy singly occupied molecular orbital (SOMO), which is
+        the first α orbital above the doubly-occupied manifold.
+
+        For a complete picture of all SOMOs, use `somo_energies` property.
+        """
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
             assert (
@@ -1341,6 +1347,80 @@ class Gaussian16Output(GaussianFileMixin):
                 == self.multiplicity
             )
             return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons]
+
+    @cached_property
+    def somo_energies(self):
+        """Returns a list of all SOMO energies for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), these are the
+        singly occupied molecular orbitals (SOMOs) in the α spin channel.
+
+        For a triplet (S=1), there are 2 SOMOs.
+        For a quintet (S=2), there are 4 SOMOs.
+
+        The list is ordered from lowest to highest energy.
+        """
+        if self.multiplicity != 1 and self.num_unpaired_electrons:
+            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
+        return None
+
+    @cached_property
+    def highest_somo_energy(self):
+        """Returns the highest SOMO energy for open-shell systems.
+
+        This is equivalent to HOMOα (the highest occupied α orbital)
+        for high-spin states. It represents the highest-energy singly
+        occupied molecular orbital.
+        """
+        if self.multiplicity != 1 and self.alpha_occ_eigenvalues:
+            return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def homo_alpha_energy(self):
+        """Returns the HOMO energy for the α spin channel.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest occupied α orbital,
+        which is also the highest SOMO.
+        """
+        if self.alpha_occ_eigenvalues:
+            return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def homo_beta_energy(self):
+        """Returns the HOMO energy for the β spin channel.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest doubly-occupied
+        orbital energy.
+        """
+        if self.beta_occ_eigenvalues:
+            return self.beta_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def lumo_alpha_energy(self):
+        """Returns the LUMO energy for the α spin channel.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied α orbital.
+        """
+        if self.alpha_virtual_eigenvalues:
+            return self.alpha_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def lumo_beta_energy(self):
+        """Returns the LUMO energy for the β spin channel.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied β orbital.
+        """
+        if self.beta_virtual_eigenvalues:
+            return self.beta_virtual_eigenvalues[0]
+        return None
 
     @cached_property
     def lumo_energy(self):

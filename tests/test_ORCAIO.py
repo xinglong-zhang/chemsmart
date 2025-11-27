@@ -432,6 +432,16 @@ class TestORCAOutput:
         assert orca_out.homo_energy == -10.252651603489042
         assert orca_out.lumo_energy == 2.419962981919028
         assert np.isclose(orca_out.fmo_gap, 12.6726145854, rtol=1e-6)
+        # New spin-resolved HOMO/LUMO properties for closed-shell systems
+        assert orca_out.homo_alpha_energy == orca_out.homo_energy
+        assert orca_out.homo_beta_energy == orca_out.homo_energy
+        assert orca_out.lumo_alpha_energy == orca_out.lumo_energy
+        assert orca_out.lumo_beta_energy == orca_out.lumo_energy
+        # For closed-shell systems, somo_energy should be None
+        assert orca_out.somo_energy is None
+        assert orca_out.somo_energies is None
+        assert orca_out.highest_somo_energy is None
+        assert orca_out.num_unpaired_electrons == 0
 
         # test HOMO LUMO
 
