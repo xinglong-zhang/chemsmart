@@ -1063,26 +1063,69 @@ class TestChemicalFeatures:
     def test_volume(
         self, gaussian_ozone_opt_outfile, gaussian_acetone_opt_outfile
     ):
-        """Test volume calculation."""
+        """Test volume calculation for molecules.
+
+        Tests various volume calculation methods:
+        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - crude_volume_by_vdw_radii
+        - crude_volume_by_atomic_radii
+        - vdw_volume
+        - vdw_volume_from_rdkit
+        - voronoi_dirichlet_polyhedra_occupied_volume
+        """
         ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
-        print(ozone.voronoi_dirichlet_occupied_volume)  # 42.796979883456515
-        print(ozone.crude_volume_by_vdw_radii)  # 44.13068085447146
-        print(ozone.crude_volume_by_atomic_radii)  # 3.612781286145805
-        print(ozone.vdw_volume)  # 32.95091895666134
-        print(ozone.vdw_volume_from_rdkit)  # 25.533471711063285
-        print(
-            ozone.voronoi_dirichlet_polyhedra_occupied_volume
-        )  # 20.94252748967074
+
+        # Test pyvoro-based method (optional, may not be available in Python 3.12+)
+        try:
+            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+            assert ozone_vd_vol > 0
+            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
+        except ImportError:
+            pass  # pyvoro not available, skip this test
+
+        # Test other volume methods that don't require pyvoro
+        assert np.isclose(
+            ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
+        )
+        assert np.isclose(
+            ozone.crude_volume_by_atomic_radii, 3.612781286145805, rtol=0.01
+        )
+        assert np.isclose(ozone.vdw_volume, 32.95091895666134, rtol=0.01)
+        assert np.isclose(
+            ozone.vdw_volume_from_rdkit, 25.533471711063285, rtol=0.01
+        )
+        assert np.isclose(
+            ozone.voronoi_dirichlet_polyhedra_occupied_volume,
+            20.94252748967074,
+            rtol=0.01,
+        )
 
         acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
-        print(acetone.voronoi_dirichlet_occupied_volume)  # 108.73483002110545
-        print(acetone.crude_volume_by_vdw_radii)  # 119.87818262306239
-        print(acetone.crude_volume_by_atomic_radii)  # 7.469325029468949
-        print(
-            acetone.voronoi_dirichlet_polyhedra_occupied_volume
-        )  # 12.369068467588548
-        print(acetone.vdw_volume)  # 63.328380116290674
-        print(acetone.vdw_volume_from_rdkit)  # 61.98249809788294
+
+        # Test pyvoro-based method (optional)
+        try:
+            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+            assert acetone_vd_vol > 0
+            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
+        except ImportError:
+            pass  # pyvoro not available, skip this test
+
+        # Test other volume methods
+        assert np.isclose(
+            acetone.crude_volume_by_vdw_radii, 119.87818262306239, rtol=0.01
+        )
+        assert np.isclose(
+            acetone.crude_volume_by_atomic_radii, 7.469325029468949, rtol=0.01
+        )
+        assert np.isclose(
+            acetone.voronoi_dirichlet_polyhedra_occupied_volume,
+            12.369068467588548,
+            rtol=0.01,
+        )
+        assert np.isclose(acetone.vdw_volume, 63.328380116290674, rtol=0.01)
+        assert np.isclose(
+            acetone.vdw_volume_from_rdkit, 61.98249809788294, rtol=0.01
+        )
 
 
 class TestStructuresFromGaussianInput:

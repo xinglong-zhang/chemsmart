@@ -186,8 +186,19 @@ def calculate_voronoi_dirichlet_occupied_volume(coords, radii, dispersion):
 
     Returns:
     - occupied_volume (float): Estimated physically occupied volume.
+
+    Raises:
+    - ImportError: If pyvoro is not installed. Install with: pip install pyvoro
+        Note: pyvoro requires Python < 3.12
     """
-    import pyvoro
+    try:
+        import pyvoro
+    except ImportError:
+        raise ImportError(
+            "pyvoro is required for Voronoi-Dirichlet volume calculation. "
+            "Install with: pip install chemsmart[voronoi]. "
+            "Note: pyvoro requires Python < 3.12."
+        )
 
     coords = np.array(coords)
     radii = np.array(radii)

@@ -320,7 +320,12 @@ class Molecule:
 
     @property
     def voronoi_dirichlet_occupied_volume(self):
-        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet tessellation."""
+        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet tessellation.
+
+        Note: This method requires the pyvoro package, which can be installed with:
+            pip install chemsmart[voronoi]
+        Note: pyvoro requires Python < 3.12
+        """
         from chemsmart.utils.geometry import (
             calculate_voronoi_dirichlet_occupied_volume,
         )
