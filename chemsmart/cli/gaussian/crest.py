@@ -8,6 +8,7 @@ from chemsmart.cli.gaussian.gaussian import (
     gaussian,
 )
 from chemsmart.cli.job import click_job_options
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import (
     MyCommand,
     get_setting_from_jobtype_for_gaussian,
@@ -63,10 +64,14 @@ def crest(
 
     check_charge_and_multiplicity(crest_settings)
 
-    # get molecule
-    molecules = ctx.obj[
-        "molecules"
-    ]  # use all molecules as a list for crest jobs
+    # For CREST jobs, we need ALL molecules from the file, not just the
+    # indexed ones from the parent gaussian command (which defaults to the
+    # last molecule with index=-1). Re-read all molecules from the file.
+    filename = ctx.obj["filename"]
+    molecules = Molecule.from_filepath(
+        filepath=filename, index=":", return_list=True
+    )
+    logger.debug(f"Re-read {len(molecules)} molecules from {filename} for CREST job")
 
     # get label for the job
     label = ctx.obj["label"]
