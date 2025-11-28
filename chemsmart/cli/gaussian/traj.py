@@ -89,7 +89,7 @@ def traj(
     logger.debug(f"Label for job: {label}")
 
     logger.info(
-        f"Simulated annealing {type} settings from project: "
+        f"Simulated annealing {jobtype} settings from project: "
         f"{structure_set_settings.__dict__}"
     )
 
