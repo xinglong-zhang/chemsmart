@@ -784,7 +784,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
     Extends the base PyMOL runner to provide hybrid molecular
     visualization capabilities with customizable styling, labeling.
 
-    Current job runner supports up to four groups."""
+    This job runner supports an arbitrary number of groups, determined dynamically."""
 
     JOBTYPES = ["pymol_hybrid_visualization"]
 
