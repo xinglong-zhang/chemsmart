@@ -83,7 +83,7 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
 
     def __init__(
         self,
-        groups,
+        groups=None,
         colors=None,
         stick_radius=None,
         surface_color=None,
