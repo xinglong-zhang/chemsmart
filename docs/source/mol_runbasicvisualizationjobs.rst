@@ -222,6 +222,7 @@ containing their RGB values.
       chemsmart run mol -f molecule.log visualize -f custom_style.py
 
 Hybrid Visualization Examples
+============================
 
 running a command like:
    .. code:: console
