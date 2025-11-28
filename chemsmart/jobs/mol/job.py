@@ -271,7 +271,7 @@ class PyMOLJob(Job):
             PyMOLJob: Configured PyMOL visualization job instance.
         """
         # get all molecule in a file and give the result as a list
-        filename = re.sub(r" ", r"\\", filename)
+        # Use the filename as-is; do not perform shell-style escaping
         logger.info(f"Reading molecules from file: {filename}.")
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True, **kwargs
