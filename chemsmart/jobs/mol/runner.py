@@ -924,23 +924,23 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_faded_colors(self, job, f):
         """Write the faded colors for non-highlighted C, N, O, P in background to the pml file."""
-        if job.new_color_carbon:
+        if job.new_color_carbon is not None:
             new_color_carbon = job.new_color_carbon
         else:
             new_color_carbon = "[0.8, 0.8, 0.9]"
-        if job.new_color_nitrogen:
+        if job.new_color_nitrogen is not None:
             new_color_nitrogen = job.new_color_nitrogen
         else:
             new_color_nitrogen = "[0.6, 0.8, 1.0]"
-        if job.new_color_oxygen:
+        if job.new_color_oxygen is not None:
             new_color_oxygen = job.new_color_oxygen
         else:
             new_color_oxygen = "[1.0, 0.7, 0.7]"
-        if job.new_color_phosphorus:
+        if job.new_color_phosphorus is not None:
             new_color_phosphorus = job.new_color_phosphorus
         else:
             new_color_phosphorus = "[1.0, 0.85, 0.6]"
-        if job.new_color_sulfur:
+        if job.new_color_sulfur is not None:
             new_color_sulfur = job.new_color_sulfur
         else:
             new_color_sulfur = "[1.0, 0.7, 0.7]"
