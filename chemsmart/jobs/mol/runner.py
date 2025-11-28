@@ -1041,11 +1041,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_surface_settings(self, job, f):
         """Write PyMOL commands to display and style the molecular surface."""
-        if job.surface_color:
+        if job.surface_color is not None:
             surface_color = job.surface_color
         else:
             surface_color = "grey"
-        if job.surface_transparency:
+        if job.surface_transparency is not None:
             surface_transparency = job.surface_transparency
         else:
             surface_transparency = "0.7"
