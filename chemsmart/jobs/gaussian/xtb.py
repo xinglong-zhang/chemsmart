@@ -325,13 +325,18 @@ class GaussianXTBJob(GaussianJob):
         # Ensure settings is the correct type
         if not isinstance(settings, GaussianXTBJobSettings):
             if isinstance(settings, GaussianJobSettings):
-                # Convert regular settings to XTB settings
+                # Convert regular settings to XTB settings using copy
                 logger.warning(
                     "Converting GaussianJobSettings to GaussianXTBJobSettings"
                 )
+                # Extract only public attributes for safe conversion
+                settings_dict = {
+                    k: v for k, v in settings.__dict__.items()
+                    if not k.startswith('_')
+                }
                 settings = GaussianXTBJobSettings(
                     calculator=XTBCalculator.default(),
-                    **settings.__dict__,
+                    **settings_dict,
                 )
             else:
                 raise ValueError(

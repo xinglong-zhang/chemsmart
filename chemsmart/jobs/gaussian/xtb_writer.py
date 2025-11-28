@@ -80,11 +80,12 @@ class GaussianXTBQST2Writer(GaussianInputWriter):
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f, molecule=self.job.product)
 
-        # Optional: Write TS guess if provided
-        if hasattr(self.job, 'ts_guess') and self.job.ts_guess is not None:
+        # Optional: Write TS guess if provided (for QST3 jobs)
+        ts_guess = getattr(self.job, 'ts_guess', None)
+        if ts_guess is not None:
             self._write_gaussian_title(f, title="TS Guess")
             self._write_charge_and_multiplicity(f)
-            self._write_cartesian_coordinates(f, molecule=self.job.ts_guess)
+            self._write_cartesian_coordinates(f, molecule=ts_guess)
 
         self._append_other_additional_info(f)
         logger.debug("Completed QST2 input file generation")
@@ -114,6 +115,6 @@ class GaussianXTBQST2Writer(GaussianInputWriter):
         if molecule is None:
             molecule = self.job.molecule
 
-        logger.debug(f"Writing coordinates for molecule: {molecule}")
+        logger.debug("Writing coordinates for molecule: %s", molecule)
         molecule.write_coordinates(f, program="gaussian")
         f.write("\n")
