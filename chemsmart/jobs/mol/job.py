@@ -8,6 +8,7 @@ to create visualization jobs from files or PubChem records.
 
 import logging
 import os
+import re
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
@@ -270,6 +271,7 @@ class PyMOLJob(Job):
             PyMOLJob: Configured PyMOL visualization job instance.
         """
         # get all molecule in a file and give the result as a list
+        filename = re.sub(r" ", r"\\", filename)
         logger.info(f"Reading molecules from file: {filename}.")
         molecules = Molecule.from_filepath(
             filepath=filename, index=":", return_list=True, **kwargs

@@ -114,6 +114,126 @@ Movie Basic Usage
 Movie Examples
 ==============
 
+###############################
+ Run Hybrid Visualization Jobs
+###############################
+
+Apart from basic visualization jobs, ChemSmart can also create graphics with different substrates displayed in different
+style (what 'hybrid' refers to).
+
+***************************
+ Hybrid Visualization Jobs
+***************************
+
+Create static PyMOL visualizations and interactive session files.
+
+.. code:: console
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize [SUBCMD_OPTIONS] --hybrid [SUBCMD_OPTIONS]
+
+Visualization-Specific OPTIONS
+==============================
+
+.. list-table:: Hybrid Visualization Job Options
+   :header-rows: 1
+   :widths: 25 15 60
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``--hybrid``
+      -  bool
+      -  Enable hybrid visualization mode. Allows drawing different groups in different styles (default=False).
+
+   -  -  ``-g, --group``
+      -  string, multiple
+      -  Indexes of atoms to select for a group. Repeatable for multiple groups.
+
+   -  -  ``-C, --color``
+      -  string, multiple
+      -  Color for each group. Repeatable to match -g options. Default = ['cbap', 'cbac', 'cbay', 'cbag', ...].
+
+   -  -  ``-sc, --surface-color``
+      -  string
+      -  Customize the surface color (default=grey).
+
+   -  -  ``-st, --surface-transparency``
+      -  string
+      -  Customize the surface transparency (default=0.7).
+
+   -  -  ``-nc, --new-color-carbon``
+      -  string
+      -  Set a custom color for carbon atoms. (default=[0.8, 0.8, 0.9]).
+
+   -  -  ``-nn, --new-color-nitrogen``
+      -  string
+      -  Set a custom color for nitrogen atoms. (default=[0.6, 0.8, 1.0]).
+
+   -  -  ``-no, --new-color-oxygen``
+      -  string
+      -  Set a custom color for oxygen atoms. (default=[1.0, 0.7, 0.7]).
+
+   -  -  ``-ns, --new-color-sulfur``
+      -  string
+      -  Set a custom color for sulfur atoms. (default=[1.0, 0.7, 0.7]).
+
+   -  -  ``-np, --new-color-phosphorus``
+      -  string
+      -  Set a custom color for phosphorus atoms. (default=[1.0, 0.85, 0.6]).
+
+**********************************
+ Hybrid Visualization Basic Usage
+**********************************
+
+**Basic hybrid visualization**
+
+   .. code:: console
+
+      chemsmart run mol -f molecule.xyz visualize --hybrid -g '1,2,3'
+
+This is the minimal command needed for hybrid visualization job. Only the highlighted groups are specified, others will
+be assigned by default.
+
+**Hybrid visualization with customized color scheme**
+
+   .. code:: console
+
+      chemsmart run mol -f calculation.log visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak
+
+This will assign a customized color scheme to different groups. Note that the color/group is assigned by input order,
+i.e., the first color ('cbay') will be assigned to the first group ([1,2,3]), etc. A default color scheme will be used
+if a group is not assigned customized colors.
+
+**Hybrid Visualization with customized background settings**
+
+   .. code:: console
+
+      chemsmart run mol -f structure.xyz visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
+
+Color options except for color schemes, such as surface color, customized carbon color can be specified by a list
+containing their RGB values.
+
+**Visualization using custom style or script file**
+===================================================
+
+   .. code:: console
+
+      chemsmart run mol -f molecule.log visualize -f custom_style.py
+
+Hybrid Visualization Examples
+
+running a command like:
+   .. code:: console
+
+      chemsmart run mol -f molecule.xyz visualize --hybrid -g  '417-418,422-424,429-447,463-464' -g '336,397-412,414-416,419-421' -g '494-529'
+
+will generate the below visualization style.
+
+.. image:: _static/B_in_R.png
+   :width: 60%
+   :align: center
+
 ************
  Align Jobs
 ************
@@ -125,12 +245,10 @@ Align multiple molecular structures for comparison.
    chemsmart run [OPTIONS] mol align [SUBCMD_OPTIONS]
 
 Align-Specific OPTIONS
-======================
 
 Inherit all options from visualization jobs and use the same parameters.
 
 Align Basic Usage
-=================
 
 **align files**
 
