@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.1.10"  # Update this dynamically if needed
+version = "0.1.11"  # Update this dynamically if needed
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
