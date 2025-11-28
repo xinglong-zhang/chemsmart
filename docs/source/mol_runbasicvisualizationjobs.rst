@@ -142,11 +142,11 @@ Visualization-Specific OPTIONS
       -  Type
       -  Description
 
-   -  -  ``--hybrid``
+   -  -  ``-H, --hybrid``
       -  bool
       -  Enable hybrid visualization mode. Allows drawing different groups in different styles (default=False).
 
-   -  -  ``-g, --group``
+   -  -  ``-G, --group``
       -  string, multiple
       -  Indexes of atoms to select for a group. Repeatable for multiple groups.
 
@@ -190,7 +190,7 @@ Visualization-Specific OPTIONS
 
    .. code:: console
 
-      chemsmart run mol -f molecule.xyz visualize --hybrid -g '1,2,3'
+      chemsmart run mol -f molecule.xyz visualize --hybrid -G '1,2,3'
 
 This is the minimal command needed for hybrid visualization job. Only the highlighted groups are specified, others will
 be assigned by default.
@@ -199,7 +199,7 @@ be assigned by default.
 
    .. code:: console
 
-      chemsmart run mol -f calculation.log visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak
+      chemsmart run mol -f calculation.log visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak
 
 This will assign a customized color scheme to different groups. Note that the color/group is assigned by input order,
 i.e., the first color ('cbay') will be assigned to the first group ([1,2,3]), etc. A default color scheme will be used
@@ -209,7 +209,7 @@ if a group is not assigned customized colors.
 
    .. code:: console
 
-      chemsmart run mol -f structure.xyz visualize --hybrid -g '1,2,3' -g '4,5,6' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
+      chemsmart run mol -f structure.xyz visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
 
 Color options except for color schemes, such as surface color, customized carbon color can be specified by a list
 containing their RGB values.
@@ -227,7 +227,7 @@ Hybrid Visualization Examples
 running a command like:
    .. code:: console
 
-      chemsmart run mol -f molecule.xyz visualize --hybrid -g  '417-418,422-424,429-447,463-464' -g '336,397-412,414-416,419-421' -g '494-529'
+      chemsmart run mol -f molecule.xyz visualize --hybrid -G  '417-418,422-424,429-447,463-464' -G '336,397-412,414-416,419-421' -G '494-529'
 
 will generate the below visualization style.
 
