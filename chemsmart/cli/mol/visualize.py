@@ -88,18 +88,23 @@ def visualize(
 
     groups = kwargs.pop("group", ())
     colors = kwargs.pop("color", ())
-    # raise error if -g/-c/-sc/-st is provided when --hybrid is false
+    # raise error if -g/-c/-sc/-st or new_color_* is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
         "color",
         "surface_color",
         "surface_transparency",
+        "new_color_carbon",
+        "new_color_nitrogen",
+        "new_color_oxygen",
+        "new_color_sulfur",
+        "new_color_phosphorus",
     ]
     if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
-            "The options '-g/--group', '--color', '--surface-color', and "
-            "'--surface-transparency' can only be used with '--hybrid'. "
-            "Please enable hybrid visualization mode with '--hybrid'."
+            "The options '-g/--group', '--color', '--surface-color', "
+            "'--surface-transparency', and '--new-color-*' can only be used "
+            "with '--hybrid'. Please enable hybrid visualization mode with '--hybrid'."
         )
     for i, grp in enumerate(groups):
         hybrid_opts[f"group{i + 1}"] = grp
