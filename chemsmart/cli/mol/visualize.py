@@ -91,13 +91,13 @@ def visualize(
     # raise error if -g/-c/-sc/-st is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
-        "colors",
+        "color",
         "surface_color",
         "surface_transparency",
     ]
     if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
-            "The options '-g/--group', '--colors', '--surface-color', and "
+            "The options '-g/--group', '--color', '--surface-color', and "
             "'--surface-transparency' can only be used with '--hybrid'. "
             "Please enable hybrid visualization mode with '--hybrid'."
         )
