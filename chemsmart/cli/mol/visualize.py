@@ -84,7 +84,7 @@ def visualize(
 
     groups = kwargs.pop("groups", ())
     colors = kwargs.pop("color", ())
-    # raise error if -g/-c/-sc/-st or new_color_* is provided when --hybrid is false
+    # raise error if -G/-C/-sc/-st or new_color_* is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
         "color",
