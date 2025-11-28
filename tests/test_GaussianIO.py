@@ -516,6 +516,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.molecule.num_atoms == 40
         assert g16_output.spin == "restricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116
@@ -1819,6 +1820,10 @@ class TestGaussianWBIOutput:
         assert g16_output.standard_orientations is not None
         assert len(g16_output.standard_orientations) == 1
         assert len(g16_output.all_structures) == 1
+
+    def test_molecules(self):
+        mol = Molecule.from_pubchem("241")  # benzene molecule
+        assert mol.is_aromatic
 
 
 class TestGaussianCubeFile:

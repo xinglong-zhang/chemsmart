@@ -1,4 +1,4 @@
-%chk=gaussian_scan.chk
+%chk=gaussian_scan_single_degree_of_freedom.chk
 %nprocshared=64
 %mem=400GB
 # opt=modredundant b3lyp empiricaldispersion=gd3bj def2svp
@@ -79,5 +79,4 @@ H       -3.0134935268    2.8856563390    3.9901859072
 H       -5.0798259750    4.0072120708    3.2802403730
 
 B 1 2 S 10 0.1
-A 3 4 5 S 10 0.1
 

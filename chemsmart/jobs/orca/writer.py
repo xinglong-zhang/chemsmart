@@ -352,13 +352,37 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
             modred: Dictionary containing scan parameters
         """
+        # append for additonal contraints for scan jobs
+        if "constrained_coordinates" in modred:
+            logger.debug("Writing modredundant constraints for scan job")
+            f.write("  Constraints\n")
+            constrained_coordinates_list = modred["constrained_coordinates"]
+            prepend_string_list = (
+                get_prepend_string_list_from_modred_free_format(
+                    input_modred=constrained_coordinates_list,
+                    program="orca",
+                )
+            )
+            for prepend_string in prepend_string_list:
+                f.write(f"  {{{prepend_string} C}}\n")
+            # write 'end' for each modred specified
+            f.write("  end\n")
+            f.write("\n")
+
         f.write("  Scan\n")
         # append for scanning job
         coords_list = modred["coords"]
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coords_list, program="orca"
+        scan_prepend_string_list = (
+            get_prepend_string_list_from_modred_free_format(
+                input_modred=coords_list, program="orca"
+            )
         )
-        for prepend_string in prepend_string_list:
+        for prepend_string, dist_start, dist_end, num_steps in zip(
+            scan_prepend_string_list,
+            modred["dist_start"],
+            modred["dist_end"],
+            modred["num_steps"],
+        ):
             if prepend_string.lower().startswith("b"):
                 scan_var = "bond distance"
                 scan_unit = "Angstrom"
@@ -372,9 +396,9 @@ class ORCAInputWriter(InputWriter):
                 scan_var = "variable"
                 scan_unit = "unit"
             f.write(
-                f"  {prepend_string} = {modred['dist_start']}, {modred['dist_end']}, "
-                f"{modred['num_steps']}  # Scanning {scan_var} from {modred['dist_start']} {scan_unit} "
-                f"to {modred['dist_end']} {scan_unit} in {modred['num_steps']} steps. \n"
+                f"  {prepend_string} = {dist_start}, {dist_end}, "
+                f"{num_steps}  # Scanning {scan_var} from {dist_start} {scan_unit} "
+                f"to {dist_end} {scan_unit} in {num_steps} steps. \n"
             )
         # write 'end' for each modred specified
         f.write("  end\n")
