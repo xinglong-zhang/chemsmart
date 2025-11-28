@@ -368,10 +368,47 @@ class Molecule:
 
     @property
     def vdw_volume(self):
-        """Calculate the occupied volume of the molecule using van der Waals radii."""
+        """Calculate the occupied volume of the molecule using van der Waals radii.
+
+        Uses pairwise overlap correction. For more accurate results on complex
+        molecules, consider using ``grid_vdw_volume`` instead.
+
+        See Also
+        --------
+        grid_vdw_volume : Grid-based volume (more accurate for complex molecules)
+        vdw_volume_from_rdkit : RDKit's grid-based implementation
+        """
         from chemsmart.utils.geometry import calculate_vdw_volume
 
         return calculate_vdw_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def grid_vdw_volume(self):
+        """Calculate the VDW volume using grid-based numerical integration.
+
+        This method places the molecule in a 3D grid and counts grid points
+        that fall inside any atomic VDW sphere. This approach correctly handles
+        all orders of atomic overlaps and provides more accurate volume estimates
+        for complex molecules compared to the pairwise method.
+
+        This implementation is similar to RDKit's DoubleCubicLatticeVolume
+        algorithm.
+
+        Returns
+        -------
+        float
+            Volume in cubic Ångstroms (Å³).
+
+        See Also
+        --------
+        vdw_volume : Faster pairwise overlap method
+        vdw_volume_from_rdkit : RDKit's native implementation
+        """
+        from chemsmart.utils.geometry import calculate_grid_vdw_volume
+
+        return calculate_grid_vdw_volume(
             coords=self.positions, radii=self.vdw_radii_list
         )
 

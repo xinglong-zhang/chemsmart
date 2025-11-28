@@ -15,7 +15,6 @@ Key functionality includes:
 
 import math
 
-
 import numpy as np
 
 
@@ -343,25 +342,49 @@ def calculate_crude_occupied_volume(coords, radii):
 
 def calculate_vdw_volume(coords, radii):
     """
-    Calculate VDW volume from atomic coordinates and VDW radii.
+    Calculate VDW volume from atomic coordinates and VDW radii using pairwise
+    overlap correction.
 
     Uses the sum of spherical volumes minus pairwise overlap corrections.
     The overlap volume between two spheres with radii r_i and r_j at distance d
     is computed using the exact lens-shaped intersection formula derived from
-    spherical cap volumes.
+    spherical cap volumes:
 
-    Parameters:
-    - coords: List of [x, y, z] coordinates in Ångstroms for each atom.
-    - radii: List of VDW radii in Ångstroms for each atom.
+        V_overlap = π(r_i + r_j - d)² × [d² + 2d(r_i + r_j) - 3(r_i - r_j)²] / (12d)
 
-    Returns:
-    - Volume in cubic Ångstroms (Å³).
+    Parameters
+    ----------
+    coords : list or array-like
+        List of [x, y, z] coordinates in Ångstroms for each atom.
+    radii : list or array-like
+        List of VDW radii in Ångstroms for each atom.
 
-    Note:
-        This method only corrects for pairwise overlaps and does not account
-        for higher-order overlaps (three or more spheres overlapping at the
-        same point), which may lead to slight overcounting of the overlap
-        correction for densely packed molecules.
+    Returns
+    -------
+    float
+        Volume in cubic Ångstroms (Å³).
+
+    Limitations
+    -----------
+    This method only corrects for pairwise (two-body) overlaps and does not
+    account for higher-order overlaps (three or more spheres overlapping at
+    the same point). For densely packed molecules, this leads to overcounting
+    of the overlap correction, resulting in underestimated volumes.
+
+    For example, if spheres A, B, and C all overlap at a common region:
+    - The pairwise method subtracts the A-B, B-C, and A-C overlaps
+    - But the triple-overlap region (where all three meet) gets subtracted
+      three times instead of once
+    - This causes the calculated volume to be smaller than the true volume
+
+    For more accurate volume calculations on complex molecules, consider using
+    ``calculate_grid_vdw_volume()`` which uses numerical grid integration
+    and correctly handles all overlap orders.
+
+    See Also
+    --------
+    calculate_grid_vdw_volume : Grid-based volume calculation (more accurate)
+    calculate_crude_occupied_volume : Sum of spheres without overlap correction
     """
     if len(coords) != len(radii):
         raise ValueError("Number of coordinates must match number of radii")
@@ -378,9 +401,7 @@ def calculate_vdw_volume(coords, radii):
             # Calculate distance between atoms i and j
             x1, y1, z1 = coords[i]
             x2, y2, z2 = coords[j]
-            d = math.sqrt(
-                (x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2
-            )
+            d = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
             r_i, r_j = radii[i], radii[j]
             sum_radii = r_i + r_j
             diff_radii = r_i - r_j
@@ -402,3 +423,102 @@ def calculate_vdw_volume(coords, radii):
                 overlap_volume += overlap
 
     return volume - overlap_volume
+
+
+def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
+    """
+    Calculate VDW volume using grid-based numerical integration.
+
+    This method places the molecule in a 3D grid and counts grid points
+    that fall inside any atomic VDW sphere. This approach correctly handles
+    all orders of atomic overlaps (pairwise, triple, etc.) and provides
+    more accurate volume estimates for complex molecules.
+
+    This implementation is similar in concept to RDKit's DoubleCubicLatticeVolume
+    algorithm, which also uses grid-based integration for molecular volume
+    calculation.
+
+    Parameters
+    ----------
+    coords : list or array-like
+        List of [x, y, z] coordinates in Ångstroms for each atom.
+    radii : list or array-like
+        List of VDW radii in Ångstroms for each atom.
+    grid_spacing : float, optional
+        Spacing between grid points in Ångstroms. Smaller values give more
+        accurate results but increase computation time. Default is 0.2 Å,
+        which provides a good balance between accuracy and speed.
+
+    Returns
+    -------
+    float
+        Volume in cubic Ångstroms (Å³).
+
+    Notes
+    -----
+    The algorithm works as follows:
+    1. Create a bounding box around the molecule with padding equal to the
+       maximum VDW radius
+    2. Generate a regular 3D grid of points within the bounding box
+    3. For each grid point, check if it falls inside any atomic VDW sphere
+    4. Count the number of points inside and multiply by the volume per
+       grid point (grid_spacing³)
+
+    The accuracy depends on grid_spacing:
+    - 0.2 Å: Good balance of accuracy and speed (default)
+    - 0.1 Å: Higher accuracy, ~8x slower
+    - 0.5 Å: Faster but less accurate
+
+    See Also
+    --------
+    calculate_vdw_volume : Analytical pairwise overlap method (faster but
+        less accurate for complex molecules)
+
+    Examples
+    --------
+    >>> coords = [[0, 0, 0], [1.5, 0, 0]]
+    >>> radii = [1.7, 1.2]
+    >>> vol = calculate_grid_vdw_volume(coords, radii)
+    """
+    coords = np.array(coords)
+    radii = np.array(radii)
+
+    if len(coords) != len(radii):
+        raise ValueError("Number of coordinates must match number of radii")
+
+    if len(coords) == 0:
+        return 0.0
+
+    # Determine bounding box with padding
+    max_radius = np.max(radii)
+    min_coords = np.min(coords, axis=0) - max_radius
+    max_coords = np.max(coords, axis=0) + max_radius
+
+    # Generate grid points
+    x_range = np.arange(
+        min_coords[0], max_coords[0] + grid_spacing, grid_spacing
+    )
+    y_range = np.arange(
+        min_coords[1], max_coords[1] + grid_spacing, grid_spacing
+    )
+    z_range = np.arange(
+        min_coords[2], max_coords[2] + grid_spacing, grid_spacing
+    )
+
+    # Count points inside any VDW sphere
+    points_inside = 0
+
+    for x in x_range:
+        for y in y_range:
+            for z in z_range:
+                point = np.array([x, y, z])
+                # Check if point is inside any atomic sphere
+                for i in range(len(coords)):
+                    dist_sq = np.sum((point - coords[i]) ** 2)
+                    if dist_sq <= radii[i] ** 2:
+                        points_inside += 1
+                        break  # Point is inside, no need to check other atoms
+
+    # Volume = number of points × volume per grid cell
+    volume_per_point = grid_spacing**3
+    return points_inside * volume_per_point

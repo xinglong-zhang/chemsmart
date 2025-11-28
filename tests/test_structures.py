@@ -1092,6 +1092,8 @@ class TestChemicalFeatures:
         )
         # vdw_volume uses exact lens-shaped intersection formula for overlap correction
         assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
+        # grid_vdw_volume uses grid-based integration (similar to RDKit)
+        assert np.isclose(ozone.grid_vdw_volume, 31.464, rtol=0.05)
         assert np.isclose(
             ozone.vdw_volume_from_rdkit, 25.533471711063285, rtol=0.01
         )
@@ -1125,6 +1127,8 @@ class TestChemicalFeatures:
         )
         # vdw_volume uses exact lens-shaped intersection formula for overlap correction
         assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
+        # grid_vdw_volume uses grid-based integration (similar to RDKit)
+        assert np.isclose(acetone.grid_vdw_volume, 64.832, rtol=0.05)
         assert np.isclose(
             acetone.vdw_volume_from_rdkit, 61.98249809788294, rtol=0.01
         )
