@@ -936,7 +936,6 @@ def quote_path(path):
         return f'"{path}"'
     else:
         return shlex.quote(path)
-    # return path
 
 
 def kabsch_align(
