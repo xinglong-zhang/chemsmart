@@ -147,3 +147,8 @@ multiple_spaces_pattern = r"\s+"
 pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"
 pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 pymol_hybrid_selection_pattern = r"^--?(g|group|c|color)(\d+)$"
+
+
+# version release
+version_pattern = r'(version\s*=\s*")[^"]+(")'
+release_pattern = r'(release\s*=\s*")[^"]+(")'
