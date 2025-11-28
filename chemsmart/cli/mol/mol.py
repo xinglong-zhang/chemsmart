@@ -162,7 +162,7 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-phosphorus",
         type=str,
         default=None,
-        help="Color carbon atoms with user-specified color."
+        help="Color phosphorus atoms with user-specified color."
         " e.g. -np  [1.0, 0.85, 0.6]",
     )(f)
 
