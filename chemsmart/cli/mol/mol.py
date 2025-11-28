@@ -38,7 +38,7 @@ def click_pymol_visualization_options(f):
     )
     @click.option(
         "-t/",
-        "--trace/--no-trace",
+        "--tracef/--no-trace",
         type=bool,
         default=True,
         help="PyMOL options to ray trace or not. Default to True.",
@@ -86,19 +86,20 @@ def click_pymol_visualization_options(f):
 def click_pymol_hybrid_visualization_options(f):
     """Group all hybrid visualization options for reuse."""
     f = click.option(
+        "-H",
         "--hybrid",
         is_flag=True,
         default=False,
         help="Use hybrid visualization mode.",
     )(f)
     f = click.option(
-        "-g",
+        "-G",
         "--groups",
         multiple=True,
         type=str,
         help=(
             "Indexes of atoms to select for a group. Repeatable for multiple groups, "
-            "e.g., -g '1-5' -g '6,7,8'."
+            "e.g., -G '1-5' -G '6,7,8'."
         ),
     )(f)
     f = click.option(

@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click_pymol_visualization_options
 @click_pymol_hybrid_visualization_options
-# all other click options removed here to simplify CLI parsing via **kwargs
 @click.pass_context
 def visualize(
     ctx,
@@ -51,7 +50,7 @@ def visualize(
 
     When --hybrid flag is used, the hybrid visualization mode is enabled, which allows the user to draw different groups in different styles.
     Example usage:
-    chemsmart run mol -f 'structure_file' visualize -g  '233,468-512' -g '308,397-414,416-423'
+    chemsmart run mol -f 'structure_file' visualize -G  '233,468-512' -G '308,397-414,416-423'
     """
 
     # get molecule
@@ -77,16 +76,13 @@ def visualize(
         PyMOLVisualizationJob,
     )
 
-    if hybrid:
-        command_line_only = True
-
     visualizationjob = (
         PyMOLHybridVisualizationJob if hybrid else PyMOLVisualizationJob
     )
 
     hybrid_opts = {}
 
-    groups = kwargs.pop("group", ())
+    groups = kwargs.pop("groups", ())
     colors = kwargs.pop("color", ())
     # raise error if -g/-c/-sc/-st or new_color_* is provided when --hybrid is false
     hybrid_only_opts = [
@@ -102,9 +98,10 @@ def visualize(
     ]
     if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
-            "The options '-g/--group', '--color', '--surface-color', "
+            "The options '-G/--group', '-C/--color', '--surface-color', "
             "'--surface-transparency', and '--new-color-*' can only be used "
-            "with '--hybrid'. Please enable hybrid visualization mode with '--hybrid'."
+            "with '-H/--hybrid'. Please enable hybrid visualization mode "
+            "with '-H/--hybrid'."
         )
     for i, grp in enumerate(groups):
         hybrid_opts[f"group{i + 1}"] = grp
