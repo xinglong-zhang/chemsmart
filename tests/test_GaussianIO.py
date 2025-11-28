@@ -633,13 +633,25 @@ class TestGaussian16Output:
         assert g16_output.somo_energies[-1] == g16_output.highest_somo_energy
         # highest_somo_energy should be HOMOα
         assert (
-            g16_output.highest_somo_energy == g16_output.alpha_occ_eigenvalues[-1]
+            g16_output.highest_somo_energy
+            == g16_output.alpha_occ_eigenvalues[-1]
         )
         # Spin-resolved HOMO/LUMO
-        assert g16_output.homo_alpha_energy == g16_output.alpha_occ_eigenvalues[-1]
-        assert g16_output.homo_beta_energy == g16_output.beta_occ_eigenvalues[-1]
-        assert g16_output.lumo_alpha_energy == g16_output.alpha_virtual_eigenvalues[0]
-        assert g16_output.lumo_beta_energy == g16_output.beta_virtual_eigenvalues[0]
+        assert (
+            g16_output.homo_alpha_energy
+            == g16_output.alpha_occ_eigenvalues[-1]
+        )
+        assert (
+            g16_output.homo_beta_energy == g16_output.beta_occ_eigenvalues[-1]
+        )
+        assert (
+            g16_output.lumo_alpha_energy
+            == g16_output.alpha_virtual_eigenvalues[0]
+        )
+        assert (
+            g16_output.lumo_beta_energy
+            == g16_output.beta_virtual_eigenvalues[0]
+        )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -681,13 +693,25 @@ class TestGaussian16Output:
         assert g16_output.somo_energies[-1] == g16_output.highest_somo_energy
         # highest_somo_energy should be HOMOα
         assert (
-            g16_output.highest_somo_energy == g16_output.alpha_occ_eigenvalues[-1]
+            g16_output.highest_somo_energy
+            == g16_output.alpha_occ_eigenvalues[-1]
         )
         # Spin-resolved HOMO/LUMO
-        assert g16_output.homo_alpha_energy == g16_output.alpha_occ_eigenvalues[-1]
-        assert g16_output.homo_beta_energy == g16_output.beta_occ_eigenvalues[-1]
-        assert g16_output.lumo_alpha_energy == g16_output.alpha_virtual_eigenvalues[0]
-        assert g16_output.lumo_beta_energy == g16_output.beta_virtual_eigenvalues[0]
+        assert (
+            g16_output.homo_alpha_energy
+            == g16_output.alpha_occ_eigenvalues[-1]
+        )
+        assert (
+            g16_output.homo_beta_energy == g16_output.beta_occ_eigenvalues[-1]
+        )
+        assert (
+            g16_output.lumo_alpha_energy
+            == g16_output.alpha_virtual_eigenvalues[0]
+        )
+        assert (
+            g16_output.lumo_beta_energy
+            == g16_output.beta_virtual_eigenvalues[0]
+        )
 
     def test_read_gaussian_link_opt_output_file(
         self, gaussian_link_opt_outputfile

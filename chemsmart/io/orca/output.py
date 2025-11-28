@@ -1768,7 +1768,7 @@ class ORCAOutput(ORCAFileMixin):
         if self.is_unrestricted and self.num_unpaired_electrons > 0:
             alpha_occ = self.alpha_occ_eigenvalues
             if alpha_occ and len(alpha_occ) >= self.num_unpaired_electrons:
-                return alpha_occ[-self.num_unpaired_electrons:]
+                return alpha_occ[-self.num_unpaired_electrons :]
 
         return None
 
