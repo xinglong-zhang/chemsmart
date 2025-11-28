@@ -480,3 +480,50 @@ class TestGaussianCrestJobs:
 
         # But only 5 are configured to run
         assert job.num_confs_to_opt == 5
+
+
+class TestGaussianTrajJobs:
+    def test_traj_job_uses_all_molecules(
+        self,
+        tmpdir,
+        multiple_molecules_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Test that GaussianTrajJob uses all molecules from the file."""
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        # set scratch directory for jobrunner
+        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
+
+        # get project settings
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        # Read all molecules from the file
+        molecules = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index=":", return_list=True
+        )
+        num_molecules_in_file = len(molecules)
+
+        # Create Traj job with all molecules
+        # Using proportion_structures_to_use=1.0 to use all structures
+        job = GaussianTrajJob(
+            molecules=molecules,
+            settings=settings,
+            label="traj_test_opt",
+            jobrunner=gaussian_jobrunner_no_scratch,
+            proportion_structures_to_use=1.0,
+        )
+
+        # Check that the job uses all molecules (no grouping by default)
+        assert job.num_structures == num_molecules_in_file
+
+        # When no grouping strategy is provided, all structures are unique
+        assert job.num_unique_structures == num_molecules_in_file
