@@ -8,7 +8,6 @@ to create visualization jobs from files or PubChem records.
 
 import logging
 import os
-import re
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
