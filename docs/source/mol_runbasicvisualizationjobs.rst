@@ -250,6 +250,7 @@ Align-Specific OPTIONS
 Inherit all options from visualization jobs and use the same parameters.
 
 Align Basic Usage
+==================
 
 **align files**
 
