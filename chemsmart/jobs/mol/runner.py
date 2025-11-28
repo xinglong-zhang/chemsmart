@@ -608,7 +608,7 @@ class PyMOLJobRunner(JobRunner):
             str: Command string with save command added.
         """
         # Append the final PyMOL commands, quoting the output file path
-        command += f"; cmd.save( {quote_path(job.outputfile)})"
+        command += f"; cmd.save({quote_path(job.outputfile)!r})"
 
         return command
 
@@ -861,9 +861,16 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             }
         """
         groups = {}
-        for i in range(1, 5):
-            group_attr = f"group{i}"
-            group_color_attr = f"color{i}"
+        # dynamically detect any `groupN` attributes on the job so users can supply unlimited groups
+        group_attrs = []
+        for attr in dir(job):
+            m = re.match(r"^group(\d+)$", attr)
+            if m:
+                group_attrs.append((int(m.group(1)), attr))
+        # stable ordering by group number
+        group_attrs.sort(key=lambda x: x[0])
+        for idx, group_attr in group_attrs:
+            group_color_attr = f"color{idx}"
             group_value = getattr(job, group_attr, None)
             group_color_value = getattr(job, group_color_attr, None)
             if group_value:
