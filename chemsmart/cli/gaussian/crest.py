@@ -79,7 +79,7 @@ def crest(
     logger.debug(f"Label for job: {label}")
 
     logger.info(
-        f"Crest {type} settings from project: {crest_settings.__dict__}"
+        f"Crest {jobtype} settings from project: {crest_settings.__dict__}"
     )
 
     from chemsmart.jobs.gaussian.crest import GaussianCrestJob

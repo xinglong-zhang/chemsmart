@@ -415,6 +415,7 @@ class TestGaussianCrestJobs:
         molecules = Molecule.from_filepath(
             filepath=multiple_molecules_xyz_file, index=":", return_list=True
         )
+        num_conformers_in_file = len(molecules)
 
         # Create CREST job with all molecules
         job = GaussianCrestJob(
@@ -425,12 +426,11 @@ class TestGaussianCrestJobs:
         )
 
         # Check that the job has the correct number of conformers
-        # The multiple_molecules_xyz_file (crest_conformers.xyz) has 18 structures
-        assert job.num_conformers == 18
+        assert job.num_conformers == num_conformers_in_file
 
         # Check that all conformer jobs are created
         all_jobs = job.all_conformers_jobs
-        assert len(all_jobs) == 18
+        assert len(all_jobs) == num_conformers_in_file
 
         # Check that all jobs have correct labels
         for i, j in enumerate(all_jobs):
@@ -464,6 +464,7 @@ class TestGaussianCrestJobs:
         molecules = Molecule.from_filepath(
             filepath=multiple_molecules_xyz_file, index=":", return_list=True
         )
+        num_conformers_in_file = len(molecules)
 
         # Create CREST job with limited number of conformers to run
         job = GaussianCrestJob(
@@ -474,8 +475,8 @@ class TestGaussianCrestJobs:
             num_confs_to_run=5,
         )
 
-        # Check that all 18 conformers are loaded
-        assert job.num_conformers == 18
+        # Check that all conformers are loaded
+        assert job.num_conformers == num_conformers_in_file
 
         # But only 5 are configured to run
         assert job.num_confs_to_opt == 5
