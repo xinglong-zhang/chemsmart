@@ -197,7 +197,8 @@ def click_file_label_and_index_options(f):
         type=str,
         default=None,
         help="Index of molecules to use; 1-based indices. "
-        "Default to the last molecule structure. 1-based index.",
+        "If not specified, all molecules are passed to the job. "
+        "Jobs that need only one molecule will use the last one.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
