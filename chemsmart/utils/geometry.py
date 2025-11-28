@@ -494,7 +494,7 @@ def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
     min_coords = np.min(coords, axis=0) - max_radius
     max_coords = np.max(coords, axis=0) + max_radius
 
-    # Generate grid points
+    # Generate grid points using meshgrid for vectorized operations
     x_range = np.arange(
         min_coords[0], max_coords[0] + grid_spacing, grid_spacing
     )
@@ -505,20 +505,22 @@ def calculate_grid_vdw_volume(coords, radii, grid_spacing=0.2):
         min_coords[2], max_coords[2] + grid_spacing, grid_spacing
     )
 
-    # Count points inside any VDW sphere
-    points_inside = 0
+    # Create 3D meshgrid and reshape to (N, 3) array of all grid points
+    xx, yy, zz = np.meshgrid(x_range, y_range, z_range, indexing="ij")
+    grid_points = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
 
-    for x in x_range:
-        for y in y_range:
-            for z in z_range:
-                point = np.array([x, y, z])
-                # Check if point is inside any atomic sphere
-                for i in range(len(coords)):
-                    dist_sq = np.sum((point - coords[i]) ** 2)
-                    if dist_sq <= radii[i] ** 2:
-                        points_inside += 1
-                        break  # Point is inside, no need to check other atoms
+    # For each atom, compute squared distances from all grid points
+    # and check if any grid point is inside the atom's VDW sphere
+    radii_sq = radii**2
+    inside_any = np.zeros(len(grid_points), dtype=bool)
 
-    # Volume = number of points × volume per grid cell
+    for i in range(len(coords)):
+        # Squared distances from atom i to all grid points
+        diff = grid_points - coords[i]
+        dist_sq = np.sum(diff**2, axis=1)
+        inside_any |= dist_sq <= radii_sq[i]
+
+    # Count points inside and compute volume
+    points_inside = np.sum(inside_any)
     volume_per_point = grid_spacing**3
     return points_inside * volume_per_point
