@@ -93,7 +93,7 @@ def click_pymol_hybrid_visualization_options(f):
     )(f)
     f = click.option(
         "-g",
-        "--group",
+        "--groups",
         multiple=True,
         type=str,
         help=(

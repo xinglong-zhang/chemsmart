@@ -964,6 +964,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         Args:
             job: PyMOLHybridVisualizationJob instance containing group and color info.
+            f: File object to write the PyMOL commands.
 
         Behavior:
             - Groups are selected using their atom indices (via _get_groups).
@@ -972,6 +973,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         Notes:
             - The order of colors follows the order of defined groups.
         """
+        # Define a list of default color schemes to be used for groups
         color_scheme = [
             "cbap",
             "cbac",
@@ -985,19 +987,53 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             "cbap",
             "cbak",
         ]
-        for idx, (key, val) in enumerate(self._get_groups(job).items()):
+
+        # Retrieve group information (indices and colors) from the job
+        groups = list(self._get_groups(job).items())
+
+        # Write PyMOL selection commands for each group
+        for idx, (key, val) in enumerate(groups):
             f.write(f"select {key},  {val['index']}\n")
-        for idx, (key, val) in enumerate(self._get_groups(job).items()):
+
+        # Track color schemes explicitly requested by the user
+        used_schemes = set()
+        for _, val in groups:
             if val["color"] != "default":
-                # use user specified coloring style
+                used_schemes.add(val["color"])
+
+        # Assign color schemes to groups, skipping already used default schemes
+        for idx, (key, val) in enumerate(groups):
+            if val["color"] != "default":
+                # Use the user-specified color scheme
                 scheme = val["color"]
+                used_schemes.add(scheme)
             else:
-                scheme = color_scheme[idx]
+                # Assign the first unused default color scheme
+                scheme = None
+                for s in color_scheme:
+                    if s not in used_schemes:
+                        scheme = s
+                        break
+                if scheme is None:
+                    # If all default schemes are used, reuse the first scheme and log a warning
+                    scheme = color_scheme[0]
+                    logger.warning(
+                        "All default color schemes already used; reusing "
+                        f"{scheme} for group {key}."
+                    )
+                used_schemes.add(scheme)
+            # Write the PyMOL command to apply the color scheme to the group
             f.write(f"util.{scheme} {key}\n")
+
+        # Set transparency for all sticks to 0 (fully opaque)
         f.write("set stick_transparency, 0, all\n")
+
+        # Retrieve the stick radius from the job or use the default value (0.25)
         stick_radius = getattr(job, "stick_radius", 0.25)
         if stick_radius is None:
             stick_radius = 0.25
+
+        # Write the PyMOL command to set the stick radius for the selected groups
         f.write(
             f"set stick_radius, {stick_radius}, ({self._get_group_selection_str(job)})\n"
         )

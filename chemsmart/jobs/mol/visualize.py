@@ -67,55 +67,24 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
     enable customization of surface appearance and atom-type recoloring,
     allowing the generation of publication-quality hybrid representations.
 
-    **Hybrid Visualization Features**
-    - Highlight multiple atom groups using user-defined selections.
-    - Assign independent colors to each group.
+    Features:
+    - Accepts an arbitrary number of highlight groups.
+    - Assign independent colors to each group (optional).
     - Render background atoms using a faded color palette.
     - Optionally customize surface color and transparency.
     - Override default atomic colors (C, N, O, S, P) with user-specified RGB values.
 
-    **Default group color schemes**
-    - Group 1: ``cbap``
-    - Group 2: ``cbac``
-    - Group 3: ``cbay``
-    - Group 4: ``cbag``
-
-    **Command-Line Options**
-    - ``--hybrid``: Activate hybrid visualization mode.
-    - ``-g, --group``: Atom indices to include in a highlight group.
-      Accepts ranges (e.g., ``1-5``) or comma-separated lists
-      (e.g., ``6,7,8``). Repeatable for multiple groups.
-    - ``-C, --color``: Color for each group. Must correspond to the number
-      of ``-g`` occurrences.
-    - ``--surface-color``: Custom surface color for the molecule.
-    - ``--surface-transparency``: Custom transparency for the molecular surface.
-    - ``--new-color-carbon``: Override carbon atom color using an RGB triplet.
-    - ``--new-color-nitrogen``: Override nitrogen atom color using an RGB triplet.
-    - ``--new-color-oxygen``: Override oxygen atom color using an RGB triplet.
-    - ``--new-color-sulfur``: Override sulfur atom color using an RGB triplet.
-    - ``--new-color-phosphorus``: Override phosphorus atom color using an RGB triplet.
-
-    Attributes:
-        TYPE (str): Job type identifier (``'pymol_hybrid_visualization'``).
-        molecule: Molecule object to visualize.
-        label (str): Job identifier used for file naming and outputs.
-        jobrunner (JobRunner): Execution backend for running the job.
-        skip_completed (bool): If True, completed jobs are not rerun.
-
+    Command-line integration (matching CLI behavior) should provide:
+    - `groups`: a list of group specifications (repeatable `--group`).
+    - `colors`: optional list of colors, one per group (repeatable `--color`).
     """
 
     TYPE = "pymol_hybrid_visualization"
 
     def __init__(
         self,
-        group1,
-        group2=None,
-        group3=None,
-        group4=None,
-        color1=None,
-        color2=None,
-        color3=None,
-        color4=None,
+        groups,
+        colors=None,
         stick_radius=None,
         surface_color=None,
         surface_transparency=None,
@@ -126,15 +95,35 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         new_color_sulfur=None,
         **kwargs,
     ):
+        """
+        Initialize a hybrid visualization job that supports an arbitrary number
+        of highlight groups.
+
+        Args:
+            groups (Iterable): Sequence of group specifications (parsed from CLI).
+            colors (Iterable, optional): Sequence of colors corresponding to groups.
+            stick_radius (float, optional): Stick radius for rendering.
+            surface_color (str or tuple, optional): Surface color override.
+            surface_transparency (float, optional): Surface transparency override.
+            new_color_* (tuple, optional): RGB triplets for element recoloring.
+            **kwargs: Additional arguments passed to parent PyMOLJob.
+        """
         super().__init__(**kwargs)
-        self.group1 = group1
-        self.group2 = group2
-        self.group3 = group3
-        self.group4 = group4
-        self.color1 = color1
-        self.color2 = color2
-        self.color3 = color3
-        self.color4 = color4
+
+        # Normalize to lists
+        self.groups = list(groups) if groups is not None else []
+        self.colors = list(colors) if colors is not None else []
+
+        # Provide compatibility with PyMOLHybridVisualizationJobRunner
+        # by populating dynamic attributes group1, group2, ... and color1, color2, ...
+        for idx, group in enumerate(self.groups, start=1):
+            setattr(self, f"group{idx}", group)
+        for idx, color in enumerate(self.colors, start=1):
+            setattr(self, f"color{idx}", color)
+
+        # Expose number of groups for convenience
+        self.group_count = len(self.groups)
+
         self.stick_radius = stick_radius
         self.surface_color = surface_color
         self.surface_transparency = surface_transparency
@@ -143,3 +132,91 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.new_color_oxygen = new_color_oxygen
         self.new_color_phosphorus = new_color_phosphorus
         self.new_color_sulfur = new_color_sulfur
+
+    #     PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
+    # """
+    # PyMOL job for hybrid molecular visualization.
+    #
+    # Extends :class:`PyMOLVisualizationJob` to provide advanced hybrid
+    # visualization capabilities. This mode selectively highlights user-defined
+    # atom groups with distinct color schemes while rendering the remainder of
+    # the molecule in a subdued (faded) background style. Additional options
+    # enable customization of surface appearance and atom-type recoloring,
+    # allowing the generation of publication-quality hybrid representations.
+    #
+    # **Hybrid Visualization Features**
+    # - Highlight multiple atom groups using user-defined selections.
+    # - Assign independent colors to each group.
+    # - Render background atoms using a faded color palette.
+    # - Optionally customize surface color and transparency.
+    # - Override default atomic colors (C, N, O, S, P) with user-specified RGB values.
+    #
+    # **Default group color schemes**
+    # - Group 1: ``cbap``
+    # - Group 2: ``cbac``
+    # - Group 3: ``cbay``
+    # - Group 4: ``cbag``
+    #
+    # **Command-Line Options**
+    # - ``--hybrid``: Activate hybrid visualization mode.
+    # - ``-g, --group``: Atom indices to include in a highlight group.
+    #   Accepts ranges (e.g., ``1-5``) or comma-separated lists
+    #   (e.g., ``6,7,8``). Repeatable for multiple groups.
+    # - ``-C, --color``: Color for each group. Must correspond to the number
+    #   of ``-g`` occurrences.
+    # - ``--surface-color``: Custom surface color for the molecule.
+    # - ``--surface-transparency``: Custom transparency for the molecular surface.
+    # - ``--new-color-carbon``: Override carbon atom color using an RGB triplet.
+    # - ``--new-color-nitrogen``: Override nitrogen atom color using an RGB triplet.
+    # - ``--new-color-oxygen``: Override oxygen atom color using an RGB triplet.
+    # - ``--new-color-sulfur``: Override sulfur atom color using an RGB triplet.
+    # - ``--new-color-phosphorus``: Override phosphorus atom color using an RGB triplet.
+    #
+    # Attributes:
+    #     TYPE (str): Job type identifier (``'pymol_hybrid_visualization'``).
+    #     molecule: Molecule object to visualize.
+    #     label (str): Job identifier used for file naming and outputs.
+    #     jobrunner (JobRunner): Execution backend for running the job.
+    #     skip_completed (bool): If True, completed jobs are not rerun.
+    #
+    # """
+    #
+    # TYPE = "pymol_hybrid_visualization"
+    #
+    # def __init__(
+    #     self,
+    #     group1,
+    #     group2=None,
+    #     group3=None,
+    #     group4=None,
+    #     color1=None,
+    #     color2=None,
+    #     color3=None,
+    #     color4=None,
+    #     stick_radius=None,
+    #     surface_color=None,
+    #     surface_transparency=None,
+    #     new_color_carbon=None,
+    #     new_color_nitrogen=None,
+    #     new_color_oxygen=None,
+    #     new_color_phosphorus=None,
+    #     new_color_sulfur=None,
+    #     **kwargs,
+    # ):
+    #     super().__init__(**kwargs)
+    #     self.group1 = group1
+    #     self.group2 = group2
+    #     self.group3 = group3
+    #     self.group4 = group4
+    #     self.color1 = color1
+    #     self.color2 = color2
+    #     self.color3 = color3
+    #     self.color4 = color4
+    #     self.stick_radius = stick_radius
+    #     self.surface_color = surface_color
+    #     self.surface_transparency = surface_transparency
+    #     self.new_color_carbon = new_color_carbon
+    #     self.new_color_nitrogen = new_color_nitrogen
+    #     self.new_color_oxygen = new_color_oxygen
+    #     self.new_color_phosphorus = new_color_phosphorus
+    #     self.new_color_sulfur = new_color_sulfur
