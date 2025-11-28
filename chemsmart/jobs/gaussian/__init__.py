@@ -30,6 +30,12 @@ from .traj import GaussianTrajJob
 from .ts import GaussianTSJob
 from .uvvis import GaussianUVVISJob
 from .wbi import GaussianWBIJob
+from .xtb import (
+    GaussianXTBJob,
+    GaussianXTBJobSettings,
+    GaussianXTBQST2Job,
+    GaussianXTBTSJob,
+)
 
 # Dynamically collect all registered Gaussian job subclasses
 jobs = GaussianJob.subclasses()
@@ -56,6 +62,10 @@ __all__ = [
     "GaussianTSJob",
     "GaussianUVVISJob",
     "GaussianWBIJob",
+    "GaussianXTBJob",
+    "GaussianXTBJobSettings",
+    "GaussianXTBQST2Job",
+    "GaussianXTBTSJob",
     "jobs",
 ]
 
