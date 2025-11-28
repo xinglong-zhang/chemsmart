@@ -108,7 +108,7 @@ def click_pymol_hybrid_visualization_options(f):
         multiple=True,
         type=str,
         help=(
-            "Color for each group. Repeatable to match -g options. "
+            "Color for each group. Repeatable to match -G options. "
             "Example color scheme: ['cbap', 'cbac', 'cbay', 'cbag', ...]."
         ),
     )(f)

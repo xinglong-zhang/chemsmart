@@ -152,7 +152,7 @@ Visualization-Specific OPTIONS
 
    -  -  ``-C, --color``
       -  string, multiple
-      -  Color for each group. Repeatable to match -g options. Default = ['cbap', 'cbac', 'cbay', 'cbag', ...].
+      -  Color for each group. Repeatable to match -G options. Default = ['cbap', 'cbac', 'cbay', 'cbag', ...].
 
    -  -  ``-sc, --surface-color``
       -  string
