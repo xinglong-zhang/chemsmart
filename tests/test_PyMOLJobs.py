@@ -218,7 +218,7 @@ class TestPyMOLJobs:
         job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
-        pse_file = os.path.join(tmpdir, "dna_hybrid.pse")
+        pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
         pml_file = os.path.join(
             tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
         )
@@ -288,7 +288,7 @@ class TestPyMOLJobs:
         job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
-        pse_file = os.path.join(tmpdir, "dna_hybrid.pse")
+        pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
         pml_file = os.path.join(
             tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
         )
@@ -370,7 +370,7 @@ class TestPyMOLJobs:
                 assert line in content
 
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
-        pse_file = os.path.join(tmpdir, "dna_hybrid.pse")
+        pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
         assert os.path.exists(style_file)
         assert os.path.exists(pse_file)
 
