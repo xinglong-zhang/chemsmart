@@ -154,31 +154,31 @@ Visualization-Specific OPTIONS
       -  string, multiple
       -  Color for each group. Repeatable to match -G options. Default = ['cbap', 'cbac', 'cbay', 'cbag', ...].
 
-   -  -  ``-sc, --surface-color``
+   -  -  ``-SC, --surface-color``
       -  string
       -  Customize the surface color (default=grey).
 
-   -  -  ``-st, --surface-transparency``
+   -  -  ``-ST, --surface-transparency``
       -  string
       -  Customize the surface transparency (default=0.7).
 
-   -  -  ``-nc, --new-color-carbon``
+   -  -  ``-NC, --new-color-carbon``
       -  string
       -  Set a custom color for carbon atoms. (default=[0.8, 0.8, 0.9]).
 
-   -  -  ``-nn, --new-color-nitrogen``
+   -  -  ``-NN, --new-color-nitrogen``
       -  string
       -  Set a custom color for nitrogen atoms. (default=[0.6, 0.8, 1.0]).
 
-   -  -  ``-no, --new-color-oxygen``
+   -  -  ``-NO, --new-color-oxygen``
       -  string
       -  Set a custom color for oxygen atoms. (default=[1.0, 0.7, 0.7]).
 
-   -  -  ``-ns, --new-color-sulfur``
+   -  -  ``-NS, --new-color-sulfur``
       -  string
       -  Set a custom color for sulfur atoms. (default=[1.0, 0.7, 0.7]).
 
-   -  -  ``-np, --new-color-phosphorus``
+   -  -  ``-NP, --new-color-phosphorus``
       -  string
       -  Set a custom color for phosphorus atoms. (default=[1.0, 0.85, 0.6]).
 
@@ -209,7 +209,7 @@ if a group is not assigned customized colors.
 
    .. code:: console
 
-      chemsmart run mol -f structure.xyz visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak -st 0.8 -nc '[0.8, 0.8, 0.9]'
+      chemsmart run mol -f structure.xyz visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak -ST 0.8 -NC '[0.8, 0.8, 0.9]'
 
 Color options except for color schemes, such as surface color, customized carbon color can be specified by a list
 containing their RGB values.

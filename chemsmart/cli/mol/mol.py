@@ -38,7 +38,7 @@ def click_pymol_visualization_options(f):
     )
     @click.option(
         "-t/",
-        "--tracef/--no-trace",
+        "--trace/--no-trace",
         type=bool,
         default=True,
         help="PyMOL options to ray trace or not. Default to True.",
@@ -113,58 +113,58 @@ def click_pymol_hybrid_visualization_options(f):
         ),
     )(f)
     f = click.option(
-        "-sc",
+        "-SC",
         "--surface-color",
         type=str,
         default=None,
         help="Customized surface color.",
     )(f)
     f = click.option(
-        "-st",
+        "-ST",
         "--surface-transparency",
         type=str,
         default=None,
         help="Customized surface transparency.",
     )(f)
     f = click.option(
-        "-nc",
+        "-NC",
         "--new-color-carbon",
         type=str,
         default=None,
         help="Color carbon atoms with user-specified color. "
-        "e.g. -nc [0.8, 0.8, 0.9]",
+        "e.g. -NC [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(
-        "-nn",
+        "-NN",
         "--new-color-nitrogen",
         type=str,
         default=None,
         help="Color nitrogen atoms with user-specified color."
-        "e.g. -nn [0.6, 0.8, 1.0]",
+        "e.g. -NN [0.6, 0.8, 1.0]",
     )(f)
     f = click.option(
-        "-no",
+        "-NO",
         "--new-color-oxygen",
         type=str,
         default=None,
         help="Color oxygen atoms with user-specified color."
-        "e.g. -no [1.0, 0.7, 0.7]",
+        "e.g. -NO [1.0, 0.7, 0.7]",
     )(f)
     f = click.option(
-        "-ns",
+        "-NS",
         "--new-color-sulfur",
         type=str,
         default=None,
         help="Color sulfur atoms with user-specified color."
-        " e.g. -ns [0.8, 0.8, 0.9]",
+        " e.g. -NS [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(
-        "-np",
+        "-NP",
         "--new-color-phosphorus",
         type=str,
         default=None,
         help="Color phosphorus atoms with user-specified color."
-        " e.g. -np  [1.0, 0.85, 0.6]",
+        " e.g. -NP  [1.0, 0.85, 0.6]",
     )(f)
 
     @functools.wraps(f)
