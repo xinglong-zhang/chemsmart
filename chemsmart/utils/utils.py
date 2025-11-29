@@ -932,10 +932,10 @@ def quote_path(path):
     Returns:
         str: Quoted path on Windows, original path on other platforms.
     """
-    path = str(Path(path))
     if sys.platform == "win32":
-        # Double-quote paths on Windows to preserve spaces
-        return f'"{path}"'
+        # Double-quote paths on Windows to preserve spaces;
+        # sidesteps backslash weirdness entirely with as_posix()
+        return f'"{Path(path).as_posix()}"'
     return shlex.quote(path)
 
 
