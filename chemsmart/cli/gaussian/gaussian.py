@@ -11,6 +11,7 @@ from chemsmart.cli.job import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import return_objects_from_string_index
 
 logger = logging.getLogger(__name__)
@@ -489,6 +490,8 @@ def gaussian(
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
+
+    label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list

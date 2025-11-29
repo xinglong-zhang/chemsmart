@@ -13,6 +13,7 @@ from chemsmart.cli.job import (
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.io import clean_label
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +280,7 @@ def nciplot(
                     if label is None
                     else label
                 )
+    label = clean_label(label)
 
     return NCIPLOTJob(
         filenames=filenames,  # accepts multiple files
