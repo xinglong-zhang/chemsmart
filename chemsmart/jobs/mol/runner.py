@@ -651,14 +651,14 @@ class PyMOLJobRunner(JobRunner):
         """
         # Open files for stdout/stderr
         job_errfile = os.path.abspath(job.errfile)
-        job_outputfile = os.path.abspath(job.outputfile)
+        job_logfile = os.path.abspath(job.logfile)
         with (
             open(job_errfile, "w") as err,
-            open(job_outputfile, "w") as out,
+            open(job_logfile, "w") as out,
         ):
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {os.path.abspath(job.logfile)}\n"
+                f"Writing log file to: {job_logfile}\n"
                 f"And err file to: {job_errfile}"
             )
             # Start PyMOL process
