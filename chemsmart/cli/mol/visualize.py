@@ -48,7 +48,8 @@ def visualize(
     vhr_ox_modred_ts10_visualize.pse and add in additional coordinates
     (bonds, angles and dihedrals) for labelling.
 
-    When --hybrid flag is used, the hybrid visualization mode is enabled, which allows the user to draw different groups in different styles.
+    When --hybrid flag is used, the hybrid visualization mode is enabled,
+    which allows the user to draw different groups in different styles.
     Example usage:
     chemsmart run mol -f 'structure_file' visualize -G  '233,468-512' -G '308,397-414,416-423'
     """
@@ -83,11 +84,14 @@ def visualize(
     hybrid_opts = {}
 
     groups = kwargs.pop("groups", ())
-    colors = kwargs.pop("color", ())
-    # raise error if -G/-C/-sc/-st or new_color_* is provided when --hybrid is false
+    hybrid_opts["groups"] = groups
+    colors = kwargs.pop("colors", ())
+    hybrid_opts["colors"] = colors
+
+    # # raise error if -G/-C/-sc/-st or new_color_* is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
-        "color",
+        "colors",
         "surface_color",
         "surface_transparency",
         "new_color_carbon",
@@ -98,23 +102,10 @@ def visualize(
     ]
     if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
-            "The options '-G/--group', '-C/--color', '--surface-color', "
+            "The options '-G/--groups', '-C/--color', '--surface-color', "
             "'--surface-transparency', and '--new-color-*' can only be used "
             "with '-H/--hybrid'. Please enable hybrid visualization mode "
             "with '-H/--hybrid'."
-        )
-    for i, grp in enumerate(groups):
-        hybrid_opts[f"group{i + 1}"] = grp
-        color_i = colors[i] if i < len(colors) else None
-        if color_i:
-            hybrid_opts[f"color{i + 1}"] = color_i
-
-    # Include surface options if specified
-    if kwargs.get("surface_color"):
-        hybrid_opts["surface_color"] = kwargs.pop("surface_color")
-    if kwargs.get("surface_transparency"):
-        hybrid_opts["surface_transparency"] = kwargs.pop(
-            "surface_transparency"
         )
 
     # Include new_color_* options if specified
@@ -127,6 +118,8 @@ def visualize(
     ]:
         if kwargs.get(color_opt):
             hybrid_opts[color_opt] = kwargs.pop(color_opt)
+
+    logger.info(f"Hybrid visualization job options: {hybrid_only_opts}")
 
     job = visualization_job(
         molecule=molecules,

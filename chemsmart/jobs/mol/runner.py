@@ -11,6 +11,7 @@ commands and post-processing (e.g., FFmpeg movie creation).
 
 import glob
 import logging
+import math
 import os
 import re
 import shlex
@@ -840,9 +841,14 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
         with open(pml_file, "w") as f:
+            logger.info(f"Writing pml file {pml_file}")
+            logger.info("Writing default pymol style..")
             self._write_default_pymol_style(job, f)
+            logger.info("Writing faded colors..")
             self._write_faded_colors(job, f)
+            logger.info("Writing highlighted colors..")
             self._write_highlighted_colors(job, f)
+            logger.info("Writing surface settings..")
             self._write_surface_settings(job, f)
         return pml_file
 
@@ -860,6 +866,8 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
                 "group2": {"index": "29-78,79,81,87", "color": "default"}
             }
         """
+        print(";;;;;;;;;;;;;;;;")
+        print(job.groups)
         groups = {}
         # dynamically detect any `groupN` attributes on the job so users can supply unlimited groups
         group_attrs = []
@@ -878,6 +886,9 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
                     "index": self._get_group_index_str(group_value),
                     "color": group_color_value or "default",
                 }
+        logger.info(
+            f"Found {len(groups)} groups in hybrid visualization job: {groups}"
+        )
         return groups
 
     def _get_group_selection_str(self, job):
@@ -975,7 +986,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             - The order of colors follows the order of defined groups.
         """
         # Define a list of default color schemes to be used for groups
-        color_scheme = [
+        color_schemes = [
             "cbap",
             "cbac",
             "cbay",
@@ -992,38 +1003,72 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         groups = list(self._get_groups(job).items())
 
         # Write PyMOL selection commands for each group
-        for key, val in groups:
-            f.write(f"select {key},  {val['index']}\n")
+        print(groups)
+        # for key, val in groups:
+        #     print(f"key-val: {key}: {val}")
+        #     f.write(f"select {key},  {val['index']}\n")
+        #
+        if len(groups) > len(color_schemes):
+            logger.warning(
+                f"More groups ({len(groups)}) than colors "
+                f"defined ({len(color_schemes)}) for {job}.\n"
+                f"Will reuse color schemes."
+            )
+            multiplier = math.ceil(len(groups) / len(color_schemes))
+            color_schemes = color_schemes * multiplier
 
-        # Start with all *user-specified* color schemes
-        used_schemes = {
-            val["color"] for _, val in groups if val["color"] != "default"
-        }
+        if len(job.colors) == 0:
+            # no user-specified colors, use defaults
+            colors = color_schemes
+        else:
+            # user user-specified colors first
+            colors = job.colors + color_schemes
+        # # used_schemes = {
+        # #     val["color"] for _, val in groups if val["color"] != "default"
+        # # }
 
-        # Assign color schemes to groups
-        for key, val in groups:
-            if val["color"] != "default":
-                # Use the user-specified color scheme
-                scheme = val["color"]
-            else:
-                # Assign the first unused default color scheme
-                scheme = next(
-                    (s for s in color_scheme if s not in used_schemes), None
-                )
-
-                if scheme is None:
-                    # If all default schemes are used, reuse the first scheme and log a warning
-                    scheme = color_scheme[0]
-                    logger.warning(
-                        "All default color schemes already used; reusing "
-                        f"{scheme} for group {key}."
-                    )
-
-            # Mark this scheme as used (no-op if it was already there)
-            used_schemes.add(scheme)
+        for i, group in enumerate(job.groups):
+            # # Assign the first unused default color scheme
+            # color_scheme = next(
+            #     (s for s in color_schemes if s not in used_schemes), None
+            # )
+            # if color_scheme is None:
+            #     # If all default schemes are used, reuse the first scheme and log a warning
+            #     color_scheme = color_schemes[0]
+            #     logger.warning(
+            #         "All default color schemes already used; reusing "
+            #         f"{color_scheme} for group {i+1}."
+            #     )
+            # # Mark this scheme as used (no-op if it was already there)
+            # used_schemes.add(color_scheme)
 
             # Write the PyMOL command to apply the color scheme to the group
-            f.write(f"util.{scheme} {key}\n")
+            f.write(f"util.{colors[i]} group{i+1}\n")
+
+        # Assign color schemes to groups
+        # for key, val in groups:
+        #     if val["color"] != "default":
+        #         # Use the user-specified color scheme
+        #         scheme = val["color"]
+        #     else:
+        #         # Assign the first unused default color scheme
+        #         scheme = next(
+        #             (s for s in color_scheme if s not in used_schemes), None
+        #         )
+        #
+        #         if scheme is None:
+        #             # If all default schemes are used, reuse the first scheme and log a warning
+        #             scheme = color_scheme[0]
+        #             logger.warning(
+        #                 "All default color schemes already used; reusing "
+        #                 f"{scheme} for group {key}."
+        #             )
+        #
+        #     # Mark this scheme as used (no-op if it was already there)
+        #     used_schemes.add(scheme)
+        #
+        #     # Write the PyMOL command to apply the color scheme to the group
+        #     f.write(f"util.{scheme} {key}\n")
 
         # Set transparency for all sticks to 0 (fully opaque)
         f.write("set stick_transparency, 0, all\n")
