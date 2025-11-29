@@ -42,7 +42,8 @@ Works for all Gaussian jobs
 
    -  -  ``-l, --label``
       -  string
-      -  Write user input filename for the job (without extension)
+      -  Write user input filename for the job (without extension). Labels should avoid containing special characters
+         such as apostrophe (``'``), comma (`,`), asterisks (``*``), etc.
 
    -  -  ``-a, --append-label``
       -  string

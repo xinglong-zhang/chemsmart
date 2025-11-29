@@ -146,7 +146,9 @@ class TestPyMOLJobs:
         # set up jobs
         job = PyMOLVisualizationJob.from_pubchem(
             "C1=CC=C(C=C1)C2=NOC(=O)O2",
-            label="3-Phenyl-1,4,2-dioxazol-5-one",
+            label="phenyldioxazolone",
+            # pymol label should avoid "," which is a separator for commands,
+            # such as e.g., 3-Phenyl-1,4,2-dioxazol-5-one
             jobrunner=pymol_visualization_jobrunner,
         )
         job.set_folder(tmpdir)
@@ -155,8 +157,8 @@ class TestPyMOLJobs:
         job.run()
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
-        xyz_file = os.path.join(tmpdir, "3-Phenyl-1,4,2-dioxazol-5-one.xyz")
-        pse_file = os.path.join(tmpdir, "3-Phenyl-1,4,2-dioxazol-5-one.pse")
+        xyz_file = os.path.join(tmpdir, "phenyldioxazolone.xyz")
+        pse_file = os.path.join(tmpdir, "phenyldioxazolone.pse")
         assert os.path.exists(style_file)
         assert os.path.exists(xyz_file)
         assert os.path.exists(pse_file)

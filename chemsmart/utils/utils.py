@@ -17,6 +17,7 @@ import sys
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
+from pathlib import Path
 from typing import Tuple, Union
 
 import numpy as np
@@ -932,10 +933,10 @@ def quote_path(path):
         str: Quoted path on Windows, original path on other platforms.
     """
     if sys.platform == "win32":
-        # Double-quote paths on Windows to preserve spaces
-        return f'"{path}"'
-    else:
-        return shlex.quote(path)
+        # Double-quote paths on Windows to preserve spaces;
+        # sidesteps backslash weirdness entirely with as_posix()
+        return f'"{Path(path).as_posix()}"'
+    return shlex.quote(path)
 
 
 def kabsch_align(

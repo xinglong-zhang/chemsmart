@@ -45,8 +45,12 @@ Works for all ORCA jobs
       -  Filename from which new ORCA input is prepared (required)
 
    -  -  ``-l, --label <string>``
+
       -  string
-      -  Write user input filename for the job (without extension). Will overwrite your original filename (default=None)
+
+      -  Write user input filename for the job (without extension). Will overwrite your original filename
+         (default=None). Labels should avoid containing special characters such as apostrophe (``'``), comma (`,`),
+         asterisks (``*``), etc.
 
    -  -  ``-a, --append-label <string>``
       -  string
