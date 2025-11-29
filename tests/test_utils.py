@@ -7,6 +7,7 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.io import (
     clean_duplicate_structure,
+    clean_label,
     create_molecule_list,
     line_of_all_integers,
     line_of_integer_followed_by_floats,
@@ -546,6 +547,28 @@ class TestIOUtilities:
         assert (
             line_of_integer_followed_by_floats("2 3e0") is True
         )  # exponent present
+
+    def test_clean_label(self):
+        # spaces -> "_"
+        assert clean_label("label with space") == "label_with_space"
+
+        # commas -> "_"
+        assert clean_label("label,with,comma") == "label_with_comma"
+
+        # periods and parentheses -> "_"
+        assert clean_label("Fig. 1(a)") == "Fig__1_a_"
+
+        # apostrophe -> "_prime_"
+        assert clean_label("O'Hara") == "O_prime_Hara"
+
+        # asterisk -> "_star_"
+        assert clean_label("label*") == "label_star_"
+
+        # combination of several special characters
+        assert (
+            clean_label("O'Hara* test, v1.0")
+            == "O_prime_Hara_star__test__v1_0"
+        )
 
 
 class TestNaturallySorted:

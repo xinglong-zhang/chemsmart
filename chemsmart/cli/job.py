@@ -182,14 +182,16 @@ def click_file_label_and_index_options(f):
         "--label",
         type=str,
         default=None,
-        help="write user input filename for the job (without extension)",
+        help="Write user input filename for the job (without extension)."
+        "Special characters such as apostrophe, comma, asterisk etc should be avoided.",
     )
     @click.option(
         "-a",
         "--append-label",
         type=str,
         default=None,
-        help="name to be appended to file for the job",
+        help="Name to be appended to file for the job. "
+        "Special characters such as apostrophe, comma, asterisk etc should be avoided.",
     )
     @click.option(
         "-i",

@@ -12,6 +12,7 @@ from chemsmart.cli.job import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
@@ -318,6 +319,8 @@ def mol(
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filenames))[0]
+
+    label = clean_label(label)
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 

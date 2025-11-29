@@ -380,3 +380,16 @@ def load_molecules_from_paths(
             raise
 
     return loaded
+
+
+def clean_label(label):
+    """Helper function to clean labels that contains special characters
+    such as apostrophe, comma, asterisk etc."""
+    label = label.replace(" ", "_")
+    label = label.replace(",", "_")
+    label = label.replace(".", "_")
+    label = label.replace("(", "_")
+    label = label.replace(")", "_")
+    label = label.replace("'", "_prime_")
+    label = label.replace("*", "_star_")
+    return label
