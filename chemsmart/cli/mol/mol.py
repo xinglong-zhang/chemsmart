@@ -84,6 +84,97 @@ def click_pymol_visualization_options(f):
     return wrapper_common_options
 
 
+def click_pymol_hybrid_visualization_options(f):
+    """Group all hybrid visualization options for reuse."""
+    f = click.option(
+        "-H",
+        "--hybrid",
+        is_flag=True,
+        default=False,
+        help="Use hybrid visualization mode.",
+    )(f)
+    f = click.option(
+        "-G",
+        "--groups",
+        multiple=True,
+        type=str,
+        help=(
+            "Indexes of atoms to select for a group. Repeatable for multiple groups, "
+            "e.g., -G '1-5' -G '6,7,8'."
+        ),
+    )(f)
+    f = click.option(
+        "-C",
+        "--color",
+        multiple=True,
+        type=str,
+        help=(
+            "Color for each group. Repeatable to match -G options. "
+            "Example color scheme: ['cbap', 'cbac', 'cbay', 'cbag', ...]."
+        ),
+    )(f)
+    f = click.option(
+        "-SC",
+        "--surface-color",
+        type=str,
+        default=None,
+        help="Customized surface color.",
+    )(f)
+    f = click.option(
+        "-ST",
+        "--surface-transparency",
+        type=str,
+        default=None,
+        help="Customized surface transparency.",
+    )(f)
+    f = click.option(
+        "-NC",
+        "--new-color-carbon",
+        type=str,
+        default=None,
+        help="Color carbon atoms with user-specified color, "
+        "e.g. -NC [0.8, 0.8, 0.9]",
+    )(f)
+    f = click.option(
+        "-NN",
+        "--new-color-nitrogen",
+        type=str,
+        default=None,
+        help="Color nitrogen atoms with user-specified color, "
+        "e.g. -NN [0.6, 0.8, 1.0]",
+    )(f)
+    f = click.option(
+        "-NO",
+        "--new-color-oxygen",
+        type=str,
+        default=None,
+        help="Color oxygen atoms with user-specified color, "
+        "e.g. -NO [1.0, 0.7, 0.7]",
+    )(f)
+    f = click.option(
+        "-NS",
+        "--new-color-sulfur",
+        type=str,
+        default=None,
+        help="Color sulfur atoms with user-specified color, "
+        "e.g. -NS [0.8, 0.8, 0.9]",
+    )(f)
+    f = click.option(
+        "-NP",
+        "--new-color-phosphorus",
+        type=str,
+        default=None,
+        help="Color phosphorus atoms with user-specified color."
+        "e.g. -NP  [1.0, 0.85, 0.6]",
+    )(f)
+
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_pymol_nci_options(f):
     """Common click options for PyMOL NCI options."""
 

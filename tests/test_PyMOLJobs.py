@@ -4,6 +4,7 @@ import shutil
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.mol import PyMOLHybridVisualizationJob
 from chemsmart.jobs.mol.align import PyMOLAlignJob
 from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob
 from chemsmart.jobs.mol.mo import PyMOLMOJob
@@ -192,6 +193,186 @@ class TestPyMOLJobs:
         assert (
             len(molecules) == 10
         ), f"Expected 1 molecule, but got {len(molecules)}."
+
+    def test_pymol_hybrid_visualization_job_on_xyz_file(
+        self,
+        tmpdir,
+        dna_hybrid_visualized_xyz_file,
+        pymol_hybrid_visualization_jobrunner,
+    ):
+        group1 = "503-523"
+        group2 = "336, 397-412, 414-422"
+        group3 = "467-495, 497-500, 502"
+        group4 = "524-539"
+        group5 = "541-550"
+        groups = [group1, group2, group3, group4, group5]
+        # set up jobs
+        job = PyMOLHybridVisualizationJob.from_filename(
+            dna_hybrid_visualized_xyz_file,
+            jobrunner=pymol_hybrid_visualization_jobrunner,
+            groups=groups,
+        )
+        job.set_folder(tmpdir)
+
+        # run job
+        job.run()
+        assert job.is_complete()
+        style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
+        pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
+        pml_file = os.path.join(
+            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
+        )
+        group_selection_commands = [
+            "pymol_style all\n",
+            "unset stick_color, all\n",
+            "hide everything, all\n",
+            "show sticks, all\n",
+            "set_color light_C, [0.8, 0.8, 0.9]\n",
+            "set_color light_N, [0.6, 0.8, 1.0]\n",
+            "set_color light_O, [1.0, 0.7, 0.7]\n",
+            "set_color light_P, [1.0, 0.85, 0.6]\n",
+            "set_color light_S, [1.0, 0.7, 0.7]\n",
+            "color light_C, elem C\n",
+            "color light_P, elem P\n",
+            "color light_O, elem O\n",
+            "color light_N, elem N\n",
+            "color light_S, elem S\n",
+            "select group1,  id 503-523\n",
+            "select group2,  id 336 or id 397-412 or id 414-422\n",
+            "select group3,  id 467-495 or id 497-500 or id 502\n",
+            "select group4,  id 524-539\n",
+            "select group5,  id 541-550\n",
+            "util.cbap group1\n",
+            "util.cbac group2\n",
+            "util.cbay group3\n",
+            "util.cbag group4\n",
+            "util.cbam group5\n",
+            "set stick_transparency, 0, all\n",
+            "set stick_radius, 0.25, (group1 or group2 or group3 or group4 or group5)\n",
+            "show surface, all\n",
+            "set surface_color, grey, all\n",
+            "set transparency, 0.7, all\n",
+        ]
+        with open(pml_file, "r") as f:
+            content = f.readlines()
+            for i in group_selection_commands:
+                assert i in content
+        assert os.path.exists(style_file)
+        assert os.path.exists(pse_file)
+
+    def test_pymol_hybrid_visualization_job_with_redundant_colors_on_xyz_file(
+        self,
+        tmpdir,
+        dna_hybrid_visualized_xyz_file,
+        pymol_hybrid_visualization_jobrunner,
+    ):
+        group1 = "503-523"
+        group2 = "336, 397-412, 414-422"
+        group3 = "467-495, 497-500, 502"
+        color1 = "cbap"
+        color2 = "cbak"
+        color3 = "cbam"
+        color4 = "cbay"
+        groups = [group1, group2, group3]
+        colors = [color1, color2, color3, color4]
+        # set up jobs
+        job = PyMOLHybridVisualizationJob.from_filename(
+            dna_hybrid_visualized_xyz_file,
+            jobrunner=pymol_hybrid_visualization_jobrunner,
+            groups=groups,
+            colors=colors,
+        )
+        job.set_folder(tmpdir)
+
+        # run job
+        job.run()
+        assert job.is_complete()
+        style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
+        pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
+        pml_file = os.path.join(
+            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
+        )
+        group_selection_commands = [
+            "select group1,  id 503-523\n",
+            "select group2,  id 336 or id 397-412 or id 414-422\n",
+            "select group3,  id 467-495 or id 497-500 or id 502\n",
+            "util.cbap group1\n",
+            "util.cbak group2\n",
+            "util.cbam group3\n",
+            "set stick_transparency, 0, all\n",
+            "set stick_radius, 0.25, (group1 or group2 or group3)\n",
+            "show surface, all\n",
+            "set surface_color, grey, all\n",
+            "set transparency, 0.7, all\n",
+        ]
+        with open(pml_file, "r") as f:
+            content = f.readlines()
+            for i in group_selection_commands:
+                assert i in content
+        assert os.path.exists(style_file)
+        assert os.path.exists(pse_file)
+
+    def test_pymol_hybrid_visualization_job_custom_light_colors_on_xyz_file(
+        self,
+        tmpdir,
+        dna_hybrid_visualized_xyz_file,
+        pymol_hybrid_visualization_jobrunner,
+    ):
+        # verify that custom light colors provided to the job are written to the pml
+        group1 = "503-523"
+        group2 = "336, 397-412, 414-422"
+        group3 = "467-495, 497-500, 502"
+        groups = [group1, group2, group3]
+
+        # custom RGB values for light colors
+        light_colors = {
+            "C": [0.1, 0.2, 0.3],
+            "N": [0.2, 0.3, 0.4],
+            "O": [0.3, 0.4, 0.5],
+            "P": [0.6, 0.7, 0.8],
+            "S": [0.9, 0.8, 0.7],
+        }
+        new_color_carbon = light_colors["C"]
+        new_color_nitrogen = light_colors["N"]
+        new_color_oxygen = light_colors["O"]
+        new_color_phosphorus = light_colors["P"]
+        new_color_sulfur = light_colors["S"]
+
+        job = PyMOLHybridVisualizationJob.from_filename(
+            dna_hybrid_visualized_xyz_file,
+            jobrunner=pymol_hybrid_visualization_jobrunner,
+            groups=groups,
+            new_color_carbon=new_color_carbon,
+            new_color_nitrogen=new_color_nitrogen,
+            new_color_oxygen=new_color_oxygen,
+            new_color_phosphorus=new_color_phosphorus,
+            new_color_sulfur=new_color_sulfur,
+        )
+        job.set_folder(tmpdir)
+
+        job.run()
+        assert job.is_complete()
+
+        pml_file = os.path.join(
+            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
+        )
+        group_selection_commands = [
+            "set_color light_C, [0.1, 0.2, 0.3]\n",
+            "set_color light_N, [0.2, 0.3, 0.4]\n",
+            "set_color light_O, [0.3, 0.4, 0.5]\n",
+            "set_color light_P, [0.6, 0.7, 0.8]\n",
+            "set_color light_S, [0.9, 0.8, 0.7]\n",
+        ]
+
+        with open(pml_file, "r") as f:
+            content = f.readlines()
+            for line in group_selection_commands:
+                assert line in content
+
+        style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
+        pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
+        assert os.path.exists(style_file)
+        assert os.path.exists(pse_file)
 
     def test_pymol_align_job_on_three_files(
         self,
