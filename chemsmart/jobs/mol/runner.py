@@ -29,6 +29,7 @@ from chemsmart.utils.repattern import (
     pymol_isosurface_pattern,
 )
 from chemsmart.utils.utils import (
+    get_list_from_string_range,
     get_prepend_string_list_from_modred_free_format,
     quote_path,
     run_command,
@@ -998,15 +999,25 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             "cbao",
             "cbak",
         ]
-
-        # Retrieve group information (indices and colors) from the job
-        groups = list(self._get_groups(job).items())
+        #
+        # # Retrieve group information (indices and colors) from the job
+        # groups = list(self._get_groups(job).items())
+        groups = job.groups
 
         # Write PyMOL selection commands for each group
-        print(groups)
+        print(job.groups)
         # for key, val in groups:
         #     print(f"key-val: {key}: {val}")
         #     f.write(f"select {key},  {val['index']}\n")
+
+        # Write PyMOL selection commands for each group
+        for i, group in enumerate(job.groups):
+            group_list = get_list_from_string_range(group)
+            group_str = ",".join(map(str, group_list))
+            f.write(f"select group{i+1}, id in ({group_str})\n")
+        # for idx, (key, val) in enumerate(groups):
+        #     f.write(f"select {key},  {val['index']}\n")
+
         #
         if len(groups) > len(color_schemes):
             logger.warning(
