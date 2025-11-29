@@ -852,45 +852,6 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             self._write_surface_settings(job, f)
         return pml_file
 
-    # def _get_groups(self, job):
-    #     """Get the group information from the job.
-    #
-    #     Args:
-    #         job: PyMOL hybrid visualization job instance.
-    #
-    #     Return:
-    #         dict: Dictionary of group information with group names as keys
-    #               and dictionaries with index and color as values.
-    #         e.g., {
-    #             "group1": {"index": "3-5,13,17,19-22", "color": "blue"},
-    #             "group2": {"index": "29-78,79,81,87", "color": "default"}
-    #         }
-    #     """
-    #     print(";;;;;;;;;;;;;;;;")
-    #     print(job.groups)
-    #     groups = {}
-    #     # dynamically detect any `groupN` attributes on the job so users can supply unlimited groups
-    #     group_attrs = []
-    #     for attr in dir(job):
-    #         m = re.match(r"^group(\d+)$", attr)
-    #         if m:
-    #             group_attrs.append((int(m.group(1)), attr))
-    #     # stable ordering by group number
-    #     group_attrs.sort(key=lambda x: x[0])
-    #     for idx, group_attr in group_attrs:
-    #         group_color_attr = f"color{idx}"
-    #         group_value = getattr(job, group_attr, None)
-    #         group_color_value = getattr(job, group_color_attr, None)
-    #         if group_value:
-    #             groups[group_attr] = {
-    #                 "index": self._get_group_index_str(group_value),
-    #                 "color": group_color_value or "default",
-    #             }
-    #     logger.info(
-    #         f"Found {len(groups)} groups in hybrid visualization job: {groups}"
-    #     )
-    #     return groups
-
     def _get_group_selection_str(self, job):
         """Get the selection string for all groups in the job.
         Args:
@@ -900,14 +861,6 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             str: Selection string for all groups,
             e.g., "group1 or group2 or group3 or group4"""
         selection_str = []
-        # pattern = re.compile(r"^group\d+$")
-        # # Get all attributes of the job that start with 'group'
-        # for attr in dir(job):
-        #     if pattern.match(attr):
-        #         group_value = getattr(job, attr)
-        #         if group_value is None:  # skip attributes with None value
-        #             continue
-        #         selection_str.append(attr)
         for i, group in enumerate(job.groups):
             selection_str.append(f"group{i+1}")
         return " or ".join(selection_str)
@@ -985,29 +938,14 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             "cbao",
             "cbak",
         ]
-        #
-        # # Retrieve group information (indices and colors) from the job
-        # groups = list(self._get_groups(job).items())
-        groups = job.groups
 
-        # Write PyMOL selection commands for each group
-        print(job.groups)
-        # for key, val in groups:
-        #     print(f"key-val: {key}: {val}")
-        #     f.write(f"select {key},  {val['index']}\n")
+        groups = job.groups
 
         # Write PyMOL selection commands for each group
         for i, group in enumerate(job.groups):
             if "," in group:
                 group_str = group.replace(",", "+")
-            # group_list = get_list_from_string_range(group)
-            # group_str = ",".join(map(str, group_list))
-            # DID not work if using id in (1,2,3,4) etc
             f.write(f"select group{i+1}, id {group_str}\n")
-        # for idx, (key, val) in enumerate(groups):
-        #     f.write(f"select {key},  {val['index']}\n")
-
-        #
         if len(groups) > len(color_schemes):
             logger.warning(
                 f"More groups ({len(groups)}) than colors "
@@ -1023,52 +961,10 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         else:
             # user user-specified colors first
             colors = job.colors + color_schemes
-        # # used_schemes = {
-        # #     val["color"] for _, val in groups if val["color"] != "default"
-        # # }
 
         for i, group in enumerate(job.groups):
-            # # Assign the first unused default color scheme
-            # color_scheme = next(
-            #     (s for s in color_schemes if s not in used_schemes), None
-            # )
-            # if color_scheme is None:
-            #     # If all default schemes are used, reuse the first scheme and log a warning
-            #     color_scheme = color_schemes[0]
-            #     logger.warning(
-            #         "All default color schemes already used; reusing "
-            #         f"{color_scheme} for group {i+1}."
-            #     )
-            # # Mark this scheme as used (no-op if it was already there)
-            # used_schemes.add(color_scheme)
-
             # Write the PyMOL command to apply the color scheme to the group
             f.write(f"util.{colors[i]} group{i+1}\n")
-
-        # Assign color schemes to groups
-        # for key, val in groups:
-        #     if val["color"] != "default":
-        #         # Use the user-specified color scheme
-        #         scheme = val["color"]
-        #     else:
-        #         # Assign the first unused default color scheme
-        #         scheme = next(
-        #             (s for s in color_scheme if s not in used_schemes), None
-        #         )
-        #
-        #         if scheme is None:
-        #             # If all default schemes are used, reuse the first scheme and log a warning
-        #             scheme = color_scheme[0]
-        #             logger.warning(
-        #                 "All default color schemes already used; reusing "
-        #                 f"{scheme} for group {key}."
-        #             )
-        #
-        #     # Mark this scheme as used (no-op if it was already there)
-        #     used_schemes.add(scheme)
-        #
-        #     # Write the PyMOL command to apply the color scheme to the group
-        #     f.write(f"util.{scheme} {key}\n")
 
         # Set transparency for all sticks to 0 (fully opaque)
         f.write("set stick_transparency, 0, all\n")

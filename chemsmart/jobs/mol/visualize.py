@@ -123,13 +123,6 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.colors = list(colors) if colors is not None else []
         logger.debug(f"Obtained colors: {colors}")
 
-        # Provide compatibility with PyMOLHybridVisualizationJobRunner
-        # by populating dynamic attributes group1, group2, ... and color1, color2, ...
-        for idx, group in enumerate(self.groups, start=1):
-            setattr(self, f"group{idx}", group)
-        for idx, color in enumerate(self.colors, start=1):
-            setattr(self, f"color{idx}", color)
-
         # Expose number of groups for convenience
         self.group_count = len(self.groups)
 
