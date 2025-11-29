@@ -110,6 +110,9 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         """
         super().__init__(**kwargs)
 
+        if self.label is not None:
+            self.label += "_hybrid_visualization"
+
         # Normalize to lists
         self.groups = list(groups) if groups is not None else []
         self.colors = list(colors) if colors is not None else []
