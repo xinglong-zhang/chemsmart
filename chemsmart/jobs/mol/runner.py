@@ -29,7 +29,6 @@ from chemsmart.utils.repattern import (
     pymol_isosurface_pattern,
 )
 from chemsmart.utils.utils import (
-    get_list_from_string_range,
     get_prepend_string_list_from_modred_free_format,
     quote_path,
     run_command,
@@ -853,44 +852,44 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             self._write_surface_settings(job, f)
         return pml_file
 
-    def _get_groups(self, job):
-        """Get the group information from the job.
-
-        Args:
-            job: PyMOL hybrid visualization job instance.
-
-        Return:
-            dict: Dictionary of group information with group names as keys
-                  and dictionaries with index and color as values.
-            e.g., {
-                "group1": {"index": "3-5,13,17,19-22", "color": "blue"},
-                "group2": {"index": "29-78,79,81,87", "color": "default"}
-            }
-        """
-        print(";;;;;;;;;;;;;;;;")
-        print(job.groups)
-        groups = {}
-        # dynamically detect any `groupN` attributes on the job so users can supply unlimited groups
-        group_attrs = []
-        for attr in dir(job):
-            m = re.match(r"^group(\d+)$", attr)
-            if m:
-                group_attrs.append((int(m.group(1)), attr))
-        # stable ordering by group number
-        group_attrs.sort(key=lambda x: x[0])
-        for idx, group_attr in group_attrs:
-            group_color_attr = f"color{idx}"
-            group_value = getattr(job, group_attr, None)
-            group_color_value = getattr(job, group_color_attr, None)
-            if group_value:
-                groups[group_attr] = {
-                    "index": self._get_group_index_str(group_value),
-                    "color": group_color_value or "default",
-                }
-        logger.info(
-            f"Found {len(groups)} groups in hybrid visualization job: {groups}"
-        )
-        return groups
+    # def _get_groups(self, job):
+    #     """Get the group information from the job.
+    #
+    #     Args:
+    #         job: PyMOL hybrid visualization job instance.
+    #
+    #     Return:
+    #         dict: Dictionary of group information with group names as keys
+    #               and dictionaries with index and color as values.
+    #         e.g., {
+    #             "group1": {"index": "3-5,13,17,19-22", "color": "blue"},
+    #             "group2": {"index": "29-78,79,81,87", "color": "default"}
+    #         }
+    #     """
+    #     print(";;;;;;;;;;;;;;;;")
+    #     print(job.groups)
+    #     groups = {}
+    #     # dynamically detect any `groupN` attributes on the job so users can supply unlimited groups
+    #     group_attrs = []
+    #     for attr in dir(job):
+    #         m = re.match(r"^group(\d+)$", attr)
+    #         if m:
+    #             group_attrs.append((int(m.group(1)), attr))
+    #     # stable ordering by group number
+    #     group_attrs.sort(key=lambda x: x[0])
+    #     for idx, group_attr in group_attrs:
+    #         group_color_attr = f"color{idx}"
+    #         group_value = getattr(job, group_attr, None)
+    #         group_color_value = getattr(job, group_color_attr, None)
+    #         if group_value:
+    #             groups[group_attr] = {
+    #                 "index": self._get_group_index_str(group_value),
+    #                 "color": group_color_value or "default",
+    #             }
+    #     logger.info(
+    #         f"Found {len(groups)} groups in hybrid visualization job: {groups}"
+    #     )
+    #     return groups
 
     def _get_group_selection_str(self, job):
         """Get the selection string for all groups in the job.
@@ -901,30 +900,17 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             str: Selection string for all groups,
             e.g., "group1 or group2 or group3 or group4"""
         selection_str = []
-        pattern = re.compile(r"^group\d+$")
-        # Get all attributes of the job that start with 'group'
-        for attr in dir(job):
-            if pattern.match(attr):
-                group_value = getattr(job, attr)
-                if group_value is None:  # skip attributes with None value
-                    continue
-                selection_str.append(attr)
+        # pattern = re.compile(r"^group\d+$")
+        # # Get all attributes of the job that start with 'group'
+        # for attr in dir(job):
+        #     if pattern.match(attr):
+        #         group_value = getattr(job, attr)
+        #         if group_value is None:  # skip attributes with None value
+        #             continue
+        #         selection_str.append(attr)
+        for i, group in enumerate(job.groups):
+            selection_str.append(f"group{i+1}")
         return " or ".join(selection_str)
-
-    def _get_group_index_str(self, index):
-        """Convert a group index string to PyMOL selection format.
-        Args:
-            index (str): A string containing group indices, separated by commas or spaces.
-
-        Return:
-            str: pymol style selection range for each group,
-            e.g., "id 467-495 or id 497-500 or id 502"
-        """
-        index_list = []
-        index = index.replace(",", " ").split()
-        for i in index:
-            index_list.append(f"id {i}")
-        return " or ".join(index_list)
 
     def _write_default_pymol_style(self, job, f):
         """Write the pymol style without settings for stick color to the pml file."""
@@ -1012,9 +998,12 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         # Write PyMOL selection commands for each group
         for i, group in enumerate(job.groups):
-            group_list = get_list_from_string_range(group)
-            group_str = ",".join(map(str, group_list))
-            f.write(f"select group{i+1}, id in ({group_str})\n")
+            if "," in group:
+                group_str = group.replace(",", "+")
+            # group_list = get_list_from_string_range(group)
+            # group_str = ",".join(map(str, group_list))
+            # DID not work if using id in (1,2,3,4) etc
+            f.write(f"select group{i+1}, id {group_str}\n")
         # for idx, (key, val) in enumerate(groups):
         #     f.write(f"select {key},  {val['index']}\n")
 
