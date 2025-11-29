@@ -556,18 +556,17 @@ class TestIOUtilities:
         assert clean_label("label,with,comma") == "label_with_comma"
 
         # periods and parentheses -> "_"
-        assert clean_label("Fig. 1(a)") == "Fig__1_a_"
+        assert clean_label("Fig. 1(a)") == "Fig_1_a"
 
         # apostrophe -> "_prime_"
         assert clean_label("O'Hara") == "O_prime_Hara"
 
         # asterisk -> "_star_"
-        assert clean_label("label*") == "label_star_"
+        assert clean_label("label*") == "label_star"
 
         # combination of several special characters
         assert (
-            clean_label("O'Hara* test, v1.0")
-            == "O_prime_Hara_star__test__v1_0"
+            clean_label("O'Hara* test, v1.0") == "O_prime_Hara_star_test_v1_0"
         )
 
 

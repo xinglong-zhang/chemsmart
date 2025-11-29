@@ -14,6 +14,7 @@ Key functionality includes:
 import logging
 import os
 import re
+import string
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,8 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
+
+SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 
 def create_molecule_list(
@@ -382,14 +385,32 @@ def load_molecules_from_paths(
     return loaded
 
 
-def clean_label(label):
-    """Helper function to clean labels that contains special characters
-    such as apostrophe, comma, asterisk etc."""
-    label = label.replace(" ", "_")
-    label = label.replace(",", "_")
-    label = label.replace(".", "_")
-    label = label.replace("(", "_")
-    label = label.replace(")", "_")
+def clean_label(label: str) -> str:
+    """
+    Make a label that is safe for filenames, DB keys, RST labels, etc.
+    - Keeps letters, digits, `_` and `-`.
+    - Replaces spaces, commas, dots, parentheses, etc. with `_`.
+    - Encodes "'" as `_prime_` and "*" as `_star_`.
+    - Collapses multiple underscores and strips leading/trailing `_`.
+    """
+
+    # Preserve your special semantics
     label = label.replace("'", "_prime_")
     label = label.replace("*", "_star_")
-    return label
+
+    out = []
+    for ch in label:
+        if ch in SAFE_CHARS:
+            out.append(ch)
+        elif ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}:
+            out.append("_")
+        else:
+            # drop any other weird character, or map to "_"
+            out.append("_")
+
+    cleaned = "".join(out)
+    # collapse runs of underscores
+    cleaned = re.sub(r"_+", "_", cleaned)
+    # strip leading/trailing underscores
+    cleaned = cleaned.strip("_")
+    return cleaned
