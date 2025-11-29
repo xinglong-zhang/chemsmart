@@ -944,8 +944,8 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         # Write PyMOL selection commands for each group
         for i, group in enumerate(job.groups):
             if "," in group:
-                group_str = group.replace(",", "+")
-            f.write(f"select group{i+1}, id {group_str}\n")
+                group = group.replace(",", "+")
+            f.write(f"select group{i+1}, id {group}\n")
         if len(groups) > len(color_schemes):
             logger.warning(
                 f"More groups ({len(groups)}) than colors "
