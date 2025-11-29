@@ -119,7 +119,7 @@ Movie Examples
 ###############################
 
 Apart from basic visualization jobs, ChemSmart can also create graphics with different substrates displayed in different
-style (what 'hybrid' refers to).
+styles (what 'hybrid' refers to).
 
 ***************************
  Hybrid Visualization Jobs
@@ -192,8 +192,8 @@ Visualization-Specific OPTIONS
 
       chemsmart run mol -f molecule.xyz visualize --hybrid -G '1,2,3'
 
-This is the minimal command needed for hybrid visualization job. Only the highlighted groups are specified, others will
-be assigned by default.
+This is the minimal command needed for a hybrid visualization job. Only the highlighted groups are specified, others
+will be assigned by default.
 
 **Hybrid visualization with customized color scheme**
 

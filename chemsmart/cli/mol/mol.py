@@ -131,7 +131,7 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-carbon",
         type=str,
         default=None,
-        help="Color carbon atoms with user-specified color. "
+        help="Color carbon atoms with user-specified color, "
         "e.g. -NC [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(
@@ -139,7 +139,7 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-nitrogen",
         type=str,
         default=None,
-        help="Color nitrogen atoms with user-specified color."
+        help="Color nitrogen atoms with user-specified color, "
         "e.g. -NN [0.6, 0.8, 1.0]",
     )(f)
     f = click.option(
@@ -147,7 +147,7 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-oxygen",
         type=str,
         default=None,
-        help="Color oxygen atoms with user-specified color."
+        help="Color oxygen atoms with user-specified color, "
         "e.g. -NO [1.0, 0.7, 0.7]",
     )(f)
     f = click.option(
@@ -155,8 +155,8 @@ def click_pymol_hybrid_visualization_options(f):
         "--new-color-sulfur",
         type=str,
         default=None,
-        help="Color sulfur atoms with user-specified color."
-        " e.g. -NS [0.8, 0.8, 0.9]",
+        help="Color sulfur atoms with user-specified color, "
+        "e.g. -NS [0.8, 0.8, 0.9]",
     )(f)
     f = click.option(
         "-NP",
@@ -164,7 +164,7 @@ def click_pymol_hybrid_visualization_options(f):
         type=str,
         default=None,
         help="Color phosphorus atoms with user-specified color."
-        " e.g. -NP  [1.0, 0.85, 0.6]",
+        "e.g. -NP  [1.0, 0.85, 0.6]",
     )(f)
 
     @functools.wraps(f)

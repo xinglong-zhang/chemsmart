@@ -117,7 +117,18 @@ def visualize(
             "surface_transparency"
         )
 
-    job = visualizationjob(
+    # Include new_color_* options if specified
+    for color_opt in [
+        "new_color_carbon",
+        "new_color_nitrogen",
+        "new_color_oxygen",
+        "new_color_sulfur",
+        "new_color_phosphorus",
+    ]:
+        if kwargs.get(color_opt):
+            hybrid_opts[color_opt] = kwargs.pop(color_opt)
+
+    job = visualization_job(
         molecule=molecules,
         label=label,
         pymol_script=file,
