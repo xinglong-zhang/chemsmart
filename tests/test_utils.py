@@ -569,6 +569,22 @@ class TestIOUtilities:
             clean_label("O'Hara* test, v1.0") == "O_prime_Hara_star_test_v1_0"
         )
 
+        # --- edge cases around underscore collapsing/stripping ---
+        # 1) Empty string input
+        assert clean_label("") == ""
+
+        # 2) String with only special characters
+        # "***" -> "_star__star__star_" -> collapse + strip -> "star_star_star"
+        assert clean_label("***") == "star_star_star"
+
+        # 3) Leading/trailing underscores after conversion
+        # "*label*" -> "_star_label_star_" -> collapse + strip -> "star_label_star"
+        assert clean_label("*label*") == "star_label_star"
+
+        # 4) Multiple consecutive special characters
+        # "label...test" -> "label___test" -> collapse -> "label_test"
+        assert clean_label("label...test") == "label_test"
+
 
 class TestNaturallySorted:
     def test_empty_list(self):

@@ -402,9 +402,8 @@ def clean_label(label: str) -> str:
     for ch in label:
         if ch in SAFE_CHARS:
             out.append(ch)
-        elif ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}:
-            out.append("_")
         else:
+            # includes ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}
             # drop any other weird character, or map to "_"
             out.append("_")
 
