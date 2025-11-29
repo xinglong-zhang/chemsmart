@@ -45,8 +45,12 @@ Works for all Mol jobs
       -  Type of file to run mol align job, if directory is specified (only for align job)
 
    -  -  ``-l, --label``
+
       -  string
-      -  Write user input filename for the job (without extension). Will overwrite your original filename (default=None)
+
+      -  Write user input filename for the job (without extension). Will overwrite your original filename
+         (default=None). Labels should avoid containing special characters such as apostrophe (``'``), comma (`,`),
+         asterisks (``*``), etc.
 
    -  -  ``-a, --append-label``
       -  string
