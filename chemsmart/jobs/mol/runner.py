@@ -783,8 +783,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
     Extends the base PyMOL runner to provide hybrid molecular
     visualization capabilities with customizable styling, labeling.
 
-    This job runner supports an arbitrary number of groups, determined dynamically.
-    """
+    Current job runner supports up to four groups."""
 
     JOBTYPES = ["pymol_hybrid_visualization"]
 
@@ -923,27 +922,26 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_faded_colors(self, job, f):
         """Write the faded colors for non-highlighted C, N, O, P in background to the pml file."""
-        new_color_carbon = (
-            job.new_color_carbon
-            if job.new_color_carbon is not None
-            else "[0.8, 0.8, 0.9]"
-        )
-        new_color_nitrogen = (
-            job.new_color_nitrogen
-            if job.new_color_nitrogen is not None
-            else "[0.6, 0.8, 1.0]"
-        )
-        new_color_oxygen = (
-            job.new_color_oxygen
-            if job.new_color_oxygen is not None
-            else "[1.0, 0.7, 0.7]"
-        )
-        new_color_phosphorus = job.new_color_phosphorus or "[1.0, 0.85, 0.6]"
-        new_color_sulfur = (
-            job.new_color_sulfur
-            if job.new_color_sulfur is not None
-            else "[1.0, 0.7, 0.7]"
-        )
+        if job.new_color_carbon:
+            new_color_carbon = job.new_color_carbon
+        else:
+            new_color_carbon = "[0.8, 0.8, 0.9]"
+        if job.new_color_nitrogen:
+            new_color_nitrogen = job.new_color_nitrogen
+        else:
+            new_color_nitrogen = "[0.6, 0.8, 1.0]"
+        if job.new_color_oxygen:
+            new_color_oxygen = job.new_color_oxygen
+        else:
+            new_color_oxygen = "[1.0, 0.7, 0.7]"
+        if job.new_color_phosphorus:
+            new_color_phosphorus = job.new_color_phosphorus
+        else:
+            new_color_phosphorus = "[1.0, 0.85, 0.6]"
+        if job.new_color_sulfur:
+            new_color_sulfur = job.new_color_sulfur
+        else:
+            new_color_sulfur = "[1.0, 0.7, 0.7]"
         f.write(
             f"set_color light_C, {new_color_carbon}\n"
             f"set_color light_N, {new_color_nitrogen}\n"
@@ -985,6 +983,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             "cbaw",
             "cbab",
             "cbao",
+            "cbap",
             "cbak",
         ]
 
@@ -992,25 +991,28 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         groups = list(self._get_groups(job).items())
 
         # Write PyMOL selection commands for each group
-        for key, val in groups:
+        for idx, (key, val) in enumerate(groups):
             f.write(f"select {key},  {val['index']}\n")
 
-        # Start with all *user-specified* color schemes
-        used_schemes = {
-            val["color"] for _, val in groups if val["color"] != "default"
-        }
+        # Track color schemes explicitly requested by the user
+        used_schemes = set()
+        for _, val in groups:
+            if val["color"] != "default":
+                used_schemes.add(val["color"])
 
-        # Assign color schemes to groups
-        for key, val in groups:
+        # Assign color schemes to groups, skipping already used default schemes
+        for idx, (key, val) in enumerate(groups):
             if val["color"] != "default":
                 # Use the user-specified color scheme
                 scheme = val["color"]
+                used_schemes.add(scheme)
             else:
                 # Assign the first unused default color scheme
-                scheme = next(
-                    (s for s in color_scheme if s not in used_schemes), None
-                )
-
+                scheme = None
+                for s in color_scheme:
+                    if s not in used_schemes:
+                        scheme = s
+                        break
                 if scheme is None:
                     # If all default schemes are used, reuse the first scheme and log a warning
                     scheme = color_scheme[0]
@@ -1018,10 +1020,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
                         "All default color schemes already used; reusing "
                         f"{scheme} for group {key}."
                     )
-
-            # Mark this scheme as used (no-op if it was already there)
-            used_schemes.add(scheme)
-
+                used_schemes.add(scheme)
             # Write the PyMOL command to apply the color scheme to the group
             f.write(f"util.{scheme} {key}\n")
 
@@ -1040,11 +1039,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_surface_settings(self, job, f):
         """Write PyMOL commands to display and style the molecular surface."""
-        if job.surface_color is not None:
+        if job.surface_color:
             surface_color = job.surface_color
         else:
             surface_color = "grey"
-        if job.surface_transparency is not None:
+        if job.surface_transparency:
             surface_transparency = job.surface_transparency
         else:
             surface_transparency = "0.7"

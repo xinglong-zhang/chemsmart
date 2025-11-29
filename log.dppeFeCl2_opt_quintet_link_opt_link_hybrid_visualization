@@ -1,0 +1,63 @@
+ PyMOL(TM) Molecular Graphics System, Version 3.1.0.
+ Copyright (c) Schrodinger, LLC.
+ All Rights Reserved.
+ 
+    Created by Warren L. DeLano, Ph.D. 
+ 
+    PyMOL is user-supported open-source software.  Although some versions
+    are freely available, PyMOL is not in the public domain.
+ 
+    If PyMOL is helpful in your work or study, then please volunteer 
+    support for our ongoing efforts to create open and affordable scientific
+    software by purchasing a PyMOL Maintenance and/or Support subscription.
+
+    More information can be found at "http://www.pymol.org".
+ 
+    Enter "help" for a list of commands.
+    Enter "help <command-name>" for information on a specific command.
+
+ Hit ESC anytime to toggle between text and graphics.
+
+ ObjectMoleculeReadStr: read through molecule 1.
+ ObjectMoleculeReadStr: read through molecule 2.
+ ObjectMoleculeReadStr: read through molecule 3.
+ ObjectMoleculeReadStr: read through molecule 4.
+ CmdLoad: "/Users/taipanlan/PycharmProjects/PythonProject1/chemsmart/dppeFeCl2_opt_quintet_link_opt_link_hybrid_visualization.xyz" loaded as "dppeFeCl2_opt_quintet_link_opt_link_hybrid_visualization".
+PyMOL>run /Users/taipanlan/PycharmProjects/PythonProject1/chemsmart/zhang_group_pymol_style.py,main
+PyMOL>pymol_style dppeFeCl2_opt_quintet_link_opt_link_hybrid_visualization; viewport 800,600; zoom; ray 2400,1800; @/Users/taipanlan/PycharmProjects/PythonProject1/chemsmart/chemsmart_hybrid_visualization.pml; save /Users/taipanlan/PycharmProjects/PythonProject1/chemsmart/dppeFeCl2_opt_quintet_link_opt_link_hybrid_visualization.pse ; quit
+ Setting: ray_shadow set to on.
+ Setting: light_count set to 2.
+ Setting: light set to [ -0.40000, -0.40000, -1.00000 ].
+ Setting: ambient set to 0.14000.
+ Setting: direct set to 0.65000.
+ Setting: reflect set to 0.25000.
+ Setting: shininess set to 40.00000.
+ Setting: power set to 1.00000.
+ Setting: specular_intensity set to 0.50000.
+ Setting: spec_direct set to 0.00000.
+ Setting: spec_count set to -1.
+ Setting: ray_shadow_decay_factor set to 0.00000.
+ Ray: render time: 0.92 sec. = 3921.1 frames/hour (0.92 sec. accum.).
+ Setting: ray_shadow set to on.
+ Setting: light_count set to 2.
+ Setting: light set to [ -0.40000, -0.40000, -1.00000 ].
+ Setting: ambient set to 0.14000.
+ Setting: direct set to 0.65000.
+ Setting: reflect set to 0.25000.
+ Setting: shininess set to 40.00000.
+ Setting: power set to 1.00000.
+ Setting: specular_intensity set to 0.50000.
+ Setting: spec_direct set to 0.00000.
+ Setting: spec_count set to -1.
+ Setting: ray_shadow_decay_factor set to 0.00000.
+ Setting: stick_color unset in 1 objects.
+ Color: "light_C" defined as [ 0.800, 0.800, 0.900 ].
+ Color: "light_N" defined as [ 0.600, 0.800, 1.000 ].
+ Color: "light_O" defined as [ 1.000, 0.700, 0.700 ].
+ Color: "light_P" defined as [ 1.000, 0.850, 0.600 ].
+ Color: "light_S" defined as [ 1.000, 0.700, 0.700 ].
+ Executive: Colored 26 atoms.
+ Executive: Colored 2 atoms.
+ Setting: stick_transparency set to 0.00000 in 1 objects.
+ Setting: surface_color set to grey in 1 objects.
+ Setting: transparency set to 0.70000 in 1 objects.
