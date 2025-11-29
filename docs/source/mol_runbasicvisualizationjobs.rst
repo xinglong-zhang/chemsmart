@@ -211,8 +211,7 @@ if a group is not assigned customized colors.
 
       chemsmart run mol -f structure.xyz visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak -ST 0.8 -NC '[0.8, 0.8, 0.9]'
 
-Color options except for color schemes, such as surface color, customized carbon color can be specified by a list
-containing their RGB values.
+Background color options, such as surface color and element-specific colors (carbon, nitrogen, etc.), can be specified using RGB values as a list.
 
 **Visualization using custom style or script file**
 ===================================================
