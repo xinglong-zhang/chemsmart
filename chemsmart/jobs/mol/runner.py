@@ -658,7 +658,7 @@ class PyMOLJobRunner(JobRunner):
         ):
             logger.info(
                 f"Command executed: {command}\n"
-                f"Writing output file to: {os.path.abspath(job.logfile)}\n"
+                f"Writing log file to: {os.path.abspath(job.logfile)}\n"
                 f"And err file to: {job_errfile}"
             )
             # Start PyMOL process
