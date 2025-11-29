@@ -224,7 +224,7 @@ containing their RGB values.
 Hybrid Visualization Examples
 =============================
 
-running a command like:
+Running a command like:
    .. code:: console
 
       chemsmart run mol -f molecule.xyz visualize --hybrid -G  '417-418,422-424,429-447,463-464' -G '336,397-412,414-416,419-421' -G '494-529'
