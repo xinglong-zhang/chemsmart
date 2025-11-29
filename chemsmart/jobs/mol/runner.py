@@ -607,8 +607,11 @@ class PyMOLJobRunner(JobRunner):
         Returns:
             str: Command string with save command added.
         """
-        # Append the final PyMOL commands, quoting the output file path
-        command += f"; save {quote_path(job.outputfile)}"
+        # Append the final PyMOL commands
+        # Note: Don't use quote_path here as it creates nested quotes that break
+        # shlex.split on Windows. The path is inside the -d argument which is
+        # already quoted, so PyMOL handles the path directly.
+        command += f"; save {job.outputfile}"
 
         return command
 
@@ -1073,8 +1076,8 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             grad_file
         ), f"Gradient cube file {grad_file} not found!"
 
-        command += f"; load {quote_path(dens_file)}"
-        command += f"; load {quote_path(grad_file)}"
+        command += f"; load {dens_file}"
+        command += f"; load {grad_file}"
 
         return command
 
@@ -1276,7 +1279,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             str: Extended command string with PML load command.
         """
         pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
-        command += f"; load {quote_path(pml_file)}"
+        command += f"; load {pml_file}"
         return command
 
 
@@ -1427,7 +1430,7 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
             str: Extended command string with PML loading command.
         """
         pml_file = os.path.join(job.folder, f"{job.spin_basename}.pml")
-        command += f"; load {quote_path(pml_file)}"
+        command += f"; load {pml_file}"
         return command
 
 
