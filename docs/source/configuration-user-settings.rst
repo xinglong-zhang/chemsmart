@@ -1,6 +1,6 @@
-######################
+###############
  User Settings
-######################
+###############
 
 Configure user-specific settings in the ``~/.chemsmart`` directory.
 
@@ -15,15 +15,15 @@ Configure user-specific settings in the ``~/.chemsmart`` directory.
 
 The ``~/.chemsmart/usersettings.yaml`` file contains:
 
-- Project or account numbers required for HPC job submissions.
-- Email address for job notifications.
+-  Project or account numbers required for HPC job submissions.
+-  Email address for job notifications.
 
 Example configuration:
 
-.. code-block:: yaml
+.. code:: yaml
 
    PROJECT: 1234567  # Account number for SLURM
    EMAIL: user@example.com
 
-To request additional features, submit an issue on the
-`GitHub repository <https://github.com/xinglong-zhang/chemsmart/issues>`_.
+To request additional features, submit an issue on the `GitHub
+repository <https://github.com/xinglong-zhang/chemsmart/issues>`_.

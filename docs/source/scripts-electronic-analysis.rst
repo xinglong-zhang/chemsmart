@@ -2,28 +2,28 @@
  Electronic Structure Analysis
 ###############################
 
-This page documents scripts for analyzing electronic structure properties
-from Gaussian and ORCA output files.
+This page documents scripts for analyzing electronic structure
+properties from Gaussian and ORCA output files.
 
 *********************
  FMO Analysis Script
 *********************
 
-The ``fmo.py`` script performs Frontier Molecular Orbital (FMO) analysis,
-extracting:
+The ``fmo.py`` script performs Frontier Molecular Orbital (FMO)
+analysis, extracting:
 
-- HOMO and LUMO energies
-- HOMO-LUMO energy gap
-- Chemical potential
-- Chemical hardness
-- Electrophilicity index
+-  HOMO and LUMO energies
+-  HOMO-LUMO energy gap
+-  Chemical potential
+-  Chemical hardness
+-  Electrophilicity index
 
 Currently supports restricted (closed-shell) calculations only.
 
 Usage
 =====
 
-.. code-block:: bash
+.. code:: bash
 
    fmo.py [-f filename] [-u eV|kcal/mol]
 
@@ -34,20 +34,22 @@ Options
    :header-rows: 1
    :widths: 20 10 70
 
-   * - Option
-     - Type
-     - Description
-   * - ``-f, --filename``
-     - string
-     - Output file to analyze (required)
-   * - ``-u, --unit``
-     - string
-     - Energy units: eV or kcal/mol (default: eV)
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  Output file to analyze (required)
+
+   -  -  ``-u, --unit``
+      -  string
+      -  Energy units: eV or kcal/mol (default: eV)
 
 Examples
 ========
 
-.. code-block:: bash
+.. code:: bash
 
    fmo.py -f water_mp2.log
 
@@ -58,7 +60,7 @@ Examples
    Chemical hardness, eta: 7.34 eV
    Electrophilicity Index, omega: 2.915 eV
 
-.. code-block:: bash
+.. code:: bash
 
    fmo.py -f water_mp2.log -u kcal/mol
 
@@ -71,13 +73,13 @@ Examples
  Mulliken Population Analysis Script
 *************************************
 
-The ``mulliken.py`` script extracts Mulliken atomic charges and spin densities.
-Supports Gaussian and ORCA output files.
+The ``mulliken.py`` script extracts Mulliken atomic charges and spin
+densities. Supports Gaussian and ORCA output files.
 
 Usage
 =====
 
-.. code-block:: bash
+.. code:: bash
 
    mulliken.py [-f filename] [-n atom_number]
 
@@ -88,20 +90,22 @@ Options
    :header-rows: 1
    :widths: 20 10 70
 
-   * - Option
-     - Type
-     - Description
-   * - ``-f, --filename``
-     - string
-     - Output file to analyze (required)
-   * - ``-n, --numbers``
-     - int
-     - Atom number(s) to report (1-indexed)
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  Output file to analyze (required)
+
+   -  -  ``-n, --numbers``
+      -  int
+      -  Atom number(s) to report (1-indexed)
 
 Examples
 ========
 
-.. code-block:: bash
+.. code:: bash
 
    mulliken.py -f molecule.log
 
@@ -110,7 +114,7 @@ Examples
    C2      :    -0.008
    ...
 
-.. code-block:: bash
+.. code:: bash
 
    mulliken.py -f triplet.log -n 3
 
@@ -125,12 +129,13 @@ Examples
  Hirshfeld Population Analysis Script
 **************************************
 
-The ``hirshfeld.py`` script extracts Hirshfeld charges and spin densities.
+The ``hirshfeld.py`` script extracts Hirshfeld charges and spin
+densities.
 
 Usage
 =====
 
-.. code-block:: bash
+.. code:: bash
 
    hirshfeld.py [-f filename] [-n atom_number]
 
@@ -141,20 +146,22 @@ Options
    :header-rows: 1
    :widths: 20 10 70
 
-   * - Option
-     - Type
-     - Description
-   * - ``-f, --filename``
-     - string
-     - Output file with Hirshfeld analysis (required)
-   * - ``-n, --numbers``
-     - int
-     - Atom number(s) to report (1-indexed)
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  Output file with Hirshfeld analysis (required)
+
+   -  -  ``-n, --numbers``
+      -  int
+      -  Atom number(s) to report (1-indexed)
 
 Example
 =======
 
-.. code-block:: bash
+.. code:: bash
 
    hirshfeld.py -f calculation_hirshfeld.out
 
@@ -171,14 +178,14 @@ Example
  Wiberg Bond Index Analysis Script
 ***********************************
 
-The ``wbi_analysis.py`` script extracts Natural Population Analysis (NPA) data
-from Wiberg Bond Index calculations. See :ref:`wbi-jobs` for running WBI
-calculations.
+The ``wbi_analysis.py`` script extracts Natural Population Analysis
+(NPA) data from Wiberg Bond Index calculations. See :ref:`wbi-jobs` for
+running WBI calculations.
 
 Usage
 =====
 
-.. code-block:: bash
+.. code:: bash
 
    wbi_analysis.py [-f filename] [-n atom_number]
 
@@ -189,20 +196,22 @@ Options
    :header-rows: 1
    :widths: 20 10 70
 
-   * - Option
-     - Type
-     - Description
-   * - ``-f, --filename``
-     - string
-     - WBI output file (required)
-   * - ``-n, --numbers``
-     - int
-     - Atom number(s) to report (1-indexed)
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-f, --filename``
+      -  string
+      -  WBI output file (required)
+
+   -  -  ``-n, --numbers``
+      -  int
+      -  Atom number(s) to report (1-indexed)
 
 Example
 =======
 
-.. code-block:: bash
+.. code:: bash
 
    wbi_analysis.py -f ts_wbi.log -n 2 -n 5
 

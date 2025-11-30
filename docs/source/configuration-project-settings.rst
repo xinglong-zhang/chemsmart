@@ -1,19 +1,20 @@
-#############################
+##################
  Project Settings
-#############################
+##################
 
 Configure project-specific settings for Gaussian and ORCA calculations.
 
-**************************
+***************************
  Gaussian Project Settings
-**************************
+***************************
 
 The ``~/.chemsmart/gaussian/`` directory contains project settings files
-specifying DFT functionals, basis sets, and other calculation parameters.
+specifying DFT functionals, basis sets, and other calculation
+parameters.
 
 Example project file (``~/.chemsmart/gaussian/test.yaml``):
 
-.. code-block:: yaml
+.. code:: yaml
 
    gas:
      functional: m062x
@@ -36,25 +37,27 @@ Example project file (``~/.chemsmart/gaussian/test.yaml``):
 
 Settings behavior:
 
-- ``gas``: Used for geometry optimization, transition state searches, etc.
-- ``solv``: Used for single point calculations.
-- ``td``: Used for TD-DFT calculations.
+-  ``gas``: Used for geometry optimization, transition state searches,
+   etc.
+-  ``solv``: Used for single point calculations.
+-  ``td``: Used for TD-DFT calculations.
 
 To run all calculations with solvent, set ``gas: Null``:
 
-.. code-block:: yaml
+.. code:: yaml
 
    gas: Null
 
-**********************
+***********************
  ORCA Project Settings
-**********************
+***********************
 
-The ``~/.chemsmart/orca/`` directory contains ORCA project settings files.
+The ``~/.chemsmart/orca/`` directory contains ORCA project settings
+files.
 
 Example project file (``~/.chemsmart/orca/test.yaml``):
 
-.. code-block:: yaml
+.. code:: yaml
 
    gas:
      functional: M062X
@@ -75,8 +78,9 @@ Example project file (``~/.chemsmart/orca/test.yaml``):
      solvent_model: SMD
      solvent_id: "toluene"
 
-This runs gas-phase jobs with M062X/def2-SVP and single point calculations
-with DLPNO-CCSD(T)/CBS using cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene).
+This runs gas-phase jobs with M062X/def2-SVP and single point
+calculations with DLPNO-CCSD(T)/CBS using cc-pVDZ/cc-pVTZ extrapolation
+in SMD(toluene).
 
 *******************
  Scratch Directory
@@ -84,11 +88,11 @@ with DLPNO-CCSD(T)/CBS using cc-pVDZ/cc-pVTZ extrapolation in SMD(toluene).
 
 Set up scratch directories for Gaussian and ORCA jobs:
 
-.. code-block:: bash
+.. code:: bash
 
    ln -s /path/to/scratch/ ~/scratch
 
 .. note::
 
-   If ``freq: False`` is not set, frequency calculations are performed by
-   default for all geometry optimization jobs.
+   If ``freq: False`` is not set, frequency calculations are performed
+   by default for all geometry optimization jobs.

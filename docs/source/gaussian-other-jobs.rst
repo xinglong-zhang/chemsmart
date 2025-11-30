@@ -1,9 +1,9 @@
-############################
+#####################
  Other Gaussian Jobs
-############################
+#####################
 
-This page covers additional Gaussian job types including multi-step link jobs,
-custom user-defined calculations, and direct input file execution.
+This page covers additional Gaussian job types including multi-step link
+jobs, custom user-defined calculations, and direct input file execution.
 
 ***********
  Link Jobs
@@ -11,7 +11,7 @@ custom user-defined calculations, and direct input file execution.
 
 Run multi-step Gaussian calculations with linked job steps.
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] link [SUBCMD_OPTIONS]
 
@@ -22,34 +22,38 @@ Link Options
    :header-rows: 1
    :widths: 30 15 55
 
-   * - Option
-     - Type
-     - Description
-   * - ``-j, --jobtype``
-     - string
-     - Job type: opt, ts, modred, scan, sp, irc
-   * - ``-st, --stable``
-     - string
-     - Stability test options (default: opt)
-   * - ``-g, --guess``
-     - string
-     - Guess options (default: mix)
-   * - ``--route``
-     - string
-     - Route for link section
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-j, --jobtype``
+      -  string
+      -  Job type: opt, ts, modred, scan, sp, irc
+
+   -  -  ``-st, --stable``
+      -  string
+      -  Stability test options (default: opt)
+
+   -  -  ``-g, --guess``
+      -  string
+      -  Guess options (default: mix)
+
+   -  -  ``--route``
+      -  string
+      -  Route for link section
 
 Basic Usage
 ===========
 
 Link job with optimization:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub gaussian -p project -f molecule.xyz link -j opt
 
 Link job with single point:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub gaussian -p project -f molecule.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative
 
@@ -58,13 +62,13 @@ Examples
 
 Optimization of singlet open-shell structure:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub -s SLURM gaussian -p project -f dimer.gjf -c 0 -m 1 link -j opt
 
 This creates a multi-step workflow:
 
-.. code-block:: text
+.. code:: text
 
    # um062x def2svp stable=opt guess=mix
    ...
@@ -78,7 +82,7 @@ This creates a multi-step workflow:
 
 Run custom calculations not built into Chemsmart.
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] userjob [SUBCMD_OPTIONS]
 
@@ -89,20 +93,22 @@ Custom Job Options
    :header-rows: 1
    :widths: 30 15 55
 
-   * - Option
-     - Type
-     - Description
-   * - ``-r, --route``
-     - string
-     - User-defined route (required)
-   * - ``-a, --append-info``
-     - string
-     - Information to append after coordinates
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-r, --route``
+      -  string
+      -  User-defined route (required)
+
+   -  -  ``-a, --append-info``
+      -  string
+      -  Information to append after coordinates
 
 Basic Usage
 ===========
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub gaussian -p project -f molecule.com -l custom_job userjob -r 'opt freq b3lyp/6-31g*' -a 'B 1 2 F'
 
@@ -112,7 +118,7 @@ Basic Usage
 
 Run a pre-prepared Gaussian input file without modifications.
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] com
 
@@ -121,18 +127,18 @@ Basic Usage
 
 Run a ``.com`` file:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub gaussian -p project -f input_file.com com
 
 Run a ``.gjf`` file:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub gaussian -p project -f input_file.gjf com
 
 Modify charge and multiplicity:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub gaussian -p project -f input_file.com -c 1 -m 2 com
