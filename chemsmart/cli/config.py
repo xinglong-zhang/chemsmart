@@ -221,14 +221,12 @@ def add_lines_in_yaml_files(
 @click.group(name="config", invoke_without_command=True)
 @click.pass_context
 def config(ctx):
+    """Set up configuration files and environment variables."""
     cfg = Config()
     ctx.ensure_object(
         dict
     )  # Initialize the Click context object if not already initialized
     ctx.obj["cfg"] = cfg
-    """
-    Set up configuration files and environment variables.
-    """
     if ctx.invoked_subcommand is None:
         # Run the default environment setup when no subcommand is provided
         cfg.setup_environment()
@@ -238,12 +236,12 @@ def config(ctx):
 @click.pass_context
 def server(ctx):
     """
-    Configures server settings in ~/.chemsmart/server/*yaml files.
+    Configure server settings in ~/.chemsmart/server/*.yaml files.
 
-    Add conda env vars after the lines
+    Adds conda environment variables after the lines:
     EXTRA_COMMANDS: |
     # extra commands to activate chemsmart environment in submission script
-    in the *yaml file.
+    in the *.yaml file.
 
     Examples:
         chemsmart config server
@@ -275,7 +273,7 @@ def server(ctx):
 )
 def gaussian(ctx, folder):
     """
-    Configures paths to g16 folder.
+    Configure paths to the g16 folder.
 
     Replaces '~/bin/g16' with the specified folder in YAML files.
 
@@ -303,7 +301,7 @@ def gaussian(ctx, folder):
 )
 def orca(ctx, folder):
     """
-    Configures paths to ORCA folder.
+    Configure paths to the ORCA folder.
 
     Replaces '~/bin/orca' with the specified folder in YAML files.
 
@@ -331,7 +329,7 @@ def orca(ctx, folder):
 )
 def nciplot(ctx, folder):
     """
-    Configures paths to NCIPLOT folder.
+    Configure paths to the NCIPLOT folder.
 
     Replaces '~/bin/nciplot' with the specified folder in YAML files.
 

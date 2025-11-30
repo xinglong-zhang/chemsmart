@@ -187,10 +187,12 @@ def nciplot(
     pubchem,
     **kwargs,
 ):
-    """CLI for running NCIPLOT jobs using the chemsmart framework.
+    """
+    Run NCIPLOT jobs using the chemsmart framework.
+
     Example usage:
-    chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
-    --fragments "{1: [1,4,5], 2: [3,4,5]}"
+        chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
+        --fragments "{1: [1,4,5], 2: [3,4,5]}"
     """
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings

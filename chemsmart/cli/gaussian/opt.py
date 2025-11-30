@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
     "-f",
     "--freeze-atoms",
     type=str,
-    help="Indices of atoms to freeze for constrained optimization.",
+    help="Indices of atoms to freeze for constrained optimization. 1-indexed.",
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI for optimization calculation for Gaussian."""
+    """Run Gaussian optimization calculation."""
 
     # get jobrunner for optimization
     jobrunner = ctx.obj["jobrunner"]

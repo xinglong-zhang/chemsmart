@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
     "-f",
     "--freeze-atoms",
     type=str,
-    help="Indices of atoms to freeze for constrained optimization.",
+    help="Indices of atoms to freeze for constrained optimization. 1-indexed.",
 )
 @click.pass_context
 def ts(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI for transition state calculation for Gaussian."""
+    """Run Gaussian transition state calculation."""
 
     # get jobrunner for transition state calculation
     jobrunner = ctx.obj["jobrunner"]

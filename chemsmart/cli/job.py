@@ -25,7 +25,7 @@ def click_job_options(f):
         is_flag=True,
         default=True,
         type=bool,
-        help="To run completed job again. Use -R to rerun completed job.",
+        help="Skip completed jobs. Use -R to rerun completed jobs.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -83,32 +83,30 @@ def click_folder_options(f):
 
 
 def click_molecule_vibrational_displacement_options(f):
-    """
-    CLI options for vibrationally_displaced() method of Molecule object.
-    """
+    """CLI options for the vibrationally_displaced() method of Molecule object."""
 
     @click.option(
         "-m",
         "--mode-idx",
         type=int,
         default=1,
-        help="Mode number of vibrational mode. 1-indexed.\n"
-        "Defaults to 1, first vibrational mode.",
+        help="Mode number of vibrational mode. 1-indexed. "
+        "Defaults to 1 (first vibrational mode).",
     )
     @click.option(
         "-a",
         "--amp",
         type=float,
         default=0.5,
-        help="Amplitude for displacement for chosen vibrational mode.\n"
-        "Defaults to 0.5 Å.",
+        help="Amplitude for displacement for the chosen vibrational mode. "
+        "Defaults to 0.5 Angstroms.",
     )
     @click.option(
         "-N",
         "--nframes",
         type=int,
         default=None,
-        help="Number of frames to create molecules along the vibrational mode.\n"
+        help="Number of frames to create molecules along the vibrational mode. "
         "Defaults to None, for which only one molecule will be created.",
     )
     @click.option(
@@ -116,7 +114,7 @@ def click_molecule_vibrational_displacement_options(f):
         "--phase",
         type=float,
         default=np.pi / 2,
-        help="Phase angle (radians) for displacement.\n"
+        help="Phase angle (radians) for displacement. "
         "Defaults to pi/2 so that sin(phase) = 1.",
     )
     @click.option(
@@ -124,8 +122,8 @@ def click_molecule_vibrational_displacement_options(f):
         type=bool,
         default=False,
         help="If True, scale the (un-weighted) mode so its largest "
-        "per-atom displacement is 1.0, making `amp` the max "
-        "displacement. \nDefaults to False.",
+        "per-atom displacement is 1.0, making `amp` the max displacement. "
+        "Defaults to False.",
     )
     @click.option(
         "--return-xyz/--no-return-xyz",

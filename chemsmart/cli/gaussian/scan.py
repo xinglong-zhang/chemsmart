@@ -24,10 +24,9 @@ logger = logging.getLogger(__name__)
     "-cc",
     "--constrained-coordinates",
     default=None,
-    help="Additional modredundant constraints for scan job. "
+    help="Additional modredundant constraints for scan jobs. "
     "Format: List of constraints separated by semicolons. "
-    "Example: [[1,2],[3,4,5],[1,2,3,4]]. "
-    "1-indexed.",
+    "Example: [[1,2],[3,4,5],[1,2,3,4]]. 1-indexed.",
 )
 @click.pass_context
 def scan(
@@ -39,7 +38,7 @@ def scan(
     constrained_coordinates=None,
     **kwargs,
 ):
-    """CLI for running Gaussian scan jobs."""
+    """Run Gaussian scan jobs."""
 
     # get jobrunner for running Gaussian scan jobs
     jobrunner = ctx.obj["jobrunner"]

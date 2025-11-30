@@ -41,7 +41,7 @@ def mo(
     skip_completed,
     **kwargs,
 ):
-    """CLI for generating molecular orbitals (MOs) and saving as pse file.
+    """Generate molecular orbitals (MOs) visualization and save as PSE file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com mo --homo
     This visualizes the HOMO of phenyldioxazolone.com file and saves as
