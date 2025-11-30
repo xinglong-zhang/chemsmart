@@ -58,7 +58,11 @@ def click_orca_settings_options(f):
         "-t", "--title", type=str, default=None, help="ORCA job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="Charge of the molecule."
+        "-c",
+        "--charge",
+        type=int,
+        default=None,
+        help="Charge of the molecule.",
     )
     @click.option(
         "-m",
@@ -188,7 +192,9 @@ def click_orca_settings_options(f):
         help="Additional route parameters.",
     )
     @click.option(
-        "--forces/--no-forces", default=False, help="Enable forces calculation."
+        "--forces/--no-forces",
+        default=False,
+        help="Enable forces calculation.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

@@ -37,7 +37,11 @@ def click_gaussian_settings_options(f):
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="Charge of the molecule."
+        "-c",
+        "--charge",
+        type=int,
+        default=None,
+        help="Charge of the molecule.",
     )
     @click.option(
         "-m",
