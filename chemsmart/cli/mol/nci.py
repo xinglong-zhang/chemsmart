@@ -35,7 +35,7 @@ def nci(
     skip_completed,
     **kwargs,
 ):
-    """Generate automatic PyMOL NCI plot and save as PSE file.
+    """CLI subcommand for generating automatic PyMOL NCI plot and save as PSE file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone_nci.log nci
     This visualizes phenyldioxazolone_nci.log file and saves as
