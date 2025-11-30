@@ -88,7 +88,7 @@ def visualize(
     colors = kwargs.pop("colors", ())
     hybrid_opts["colors"] = colors
 
-    # # raise error if -G/-C/-sc/-st or new_color_* is provided when --hybrid is false
+    # raise error if -G/-C/-sc/-st or new_color_* is provided when --hybrid is false
     hybrid_only_opts = [
         "groups",
         "colors",
@@ -122,7 +122,6 @@ def visualize(
             hybrid_opts[hybrid_opt] = kwargs.pop(hybrid_opt)
 
     logger.info(f"Hybrid visualization job options: {hybrid_opts}")
-
     job = visualization_job(
         molecule=molecules,
         label=label,

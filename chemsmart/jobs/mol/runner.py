@@ -943,10 +943,6 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         # Write PyMOL selection commands for each group
         for i, group in enumerate(job.groups):
-            # an alternative without using helper conversion function is
-            # if "," in group:
-            #     group = group.replace(",", "+")
-            # f.write(f"select group{i + 1}, id {group}\n")
             f.write(
                 f"select group{i+1}, {convert_string_indices_to_pymol_id_indices(group)}\n"
             )
