@@ -44,7 +44,7 @@ def qrc(
     **kwargs,
 ):
     """
-    Run ORCA quick reaction coordinate (QRC) calculations.
+    CLI subcommand for running ORCA quick reaction coordinate (QRC) calculations.
 
     Examples:
         `chemsmart sub orca -p proj -f ts.log qrc` runs QRC optimization jobs
