@@ -166,7 +166,7 @@ def click_pymol_hybrid_visualization_options(f):
         type=str,
         default=None,
         help="Color phosphorus atoms with user-specified color."
-        "e.g. -NP  [1.0, 0.85, 0.6]",
+        "e.g. -NP [1.0, 0.85, 0.6]",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
