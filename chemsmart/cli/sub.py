@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
-@click.option("-t", "--time-hours", type=float, default=None, help="Time in hours for the job.")
-@click.option("-q", "--queue", type=str, help="Queue name.")
+@click.option("-t", "--time-hours", type=float, default=None, help="Time limit in hours for the job (e.g., 48.0).")
+@click.option("-q", "--queue", type=str, help="Queue name for job submission.")
 @click.option(
     "-v/",
     "--verbose/--no-verbose",

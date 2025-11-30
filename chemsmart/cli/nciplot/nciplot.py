@@ -75,8 +75,8 @@ def click_nciplot_settings_options(f):
         "--increments",
         type=str,
         default=None,
-        help="Increments along the x, y, z directions of the cube in Å. "
-        "The default is set to 0.1, 0.1, 0.1."
+        help="Increments along the x, y, z directions of the cube in Angstroms. "
+        "The default is set to 0.1, 0.1, 0.1. "
         "Accepts strings in the form of 'x,y,z' or as a tuple (x, y, z).",
     )
     @click.option(

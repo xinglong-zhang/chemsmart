@@ -236,7 +236,7 @@ def click_orca_jobtype_options(f):
         "-n",
         "--num-steps",
         default=None,
-        help="Number of steps for coordinate scans.",
+        help="Number of intermediate points for coordinate scans.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
