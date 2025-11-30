@@ -1,6 +1,10 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
-
 ##################
  NCIPLOT Tutorial
 ##################
+
+This section will cover NCIPLOT analysis capabilities in Chemsmart.
+
+.. note::
+
+   NCIPLOT documentation is under development. For NCI visualization using
+   PyMOL, see :doc:`pymol-interaction-analysis`.

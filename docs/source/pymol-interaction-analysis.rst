@@ -1,78 +1,70 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
-
 ###############################
- Run Interaction Analysis Jobs
+ Interaction Analysis (PyMOL)
 ###############################
 
-ChemSmart provides powerful interaction analysis capabilities using PyMOL for visualizing non-covalent interactions
-(NCI) and intermolecular interaction patterns.
+This page covers non-covalent interaction visualization using PyMOL.
 
 **********
  NCI Jobs
 **********
 
-Generate non-covalent interaction (NCI) plots for analyzing intermolecular and intramolecular interactions.
+Generate non-covalent interaction (NCI) plots for analyzing intermolecular
+and intramolecular interactions.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] nci [SUBCMD_OPTIONS]
 
-NCI-Specific OPTIONS
-====================
+NCI Options
+===========
 
-.. list-table:: NCI Job Options
+.. list-table::
    :header-rows: 1
    :widths: 30 15 55
 
-   -  -  Option
-      -  Type
-      -  Description
-
-   -  -  ``-i, --isosurface``
-      -  float
-      -  Isosurface value for NCI plot (default=0.5)
-
-   -  -  ``-r, --color-range``
-      -  float
-      -  Ramp range for NCI plot (default=1.0)
-
-   -  -  ``-b, --binary``
-      -  bool
-      -  Plot NCI plots with two colors only (default=False)
-
-   -  -  ``--intermediate``
-      -  bool
-      -  Plot NCI plots with intermediate range colors (default=False)
+   * - Option
+     - Type
+     - Description
+   * - ``-i, --isosurface``
+     - float
+     - Isosurface value (default: 0.5)
+   * - ``-r, --color-range``
+     - float
+     - Color ramp range (default: 1.0)
+   * - ``-b, --binary``
+     - bool
+     - Two-color plot (default: disabled)
+   * - ``--intermediate``
+     - bool
+     - Intermediate range colors (default: disabled)
 
 .. note::
 
-   NCI jobs also inherit all options from visualization jobs including styling, ray tracing, and surface rendering
-   options.
+   NCI jobs inherit all visualization options.
 
-NCI Basic Usage
-===============
+Basic Usage
+===========
 
-**Basic NCI plot**
+Standard NCI plot:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart run mol -f complex.xyz nci
+   chemsmart run mol -f complex.xyz nci
 
-**NCI plot with custom color range**
+Custom color range:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart run mol -f complex.xyz nci -r 1.5
+   chemsmart run mol -f complex.xyz nci -r 1.5
 
-**Binary color NCI plot**
+Binary color plot:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart run mol -f hydrogen_bond.xyz nci -b
+   chemsmart run mol -f hydrogen_bond.xyz nci -b
 
-**High-quality NCI plot with ray tracing**
+High-quality with ray tracing:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart run mol -f complex.xyz nci -i 0.4 -t -s pymol
+   chemsmart run mol -f complex.xyz nci -i 0.4 -t -s pymol

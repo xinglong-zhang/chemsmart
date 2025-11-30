@@ -1,12 +1,9 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
-
 ############################
- Submit Other Gaussian Jobs
+ Other Gaussian Jobs
 ############################
 
-ChemSmart provides additional Gaussian job capabilities including multi-step link jobs, custom user-defined
-calculations, and direct execution of Gaussian input files.
+This page covers additional Gaussian job types including multi-step link jobs,
+custom user-defined calculations, and direct input file execution.
 
 ***********
  Link Jobs
@@ -14,142 +11,128 @@ calculations, and direct execution of Gaussian input files.
 
 Run multi-step Gaussian calculations with linked job steps.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] link [SUBCMD_OPTIONS]
 
-Link Job Specific OPTIONS
-=========================
+Link Options
+============
 
-.. list-table:: Link Job Options
+.. list-table::
    :header-rows: 1
    :widths: 30 15 55
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-j, --jobtype``
+     - string
+     - Job type: opt, ts, modred, scan, sp, irc
+   * - ``-st, --stable``
+     - string
+     - Stability test options (default: opt)
+   * - ``-g, --guess``
+     - string
+     - Guess options (default: mix)
+   * - ``--route``
+     - string
+     - Route for link section
 
-   -  -  ``-j, --jobtype``
-      -  string
-      -  Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp", "irc"]
+Basic Usage
+===========
 
-   -  -  ``-st, --stable``
-      -  string
-      -  Gaussian stability test options (default=opt)
+Link job with optimization:
 
-   -  -  ``-g, --guess``
-      -  string
-      -  Gaussian guess options (default=mix)
+.. code-block:: bash
 
-   -  -  ``--route``
-      -  string
-      -  Route for link section (default=None)
+   chemsmart sub gaussian -p project -f molecule.xyz link -j opt
 
-Link Basic Usage
-================
+Link job with single point:
 
-**Link job with optimization job type**
+.. code-block:: bash
 
-   .. code:: console
+   chemsmart sub gaussian -p project -f molecule.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative
 
-      chemsmart sub gaussian -p link_opt -f molecule.xyz link -j opt
+Examples
+========
 
-**Link job with single point job type**
+Optimization of singlet open-shell structure:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart sub gaussian -p project -f 1_opt.xyz -c 0 -m 1 -r scf=qc link -j sp -so iterative
+   chemsmart sub -s SLURM gaussian -p project -f dimer.gjf -c 0 -m 1 link -j opt
 
-Link Examples
-=============
+This creates a multi-step workflow:
 
-**Use link job for optimization of singlet openshell structure**
+.. code-block:: text
 
-   .. code:: console
-
-      chemsmart sub -s SLURM gaussian -p kc -f dimer.gjf -c 0 -m 1 link -j opt
-
-   When using linkjob, the workflow will change to:
-
-   .. code:: console
-
-      ...
-      # um062x def2svp stable=opt guess=mix
-      ...
-      # opt freq um062x def2svp geom=check guess=read
-      ...
-      #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
-      ...
+   # um062x def2svp stable=opt guess=mix
+   ...
+   # opt freq um062x def2svp geom=check guess=read
+   ...
+   #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
 
 ******************
  Custom User Jobs
 ******************
 
-Generally, if a user wants to run job that is currently not present in our package, one can run custom job
+Run custom calculations not built into Chemsmart.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] userjob [SUBCMD_OPTIONS]
 
-Custom Job Specific OPTIONS
-===========================
+Custom Job Options
+==================
 
-.. list-table:: Custom Job Options
+.. list-table::
    :header-rows: 1
    :widths: 30 15 55
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-r, --route``
+     - string
+     - User-defined route (required)
+   * - ``-a, --append-info``
+     - string
+     - Information to append after coordinates
 
-   -  -  ``-r, --route``
-      -  string
-      -  User-defined route for Gaussian calculation (required)
+Basic Usage
+===========
 
-   -  -  ``-a, --append-info``
-      -  string
-      -  Information to be appended at the end of the file (default=None)
+.. code-block:: bash
 
-Custom Job Basic Usage
-======================
-
-**Custom job with user-defined route**:
-
--  to create an input file named ``user_defined_job.com`` with user-specified route ``mnr functional/basis solvent`` etc
-   and ``B 1 2 F\nA 1 2 3 F`` at the end of the input file after the specification of coordinates, run
-
-   .. code:: console
-
-      chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob -r 'mnr functional/basis solvent etc' -a 'B 1 2 F\nA 1 2 3 F'
+   chemsmart sub gaussian -p project -f molecule.com -l custom_job userjob -r 'opt freq b3lyp/6-31g*' -a 'B 1 2 F'
 
 *****************************
  Direct Input File Execution
 *****************************
 
-If a user wants to run a job with pre-prepared Gaussian input file directly, one can run the job directly without
-modifications.
+Run a pre-prepared Gaussian input file without modifications.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] com
 
 Basic Usage
 ===========
 
-**Direct execution of Gaussian input file**:
+Run a ``.com`` file:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart sub -s share gaussian -p test -f input_file.com com
+   chemsmart sub gaussian -p project -f input_file.com com
 
-   or for input file with .gjf extension .. code-block:: console
+Run a ``.gjf`` file:
 
-      chemsmart sub -s share gaussian -p test -f input_file.gjf com
+.. code-block:: bash
 
-**Some modifications to the input file**:
+   chemsmart sub gaussian -p project -f input_file.gjf com
 
--  to change charge and multiplicity of the input file, one can do：
+Modify charge and multiplicity:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart sub -s share gaussian -p test -f input_file.com -c 1 -m 2 com
+   chemsmart sub gaussian -p project -f input_file.com -c 1 -m 2 com

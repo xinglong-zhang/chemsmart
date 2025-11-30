@@ -1,237 +1,170 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
-
 ##############################
- Run Basic Visualization Jobs
+ Basic Visualization (PyMOL)
 ##############################
 
-ChemSmart provides powerful molecular visualization capabilities using PyMOL for creating high-quality molecular
-graphics, movies, and interactive visualizations.
+This page covers molecular visualization capabilities using PyMOL for creating
+high-quality graphics and interactive session files.
 
 ********************
  Visualization Jobs
 ********************
 
-Create static PyMOL visualizations and interactive session files.
+Create static PyMOL visualizations and interactive PSE session files.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize [SUBCMD_OPTIONS]
 
-Visualization-Specific OPTIONS
-==============================
+Visualization Options
+=====================
 
-.. list-table:: Visualization Job Options
+.. list-table::
    :header-rows: 1
    :widths: 30 15 55
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-f, --file``
+     - string
+     - PyMOL style script (default: zhang_group_pymol_style.py)
+   * - ``-s, --style``
+     - string
+     - Render style: pymol or cylview
+   * - ``-t, --trace/--no-trace``
+     - bool
+     - Ray trace rendering (default: enabled)
+   * - ``-v, --vdw``
+     - bool
+     - Add Van der Waals surface (default: disabled)
+   * - ``-q, --quiet/--no-quiet``
+     - bool
+     - Quiet mode (default: disabled)
+   * - ``--command-line-only/--no-command-line-only``
+     - bool
+     - Run without GUI (default: enabled)
+   * - ``-c, --coordinates``
+     - string
+     - Coordinates for labeling (1-indexed)
 
-   -  -  ``-f, --file``
-      -  string
-      -  PyMOL file script or style. If not specified, defaults to use zhang_group_pymol_style.py (default=None)
+Basic Usage
+===========
 
-   -  -  ``-s, --style``
-      -  string
-      -  PyMOL render style. Options: pymol, cylview (default=None)
+Standard visualization:
 
-   -  -  ``-t/, --trace/--no-trace``
-      -  bool
-      -  PyMOL options to ray trace or not (default=True)
+.. code-block:: bash
 
-   -  -  ``-v, --vdw``
-      -  bool
-      -  Add Van der Waals surface (default=False)
+   chemsmart run mol -f molecule.xyz visualize
 
-   -  -  ``-q, --quiet/--no-quiet``
-      -  bool
-      -  Run PyMOL in quiet mode (default=False)
+Quiet mode:
 
-   -  -  ``--command-line-only/--no-command-line-only``
-      -  bool
-      -  Run PyMOL in command line only (default=True)
+.. code-block:: bash
 
-   -  -  ``-c, --coordinates <string>``
-      -  string
-      -  List of coordinates (bonds, angles and dihedrals) for labelling. 1-indexed (default=None)
+   chemsmart run mol -f calculation.log visualize -q
 
-Visualization Basic Usage
-=========================
+With coordinate labeling:
 
-**Basic molecular visualization**
+.. code-block:: bash
 
-   .. code:: console
+   chemsmart run mol -f structure.xyz visualize -c [[1,2,3]]
 
-      chemsmart run mol -f molecule.xyz visualize
+Custom style:
 
-**Quiet mode visualization**
+.. code-block:: bash
 
-   .. code:: console
-
-      chemsmart run mol -f calculation.log visualize -q
-
-**Visualization with coordinate labeling**
-
-   .. code:: console
-
-      chemsmart run mol -f structure.xyz visualize -c [[1,2,3]]
-
-**Visualization using custom style or script file**
-
-   .. code:: console
-
-      chemsmart run mol -f molecule.log visualize -f custom_style.py
-
-Visualization Examples
-======================
+   chemsmart run mol -f molecule.log visualize -f custom_style.py
 
 ************
  Movie Jobs
 ************
 
-Generate rotating movie animations of molecular structures.
+Generate rotating movie animations.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] movie [SUBCMD_OPTIONS]
 
-Movie-Specific OPTIONS
-======================
+Movie jobs inherit all visualization options.
 
-Movie jobs inherit all options from visualization jobs and use the same parameters.
+Basic Usage
+===========
 
-Movie Basic Usage
-=================
+.. code-block:: bash
 
-**Basic rotating movie**
+   chemsmart run mol -f molecule.xyz movie
 
-   .. code:: console
+###############################
+ Hybrid Visualization
+###############################
 
-      chemsmart run mol -f molecule.xyz movie
+Create visualizations with different groups displayed in different styles.
 
-Movie Examples
+.. code-block:: bash
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize --hybrid [SUBCMD_OPTIONS]
+
+Hybrid Options
 ==============
 
-###############################
- Run Hybrid Visualization Jobs
-###############################
-
-Apart from basic visualization jobs, ChemSmart can also create graphics with different substrates displayed in different
-styles (what 'hybrid' refers to).
-
-***************************
- Hybrid Visualization Jobs
-***************************
-
-Create static PyMOL visualizations and interactive session files.
-
-.. code:: console
-
-   chemsmart run [OPTIONS] mol [MOL_OPTIONS] visualize [SUBCMD_OPTIONS] --hybrid [SUBCMD_OPTIONS]
-
-Visualization-Specific OPTIONS
-==============================
-
-.. list-table:: Hybrid Visualization Job Options
+.. list-table::
    :header-rows: 1
    :widths: 25 15 60
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-H, --hybrid``
+     - bool
+     - Enable hybrid visualization mode
+   * - ``-G, --group``
+     - string
+     - Atom indices for a group (repeatable)
+   * - ``-C, --color``
+     - string
+     - Color for each group (repeatable)
+   * - ``-SC, --surface-color``
+     - string
+     - Surface color (default: grey)
+   * - ``-ST, --surface-transparency``
+     - string
+     - Surface transparency (default: 0.7)
+   * - ``-NC, --new-color-carbon``
+     - string
+     - Carbon atom color (RGB list)
+   * - ``-NN, --new-color-nitrogen``
+     - string
+     - Nitrogen atom color (RGB list)
+   * - ``-NO, --new-color-oxygen``
+     - string
+     - Oxygen atom color (RGB list)
 
-   -  -  ``-H, --hybrid``
-      -  bool
-      -  Enable hybrid visualization mode. Allows drawing different groups in different styles (default=False).
+Basic Usage
+===========
 
-   -  -  ``-G, --group``
-      -  string, multiple
-      -  Indexes of atoms to select for a group. Repeatable for multiple groups.
+Basic hybrid visualization:
 
-   -  -  ``-C, --color``
-      -  string, multiple
-      -  Color for each group. Repeatable to match -G options. Default = ['cbap', 'cbac', 'cbay', 'cbag', ...].
+.. code-block:: bash
 
-   -  -  ``-SC, --surface-color``
-      -  string
-      -  Customize the surface color (default=grey).
+   chemsmart run mol -f molecule.xyz visualize --hybrid -G '1,2,3'
 
-   -  -  ``-ST, --surface-transparency``
-      -  string
-      -  Customize the surface transparency (default=0.7).
+Custom colors:
 
-   -  -  ``-NC, --new-color-carbon``
-      -  string
-      -  Set a custom color for carbon atoms. (default=[0.8, 0.8, 0.9]).
+.. code-block:: bash
 
-   -  -  ``-NN, --new-color-nitrogen``
-      -  string
-      -  Set a custom color for nitrogen atoms. (default=[0.6, 0.8, 1.0]).
+   chemsmart run mol -f molecule.log visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak
 
-   -  -  ``-NO, --new-color-oxygen``
-      -  string
-      -  Set a custom color for oxygen atoms. (default=[1.0, 0.7, 0.7]).
+Custom background settings:
 
-   -  -  ``-NS, --new-color-sulfur``
-      -  string
-      -  Set a custom color for sulfur atoms. (default=[1.0, 0.7, 0.7]).
+.. code-block:: bash
 
-   -  -  ``-NP, --new-color-phosphorus``
-      -  string
-      -  Set a custom color for phosphorus atoms. (default=[1.0, 0.85, 0.6]).
+   chemsmart run mol -f structure.xyz visualize --hybrid -G '1,2,3' -ST 0.8 -NC '[0.8, 0.8, 0.9]'
 
-Note that short forms for [SUBCMD_OPTIONS] for hybrid visualization jobs are all in capital letters.
+Example
+=======
 
-**********************************
- Hybrid Visualization Basic Usage
-**********************************
+.. code-block:: bash
 
-**Basic hybrid visualization**
-
-   .. code:: console
-
-      chemsmart run mol -f molecule.xyz visualize --hybrid -G '1,2,3'
-
-This is the minimal command needed for a hybrid visualization job. Only the highlighted groups are specified, others
-will be assigned by default.
-
-**Hybrid visualization with customized color scheme**
-
-   .. code:: console
-
-      chemsmart run mol -f calculation.log visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak
-
-This will assign a customized color scheme to different groups. Note that the color/group is assigned by input order,
-i.e., the first color ('cbay') will be assigned to the first group ([1,2,3]), etc. A default color scheme will be used
-if a group is not assigned customized colors.
-
-**Hybrid Visualization with customized background settings**
-
-   .. code:: console
-
-      chemsmart run mol -f structure.xyz visualize --hybrid -G '1,2,3' -G '4,5,6' -C cbay -C cbak -ST 0.8 -NC '[0.8, 0.8, 0.9]'
-
-Background color options, such as surface color and element-specific colors (carbon, nitrogen, etc.), can be specified
-using RGB values as a list.
-
-**Visualization using custom style or script file**
-===================================================
-
-   .. code:: console
-
-      chemsmart run mol -f molecule.log visualize -f custom_style.py
-
-Hybrid Visualization Examples
-=============================
-
-Running a command like:
-   .. code:: console
-
-      chemsmart run mol -f molecule.xyz visualize --hybrid -G  '417-418,422-424,429-447,463-464' -G '336,397-412,414-416,419-421' -G '494-529'
-
-will generate the below visualization style.
+   chemsmart run mol -f molecule.xyz visualize --hybrid -G '417-418,422-424' -G '336,397-412'
 
 .. image:: _static/B_in_R.png
    :width: 60%
@@ -243,32 +176,25 @@ will generate the below visualization style.
 
 Align multiple molecular structures for comparison.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart run [OPTIONS] mol align [SUBCMD_OPTIONS]
 
-Align-Specific OPTIONS
-======================
+Basic Usage
+===========
 
-Inherit all options from visualization jobs and use the same parameters.
+Align multiple files:
 
-Align Basic Usage
-=================
+.. code-block:: bash
 
-**align files**
+   chemsmart run mol -f mol1.xyz -f mol2.gjf -f mol3.log -i 1 align
 
-   .. code:: console
+Align all files of the same type:
 
-      chemsmart run mol -f mol1.xyz -f mol2.gjf -f mol3.log -i 1 align
+.. code-block:: bash
 
-This command will align the subsequent molecules to the first molecule sequentially (align mol2 and mol3 to mol1).
-
-**align all files in same type**
-
-   .. code:: console
-
-      chemsmart run mol -t xyz -l xyz_alignment align
+   chemsmart run mol -t xyz -l xyz_alignment align
 
 .. note::
 
-   When using the ``-i n`` option, user should ensure that every input file contains the n-th molecule.
+   When using ``-i n``, ensure every input file contains the nth structure.

@@ -1,73 +1,72 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
-
 ####################################
- Submit Structure Optimization Jobs
+ Structure Optimization (ORCA)
 ####################################
 
-ChemSmart provides comprehensive tools for structure optimization calculations using ORCA. This section covers geometry
-optimization workflows including constrained optimizations.
+This page covers geometry optimization and single point calculations using ORCA.
 
 ************************
- Structure Optimization
+ Geometry Optimization
 ************************
 
-Geometry optimization is used to find the minimum energy structure of a molecule by adjusting atomic positions until
-forces are minimized.
+Find the minimum energy structure by adjusting atomic positions.
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] opt [SUBCMD_OPTIONS]
 
-Opt-Specific OPTIONS
+Optimization Options
 ====================
 
-.. list-table:: Structure Optimization Options
+.. list-table::
    :header-rows: 1
    :widths: 30 15 55
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-f, --freeze-atoms``
+     - string
+     - Atom indices to freeze (1-based indexing)
+   * - ``-i, --invert-constraints/--no-invert-constraints``
+     - bool
+     - Invert frozen atom constraints (default: disabled)
 
-   -  -  ``-f, --freeze-atoms``
-      -  string
-      -  Indices of atoms to freeze for constrained optimization. 1-indexed (default=None)
+Basic Usage
+===========
 
-   -  -  ``-i, --invert-constraints/--no-invert-constraints``
-      -  bool
-      -  Invert the constraints for frozen atoms in optimization (default=False)
+Standard geometry optimization:
 
-Opt Basic Usage
-===============
+.. code-block:: bash
 
-**Basic geometry optimization**:
+   chemsmart sub orca -p project -f input.xyz opt
 
-   .. code:: console
+Optimization with frozen atoms:
 
-      chemsmart sub orca -p project_name -f input.xyz opt
+.. code-block:: bash
 
-**Optimization with inverted constraints**:
+   chemsmart sub orca -p project -f molecule.xyz opt -f 1,2,3
 
-   .. code:: console
+Optimization with inverted constraints:
 
-      chemsmart sub orca -p inverted_opt -f molecule.xyz opt -f 1,2,3 -i
+.. code-block:: bash
+
+   chemsmart sub orca -p project -f molecule.xyz opt -f 1,2,3 -i
 
 ***************************
  Single Point Calculations
 ***************************
 
-Single point calculations compute the energy and properties of a molecule at a fixed geometry without optimization.
+Compute energy and properties at a fixed geometry.
 
-.. code:: console
+.. code-block:: bash
 
-   chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] sp [SUBCMD_OPTIONS]
+   chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] sp
 
-SP Basic Usage
-==============
+Basic Usage
+===========
 
-**Basic single point calculation**:
+Standard single point calculation:
 
-   .. code:: console
+.. code-block:: bash
 
-      chemsmart sub orca -p project_name -f input.xyz sp
+   chemsmart sub orca -p project -f input.xyz sp

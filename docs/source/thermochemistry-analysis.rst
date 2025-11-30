@@ -1,22 +1,21 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
+###################################
+ Thermochemistry Analysis
+###################################
 
-###################################
- Run Thermochemistry Analysis Jobs
-###################################
+Chemsmart provides thermochemistry analysis capabilities for computing
+thermodynamic properties from Gaussian and ORCA output files.
 
 *******************************
  Thermochemistry Analysis Jobs
 *******************************
 
-In CHEMSMART, the ``thermochemistry`` command currently supports parsing output files from **Gaussian** and **ORCA**,
-enabling users to recalculate and apply corrections to thermochemical properties such as enthalpy, entropy, and Gibbs
-free energy based on quantum chemical results.
+The ``thermochemistry`` command parses output files and calculates
+thermochemical properties including enthalpy, entropy, and Gibbs free energy.
 
-USAGE
+Usage
 =====
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart run thermochemistry [-d path/to/directory] [-t log|out] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
@@ -24,322 +23,194 @@ USAGE
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
                                  [-o outfile.dat] [-O] [-i] [-S|-R]
 
-THERMO_OPTIONS
-==============
+Options
+=======
+
+**Input Options:**
 
 .. list-table::
    :header-rows: 1
    :widths: 15 10 75
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-d, --directory``
+     - string
+     - Directory for batch processing (mutually exclusive with -f)
+   * - ``-t, --filetype``
+     - string
+     - File type: log (Gaussian) or out (ORCA)
+   * - ``-f, --filenames``
+     - string
+     - Specific file(s) to analyze (repeatable, mutually exclusive with -d)
 
-   -  -  ``-d, --directory``
-      -  string
-      -  |  Specifies a directory containing files to be processed in batch.
-         |  This option is mutually exclusive with ``-f``.
+**Quasi-RRHO Corrections:**
 
-   -  -  ``-t, --filetype``
-      -  string
-      -  |  Specifies the file type in the directory, either ``log`` (Gaussian) or ``out`` (ORCA).
-         |  This option is only used together with ``-d``.
+.. list-table::
+   :header-rows: 1
+   :widths: 15 10 75
 
-   -  -  ``-f, --filenames``
-
-      -  string
-
-      -  |  Specifies one or more individual files to analyze.
-         |  This option can be used multiple times and is mutually exclusive with ``-d``
-         |  and ``-t``.
-
-   -  -  ``-csg, --cutoff-entropy-grimme``
-
-      -  float
-
-      -  |  Specifies the cut-off frequency (in wavenumbers) for applying Grimme’s
-         |  quasi-rigid-rotor-harmonic-oscillator (quasi-RRHO) correction to entropy.
-         |  For example, ``-csg 100`` applies cut-off frequency of 100 :math:`\rm cm^{-1}` to entropy
-         |  when computing corrected entropy (*qh-S*).
-
-   -  -  ``-cst, --cutoff-entropy-truhlar``
-
-      -  float
-
-      -  |  Specifies the cut-off frequency (in wavenumbers) for applying Truhlar’s
-         |  quasi-RRHO approach to entropy.
-         |  Vibrational modes with frequencies below the cut-off are raised to the
-         |  cut-off value instead of being treated by the standard RRHO approximation.
+   * - Option
+     - Type
+     - Description
+   * - ``-csg, --cutoff-entropy-grimme``
+     - float
+     - Grimme's quasi-RRHO entropy cutoff frequency (cm⁻¹)
+   * - ``-cst, --cutoff-entropy-truhlar``
+     - float
+     - Truhlar's quasi-RRHO entropy cutoff frequency (cm⁻¹)
+   * - ``-ch, --cutoff-enthalpy``
+     - float
+     - Head-Gordon's quasi-RRHO enthalpy cutoff frequency (cm⁻¹)
 
 .. note::
 
-   The ``-csg`` and ``-cst`` options are mutually exclusive, and only one of them can be specified at most. If neither
-   is specified, the quasi-RRHO entropy correction is not applied and only the standard entropy (*S*) is calculated.
+   ``-csg`` and ``-cst`` are mutually exclusive. If neither is specified,
+   no quasi-RRHO entropy correction is applied.
+
+**Thermodynamic Conditions:**
 
 .. list-table::
-   :header-rows: 0
+   :header-rows: 1
    :widths: 15 10 75
 
-   -  -  ``-ch, --cutoff-enthalpy``
+   * - Option
+     - Type
+     - Description
+   * - ``-c, --concentration``
+     - float
+     - Solution concentration in mol/L (mutually exclusive with -p)
+   * - ``-p, --pressure``
+     - float
+     - Gas-phase pressure in atm (default: 1.0)
+   * - ``-w, --weighted``
+     - bool
+     - Use isotopically weighted masses
+   * - ``-T, --temperature``
+     - float
+     - Temperature in Kelvin (required)
+   * - ``-a, --alpha``
+     - int
+     - Interpolator exponent (default: 4)
 
-      -  float
-
-      -  |  Specifies the cut-off frequency (in wavenumbers) for applying
-         |  Head-Gordon’s quasi-RRHO correction to enthalpy.
-         |  For example, ``-ch 50`` applies a cut-off frequency of 50 :math:`\rm cm^{-1}` to enthalpy
-         |  when calculating corrected enthalpy (*qh-H*).
-         |  If not specified, no quasi-RRHO correction is applied to enthalpy and only
-         |  the standard enthalpy (*H*) is calculated.
-
-   -  -  ``-c, --concentration``
-
-      -  float
-
-      -  |  Specifies the solution concentration (in mol/L).
-         |  In this case, the translational partition function is evaluated in the
-         |  concentration-dependent form, instead of the pressure-dependent form
-         |  used in the gas phase.
-         |  This correction follows directly from the Sackur-Tetrode equation of
-         |  translational entropy.
-         |  If ``-c`` is not specified, the calculation defaults to the gas phase.
-
-   -  -  ``-p, --pressure``
-      -  float
-      -  |  Specifies the gas-phase pressure (in atm), with a default value of 1.0 atm.
-
-.. note::
-
-   The ``-c`` and ``-p`` options are mutually exclusive. If both are provided, ``-c`` takes precedence and ``-p`` is
-   ignored.
+**Output Options:**
 
 .. list-table::
-   :header-rows: 0
+   :header-rows: 1
    :widths: 15 10 75
 
-   -  -  ``-w, --weighted``
-      -  bool
-      -  |  Uses masses weighted by natural isotopic abundance.
-         |  By default, the most abundant isotope masses are used.
+   * - Option
+     - Type
+     - Description
+   * - ``-u, --energy-units``
+     - string
+     - Units: hartree, eV, kcal/mol, kJ/mol (default: hartree)
+   * - ``-o, --outputfile``
+     - string
+     - Output filename (default: <basename>.dat)
+   * - ``-O, --overwrite``
+     - bool
+     - Overwrite existing output files
+   * - ``-i, --check-imaginary-frequencies``
+     - bool
+     - Check for imaginary frequencies
+   * - ``-S/-R, --skip-completed/--no-skip-completed``
+     - bool
+     - Skip or rerun completed jobs
 
-   -  -  ``-T, --temperature``
-      -  float
-      -  |  **Required**. Specifies the temperature (in Kelvin).
-
-   -  -  ``-a, --alpha``
-      -  int
-      -  |  Specifies the interpolator exponent (alpha) in the quasi-RRHO scheme.
-         |  The default value is 4.
-
-   -  -  ``-u, --energy-units``
-
-      -  string
-
-      -  |  Specifies the units for energetic values.
-         |  Options include ``hartree``, ``eV``, ``kcal/mol``, and ``kJ/mol``.
-         |  The default unit is ``hartree``.
-
-   -  -  ``-o, --outputfile``
-      -  string
-      -  |  Specifies the output file to save the thermochemistry results.
-         |  By default, results are saved to a file named ``file_basename.dat``.
-
-   -  -  ``-O, --overwrite``
-      -  bool
-      -  |  Overwrites existing output files if they already exist.
-         |  By default, the results are appended to the existing file.
-
-   -  -  ``-i, --check-imaginary-frequencies``
-      -  bool
-      -  |  Checks for imaginary frequencies in the calculations.
-         |  By default, this check is performed.
-
-   -  -  ``-S, --skip-completed / -R, --no-skip-completed``
-
-      -  bool
-
-      -  |  Controls how completed jobs are handled.
-         |  ``-R`` forces rerun completed Thermochemistry jobs, ``-S`` skips completed jobs.
-         |  By default, ``-S`` is enabled.
-
-EXAMPLES
+Examples
 ========
 
-**Thermochemical calculation for a single file**
+**Single file analysis:**
 
-.. code:: console
+.. code-block:: bash
 
    chemsmart run thermochemistry -T 298.15 -f water_opt.out
 
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   water_opt                                  -76.323311   0.021581    -76.297951   0.021430    -76.319381
+   Structure                        E        ZPE          H       T.S        G(T)
+   ================================================================================
+   water_opt               -76.323311   0.021581  -76.297951   0.021430  -76.319381
 
-Calculate standard thermochemical properties (*E*, *ZPE*, *H*, *T.S*, *G(T)*) at 298.15 K for ``water_opt.out``. Results
-are saved as ``water_opt.dat``.
+**Multiple files:**
 
-**Thermochemical calculation for multiple files**
-
-.. code:: console
+.. code-block:: bash
 
    chemsmart run thermochemistry -T 298.15 -f he_gaussian.log -f he_orca.out
 
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   he_gaussian                                 -2.915130   0.000000     -2.912769   0.014313     -2.927083
+**Batch processing:**
 
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   he_orca                                     -2.899161   0.000000     -2.896800   0.014313     -2.911114
+.. code-block:: bash
 
-Compute standard thermochemical properties for both ``he_gaussian.log`` and ``he_orca.out``.
+   chemsmart run thermochemistry -T 298.15 -d . -t log -o thermo.dat
 
-Results are saved as ``he_gaussian.dat`` and ``he_orca.dat``, respectively.
+**Solution phase:**
 
-**Batch calculation for all files of a specified type**
-
-.. code:: console
-
-   chemsmart run thermochemistry -T 298.15 -d </path/to/directory> -t log -o thermo.dat
-
-Process all ``.log`` files in the specified directory and summarize results in ``thermo.dat``.
-
-**Solution vs gas-phase calculation**
-
-.. code:: console
+.. code-block:: bash
 
    chemsmart run thermochemistry -T 298.15 -f co2.log -c 1.0
 
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   co2                                       -188.444680   0.011776   -188.429325   0.021262   -188.450587
+**With quasi-RRHO corrections:**
 
-Calculate standard thermochemical properties in the solution at a concentration of 1.0 mol/L.
+.. code-block:: bash
 
-.. code:: console
-
-   chemsmart run thermochemistry -T 298.15 -f co2.log -p 1.0
-
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   co2                                       -188.444680   0.011776   -188.429325   0.024281   -188.453606
-
-Calculate standard thermochemical properties in the gas phase at a pressure of 1.0 atm.
-
-**Thermochemical calculation with quasi-RRHO corrections**
-
-.. code:: console
-
+   # Grimme's entropy correction
    chemsmart run thermochemistry -T 298.15 -f water_mp2.log -csg 100
 
-   Structure                                           E        ZPE             H        T.S     T.qh-S          G(T)       qh-G(T)
-   ================================================================================================================================
-   water_mp2                                  -76.328992   0.021410    -76.303803   0.021424   0.021424    -76.325227    -76.325227
-
-Apply Grimme’s quasi-RRHO correction with a frequency cut-off of 100 :math:`\rm cm^{-1}` for entropy to obtain the
-corrected entropy (*qh-S*).
-
-Output includes *E*, *ZPE*, *H*, *T.S*, *T.qh-S*, *G(T)*, and *qh-G(T)*, where *qh-G(T)* is calculated using *qh-S*
-together with *H*.
-
-.. code:: console
-
+   # Head-Gordon's enthalpy correction
    chemsmart run thermochemistry -T 298.15 -f water_mp2.log -ch 200
 
-   Structure                                           E        ZPE             H          qh-H        T.S          G(T)       qh-G(T)
-   ===================================================================================================================================
-   water_mp2                                  -76.328992   0.021410    -76.303803    -76.303804   0.021424    -76.325227    -76.325228
-
-Apply Head-Gordon’s quasi-RRHO correction with a frequency cut-off of 200 :math:`\rm cm^{-1}` for enthalpy to calculate
-the corrected enthalpy (*qh-H*).
-
-Output includes *E*, *ZPE*, *H*, *qh-H*, *T.S*, *G(T)*, and *qh-G(T)*, where *qh-G(T)* is calculated using *qh-H*
-together with *S*.
-
-.. code:: console
-
+   # Both corrections
    chemsmart run thermochemistry -T 298.15 -f water_mp2.log -cst 40 -ch 100
-
-   Structure                                           E        ZPE             H          qh-H        T.S     T.qh-S          G(T)       qh-G(T)
-   ==============================================================================================================================================
-   water_mp2                                  -76.328992   0.021410    -76.303803    -76.303803   0.021424   0.021424    -76.325227    -76.325227
-
-Perform thermochemical analysis by applying Truhlar’s quasi-RRHO method with a frequency cut-off of 40 :math:`\rm
-cm^{-1}` to entropy and Head-Gordon’s method with a frequency cut-off of 100 :math:`\rm cm^{-1}` to enthalpy.
-
-Output includes *E*, *ZPE*, *H*, *qh-H*, *T.S*, *T.qh-S*, *G(T)*, and *qh-G(T)*, where *qh-G(T)* is calculated using
-both *qh-H* and *qh-S*.
 
 ***********************************
  Boltzmann Weighted Averaging Jobs
 ***********************************
 
-The ``boltzmann`` subcommand performs Boltzmann-weighted averaging of thermochemical results across multiple conformers
-to obtain the overall thermochemical properties of the system.
+The ``boltzmann`` subcommand performs Boltzmann-weighted averaging of
+thermochemical results across multiple conformers.
 
-USAGE
+Usage
 =====
 
-.. code:: console
+.. code-block:: bash
 
-   chemsmart run thermochemistry [THERMO_OPTIONS]
-                 boltzmann [-w gibbs|electronic] [-S|-R]
+   chemsmart run thermochemistry [THERMO_OPTIONS] boltzmann [-w gibbs|electronic] [-S|-R]
 
-BOLTZMANN_OPTIONS
-=================
+Options
+=======
 
 .. list-table::
    :header-rows: 1
    :widths: 15 10 75
 
-   -  -  Option
-      -  Type
-      -  Description
+   * - Option
+     - Type
+     - Description
+   * - ``-w, --energy-type-for-weighting``
+     - string
+     - Weighting scheme: gibbs or electronic (default: gibbs)
+   * - ``-S/-R, --skip-completed/--no-skip-completed``
+     - bool
+     - Skip or rerun completed jobs
 
-   -  -  ``-w, --energy-type-for-weighting``
-
-      -  string
-
-      -  |  Specifies the weighting scheme for Boltzmann averaging based on the type of
-         |  energy.
-         |  Options include ``gibbs`` (default) and ``electronic``.
-
-   -  -  ``-S, --skip-completed / -R, --no-skip-completed``
-
-      -  bool
-
-      -  |  Controls how completed jobs are handled.
-         |  ``-R`` forces rerun completed Boltzmann jobs, ``-S`` skips completed jobs.
-         |  By default, ``-S`` is enabled.
-
-EXAMPLES
+Examples
 ========
 
-**Boltzmann-weighted averaging for two conformers**
+**Boltzmann averaging of conformers:**
 
-.. code:: console
+.. code-block:: bash
 
-   chemsmart run thermochemistry -T 298.15 -f udc3_mCF3_monomer_c1.log -f udc3_mCF3_monomer_c4.log boltzmann -w electronic
+   chemsmart run thermochemistry -T 298.15 -f conf1.log -f conf2.log boltzmann -w electronic
 
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   udc3_mCF3_monomer_c_boltzmann_avg_by_electronic  -2189.631938   0.288732  -2189.312517   0.097016  -2189.409533
+   Structure                                        E        ZPE          H       T.S        G(T)
+   ================================================================================================
+   conformer_boltzmann_avg_by_electronic   -2189.631938   0.288732  -2189.312517   0.097016  -2189.409533
 
-Perform thermochemical analysis for ``udc3_mCF3_monomer_c1.log`` and ``udc3_mCF3_monomer_c4.log``, followed by
-Boltzmann-weighted averaging using electronic energies.
+**Batch directory averaging:**
 
-Results will be saved to ``thermochemistry_job_boltzmann.dat``.
-
-**Boltzmann-weighted averaging for batch directory calculation**
-
-.. code:: console
+.. code-block:: bash
 
    chemsmart run thermochemistry -T 298.15 -d . -t log boltzmann
 
-   Structure                                           E        ZPE             H        T.S          G(T)
-   =======================================================================================================
-   udc3_mCF3_monomer_c_boltzmann_avg_by_gibbs  -2189.631914   0.288696  -2189.312512   0.097155  -2189.409667
-
-Perform thermochemical calculations for all ``.log`` files in current directory and apply Boltzmann-weighted average
-using Gibbs free energies.
-
-Results will be saved to ``thermochemistry_job_boltzmann.dat``.
+Results are saved to ``thermochemistry_job_boltzmann.dat``.

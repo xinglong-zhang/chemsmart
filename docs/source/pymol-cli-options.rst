@@ -1,124 +1,117 @@
-Welcome to the tutorials! We're thrilled to have you here. Please go through the code examples, and don't hesitate to
-contact our team if you have questions or feedback.
-
 ######################################
- General CLI Options for All Mol Jobs
+ PyMOL CLI Options
 ######################################
 
-ChemSmart provides comprehensive command-line options for molecular visualization and analysis using PyMOL. Use
-``chemsmart run mol --help`` for detailed information about all available options.
+This page documents the CLI options for molecular visualization and analysis
+using PyMOL. Use ``chemsmart run mol --help`` for the complete list.
 
 *************************
  Basic Command Structure
 *************************
 
-The basic command structure for Mol jobs is:
-
-.. code:: console
+.. code-block:: bash
 
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] <SUBCMD> [SUBCMD_OPTIONS]
 
-*************
- MOL_OPTIONS
-*************
-
-Works for all Mol jobs
+**************
+ MOL Options
+**************
 
 .. list-table::
    :header-rows: 1
    :widths: 30 15 55
 
-   -  -  Option
-      -  Type
-      -  Description
-
-   -  -  ``-f, --filenames``
-      -  string
-      -  Filename from which new Gaussian input is prepared (Multiple usage is only for align job)
-
-   -  -  ``-d, --directory``
-      -  string
-      -  Directory in which to run mol align job (only for align job)
-
-   -  -  ``-t, --filetype``
-      -  string
-      -  Type of file to run mol align job, if directory is specified (only for align job)
-
-   -  -  ``-l, --label``
-
-      -  string
-
-      -  Write user input filename for the job (without extension). Will overwrite your original filename
-         (default=None). Labels should avoid containing special characters such as apostrophe (``'``), comma (`,`),
-         asterisks (``*``), etc.
-
-   -  -  ``-a, --append-label``
-      -  string
-      -  Name to be appended to file for the job. Will append name to current filename (default=None)
-
-   -  -  ``-i, --index``
-      -  string
-      -  Index of molecules to use; 1-based indices. Default to the last molecule structure (default="-1")
-
-   -  -  ``--pubchem``
-      -  string
-      -  Get molecule structure from PubChem database using identifier (default=None)
-
-   -  -  ``-o, --overwrite``
-      -  bool
-      -  Overwrite existing files (default=False)
+   * - Option
+     - Type
+     - Description
+   * - ``-f, --filenames``
+     - string
+     - Input file(s) for visualization
+   * - ``-d, --directory``
+     - string
+     - Directory for align jobs
+   * - ``-t, --filetype``
+     - string
+     - File type filter for directory processing
+   * - ``-l, --label``
+     - string
+     - Custom output filename
+   * - ``-a, --append-label``
+     - string
+     - String to append to filename
+   * - ``-i, --index``
+     - string
+     - Structure index, 1-based (default: -1, last)
+   * - ``--pubchem``
+     - string
+     - Query structure from PubChem
+   * - ``-o, --overwrite``
+     - bool
+     - Overwrite existing files (default: disabled)
 
 *******************************
- SUBCMD for Different Mol Jobs
+ Available Subcommands
 *******************************
 
-.. list-table:: Basic Visualization
+Basic Visualization
+===================
+
+.. list-table::
    :header-rows: 1
    :widths: 15 85
 
-   -  -  Subcommand
-      -  Description
-   -  -  ``visualize``
-      -  CLI for running automatic PyMOL visualization and saving as pse file
-   -  -  ``movie``
-      -  CLI for generating automatic PyMOL movie for rotating molecules
+   * - Subcommand
+     - Description
+   * - ``visualize``
+     - Create PyMOL visualization and save as PSE file
+   * - ``movie``
+     - Generate rotating molecule movie
 
-.. list-table:: Reaction Analysis
+Reaction Analysis
+=================
+
+.. list-table::
    :header-rows: 1
    :widths: 15 85
 
-   -  -  Subcommand
-      -  Description
-   -  -  ``irc``
-      -  CLI for generating automatic PyMOL IRC movie and saving the trajectory
+   * - Subcommand
+     - Description
+   * - ``irc``
+     - Generate IRC movie and trajectory visualization
 
-.. list-table:: Electronic Structure Analysis
+Electronic Structure Analysis
+=============================
+
+.. list-table::
    :header-rows: 1
    :widths: 15 85
 
-   -  -  Subcommand
-      -  Description
-   -  -  ``mo``
-      -  CLI for generating molecular orbitals (MOs) and saving as pse file
-   -  -  ``spin``
-      -  CLI for generating spin density and saving as pse file
+   * - Subcommand
+     - Description
+   * - ``mo``
+     - Generate molecular orbital visualizations
+   * - ``spin``
+     - Generate spin density visualizations
 
-.. list-table:: Interaction Analysis
+Interaction Analysis
+====================
+
+.. list-table::
    :header-rows: 1
    :widths: 15 85
 
-   -  -  Subcommand
-      -  Description
-   -  -  ``nci``
-      -  CLI for generating automatic PyMOL NCI plot and saving as pse file
+   * - Subcommand
+     - Description
+   * - ``nci``
+     - Generate non-covalent interaction plots
 
 ************
  Next Steps
 ************
 
-For specific visualization types, see the detailed tutorials:
+For detailed information on each visualization type:
 
--  Run Basic Visualization Jobs
--  Run Reaction Analysis Jobs
--  Run Electronic Structure Analysis Jobs
--  Run Interaction Analysis Jobs
+- :doc:`pymol-visualization`
+- :doc:`pymol-reaction-analysis`
+- :doc:`pymol-electronic-structure`
+- :doc:`pymol-interaction-analysis`
