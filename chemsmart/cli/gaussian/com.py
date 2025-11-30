@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def com(ctx, skip_completed, **kwargs):
-    """CLI subcommand for Gaussian input file as is."""
+    """CLI subcommand for running Gaussian input file as is."""
 
     # get jobrunner for running Gaussian input files
     jobrunner = ctx.obj["jobrunner"]
