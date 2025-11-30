@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def userjob(ctx, route, append_info, **kwargs):
-    """Run Gaussian custom jobs."""
+    """CLI for running Gaussian custom jobs."""
 
     # get jobrunner for running Gaussian custom jobs
     jobrunner = ctx.obj["jobrunner"]

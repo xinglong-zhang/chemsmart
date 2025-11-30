@@ -40,7 +40,7 @@ def qrc(
     **kwargs,
 ):
     """
-    Run Gaussian QRC jobs.
+    CLI for running Gaussian QRC jobs.
 
     Examples:
         `chemsmart sub gaussian -p proj -f ts.log qrc` runs QRC optimization jobs

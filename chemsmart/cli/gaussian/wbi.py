@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def wbi(ctx, **kwargs):
-    """Run Gaussian WBI jobs."""
+    """CLI for running Gaussian WBI jobs."""
 
     # get jobrunner for running Gaussian WBI jobs
     jobrunner = ctx.obj["jobrunner"]

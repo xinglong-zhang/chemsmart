@@ -67,7 +67,7 @@ def link(
     direction,
     **kwargs,
 ):
-    """Run Gaussian link jobs."""
+    """CLI for running Gaussian link jobs."""
 
     # get jobrunner for running Gaussian link jobs
     jobrunner = ctx.obj["jobrunner"]

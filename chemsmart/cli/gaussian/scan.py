@@ -38,7 +38,7 @@ def scan(
     constrained_coordinates=None,
     **kwargs,
 ):
-    """Run Gaussian scan jobs."""
+    """CLI for running Gaussian scan jobs."""
 
     # get jobrunner for running Gaussian scan jobs
     jobrunner = ctx.obj["jobrunner"]

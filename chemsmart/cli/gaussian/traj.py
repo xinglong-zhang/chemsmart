@@ -55,7 +55,7 @@ def traj(
     proportion_structures_to_use,
     **kwargs,
 ):
-    """Run Gaussian set jobs."""
+    """CLI for running Gaussian set jobs."""
 
     # get jobrunner for running Gaussian set jobs
     jobrunner = ctx.obj["jobrunner"]
