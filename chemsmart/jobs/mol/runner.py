@@ -23,6 +23,7 @@ from pathlib import Path
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.executable import GaussianExecutable
+from chemsmart.utils.io import convert_string_indices_to_pymol_id_indices
 from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     pymol_color_range_pattern,
@@ -943,24 +944,27 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         # Write PyMOL selection commands for each group
         for i, group in enumerate(job.groups):
-            if "," in group:
-                group = group.replace(",", "+")
-            f.write(f"select group{i+1}, id {group}\n")
-        if len(groups) > len(color_schemes):
-            logger.warning(
-                f"More groups ({len(groups)}) than colors "
-                f"defined ({len(color_schemes)}) for {job}.\n"
-                f"Will reuse color schemes."
+            f.write(
+                f"select group{i+1}, {convert_string_indices_to_pymol_id_indices(group)}\n"
             )
-            multiplier = math.ceil(len(groups) / len(color_schemes))
-            color_schemes = color_schemes * multiplier
 
         if len(job.colors) == 0:
             # no user-specified colors, use defaults
             colors = color_schemes
         else:
             # user user-specified colors first
-            colors = job.colors + color_schemes
+            colors = list(job.colors) + [
+                c for c in color_schemes if c not in job.colors
+            ]
+
+        if len(groups) > len(colors):
+            logger.warning(
+                f"More groups ({len(groups)}) than colors "
+                f"defined ({len(colors)}) for {job}.\n"
+                f"Will reuse color schemes."
+            )
+            multiplier = math.ceil(len(groups) / len(colors))
+            colors = colors * multiplier
 
         for i, group in enumerate(job.groups):
             # Write the PyMOL command to apply the color scheme to the group
@@ -970,14 +974,19 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         f.write("set stick_transparency, 0, all\n")
 
         # Retrieve the stick radius from the job or use the default value (0.25)
-        stick_radius = getattr(job, "stick_radius", 0.25)
-        if stick_radius is None:
+        if job.stick_radius is None:
             stick_radius = 0.25
+        else:
+            stick_radius = job.stick_radius
 
-        # Write the PyMOL command to set the stick radius for the selected groups
+        # Write the PyMOL command to set the stick radius for the selected
+
         f.write(
             f"set stick_radius, {stick_radius}, ({self._get_group_selection_str(job)})\n"
         )
+        # The following codes would not set stick_radius for the linking stick correctly
+        # for i, group in enumerate(job.groups):
+        #     f.write(f"set stick_radius, {stick_radius}, group{i+1}\n")
 
     def _write_surface_settings(self, job, f):
         """Write PyMOL commands to display and style the molecular surface."""

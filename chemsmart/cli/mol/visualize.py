@@ -102,22 +102,24 @@ def visualize(
     ]
     if any(kwargs.get(opt) for opt in hybrid_only_opts) and not hybrid:
         raise click.UsageError(
-            "The options '-G/--groups', '-C/--color', '--surface-color', "
+            "The options '-G/--groups', '-C/--colors', '--surface-color', "
             "'--surface-transparency', and '--new-color-*' can only be used "
             "with '-H/--hybrid'. Please enable hybrid visualization mode "
             "with '-H/--hybrid'."
         )
 
     # Include new_color_* options if specified
-    for color_opt in [
+    for hybrid_opt in [
+        "surface_color",
+        "surface_transparency",
         "new_color_carbon",
         "new_color_nitrogen",
         "new_color_oxygen",
         "new_color_sulfur",
         "new_color_phosphorus",
     ]:
-        if kwargs.get(color_opt):
-            hybrid_opts[color_opt] = kwargs.pop(color_opt)
+        if kwargs.get(hybrid_opt):
+            hybrid_opts[hybrid_opt] = kwargs.pop(hybrid_opt)
 
     logger.info(f"Hybrid visualization job options: {hybrid_only_opts}")
 

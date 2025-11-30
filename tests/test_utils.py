@@ -8,6 +8,7 @@ from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.io import (
     clean_duplicate_structure,
     clean_label,
+    convert_string_indices_to_pymol_id_indices,
     create_molecule_list,
     line_of_all_integers,
     line_of_integer_followed_by_floats,
@@ -584,6 +585,39 @@ class TestIOUtilities:
         # 4) Multiple consecutive special characters
         # "label...test" -> "label___test" -> collapse -> "label_test"
         assert clean_label("label...test") == "label_test"
+
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            ("1-10", "id 1-10"),
+            ("11", "id 11"),
+            ("1-10,11", "id 1-10 or id 11"),
+            ("1-10,11,14,19-30", "id 1-10 or id 11 or id 14 or id 19-30"),
+        ],
+    )
+    def test_basic_conversion(self, input_str, expected):
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    def test_conversion_strips_whitespace(self):
+        input_str = " 1-10,  11 ,14 ,  19-30  "
+        expected = "id 1-10 or id 11 or id 14 or id 19-30"
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    def test_trailing_comma_is_ignored(self):
+        input_str = "1-10,"
+        expected = "id 1-10"
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    @pytest.mark.parametrize("bad_input", ["", "   ", ",,,", ",  ,"])
+    def test_raises_value_error_on_empty_or_invalid_input(self, bad_input):
+        with pytest.raises(ValueError):
+            convert_string_indices_to_pymol_id_indices(bad_input)
 
 
 class TestNaturallySorted:

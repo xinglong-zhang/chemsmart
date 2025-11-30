@@ -413,3 +413,48 @@ def clean_label(label: str) -> str:
     # strip leading/trailing underscores
     cleaned = cleaned.strip("_")
     return cleaned
+
+
+def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
+    """
+    Convert a comma-separated list of atom index ranges into a PyMOL `id` selection.
+
+    The input is expected to be a string of indices and/or index ranges separated
+    by commas, e.g.:
+
+        "1-10,11,14,19-30"
+
+    This will be converted into a PyMOL selection string where each element is
+    prefixed with `id` and combined with `or`, e.g.:
+
+        "id 1-10 or id 11 or id 14 or id 19-30"
+
+    Parameters
+    ----------
+    string_indices : str
+        Comma-separated atom indices and/or ranges, as understood by PyMOL.
+
+    Returns
+    -------
+    str
+        A PyMOL selection string using `id` and `or`.
+
+    Raises
+    ------
+    ValueError
+        If the input string is empty or contains no valid indices after stripping.
+    """
+    # Split on commas and normalise whitespace.
+    parts = [
+        part.strip() for part in string_indices.split(",") if part.strip()
+    ]
+
+    if not parts:
+        raise ValueError(
+            "string_indices must contain at least one index or range."
+        )
+
+    if len(parts) == 1:
+        return f"id {parts[0]}"
+
+    return " or ".join(f"id {part}" for part in parts)
