@@ -56,7 +56,7 @@ def irc(
     skip_completed,
     **kwargs,
 ):
-    """Generate automatic PyMOL IRC movie and save as PSE file.
+    """CLI subcommand for generating automatic PyMOL IRC movie and save as PSE file.
     Example usage:
         chemsmart run mol irc -r vhr_ox_modred_ts10_ircr.log -p vhr_ox_modred_ts10_ircf.log -c [1,12] -o
     This makes an IRC movie from vhr_ox_modred_ts10_ircr.log and
