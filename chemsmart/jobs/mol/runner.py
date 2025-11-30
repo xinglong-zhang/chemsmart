@@ -978,14 +978,11 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         else:
             stick_radius = job.stick_radius
 
-        # Write the PyMOL command to set the stick radius for the selected
+        # Write the PyMOL command to set the stick radius for the selected indices
 
         f.write(
             f"set stick_radius, {stick_radius}, ({self._get_group_selection_str(job)})\n"
         )
-        # The following codes would not set stick_radius for the linking stick correctly
-        # for i, group in enumerate(job.groups):
-        #     f.write(f"set stick_radius, {stick_radius}, group{i+1}\n")
 
     def _write_surface_settings(self, job, f):
         """Write PyMOL commands to display and style the molecular surface."""
