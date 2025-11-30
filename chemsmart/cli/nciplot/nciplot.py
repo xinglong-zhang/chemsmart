@@ -188,7 +188,7 @@ def nciplot(
     **kwargs,
 ):
     """
-    Run NCIPLOT jobs using the chemsmart framework.
+    CLI subcommand for running NCIPLOT jobs using the chemsmart framework.
 
     Example usage:
         chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
