@@ -2,15 +2,13 @@
  Electronic Structure Analysis
 ###############################
 
-This page documents scripts for analyzing electronic structure
-properties from Gaussian and ORCA output files.
+This page documents scripts for analyzing electronic structure properties from Gaussian and ORCA output files.
 
 *********************
  FMO Analysis Script
 *********************
 
-The ``fmo.py`` script performs Frontier Molecular Orbital (FMO)
-analysis, extracting:
+The ``fmo.py`` script performs Frontier Molecular Orbital (FMO) analysis, extracting:
 
 -  HOMO and LUMO energies
 -  HOMO-LUMO energy gap
@@ -73,8 +71,7 @@ Examples
  Mulliken Population Analysis Script
 *************************************
 
-The ``mulliken.py`` script extracts Mulliken atomic charges and spin
-densities. Supports Gaussian and ORCA output files.
+The ``mulliken.py`` script extracts Mulliken atomic charges and spin densities. Supports Gaussian and ORCA output files.
 
 Usage
 =====
@@ -129,8 +126,7 @@ Examples
  Hirshfeld Population Analysis Script
 **************************************
 
-The ``hirshfeld.py`` script extracts Hirshfeld charges and spin
-densities.
+The ``hirshfeld.py`` script extracts Hirshfeld charges and spin densities.
 
 Usage
 =====
@@ -178,9 +174,8 @@ Example
  Wiberg Bond Index Analysis Script
 ***********************************
 
-The ``wbi_analysis.py`` script extracts Natural Population Analysis
-(NPA) data from Wiberg Bond Index calculations. See :ref:`wbi-jobs` for
-running WBI calculations.
+The ``wbi_analysis.py`` script extracts Natural Population Analysis (NPA) data from Wiberg Bond Index calculations. See
+:ref:`wbi-jobs` for running WBI calculations.
 
 Usage
 =====

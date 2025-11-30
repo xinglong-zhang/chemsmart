@@ -6,32 +6,28 @@
    :width: 400
    :align: center
 
-Chemsmart is a Python-based toolkit for the automatic creation of input
-files, submission scripts, and analysis of quantum chemistry simulation
-jobs.
+Chemsmart is a Python-based toolkit for the automatic creation of input files, submission scripts, and analysis of
+quantum chemistry simulation jobs.
 
-It uses the same submission command regardless of the queueing system
-(SLURM, Torque, or PBS) used by any High Performance Computing (HPC)
-cluster.
+It uses the same submission command regardless of the queueing system (SLURM, Torque, or PBS) used by any High
+Performance Computing (HPC) cluster.
 
-Users can customize their own HPC server settings and project settings
-to run different jobs without modifying the source code.
+Users can customize their own HPC server settings and project settings to run different jobs without modifying the
+source code.
 
 **********
  Citation
 **********
 
-If you use Chemsmart in your work, please follow good scholarly practice
-and cite our work:
+If you use Chemsmart in your work, please follow good scholarly practice and cite our work:
 
 📄 **Paper URL**: https://arxiv.org/abs/2508.20042
 
 ACS Style
 =========
 
-Zhang, X.; Tan, H.; Liu, J.; Li, Z.; Wang, L.; Chen, B. W. J. CHEMSMART:
-Chemistry Simulation and Modeling Automation Toolkit for High-Efficiency
-Computational Chemistry Workflows. *arXiv* **2025**, arXiv:2508.20042.
+Zhang, X.; Tan, H.; Liu, J.; Li, Z.; Wang, L.; Chen, B. W. J. CHEMSMART: Chemistry Simulation and Modeling Automation
+Toolkit for High-Efficiency Computational Chemistry Workflows. *arXiv* **2025**, arXiv:2508.20042.
 https://doi.org/10.48550/arXiv.2508.20042.
 
 BibTeX
@@ -59,9 +55,8 @@ ASE (Atomic Simulation Environment)
 
 If you use ASE Atoms objects in Chemsmart, please cite:
 
-Ask Hjorth Larsen et al. The atomic simulation environment—a Python
-library for working with atoms. *J. Phys.: Condens. Matter*, 2017, 29,
-273002.
+Ask Hjorth Larsen et al. The atomic simulation environment—a Python library for working with atoms. *J. Phys.: Condens.
+Matter*, 2017, 29, 273002.
 
 .. code:: bibtex
 
@@ -98,13 +93,11 @@ RDKit: Open-source cheminformatics. https://www.rdkit.org
 Pymatgen
 ========
 
-If you convert Chemsmart molecules into pymatgen ``AseAtomsAdaptor``,
-please cite:
+If you convert Chemsmart molecules into pymatgen ``AseAtomsAdaptor``, please cite:
 
-A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek, S.
-Cholia, D. Gunter, D. Skinner, G. Ceder, K.A. Persson. The Materials
-Project: A materials genome approach to accelerating materials
-innovation. *APL Materials*, 2013, 1(1), 011002.
+A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek, S. Cholia, D. Gunter, D. Skinner, G. Ceder, K.A.
+Persson. The Materials Project: A materials genome approach to accelerating materials innovation. *APL Materials*, 2013,
+1(1), 011002.
 
 .. code:: bibtex
 
@@ -124,8 +117,7 @@ Scikit-learn
 
 If you use scikit-learn, please cite:
 
-Pedregosa et al., Scikit-learn: Machine Learning in Python, *J. Mach.
-Learn. Res.* 2011, 12, 2825-2830.
+Pedregosa et al., Scikit-learn: Machine Learning in Python, *J. Mach. Learn. Res.* 2011, 12, 2825-2830.
 
 .. code:: bibtex
 
@@ -140,6 +132,5 @@ Learn. Res.* 2011, 12, 2825-2830.
 
 .. note::
 
-   Please also cite other relevant software (e.g., Gaussian, ORCA,
-   NCIPLOT, PyMOL) and DFT functionals and basis sets you use in your
-   research.
+   Please also cite other relevant software (e.g., Gaussian, ORCA, NCIPLOT, PyMOL) and DFT functionals and basis sets
+   you use in your research.

@@ -2,27 +2,23 @@
  Quick Reaction Coordinate (QRC) Jobs
 ######################################
 
-The Quick Reaction Coordinate (QRC) method is a lightweight alternative
-to full Intrinsic Reaction Coordinate (IRC) calculations for linking a
-transition state (TS) to its adjacent minima.
+The Quick Reaction Coordinate (QRC) method is a lightweight alternative to full Intrinsic Reaction Coordinate (IRC)
+calculations for linking a transition state (TS) to its adjacent minima.
 
 **************
  Introduction
 **************
 
-The QRC method was introduced by Jonathan M. Goodman and M. A. Silva in
-*Tetrahedron Letters*, 2003, 44, 8233.
+The QRC method was introduced by Jonathan M. Goodman and M. A. Silva in *Tetrahedron Letters*, 2003, 44, 8233.
 
 The core idea:
 
 #. Start from a TS with a completed frequency calculation.
-#. Displace along the imaginary mode (negative eigenvalue direction) in
-   both + and − directions by a small amplitude.
+#. Displace along the imaginary mode (negative eigenvalue direction) in both + and − directions by a small amplitude.
 #. Optimize each displaced geometry to find the adjacent minima.
 #. Plot energy vs. displacement for a quick reaction profile.
 
-Chemsmart automates this process, taking a TS frequency calculation
-output and directly submitting QRC jobs.
+Chemsmart automates this process, taking a TS frequency calculation output and directly submitting QRC jobs.
 
 .. code:: bash
 
@@ -86,13 +82,12 @@ output and directly submitting QRC jobs.
 
 #. **Read TS geometry and modes**
 
-   Supply a Gaussian output (``ts.log``) or ORCA output (``ts.out``)
-   containing an optimized TS and frequency calculation.
+   Supply a Gaussian output (``ts.log``) or ORCA output (``ts.out``) containing an optimized TS and frequency
+   calculation.
 
 #. **Select eigenmode**
 
-   By default, mode 1 is used (the imaginary mode). Use ``-m`` to select
-   a different mode.
+   By default, mode 1 is used (the imaginary mode). Use ``-m`` to select a different mode.
 
 #. **Generate displaced guesses**
 
@@ -102,8 +97,7 @@ output and directly submitting QRC jobs.
 
       R(\pm) = R_\mathrm{TS} \pm \mathrm{amp} \times v_\mathrm{mode}
 
-   If ``--normalize`` is used, the eigenvector is rescaled so the
-   largest single-atom displacement is 1.0 Å.
+   If ``--normalize`` is used, the eigenvector is rescaled so the largest single-atom displacement is 1.0 Å.
 
 #. **Launch downstream jobs**
 
@@ -117,8 +111,8 @@ output and directly submitting QRC jobs.
 
 #. **(Optional) Generate movie**
 
-   With ``--nframes``, sample multiple points along the vibrational
-   mode. Use ``--return-xyz`` to output a multi-frame XYZ file.
+   With ``--nframes``, sample multiple points along the vibrational mode. Use ``--return-xyz`` to output a multi-frame
+   XYZ file.
 
 *************
  Basic Usage
@@ -148,8 +142,7 @@ Generate a vibrational movie:
 
 **Removing spurious imaginary frequencies from geometry optimizations:**
 
-If an optimization produces an unwanted imaginary frequency, use QRC to
-displace along that mode and re-optimize:
+If an optimization produces an unwanted imaginary frequency, use QRC to displace along that mode and re-optimize:
 
 .. code:: bash
 

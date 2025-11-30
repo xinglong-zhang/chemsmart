@@ -8,11 +8,9 @@ This guide covers installing Chemsmart on Linux and macOS systems.
  Create Environment
 ********************
 
-We recommend using conda to manage the packages required by Chemsmart.
-Either Anaconda3 or Miniconda3 may be installed. See the `conda
-installation guide
-<https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_
-for more information.
+We recommend using conda to manage the packages required by Chemsmart. Either Anaconda3 or Miniconda3 may be installed.
+See the `conda installation guide <https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_ for
+more information.
 
 #. Clone the repository:
 
@@ -27,8 +25,7 @@ for more information.
       cd chemsmart
       make env
 
-   This creates a conda environment named ``chemsmart`` with all
-   required Python packages.
+   This creates a conda environment named ``chemsmart`` with all required Python packages.
 
    If conda is not installed, you can use virtualenv instead:
 

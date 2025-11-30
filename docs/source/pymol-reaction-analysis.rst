@@ -2,8 +2,8 @@
  Reaction Analysis (PyMOL)
 ###########################
 
-This page covers reaction pathway visualization using PyMOL, including
-IRC trajectories and molecular dynamics during chemical reactions.
+This page covers reaction pathway visualization using PyMOL, including IRC trajectories and molecular dynamics during
+chemical reactions.
 
 **********
  IRC Jobs

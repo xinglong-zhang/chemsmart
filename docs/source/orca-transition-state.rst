@@ -2,8 +2,7 @@
  Transition State Search (ORCA)
 ################################
 
-This page covers transition state optimization, IRC calculations, and
-coordinate scanning using ORCA.
+This page covers transition state optimization, IRC calculations, and coordinate scanning using ORCA.
 
 *************************
  Transition State Search

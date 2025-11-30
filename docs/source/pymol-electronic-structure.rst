@@ -2,15 +2,13 @@
  Electronic Structure Analysis (PyMOL)
 #######################################
 
-This page covers electronic structure visualization using PyMOL,
-including molecular orbitals and spin density plots.
+This page covers electronic structure visualization using PyMOL, including molecular orbitals and spin density plots.
 
 *****************************
  Molecular Orbital (MO) Jobs
 *****************************
 
-Generate molecular orbital visualizations for frontier orbitals and
-other electronic states.
+Generate molecular orbital visualizations for frontier orbitals and other electronic states.
 
 .. code:: bash
 
@@ -41,8 +39,7 @@ MO Options
 
 .. note::
 
-   MO jobs inherit all visualization options including styling, ray
-   tracing, and surface rendering.
+   MO jobs inherit all visualization options including styling, ray tracing, and surface rendering.
 
 Basic Usage
 ===========

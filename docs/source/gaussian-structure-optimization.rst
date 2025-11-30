@@ -59,5 +59,4 @@ Use an optimized structure with different charge/multiplicity:
 
    chemsmart sub -s SLURM gaussian -p project -f k_atom_opt.log -c 1 -m 1 -l k_cation_opt opt
 
-This takes the optimized K atom structure and runs a cation
-optimization.
+This takes the optimized K atom structure and runs a cation optimization.

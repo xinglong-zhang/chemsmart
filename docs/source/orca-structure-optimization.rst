@@ -2,8 +2,7 @@
  Structure Optimization (ORCA)
 ###############################
 
-This page covers geometry optimization and single point calculations
-using ORCA.
+This page covers geometry optimization and single point calculations using ORCA.
 
 ***********************
  Geometry Optimization

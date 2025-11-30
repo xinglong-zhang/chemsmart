@@ -2,8 +2,8 @@
  Other Gaussian Jobs
 #####################
 
-This page covers additional Gaussian job types including multi-step link
-jobs, custom user-defined calculations, and direct input file execution.
+This page covers additional Gaussian job types including multi-step link jobs, custom user-defined calculations, and
+direct input file execution.
 
 ***********
  Link Jobs

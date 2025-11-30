@@ -10,20 +10,14 @@ This guide covers installing Chemsmart on Windows using Git Bash.
 
 #. Install the required software:
 
-   -  **Conda**: Install either Anaconda3 or Miniconda3 for Windows from
-      the `conda installation guide
+   -  **Conda**: Install either Anaconda3 or Miniconda3 for Windows from the `conda installation guide
       <https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_.
-
-   -  **Git**: Install Git from https://git-scm.com/downloads (Git Bash
-      is included).
-
-   -  **Chocolatey**: Install from https://chocolatey.org/install to
-      enable ``make`` support.
+   -  **Git**: Install Git from https://git-scm.com/downloads (Git Bash is included).
+   -  **Chocolatey**: Install from https://chocolatey.org/install to enable ``make`` support.
 
 .. note::
 
-   Ensure the environment variables for Git and Conda are added
-   correctly.
+   Ensure the environment variables for Git and Conda are added correctly.
 
 2. Open Git Bash and install ``make``:
 

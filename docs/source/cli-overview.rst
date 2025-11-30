@@ -2,9 +2,8 @@
  Command Line Interface Overview
 #################################
 
-Chemsmart provides a comprehensive command-line interface for quantum
-chemistry calculations and molecular analysis. This guide covers the
-fundamental CLI structure, execution modes, and common options.
+Chemsmart provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
+This guide covers the fundamental CLI structure, execution modes, and common options.
 
 *************************
  Basic Command Structure
@@ -12,10 +11,8 @@ fundamental CLI structure, execution modes, and common options.
 
 Chemsmart offers two main execution modes:
 
--  **Local execution**: Use ``chemsmart run`` to execute tasks on the
-   current terminal.
--  **HPC submission**: Use ``chemsmart sub`` to submit jobs to
-   high-performance computing clusters.
+-  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
+-  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
 The basic command structure is:
 
@@ -40,8 +37,7 @@ Server and Resource Options
 
    -  -  ``-s, --server``
       -  string
-      -  Server name from ``~/.chemsmart/server/*.yaml`` (auto-detected
-         if not specified)
+      -  Server name from ``~/.chemsmart/server/*.yaml`` (auto-detected if not specified)
 
    -  -  ``-n, --num-cores``
       -  int
@@ -57,9 +53,8 @@ Server and Resource Options
 
 .. note::
 
-   The ``-s`` option takes the server name without the ``.yaml``
-   extension. The ``-n``, ``-g``, and ``-m`` options override the server
-   defaults.
+   The ``-s`` option takes the server name without the ``.yaml`` extension. The ``-n``, ``-g``, and ``-m`` options
+   override the server defaults.
 
 Execution Control Options
 =========================
@@ -78,8 +73,7 @@ Execution Control Options
 
    -  -  ``--fake/--no-fake``
       -  bool
-      -  Enable simulation mode with fake job runners (default:
-         disabled)
+      -  Enable simulation mode with fake job runners (default: disabled)
 
    -  -  ``--scratch/--no-scratch``
       -  bool
@@ -164,6 +158,5 @@ For specific job types, see the detailed tutorials:
 
 .. note::
 
-   Chemsmart checks job name uniqueness. If a job with the same name is
-   already running, submission will be blocked. Use ``-a`` (append
-   label) or ``-l`` (label) options to create unique job names.
+   Chemsmart checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
+   ``-a`` (append label) or ``-l`` (label) options to create unique job names.

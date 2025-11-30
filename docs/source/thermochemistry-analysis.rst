@@ -2,21 +2,20 @@
  Thermochemistry Analysis
 ##########################
 
-Chemsmart provides thermochemistry analysis capabilities for computing
-thermodynamic properties from Gaussian and ORCA output files.
+Chemsmart provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian and ORCA
+output files.
 
 *******************************
  Thermochemistry Analysis Jobs
 *******************************
 
-The ``thermochemistry`` command parses output files and calculates
-thermochemical properties including enthalpy, entropy, and Gibbs free
-energy.
+The ``thermochemistry`` command parses output files and calculates thermochemical properties including enthalpy,
+entropy, and Gibbs free energy.
 
 Usage
 =====
 
-.. code:: bash
+.. code:: text
 
    chemsmart run thermochemistry [-d path/to/directory] [-t log|out] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
@@ -47,8 +46,7 @@ Options
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific file(s) to analyze (repeatable, mutually exclusive
-         with -d)
+      -  Specific file(s) to analyze (repeatable, mutually exclusive with -d)
 
 **Quasi-RRHO Corrections:**
 
@@ -74,8 +72,7 @@ Options
 
 .. note::
 
-   ``-csg`` and ``-cst`` are mutually exclusive. If neither is
-   specified, no quasi-RRHO entropy correction is applied.
+   ``-csg`` and ``-cst`` are mutually exclusive. If neither is specified, no quasi-RRHO entropy correction is applied.
 
 **Thermodynamic Conditions:**
 
@@ -146,6 +143,10 @@ Examples
 
    chemsmart run thermochemistry -T 298.15 -f water_opt.out
 
+Output:
+
+.. code:: text
+
    Structure                        E        ZPE          H       T.S        G(T)
    ================================================================================
    water_opt               -76.323311   0.021581  -76.297951   0.021430  -76.319381
@@ -185,13 +186,12 @@ Examples
  Boltzmann Weighted Averaging Jobs
 ***********************************
 
-The ``boltzmann`` subcommand performs Boltzmann-weighted averaging of
-thermochemical results across multiple conformers.
+The ``boltzmann`` subcommand performs Boltzmann-weighted averaging of thermochemical results across multiple conformers.
 
 Usage
 =====
 
-.. code:: bash
+.. code:: text
 
    chemsmart run thermochemistry [THERMO_OPTIONS] boltzmann [-w gibbs|electronic] [-S|-R]
 
@@ -222,6 +222,10 @@ Examples
 .. code:: bash
 
    chemsmart run thermochemistry -T 298.15 -f conf1.log -f conf2.log boltzmann -w electronic
+
+Output:
+
+.. code:: text
 
    Structure                                        E        ZPE          H       T.S        G(T)
    ================================================================================================

@@ -2,8 +2,8 @@
  Gaussian CLI Options
 ######################
 
-This page documents the CLI options available for all Gaussian jobs. Use
-``chemsmart sub gaussian --help`` for the complete list.
+This page documents the CLI options available for all Gaussian jobs. Use ``chemsmart sub gaussian --help`` for the
+complete list.
 
 *************************
  Basic Command Structure
@@ -59,8 +59,7 @@ Project and File Options
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``,
-      ``.log``, ``.inp``, or ``.out``.
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, or ``.out``.
 
 Specifying Output Filenames
 ---------------------------
@@ -94,8 +93,7 @@ This uses the 5th structure (1-indexed) from the ASE database file.
 
 .. warning::
 
-   Chemsmart uses 1-based indexing to match most molecular visualization
-   software.
+   Chemsmart uses 1-based indexing to match most molecular visualization software.
 
 Using PubChem
 -------------
@@ -129,8 +127,7 @@ Molecular Properties Options
 
 .. warning::
 
-   If the input file lacks charge/multiplicity information, you must
-   specify them with ``-c`` and ``-m``.
+   If the input file lacks charge/multiplicity information, you must specify them with ``-c`` and ``-m``.
 
 Examples:
 
@@ -147,8 +144,7 @@ Examples:
 
 .. tip::
 
-   This is useful when using an optimized neutral closed-shell structure
-   to run calculations on a charged radical ion.
+   This is useful when using an optimized neutral closed-shell structure to run calculations on a charged radical ion.
 
 Method and Basis Set Options
 ============================

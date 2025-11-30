@@ -8,12 +8,10 @@ Configure server-specific settings for your HPC cluster.
  Server Configuration
 **********************
 
-The ``~/.chemsmart/server/`` directory contains YAML files for different
-HPC clusters. Each file defines the server configuration needed to
-generate submission scripts.
+The ``~/.chemsmart/server/`` directory contains YAML files for different HPC clusters. Each file defines the server
+configuration needed to generate submission scripts.
 
-Example SLURM server configuration
-(``~/.chemsmart/server/shared.yaml``):
+Example SLURM server configuration (``~/.chemsmart/server/shared.yaml``):
 
 .. code:: yaml
 

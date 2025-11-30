@@ -2,8 +2,8 @@
  Basic Visualization (PyMOL)
 #############################
 
-This page covers molecular visualization capabilities using PyMOL for
-creating high-quality graphics and interactive session files.
+This page covers molecular visualization capabilities using PyMOL for creating high-quality graphics and interactive
+session files.
 
 ********************
  Visualization Jobs
@@ -104,8 +104,7 @@ Basic Usage
  Hybrid Visualization
 **********************
 
-Create visualizations with different groups displayed in different
-styles.
+Create visualizations with different groups displayed in different styles.
 
 .. code:: bash
 
@@ -213,5 +212,4 @@ Align all files of the same type:
 
 .. note::
 
-   When using ``-i n``, ensure every input file contains the nth
-   structure.
+   When using ``-i n``, ensure every input file contains the nth structure.

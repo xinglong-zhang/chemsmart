@@ -8,9 +8,8 @@ Configure project-specific settings for Gaussian and ORCA calculations.
  Gaussian Project Settings
 ***************************
 
-The ``~/.chemsmart/gaussian/`` directory contains project settings files
-specifying DFT functionals, basis sets, and other calculation
-parameters.
+The ``~/.chemsmart/gaussian/`` directory contains project settings files specifying DFT functionals, basis sets, and
+other calculation parameters.
 
 Example project file (``~/.chemsmart/gaussian/test.yaml``):
 
@@ -37,8 +36,7 @@ Example project file (``~/.chemsmart/gaussian/test.yaml``):
 
 Settings behavior:
 
--  ``gas``: Used for geometry optimization, transition state searches,
-   etc.
+-  ``gas``: Used for geometry optimization, transition state searches, etc.
 -  ``solv``: Used for single point calculations.
 -  ``td``: Used for TD-DFT calculations.
 
@@ -52,8 +50,7 @@ To run all calculations with solvent, set ``gas: Null``:
  ORCA Project Settings
 ***********************
 
-The ``~/.chemsmart/orca/`` directory contains ORCA project settings
-files.
+The ``~/.chemsmart/orca/`` directory contains ORCA project settings files.
 
 Example project file (``~/.chemsmart/orca/test.yaml``):
 
@@ -78,9 +75,8 @@ Example project file (``~/.chemsmart/orca/test.yaml``):
      solvent_model: SMD
      solvent_id: "toluene"
 
-This runs gas-phase jobs with M062X/def2-SVP and single point
-calculations with DLPNO-CCSD(T)/CBS using cc-pVDZ/cc-pVTZ extrapolation
-in SMD(toluene).
+This runs gas-phase jobs with M062X/def2-SVP and single point calculations with DLPNO-CCSD(T)/CBS using cc-pVDZ/cc-pVTZ
+extrapolation in SMD(toluene).
 
 *******************
  Scratch Directory
@@ -94,5 +90,4 @@ Set up scratch directories for Gaussian and ORCA jobs:
 
 .. note::
 
-   If ``freq: False`` is not set, frequency calculations are performed
-   by default for all geometry optimization jobs.
+   If ``freq: False`` is not set, frequency calculations are performed by default for all geometry optimization jobs.

@@ -2,9 +2,8 @@
  PyMOL CLI Options
 ###################
 
-This page documents the CLI options for molecular visualization and
-analysis using PyMOL. Use ``chemsmart run mol --help`` for the complete
-list.
+This page documents the CLI options for molecular visualization and analysis using PyMOL. Use ``chemsmart run mol
+--help`` for the complete list.
 
 *************************
  Basic Command Structure

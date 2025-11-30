@@ -6,10 +6,9 @@
    :width: 400
    :align: center
 
-Chemsmart is a Python-based toolkit for automating quantum chemistry
-workflows. It provides tools for creating input files, submitting jobs
-to HPC clusters, and analyzing simulation results from Gaussian, ORCA,
-and other computational chemistry software.
+Chemsmart is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
+files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, and other computational
+chemistry software.
 
 .. toctree::
    :maxdepth: 2

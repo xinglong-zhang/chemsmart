@@ -2,16 +2,14 @@
  Conformational Sampling & Dynamics (Gaussian)
 ###############################################
 
-This page covers CREST conformational searches and trajectory analysis
-using Gaussian.
+This page covers CREST conformational searches and trajectory analysis using Gaussian.
 
 ************
  CREST Jobs
 ************
 
-CREST (Conformer-Rotamer Ensemble Sampling Tool) performs systematic
-conformational searches to find low-energy conformers. Chemsmart
-combines CREST with Gaussian for subsequent calculations.
+CREST (Conformer-Rotamer Ensemble Sampling Tool) performs systematic conformational searches to find low-energy
+conformers. Chemsmart combines CREST with Gaussian for subsequent calculations.
 
 .. code:: bash
 
@@ -63,8 +61,7 @@ Run modred optimization with constraints:
 
 .. note::
 
-   The ``<input_file>`` is typically the CREST output file named
-   ``crest_conformers.xyz``.
+   The ``<input_file>`` is typically the CREST output file named ``crest_conformers.xyz``.
 
 Examples
 ========
@@ -75,20 +72,18 @@ Process 10 lowest-energy conformers:
 
    chemsmart sub gaussian -p project -f crest_conformers.xyz -l structure_from_lowest -c 0 -m 1 crest -j opt -N 10
 
-Output files are named ``structure_from_lowest_opt_c1`` through
-``structure_from_lowest_opt_c10``.
+Output files are named ``structure_from_lowest_opt_c1`` through ``structure_from_lowest_opt_c10``.
 
 .. note::
 
-   If a job terminates before all conformers are processed (e.g.,
-   walltime limit), resubmitting will continue from where it left off.
+   If a job terminates before all conformers are processed (e.g., walltime limit), resubmitting will continue from where
+   it left off.
 
 *********************
  Trajectory Analysis
 *********************
 
-Process molecular dynamics trajectories and extract structures for
-further analysis:
+Process molecular dynamics trajectories and extract structures for further analysis:
 
 .. code:: bash
 
@@ -201,5 +196,4 @@ Use RMSD grouper with tight threshold and hydrogen exclusion:
 
    chemsmart run gaussian -p local -f crest_conformers.xyz -l grouped -c 0 -m 1 crest -j opt -g rmsd -t 0.2 -p 4 -i
 
-Output files are named ``grouped_opt_c1.com``, ``grouped_opt_c2.com``,
-etc.
+Output files are named ``grouped_opt_c1.com``, ``grouped_opt_c2.com``, etc.

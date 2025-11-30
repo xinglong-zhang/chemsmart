@@ -2,8 +2,8 @@
  ORCA CLI Options
 ##################
 
-This page documents the CLI options available for all ORCA jobs. Use
-``chemsmart sub orca --help`` for the complete list.
+This page documents the CLI options available for all ORCA jobs. Use ``chemsmart sub orca --help`` for the complete
+list.
 
 *************************
  Basic Command Structure
@@ -15,8 +15,7 @@ This page documents the CLI options available for all ORCA jobs. Use
 
 .. tip::
 
-   ORCA options are largely similar to Gaussian options with some
-   ORCA-specific parameters.
+   ORCA options are largely similar to Gaussian options with some ORCA-specific parameters.
 
 **************
  ORCA Options
@@ -64,8 +63,7 @@ Project and File Options
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``,
-      ``.log``, ``.inp``, or ``.out``.
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, or ``.out``.
 
 Molecular Properties Options
 ============================

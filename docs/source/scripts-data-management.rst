@@ -2,21 +2,19 @@
  File Management
 #################
 
-This page documents file management scripts for organizing and
-converting computational chemistry files.
+This page documents file management scripts for organizing and converting computational chemistry files.
 
 **************************
  File Organization Script
 **************************
 
-The ``file_organizer.py`` script organizes computational chemistry
-output files based on an Excel spreadsheet. It creates folders, renames
-files, and moves them to their corresponding directories.
+The ``file_organizer.py`` script organizes computational chemistry output files based on an Excel spreadsheet. It
+creates folders, renames files, and moves them to their corresponding directories.
 
 Usage
 =====
 
-.. code:: bash
+.. code:: text
 
    file_organizer.py [-d path/to/directory] [-f excel_file] [-t filetype]
                      [-n sheet_name] [-c columns] [-s skip_row(s)]
@@ -35,8 +33,7 @@ Options
 
    -  -  ``-d, --directory``
       -  string
-      -  Directory containing files to organize (default: current
-         directory)
+      -  Directory containing files to organize (default: current directory)
 
    -  -  ``-f, --filename``
       -  string
@@ -89,13 +86,12 @@ This skips the first 2 rows and processes up to 45 rows. The script:
  File Conversion Script
 ************************
 
-The ``file_converter.py`` script converts structure files between
-formats.
+The ``file_converter.py`` script converts structure files between formats.
 
 Usage
 =====
 
-.. code:: bash
+.. code:: text
 
    file_converter.py [-d path/to/directory] [-t filetype] [-f filename]
                      [-o output_type] [-i]
@@ -156,5 +152,4 @@ Output ``co2.xyz``:
 
    file_converter.py -d . -t log -o com -i
 
-Converts all ``.log`` files in the current directory to ``.com`` files,
-including intermediate structures.
+Converts all ``.log`` files in the current directory to ``.com`` files, including intermediate structures.

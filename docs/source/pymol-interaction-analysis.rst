@@ -8,8 +8,7 @@ This page covers non-covalent interaction visualization using PyMOL.
  NCI Jobs
 **********
 
-Generate non-covalent interaction (NCI) plots for analyzing
-intermolecular and intramolecular interactions.
+Generate non-covalent interaction (NCI) plots for analyzing intermolecular and intramolecular interactions.
 
 .. code:: bash
 

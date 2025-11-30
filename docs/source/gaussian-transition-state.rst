@@ -2,15 +2,13 @@
  Transition State Search (Gaussian)
 ####################################
 
-This page covers transition state optimization, IRC calculations, and
-potential energy surface scanning using Gaussian.
+This page covers transition state optimization, IRC calculations, and potential energy surface scanning using Gaussian.
 
 *******************************
  Transition State Optimization
 *******************************
 
-Run transition state optimization to find saddle points on the potential
-energy surface:
+Run transition state optimization to find saddle points on the potential energy surface:
 
 .. code:: bash
 
@@ -56,8 +54,7 @@ Using semiempirical method for pre-screening:
  Modified Redundant Coordinate (Modred) Jobs
 *********************************************
 
-Run constrained geometry optimization using modified redundant
-coordinates:
+Run constrained geometry optimization using modified redundant coordinates:
 
 .. code:: bash
 
@@ -97,8 +94,7 @@ Constrain multiple bonds:
  Intrinsic Reaction Coordinate (IRC) Calculations
 **************************************************
 
-Run IRC calculations to follow the reaction path from a transition
-state:
+Run IRC calculations to follow the reaction path from a transition state:
 
 .. code:: bash
 
@@ -168,8 +164,7 @@ Run coordinate scanning to explore potential energy surfaces:
 
 .. note::
 
-   Scanning coordinates, step size, and number of steps are all
-   required.
+   Scanning coordinates, step size, and number of steps are all required.
 
 Scan Options
 ============

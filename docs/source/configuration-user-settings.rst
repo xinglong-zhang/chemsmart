@@ -6,8 +6,7 @@ Configure user-specific settings in the ``~/.chemsmart`` directory.
 
 .. note::
 
-   You can modify files in ``~/.chemsmart`` freely without affecting or
-   needing to understand the Chemsmart source code.
+   You can modify files in ``~/.chemsmart`` freely without affecting or needing to understand the Chemsmart source code.
 
 ********************
  User Settings File
@@ -25,5 +24,5 @@ Example configuration:
    PROJECT: 1234567  # Account number for SLURM
    EMAIL: user@example.com
 
-To request additional features, submit an issue on the `GitHub
-repository <https://github.com/xinglong-zhang/chemsmart/issues>`_.
+To request additional features, submit an issue on the `GitHub repository
+<https://github.com/xinglong-zhang/chemsmart/issues>`_.

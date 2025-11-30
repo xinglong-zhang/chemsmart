@@ -2,9 +2,8 @@
  Electronic Structure Properties & Analyses (Gaussian)
 #######################################################
 
-This page covers electronic structure analysis capabilities using
-Gaussian, including single point calculations, excited state properties,
-bond analysis, and molecular interaction studies.
+This page covers electronic structure analysis capabilities using Gaussian, including single point calculations, excited
+state properties, bond analysis, and molecular interaction studies.
 
 *******************
  Single Point Jobs
@@ -70,8 +69,7 @@ The output file will be named ``ethanol_opt_gas_phase.log``.
  DI-AS Analysis
 ****************
 
-Run Distortion-Interaction/Activation-Strain (DI-AS) analysis for
-reaction mechanisms.
+Run Distortion-Interaction/Activation-Strain (DI-AS) analysis for reaction mechanisms.
 
 .. code:: bash
 
@@ -133,8 +131,7 @@ Run DI-AS analysis for atoms 5-17 at every 10th point along an IRC:
  RESP Jobs
 ***********
 
-Run RESP (Restrained Electrostatic Potential) charge fitting
-calculations.
+Run RESP (Restrained Electrostatic Potential) charge fitting calculations.
 
 .. code:: bash
 
@@ -149,15 +146,14 @@ Basic Usage
 
 .. note::
 
-   This creates an input file with a fixed route for RESP:
-   ``HF/6-31+G(d) SCF=Tight Pop=MK IOp(6/33=2,6/41=10,6/42=17,6/50=1)``
+   This creates an input file with a fixed route for RESP: ``HF/6-31+G(d) SCF=Tight Pop=MK
+   IOp(6/33=2,6/41=10,6/42=17,6/50=1)``
 
 **********
  NCI Jobs
 **********
 
-Run Non-Covalent Interaction (NCI) analysis for intermolecular
-interactions.
+Run Non-Covalent Interaction (NCI) analysis for intermolecular interactions.
 
 .. code:: bash
 
@@ -193,8 +189,7 @@ TD-DFT Options
 
    -  -  ``-s, --states``
       -  string
-      -  State type: ``singlets``, ``triplets``, or ``50-50`` (default:
-         singlets)
+      -  State type: ``singlets``, ``triplets``, or ``50-50`` (default: singlets)
 
    -  -  ``-r, --root``
       -  int
