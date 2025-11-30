@@ -221,7 +221,6 @@ class TestPyMOLJobs:
         pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
         pml_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pml")
         group_selection_commands = [
-            "pymol_style all\n",
             "unset stick_color, all\n",
             "hide everything, all\n",
             "show sticks, all\n",
