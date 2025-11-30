@@ -342,7 +342,7 @@ def mol(
     pubchem,
 ):
     """
-    Run PyMOL visualization jobs using the chemsmart framework.
+    CLI subcommand for running PyMOL visualization jobs using the chemsmart framework.
 
     Example usage:
         chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
