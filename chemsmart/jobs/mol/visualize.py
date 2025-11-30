@@ -7,7 +7,11 @@ rendering options. Jobs in this module rely on the shared PyMOLJob
 infrastructure for file management and execution via job runners.
 """
 
+import logging
+
 from chemsmart.jobs.mol.job import PyMOLJob
+
+logger = logging.getLogger(__name__)
 
 
 class PyMOLVisualizationJob(PyMOLJob):
@@ -115,14 +119,9 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
 
         # Normalize to lists
         self.groups = list(groups) if groups is not None else []
+        logger.debug(f"Obtained groups: {groups}")
         self.colors = list(colors) if colors is not None else []
-
-        # Provide compatibility with PyMOLHybridVisualizationJobRunner
-        # by populating dynamic attributes group1, group2, ... and color1, color2, ...
-        for idx, group in enumerate(self.groups, start=1):
-            setattr(self, f"group{idx}", group)
-        for idx, color in enumerate(self.colors, start=1):
-            setattr(self, f"color{idx}", color)
+        logger.debug(f"Obtained colors: {colors}")
 
         # Expose number of groups for convenience
         self.group_count = len(self.groups)
