@@ -1,98 +1,92 @@
-..
-   chemsmart documentation master file, created by
-   sphinx-quickstart on Tue Apr 22 19:18:18 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+######################################
+ Chemsmart Documentation
+######################################
 
-#######################################
- Welcome to chemsmart’s documentation!
-#######################################
+.. image:: _static/chemsmart_logo.png
+   :width: 400
+   :align: center
 
-   .. image:: _static/chemsmart_logo.png
-      :width: 400
-      :align: center
+Chemsmart is a Python-based toolkit for automating quantum chemistry workflows.
+It provides tools for creating input files, submitting jobs to HPC clusters,
+and analyzing simulation results from Gaussian, ORCA, and other computational
+chemistry software.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Introduction
+   :caption: Getting Started
 
    introduction
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Installation
-
-   installation_installationforlinuxandmacos
-   installation_installationforwindowsusinggitbash
-   installation_installationforwindowsusingubuntu
-   installation_installationforhpccluster
+   installation-linux-macos
+   installation-windows-gitbash
+   installation-windows-wsl
+   installation-hpc-cluster
 
 .. toctree::
    :maxdepth: 2
    :caption: Configuration
 
-   configuration_makeconfiguration
-   configuration_test
-   configuration_setupusersettings
-   configuration_setupserverconfigurationonthecluster
-   configuration_setuptheprojectsettings
+   configuration-overview
+   configuration-test
+   configuration-user-settings
+   configuration-server-settings
+   configuration-project-settings
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for Chemsmart
+   :caption: CLI Reference
 
-   tutorials_chemsmart
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Tutorials for Gaussian Jobs
-
-   gaussian_generalcliforallgaussianjobs
-   gaussian_submitconformationalsamplingdynamicsjobs
-   gaussian_submitstructureoptimizationjobs
-   gaussian_submittransitionstatesearchjobs
-   gaussian_submitqrcjobs.rst
-   gaussian_submitelectronicstructurepropertiesanalysesjobs
-   gaussian_submitotherjobs
+   cli-overview
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for ORCA Jobs
+   :caption: Gaussian Jobs
 
-   orca_generalcliforallorcajobs
-   orca_submitstructureoptimizationjobs
-   orca_submittransitionstatesearchjobs
-   orca_submitorcadirectinput
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Tutorials for ThermoChem Jobs
-
-   thermochemistry_runthermochemistryjobs
+   gaussian-cli-options
+   gaussian-structure-optimization
+   gaussian-transition-state
+   gaussian-conformational-sampling
+   gaussian-qrc
+   gaussian-electronic-structure
+   gaussian-other-jobs
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for PyMOL Jobs
+   :caption: ORCA Jobs
 
-   mol_generalcliforallmoljobs
-   mol_runbasicvisualizationjobs
-   mol_runreactionanalysisjobs
-   mol_runelectronicstructureanalysisjobs
-   mol_runInteractionanalysisjobs
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Tutorials for NCIPLOT Jobs
-
-   nciplot_runnciplotjobs
+   orca-cli-options
+   orca-structure-optimization
+   orca-transition-state
+   orca-direct-input
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials for Auxiliary Scripts
+   :caption: Thermochemistry
 
-   scripts_overview
-   scripts_data_management
-   scripts_electronic_structure_analysis
+   thermochemistry-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: PyMOL Visualization
+
+   pymol-cli-options
+   pymol-visualization
+   pymol-reaction-analysis
+   pymol-electronic-structure
+   pymol-interaction-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: NCIPLOT
+
+   nciplot-tutorial
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Auxiliary Scripts
+
+   scripts-overview
+   scripts-data-management
+   scripts-electronic-analysis
 
 .. toctree::
    :maxdepth: 2
@@ -100,10 +94,10 @@
 
    modules
 
-####################
- Indices and tables
-####################
+##################
+ Indices and Tables
+##################
 
--  :ref:`genindex`
--  :ref:`modindex`
--  :ref:`search`
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
