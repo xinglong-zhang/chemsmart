@@ -219,9 +219,7 @@ class TestPyMOLJobs:
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
-        pml_file = os.path.join(
-            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
-        )
+        pml_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pml")
         group_selection_commands = [
             "pymol_style all\n",
             "unset stick_color, all\n",
@@ -237,11 +235,11 @@ class TestPyMOLJobs:
             "color light_O, elem O\n",
             "color light_N, elem N\n",
             "color light_S, elem S\n",
-            "select group1,  id 503-523\n",
-            "select group2,  id 336 or id 397-412 or id 414-422\n",
-            "select group3,  id 467-495 or id 497-500 or id 502\n",
-            "select group4,  id 524-539\n",
-            "select group5,  id 541-550\n",
+            "select group1, id 503-523\n",
+            "select group2, id 336 or id 397-412 or id 414-422\n",
+            "select group3, id 467-495 or id 497-500 or id 502\n",
+            "select group4, id 524-539\n",
+            "select group5, id 541-550\n",
             "util.cbap group1\n",
             "util.cbac group2\n",
             "util.cbay group3\n",
@@ -255,6 +253,7 @@ class TestPyMOLJobs:
         ]
         with open(pml_file, "r") as f:
             content = f.readlines()
+            print(content)
             for i in group_selection_commands:
                 assert i in content
         assert os.path.exists(style_file)
@@ -289,13 +288,11 @@ class TestPyMOLJobs:
         assert job.is_complete()
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
         pse_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pse")
-        pml_file = os.path.join(
-            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
-        )
+        pml_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pml")
         group_selection_commands = [
-            "select group1,  id 503-523\n",
-            "select group2,  id 336 or id 397-412 or id 414-422\n",
-            "select group3,  id 467-495 or id 497-500 or id 502\n",
+            "select group1, id 503-523\n",
+            "select group2, id 336 or id 397-412 or id 414-422\n",
+            "select group3, id 467-495 or id 497-500 or id 502\n",
             "util.cbap group1\n",
             "util.cbak group2\n",
             "util.cbam group3\n",
@@ -353,9 +350,7 @@ class TestPyMOLJobs:
         job.run()
         assert job.is_complete()
 
-        pml_file = os.path.join(
-            tmpdir, f"{os.path.basename(tmpdir)}_hybrid_visualization.pml"
-        )
+        pml_file = os.path.join(tmpdir, "dna_hybrid_hybrid_visualization.pml")
         group_selection_commands = [
             "set_color light_C, [0.1, 0.2, 0.3]\n",
             "set_color light_N, [0.2, 0.3, 0.4]\n",
