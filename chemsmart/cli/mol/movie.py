@@ -32,7 +32,7 @@ def movie(
     skip_completed,
     **kwargs,
 ):
-    """Generate automatic PyMOL movie for rotating molecule and save as PSE file.
+    """CLI subcommand for generating automatic PyMOL movie for rotating molecule and save as PSE file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com movie -v
     This visualizes phenyldioxazolone.com file and saves as
