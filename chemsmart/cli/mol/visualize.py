@@ -121,7 +121,7 @@ def visualize(
         if kwargs.get(hybrid_opt):
             hybrid_opts[hybrid_opt] = kwargs.pop(hybrid_opt)
 
-    logger.info(f"Hybrid visualization job options: {hybrid_only_opts}")
+    logger.info(f"Hybrid visualization job options: {hybrid_opts}")
 
     job = visualization_job(
         molecule=molecules,

@@ -944,6 +944,10 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
         # Write PyMOL selection commands for each group
         for i, group in enumerate(job.groups):
+            # an alternative without using helper conversion function is
+            # if "," in group:
+            #     group = group.replace(",", "+")
+            # f.write(f"select group{i + 1}, id {group}\n")
             f.write(
                 f"select group{i+1}, {convert_string_indices_to_pymol_id_indices(group)}\n"
             )
@@ -952,7 +956,7 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
             # no user-specified colors, use defaults
             colors = color_schemes
         else:
-            # user user-specified colors first
+            # use user-specified colors first
             colors = list(job.colors) + [
                 c for c in color_schemes if c not in job.colors
             ]
