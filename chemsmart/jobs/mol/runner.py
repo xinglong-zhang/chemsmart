@@ -868,7 +868,6 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
 
     def _write_default_pymol_style(self, job, f):
         """Write the pymol style without settings for stick color to the pml file."""
-        f.write("pymol_style all\n")
         f.write("unset stick_color, all\n")
         f.write("hide everything, all\n")
         f.write("show sticks, all\n")
