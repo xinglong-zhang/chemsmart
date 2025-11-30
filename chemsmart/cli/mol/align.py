@@ -31,7 +31,7 @@ def align(
     skip_completed,
     **kwargs,
 ):
-    """Align multiple molecule files using PyMOL.
+    """CLI subcommand for aligning multiple molecule files in PyMOL.
     Example:
         chemsmart run mol  -f a.log -f b.xyz -f c.gjf align
         chemsmart run mol -t log -d . align
