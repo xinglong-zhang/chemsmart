@@ -413,7 +413,10 @@ def mol(
 
     label = clean_label(label)
 
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+    logger.info(
+        f"Obtained molecules: {molecules} before applying indices,"
+        f"with label: {label}"
+    )
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list

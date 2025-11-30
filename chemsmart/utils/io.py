@@ -429,6 +429,14 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
 
         "id 1-10 or id 11 or id 14 or id 19-30"
 
+    Note: PyMOL selection:
+    `select mysel, id 1 or id 2 or id 8-10`
+    selects all atoms where (id == 1) OR (id == 2) OR (id is in 8-10)
+    So any atom that satisfies any one of those conditions is included in the selection.
+    That gives you atoms 1, 2, 8, 9, 10.
+    This is proper boolean logic:
+    or -> set union (combine atoms from all conditions)
+
     Parameters
     ----------
     string_indices : str

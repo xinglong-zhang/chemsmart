@@ -837,19 +837,19 @@ class PyMOLHybridVisualizationJobRunner(PyMOLVisualizationJobRunner):
         """
         pml_file = os.path.join(
             job.folder,
-            f"{os.path.basename(job.folder)}_hybrid_visualization.pml",
+            f"{job.label}.pml",
         )
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
         with open(pml_file, "w") as f:
-            logger.info(f"Writing pml file {pml_file}")
-            logger.info("Writing default pymol style..")
+            logger.info(f"Writing pml file to {pml_file}")
+            logger.debug("Writing default pymol style..")
             self._write_default_pymol_style(job, f)
-            logger.info("Writing faded colors..")
+            logger.debug("Writing faded colors..")
             self._write_faded_colors(job, f)
-            logger.info("Writing highlighted colors..")
+            logger.debug("Writing highlighted colors..")
             self._write_highlighted_colors(job, f)
-            logger.info("Writing surface settings..")
+            logger.debug("Writing surface settings..")
             self._write_surface_settings(job, f)
         return pml_file
 
