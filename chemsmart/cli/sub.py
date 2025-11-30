@@ -24,13 +24,19 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
-@click.option("-t", "--time-hours", type=float, default=None)
-@click.option("-q", "--queue", type=str, help="queue")
+@click.option(
+    "-t",
+    "--time-hours",
+    type=float,
+    default=None,
+    help="Time limit in hours for the job (e.g., 48.0).",
+)
+@click.option("-q", "--queue", type=str, help="Queue name for job submission.")
 @click.option(
     "-v/",
     "--verbose/--no-verbose",
     default=False,
-    help="Turns on logging to stream output and debug logging.",
+    help="Turn on logging to stream output and debug logging.",
 )
 @click.option(
     "--test/--no-test",
@@ -41,7 +47,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--print-command/--no-print-command",
     default=False,
-    help="print the command generated",
+    help="Print the generated command.",
 )
 def sub(
     ctx,

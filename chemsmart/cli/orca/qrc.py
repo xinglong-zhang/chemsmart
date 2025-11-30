@@ -44,16 +44,20 @@ def qrc(
     **kwargs,
 ):
     """
-     Run ORCA quick reaction coordinate (qrc) calculations.
+    CLI subcommand for running ORCA quick reaction coordinate (QRC) calculations.
 
-    `chemsmart sub gaussian -p proj -f ts.log qrc` will run QRC optimization jobs
-     after displacing along vibrational mode 1 (default) by ± 0.5 Å (default).
-     `chemsmart sub gaussian -p proj -f ts.log qrc -m 2 -a 1.2` will run QRC opt jobs
-     after displacing along vibrational mode 2 (-m 2) by ± 1.2 Å (-a 1.2).
-     `chemsmart sub gaussian -p proj -f ts.log qrc -j ts -m 2 -a 1.5` will run QRC TS jobs
-     after displacing along vibrational mode 2 (-m 2) by ± 1.5 Å (-a 1.5).
-     `chemsmart sub gaussian -p proj -f ts.log qrc -j modred -c [1,2] -m 2 -a 1.5`
-     will run QRC modred jobs after displacing along vibrational mode 2 by ± 1.5 Å.
+    Examples:
+        `chemsmart sub orca -p proj -f ts.log qrc` runs QRC optimization jobs
+        after displacing along vibrational mode 1 (default) by +/- 0.5 Angstroms (default).
+
+        `chemsmart sub orca -p proj -f ts.log qrc -m 2 -a 1.2` runs QRC optimization jobs
+        after displacing along vibrational mode 2 (-m 2) by +/- 1.2 Angstroms (-a 1.2).
+
+        `chemsmart sub orca -p proj -f ts.log qrc -j ts -m 2 -a 1.5` runs QRC TS jobs
+        after displacing along vibrational mode 2 (-m 2) by +/- 1.5 Angstroms (-a 1.5).
+
+        `chemsmart sub orca -p proj -f ts.log qrc -j modred -c [1,2] -m 2 -a 1.5`
+        runs QRC modred jobs after displacing along vibrational mode 2 by +/- 1.5 Angstroms.
     """
 
     # get jobrunner for running Gaussian crest jobs

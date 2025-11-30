@@ -34,7 +34,7 @@ def click_pymol_visualization_options(f):
         "--style",
         type=click.Choice(["pymol", "cylview"], case_sensitive=False),
         default=None,
-        help='PyMOL render style. Choices include "pymol" or "cylview", if '
+        help='PyMOL render style. Choices include "pymol" or "cylview" when '
         "using zhang_group_pymol_style.",
     )
     @click.option(
@@ -42,33 +42,33 @@ def click_pymol_visualization_options(f):
         "--trace/--no-trace",
         type=bool,
         default=True,
-        help="PyMOL options to ray trace or not. Default to True.",
+        help="PyMOL option to ray trace or not. Defaults to True.",
     )
     @click.option(
         "-v",
         "--vdw",
         is_flag=True,
         default=False,
-        help="Add Van der Waal surface. Default to False.",
+        help="Add Van der Waals surface. Defaults to False.",
     )
     @click.option(
         "-q",
         "--quiet",
         is_flag=True,
         default=False,
-        help="Run PyMOL in quiet mode. Default to True.",
+        help="Run PyMOL in quiet mode. Defaults to False.",
     )
     @click.option(
         "--command-line-only/--no-command-line-only",
         is_flag=True,
         default=True,
-        help="Run PyMOL in command line only. Default to True.",
+        help="Run PyMOL in command line only mode. Defaults to True.",
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates (bonds, angles and dihedrals) for "
+        help="List of coordinates (bonds, angles, and dihedrals) for "
         "labelling. 1-indexed.",
     )
     @click.option(
@@ -176,35 +176,34 @@ def click_pymol_hybrid_visualization_options(f):
 
 
 def click_pymol_nci_options(f):
-    """Common click options for PyMOL NCI options."""
+    """Common click options for PyMOL NCI visualization."""
 
     @click.option(
         "-i",
         "--isosurface-value",
         type=float,
         default=None,
-        help="Isosurface value for NCI plot. Default=0.5",
+        help="Isosurface value for NCI plot. Defaults to 0.5.",
     )
     @click.option(
         "-r",
         "--color-range",
         type=float,
         default=1.0,
-        help="Ramp range for NCI plot. Default=1.0",
+        help="Ramp range for NCI plot. Defaults to 1.0.",
     )
     @click.option(
         "-b",
         "--binary/--no-binary",
         is_flag=True,
         default=False,
-        help="Plot NCI plots with two colors only. Default to False.",
+        help="Plot NCI plots with two colors only. Defaults to False.",
     )
     @click.option(
         "--intermediate/--no-intermediate",
         is_flag=True,
         default=False,
-        help="Plot NCI plots with intermediate range colors. Default to "
-        "False.",
+        help="Plot NCI plots with intermediate range colors. Defaults to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -214,15 +213,15 @@ def click_pymol_nci_options(f):
 
 
 def click_pymol_mo_options(f):
-    """Common click options for PyMOL molecular orbitals options."""
+    """Common click options for PyMOL molecular orbital visualization."""
 
     @click.option(
         "-n",
         "--number",
         type=int,
         default=None,
-        help="Molecular Orbital number to be visualized (e.g., 31 will "
-        "visualize MO #31). Default to None.",
+        help="Molecular orbital number to be visualized (e.g., 31 will "
+        "visualize MO #31). Defaults to None.",
     )
     @click.option(
         "-h",
@@ -230,15 +229,15 @@ def click_pymol_mo_options(f):
         is_flag=True,
         default=False,
         help="Plot the highest occupied molecular orbital (HOMO). "
-        "Default to False.",
+        "Defaults to False.",
     )
     @click.option(
         "-l",
         "--lumo",
         is_flag=True,
         default=False,
-        help="Plot the lowest unoccuplied molecular orbitals (LUMO). "
-        "Default to False.",
+        help="Plot the lowest unoccupied molecular orbital (LUMO). "
+        "Defaults to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -263,7 +262,7 @@ def click_pymol_pml_options(f):
         type=float,
         default=None,
         help="Set transparency value to be used in PyMOL .pml file. "
-        "Value range: 0.0 – 1.0; 0.0 = fully opaque; 1.0 = fully transparent",
+        "Value range: 0.0 - 1.0; 0.0 = fully opaque; 1.0 = fully transparent.",
     )
     @click.option(
         "-sq",
@@ -272,11 +271,11 @@ def click_pymol_pml_options(f):
         default=None,
         help="Set surface quality in PyMOL .pml file. Controls the "
         "quality of molecular surfaces. Higher values yield smoother "
-        "surfaces but may increase rendering time. 0 → Low quality "
-        "(fast, faceted surfaces); 1 → Medium quality (balanced); "
-        "2 → High quality (smooth surfaces, slower rendering); "
-        "3 → Very high quality (very smooth, longest rendering time);"
-        " 4 → Ultra quality (maximum smoothness, may be very slow)",
+        "surfaces but may increase rendering time. 0 = Low quality "
+        "(fast, faceted surfaces); 1 = Medium quality (balanced); "
+        "2 = High quality (smooth surfaces, slower rendering); "
+        "3 = Very high quality (very smooth, longest rendering time); "
+        "4 = Ultra quality (maximum smoothness, may be very slow).",
     )
     @click.option(
         "-a",
@@ -285,8 +284,8 @@ def click_pymol_pml_options(f):
         default=None,
         help="Set antialias value in PyMOL .pml file. Controls smoothing of edges "
         "in the 3D rendering (anti-aliasing). Helps remove jagged edges, "
-        "especially useful for high-quality figures. 0 → Off (fast, jagged edges);"
-        "1 → On (basic anti-aliasing); 2 → Higher quality anti-aliasing."
+        "especially useful for high-quality figures. 0 = Off (fast, jagged edges); "
+        "1 = On (basic anti-aliasing); 2 = Higher quality anti-aliasing. "
         "Some builds allow up to 4.",
     )
     @click.option(
@@ -296,11 +295,11 @@ def click_pymol_pml_options(f):
         default=None,
         help="Set ray trace mode in PyMOL .pml file. Controls quality "
         "of ray-traced images. Higher values yield better quality "
-        "but take longer to render. 0 → Normal shading (standard "
-        "photorealistic render); 1 → Cartoon/line outlines (black "
-        "outlines around objects, like cell-shading); 2 → Black "
+        "but take longer to render. 0 = Normal shading (standard "
+        "photorealistic render); 1 = Cartoon/line outlines (black "
+        "outlines around objects, like cell-shading); 2 = Black "
         "outline only (no shading, wireframe-like appearance); "
-        "3 → White outline mode (for figures on dark backgrounds)",
+        "3 = White outline mode (for figures on dark backgrounds).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -317,7 +316,7 @@ def click_pymol_save_options(f):
         "--overwrite",
         is_flag=True,
         default=False,
-        help="Overwrite existing files. Default to False.",
+        help="Overwrite existing files. Defaults to False.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -342,9 +341,11 @@ def mol(
     filetype,
     pubchem,
 ):
-    """CLI for running PYMOL visualization jobs using the chemsmart framework.
+    """
+    CLI subcommand for running PyMOL visualization jobs using the chemsmart framework.
+
     Example usage:
-    chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
+        chemsmart run mol -f test.xyz visualize -c [[413,409],[413,412],[413,505],[413,507]]
     """
     # Initialize molecules variable
     molecules = None

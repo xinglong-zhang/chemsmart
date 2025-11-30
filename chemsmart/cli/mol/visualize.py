@@ -36,7 +36,7 @@ def visualize(
     hybrid,
     **kwargs,
 ):
-    """CLI for running automatic PyMOL visualization and saving as pse file.
+    """CLI subcommand for running automatic PyMOL visualization and save as PSE file.
     Example usage:
         chemsmart run --debug mol -f phenyldioxazolone.com visualize -v
     This visualizes phenyldioxazolone.com file and saves as

@@ -75,8 +75,8 @@ def click_nciplot_settings_options(f):
         "--increments",
         type=str,
         default=None,
-        help="Increments along the x, y, z directions of the cube in Å. "
-        "The default is set to 0.1, 0.1, 0.1."
+        help="Increments along the x, y, z directions of the cube in Angstroms. "
+        "The default is set to 0.1, 0.1, 0.1. "
         "Accepts strings in the form of 'x,y,z' or as a tuple (x, y, z).",
     )
     @click.option(
@@ -187,10 +187,12 @@ def nciplot(
     pubchem,
     **kwargs,
 ):
-    """CLI for running NCIPLOT jobs using the chemsmart framework.
+    """
+    CLI subcommand for running NCIPLOT jobs using the chemsmart framework.
+
     Example usage:
-    chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
-    --fragments "{1: [1,4,5], 2: [3,4,5]}"
+        chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
+        --fragments "{1: [1,4,5], 2: [3,4,5]}"
     """
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
