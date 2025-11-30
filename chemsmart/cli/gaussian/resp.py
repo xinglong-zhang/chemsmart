@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def resp(ctx, **kwargs):
-    """CLI for running Gaussian RESP jobs."""
+    """CLI subcommand for Gaussian RESP jobs."""
 
     # get jobrunner for running Gaussian RESP jobs
     jobrunner = ctx.obj["jobrunner"]

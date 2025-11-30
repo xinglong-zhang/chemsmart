@@ -30,7 +30,7 @@ def irc(
     skip_completed,
     **kwargs,
 ):
-    """CLI for running Gaussian IRC jobs."""
+    """CLI subcommand for Gaussian IRC jobs."""
 
     # get jobrunner for running Gaussian IRC jobs
     jobrunner = ctx.obj["jobrunner"]

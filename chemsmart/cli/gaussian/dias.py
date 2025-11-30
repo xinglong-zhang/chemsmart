@@ -82,7 +82,7 @@ def dias(
     multiplicity_of_fragment2=None,
     **kwargs,
 ):
-    """CLI for running Gaussian DI-AS jobs."""
+    """CLI subcommand for Gaussian DI-AS jobs."""
 
     # get jobrunner for running Gaussian DI-AS jobs
     jobrunner = ctx.obj["jobrunner"]

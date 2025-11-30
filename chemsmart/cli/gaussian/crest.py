@@ -42,7 +42,7 @@ def crest(
     skip_completed,
     **kwargs,
 ):
-    """CLI for running Gaussian CREST jobs."""
+    """CLI subcommand for Gaussian CREST jobs."""
 
     # get jobrunner for running Gaussian crest jobs
     jobrunner = ctx.obj["jobrunner"]

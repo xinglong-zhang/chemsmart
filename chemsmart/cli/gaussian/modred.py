@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @click_gaussian_jobtype_options
 @click.pass_context
 def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
-    """CLI for running Gaussian modred jobs."""
+    """CLI subcommand for Gaussian modred jobs."""
 
     # get jobrunner for running Gaussian modred jobs
     jobrunner = ctx.obj["jobrunner"]

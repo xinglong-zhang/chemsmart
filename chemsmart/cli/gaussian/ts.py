@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def ts(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI for running Gaussian transition state calculation."""
+    """CLI subcommand for Gaussian transition state calculation."""
 
     # get jobrunner for transition state calculation
     jobrunner = ctx.obj["jobrunner"]

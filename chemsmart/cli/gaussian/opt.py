@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI for running Gaussian optimization calculation."""
+    """CLI subcommand for Gaussian optimization calculation."""
 
     # get jobrunner for optimization
     jobrunner = ctx.obj["jobrunner"]

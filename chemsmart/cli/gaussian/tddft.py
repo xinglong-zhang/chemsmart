@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @click_gaussian_td_options
 @click.pass_context
 def td(ctx, states, root, nstates, eqsolv, **kwargs):
-    """CLI for running Gaussian TDDFT jobs."""
+    """CLI subcommand for Gaussian TDDFT jobs."""
 
     # get jobrunner for running Gaussian TDDFT jobs
     jobrunner = ctx.obj["jobrunner"]

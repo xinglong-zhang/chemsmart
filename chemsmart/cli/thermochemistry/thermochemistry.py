@@ -165,7 +165,7 @@ def thermochemistry(
     **kwargs,
 ):
     """
-    CLI for running thermochemistry jobs using the chemsmart framework.
+    CLI subcommand for thermochemistry jobs using the chemsmart framework.
 
     This command allows you to compute thermochemistry for Gaussian or ORCA
     output files.
