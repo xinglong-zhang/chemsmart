@@ -1349,6 +1349,7 @@ class Gaussian16Output(GaussianFileMixin):
         the first α orbital above the doubly-occupied manifold.
 
         For closed-shell systems (multiplicity == 1), returns None.
+        For a complete picture of all SOMOs, use `somo_energies` property.
         """
         if self.multiplicity != 1 and self.somo_energies:
             return self.somo_energies[0]
