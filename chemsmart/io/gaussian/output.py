@@ -1322,6 +1322,7 @@ class Gaussian16Output(GaussianFileMixin):
             return len(self.alpha_occ_eigenvalues) - len(
                 self.beta_occ_eigenvalues
             )
+        return 0
 
     @cached_property
     def somo_energies(self):
