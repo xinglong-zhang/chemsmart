@@ -625,32 +625,21 @@ class TestGaussian16Output:
         assert g16_output.lumo_energy is None
         assert g16_output.num_unpaired_electrons == 2
         assert g16_output.multiplicity == 3
-        assert g16_output.somo_energy == -0.19177 * units.Hartree
-        # New properties for high-spin systems
         # somo_energies should return list of 2 SOMOs for triplet
         assert len(g16_output.somo_energies) == 2
-        assert g16_output.somo_energies[0] == g16_output.somo_energy
-        assert g16_output.somo_energies[-1] == g16_output.highest_somo_energy
-        # highest_somo_energy should be HOMOα
-        assert (
-            g16_output.highest_somo_energy
-            == g16_output.alpha_occ_eigenvalues[-1]
-        )
-        # Spin-resolved HOMO/LUMO
-        assert (
-            g16_output.homo_alpha_energy
-            == g16_output.alpha_occ_eigenvalues[-1]
-        )
-        assert (
-            g16_output.homo_beta_energy == g16_output.beta_occ_eigenvalues[-1]
-        )
-        assert (
-            g16_output.lumo_alpha_energy
-            == g16_output.alpha_virtual_eigenvalues[0]
-        )
-        assert (
-            g16_output.lumo_beta_energy
-            == g16_output.beta_virtual_eigenvalues[0]
+        assert g16_output.somo_energies == [
+            -0.19177 * units.Hartree,
+            -0.15673 * units.Hartree,
+        ]
+        assert g16_output.lowest_somo_energy == -0.19177 * units.Hartree
+        assert g16_output.highest_somo_energy == -0.15673 * units.Hartree
+        assert g16_output.homo_alpha_energy == -0.15673 * units.Hartree
+        assert g16_output.homo_beta_energy == -0.18923 * units.Hartree
+        assert g16_output.lumo_alpha_energy == -0.07423 * units.Hartree
+        assert g16_output.lumo_beta_energy == -0.05025 * units.Hartree
+        assert np.isclose(
+            g16_output.fmo_gap,
+            (min(-0.07423, -0.05025) - (-0.15673)) * units.Hartree,
         )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
@@ -680,37 +669,25 @@ class TestGaussian16Output:
         assert (
             g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
         )
-        assert g16_output.fmo_gap is None
         assert g16_output.num_unpaired_electrons == 4
         assert g16_output.multiplicity == 5
-        assert np.isclose(
-            g16_output.somo_energy, -0.22065 * units.Hartree, atol=1e-5
-        )
-        # New properties for high-spin systems
         # somo_energies should return list of 4 SOMOs for quintet
         assert len(g16_output.somo_energies) == 4
-        assert g16_output.somo_energies[0] == g16_output.somo_energy
-        assert g16_output.somo_energies[-1] == g16_output.highest_somo_energy
-        # highest_somo_energy should be HOMOα
-        assert (
-            g16_output.highest_somo_energy
-            == g16_output.alpha_occ_eigenvalues[-1]
-        )
-        # Spin-resolved HOMO/LUMO
-        assert (
-            g16_output.homo_alpha_energy
-            == g16_output.alpha_occ_eigenvalues[-1]
-        )
-        assert (
-            g16_output.homo_beta_energy == g16_output.beta_occ_eigenvalues[-1]
-        )
-        assert (
-            g16_output.lumo_alpha_energy
-            == g16_output.alpha_virtual_eigenvalues[0]
-        )
-        assert (
-            g16_output.lumo_beta_energy
-            == g16_output.beta_virtual_eigenvalues[0]
+        assert g16_output.somo_energies == [
+            -0.22065 * units.Hartree,
+            -0.21055 * units.Hartree,
+            -0.19474 * units.Hartree,
+            -0.18764 * units.Hartree,
+        ]
+        assert g16_output.lowest_somo_energy == -0.22065 * units.Hartree
+        assert g16_output.highest_somo_energy == -0.18764 * units.Hartree
+        assert g16_output.homo_alpha_energy == -0.18764 * units.Hartree
+        assert g16_output.homo_beta_energy == -0.19564 * units.Hartree
+        assert g16_output.lumo_alpha_energy == -0.03881 * units.Hartree
+        assert g16_output.lumo_beta_energy == -0.06116 * units.Hartree
+        assert np.isclose(
+            g16_output.fmo_gap,
+            (min(-0.03881, -0.06116) - (-0.18764)) * units.Hartree,
         )
 
     def test_read_gaussian_link_opt_output_file(
@@ -868,9 +845,12 @@ class TestGaussian16Output:
         )
         assert g16_link_modred.multiplicity == 5
         assert g16_link_modred.num_unpaired_electrons == 4
-        assert np.isclose(
-            g16_link_modred.somo_energy, -0.30450 * units.Hartree, atol=1e-5
-        )
+        assert g16_link_modred.somo_energies == [
+            -0.30450 * units.Hartree,
+            -0.29487 * units.Hartree,
+            -0.26983 * units.Hartree,
+            -0.24253 * units.Hartree,
+        ]
 
     def test_read_gaussian_link_sp_output_file(
         self, gaussian_link_sp_outputfile

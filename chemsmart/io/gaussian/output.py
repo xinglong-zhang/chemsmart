@@ -1310,11 +1310,6 @@ class Gaussian16Output(GaussianFileMixin):
             return beta_virtual_eigenvalues
 
     @cached_property
-    def homo_energy(self):
-        if self.multiplicity == 1:
-            return self.alpha_occ_eigenvalues[-1]
-
-    @cached_property
     def num_unpaired_electrons(self):
         if self.multiplicity != 1:
             # the multiplicity is the number of unpaired electrons + 1
@@ -1327,29 +1322,6 @@ class Gaussian16Output(GaussianFileMixin):
             return len(self.alpha_occ_eigenvalues) - len(
                 self.beta_occ_eigenvalues
             )
-
-    @cached_property
-    def somo_energy(self):
-        """Returns the lowest SOMO energy for open-shell systems.
-
-        For high-spin states (triplet, quintet, etc.), this returns the
-        lowest-energy singly occupied molecular orbital (SOMO), which is
-        the first α orbital above the doubly-occupied manifold.
-
-        For closed-shell systems (multiplicity == 1), returns None.
-
-        For a complete picture of all SOMOs, use `somo_energies` property.
-        """
-        if self.multiplicity == 1:
-            return None
-        # the multiplicity is the number of unpaired electrons + 1
-        assert (
-            len(self.alpha_occ_eigenvalues)
-            - len(self.beta_occ_eigenvalues)
-            + 1
-            == self.multiplicity
-        )
-        return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons]
 
     @cached_property
     def somo_energies(self):
@@ -1368,6 +1340,20 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     @cached_property
+    def lowest_somo_energy(self):
+        """Returns the lowest SOMO energy for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), this returns the
+        lowest-energy singly occupied molecular orbital (SOMO), which is
+        the first α orbital above the doubly-occupied manifold.
+
+        For closed-shell systems (multiplicity == 1), returns None.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[0]
+        return None
+
+    @cached_property
     def highest_somo_energy(self):
         """Returns the highest SOMO energy for open-shell systems.
 
@@ -1375,8 +1361,8 @@ class Gaussian16Output(GaussianFileMixin):
         for high-spin states. It represents the highest-energy singly
         occupied molecular orbital.
         """
-        if self.multiplicity != 1 and self.alpha_occ_eigenvalues:
-            return self.alpha_occ_eigenvalues[-1]
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[-1]
         return None
 
     @cached_property
@@ -1426,6 +1412,11 @@ class Gaussian16Output(GaussianFileMixin):
         return None
 
     @cached_property
+    def homo_energy(self):
+        if self.multiplicity == 1:
+            return self.alpha_occ_eigenvalues[-1]
+
+    @cached_property
     def lumo_energy(self):
         if self.multiplicity == 1:
             return self.alpha_virtual_eigenvalues[0]
@@ -1435,8 +1426,11 @@ class Gaussian16Output(GaussianFileMixin):
         if self.multiplicity == 1:
             return self.lumo_energy - self.homo_energy
         else:
-            # to implement for radical systems
-            pass
+            # radical systems
+            return (
+                min(self.lumo_alpha_energy, self.lumo_beta_energy)
+                - self.highest_somo_energy
+            )
 
     @cached_property
     def mulliken_atomic_charges(self):
