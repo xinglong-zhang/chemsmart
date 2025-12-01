@@ -1628,7 +1628,7 @@ class ORCAOutput(ORCAFileMixin):
         the multiplicity is the number of unpaired electrons + 1
         """
         if self.multiplicity != 1:
-            # the multiplicity is the number of unpaired electrons + 1
+            # Verify that alpha_occ - beta_occ + 1 equals multiplicity
             assert (
                 len(self.alpha_occ_eigenvalues)
                 - len(self.beta_occ_eigenvalues)
