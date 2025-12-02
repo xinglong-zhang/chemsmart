@@ -1734,17 +1734,21 @@ class ORCAOutput(ORCAFileMixin):
 
         For closed-shell systems (multiplicity == 1), returns the energy of the
         highest doubly-occupied orbital.
-
-        For open-shell systems, this property is not well-defined and returns None.
-        Use homo_alpha_energy, homo_beta_energy, or highest_somo_energy instead.
         """
         if self.multiplicity == 1:
-            return self.alpha_occ_eigenvalues[-1]
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[-1]
 
     @cached_property
     def lumo_energy(self):
+        """Returns the LUMO (Lowest Unoccupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy of the
+        lowest unoccupied orbital.
+        """
         if self.multiplicity == 1:
-            return self.alpha_virtual_eigenvalues[0]
+            if self.alpha_virtual_eigenvalues:
+                return self.alpha_virtual_eigenvalues[0]
 
     @cached_property
     def fmo_gap(self):

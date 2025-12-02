@@ -502,7 +502,6 @@ class TestORCAOutput:
             rtol=1e-6,
         )
 
-
         assert orca_out.mulliken_atomic_charges == {
             "O1": -0.32926,
             "H2": 0.16463,

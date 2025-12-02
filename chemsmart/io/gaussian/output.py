@@ -1421,7 +1421,8 @@ class Gaussian16Output(GaussianFileMixin):
         highest doubly-occupied orbital.
         """
         if self.multiplicity == 1:
-            return self.alpha_occ_eigenvalues[-1]
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[-1]
 
     @cached_property
     def lumo_energy(self):
@@ -1431,7 +1432,8 @@ class Gaussian16Output(GaussianFileMixin):
         lowest unoccupied orbital.
         """
         if self.multiplicity == 1:
-            return self.alpha_virtual_eigenvalues[0]
+            if self.alpha_virtual_eigenvalues:
+                return self.alpha_virtual_eigenvalues[0]
 
     @cached_property
     def fmo_gap(self):
