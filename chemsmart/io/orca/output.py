@@ -1537,14 +1537,14 @@ class ORCAOutput(ORCAFileMixin):
                 try:
                     occ = float(line_elements[1])
                     energy_in_hartree = float(line_elements[2])
-                    energy = energy_in_hartree * units.Hartree
+                    energy_in_eV = energy_in_hartree * units.Hartree
 
                     if in_alpha:
                         alpha_occupancy.append(occ)
-                        alpha_energies.append(energy)
+                        alpha_energies.append(energy_in_eV)
                     elif in_beta:
                         beta_occupancy.append(occ)
-                        beta_energies.append(energy)
+                        beta_energies.append(energy_in_eV)
                 except ValueError:
                     continue
 
