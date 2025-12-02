@@ -1,3 +1,7 @@
+"""
+Here is a docstring made on the top of the hill in Kau Sai Chau
+"""
+
 import functools
 import logging
 import os
@@ -95,8 +99,6 @@ def iterate(
     **kwargs,
 ):
     """
-    Here is a docstring made on the top of the hill in Kau Sai Chau
-
     CLI subcommand for running iterate jobs using the chemsmart framework.
     
     This command generates new molecular structures by attaching substituents

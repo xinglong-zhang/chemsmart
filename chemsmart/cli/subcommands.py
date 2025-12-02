@@ -5,11 +5,16 @@ from chemsmart.cli.orca import orca
 from chemsmart.cli.thermochemistry import thermochemistry
 from chemsmart.cli.iterate import iterate
 
+# Subcommands available for both 'run' and 'sub'
 subcommands = [
     gaussian,
     orca,
     mol,
     nciplot,
     thermochemistry,
+]
+
+# Subcommands only available for 'run' (not submittable to queue)
+run_subcommands = [
     iterate,
 ]
