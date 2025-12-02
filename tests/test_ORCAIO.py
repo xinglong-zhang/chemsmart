@@ -490,10 +490,10 @@ class TestORCAOutput:
         assert orca_out.somo_energies is None
         assert orca_out.lowest_somo_energy is None
         assert orca_out.highest_somo_energy is None
-        assert orca_out.homo_alpha_energy == -0.376778 * units.Hartree
-        assert orca_out.homo_beta_energy == -0.376778 * units.Hartree
-        assert orca_out.lumo_alpha_energy == 0.088932 * units.Hartree
-        assert orca_out.lumo_beta_energy == 0.088932 * units.Hartree
+        assert orca_out.alpha_homo_energy == -0.376778 * units.Hartree
+        assert orca_out.beta_homo_energy == -0.376778 * units.Hartree
+        assert orca_out.alpha_lumo_energy == 0.088932 * units.Hartree
+        assert orca_out.beta_lumo_energy == 0.088932 * units.Hartree
         assert orca_out.homo_energy == -0.376778 * units.Hartree
         assert orca_out.lumo_energy == 0.088932 * units.Hartree
         assert np.isclose(
@@ -2359,10 +2359,10 @@ class TestORCAOutput:
         assert orca_out.highest_somo_energy == -0.761816 * units.Hartree
 
         # HOMO/LUMO properties for open-shell
-        assert orca_out.homo_alpha_energy == -0.761816 * units.Hartree
-        assert orca_out.homo_beta_energy == -0.721020 * units.Hartree
-        assert orca_out.lumo_alpha_energy == -0.346513 * units.Hartree
-        assert orca_out.lumo_beta_energy == -0.381082 * units.Hartree
+        assert orca_out.alpha_homo_energy == -0.761816 * units.Hartree
+        assert orca_out.beta_homo_energy == -0.721020 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.346513 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.381082 * units.Hartree
         assert (
             orca_out.fmo_gap
             == (min(-0.346513, -0.381082) - (-0.761816)) * units.Hartree
@@ -2387,13 +2387,14 @@ class TestORCAOutput:
         assert orca_out.highest_somo_energy == -0.705655 * units.Hartree
 
         # HOMO/LUMO properties
-        assert orca_out.homo_alpha_energy == -0.705655 * units.Hartree
-        assert orca_out.homo_beta_energy == -0.688110 * units.Hartree
-        assert orca_out.lumo_alpha_energy == -0.336304 * units.Hartree
-        assert orca_out.lumo_beta_energy == -0.328840 * units.Hartree
+        assert orca_out.alpha_homo_energy == -0.705655 * units.Hartree
+        assert orca_out.beta_homo_energy == -0.688110 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.336304 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.328840 * units.Hartree
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.336304, -0.328840) - (-0.705655)) * units.Hartree,
+            # 0.369351
         )
 
     def test_fe3_doublet_orbital_properties(self, fe3_doublet_output):
@@ -2410,10 +2411,10 @@ class TestORCAOutput:
         assert orca_out.highest_somo_energy == -1.060149 * units.Hartree
 
         # HOMO/LUMO properties
-        assert orca_out.homo_alpha_energy == -1.060149 * units.Hartree
-        assert orca_out.homo_beta_energy == -1.061789 * units.Hartree
-        assert orca_out.lumo_alpha_energy == -0.764634 * units.Hartree
-        assert orca_out.lumo_beta_energy == -0.744986 * units.Hartree
+        assert orca_out.alpha_homo_energy == -1.060149 * units.Hartree
+        assert orca_out.beta_homo_energy == -1.061789 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.764634 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.744986 * units.Hartree
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.764634, -0.744986) - (-1.060149)) * units.Hartree,
@@ -2437,10 +2438,10 @@ class TestORCAOutput:
         assert orca_out.highest_somo_energy == -1.034892 * units.Hartree
 
         # HOMO/LUMO properties
-        assert orca_out.homo_alpha_energy == -1.034892 * units.Hartree
-        assert orca_out.homo_beta_energy == -1.024711 * units.Hartree
-        assert orca_out.lumo_alpha_energy == -0.749293 * units.Hartree
-        assert orca_out.lumo_beta_energy == -0.721360 * units.Hartree
+        assert orca_out.alpha_homo_energy == -1.034892 * units.Hartree
+        assert orca_out.beta_homo_energy == -1.024711 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.749293 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.721360 * units.Hartree
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.749293, -0.721360) - (-1.034892)) * units.Hartree,
@@ -2466,10 +2467,10 @@ class TestORCAOutput:
         assert orca_out.highest_somo_energy == -1.030076 * units.Hartree
 
         # HOMO/LUMO properties
-        assert orca_out.homo_alpha_energy == -1.030076 * units.Hartree
-        assert orca_out.homo_beta_energy == -1.045382 * units.Hartree
-        assert orca_out.lumo_alpha_energy == -0.553561 * units.Hartree
-        assert orca_out.lumo_beta_energy == -0.775129 * units.Hartree
+        assert orca_out.alpha_homo_energy == -1.030076 * units.Hartree
+        assert orca_out.beta_homo_energy == -1.045382 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.553561 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.775129 * units.Hartree
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.553561, -0.775129) - (-1.030076)) * units.Hartree,

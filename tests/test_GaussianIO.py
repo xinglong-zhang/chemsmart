@@ -534,6 +534,7 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert g16_output.fmo_gap == g16_output.alpha_fmo_gap
         assert np.allclose(
             g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
         )
@@ -633,14 +634,16 @@ class TestGaussian16Output:
         ]
         assert g16_output.lowest_somo_energy == -0.19177 * units.Hartree
         assert g16_output.highest_somo_energy == -0.15673 * units.Hartree
-        assert g16_output.homo_alpha_energy == -0.15673 * units.Hartree
-        assert g16_output.homo_beta_energy == -0.18923 * units.Hartree
-        assert g16_output.lumo_alpha_energy == -0.07423 * units.Hartree
-        assert g16_output.lumo_beta_energy == -0.05025 * units.Hartree
+        assert g16_output.alpha_homo_energy == -0.15673 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.18923 * units.Hartree
+        assert g16_output.alpha_lumo_energy == -0.07423 * units.Hartree
+        assert g16_output.beta_lumo_energy == -0.05025 * units.Hartree
         assert np.isclose(
             g16_output.fmo_gap,
             (min(-0.07423, -0.05025) - (-0.15673)) * units.Hartree,
         )
+        assert g16_output.beta_lumo_energy == -0.05025 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.18923 * units.Hartree
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -681,10 +684,10 @@ class TestGaussian16Output:
         ]
         assert g16_output.lowest_somo_energy == -0.22065 * units.Hartree
         assert g16_output.highest_somo_energy == -0.18764 * units.Hartree
-        assert g16_output.homo_alpha_energy == -0.18764 * units.Hartree
-        assert g16_output.homo_beta_energy == -0.19564 * units.Hartree
-        assert g16_output.lumo_alpha_energy == -0.03881 * units.Hartree
-        assert g16_output.lumo_beta_energy == -0.06116 * units.Hartree
+        assert g16_output.alpha_homo_energy == -0.18764 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.19564 * units.Hartree
+        assert g16_output.alpha_lumo_energy == -0.03881 * units.Hartree
+        assert g16_output.beta_lumo_energy == -0.06116 * units.Hartree
         assert np.isclose(
             g16_output.fmo_gap,
             (min(-0.03881, -0.06116) - (-0.18764)) * units.Hartree,

@@ -183,9 +183,7 @@ class FileMixin:
         Returns:
             int: Number of unpaired electrons.
         """
-        if self.multiplicity != 1:
-            return self.multiplicity - 1
-        return 0
+        return self.multiplicity - 1
 
     @cached_property
     def somo_energies(self):
@@ -202,20 +200,7 @@ class FileMixin:
         Returns:
             list or None: List of SOMO energies, or None for closed-shell.
         """
-        if self.multiplicity != 1 and self.num_unpaired_electrons:
-            # Verify orbital data consistency with stated multiplicity
-            if hasattr(self, 'alpha_occ_eigenvalues') and hasattr(self, 'beta_occ_eigenvalues'):
-                assert (
-                    len(self.alpha_occ_eigenvalues)
-                    - len(self.beta_occ_eigenvalues)
-                    + 1
-                    == self.multiplicity
-                ), (
-                    f"Orbital count inconsistent with multiplicity: "
-                    f"alpha_occ={len(self.alpha_occ_eigenvalues)}, "
-                    f"beta_occ={len(self.beta_occ_eigenvalues)}, "
-                    f"multiplicity={self.multiplicity}"
-                )
+        if self.multiplicity != 1:
             return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
         return None
 
@@ -245,6 +230,8 @@ class FileMixin:
         for high-spin states. It represents the highest-energy singly
         occupied molecular orbital.
 
+        For a complete picture of all SOMOs, use `somo_energies` property.
+
         Returns:
             float or None: Highest SOMO energy, or None for closed-shell.
         """
@@ -253,23 +240,23 @@ class FileMixin:
         return None
 
     @cached_property
-    def homo_alpha_energy(self):
-        """Returns the HOMO energy for the α spin channel.
+    def alpha_homo_energy(self):
+        """Returns the HOMO energy for α spin orbitals.
 
         For closed-shell systems, this equals the standard HOMO energy.
         For open-shell systems, this is the highest occupied α orbital,
         which is also the highest SOMO.
 
         Returns:
-            float or None: α-channel HOMO energy.
+            float or None: α-spin HOMO energy.
         """
         if self.alpha_occ_eigenvalues:
             return self.alpha_occ_eigenvalues[-1]
         return None
 
     @cached_property
-    def homo_beta_energy(self):
-        """Returns the HOMO energy for the β spin channel.
+    def beta_homo_energy(self):
+        """Returns the HOMO energy for β spin orbitals.
 
         For closed-shell systems, this equals the standard HOMO energy.
         For open-shell systems, this is the highest doubly-occupied
@@ -283,8 +270,8 @@ class FileMixin:
         return None
 
     @cached_property
-    def lumo_alpha_energy(self):
-        """Returns the LUMO energy for the α spin channel.
+    def alpha_lumo_energy(self):
+        """Returns the LUMO energy for α spin orbitals.
 
         For closed-shell systems, this equals the standard LUMO energy.
         For open-shell systems, this is the lowest unoccupied α orbital.
@@ -297,8 +284,8 @@ class FileMixin:
         return None
 
     @cached_property
-    def lumo_beta_energy(self):
-        """Returns the LUMO energy for the β spin channel.
+    def beta_lumo_energy(self):
+        """Returns the LUMO energy for β spin orbitals.
 
         For closed-shell systems, this equals the standard LUMO energy.
         For open-shell systems, this is the lowest unoccupied β orbital.
@@ -316,7 +303,8 @@ class FileMixin:
 
         For closed-shell systems (multiplicity == 1), returns the energy
         of the highest doubly-occupied orbital. For open-shell systems,
-        returns None (use homo_alpha_energy or homo_beta_energy instead).
+        returns None (use homo_alpha_energy or beta_homo_energy or
+        somo_energies instead).
 
         Returns:
             float or None: HOMO energy for closed-shell systems.
@@ -332,7 +320,7 @@ class FileMixin:
 
         For closed-shell systems (multiplicity == 1), returns the energy
         of the lowest unoccupied orbital. For open-shell systems,
-        returns None (use lumo_alpha_energy or lumo_beta_energy instead).
+        returns None (use alpha_lumo_energy or beta_lumo_energy instead).
 
         Returns:
             float or None: LUMO energy for closed-shell systems.
@@ -359,15 +347,47 @@ class FileMixin:
         else:
             # radical systems
             if (
-                self.lumo_alpha_energy is not None
-                and self.lumo_beta_energy is not None
+                self.alpha_lumo_energy is not None
+                and self.beta_lumo_energy is not None
                 and self.highest_somo_energy is not None
             ):
                 return (
-                    min(self.lumo_alpha_energy, self.lumo_beta_energy)
+                    min(self.alpha_lumo_energy, self.beta_lumo_energy)
                     - self.highest_somo_energy
                 )
         return None
+
+    @cached_property
+    def alpha_fmo_gap(self):
+        """Returns the frontier molecular orbital (FMO) gap for alpha-spin orbitals,
+        for open-shell systems.
+        For closed-shell systems (multiplicity == 1), returns fmo_gap.
+        Returns:
+            float or None: alpha FMO gap in eV."""
+
+        if (
+            self.alpha_lumo_energy is not None
+            and self.alpha_homo_energy is not None
+        ):
+            return self.alpha_lumo_energy - self.alpha_homo_energy
+        else:
+            return None
+
+    @cached_property
+    def beta_fmo_gap(self):
+        """Returns the frontier molecular orbital (FMO) gap for beta-spin orbitals,
+        for open-shell systems.
+        For closed-shell systems (multiplicity == 1), under restricted KS, beta
+        orbitals are not printed, and this returns None.
+        Returns:
+            float or None: beta FMO gap in eV."""
+        if (
+            self.beta_lumo_energy is not None
+            and self.beta_homo_energy is not None
+        ):
+            return self.beta_lumo_energy - self.beta_homo_energy
+        else:
+            return None
 
 
 class GaussianFileMixin(FileMixin):
