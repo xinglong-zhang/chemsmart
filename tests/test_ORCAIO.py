@@ -486,7 +486,7 @@ class TestORCAOutput:
             3.864433 * units.Hartree,
         ]
         assert orca_out.num_unpaired_electrons == 0
-        # For closed-shell systems, somo_energy should be None
+        # For closed-shell systems, somo_energies should be None
         assert orca_out.somo_energies is None
         assert orca_out.lowest_somo_energy is None
         assert orca_out.highest_somo_energy is None
