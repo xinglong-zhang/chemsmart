@@ -1413,7 +1413,15 @@ class Gaussian16Output(GaussianFileMixin):
             return self.beta_virtual_eigenvalues[0]
         return None
 
-    @cached_property
+    def homo_energy(self):
+        """Returns the HOMO (Highest Occupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy of the
+        highest doubly-occupied orbital.
+
+        For open-shell systems, this property is not well-defined and returns None.
+        Use homo_alpha_energy, homo_beta_energy, or highest_somo_energy instead.
+        """
     def homo_energy(self):
         if self.multiplicity == 1:
             return self.alpha_occ_eigenvalues[-1]
