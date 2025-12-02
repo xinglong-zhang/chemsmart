@@ -1625,7 +1625,7 @@ class ORCAOutput(ORCAFileMixin):
     @cached_property
     def num_unpaired_electrons(self):
         """Get the number of unpaired electrons.
-        the multiplicity is the number of unpaired electrons + 1
+        The multiplicity is the number of unpaired electrons + 1
         """
         if self.multiplicity != 1:
             # Verify that alpha_occ - beta_occ + 1 equals multiplicity
