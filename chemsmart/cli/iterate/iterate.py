@@ -5,15 +5,12 @@ import yaml
 
 import click
 
-from chemsmart.cli.job import (
-    click_file_label_and_index_options,
-    click_filenames_options,
-    click_folder_options,
-    click_job_options,
-)
+from chemsmart.cli.job import click_filename_options
 from chemsmart.jobs.iterate.job import IterateJob
+from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.iterate import generate_template
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +26,31 @@ def click_iterate_options(f):
     """
 
     @click.option(
+        "-g",
+        "--generate-template",
+        "generate_template_path",
+        is_flag=False,
+        flag_value="iterate_template.yaml",
+        default=None,
+        type=str,
+        help="Generate a template YAML configuration file and exit. "
+             "Optionally specify output path (default: iterate_template.yaml).",
+    )
+    @click.option(
         "-P",
         "--nprocs",
         default=1,
         type=click.IntRange(min=1),
         show_default=True,
         help="Number of processes for parallel execution.",
+    )
+    @click.option(
+        "-t",
+        "--timeout",
+        default=120,
+        type=click.IntRange(min=1),
+        show_default=True,
+        help="Timeout in seconds for each worker process.",
     )
     @click.option(
         "-a",
@@ -49,6 +65,14 @@ def click_iterate_options(f):
         show_default=True,
         help="Algorithm to use for substituents' position optimization.",
     )
+    @click.option(
+        "-o",
+        "--outputfile",
+        default="iterate_out",
+        type=str,
+        show_default=True,
+        help="Output filename (without .xyz extension) for generated structures.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -58,45 +82,65 @@ def click_iterate_options(f):
 # use MyGroup to allow potential subcommands in the future
 @click.group(cls=MyGroup, invoke_without_command=True)
 @click_iterate_options
-@click_job_options
-@click_folder_options
-@click_filenames_options
-@click_file_label_and_index_options
+@click_filename_options
 @click.pass_context
 def iterate(
     ctx,
     filename,
     algorithm,
     nprocs,
+    timeout,
+    outputfile,
+    generate_template_path,
+    **kwargs,
 ):
     """
     CLI subcommand for running iterate jobs using the chemsmart framework.
     
     This command generates new molecular structures by attaching substituents
     to skeleton molecules at specified positions.
+    
+    Examples:
+    
+    `chemsmart run iterate -f config.yaml`
+    will generate structures based on the YAML configuration file.
+    
+    `chemsmart run iterate -f config.yaml -P 4`
+    will use 4 processes for parallel execution.
+    
+    `chemsmart run iterate -f config.yaml -o ./output`
+    will save generated structures to ./output directory.
+    
+    `chemsmart run iterate -g`
+    will generate a template YAML configuration file (iterate_template.yaml).
+    
+    `chemsmart run iterate -g my_config.yaml`
+    will generate a template at the specified path.
     """
-        
-    # Validate filename
-    if filename is None:
-        raise click.BadParameter("YAML configuration file is required.", param_hint="'-f' / '--filename'")
+    # Handle -g option: generate template and exit
+    if generate_template_path is not None:
+        template_path = generate_template(generate_template_path, overwrite=False)
+        click.echo(f"Generated template: {template_path}")
+        ctx.exit(0)
+    
+    # Validate filename - expect a single YAML config file
+    if not filename:
+        raise click.BadParameter(
+            "YAML configuration file is required.", 
+            param_hint="'-f' / '--filename'"
+        )
     
     if not os.path.exists(filename):
-        raise click.BadParameter(f"File '{filename}' does not exist.", param_hint="'-f' / '--filename'")
+        raise click.BadParameter(
+            f"File '{filename}' does not exist.", 
+            param_hint="'-f' / '--filename'"
+        )
     
     if not filename.endswith(('.yaml', '.yml')):
         raise click.BadParameter(
             f"File '{filename}' must be a YAML file (ending with .yaml or .yml).",
             param_hint="'-f' / '--filename'"
         )
-    
-    # Validate and convert nprocs
-    _validate_nprocs(nprocs)
-    nprocs = _convert_nprocs(nprocs)
-    
-    job_settings = IterateJobSettings(
-        config_file=filename,
-        algorithm=algorithm,
-    )
 
     # Load YAML configuration file
     with open(filename, 'r') as f:
@@ -113,102 +157,68 @@ def iterate(
     logger.info(f"  Skeletons: {len(config['skeletons'])}")
     logger.info(f"  Substituents: {len(config['substituents'])}")
 
+    # Create job settings
+    job_settings = IterateJobSettings(
+        config_file=filename,
+        algorithm=algorithm,
+    )
     job_settings.skeleton_list = config['skeletons']
     job_settings.substituent_list = config['substituents']
 
-    job = IterateJob()
+    # Create job runner
+    jobrunner = IterateJobRunner()
+
+    # Create job
+    job = IterateJob(
+        settings=job_settings,
+        jobrunner=jobrunner,
+        nprocs=nprocs,
+        timeout=timeout,
+        outputfile=outputfile,
+    )
+    
+    logger.debug(f"Created IterateJob with {nprocs} process(es)")
+
     # Store objects in context
+    ctx.ensure_object(dict)
+    ctx.obj["job"] = job
     ctx.obj["job_settings"] = job_settings
     ctx.obj["filename"] = filename
-    ctx.obj["algorithm"] = algorithm
-    ctx.obj["nprocs"] = nprocs
-    
 
 
-def _validate_nprocs(value) -> None:
+@iterate.result_callback()
+@click.pass_context
+def iterate_process_pipeline(ctx, *args, **kwargs):
     """
-    Validate nprocs value.
-    
-    Parameters
-    ----------
-    value : int, str, or other
-        The value to validate
-    
-    Raises
-    ------
-    click.BadParameter
-        If the value is invalid
+    Process the iterate job after command execution.
     """
-    # Handle None - valid, will default to 1
-    if value is None:
-        return
+    logger.debug(f"Context object: {ctx.obj}")
+
+    job = ctx.obj.get("job")
     
-    # Handle int
-    if isinstance(value, int):
-        if value < 1:
-            raise click.BadParameter(
-                f"nprocs must be >= 1, got {value}",
-                param_hint="'-P' / '--nprocs'"
-            )
-        return
-    
-    # Handle string
-    if isinstance(value, str):
-        value = value.strip()
-        if not value:
-            return  # Empty string is valid, will default to 1
+    if ctx.invoked_subcommand is None and job is not None:
+        # If no subcommand is invoked, run the iterate job
+        logger.info("Running iterate job to generate molecular structures.")
+        
         try:
-            result = int(value)
-            if result < 1:
-                raise click.BadParameter(
-                    f"nprocs must be >= 1, got {result}",
-                    param_hint="'-P' / '--nprocs'"
-                )
-            return
-        except ValueError:
-            raise click.BadParameter(
-                f"nprocs must be an integer, got '{value}'",
-                param_hint="'-P' / '--nprocs'"
-            )
-    
-    # Handle other types
-    raise click.BadParameter(
-        f"nprocs must be an integer, got {type(value).__name__}",
-        param_hint="'-P' / '--nprocs'"
-    )
-
-
-def _convert_nprocs(value) -> int:
-    """
-    Convert nprocs value to a single integer.
-    
-    Parameters
-    ----------
-    value : int, str, or None
-        The value to convert (must be pre-validated)
-    
-    Returns
-    -------
-    int
-        Number of processes (>= 1)
-    """
-    # Handle None
-    if value is None:
-        return 1
-    
-    # Handle int
-    if isinstance(value, int):
-        return value
-    
-    # Handle string
-    if isinstance(value, str):
-        value = value.strip()
-        if not value:
-            return 1
-        return int(value)
-    
-    # Fallback (should not reach here if validated)
-    return 1
+            # Run the job
+            results = job.run()
+            
+            # Save results
+            if results:
+                saved_files = job.save_results()
+                logger.info(f"Successfully generated {len(saved_files)} structure(s).")
+                for f in saved_files:
+                    click.echo(f"Saved: {f}")
+            else:
+                logger.warning("No structures were generated.")
+                
+        except Exception as e:
+            logger.error(f"Error running iterate job: {e}")
+            raise click.ClickException(str(e))
+    else:
+        # If a subcommand is invoked, just log
+        logger.info("Subcommand invoked. No iterate job executed.")
 
 
 def _parse_index_string(value, entry_type: str, idx: int, field_name: str) -> list[int] | None:

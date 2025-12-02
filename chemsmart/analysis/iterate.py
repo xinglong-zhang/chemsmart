@@ -392,7 +392,7 @@ class IterateAnalyzer:
             skeleton_link_index: int,
             substituent_link_index: int,
             buffer: float = DEFAULT_BUFFER,
-            algorithm: str = 'lagrange',
+            algorithm: str = 'lagrange_multipliers',
         ):
         """
         Initialize IterateAnalyzer.
@@ -410,8 +410,8 @@ class IterateAnalyzer:
         buffer : float
             Buffer for min distance constraint (default: 0.3 Å)
         algorithm : str
-            Optimization algorithm to use (default: 'lagrange')
-            Supported: 'lagrange'
+            Optimization algorithm to use (default: 'lagrange_multipliers')
+            Supported: 'lagrange_multipliers'
         """
         self.skeleton = skeleton
         self.substituent = substituent
@@ -583,7 +583,7 @@ class IterateAnalyzer:
         skeleton_link_index: int,
         sub_link_index: int,
         buffer: float = DEFAULT_BUFFER,
-        algorithm: str = 'lagrange'
+        algorithm: str = 'lagrange_multipliers'
     ) -> np.ndarray:
         """
         Find the optimal position for a substituent molecule (sub) to be attached to a 
@@ -607,8 +607,8 @@ class IterateAnalyzer:
         buffer : float
             Buffer for min distance constraint (default: 0.3 Å)
         algorithm : str
-            Optimization algorithm to use (default: 'lagrange')
-            Supported: 'lagrange'
+            Optimization algorithm to use (default: 'lagrange_multipliers')
+            Supported: 'lagrange_multipliers'
         
         Returns
         -------
@@ -657,13 +657,13 @@ class IterateAnalyzer:
         min_dist_matrix = sub_radii[:, np.newaxis] + skeleton_radii[np.newaxis, :] + buffer  # (m, n)
         
         # Select algorithm
-        if algorithm == 'lagrange':
+        if algorithm == 'lagrange_multipliers':
             optimal_sub = IterateAnalyzer._optimize_lagrange(
                 sub_coord, skeleton_coords, skeleton_link_coords,
                 relative_offsets, bond_dist, min_dist_matrix, sub_link_index
             )
         else:
-            raise ValueError(f"Unknown algorithm: {algorithm}. Supported: 'lagrange'")
+            raise ValueError(f"Unknown algorithm: {algorithm}. Supported: 'lagrange_multipliers'")
         
         return optimal_sub
 
