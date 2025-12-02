@@ -96,7 +96,7 @@ def iterate(
 ):
     """
     Here is a docstring made on the top of the hill in Kau Sai Chau
-    
+
     CLI subcommand for running iterate jobs using the chemsmart framework.
     
     This command generates new molecular structures by attaching substituents
@@ -203,15 +203,13 @@ def iterate_process_pipeline(ctx, *args, **kwargs):
         logger.info("Running iterate job to generate molecular structures.")
         
         try:
-            # Run the job
-            results = job.run()
+            # Run the job - this already writes results to outputfile
+            output_path = job.run()
             
-            # Save results
-            if results:
-                saved_files = job.save_results()
-                logger.info(f"Successfully generated {len(saved_files)} structure(s).")
-                for f in saved_files:
-                    click.echo(f"Saved: {f}")
+            # Output path is returned from job.run()
+            if output_path and os.path.exists(output_path):
+                logger.info(f"Successfully generated structures.")
+                click.echo(f"Output saved to: {output_path}")
             else:
                 logger.warning("No structures were generated.")
                 

@@ -48,8 +48,13 @@ class IterateJob(Job):
             Additional keyword arguments
         """
         logger.debug("Initializing IterateJob")
+        # IterateJob doesn't use a single molecule, pass None and a default label
         super().__init__(
-            settings=settings, jobrunner=jobrunner, **kwargs
+            molecule=None,
+            label="iterate_job",
+            jobrunner=jobrunner,
+            skip_completed=False,  # IterateJob doesn't support skip_completed
+            **kwargs
         )
         
         self.settings = settings if settings is not None else IterateJobSettings()

@@ -4,7 +4,7 @@ from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeo
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from chemsmart.analysis.iterate import IterateAnalyzer, SkeletonPreprocessor
+from chemsmart.analysis.iterate import IterateAnalyzer, SkeletonPreprocessor, SubstituentPreprocessor
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.runner import JobRunner
 
@@ -62,19 +62,28 @@ def _run_combination_worker(combination: IterateCombination) -> tuple[str, Optio
     
     try:
         # Preprocess skeleton if needed
-        preprocessor = SkeletonPreprocessor(
+        skeleton_preprocessor = SkeletonPreprocessor(
             molecule=combination.skeleton,
             link_index=combination.skeleton_link_index,
             skeleton_indices=combination.skeleton_indices,
         )
-        processed_skeleton = preprocessor.run()
+        processed_skeleton = skeleton_preprocessor.run()
+        new_skeleton_link_index = skeleton_preprocessor.get_new_link_index()
+        
+        # Preprocess substituent if needed
+        substituent_preprocessor = SubstituentPreprocessor(
+            molecule=combination.substituent,
+            link_index=combination.substituent_link_index,
+        )
+        processed_substituent = substituent_preprocessor.run()
+        new_substituent_link_index = substituent_preprocessor.get_new_link_index()
         
         # Run analysis to generate combined molecule
         analyzer = IterateAnalyzer(
             skeleton=processed_skeleton,
-            substituent=combination.substituent,
-            skeleton_link_index=combination.skeleton_link_index,
-            substituent_link_index=combination.substituent_link_index,
+            substituent=processed_substituent,
+            skeleton_link_index=new_skeleton_link_index,
+            substituent_link_index=new_substituent_link_index,
             algorithm=combination.algorithm,
         )
         
@@ -389,11 +398,14 @@ class IterateJobRunner(JobRunner):
         with open(outputfile, 'w') as f:
             for label, mol in results:
                 if mol is not None:
-                    # Get xyz string and replace second line with label
-                    xyz_lines = mol.to_xyz().strip().split('\n')
-                    # First line is atom count, second line is comment (replace with label)
-                    xyz_lines[1] = f"       {label}"
-                    f.write('\n'.join(xyz_lines) + '\n')
+                    # Build xyz string manually
+                    # First line: number of atoms
+                    f.write(f"{mol.num_atoms}\n")
+                    # Second line: label as comment
+                    f.write(f"       {label}\n")
+                    # Following lines: atom symbol and coordinates
+                    for symbol, pos in zip(mol.chemical_symbols, mol.positions):
+                        f.write(f"{symbol:2s}  {pos[0]:15.10f}  {pos[1]:15.10f}  {pos[2]:15.10f}\n")
                     successful_count += 1
         
         logger.info(f"Wrote {successful_count} molecule(s) to {outputfile}")
