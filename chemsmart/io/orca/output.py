@@ -1488,11 +1488,14 @@ class ORCAOutput(ORCAFileMixin):
         Get the last section of orbital energies
         """
         reversed_lines = []
+        collecting = False
         for line in reversed(self.contents):
-            if "ORBITAL ENERGIES" not in line:
-                reversed_lines.append(line)
-            else:
+            if "* MULLIKEN POPULATION ANALYSIS *" in line:
+                collecting = True
+            if "ORBITAL ENERGIES" in line and collecting:
                 break
+            if collecting:
+                reversed_lines.append(line)
         return reversed_lines[::-1]
 
     @cached_property
@@ -1554,16 +1557,6 @@ class ORCAOutput(ORCAFileMixin):
         Returns True if the calculation used separate alpha and beta spin orbitals.
         """
         return self.spin == "unrestricted"
-
-    @cached_property
-    def num_unpaired_electrons(self):
-        """Get the number of unpaired electrons.
-
-        For open-shell systems, this is multiplicity - 1.
-        """
-        if self.multiplicity is not None and self.multiplicity != 1:
-            return self.multiplicity - 1
-        return 0
 
     @property
     def alpha_occ_eigenvalues(self):
@@ -1629,185 +1622,144 @@ class ORCAOutput(ORCAFileMixin):
         orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
         return [e for e, occ in orbitals if occ == 0]
 
-    @property
-    def homo_energy(self):
-        """Get the HOMO (Highest Occupied Molecular Orbital) energy in eV.
-
-        For closed-shell systems, returns the highest doubly occupied orbital.
-        For open-shell restricted calculations, returns the highest occupied
-        orbital (which may be singly occupied).
+    @cached_property
+    def num_unpaired_electrons(self):
+        """Get the number of unpaired electrons.
+        The multiplicity is the number of unpaired electrons + 1
         """
-        # get all filled orbitals (occupancy > 0)
-        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        occupied_energies = [
-            energy for energy, occupancy in orbitals if occupancy == 2
-        ]
-        if occupied_energies:
-            return max(occupied_energies)
-        # If no doubly occupied orbitals, get highest occupied
-        occupied_energies = [
-            energy for energy, occupancy in orbitals if occupancy > 0
-        ]
-        if occupied_energies:
-            return max(occupied_energies)
-        return None
+        if self.multiplicity != 1:
+            # Verify that alpha_occ - beta_occ + 1 equals multiplicity
+            assert (
+                len(self.alpha_occ_eigenvalues)
+                - len(self.beta_occ_eigenvalues)
+                + 1
+                == self.multiplicity
+            )
+            return len(self.alpha_occ_eigenvalues) - len(
+                self.beta_occ_eigenvalues
+            )
+        return 0
 
-    @property
-    def lumo_energy(self):
-        """Get the LUMO (Lowest Unoccupied Molecular Orbital) energy in eV.
-
-        Returns the lowest unoccupied orbital energy.
-        """
-        # get all empty orbitals
-        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        unoccupied_energies = [
-            energy for energy, occupancy in orbitals if occupancy == 0
-        ]
-        if unoccupied_energies:
-            return min(unoccupied_energies)
-        return None
-
-    @property
-    def homo_alpha_energy(self):
-        """Get the HOMO energy for the α spin channel.
-
-        For unrestricted calculations, returns the highest occupied α orbital.
-        For restricted calculations, returns the HOMO energy.
-        """
-        if self.alpha_occ_eigenvalues:
-            return max(self.alpha_occ_eigenvalues)
-        return None
-
-    @property
-    def homo_beta_energy(self):
-        """Get the HOMO energy for the β spin channel.
-
-        For unrestricted calculations, returns the highest occupied β orbital.
-        For restricted calculations, returns the HOMO energy.
-        """
-        if self.beta_occ_eigenvalues:
-            return max(self.beta_occ_eigenvalues)
-        return None
-
-    @property
-    def lumo_alpha_energy(self):
-        """Get the LUMO energy for the α spin channel.
-
-        For unrestricted calculations, returns the lowest unoccupied α orbital.
-        For restricted calculations, returns the LUMO energy.
-        """
-        if self.alpha_virtual_eigenvalues:
-            return min(self.alpha_virtual_eigenvalues)
-        return None
-
-    @property
-    def lumo_beta_energy(self):
-        """Get the LUMO energy for the β spin channel.
-
-        For unrestricted calculations, returns the lowest unoccupied β orbital.
-        For restricted calculations, returns the LUMO energy.
-        """
-        if self.beta_virtual_eigenvalues:
-            return min(self.beta_virtual_eigenvalues)
-        return None
-
-    @property
-    def somo_energy(self):
-        """Get the lowest SOMO energy for open-shell systems.
-
-        For high-spin states (triplet, quintet, etc.), this returns the
-        lowest-energy singly occupied molecular orbital (SOMO) energy.
-
-        For restricted open-shell calculations, identifies orbitals with
-        occupancy of 1. For unrestricted calculations, returns the lowest
-        α orbital not matched by a β occupied orbital.
-
-        Returns energy in eV, or None for closed-shell systems.
-        """
-        if self.multiplicity == 1:
-            return None
-
-        # For restricted open-shell: look for singly occupied orbitals
-        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        somo_energies = [e for e, occ in orbitals if occ == 1]
-        if somo_energies:
-            return min(somo_energies)
-
-        # For unrestricted: SOMOs are top α occupied orbitals
-        # (the ones that don't have corresponding β electrons)
-        if self.is_unrestricted and self.num_unpaired_electrons > 0:
-            alpha_occ = self.alpha_occ_eigenvalues
-            if alpha_occ and len(alpha_occ) >= self.num_unpaired_electrons:
-                return alpha_occ[-self.num_unpaired_electrons]
-
-        return None
-
-    @property
+    @cached_property
     def somo_energies(self):
-        """Get all SOMO energies for open-shell systems.
+        """Returns a list of all SOMO energies for open-shell systems.
 
-        For high-spin states (triplet, quintet, etc.), returns all
-        singly occupied molecular orbital (SOMO) energies.
+        For high-spin states (triplet, quintet, etc.), these are the
+        singly occupied molecular orbitals (SOMOs) in the α spin channel.
 
-        For a triplet (S=1, multiplicity=3), there are 2 SOMOs.
-        For a quintet (S=2, multiplicity=5), there are 4 SOMOs.
+        For a triplet (S=1), there are 2 SOMOs.
+        For a quintet (S=2), there are 4 SOMOs.
 
-        Returns a list of energies in eV ordered from lowest to highest,
-        or None for closed-shell systems.
+        The list is ordered from lowest to highest energy.
         """
-        if self.multiplicity == 1:
-            return None
-
-        # For restricted open-shell: look for singly occupied orbitals
-        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        somo_energies = [e for e, occ in orbitals if occ == 1]
-        if somo_energies:
-            return sorted(somo_energies)
-
-        # For unrestricted: SOMOs are top α occupied orbitals
-        if self.is_unrestricted and self.num_unpaired_electrons > 0:
-            alpha_occ = self.alpha_occ_eigenvalues
-            if alpha_occ and len(alpha_occ) >= self.num_unpaired_electrons:
-                return alpha_occ[-self.num_unpaired_electrons :]
-
-        return None
-
-    @property
-    def highest_somo_energy(self):
-        """Get the highest SOMO energy for open-shell systems.
-
-        This is equivalent to HOMOα (the highest occupied α orbital)
-        for high-spin unrestricted calculations. It represents the
-        highest-energy singly occupied molecular orbital.
-
-        Returns energy in eV, or None for closed-shell systems.
-        """
-        if self.multiplicity == 1:
-            return None
-
-        somo_energies = self.somo_energies
-        if somo_energies:
-            return max(somo_energies)
-
-        # Fallback: return highest α occupied
-        if self.alpha_occ_eigenvalues:
-            return max(self.alpha_occ_eigenvalues)
-
+        if self.multiplicity != 1 and self.num_unpaired_electrons:
+            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
         return None
 
     @cached_property
-    def fmo_gap(self):
-        """Get the HOMO-LUMO gap in eV for closed-shell systems.
+    def lowest_somo_energy(self):
+        """Returns the lowest SOMO energy for open-shell systems.
 
-        For open-shell systems, returns None as the gap concept is
-        more complex with spin-polarized orbitals.
+        For high-spin states (triplet, quintet, etc.), this returns the
+        lowest-energy singly occupied molecular orbital (SOMO), which is
+        the first α orbital above the doubly-occupied manifold.
+
+        For closed-shell systems (multiplicity == 1), returns None.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[0]
+        return None
+
+    @cached_property
+    def highest_somo_energy(self):
+        """Returns the highest SOMO energy for open-shell systems.
+
+        This is equivalent to HOMOα (the highest occupied α orbital)
+        for high-spin states. It represents the highest-energy singly
+        occupied molecular orbital.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[-1]
+        return None
+
+    @cached_property
+    def homo_alpha_energy(self):
+        """Returns the HOMO energy for the α spin channel.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest occupied α orbital,
+        which is also the highest SOMO.
+        """
+        if self.alpha_occ_eigenvalues:
+            return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def homo_beta_energy(self):
+        """Returns the HOMO energy for the β spin channel.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest doubly-occupied
+        orbital energy.
+        """
+        if self.beta_occ_eigenvalues:
+            return self.beta_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def lumo_alpha_energy(self):
+        """Returns the LUMO energy for the α spin channel.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied α orbital.
+        """
+        if self.alpha_virtual_eigenvalues:
+            return self.alpha_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def lumo_beta_energy(self):
+        """Returns the LUMO energy for the β spin channel.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied β orbital.
+        """
+        if self.beta_virtual_eigenvalues:
+            return self.beta_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def homo_energy(self):
+        """Returns the HOMO (Highest Occupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy of the
+        highest doubly-occupied orbital.
         """
         if self.multiplicity == 1:
-            homo = self.homo_energy
-            lumo = self.lumo_energy
-            if homo is not None and lumo is not None:
-                return lumo - homo
-        return None
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[-1]
+
+    @cached_property
+    def lumo_energy(self):
+        """Returns the LUMO (Lowest Unoccupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy of the
+        lowest unoccupied orbital.
+        """
+        if self.multiplicity == 1:
+            if self.alpha_virtual_eigenvalues:
+                return self.alpha_virtual_eigenvalues[0]
+
+    @cached_property
+    def fmo_gap(self):
+        if self.multiplicity == 1:
+            return self.lumo_energy - self.homo_energy
+        else:
+            # radical systems
+            return (
+                min(self.lumo_alpha_energy, self.lumo_beta_energy)
+                - self.highest_somo_energy
+            )
 
     @property
     def mulliken_atomic_charges(self):
