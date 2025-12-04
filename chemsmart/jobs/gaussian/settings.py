@@ -1472,13 +1472,19 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             level_name="low",
         )
 
-        oniom_string = " oniom"
+        # Build ONIOM string with proper parentheses handling
+        levels = []
         if high_level_of_theory is not None:
-            oniom_string += f"({high_level_of_theory}"
+            levels.append(high_level_of_theory)
         if medium_level_of_theory is not None:
-            oniom_string += f":{medium_level_of_theory}"
+            levels.append(medium_level_of_theory)
         if low_level_of_theory is not None:
-            oniom_string += f":{low_level_of_theory})"
+            levels.append(low_level_of_theory)
+
+        if levels:
+            oniom_string = f" oniom({':'.join(levels)})"
+        else:
+            oniom_string = " oniom"
 
         return oniom_string
 
