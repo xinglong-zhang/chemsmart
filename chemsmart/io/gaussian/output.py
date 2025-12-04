@@ -22,8 +22,11 @@ from chemsmart.utils.repattern import (
     oniom_gridpoint_pattern,
     scf_energy_pattern,
 )
-from chemsmart.utils.utils import get_range_from_list, string2index_1based
-from chemsmart.utils.utils import safe_min_lengths, string2index_1based
+from chemsmart.utils.utils import (
+    get_range_from_list,
+    safe_min_lengths,
+    string2index_1based,
+)
 
 p = PeriodicTable()
 logger = logging.getLogger(__name__)

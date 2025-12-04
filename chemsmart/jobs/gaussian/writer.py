@@ -247,6 +247,8 @@ class GaussianInputWriter(InputWriter):
         logger.debug("Writing charge and multiplicity for QM/MM.")
         line = f"{self.settings.charge_and_multiplicity_string}\n"
         f.write(line)
+        charge = self.settings.charge
+        multiplicity = self.settings.multiplicity
         logger.debug(
             f"Molecular charge: {charge}, multiplicity: {multiplicity}"
         )
@@ -279,7 +281,6 @@ class GaussianInputWriter(InputWriter):
                 )
             self.job.molecule.low_level_atoms = self.settings.low_level_atoms
             self.job.molecule.bonded_atoms = self.settings.bonded_atoms
-
 
         # Log molecular information for debugging
         logger.debug(

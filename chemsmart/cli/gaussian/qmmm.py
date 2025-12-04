@@ -173,6 +173,7 @@ def qmmm(
     scale_factors,
     **kwargs,
 ):
+    """CLI for running Gaussian QRC jobs."""
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
     # get jobrunner for running Gaussian IRC jobs

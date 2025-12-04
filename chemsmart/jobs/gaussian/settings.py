@@ -1445,7 +1445,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         # Add solvation if specified
         if self.solvent_model is not None and self.solvent_id is not None:
-            route_string += f" scrf=({self.solvent_model},solvent={self.solvent_id})"
+            route_string += (
+                f" scrf=({self.solvent_model},solvent={self.solvent_id})"
+            )
 
         return route_string
 

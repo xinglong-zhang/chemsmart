@@ -11,8 +11,8 @@ from .irc import irc
 from .modred import modred
 from .opt import opt
 from .orca import orca
-from .qrc import qrc
 from .qmmm import qmmm
+from .qrc import qrc
 from .scan import scan
 from .singlepoint import sp
 from .ts import ts
