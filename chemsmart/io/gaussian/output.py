@@ -896,7 +896,6 @@ class Gaussian16Output(GaussianFileMixin):
         return layer_energies
 
     @cached_property
-    @property
     def energies(self):
         """
         Return energies of the system.

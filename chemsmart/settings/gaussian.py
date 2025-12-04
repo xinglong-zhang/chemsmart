@@ -460,7 +460,6 @@ class YamlGaussianProjectSettingsBuilder:
             )
             if job_type_config is not None:
                 # Use specific settings class if available, otherwise default
-                return settings_mapping.get(
                 settings = settings_mapping.get(
                     job_type, GaussianJobSettings
                 ).from_dict(job_type_config)

@@ -3080,7 +3080,7 @@ class ORCAQMMMOutput(ORCAOutput):
 
     @property
     def qm_system_size(self):
-        return self.natoms
+        return self._get_partition_system_sizes()["QM1"]
 
     @property
     def qm2_system_size(self):

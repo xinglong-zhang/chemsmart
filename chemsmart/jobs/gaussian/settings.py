@@ -571,26 +571,12 @@ class GaussianJobSettings(MolecularJobSettings):
         """
         route_string = ""
 
+        # Get dieze tag with job route and freq string
         dieze_tag = self._get_dieze_tag()
         route_string += dieze_tag
 
-        job_route = self._get_job_route()
-        route_string += job_route
-
-        freq_string = self._get_freq_string()
-        route_string += freq_string
-
         level_of_theory_string = self._get_level_of_theory_string()
         route_string += level_of_theory_string
-
-        force_string = self._get_force_string()
-        route_string += force_string
-
-        solvent_string = self._get_solvent_string()
-        route_string += solvent_string
-
-        additional_string = self._get_additional_string()
-        route_string += additional_string
 
         return route_string
 
@@ -1385,7 +1371,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             or self.low_level_basis
         )
         self.title = "Gaussian QM/MM job"
-        self._route_string = self.get_qmmm_level_of_theory_string()
 
         if self.real_charge and self.real_multiplicity:
             # the charge and multiplicity of the real system equal to
@@ -1434,14 +1419,38 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
 
         return level_of_theory
 
-    def get_qmmm_level_of_theory_string(self):
-        """Get ONIOM level of theory for route string."""
-        oniom_string = "# oniom"
-        assert (
-            self.jobtype is not None
-        ), "Job type must be specified for ONIOM job!"
-        jobtype = self.jobtype.lower()
-        jobtype = self.jobtype
+    def _get_route_string_from_jobtype(self):
+        """Generate QM/MM route string with job type, freq, and ONIOM specification."""
+        route_string = "#"
+
+        # Add job type
+        jobtype = self.jobtype.lower() if self.jobtype else None
+        if jobtype == "opt":
+            route_string += " opt"
+        elif jobtype == "ts":
+            route_string += " opt=(ts,calcfc,noeigentest)"
+        elif jobtype == "irc":
+            route_string += " irc"
+        elif jobtype == "freq":
+            route_string += " freq"
+        # sp doesn't add any keyword
+
+        # Add freq if enabled (and not already a freq job)
+        if (self.freq or self.numfreq) and jobtype != "freq":
+            route_string += " freq"
+
+        # Add ONIOM level of theory string
+        oniom_string = self._get_oniom_string()
+        route_string += oniom_string
+
+        # Add solvation if specified
+        if self.solvent_model is not None and self.solvent_id is not None:
+            route_string += f" scrf=({self.solvent_model},solvent={self.solvent_id})"
+
+        return route_string
+
+    def _get_oniom_string(self):
+        """Get ONIOM level of theory string."""
         high_level_of_theory = self.validate_and_assign_level(
             self.high_level_functional,
             self.high_level_basis,
@@ -1463,16 +1472,31 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             level_name="low",
         )
 
+        # Build ONIOM string with proper parentheses handling
+        levels = []
         if high_level_of_theory is not None:
-            oniom_string += f"({high_level_of_theory}"
+            levels.append(high_level_of_theory)
         if medium_level_of_theory is not None:
-            oniom_string += f":{medium_level_of_theory}"
+            levels.append(medium_level_of_theory)
         if low_level_of_theory is not None:
-            oniom_string += f":{low_level_of_theory})"
-        if jobtype == "sp" or jobtype == "opt" or jobtype == "freq":
-            oniom_string += f" {jobtype}"
-        # oniom_string += f" {jobtype}"
+            levels.append(low_level_of_theory)
+
+        if levels:
+            oniom_string = f" oniom({':'.join(levels)})"
+        else:
+            oniom_string = " oniom"
+
         return oniom_string
+
+    def get_qmmm_level_of_theory_string(self):
+        """Get ONIOM level of theory for route string.
+
+        Deprecated: Use _get_route_string_from_jobtype instead.
+        """
+        assert (
+            self.jobtype is not None
+        ), "Job type must be specified for ONIOM job!"
+        return self._get_route_string_from_jobtype()
 
     def _get_charge_and_multiplicity(self):
         """Obtain charge and multiplicity string.
