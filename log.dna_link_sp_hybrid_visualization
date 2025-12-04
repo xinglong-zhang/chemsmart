@@ -1,0 +1,54 @@
+ PyMOL(TM) Molecular Graphics System, Version 3.1.0.
+ Copyright (c) Schrodinger, LLC.
+ All Rights Reserved.
+ 
+    Created by Warren L. DeLano, Ph.D. 
+ 
+    PyMOL is user-supported open-source software.  Although some versions
+    are freely available, PyMOL is not in the public domain.
+ 
+    If PyMOL is helpful in your work or study, then please volunteer 
+    support for our ongoing efforts to create open and affordable scientific
+    software by purchasing a PyMOL Maintenance and/or Support subscription.
+
+    More information can be found at "http://www.pymol.org".
+ 
+    Enter "help" for a list of commands.
+    Enter "help <command-name>" for information on a specific command.
+
+ Hit ESC anytime to toggle between text and graphics.
+
+ CmdLoad: "/Users/taipanlan/PycharmProjects/chemsmart/dna_link_sp_hybrid_visualization.xyz" loaded as "dna_link_sp_hybrid_visualization".
+PyMOL>run /Users/taipanlan/PycharmProjects/chemsmart/zhang_group_pymol_style.py,main
+PyMOL>pymol_style dna_link_sp_hybrid_visualization; viewport 800,600; angle a1, id 7, id 8, id 9; zoom; ray 2400,1800; @/Users/taipanlan/PycharmProjects/chemsmart/dna_link_sp_hybrid_visualization.pml; save /Users/taipanlan/PycharmProjects/chemsmart/dna_link_sp_hybrid_visualization.pse ; quit
+ Setting: ray_shadow set to on.
+ Setting: light_count set to 2.
+ Setting: light set to [ -0.40000, -0.40000, -1.00000 ].
+ Setting: ambient set to 0.14000.
+ Setting: direct set to 0.65000.
+ Setting: reflect set to 0.25000.
+ Setting: shininess set to 40.00000.
+ Setting: power set to 1.00000.
+ Setting: specular_intensity set to 0.50000.
+ Setting: spec_direct set to 0.00000.
+ Setting: spec_count set to -1.
+ Setting: ray_shadow_decay_factor set to 0.00000.
+ Executive: object "a1" created.
+ Ray: render time: 0.47 sec. = 7686.4 frames/hour (0.47 sec. accum.).
+ Setting: stick_color unset in 1 objects.
+ Color: "light_C" defined as [ 0.012, 0.012, 0.012 ].
+ Color: "light_N" defined as [ 0.600, 0.800, 1.000 ].
+ Color: "light_O" defined as [ 1.000, 0.700, 0.700 ].
+ Color: "light_P" defined as [ 1.000, 0.850, 0.600 ].
+ Color: "light_S" defined as [ 1.000, 0.700, 0.700 ].
+ Executive: Colored 191 atoms.
+ Executive: Colored 14 atoms.
+ Executive: Colored 96 atoms.
+ Executive: Colored 59 atoms.
+ Selector: selection "group1" defined with 3 atoms.
+ Executive: Colored 1 atom.
+ Executive: Colored 2 atoms.
+ Setting: stick_transparency set to 0.00000 in 2 objects.
+ Setting: stick_radius set for 2 bonds in object "dna_link_sp_hybrid_visualization".
+ Setting: surface_color set to grey in 2 objects.
+ Setting: transparency set to 0.80000 in 2 objects.
