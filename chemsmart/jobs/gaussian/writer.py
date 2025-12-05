@@ -97,11 +97,13 @@ class GaussianInputWriter(InputWriter):
         """
         logger.debug("Starting complete input file generation")
         self._write_gaussian_header(f)
-        self._write_route_section(f)
-        self._write_gaussian_title(f)
         if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._write_route_string_qmmm(f)
+            self._write_gaussian_title(f)
             self._write_charge_and_multiplicity_qmmm(f)
         else:
+            self._write_route_section(f)
+            self._write_gaussian_title(f)
             self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
 
@@ -254,6 +256,12 @@ class GaussianInputWriter(InputWriter):
         logger.debug(
             f"Molecular charge: {charge}, multiplicity: {multiplicity}"
         )
+
+    def _write_route_string_qmmm(self, f):
+        logger.debug("Writing route for QM/MM.")
+        route_string = self.settings.get_qmmm_level_of_theory_string()
+        f.write(f"{route_string}\n")
+        f.write("\n")
 
     def _write_cartesian_coordinates(self, f):
         """
