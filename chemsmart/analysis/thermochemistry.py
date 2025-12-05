@@ -719,8 +719,15 @@ class Thermochemistry:
         """
         if self.s_freq_cutoff is None or self.v is None:
             return None
+        # For molecules with no vibrational modes (e.g., monoatomic),
+        # vibrational entropy is zero
+        if len(self.v) == 0:
+            return 0.0
         vib_entropy = []
         if self.entropy_method == "grimme":
+            # Check if free_rotor_entropy is available (requires Bav)
+            if self.free_rotor_entropy is None:
+                return None
             assert len(self.v) == len(self.entropy_damping_function), (
                 f"The length of vibrational frequencies and damping function "
                 f"must be equal.\n"
@@ -772,6 +779,10 @@ class Thermochemistry:
         """
         if self.h_freq_cutoff is None or self.v is None:
             return None
+        # For molecules with no vibrational modes (e.g., monoatomic),
+        # vibrational internal energy is zero
+        if len(self.v) == 0:
+            return 0.0
         vib_energies = []
         assert len(self.v) == len(self.enthalpy_damping_function), (
             f"The length of vibrational frequencies and damping function "
