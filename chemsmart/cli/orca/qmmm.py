@@ -13,6 +13,48 @@ from chemsmart.utils.utils import convert_string_to_slices
 logger = logging.getLogger(__name__)
 
 
+def _populate_charge_and_multiplicity_on_settings(qs):
+    """
+    Populate top-level `charge` and `multiplicity` on an ORCAQMMMJobSettings
+    instance `qs` from QMMM-specific fields following the preference order:
+      1. medium (charge_medium, mult_medium)
+      2. qm (charge_qm, mult_qm)
+      3. total (charge_total, mult_total)
+
+    This is necessary because the ORCAQMMMJobSettings __init__ only sets
+    these parent attributes during construction; when CLI later assigns
+    the per-layer attributes we must propagate them back to `.charge` and
+    `.multiplicity` for downstream writers.
+    """
+    charge = getattr(qs, "charge", None)
+    mult = getattr(qs, "multiplicity", None)
+
+    # Preference: medium -> qm -> total
+    if (
+        getattr(qs, "charge_medium", None) is not None
+        and getattr(qs, "mult_medium", None) is not None
+    ):
+        charge = qs.charge_medium
+        mult = qs.mult_medium
+    elif (
+        getattr(qs, "charge_qm", None) is not None
+        and getattr(qs, "mult_qm", None) is not None
+    ):
+        charge = qs.charge_qm
+        mult = qs.mult_qm
+    elif (
+        getattr(qs, "charge_total", None) is not None
+        and getattr(qs, "mult_total", None) is not None
+    ):
+        charge = qs.charge_total
+        mult = qs.mult_total
+
+    if charge is not None:
+        qs.charge = charge
+    if mult is not None:
+        qs.multiplicity = mult
+
+
 @orca.command("qmmm", cls=MyCommand)
 @click_job_options
 @click.option(
@@ -252,21 +294,76 @@ def qmmm(
     """
     from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
+    # get jobrunner for running Gaussian QMMM jobs
     jobrunner = ctx.obj["jobrunner"]
+    ctx.obj["qmmm"] = True
+    # get settings from project
     project_settings = ctx.obj["project_settings"]
-    qmmm_settings = project_settings.qmmm_settings()
-
+    logger.debug("Project settings: %s", ctx.obj["project_settings"].__dict__)
     # job setting from filename or default, with updates from user in cli specified in keywords
-    # e.g., `chemsmart sub orca qmmm -qf <qm_functional> -qb <qm_basis>`
+    # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.orca.py subcommands
-    qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
+    # Initialize qmmm_settings from project; fall back to defaults if missing
+    qmmm_settings = project_settings.qmmm_settings()
+    if qmmm_settings is None:
+        logger.warning(
+            "Project qmmm settings not found; using GaussianQMMMJobSettings defaults."
+        )
+        qmmm_settings = ORCAQMMMJobSettings()
+
+    # Merge project qmmm settings with job settings and CLI-specified keywords.
+    # The merge method is expected to exist on project settings objects; guard against
+    # missing/unsupported implementations and ensure we end up with a
+    # GaussianQMMMJobSettings instance.
+    try:
+        qmmm_merged = qmmm_settings.merge(job_settings, keywords=keywords)
+    except Exception as exc:
+        logger.debug("qmmm_settings.merge failed or is unavailable: %s", exc)
+        # If merge failed, prefer job_settings if available, otherwise keep defaults
+        if job_settings is not None:
+            # Try to normalize job_settings into a GaussianQMMMJobSettings if possible
+            try:
+                # job_settings may be a settings instance or a dict-like
+                qmmm_merged = ORCAQMMMJobSettings(
+                    **getattr(job_settings, "__dict__", job_settings)
+                )
+            except Exception:
+                qmmm_merged = qmmm_settings
+        else:
+            qmmm_merged = qmmm_settings
+
+    # Ensure the final settings object is a GaussianQMMMJobSettings instance
+    if isinstance(qmmm_merged, ORCAQMMMJobSettings):
+        qmmm_settings = qmmm_merged
+    else:
+        try:
+            qmmm_settings = ORCAQMMMJobSettings(
+                **getattr(qmmm_merged, "__dict__", {})
+            )
+        except Exception:
+            qmmm_settings = ORCAQMMMJobSettings()
 
     # get label for the job
-    label = ctx.obj["label"]
-    logger.debug(f"Label for job: {label}")
+    label = ctx.obj.get("label")
+    logger.debug("Label for job: %s", label)
+
+    # jobrunner = ctx.obj["jobrunner"]
+    # project_settings = ctx.obj["project_settings"]
+    # qmmm_settings = project_settings.qmmm_settings()
+    #
+    # # job setting from filename or default, with updates from user in cli specified in keywords
+    # # e.g., `chemsmart sub orca qmmm -qf <qm_functional> -qb <qm_basis>`
+    # job_settings = ctx.obj["job_settings"]
+    # keywords = ctx.obj["keywords"]
+    #
+    # # merge project settings with job settings from cli keywords from cli.orca.py subcommands
+    # qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
+    #
+    # # get label for the job
+    # label = ctx.obj["label"]
+    # logger.debug(f"Label for job: {label}")
 
     # convert from ORCAJobSettings instance to ORCAQMMMJobSettings instance
     qmmm_settings = ORCAQMMMJobSettings(**qmmm_settings.__dict__)
@@ -303,6 +400,8 @@ def qmmm(
     qmmm_settings.ecp_layer_ecp = ecp_layer_ecp
     qmmm_settings.ecp_layer = ecp_layer
     qmmm_settings.scale_formal_charge_ecp_atom = scale_formal_charge_ecp_atom
+    # populate top-level charge/multiplicity on settings for downstream writers
+    _populate_charge_and_multiplicity_on_settings(qmmm_settings)
     # get molecule
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]

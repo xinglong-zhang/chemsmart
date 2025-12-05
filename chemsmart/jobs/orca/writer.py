@@ -9,7 +9,11 @@ based on job settings and molecular structures.
 import logging
 import os.path
 
-from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCATSJobSettings
+from chemsmart.jobs.orca.settings import (
+    ORCAIRCJobSettings,
+    ORCAQMMMJobSettings,
+    ORCATSJobSettings,
+)
 from chemsmart.jobs.writer import InputWriter
 from chemsmart.utils.io import remove_keyword
 from chemsmart.utils.utils import (
@@ -81,6 +85,7 @@ class ORCAInputWriter(InputWriter):
         self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
+        self._write_qmmm_block(f)
         self._write_modred_block(f)
         self._write_hessian_block(f)
         self._write_irc_block(f)
@@ -297,6 +302,18 @@ class ORCAInputWriter(InputWriter):
             else:
                 f.write("  Quadrupole False\n")
             f.write("end\n")
+
+    def _write_qmmm_block(self, f):
+        """
+        Write QM/MM parameters block.
+
+        Args:
+            f: File object to write to
+        """
+        print("Writing QM/MM block", self.settings.qmmm_block, self.settings)
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            logger.debug("Writing qmmm block")
+            f.write(f"{self.settings.qmmm_block}\n")
 
     def _write_modred_block(self, f):
         """
@@ -641,8 +658,46 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If charge or multiplicity is not specified
         """
-        charge = self.settings.charge
-        multiplicity = self.settings.multiplicity
+        charge = getattr(self.settings, "charge", None)
+        multiplicity = getattr(self.settings, "multiplicity", None)
+
+        # If missing, attempt to populate from common QMMM-related fields.
+        # Common names across settings: charge_qm, charge_medium, charge_total
+        # and mult_qm, mult_medium, mult_total.
+        if charge is None or multiplicity is None:
+            # order of preference: medium (QM2) -> qm -> total
+            candidate_charge_attrs = [
+                "charge_medium",
+                "charge_qm",
+                "charge_total",
+                "charge",
+            ]
+            candidate_mult_attrs = [
+                "mult_medium",
+                "mult_qm",
+                "mult_total",
+                "multiplicity",
+            ]
+
+            for attr in candidate_charge_attrs:
+                if charge is None:
+                    charge = getattr(self.settings, attr, None)
+            for attr in candidate_mult_attrs:
+                if multiplicity is None:
+                    multiplicity = getattr(self.settings, attr, None)
+
+            # if we found values, assign back to settings for downstream use
+            if charge is not None:
+                logger.debug(
+                    f"Populating settings.charge from QMMM fields: {charge}"
+                )
+                self.settings.charge = charge
+            if multiplicity is not None:
+                logger.debug(
+                    f"Populating settings.multiplicity from QMMM fields: {multiplicity}"
+                )
+                self.settings.multiplicity = multiplicity
+
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
