@@ -3049,6 +3049,12 @@ class TestThermochemistryBatchProcessing:
         with open(output_file, "r") as f:
             first_content = f.read()
 
+        # Count "Temperature:" occurrences - should be 1 (from first write)
+        temperature_count = first_content.count("Temperature:")
+        assert (
+            temperature_count == 1
+        ), f"Expected 1 'Temperature:' line but found {temperature_count}"
+
         # Write again without header
         thermochem.log_results_to_file(
             structure,
@@ -3070,17 +3076,19 @@ class TestThermochemistryBatchProcessing:
 
         # Count "Temperature:" occurrences - should be 1 (from first write)
         temperature_count = second_content.count("Temperature:")
-        assert temperature_count == 1, (
-            f"Expected 1 'Temperature:' line but found {temperature_count}"
-        )
+        assert (
+            temperature_count == 1
+        ), f"Expected 1 'Temperature:' line but found {temperature_count}"
 
         # Count data rows - should be 2 (one from each write)
         data_lines = [
-            line for line in second_content.split("\n") if "co2" in line.lower()
+            line
+            for line in second_content.split("\n")
+            if "co2" in line.lower()
         ]
-        assert len(data_lines) == 2, (
-            f"Expected 2 data rows but found {len(data_lines)}"
-        )
+        assert (
+            len(data_lines) == 2
+        ), f"Expected 2 data rows but found {len(data_lines)}"
 
     def test_log_results_write_header_explicit_true(
         self, gaussian_co2_opt_outfile, tmpdir
@@ -3137,9 +3145,9 @@ class TestThermochemistryBatchProcessing:
         with open(output_file, "r") as f:
             content = f.read()
         temperature_count = content.count("Temperature:")
-        assert temperature_count == 2, (
-            f"Expected 2 'Temperature:' lines but found {temperature_count}"
-        )
+        assert (
+            temperature_count == 2
+        ), f"Expected 2 'Temperature:' lines but found {temperature_count}"
 
     def test_batch_processing_single_header(
         self,
@@ -3194,9 +3202,9 @@ class TestThermochemistryBatchProcessing:
 
         # Should have only 1 temperature header
         temperature_count = content.count("Temperature:")
-        assert temperature_count == 1, (
-            f"Expected 1 'Temperature:' line but found {temperature_count}"
-        )
+        assert (
+            temperature_count == 1
+        ), f"Expected 1 'Temperature:' line but found {temperature_count}"
 
         # Should have data for both conformers
         assert "udc3_mCF3_monomer_c1" in content
