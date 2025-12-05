@@ -2367,6 +2367,16 @@ class TestORCAOutput:
             orca_out.fmo_gap
             == (min(-0.346513, -0.381082) - (-0.761816)) * units.Hartree
         )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.346513 - (-0.761816)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.381082 - (-0.721020)) * units.Hartree,
+            rtol=1e-6,
+        )
 
     def test_fe2_quintet_orbital_properties(self, fe2_quintet_output):
         """Test HOMO/LUMO/SOMO properties for Fe2 quintet state."""
@@ -2396,6 +2406,16 @@ class TestORCAOutput:
             (min(-0.336304, -0.328840) - (-0.705655)) * units.Hartree,
             # 0.369351
         )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.336304 - (-0.705655)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.328840 - (-0.688110)) * units.Hartree,
+            rtol=1e-6,
+        )
 
     def test_fe3_doublet_orbital_properties(self, fe3_doublet_output):
         """Test HOMO/LUMO/SOMO properties for Fe3 doublet state."""
@@ -2418,6 +2438,16 @@ class TestORCAOutput:
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.764634, -0.744986) - (-1.060149)) * units.Hartree,
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.764634 - (-1.060149)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.744986 - (-1.061789)) * units.Hartree,
+            rtol=1e-6,
         )
 
     def test_fe3_quartet_orbital_properties(self, fe3_quartet_output):
@@ -2445,6 +2475,16 @@ class TestORCAOutput:
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.749293, -0.721360) - (-1.034892)) * units.Hartree,
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.749293 - (-1.034892)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.721360 - (-1.024711)) * units.Hartree,
+            rtol=1e-6,
         )
 
     def test_fe3_sextet_orbital_properties(self, fe3_sextet_output):
@@ -2474,6 +2514,16 @@ class TestORCAOutput:
         assert np.isclose(
             orca_out.fmo_gap,
             (min(-0.553561, -0.775129) - (-1.030076)) * units.Hartree,
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.553561 - (-1.030076)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.775129 - (-1.045382)) * units.Hartree,
+            rtol=1e-6,
         )
 
 

@@ -643,8 +643,16 @@ class TestGaussian16Output:
             g16_output.fmo_gap,
             (min(-0.07423, -0.05025) - (-0.15673)) * units.Hartree,
         )
-        assert g16_output.beta_lumo_energy == -0.05025 * units.Hartree
-        assert g16_output.beta_homo_energy == -0.18923 * units.Hartree
+        assert np.isclose(
+            g16_output.alpha_fmo_gap,
+            (-0.07423 - (-0.15673)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.beta_fmo_gap,
+            (-0.05025 - (-0.18923)) * units.Hartree,
+            rtol=1e-6,
+        )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -692,6 +700,16 @@ class TestGaussian16Output:
         assert np.isclose(
             g16_output.fmo_gap,
             (min(-0.03881, -0.06116) - (-0.18764)) * units.Hartree,
+        )
+        assert np.isclose(
+            g16_output.alpha_fmo_gap,
+            (-0.03881 - (-0.18764)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.beta_fmo_gap,
+            (-0.06116 - (-0.19564)) * units.Hartree,
+            rtol=1e-6,
         )
 
     def test_read_gaussian_link_opt_output_file(
