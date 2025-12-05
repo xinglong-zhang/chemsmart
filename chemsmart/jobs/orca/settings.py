@@ -968,77 +968,6 @@ class ORCAIRCJobSettings(ORCAJobSettings):
         f.write("end\n")
 
 
-def _get_formatted_partition_strings(atom_id):
-    """Normalize atom specification to sorted unique ints and compress into ranges.
-
-    Acceptable inputs:
-      - list/tuple of ints
-      - iterable of ints
-      - string like '1-15,37,39' or '1:15 37 39'
-
-    Returns a string like '1:15 37 39' (ranges use ':' and tokens are space-separated).
-    """
-    if atom_id is None:
-        return None
-
-    # If it's already a sequence of integers (list/tuple), coerce to ints
-    if isinstance(atom_id, (list, tuple)):
-        atoms = [int(x) for x in atom_id]
-    elif isinstance(atom_id, str):
-        # Prefer robust utility if available
-        try:
-            atoms = get_list_from_string_range(atom_id)
-        except Exception:
-            # Fallback simple parser: split on commas/spaces, handle ranges like '1-5' or '1:5'
-            tokens = re.split(r"[,\s]+", atom_id.strip())
-            atoms = []
-            for tok in tokens:
-                if not tok:
-                    continue
-                if "-" in tok:
-                    a, b = tok.split("-", 1)
-                    atoms.extend(range(int(a), int(b) + 1))
-                elif ":" in tok:
-                    a, b = tok.split(":", 1)
-                    atoms.extend(range(int(a), int(b) + 1))
-                else:
-                    atoms.append(int(tok))
-    else:
-        # Try to iterate and coerce
-        try:
-            atoms = [int(x) for x in atom_id]
-        except Exception:
-            raise TypeError(
-                "Unsupported atom specification type for partition string"
-            )
-
-    # make unique sorted list of ints
-    atoms = sorted(set(int(x) for x in atoms))
-    if not atoms:
-        return None
-
-    # compress contiguous sequences into start:end or single integer
-    ranges = []
-    start = prev = atoms[0]
-    for a in atoms[1:]:
-        if a == prev + 1:
-            prev = a
-            continue
-        # break in sequence
-        if start == prev:
-            ranges.append(str(start))
-        else:
-            ranges.append(f"{start}:{prev}")
-        start = prev = a
-    # finalize last segment
-    if start == prev:
-        ranges.append(str(start))
-    else:
-        ranges.append(f"{start}:{prev}")
-
-    return " ".join(ranges)
-
-
 class ORCAQMMMJobSettings(ORCAJobSettings):
     """Settings for ORCA multiscale job.
     This includes five types of methods:
@@ -1354,13 +1283,83 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         e.g. 'QMAtoms {1:10 15:20} end'"""
 
         partition_string = ""
-        qm_fmt = _get_formatted_partition_strings(self.qm_atoms)
+        qm_fmt = self._get_formatted_partition_strings(self.qm_atoms)
         if qm_fmt is not None:
             partition_string += f"QMAtoms {{{qm_fmt}}} end\n"
-        qm2_fmt = _get_formatted_partition_strings(self.qm2_atoms)
+        qm2_fmt = self._get_formatted_partition_strings(self.qm2_atoms)
         if qm2_fmt is not None:
             partition_string += f"QM2Atoms {{{qm2_fmt}}} end\n"
         return partition_string
+
+    def _get_formatted_partition_strings(self, atom_id):
+        """Normalize atom specification to sorted unique ints and compress into ranges.
+
+        Acceptable inputs:
+          - list/tuple of ints
+          - iterable of ints
+          - string like '1-15,37,39' or '1:15 37 39'
+
+        Returns a string like '1:15 37 39' (ranges use ':' and tokens are space-separated).
+        """
+        if atom_id is None:
+            return None
+
+        # If it's already a sequence of integers (list/tuple), coerce to ints
+        if isinstance(atom_id, (list, tuple)):
+            atoms = [int(x) for x in atom_id]
+        elif isinstance(atom_id, str):
+            # Prefer robust utility if available
+            try:
+                atoms = get_list_from_string_range(atom_id)
+            except Exception:
+                # Fallback simple parser: split on commas/spaces, handle ranges like '1-5' or '1:5'
+                tokens = re.split(r"[,\s]+", atom_id.strip())
+                atoms = []
+                for tok in tokens:
+                    if not tok:
+                        continue
+                    if "-" in tok:
+                        a, b = tok.split("-", 1)
+                        atoms.extend(range(int(a), int(b) + 1))
+                    elif ":" in tok:
+                        a, b = tok.split(":", 1)
+                        atoms.extend(range(int(a), int(b) + 1))
+                    else:
+                        atoms.append(int(tok))
+        else:
+            # Try to iterate and coerce
+            try:
+                atoms = [int(x) for x in atom_id]
+            except Exception:
+                raise TypeError(
+                    "Unsupported atom specification type for partition string"
+                )
+
+        # make unique sorted list of ints
+        atoms = sorted(set(int(x) for x in atoms))
+        if not atoms:
+            return None
+
+        # compress contiguous sequences into start:end or single integer
+        ranges = []
+        start = prev = atoms[0]
+        for a in atoms[1:]:
+            if a == prev + 1:
+                prev = a
+                continue
+            # break in sequence
+            if start == prev:
+                ranges.append(str(start))
+            else:
+                ranges.append(f"{start}:{prev}")
+            start = prev = a
+        # finalize last segment
+        if start == prev:
+            ranges.append(str(start))
+        else:
+            ranges.append(f"{start}:{prev}")
+
+        return " ".join(ranges)
 
     def _write_qmmm_block(self):
         """Writes the QMMM block options.
@@ -1376,34 +1375,46 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         end
         *pdbfile -1 1 peptideChain.pdb
         """
-        qm_block = {}
         full_qm_block = "%qmmm\n"
-        qm_block["qm_atoms"] = f"QMAtoms {{{''.join(self.qm_atoms)}}} end "
-        if self.qm2_atoms:
-            qm_block["qm2_atoms"] = f"QM2Atoms {''.join(self.qm2_atoms)} end "
-        qm_block["charge"], _ = self._get_charge_and_multiplicity()
-        _, qm_block["multiplicity"] = self._get_charge_and_multiplicity()
-        if self.qm2_solvation is not None:
-            qm_block["qm2_solvation"] = f"solv_scheme {self.qm2_solvation}"
-        if self.active_atoms is not None:
-            qm_block["active_atoms"] = (
-                f"ActiveAtoms {''.join(self.active_atoms)} end"
-            )
-        if self._get_level_of_theory() in ["!QM/QM2", "!QM/QM2/MM"]:
-            if self.qm2_method is not None:
-                # the case where QM2 method is provided in a file
-                qm_block["qm2_method"] = (
-                    f'QM2CustomFile "{self.qm2_method}" end'
-                )
-            else:
-                qm_block["qm2_funtional"] = (
-                    f'QM2CUSTOMMETHOD "{self.qm2_functional}" end'
-                )
-                qm_block["qm2_basis"] = (
-                    f'QM2CUSTOMBASIS "{self.qm2_basis}" end'
-                )
 
-        if self.jobtype.upper() in [
+        # Partition strings (QMAtoms and QM2Atoms) using dedicated helper
+        partition_block = self._get_partition_string()
+        if partition_block:
+            # partition_block already contains trailing newlines between lines
+            full_qm_block += partition_block
+
+        # Charge / multiplicity lines for medium/total
+        charge_str, mult_str = self._get_charge_and_multiplicity()
+        # Only include lines that do not contain the string 'None'
+        if charge_str and "None" not in str(charge_str):
+            full_qm_block += f"{charge_str}\n"
+        if mult_str and "None" not in str(mult_str):
+            full_qm_block += f"{mult_str}\n"
+
+        # QM2 solvation scheme
+        if self.qm2_solvation is not None:
+            full_qm_block += f"solv_scheme {self.qm2_solvation}\n"
+
+        # Active atoms (if provided) - format with helper
+        active_fmt = self._get_formatted_partition_strings(self.active_atoms)
+        if active_fmt is not None:
+            full_qm_block += f"ActiveAtoms {{{active_fmt}}} end\n"
+
+        # QM2 custom method / basis when applicable
+        lot = self._get_level_of_theory()
+        if lot in ["!QM/QM2", "!QM/QM2/MM"]:
+            if self.qm2_method is not None:
+                full_qm_block += f'QM2CustomFile "{self.qm2_method}" end\n'
+            else:
+                if self.qm2_functional is not None:
+                    full_qm_block += (
+                        f'QM2CUSTOMMETHOD "{self.qm2_functional}" end\n'
+                    )
+                if self.qm2_basis is not None:
+                    full_qm_block += f'QM2CUSTOMBASIS "{self.qm2_basis}" end\n'
+
+        # Force field file for specific job types
+        if self.jobtype and self.jobtype.upper() in [
             "QM/MM",
             "QM/QM2/MM",
             "IONIC-CRYSTAL-QMMM",
@@ -1411,30 +1422,39 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             assert (
                 self.mm_force_field is not None
             ), f"Force field file is missing for {self.jobtype} job!"
-            qm_block["force_field"] = f'ORCAFFFilename "{self.mm_force_field}"'
+            full_qm_block += f'ORCAFFFilename "{self.mm_force_field}"\n'
 
+        # Fixed atoms options
         if self.use_active_info_from_pbc:
-            qm_block["fixed_atoms"] = "Use_Active_InfoFromPDB true"
-        elif self.active_atoms:
-            qm_block["fixed_atoms"] = (
-                f"OptRegion_FixedAtoms {''.join(self.optregion_fixed_atoms)} end"
+            full_qm_block += "Use_Active_InfoFromPDB true\n"
+        elif self.optregion_fixed_atoms:
+            fixed_fmt = self._get_formatted_partition_strings(
+                self.optregion_fixed_atoms
             )
+            if fixed_fmt is not None:
+                full_qm_block += f"OptRegion_FixedAtoms {{{fixed_fmt}}} end\n"
+
+        # H-bond lengths block
         if self.qm_h_bond_length is not None:
-            qm_block["h_bond_length"] = self._get_h_bond_length()
+            h_block = self._get_h_bond_length()
+            if h_block:
+                # _get_h_bond_length may return a multi-line string
+                full_qm_block += (
+                    f"{h_block}\n" if not h_block.endswith("\n") else h_block
+                )
+
         if self.delete_la_double_counting is True:
-            qm_block["delete_la_double_counting"] = (
-                "Delete_LA_Double_Counting true"
-            )
+            full_qm_block += "Delete_LA_Double_Counting true\n"
         if self.delete_la_bond_double_counting_atoms:
-            qm_block["delete_la_bond_double_counting_atoms"] = (
-                "DeleteLABondDoubleCounting true"
-            )
+            full_qm_block += "DeleteLABondDoubleCounting true\n"
         if self.embedding_type is not None:
-            qm_block["embedding_type"] = self._get_embedding_type()
-        for key, val in qm_block.items():
-            full_qm_block += f"{val}\n"
-        if self._write_crystal_qmmm_subblock() is not None:
-            full_qm_block += self._write_crystal_qmmm_subblock()
+            full_qm_block += f"{self._get_embedding_type()}\n"
+
+        # Append crystal subblock if any
+        crystal_sub = self._write_crystal_qmmm_subblock()
+        if crystal_sub is not None:
+            full_qm_block += crystal_sub
+
         full_qm_block += "end\n"
         return full_qm_block
 
