@@ -3211,8 +3211,6 @@ class TestThermochemistryBatchProcessing:
         """Test that FileExistsError is raised when output file exists
         during batch processing without overwrite flag.
         """
-        import os
-
         from chemsmart.cli.thermochemistry.thermochemistry import (
             thermochemistry_process_pipeline,
         )

@@ -304,8 +304,7 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
             for i, job in enumerate(jobs):
                 try:
                     # Write header only for the first job
-                    write_header = True if i == 0 else False
-                    job.compute_thermochemistry(write_header=write_header)
+                    job.compute_thermochemistry(write_header=(i == 0))
                     logger.info(
                         f"Thermochemistry calculation completed for "
                         f"{job.label}."
