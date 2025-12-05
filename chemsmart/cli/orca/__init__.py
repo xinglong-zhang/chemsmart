@@ -27,5 +27,6 @@ __all__ = [
     "scan",
     "sp",
     "ts",
+    "qmmm",
 ]
 __all__ = ["inp", "irc", "modred", "opt", "orca", "scan", "sp", "ts", "qmmm"]
