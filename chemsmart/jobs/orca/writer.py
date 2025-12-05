@@ -129,6 +129,10 @@ class ORCAInputWriter(InputWriter):
         else:
             route_string = self.settings.route_string
 
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            logger.debug("Writing qmmm route string")
+            route_string = self.settings.qmmm_route_string
+
         f.write(route_string + "\n")
 
     def _write_processors(self, f):
@@ -310,7 +314,6 @@ class ORCAInputWriter(InputWriter):
         Args:
             f: File object to write to
         """
-        print("Writing QM/MM block", self.settings.qmmm_block, self.settings)
         if isinstance(self.settings, ORCAQMMMJobSettings):
             logger.debug("Writing qmmm block")
             f.write(f"{self.settings.qmmm_block}\n")
