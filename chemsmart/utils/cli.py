@@ -43,6 +43,16 @@ def _add_subcommand_info_to_ctx(ctx):
     Args:
         ctx (Context): Click context object containing command information.
     """
+    # Ensure ctx.obj is a mutable mapping (dict) so callers like MyGroup
+    # and MyCommand can safely append subcommand metadata even when the
+    # group's callback has not yet executed (ctx.obj may be None).
+    try:
+        ctx.ensure_object(dict)
+    except Exception:
+        # fallback for contexts that may not implement ensure_object
+        if ctx.obj is None:
+            ctx.obj = {}
+
     if "subcommand" not in ctx.obj:
         ctx.obj["subcommand"] = []
 
