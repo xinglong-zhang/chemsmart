@@ -1,9 +1,0 @@
- Entering Gaussian System, FakeGaussianRunner
- Input=/Users/taipanlan/PycharmProjects/chemsmart/crest_best_qmmm.com
- Output=/Users/taipanlan/PycharmProjects/chemsmart/crest_best_qmmm.log
- ******************************************
- Fake Gaussian Executable
- ******************************************
- %chk=crest_best_qmmm.chk
- %nprocshared=12
- %mem=40GB
