@@ -792,6 +792,13 @@ class Molecule:
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
 
+        if basename.endswith((".cdx", ".cdxml")):
+            return cls._read_chemdraw_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -882,6 +889,31 @@ class Molecule:
 
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.get_molecule(index=index)
+
+    @classmethod
+    def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read ChemDraw file (.cdx or .cdxml) format.
+
+        Args:
+            filepath (str): Path to ChemDraw file (.cdx or .cdxml)
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+            return_list (bool): If True, return a list of molecules.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from ChemDraw file.
+
+        Note:
+            - .cdxml files are XML-based ChemDraw format.
+            - .cdx files are binary ChemDraw format.
+            - RDKit's MolsFromCDXMLFile supports both formats.
+            - 3D coordinates are generated using RDKit's EmbedMolecule.
+        """
+        chemdraw_file = CDXFile(filename=filepath)
+        return chemdraw_file.get_molecules(
+            index=index, return_list=return_list
+        )
 
     # @staticmethod
     # @file_cache()
@@ -2061,3 +2093,144 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+
+class CDXFile(FileMixin):
+    """
+    ChemDraw file object for reading .cdx and .cdxml files.
+
+    Supports both binary (.cdx) and XML-based (.cdxml) ChemDraw formats.
+    Uses RDKit for parsing and generates 3D coordinates using EmbedMolecule.
+
+    Args:
+        filename (str or pathlib.Path): Path to the ChemDraw file.
+    """
+
+    def __init__(self, filename):
+        from pathlib import Path
+
+        # Accept both str and pathlib.Path
+        self.filename = str(filename) if isinstance(filename, Path) else filename
+
+    @property
+    def molecules(self):
+        """
+        Return all molecules from the ChemDraw file.
+        """
+        return self._parse_chemdraw_file()
+
+    def _parse_chemdraw_file(self):
+        """
+        Parse the ChemDraw file and return a list of Molecule objects.
+
+        Uses RDKit to parse the file and generate 3D coordinates.
+
+        Returns:
+            list[Molecule]: List of Molecule objects with 3D coordinates.
+        """
+        from rdkit.Chem import AllChem
+
+        # RDKit's MolsFromCDXMLFile works for both .cdx and .cdxml
+        rdkit_mols = list(Chem.MolsFromCDXMLFile(self.filename, removeHs=False))
+
+        if not rdkit_mols:
+            raise ValueError(
+                f"No molecules could be read from ChemDraw file: {self.filename}"
+            )
+
+        molecules = []
+        for rdkit_mol in rdkit_mols:
+            if rdkit_mol is None:
+                continue
+
+            # Add explicit hydrogens for proper structure
+            rdkit_mol = Chem.AddHs(rdkit_mol)
+
+            # Generate 3D coordinates
+            try:
+                # Try to embed the molecule to get 3D coordinates
+                result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+                if result == -1:
+                    # Embedding failed, try with random seed
+                    result = AllChem.EmbedMolecule(
+                        rdkit_mol,
+                        useRandomCoords=True,
+                        randomSeed=42,
+                    )
+                    if result == -1:
+                        logger.warning(
+                            f"Could not generate 3D coordinates for a molecule "
+                            f"in {self.filename}. Skipping this molecule."
+                        )
+                        continue
+
+                # Optimize the geometry
+                AllChem.MMFFOptimizeMolecule(rdkit_mol)
+
+            except Exception as e:
+                logger.warning(
+                    f"Error generating 3D coordinates for molecule: {str(e)}"
+                )
+                continue
+
+            # Convert RDKit mol to Molecule
+            mol = Molecule.from_rdkit_mol(rdkit_mol)
+            molecules.append(mol)
+
+        if not molecules:
+            raise ValueError(
+                f"No valid molecules with 3D coordinates could be generated "
+                f"from ChemDraw file: {self.filename}"
+            )
+
+        return molecules
+
+    def get_molecules(self, index="-1", return_list=False):
+        """
+        Get molecule(s) from the ChemDraw file.
+
+        Args:
+            index (str or int): Index specification:
+                - "-1": Return the last molecule (default)
+                - ":": Return all molecules
+                - "1": Return the first molecule (1-based indexing)
+                - "1:3": Return molecules 1 to 3 (1-based indexing)
+            return_list (bool): If True, always return a list.
+
+        Returns:
+            Molecule or list[Molecule]: Single Molecule or list of Molecules.
+        """
+        molecules = self.molecules
+
+        # Handle index specification
+        if isinstance(index, int):
+            index = str(index)
+
+        if index == ":":
+            # Return all molecules
+            return molecules if return_list else molecules
+
+        if index == "-1":
+            # Return last molecule
+            mol = molecules[-1]
+            return [mol] if return_list else mol
+
+        # Handle 1-based indexing
+        if index.isdigit() or (index.startswith("-") and index[1:].isdigit()):
+            idx = int(index)
+            if idx > 0:
+                # 1-based positive indexing
+                mol = molecules[idx - 1]
+            else:
+                # Negative indexing
+                mol = molecules[idx]
+            return [mol] if return_list else mol
+
+        # Handle slice notation (e.g., "1:3")
+        if ":" in index:
+            parts = index.split(":")
+            start = int(parts[0]) - 1 if parts[0] else 0
+            end = int(parts[1]) if parts[1] else len(molecules)
+            return molecules[start:end]
+
+        raise ValueError(f"Invalid index specification: {index}")

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd">
+<CDXML BondLength="30" LabelFont="3" CaptionFont="4">
+  <page id="1">
+    <fragment id="2">
+      <n id="3" p="150 200" NumHydrogens="4" Element="6"/>
+    </fragment>
+  </page>
+</CDXML>
