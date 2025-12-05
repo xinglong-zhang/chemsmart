@@ -108,7 +108,7 @@ class SkeletonPreprocessor:
         """
         Check if the link atom has an available bonding position.
         
-        This is determined by comparing the actual number of neighbors
+        This is determined by comparing the actual sum of bond orders
         with the expected maximum bonding capacity of the element.
         
         Returns
@@ -119,8 +119,13 @@ class SkeletonPreprocessor:
         # Build molecular graph
         graph = self.molecule.to_graph()
         
-        # Get current number of neighbors (bonds)
-        current_bonds = len(list(graph.neighbors(self.link_index)))
+        # Calculate current total bond order
+        current_bond_order_sum = 0.0
+        for neighbor in graph.neighbors(self.link_index):
+            edge_data = graph.get_edge_data(self.link_index, neighbor)
+            # Default to 1.0 if bond_order is missing (shouldn't happen with to_graph)
+            bond_order = edge_data.get('bond_order', 1.0)
+            current_bond_order_sum += bond_order
         
         # Get element symbol
         element = self.molecule.chemical_symbols[self.link_index]
@@ -128,7 +133,8 @@ class SkeletonPreprocessor:
         # Get expected maximum bonding capacity
         max_bonds = self._get_max_bonding_capacity(element)
         
-        return current_bonds < max_bonds
+        # Use a small epsilon for float comparison
+        return current_bond_order_sum < (max_bonds - 0.1)
     
     @staticmethod
     def _get_max_bonding_capacity(element: str) -> int:
@@ -443,7 +449,7 @@ class SubstituentPreprocessor:
         """
         Check if the link atom has an available bonding position.
         
-        This is determined by comparing the actual number of neighbors
+        This is determined by comparing the actual sum of bond orders
         with the expected maximum bonding capacity of the element.
         
         Returns
@@ -454,8 +460,13 @@ class SubstituentPreprocessor:
         # Build molecular graph
         graph = self.molecule.to_graph()
         
-        # Get current number of neighbors (bonds)
-        current_bonds = len(list(graph.neighbors(self.link_index)))
+        # Calculate current total bond order
+        current_bond_order_sum = 0.0
+        for neighbor in graph.neighbors(self.link_index):
+            edge_data = graph.get_edge_data(self.link_index, neighbor)
+            # Default to 1.0 if bond_order is missing (shouldn't happen with to_graph)
+            bond_order = edge_data.get('bond_order', 1.0)
+            current_bond_order_sum += bond_order
         
         # Get element symbol
         element = self.molecule.chemical_symbols[self.link_index]
@@ -463,7 +474,8 @@ class SubstituentPreprocessor:
         # Get expected maximum bonding capacity
         max_bonds = self._get_max_bonding_capacity(element)
         
-        return current_bonds < max_bonds
+        # Use a small epsilon for float comparison
+        return current_bond_order_sum < (max_bonds - 0.1)
     
     @staticmethod
     def _get_max_bonding_capacity(element: str) -> int:
