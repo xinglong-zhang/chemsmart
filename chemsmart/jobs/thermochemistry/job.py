@@ -267,13 +267,18 @@ class ThermochemistryJob(Job):
             **kwargs,
         )
 
-    def compute_thermochemistry(self):
+    def compute_thermochemistry(self, write_header=None):
         """
         Perform thermochemistry calculation and save results.
 
         Computes thermochemical properties including electronic energy,
         zero-point energy, thermal corrections, enthalpy, entropy, and
         Gibbs free energy from frequency calculation data.
+
+        Args:
+            write_header (bool, optional): If provided, controls whether
+                headers are written to the output file. If None, behavior
+                is determined automatically.
 
         Raises:
             ValueError: If no input file is provided
@@ -329,6 +334,7 @@ class ThermochemistryJob(Job):
                 qrrho_gibbs_free_energy,
                 outputfile=self.settings.outputfile,
                 overwrite=self.settings.overwrite,
+                write_header=write_header,
             )
 
         except Exception as e:

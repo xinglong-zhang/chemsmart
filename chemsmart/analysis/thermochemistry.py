@@ -1085,6 +1085,7 @@ class Thermochemistry:
         qrrho_gibbs_free_energy,
         outputfile=None,
         overwrite=False,
+        write_header=None,
     ):
         """
         Log thermochemistry results to a structured output file.
@@ -1138,6 +1139,11 @@ class Thermochemistry:
             If True, existing files are replaced. If False, results are
             appended
             (header is repeated to reflect possible changes in conditions).
+        write_header : bool or None, default=None
+            Controls header writing. If None, behavior is determined
+            automatically: headers are written when creating a new file or
+            when appending (for backward compatibility). If True, headers
+            are always written. If False, headers are never written.
 
         Notes
         -----
@@ -1310,23 +1316,31 @@ class Thermochemistry:
                 )
 
         # Handle file writing
+        # Determine write mode and header writing based on parameters
+        should_write_header = write_header  # preserve the explicit parameter
         if os.path.exists(outputfile):
             logger.warning(f"Output file {outputfile} already exists.")
             if overwrite:
                 mode = "w"
                 logger.info(f"Overwriting {outputfile}.")
-                write_header = True
+                # If write_header not explicitly set, write header on overwrite
+                if should_write_header is None:
+                    should_write_header = True
             else:
                 mode = "a"
                 logger.info(f"Appending to {outputfile}.")
-                # Always repeat header when appending (different conditions may be used)
-                write_header = True
+                # If write_header not explicitly set, default to True for
+                # backward compatibility
+                if should_write_header is None:
+                    should_write_header = True
         else:
             mode = "w"
-            write_header = True
+            # If write_header not explicitly set, write header for new file
+            if should_write_header is None:
+                should_write_header = True
 
         with open(outputfile, mode) as out:
-            if write_header:
+            if should_write_header:
                 out.write(build_header())
             out.write(build_row())
 

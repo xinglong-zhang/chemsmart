@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 
 import click
 
@@ -270,6 +271,11 @@ def thermochemistry(
 def thermochemistry_process_pipeline(ctx, *args, **kwargs):
     """
     Process the thermochemistry jobs.
+
+    When batch processing with a specified output file, headers are printed
+    only once at the beginning, followed by data rows for each parsed file.
+    If the output file already exists and overwrite is not enabled, an error
+    is raised.
     """
     logger.debug(f"Context object: {ctx.obj}")
     logger.debug(f"args: {args}")
@@ -277,27 +283,58 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
 
     jobs = ctx.obj.get("jobs", [])
     outputfile = ctx.obj.get("outputfile", None)
+    job_settings = ctx.obj.get("job_settings", None)
     logger.debug(f"Jobs to process:{jobs}")
     if ctx.invoked_subcommand is None:
         # If no subcommand is invoked, run the thermochemistry jobs
         logger.info("Running thermochemistry calculations on specified jobs.")
-        for job in jobs:
-            try:
-                job.compute_thermochemistry()
-                logger.info(
-                    f"Thermochemistry calculation completed for {job.label}."
-                )
-            except Exception as e:
-                logger.error(f"Error processing job for {job.label}: {e}")
 
-        if outputfile is None:
-            # If no output file is specified, save results to individual
-            # files
-            for job in jobs:
-                job.show_results()
-        else:
-            # If output file is specified, save all results to this file
+        # When batch processing with a common output file
+        if outputfile is not None and len(jobs) > 1:
+            # Check if output file exists and raise error if not overwriting
+            overwrite = job_settings.overwrite if job_settings else False
+            if os.path.exists(outputfile) and not overwrite:
+                raise FileExistsError(
+                    f"Output file '{outputfile}' already exists. Please "
+                    f"choose a different output file name or use the "
+                    f"--overwrite flag to replace the existing file."
+                )
+
+            # Process jobs with proper header handling
+            for i, job in enumerate(jobs):
+                try:
+                    # Write header only for the first job
+                    write_header = True if i == 0 else False
+                    job.compute_thermochemistry(write_header=write_header)
+                    logger.info(
+                        f"Thermochemistry calculation completed for "
+                        f"{job.label}."
+                    )
+                except Exception as e:
+                    logger.error(f"Error processing job for {job.label}: {e}")
+
+            # Show combined results
             jobs[0].show_results()
+        else:
+            # Single file or no common output file - use default behavior
+            for job in jobs:
+                try:
+                    job.compute_thermochemistry()
+                    logger.info(
+                        f"Thermochemistry calculation completed for "
+                        f"{job.label}."
+                    )
+                except Exception as e:
+                    logger.error(f"Error processing job for {job.label}: {e}")
+
+            if outputfile is None:
+                # If no output file is specified, save results to individual
+                # files
+                for job in jobs:
+                    job.show_results()
+            else:
+                # If output file is specified with a single job
+                jobs[0].show_results()
     else:
         # If a subcommand is invoked, just log the jobs
         logger.info(

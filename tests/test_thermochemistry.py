@@ -3002,3 +3002,271 @@ class TestBoltzmannWeightedAverage:
             expected_boltzmann_qrrho_gibbs_free_energy2,
             atol=1e-6,
         )
+
+
+class TestThermochemistryBatchProcessing:
+    """Tests for batch processing behavior in thermochemistry output."""
+
+    def test_log_results_write_header_explicit_false(
+        self, gaussian_co2_opt_outfile, tmpdir
+    ):
+        """Test that write_header=False prevents header from being written."""
+        output_file = os.path.join(tmpdir, "test_output.dat")
+        thermochem = Thermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+            use_weighted_mass=False,
+        )
+        (
+            structure,
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+        ) = thermochem.compute_thermochemistry()
+
+        # Write with header first
+        thermochem.log_results_to_file(
+            structure,
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+            outputfile=output_file,
+            write_header=True,
+        )
+
+        # Get content after first write
+        with open(output_file, "r") as f:
+            first_content = f.read()
+
+        # Write again without header
+        thermochem.log_results_to_file(
+            structure,
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+            outputfile=output_file,
+            write_header=False,
+        )
+
+        # Get content after second write
+        with open(output_file, "r") as f:
+            second_content = f.read()
+
+        # Count "Temperature:" occurrences - should be 1 (from first write)
+        temperature_count = second_content.count("Temperature:")
+        assert temperature_count == 1, (
+            f"Expected 1 'Temperature:' line but found {temperature_count}"
+        )
+
+        # Count data rows - should be 2 (one from each write)
+        data_lines = [
+            line for line in second_content.split("\n") if "co2" in line.lower()
+        ]
+        assert len(data_lines) == 2, (
+            f"Expected 2 data rows but found {len(data_lines)}"
+        )
+
+    def test_log_results_write_header_explicit_true(
+        self, gaussian_co2_opt_outfile, tmpdir
+    ):
+        """Test that write_header=True forces header to be written."""
+        output_file = os.path.join(tmpdir, "test_output.dat")
+        thermochem = Thermochemistry(
+            filename=gaussian_co2_opt_outfile,
+            temperature=298.15,
+            pressure=1,
+            use_weighted_mass=False,
+        )
+        (
+            structure,
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+        ) = thermochem.compute_thermochemistry()
+
+        # Write with header twice
+        thermochem.log_results_to_file(
+            structure,
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+            outputfile=output_file,
+            write_header=True,
+        )
+        thermochem.log_results_to_file(
+            structure,
+            electronic_energy,
+            zero_point_energy,
+            enthalpy,
+            qrrho_enthalpy,
+            entropy_times_temperature,
+            qrrho_entropy_times_temperature,
+            gibbs_free_energy,
+            qrrho_gibbs_free_energy,
+            outputfile=output_file,
+            write_header=True,
+        )
+
+        # Count "Temperature:" occurrences - should be 2
+        with open(output_file, "r") as f:
+            content = f.read()
+        temperature_count = content.count("Temperature:")
+        assert temperature_count == 2, (
+            f"Expected 2 'Temperature:' lines but found {temperature_count}"
+        )
+
+    def test_batch_processing_single_header(
+        self,
+        gaussian_conformer1_outfile,
+        gaussian_conformer2_outfile,
+        tmpdir,
+    ):
+        """Test that batch processing writes header only once."""
+        from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
+        from chemsmart.jobs.thermochemistry.settings import (
+            ThermochemistryJobSettings,
+        )
+
+        output_file = os.path.join(tmpdir, "batch_output.dat")
+
+        job_settings1 = ThermochemistryJobSettings(
+            temperature=298.15,
+            pressure=1.0,
+            outputfile=output_file,
+        )
+        job_settings2 = ThermochemistryJobSettings(
+            temperature=298.15,
+            pressure=1.0,
+            outputfile=output_file,
+        )
+
+        mol1 = Molecule.from_filepath(gaussian_conformer1_outfile)
+        mol2 = Molecule.from_filepath(gaussian_conformer2_outfile)
+
+        job1 = ThermochemistryJob(
+            filename=gaussian_conformer1_outfile,
+            molecule=mol1,
+            settings=job_settings1,
+            label="udc3_mCF3_monomer_c1",
+        )
+        job2 = ThermochemistryJob(
+            filename=gaussian_conformer2_outfile,
+            molecule=mol2,
+            settings=job_settings2,
+            label="udc3_mCF3_monomer_c4",
+        )
+
+        # Process first job with header
+        job1.compute_thermochemistry(write_header=True)
+
+        # Process second job without header
+        job2.compute_thermochemistry(write_header=False)
+
+        # Check result
+        with open(output_file, "r") as f:
+            content = f.read()
+
+        # Should have only 1 temperature header
+        temperature_count = content.count("Temperature:")
+        assert temperature_count == 1, (
+            f"Expected 1 'Temperature:' line but found {temperature_count}"
+        )
+
+        # Should have data for both conformers
+        assert "udc3_mCF3_monomer_c1" in content
+        assert "udc3_mCF3_monomer_c4" in content
+
+    def test_file_exists_error_batch_processing(
+        self,
+        gaussian_conformer1_outfile,
+        gaussian_conformer2_outfile,
+        tmpdir,
+    ):
+        """Test that FileExistsError is raised when output file exists
+        during batch processing without overwrite flag.
+        """
+        import os
+
+        from chemsmart.cli.thermochemistry.thermochemistry import (
+            thermochemistry_process_pipeline,
+        )
+        from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
+        from chemsmart.jobs.thermochemistry.settings import (
+            ThermochemistryJobSettings,
+        )
+
+        output_file = os.path.join(tmpdir, "existing_output.dat")
+
+        # Create existing file
+        with open(output_file, "w") as f:
+            f.write("Existing content\n")
+
+        job_settings = ThermochemistryJobSettings(
+            temperature=298.15,
+            pressure=1.0,
+            outputfile=output_file,
+            overwrite=False,  # Do not overwrite
+        )
+
+        mol1 = Molecule.from_filepath(gaussian_conformer1_outfile)
+        mol2 = Molecule.from_filepath(gaussian_conformer2_outfile)
+
+        job1 = ThermochemistryJob(
+            filename=gaussian_conformer1_outfile,
+            molecule=mol1,
+            settings=job_settings,
+            label="udc3_mCF3_monomer_c1",
+        )
+        job2 = ThermochemistryJob(
+            filename=gaussian_conformer2_outfile,
+            molecule=mol2,
+            settings=job_settings,
+            label="udc3_mCF3_monomer_c4",
+        )
+
+        jobs = [job1, job2]
+
+        # Create a mock context object
+        class MockContext:
+            def __init__(self):
+                self.obj = {
+                    "jobs": jobs,
+                    "outputfile": output_file,
+                    "job_settings": job_settings,
+                }
+                self.invoked_subcommand = None
+
+        ctx = MockContext()
+
+        # Should raise FileExistsError
+        with pytest.raises(FileExistsError) as exc_info:
+            thermochemistry_process_pipeline.__wrapped__(ctx)
+
+        assert "already exists" in str(exc_info.value)
+        assert "different output file name" in str(exc_info.value)
