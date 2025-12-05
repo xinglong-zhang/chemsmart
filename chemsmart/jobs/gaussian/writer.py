@@ -14,6 +14,7 @@ multiple calculation steps.
 import logging
 import os.path
 
+from chemsmart.io.molecules.structure import QMMMMolecule
 from chemsmart.jobs.gaussian.settings import (
     GaussianLinkJobSettings,
     GaussianQMMMJobSettings,
@@ -202,8 +203,9 @@ class GaussianInputWriter(InputWriter):
                     self.settings.basis,
                     light_elements_basis,
                 )
-        f.write(route_string + "\n")
-        f.write("\n")
+        if route_string:
+            f.write(route_string + "\n")
+            f.write("\n")
 
     def _write_gaussian_title(self, f):
         """
@@ -252,7 +254,6 @@ class GaussianInputWriter(InputWriter):
         logger.debug(
             f"Molecular charge: {charge}, multiplicity: {multiplicity}"
         )
-        f.write(f"{charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
         """
@@ -274,6 +275,7 @@ class GaussianInputWriter(InputWriter):
         assert self.job.molecule is not None, "No molecular geometry found!"
         # populate QM/MM partition to molecule object
         if isinstance(self.settings, GaussianQMMMJobSettings):
+            self.job.molecule = QMMMMolecule(molecule=self.job.molecule)
             self.job.molecule.high_level_atoms = self.settings.high_level_atoms
             if self.settings.medium_level_atoms is not None:
                 self.job.molecule.medium_level_atoms = (

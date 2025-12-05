@@ -8,7 +8,7 @@ from .link import link
 from .modred import modred
 from .nci import nci
 from .opt import opt
-from .qmmm import qmmm
+from .qmmm import qmmm  # noqa: F401
 from .qrc import qrc
 from .resp import resp
 from .scan import scan

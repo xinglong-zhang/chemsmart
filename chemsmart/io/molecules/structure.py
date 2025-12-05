@@ -2061,11 +2061,11 @@ class QMMMMolecule(Molecule):
             self.charge = self.real_charge
             self.multiplicity = self.real_multiplicity
 
-        def __getattr__(self, name):
-            # Forward any missing attribute to the underlying Molecule
-            if hasattr(self.molecule, name):
-                return getattr(self.molecule, name)
-            raise AttributeError(f"'QMMM' object has no attribute '{name}'")
+    def __getattr__(self, name):
+        # Forward any missing attribute to the underlying Molecule
+        if hasattr(self.molecule, name):
+            return getattr(self.molecule, name)
+        raise AttributeError(f"'QMMM' object has no attribute '{name}'")
 
     @property
     def partition_level_strings(self):
@@ -2082,55 +2082,96 @@ class QMMMMolecule(Molecule):
         # then we want high_level_atoms=[18, 19, 20, ..., 28, 29, 30, ..., 39, ...]
         from chemsmart.utils.utils import get_list_from_string_range
 
+        # Normalize inputs into lists of integer indices
         if self.high_level_atoms is None:
             raise ValueError("High level atoms should not be None!")
-        if not isinstance(self.high_level_atoms, list):
-            high_level_atoms = get_list_from_string_range(
-                self.high_level_atoms
+
+        high_level_atoms = (
+            self.high_level_atoms
+            if isinstance(self.high_level_atoms, list)
+            else get_list_from_string_range(self.high_level_atoms)
+        )
+
+        medium_level_atoms = (
+            self.medium_level_atoms
+            if isinstance(self.medium_level_atoms, list)
+            else (
+                get_list_from_string_range(self.medium_level_atoms)
+                if self.medium_level_atoms
+                else []
             )
-        else:
-            high_level_atoms = self.high_level_atoms
-        if self.medium_level_atoms:
-            if not isinstance(self.medium_level_atoms, list):
-                medium_level_atoms = get_list_from_string_range(
-                    self.medium_level_atoms
-                )
-            else:
-                medium_level_atoms = self.medium_level_atoms
-        else:
-            medium_level_atoms = []
+        )
+
+        # If low level atoms are not provided and high level atoms exist,
+        # assign the remainder of the atoms to low level. Otherwise normalize.
         if self.low_level_atoms is None:
-            # low level atoms not given
             if len(high_level_atoms) != 0:
-                # set the rest of the atoms as low level atoms
                 default_layer = list(range(1, int(self.num_atoms) + 1))
                 low_level_atoms = list(
                     set(default_layer)
                     - set(medium_level_atoms)
                     - set(high_level_atoms)
                 )
+                low_level_atoms.sort()
             else:
-                # high level also not given
                 low_level_atoms = []
         else:
-            if not isinstance(self.low_level_atoms, list):
-                low_level_atoms = get_list_from_string_range(
-                    self.low_level_atoms
-                )
-            else:
-                low_level_atoms = self.low_level_atoms
+            low_level_atoms = (
+                self.low_level_atoms
+                if isinstance(self.low_level_atoms, list)
+                else get_list_from_string_range(self.low_level_atoms)
+            )
 
-            if len(high_level_atoms) != 0:
-                # check that low level atoms add up to the total number of atoms
-                if (
-                    len(low_level_atoms)
-                    + len(high_level_atoms)
-                    + len(medium_level_atoms)
-                    != self.num_atoms
-                ):
+        # Validation: indices must be within 1..num_atoms
+        def _validate_indices(name, indices):
+            if indices is None:
+                return
+            for idx in indices:
+                try:
+                    i = int(idx)
+                except Exception:
                     raise ValueError(
-                        "The number of low + medium + high level atoms be equal to the number of atoms in the molecule!"
+                        f"Invalid atom index '{idx}' in {name}; must be integer."
                     )
+                if i < 1 or i > int(self.num_atoms):
+                    raise ValueError(
+                        f"Atom index {i} in {name} out of range: must be between 1 and {int(self.num_atoms)}"
+                    )
+
+        _validate_indices("high_level_atoms", high_level_atoms)
+        _validate_indices("medium_level_atoms", medium_level_atoms)
+        _validate_indices("low_level_atoms", low_level_atoms)
+
+        # Validation: ensure partitions do not overlap
+        set_h = set(high_level_atoms)
+        set_m = set(medium_level_atoms)
+        set_l = set(low_level_atoms)
+
+        overlaps = []
+        if set_h & set_m:
+            overlaps.append(("high", "medium", sorted(list(set_h & set_m))))
+        if set_h & set_l:
+            overlaps.append(("high", "low", sorted(list(set_h & set_l))))
+        if set_m & set_l:
+            overlaps.append(("medium", "low", sorted(list(set_m & set_l))))
+
+        if overlaps:
+            msgs = [
+                f"Overlap between {a} and {b}: atoms {c}"
+                for a, b, c in overlaps
+            ]
+            raise ValueError("; ".join(msgs))
+
+        # If all three layers are provided, ensure they sum to the total atoms
+        if (len(set_h) + len(set_m) + len(set_l)) != int(
+            self.num_atoms
+        ) and len(set_h) + len(set_m) + len(set_l) != 0:
+            # allow the case where user only supplied some layers and intended others empty
+            # but raise if they provided explicit low/medium/high that don't cover all atoms
+            if self.low_level_atoms is not None:
+                raise ValueError(
+                    "The number of low + medium + high level atoms must equal the number of atoms in the molecule when low_level_atoms is explicitly provided."
+                )
 
         return high_level_atoms, medium_level_atoms, low_level_atoms
 

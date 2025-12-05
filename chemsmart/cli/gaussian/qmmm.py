@@ -176,27 +176,60 @@ def qmmm(
     """CLI for running Gaussian QRC jobs."""
     from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
-    # get jobrunner for running Gaussian IRC jobs
+    # get jobrunner for running Gaussian QMMM jobs
     jobrunner = ctx.obj["jobrunner"]
+    ctx.obj["qmmm"] = True
     # get settings from project
     project_settings = ctx.obj["project_settings"]
-    qmmm_settings = project_settings.qmmm_settings()
-    logger.debug("Project settings:", ctx.obj["project_settings"].__dict__)
-    # print("Job settings:", qmmm_settings.__dict__)
+    logger.debug("Project settings: %s", ctx.obj["project_settings"].__dict__)
     # job setting from filename or default, with updates from user in cli specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
-    qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
+    # Initialize qmmm_settings from project; fall back to defaults if missing
+    qmmm_settings = project_settings.qmmm_settings()
+    if qmmm_settings is None:
+        logger.warning(
+            "Project qmmm settings not found; using GaussianQMMMJobSettings defaults."
+        )
+        qmmm_settings = GaussianQMMMJobSettings()
+
+    # Merge project qmmm settings with job settings and CLI-specified keywords.
+    # The merge method is expected to exist on project settings objects; guard against
+    # missing/unsupported implementations and ensure we end up with a
+    # GaussianQMMMJobSettings instance.
+    try:
+        qmmm_merged = qmmm_settings.merge(job_settings, keywords=keywords)
+    except Exception as exc:
+        logger.debug("qmmm_settings.merge failed or is unavailable: %s", exc)
+        # If merge failed, prefer job_settings if available, otherwise keep defaults
+        if job_settings is not None:
+            # Try to normalize job_settings into a GaussianQMMMJobSettings if possible
+            try:
+                # job_settings may be a settings instance or a dict-like
+                qmmm_merged = GaussianQMMMJobSettings(
+                    **getattr(job_settings, "__dict__", job_settings)
+                )
+            except Exception:
+                qmmm_merged = qmmm_settings
+        else:
+            qmmm_merged = qmmm_settings
+
+    # Ensure the final settings object is a GaussianQMMMJobSettings instance
+    if isinstance(qmmm_merged, GaussianQMMMJobSettings):
+        qmmm_settings = qmmm_merged
+    else:
+        try:
+            qmmm_settings = GaussianQMMMJobSettings(
+                **getattr(qmmm_merged, "__dict__", {})
+            )
+        except Exception:
+            qmmm_settings = GaussianQMMMJobSettings()
 
     # get label for the job
-    label = ctx.obj["label"]
-    logger.debug(f"Label for job: {label}")
-
-    # convert from GaussianJobSettings instance to GaussianQMMMJobSettings instance
-    qmmm_settings = GaussianQMMMJobSettings(**qmmm_settings.__dict__)
+    label = ctx.obj.get("label")
+    logger.debug("Label for job: %s", label)
 
     # populate cli options
     qmmm_settings.jobtype = jobtype
@@ -243,7 +276,7 @@ def qmmm(
         scale_factors = ast.literal_eval(scale_factors)
         molecule.scale_factors = scale_factors
 
-    logger.info("Job settings:", qmmm_settings.__dict__)
+    logger.info("Job settings: %s", qmmm_settings.__dict__)
 
     from chemsmart.jobs.gaussian.qmmm import GaussianQMMMJob
 

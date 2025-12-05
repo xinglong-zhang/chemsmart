@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/Users/taipanlan/Desktop/work/chemsmart/g16/g16", line 8, in <module>
+    fg_runner.run()
+    ~~~~~~~~~~~~~^^
+  File "/Users/taipanlan/PycharmProjects/chemsmart/chemsmart/jobs/gaussian/runner.py", line 724, in run
+    g.write(" " + "-" * line_len + "\n")
+                        ^^^^^^^^
+UnboundLocalError: cannot access local variable 'line_len' where it is not associated with a value
