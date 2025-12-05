@@ -2404,3 +2404,59 @@ class TestORCAQMMM:
             orca_qmmm1.qm_qm2_energy,
             orca_qmmm1.qm_energy,
         )
+
+
+class TestORCAQMMMJobSettings:
+    def test_partition_string_single_and_list_input(self):
+        """Partition string should accept '1-15,37,39' or list and compress ranges."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.qm_atoms = "1-15,37,39"
+        out = s._get_partition_string()
+        assert out.strip() == "QMAtoms {1:15 37 39} end"
+
+        # list input should produce the same output
+        s.qm_atoms = [1, *range(2, 16), 37, 39]
+        out2 = s._get_partition_string()
+        assert out2.strip() == "QMAtoms {1:15 37 39} end"
+
+    def test_partition_string_qm_and_qm2(self):
+        """When both qm_atoms and qm2_atoms provided, both lines should be returned."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.qm_atoms = "1-3,5"
+        s.qm2_atoms = "7-9,12"
+        out = s._get_partition_string()
+        # order: QMAtoms then QM2Atoms
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        assert lines[0].strip() == "QMAtoms {1:3 5} end"
+        assert lines[1].strip() == "QM2Atoms {7:9 12} end"
+
+    def test_charge_and_multiplicity_population(self):
+        """ORCAQMMMJobSettings should populate .charge and .multiplicity from medium or qm fields."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        # medium-level provided -> charge/multiplicity come from medium
+        s1 = ORCAQMMMJobSettings(
+            charge_medium=0, mult_medium=1, charge_qm=2, mult_qm=3
+        )
+        assert s1.charge == 2
+        assert s1.multiplicity == 3
+
+        # medium missing -> fall back to qm
+        s2 = ORCAQMMMJobSettings(charge_qm=-1, mult_qm=2)
+        assert s2.charge == -1
+        assert s2.multiplicity == 2
+
+    def test_partition_string_empty_and_none(self):
+        """Empty string or None should return empty partition block."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings()
+        s.qm_atoms = ""
+        assert s._get_partition_string() == ""
+
+        s.qm_atoms = None
+        assert s._get_partition_string() == ""

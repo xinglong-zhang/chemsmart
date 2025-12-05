@@ -502,6 +502,30 @@ def gaussian(
 
     logger.debug(f"Obtained molecules: {molecules}")
 
+    # If the user requested the qmmm subcommand, ensure molecules are
+    # represented as QMMMMolecule so the subcommand sees QMMM-specific
+    # attributes early (e.g., high_level_atoms, bonded_atoms).
+    try:
+        if ctx.invoked_subcommand == "qmmm":
+            from chemsmart.io.molecules.structure import QMMMMolecule
+
+            converted = []
+            for m in molecules:
+                if isinstance(m, QMMMMolecule):
+                    converted.append(m)
+                else:
+                    converted.append(QMMMMolecule(molecule=m))
+            molecules = converted
+            logger.debug(
+                "Converted molecules to QMMMMolecule for qmmm subcommand."
+            )
+    except Exception:
+        # Non-fatal: if anything goes wrong, keep original molecules and
+        # let the qmmm subcommand attempt conversion itself.
+        logger.debug(
+            "Could not convert molecules to QMMMMolecule at group level."
+        )
+
     # store objects
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings

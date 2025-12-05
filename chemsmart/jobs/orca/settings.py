@@ -1157,14 +1157,24 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         # populate self.functional, self.basis, etc.
         self.functional = self.qm_functional
         self.basis = self.qm_basis
-        if self.charge_medium is not None and self.mult_medium is not None:
-            self.charge = self.charge_medium
-            self.multiplicity = self.mult_medium
-            # the charge/multiplicity of the medium system corresponds to the
-            # sum of the charge/multiplicity of the high level and low level regions
-        else:
+
+        # Prefer charge/multiplicity specified for the QM region.
+        # Fallback order: QM region -> medium region -> total system.
+        if self.charge_qm is not None and self.mult_qm is not None:
             self.charge = self.charge_qm
             self.multiplicity = self.mult_qm
+        elif self.charge_medium is not None and self.mult_medium is not None:
+            # the charge/multiplicity of the medium system corresponds to the
+            # sum of the charge/multiplicity of the high level and low level regions
+            self.charge = self.charge_medium
+            self.multiplicity = self.mult_medium
+        elif self.charge_total is not None and self.mult_total is not None:
+            self.charge = self.charge_total
+            self.multiplicity = self.mult_total
+        else:
+            # leave unspecified if nothing provided
+            self.charge = None
+            self.multiplicity = None
 
     @property
     def qmmm_route_string(self):
