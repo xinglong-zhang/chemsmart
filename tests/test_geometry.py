@@ -19,44 +19,44 @@ class TestIsCollinear:
     def test_collinear_points_on_x_axis(self):
         """Test that points on a straight line along x-axis are collinear."""
         coords = [[0, 0, 0], [1, 0, 0], [2, 0, 0]]
-        assert is_collinear(coords) == True
+        assert is_collinear(coords)
 
     def test_collinear_points_on_y_axis(self):
         """Test that points on a straight line along y-axis are collinear."""
         coords = [[0, 0, 0], [0, 1, 0], [0, 2, 0]]
-        assert is_collinear(coords) == True
+        assert is_collinear(coords)
 
     def test_collinear_points_on_z_axis(self):
         """Test that points on a straight line along z-axis are collinear."""
         coords = [[0, 0, 0], [0, 0, 1], [0, 0, 2]]
-        assert is_collinear(coords) == True
+        assert is_collinear(coords)
 
     def test_collinear_points_on_diagonal(self):
         """Test that points on a diagonal line are collinear."""
         coords = [[0, 0, 0], [1, 1, 1], [2, 2, 2]]
-        assert is_collinear(coords) == True
+        assert is_collinear(coords)
 
     def test_non_collinear_points_triangle(self):
         """Test that points forming a triangle are not collinear."""
         coords = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
-        assert is_collinear(coords) == False
+        assert not is_collinear(coords)
 
     def test_non_collinear_points_3d(self):
         """Test that points in 3D space not on a line are not collinear."""
         coords = [[0, 0, 0], [1, 0, 0], [0, 0, 1]]
-        assert is_collinear(coords) == False
+        assert not is_collinear(coords)
 
     def test_collinear_with_custom_tolerance(self):
         """Test collinearity with custom tolerance."""
         # Points that are slightly off a line
         coords = [[0, 0, 0], [1, 0, 0], [2, 1e-6, 0]]
-        assert is_collinear(coords, tol=1e-5) == True
-        assert is_collinear(coords, tol=1e-7) == False
+        assert is_collinear(coords, tol=1e-5)
+        assert not is_collinear(coords, tol=1e-7)
 
     def test_collinear_negative_coordinates(self):
         """Test collinearity with negative coordinates."""
         coords = [[-2, -2, -2], [0, 0, 0], [2, 2, 2]]
-        assert is_collinear(coords) == True
+        assert is_collinear(coords)
 
 
 class TestCalculateMomentsOfInertia:
