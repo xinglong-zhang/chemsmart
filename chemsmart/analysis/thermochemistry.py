@@ -1085,6 +1085,7 @@ class Thermochemistry:
         qrrho_gibbs_free_energy,
         outputfile=None,
         overwrite=False,
+        write_header=True,
     ):
         """
         Log thermochemistry results to a structured output file.
@@ -1138,6 +1139,10 @@ class Thermochemistry:
             If True, existing files are replaced. If False, results are
             appended
             (header is repeated to reflect possible changes in conditions).
+        write_header : bool, default=True
+            If True, writes the header block before results. Set to False
+            to skip header writing (useful when appending multiple times
+            without changing conditions).
 
         Notes
         -----
@@ -1315,15 +1320,11 @@ class Thermochemistry:
             if overwrite:
                 mode = "w"
                 logger.info(f"Overwriting {outputfile}.")
-                write_header = True
             else:
                 mode = "a"
                 logger.info(f"Appending to {outputfile}.")
-                # Always repeat header when appending (different conditions may be used)
-                write_header = True
         else:
             mode = "w"
-            write_header = True
 
         with open(outputfile, mode) as out:
             if write_header:

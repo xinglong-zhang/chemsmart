@@ -233,6 +233,7 @@ def thermochemistry(
                 settings=job_settings,
                 skip_completed=skip_completed,
             )
+            job_settings.write_header = False
             jobs.append(job)
             logger.info(f"Created thermochemistry job for file: {file}")
             logger.debug(f"Job settings: {job_settings.__dict__}")
@@ -249,6 +250,7 @@ def thermochemistry(
                 settings=job_settings,
                 skip_completed=skip_completed,
             )
+            job_settings.write_header = False
             jobs.append(job)
             logger.info(f"Created thermochemistry job for file: {file}")
 
