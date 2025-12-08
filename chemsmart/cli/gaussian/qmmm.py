@@ -15,8 +15,8 @@ from chemsmart.utils.utils import get_list_from_string_range
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("qmmm", cls=MyCommand)
-@click_job_options
+# @gaussian.command("qmmm", cls=MyCommand)
+# @click_job_options
 @click.option(
     "-j",
     "--jobtype",
@@ -147,6 +147,8 @@ logger = logging.getLogger(__name__)
     help="A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom "
     "pair indices and the value is a list of scale factors for (low, medium, high).",
 )
+@gaussian.command("qmmm", cls=MyCommand)
+@click_job_options
 @click.pass_context
 def qmmm(
     ctx,

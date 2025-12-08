@@ -1400,18 +1400,20 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if active_fmt is not None:
             full_qm_block += f"ActiveAtoms {{{active_fmt}}} end\n"
 
-        # QM2 custom method / basis when applicable
-        lot = self._get_level_of_theory()
-        if lot in ["!QM/QM2", "!QM/QM2/MM"]:
-            if self.qm2_method is not None:
-                full_qm_block += f'QM2CustomFile "{self.qm2_method}" end\n'
-            else:
-                if self.qm2_functional is not None:
-                    full_qm_block += (
-                        f'QM2CUSTOMMETHOD "{self.qm2_functional}" end\n'
-                    )
-                if self.qm2_basis is not None:
-                    full_qm_block += f'QM2CUSTOMBASIS "{self.qm2_basis}" end\n'
+        # QM2 custom method / basis when provided.
+        # Avoid calling _get_level_of_theory() here because it may perform
+        # validations that are not relevant when building the %qmmm block.
+        if self.qm2_method is not None:
+            # QM2 method provided via external file
+            full_qm_block += f'QM2CustomFile "{self.qm2_method}" end\n'
+        else:
+            # If custom QM2 functional/basis provided, include them
+            if self.qm2_functional is not None:
+                full_qm_block += (
+                    f'QM2CUSTOMMETHOD "{self.qm2_functional}" end\n'
+                )
+            if self.qm2_basis is not None:
+                full_qm_block += f'QM2CUSTOMBASIS "{self.qm2_basis}" end\n'
 
         # Force field file for specific job types
         if self.jobtype and self.jobtype.upper() in [
@@ -1460,7 +1462,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
 
     def _write_crystal_qmmm_subblock(self):
         crystal_qmmm_subblock = " "
-        if self.conv_charges is False:
+        if not self.conv_charges:
             crystal_qmmm_subblock += "Conv_Charges False \n"
             crystal_qmmm_subblock += (
                 f'ORCAFFFilename "{self.mm_force_field}" \n'
