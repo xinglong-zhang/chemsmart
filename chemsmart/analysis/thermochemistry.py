@@ -667,6 +667,8 @@ class Thermochemistry:
         if self.v is None:
             return None
         bav = self.Bav
+        if bav is None:
+            return []
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
         entropy = [
