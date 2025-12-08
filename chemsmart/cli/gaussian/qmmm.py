@@ -231,28 +231,49 @@ def qmmm(
     label = ctx.obj.get("label")
     logger.debug("Label for job: %s", label)
 
-    # populate cli options
-    qmmm_settings.jobtype = jobtype
-    qmmm_settings.high_level_functional = high_level_functional
-    qmmm_settings.high_level_basis = high_level_basis
-    qmmm_settings.high_level_force_field = high_level_force_field
-    qmmm_settings.medium_level_functional = medium_level_functional
-    qmmm_settings.medium_level_basis = medium_level_basis
-    qmmm_settings.medium_level_force_field = medium_level_force_field
-    qmmm_settings.low_level_functional = low_level_functional
-    qmmm_settings.low_level_basis = low_level_basis
-    qmmm_settings.low_level_force_field = low_level_force_field
-    qmmm_settings.real_charge = real_charge
-    qmmm_settings.real_multiplicity = real_multiplicity
-    qmmm_settings.int_charge = int_charge
-    qmmm_settings.int_multiplicity = int_multiplicity
-    qmmm_settings.model_charge = model_charge
-    qmmm_settings.model_multiplicity = model_multiplicity
-    qmmm_settings.high_level_atoms = high_level_atoms
-    qmmm_settings.medium_level_atoms = medium_level_atoms
-    qmmm_settings.low_level_atoms = low_level_atoms
-    qmmm_settings.bonded_atoms = bonded_atoms
-    qmmm_settings.scale_factors = scale_factors
+    # populate cli options (only override if CLI value is provided)
+    if jobtype is not None:
+        qmmm_settings.jobtype = jobtype
+    if high_level_functional is not None:
+        qmmm_settings.high_level_functional = high_level_functional
+    if high_level_basis is not None:
+        qmmm_settings.high_level_basis = high_level_basis
+    if high_level_force_field is not None:
+        qmmm_settings.high_level_force_field = high_level_force_field
+    if medium_level_functional is not None:
+        qmmm_settings.medium_level_functional = medium_level_functional
+    if medium_level_basis is not None:
+        qmmm_settings.medium_level_basis = medium_level_basis
+    if medium_level_force_field is not None:
+        qmmm_settings.medium_level_force_field = medium_level_force_field
+    if low_level_functional is not None:
+        qmmm_settings.low_level_functional = low_level_functional
+    if low_level_basis is not None:
+        qmmm_settings.low_level_basis = low_level_basis
+    if low_level_force_field is not None:
+        qmmm_settings.low_level_force_field = low_level_force_field
+    if real_charge is not None:
+        qmmm_settings.real_charge = real_charge
+    if real_multiplicity is not None:
+        qmmm_settings.real_multiplicity = real_multiplicity
+    if int_charge is not None:
+        qmmm_settings.int_charge = int_charge
+    if int_multiplicity is not None:
+        qmmm_settings.int_multiplicity = int_multiplicity
+    if model_charge is not None:
+        qmmm_settings.model_charge = model_charge
+    if model_multiplicity is not None:
+        qmmm_settings.model_multiplicity = model_multiplicity
+    if high_level_atoms is not None:
+        qmmm_settings.high_level_atoms = high_level_atoms
+    if medium_level_atoms is not None:
+        qmmm_settings.medium_level_atoms = medium_level_atoms
+    if low_level_atoms is not None:
+        qmmm_settings.low_level_atoms = low_level_atoms
+    if bonded_atoms is not None:
+        qmmm_settings.bonded_atoms = bonded_atoms
+    if scale_factors is not None:
+        qmmm_settings.scale_factors = scale_factors
 
     # get molecule
     molecules = ctx.obj["molecules"]

@@ -309,14 +309,11 @@ def qmmm(
     qmmm_settings = project_settings.qmmm_settings()
     if qmmm_settings is None:
         logger.warning(
-            "Project qmmm settings not found; using GaussianQMMMJobSettings defaults."
+            "Project qmmm settings not found; using ORCAQMMMJobSettings defaults."
         )
         qmmm_settings = ORCAQMMMJobSettings()
 
     # Merge project qmmm settings with job settings and CLI-specified keywords.
-    # The merge method is expected to exist on project settings objects; guard against
-    # missing/unsupported implementations and ensure we end up with a
-    # GaussianQMMMJobSettings instance.
     try:
         qmmm_merged = qmmm_settings.merge(job_settings, keywords=keywords)
     except Exception as exc:
@@ -367,39 +364,74 @@ def qmmm(
 
     # convert from ORCAJobSettings instance to ORCAQMMMJobSettings instance
     qmmm_settings = ORCAQMMMJobSettings(**qmmm_settings.__dict__)
-    qmmm_settings.jobtype = job_type
-    qmmm_settings.qm_functional = qm_functional
-    qmmm_settings.qm_basis = qm_basis
-    qmmm_settings.qm2_functional = qm2_functional
-    qmmm_settings.qm2_basis = qm2_basis
-    qmmm_settings.qm2_methods = qm2_methods
-    qmmm_settings.mm_force_field = mm_force_field
-    qmmm_settings.qm_atoms = qm_atoms
-    qmmm_settings.qm2_atoms = qm2_atoms
-    qmmm_settings.charge_total = charge_total
-    qmmm_settings.mult_total = mult_total
-    qmmm_settings.charge_medium = charge_medium
-    qmmm_settings.mult_medium = mult_medium
-    qmmm_settings.charge_qm = charge_qm
-    qmmm_settings.mult_qm = mult_qm
-    qmmm_settings.qm2_solvation = qm2_solvation
-    qmmm_settings.active_atoms = active_atoms
-    qmmm_settings.use_active_info_from_pbc = use_active_info_from_pbc
-    qmmm_settings.optregion_fixed_atoms = optregion_fixed_atoms
-    qmmm_settings.qm_h_bond_length = qm_h_bond_length
-    qmmm_settings.delete_la_double_counting = delete_la_double_counting
-    qmmm_settings.delete_la_bond_double_counting_atoms = (
-        delete_la_bond_double_counting_atoms
-    )
-    qmmm_settings.embedding_type = embedding_type
-    qmmm_settings.conv_charges = conv_charges
-    qmmm_settings.conv_charges_max_n_cycles = conv_charges_max_n_cycles
-    qmmm_settings.conv_charges_conv_thresh = conv_charges_conv_thresh
-    qmmm_settings.scale_formal_charge_mm_atom = scale_formal_charge_mm_atom
-    qmmm_settings.n_unit_cell_atoms = n_unit_cell_atoms
-    qmmm_settings.ecp_layer_ecp = ecp_layer_ecp
-    qmmm_settings.ecp_layer = ecp_layer
-    qmmm_settings.scale_formal_charge_ecp_atom = scale_formal_charge_ecp_atom
+
+    # populate cli options (only override if CLI value is provided)
+    if job_type is not None:
+        qmmm_settings.jobtype = job_type
+    if qm_functional is not None:
+        qmmm_settings.qm_functional = qm_functional
+    if qm_basis is not None:
+        qmmm_settings.qm_basis = qm_basis
+    if qm2_functional is not None:
+        qmmm_settings.qm2_functional = qm2_functional
+    if qm2_basis is not None:
+        qmmm_settings.qm2_basis = qm2_basis
+    if qm2_methods is not None:
+        qmmm_settings.qm2_methods = qm2_methods
+    if mm_force_field is not None:
+        qmmm_settings.mm_force_field = mm_force_field
+    if qm_atoms is not None:
+        qmmm_settings.qm_atoms = qm_atoms
+    if qm2_atoms is not None:
+        qmmm_settings.qm2_atoms = qm2_atoms
+    if charge_total is not None:
+        qmmm_settings.charge_total = charge_total
+    if mult_total is not None:
+        qmmm_settings.mult_total = mult_total
+    if charge_medium is not None:
+        qmmm_settings.charge_medium = charge_medium
+    if mult_medium is not None:
+        qmmm_settings.mult_medium = mult_medium
+    if charge_qm is not None:
+        qmmm_settings.charge_qm = charge_qm
+    if mult_qm is not None:
+        qmmm_settings.mult_qm = mult_qm
+    if qm2_solvation is not None:
+        qmmm_settings.qm2_solvation = qm2_solvation
+    if active_atoms is not None:
+        qmmm_settings.active_atoms = active_atoms
+    if use_active_info_from_pbc is not None:
+        qmmm_settings.use_active_info_from_pbc = use_active_info_from_pbc
+    if optregion_fixed_atoms is not None:
+        qmmm_settings.optregion_fixed_atoms = optregion_fixed_atoms
+    if qm_h_bond_length is not None:
+        qmmm_settings.qm_h_bond_length = qm_h_bond_length
+    if delete_la_double_counting is not None:
+        qmmm_settings.delete_la_double_counting = delete_la_double_counting
+    if delete_la_bond_double_counting_atoms is not None:
+        qmmm_settings.delete_la_bond_double_counting_atoms = (
+            delete_la_bond_double_counting_atoms
+        )
+    if embedding_type is not None:
+        qmmm_settings.embedding_type = embedding_type
+    if conv_charges is not None:
+        qmmm_settings.conv_charges = conv_charges
+    if conv_charges_max_n_cycles is not None:
+        qmmm_settings.conv_charges_max_n_cycles = conv_charges_max_n_cycles
+    if conv_charges_conv_thresh is not None:
+        qmmm_settings.conv_charges_conv_thresh = conv_charges_conv_thresh
+    if scale_formal_charge_mm_atom is not None:
+        qmmm_settings.scale_formal_charge_mm_atom = scale_formal_charge_mm_atom
+    if n_unit_cell_atoms is not None:
+        qmmm_settings.n_unit_cell_atoms = n_unit_cell_atoms
+    if ecp_layer_ecp is not None:
+        qmmm_settings.ecp_layer_ecp = ecp_layer_ecp
+    if ecp_layer is not None:
+        qmmm_settings.ecp_layer = ecp_layer
+    if scale_formal_charge_ecp_atom is not None:
+        qmmm_settings.scale_formal_charge_ecp_atom = (
+            scale_formal_charge_ecp_atom
+        )
     # populate top-level charge/multiplicity on settings for downstream writers
     _populate_charge_and_multiplicity_on_settings(qmmm_settings)
     # get molecule

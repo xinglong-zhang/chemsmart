@@ -184,13 +184,14 @@ def read_molecular_job_yaml(filename, program="gaussian"):
         )
 
     # populate job settings for different jobs
-    all_project_configs = {}  # store all job settings in a dict
+    all_project_configs = {}  # store all job settings in a dict\
 
     # check if solv settings exist
     solv_config = project_config.get("solv", None)
 
     # check if separate gas phase settings exist
     gas_config = project_config.get("gas", None)
+    qmmm_config = project_config.get("qmmm", None)
 
     if gas_config is None:
         # no settings for gas phase; using implicit solvation model for all jobs
@@ -210,9 +211,20 @@ def read_molecular_job_yaml(filename, program="gaussian"):
                 default_config.copy()
             )  # populate defaults
             all_project_configs[job]["job_type"] = job  # update job_type
-            all_project_configs[job] = update_dict_with_existing_keys(
-                all_project_configs[job], gas_config
-            )
+            try:
+                # Try updating with gas_config first
+                all_project_configs[job] = update_dict_with_existing_keys(
+                    all_project_configs[job], gas_config
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Updating job '{job}' with gas_config failed ({e}). "
+                    f"Falling back to qmmm_config."
+                )
+                # Fallback: try updating with qmmm_config
+                all_project_configs[job] = update_dict_with_existing_keys(
+                    all_project_configs[job], qmmm_config
+                )
         for job in sp_job:  # jobs using solv config
             all_project_configs[job] = (
                 default_config.copy()
