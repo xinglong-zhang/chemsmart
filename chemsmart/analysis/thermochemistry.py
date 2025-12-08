@@ -139,12 +139,18 @@ class Thermochemistry:
         """Open the file and return the file object."""
         program = get_outfile_format(self.filename)
         if program == "gaussian":
-            return Gaussian16Output(self.filename)
+            output = Gaussian16Output(self.filename)
         elif program == "orca":
-            return ORCAOutput(self.filename)
+            output = ORCAOutput(self.filename)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")
+        if not output.normal_termination:
+            raise ValueError(
+                f"File '{self.filename}' did not terminate normally. "
+                "Skipping thermochemistry calculation for this file."
+            )
+        return output
 
     @property
     def job_type(self):
@@ -920,6 +926,14 @@ class Thermochemistry:
 
     def compute_thermochemistry(self):
         """Compute Boltzmann-averaged properties."""
+        # Check if file terminated normally
+        if self.file_object is None:
+            logger.warning(
+                f"Skipping thermochemistry calculation for '{self.filename}': "
+                "file did not terminate normally."
+            )
+            return None
+
         logger.debug(f"Computing thermochemistry for {self.filename}...")
         return self._compute_thermochemistry()
 
@@ -1187,7 +1201,7 @@ class Thermochemistry:
                 if not self.use_weighted_mass
                 else "Natural Abundance Weighted Masses"
             )
-            header = f"Temperature: {self.temperature:.2f} K\n"
+            header = f"\nTemperature: {self.temperature:.2f} K\n"
             if self.concentration is not None:
                 header += f"Concentration: {self.concentration:.1f} mol/L\n"
             else:
