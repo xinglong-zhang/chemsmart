@@ -1403,16 +1403,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         # QM2 custom method / basis when provided.
         # Avoid calling _get_level_of_theory() here because it may perform
         # validations that are not relevant when building the %qmmm block.
-        if self.qm2_method is not None:
+        if self.qm2_method is not None and self.qm2_method.strip():
             # QM2 method provided via external file
             full_qm_block += f'QM2CustomFile "{self.qm2_method}" end\n'
         else:
             # If custom QM2 functional/basis provided, include them
-            if self.qm2_functional is not None:
+            if self.qm2_functional is not None and self.qm2_functional.strip():
                 full_qm_block += (
                     f'QM2CUSTOMMETHOD "{self.qm2_functional}" end\n'
                 )
-            if self.qm2_basis is not None:
+            if self.qm2_basis is not None and self.qm2_basis.strip():
                 full_qm_block += f'QM2CUSTOMBASIS "{self.qm2_basis}" end\n'
 
         # Force field file for specific job types
