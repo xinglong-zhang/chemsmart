@@ -343,7 +343,7 @@ class ThermochemistryJob(Job):
         Reads and prints the contents of the output file containing
         the computed thermochemical properties to the console.
         """
-        if os.path.exists(self.settings.outputfile):
+        if self.settings.outputfile and os.path.exists(self.settings.outputfile):
             with open(self.settings.outputfile, "r") as out:
                 print()
                 results = out.read()
