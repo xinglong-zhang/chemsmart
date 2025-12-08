@@ -309,7 +309,11 @@ class ORCAInputWriter(InputWriter):
 
     def _write_qmmm_block(self, f):
         """
-        Write QM/MM parameters block.
+        Write QM/MM parameter block to ORCA input file.
+
+        Writes the complete %qmmm block for multiscale calculations
+        when using ORCAQMMMJobSettings. The block contains all necessary
+        parameters for defining QM/MM partitioning and calculation setup.
 
         Args:
             f: File object to write to

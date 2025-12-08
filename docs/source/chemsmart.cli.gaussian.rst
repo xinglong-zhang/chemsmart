@@ -97,6 +97,15 @@
    :show-inheritance:
 
 ************************************
+ chemsmart.cli.gaussian.qmmm module
+************************************
+
+.. automodule:: chemsmart.cli.gaussian.qmmm
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+************************************
  chemsmart.cli.gaussian.resp module
 ************************************
 

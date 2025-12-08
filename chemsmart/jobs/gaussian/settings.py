@@ -1274,6 +1274,104 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
 
 
 class GaussianQMMMJobSettings(GaussianJobSettings):
+    """
+    Configuration settings for Gaussian QM/MM calculations using ONIOM methodology.
+
+    This class manages all parameters needed to set up multi-layer ONIOM calculations
+    in Gaussian, which partition molecular systems into different regions treated with
+    varying levels of theory. The ONIOM approach enables accurate quantum mechanical
+    treatment of chemically active regions while efficiently handling large molecular
+    environments with molecular mechanics.
+
+    The class supports 2-layer and 3-layer ONIOM calculations:
+
+    **2-Layer ONIOM**: High(QM):Low(MM)
+        - High level: Quantum mechanics (DFT, ab initio, etc.)
+        - Low level: Molecular mechanics force fields
+
+    **3-Layer ONIOM**: High(QM):Medium(QM):Low(MM)
+        - High level: High-accuracy quantum mechanics
+        - Medium level: Lower-cost quantum mechanics
+        - Low level: Molecular mechanics force fields
+
+    Key Features:
+    - Flexible layer definition with atom selection
+    - Support for mixed QM/MM and QM/QM/MM schemes
+    - Automatic link atom handling for covalent boundaries
+    - Customizable scale factors for link atom placement
+    - Integration with popular force fields (AMBER, UFF, etc.)
+    - Multiple charge/multiplicity specifications per layer
+
+    Attributes:
+        jobtype (str): Type of ONIOM calculation ('sp', 'opt', 'freq', 'ts', 'irc')
+
+        Level-specific theory parameters:
+            high_level_functional (str): DFT functional for high layer (e.g., 'B3LYP', 'M06-2X')
+            high_level_basis (str): Basis set for high layer (e.g., '6-31G*', 'def2-TZVP')
+            high_level_force_field (str): Force field for high layer (if MM)
+            medium_level_functional (str): DFT functional for medium layer
+            medium_level_basis (str): Basis set for medium layer
+            medium_level_force_field (str): Force field for medium layer
+            low_level_functional (str): DFT functional for low layer (if QM)
+            low_level_basis (str): Basis set for low layer (if QM)
+            low_level_force_field (str): Force field for low layer (usually MM)
+
+        Charge and multiplicity specifications:
+            real_charge/real_multiplicity (int): Full system properties
+            int_charge/int_multiplicity (int): Intermediate system properties
+            model_charge/model_multiplicity (int): Model system properties
+
+        Atom partitioning:
+            high_level_atoms (list/str): Atoms in high layer (1-indexed)
+            medium_level_atoms (list/str): Atoms in medium layer (1-indexed)
+            low_level_atoms (list/str): Atoms in low layer (1-indexed)
+            bonded_atoms (list): Covalent bonds crossing layer boundaries
+            scale_factors (dict): Custom scale factors for link atom placement
+
+    Examples:
+        2-layer enzyme active site calculation:
+        >>> settings = GaussianQMMMJobSettings(
+        ...     jobtype='opt',
+        ...     high_level_functional='B3LYP',
+        ...     high_level_basis='6-31G*',
+        ...     low_level_force_field='AMBER=HardFirst',
+        ...     real_charge=0,
+        ...     real_multiplicity=1,
+        ...     high_level_atoms=[1, 2, 3, 4, 5],  # Active site residues
+        ...     bonded_atoms=[(5, 6)],  # QM-MM boundary bond
+        ... )
+
+        3-layer organometallic catalyst:
+        >>> settings = GaussianQMMMJobSettings(
+        ...     jobtype='freq',
+        ...     high_level_functional='M06-2X',
+        ...     high_level_basis='def2-TZVP',
+        ...     medium_level_functional='B3LYP',
+        ...     medium_level_basis='6-31G*',
+        ...     low_level_force_field='UFF',
+        ...     real_charge=-1,
+        ...     real_multiplicity=2,
+        ...     high_level_atoms='1-10',     # Metal center and ligands
+        ...     medium_level_atoms='11-50',  # Extended coordination sphere
+        ...     bonded_atoms=[(10,11), (50,51)],
+        ...     scale_factors={(10,11): [0.709, 0.709, 0.709]}
+        ... )
+
+    Note:
+        The real/intermediate/model charge and multiplicity specifications follow
+        ONIOM conventions where:
+        - Real system: Complete molecular system
+        - Intermediate system: High+Medium layers (3-layer only)
+        - Model system: High layer only
+
+        Scale factors control link atom placement and default to covalent radii
+        ratios if not specified. The format is {(atom1,atom2): [low,medium,high]}.
+
+    See Also:
+        - GaussianQMMMJob: Job execution class for QM/MM calculations
+        - GaussianJobSettings: Base class for Gaussian job configuration
+        - Molecule: Molecular structure with QM/MM partitioning information
+    """
 
     def __init__(
         self,
@@ -1300,39 +1398,57 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         scale_factors=None,
         **kwargs,
     ):
-        """Gaussian QM/MM Job Settings containing information to create a QM/MM Job.
-        Args:
-            job_type: different calculations support by Gaussian ONIOM, including:
-                1.Single-point energy;
-                2.Geometry optimization;
-                3.Frequency analysis;
-                4.Transition state search (QST2/QST3)
-                5.IRC calculations
-            high_level_functional/medium_level_functional/low_level_functional: Functional for high/medium/low level of theory
-            high_level_basis/medium_level_basis/low_level_basis: Basis set for high/medium/low level of theory
-            high_level_force_field/medium_level_force_field/low_level_force_field: Force field for high/medium/low level of theory (if specified)
-            real_/int_/model_charge(int): Charge of real/intermediate/model system
-            real_/int_/model_charge_multiplicity(int): Multiplicity of real/intermediate/model system
-            high_level_atoms (list or string): List of high level atoms.
-            medium_level_atoms (list) : List of medium level atoms.
-            low_level_atoms (list): List of low level atoms.
-            bonded_atoms (list of tuples): List of bonded atoms.
-            scale_factors (dict) (optional):  A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom pair indices and the value is a list of scale factors for (low, medium, high).
-            **kwargs: Additional keyword arguments.
+        """
+        Initialize Gaussian QM/MM job settings for ONIOM calculations.
 
-            Information about scale factors:
-            The scale factors are used to scale the bond lengths between different layers.
-            For example, in a two-layer ONIOM calculation, if a C-C bond is cut between low and high layers, the
-            C atom from the low layer will be substituted by an H atom (link atom) when conducting the high-level
-            calculation. Instead of directly placing an H atom at the position of the C atom, the link atom (H)
-            needs to be aligned along with the bond vector of the original C-C bond.
-            Note that the bond distances of C-C and C-H bond are different. Both scale_factor1 and scale_factor2
-            can be set as 0.709, which represents the ratio of a standard C-C bond length (1.084 Å) to a standard
-            C-H bond length (1.528 Å). That is, a link atom (H) is placed at a distance of 0.709 times the bond
-            length of the original C-C bond for both low-level and high-level calculations.
-            If not specified, scale factors will be calculated by the ratio of covalent radiis. If only one scale
-            factor is specified, it will be used for all layers. If two scale factors are specified for a 3-layer
-            ONIOM calculation, both the high- and medium-layer will use the second scale factor.
+        Args:
+            jobtype (str): Type of ONIOM calculation to perform.
+                Options: 'sp' (single-point), 'opt' (optimization), 'freq' (frequency),
+                'ts' (transition state), 'irc' (intrinsic reaction coordinate)
+
+            Theory level parameters:
+                high_level_functional (str): DFT functional for high QM layer
+                    (e.g., 'B3LYP', 'M06-2X', 'wB97X-D', 'PBE0')
+                high_level_basis (str): Basis set for high QM layer
+                    (e.g., '6-31G*', '6-311++G(d,p)', 'def2-TZVP', 'cc-pVTZ')
+                high_level_force_field (str): Force field for high MM layer (rare)
+                medium_level_functional (str): DFT functional for medium QM layer
+                medium_level_basis (str): Basis set for medium QM layer
+                medium_level_force_field (str): Force field for medium MM layer
+                low_level_functional (str): DFT functional for low QM layer (uncommon)
+                low_level_basis (str): Basis set for low QM layer (uncommon)
+                low_level_force_field (str): Force field for low MM layer
+                    (e.g., 'AMBER=HardFirst', 'UFF', 'DREIDING', 'MM3')
+
+            Charge and multiplicity:
+                real_charge (int): Total charge of complete molecular system
+                real_multiplicity (int): Spin multiplicity of complete system (2S+1)
+                int_charge (int): Charge of high+medium layers (3-layer only)
+                int_multiplicity (int): Multiplicity of high+medium layers
+                model_charge (int): Charge of high layer only
+                model_multiplicity (int): Multiplicity of high layer only
+
+            Atom partitioning:
+                high_level_atoms (list/str): Atoms in high layer. Can be:
+                    - List of integers: [1, 2, 3, 5, 8]
+                    - Range string: "1-10,15,20-25"
+                    - List of ranges: ["1-10", "15", "20-25"]
+                medium_level_atoms (list/str): Atoms in medium layer (3-layer only)
+                low_level_atoms (list/str): Atoms in low layer (usually auto-assigned)
+                bonded_atoms (list): Covalent bonds crossing layer boundaries.
+                    Format: [(atom1, atom2), (atom3, atom4)] where atoms are 1-indexed
+                scale_factors (dict): Custom link atom scale factors. Format:
+                    {(atom1, atom2): [scale_low, scale_medium, scale_high]}
+                    Values typically range from 0.5-1.0, common value is 0.709
+
+            **kwargs: Additional keyword arguments passed to parent GaussianJobSettings
+
+        Note:
+            - All atom indices are 1-based following Gaussian conventions
+            - If only 2 layers specified, use high_level_* and low_level_* parameters
+            - Force fields must be available in your Gaussian installation
+            - Link atoms are automatically placed for bonded_atoms specifications
+            - The parent class 'functional' and 'basis' attributes are set to high_level values
         """
         super().__init__(**kwargs)
         self.jobtype = jobtype

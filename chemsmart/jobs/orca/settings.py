@@ -969,13 +969,49 @@ class ORCAIRCJobSettings(ORCAJobSettings):
 
 
 class ORCAQMMMJobSettings(ORCAJobSettings):
-    """Settings for ORCA multiscale job.
-    This includes five types of methods:
-    1. Additive QMMM.
-    2. Subtractive QM/QM2 (2-layered ONIOM).
-    3. Subtractive QM/QM2/MM (3-layered ONIOM).
-    4. MOL-CRYSTAL-QMMM for molecular crystals.
-    5. IONIC-CRYSTAL-QMMM for semiconductors and insulators."""
+    """
+    Configuration for ORCA multiscale QM/MM calculations.
+
+    Supports five multiscale calculation types:
+    1. Additive QM/MM
+    2. Subtractive QM/QM2 (2-layer ONIOM)
+    3. Subtractive QM/QM2/MM (3-layer ONIOM)
+    4. MOL-CRYSTAL-QMMM (molecular crystals)
+    5. IONIC-CRYSTAL-QMMM (semiconductors/insulators)
+
+    Attributes:
+        jobtype (str): Multiscale calculation type
+        qm_functional (str): DFT functional for QM region
+        qm_basis (str): Basis set for QM region
+        qm2_functional (str): DFT functional for QM2 region
+        qm2_basis (str): Basis set for QM2 region
+        qm2_method (str): Built-in method for QM2 (XTB, HF-3C, etc.)
+        mm_force_field (str): Force field for MM region
+        qm_atoms (list): Atom indices for QM region
+        qm2_atoms (list): Atom indices for QM2 region
+        charge_total (int): Total system charge
+        mult_total (int): Total system multiplicity
+        charge_medium (int): Medium layer charge
+        mult_medium (int): Medium layer multiplicity
+        charge_qm (int): QM region charge
+        mult_qm (int): QM region multiplicity
+        qm2_solvation (str): Solvation model for QM2
+        active_atoms (list): Active atoms for optimization
+        use_active_info_from_pbc (bool): Use PDB active atom info
+        optregion_fixed_atoms (list): Fixed atoms in optimization
+        qm_h_bond_length (dict): Custom QM-H bond distances
+        delete_la_double_counting (bool): Remove bend/torsion double counting
+        delete_la_bond_double_counting_atoms (bool): Remove bond double counting
+        embedding_type (str): Electronic or mechanical embedding
+        conv_charges (bool): Use converged charges for crystal QM/MM
+        conv_charges_max_n_cycles (int): Max charge convergence cycles
+        conv_charges_conv_thresh (float): Charge convergence threshold
+        scale_formal_charge_mm_atom (float): MM charge scaling factor
+        n_unit_cell_atoms (int): Atoms per unit cell (MOL-CRYSTAL-QMMM)
+        ecp_layer_ecp (str): ECP type for boundary region
+        ecp_layer (int): Number of ECP layers
+        scale_formal_charge_ecp_atom (float): ECP charge scaling factor
+    """
 
     def __init__(
         self,
@@ -1015,38 +1051,39 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         **kwargs,
     ):
         """
-        Args:
-            jobtype: str, type of multiscale job (e.g. "QMMM", "QM/QM2", "QM/QM2/MM", "MOL-CRYSTAL-QMMM", "IONIC-CRYSTAL-QMMM")
-            qm_functional: str, functional for QM level of theory
-            qm_basis: str, basis set for QM level of theory
-            qm2_functional: str, functional for QM2 level of theory
-            qm2_basis: str, basis set for QM2 level of theory
-            qm2_method: str, method for QM2 level of theory (e.g. "XTB", "HF-3C", "PBEH-3C")
-            mm_force_field: str, method for MM level of theory (e.g. "MMFF", "AMBER", "CHARMM")
-            qm_atoms: list of int, indices of QM atoms
-            qm2_atoms: list of int, indices of QM2 atoms
-            charge_total: int, total charge of the system
-            mult_total: int, total multiplicity of the system
-            charge_medium: int, charge of the medium system (QM2) if available
-            mult_medium: int, multiplicity of the medium system (QM2) if available
-            charge_qm: int, charge of the QM system
-            mult_qm: int, multiplicity of the QM system
-            qm2_solvation: str, solvation model for QM2 level of theory (e.g. "CPCM", "SMD")
-            active_atoms: list of int, indices of active atoms in the system, default whole system
-            optregion_fixed_atoms: list of int, indices of fixed atoms in the optimization region
-            qm_h_bond_length: dictionary, where the key is atom types of two bonding atoms (in tuple), and values are customized bond length
-            delete_la_double_counting: bool, whether to neglect bends (QM2-QM1-MM1) and torsions (QM3-QM2-QM1-MM1), default true
-            delete_la_bond_double_counting_atoms: bool, whether to neglect bonds (QM1-MM1), default true
-            electronic_interaction: str, whether to use electronic (default)/mechanical embedding between QM and MM region
-            conv_charges: bool, default true
-            conv_charges_max_n_cycles: int, default 30 for MOL-CRYSTAL-QMMM, 10 for IONIC-CRYSTAL-QMMM
-            conv_charges_conv_thresh: float, default 1e-2 for maximum charge change for atom type between two subsequent charge convergence cycles
-            scale_formal_charge_mm_atom: float, scale factors of MM atomic charges used in QM part of the CRYSTAL-QMMM calculation, default 1.
-            n_unit_cell_atoms: int, the number of atoms per molecular subunit. Mandatory for MOL-CRYSTAL-QMMM
-            ecp_layer_ecp: str, cECPs used for the boundary region
-            ecp_layer: int, number of cECP layers around the QM region, default 3
-            scale_formal_charge_ecp_atom: float, scale factors of ECP atomic charges, default 1.
+        Initialize ORCA QM/MM job settings.
 
+        Args:
+            jobtype: Type of multiscale calculation (QMMM, QM/QM2, QM/QM2/MM, etc.)
+            qm_functional: DFT functional for QM region
+            qm_basis: Basis set for QM region
+            qm2_functional: DFT functional for QM2 region
+            qm2_basis: Basis set for QM2 region
+            qm2_method: Built-in method for QM2 (XTB, HF-3C, PBEH-3C, etc.)
+            mm_force_field: Force field for MM region (MMFF, AMBER, CHARMM, etc.)
+            qm_atoms: Atom indices for QM region
+            qm2_atoms: Atom indices for QM2 region
+            charge_total: Total system charge
+            mult_total: Total system multiplicity
+            charge_medium: Medium layer charge (QM2)
+            mult_medium: Medium layer multiplicity (QM2)
+            charge_qm: QM region charge
+            mult_qm: QM region multiplicity
+            qm2_solvation: Solvation model for QM2 (CPCM, SMD, etc.)
+            active_atoms: Active atom indices (default: whole system)
+            optregion_fixed_atoms: Fixed atom indices in optimization
+            qm_h_bond_length: Custom bond lengths {(atom1, atom2): length}
+            delete_la_double_counting: Remove bend/torsion double counting
+            delete_la_bond_double_counting_atoms: Remove bond double counting
+            embedding_type: Electronic (default) or mechanical embedding
+            conv_charges: Use converged charges
+            conv_charges_max_n_cycles: Max cycles for charge convergence
+            conv_charges_conv_thresh: Convergence threshold for charges
+            scale_formal_charge_mm_atom: MM atomic charge scaling factor
+            n_unit_cell_atoms: Atoms per unit cell (required for MOL-CRYSTAL-QMMM)
+            ecp_layer_ecp: ECP type for boundary region
+            ecp_layer: Number of ECP layers around QM region
+            scale_formal_charge_ecp_atom: ECP atomic charge scaling factor
         """
         super().__init__(**kwargs)
         self.jobtype = jobtype
@@ -1074,21 +1111,22 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             delete_la_bond_double_counting_atoms
         )
         self.embedding_type = embedding_type
+        # Crystal QM/MM parameters
         self.conv_charges = conv_charges
         self.conv_charges_max_n_cycles = conv_charges_max_n_cycles
         self.conv_charges_conv_thresh = conv_charges_conv_thresh
         self.scale_formal_charge_mm_atom = scale_formal_charge_mm_atom
-        self.n_unit_cell_atoms = n_unit_cell_atoms
+        self.n_unit_cell_atoms = n_unit_cell_atoms  # For MOL-CRYSTAL-QMMM
+        # Ionic crystal QM/MM parameters
         self.ecp_layer_ecp = ecp_layer_ecp
         self.ecp_layer = ecp_layer
         self.scale_formal_charge_ecp_atom = scale_formal_charge_ecp_atom
 
-        # populate self.functional, self.basis, etc.
+        # Set parent class attributes from QM region
         self.functional = self.qm_functional
         self.basis = self.qm_basis
 
-        # Prefer charge/multiplicity specified for the QM region.
-        # Fallback order: QM region -> medium region -> total system.
+        # Set charge/multiplicity with fallback priority: QM -> medium -> total
         if self.charge_qm is not None and self.mult_qm is not None:
             self.charge = self.charge_qm
             self.multiplicity = self.mult_qm
@@ -1101,7 +1139,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.charge = self.charge_total
             self.multiplicity = self.mult_total
         else:
-            # leave unspecified if nothing provided
             self.charge = None
             self.multiplicity = None
 
@@ -1116,7 +1153,21 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
     def validate_and_assign_level(
         self, functional, basis, built_in_method, level_name
     ):
-        """Validate and assign the level of theory for QM and QM2."""
+        """
+        Validate and assign level of theory for QM/QM2/MM layers.
+
+        Args:
+            functional: DFT functional
+            basis: Basis set
+            built_in_method: Built-in ORCA method (XTB, HF-3C, etc.)
+            level_name: Layer name (qm, qm2, mm)
+
+        Returns:
+            str: Validated level of theory string
+
+        Raises:
+            ValueError: If incompatible options are specified
+        """
         qm2_built_in_list = [
             "XTB",
             "XTB0",
@@ -1130,12 +1181,12 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         level_of_theory = ""
         if functional and basis and built_in_method:
             raise ValueError(
-                f"For {level_name} level of theory, one should specify only functional/basis or ORCA built-in method!"
+                f"For {level_name} level: specify either functional/basis OR built-in method, not both!"
             )
         if built_in_method:
             assert functional is None and basis is None, (
-                f"ORCA built-in method is given for {level_name} level of theory, "
-                f"thus no functional and basis should be given!"
+                f"Built-in method specified for {level_name} level - "
+                f"functional and basis should not be provided!"
             )
             if (
                 level_name == "qm2"
@@ -1149,12 +1200,19 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 level_of_theory = f"{functional} {basis}"
         else:
             level_of_theory = None
-        logger.debug(
-            f"Obtained level of theory {level_of_theory} for {level_name} level."
-        )
+        logger.debug(f"Level of theory for {level_name}: {level_of_theory}")
         return level_of_theory
 
     def check_crystal_qmmm(self):
+        """
+        Validate crystal QM/MM job settings.
+
+        Ensures required parameters are set for MOL-CRYSTAL-QMMM
+        and IONIC-CRYSTAL-QMMM calculations.
+
+        Raises:
+            AssertionError: If required parameters are missing or invalid
+        """
         job_type = self.job_type.upper()
         if job_type in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
             assert (
@@ -1180,10 +1238,12 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 ), "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
 
     def _get_level_of_theory_string(self):
-        """Get the level of theory string for QM and QM2.
-        e.g. '!QM/XTB' (without solvent), '!QM/XTB ALPB(Water)' (with solvent), '!QM/HF-3C/MM' (for QM/QM2/MM)
         """
-        # todo: move to crystalqmmm class
+        Generate ORCA route string for QM/MM calculations.
+
+        Returns:
+            str: Route string (e.g., '!QM/XTB', '!QM/HF-3C/MM', '!QMMM')
+        """
         if (
             self.jobtype.upper() == "IONIC-CRYSTAL-QMMM"
             or self.jobtype.upper() == "MOL-CRYSTAL-QMMM"
@@ -1203,13 +1263,12 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.mm_level_of_theory = self.validate_and_assign_level(
                 None, None, self.mm_force_field, level_name="mm"
             )
-            print(self.mm_force_field, self.jobtype, self.mm_level_of_theory)
-            if self.qm2_level_of_theory is not None:
-                level_of_theory += f"/{self.qm2_level_of_theory}"
+            # only "!QMMM" will be used for additive QMMM
+            level_of_theory = "!QMMM"
+            level_of_theory += f"/{self.qm2_level_of_theory}"
             if self.mm_level_of_theory is not None:
                 if self.jobtype.upper() == "QMMM":
-                    # only "!QMMM" will be used for additive QMMM
-                    level_of_theory = "!QMMM"
+                    level_of_theory = "!QMMM"  # Additive QM/MM
                 else:
                     level_of_theory += f"/{self.mm_level_of_theory}"
             if self.solvent_model is not None:
@@ -1229,15 +1288,17 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return level_of_theory
 
     def _get_h_bond_length(self):
-        """Example input in '%qmmm' block:
-        %qmmm
-        # standard equilibrium bond lengths with hydrogen can be modified
-        Dist_C_HLA 1.09 # d0_C-H
-        Dist_O_HLA 0.98 # d0_O-H
-        Dist_N_HLA 0.99 # d0_N-H
-        # file can be provided which provides the used d0_X-H values specific to all atoms
-        H_Dist_FileName "QM_H_dist.txt"
-        end
+        """
+        Generate custom QM-H bond length specifications.
+
+        Returns:
+            str: Bond length specifications for %qmmm block
+
+        Example output:
+            Dist_C_HLA 1.09
+            Dist_O_HLA 0.98
+            or
+            H_Dist_FileName "QM_H_dist.txt"
         """
         if isinstance(self.qm_h_bond_length, dict):
             h_bond_length = ""
@@ -1254,6 +1315,15 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             return f'H_Dist_FileName "{self.qm_h_bond_length}"'
 
     def _get_embedding_type(self):
+        """
+        Generate embedding type specification for QM/MM calculations.
+
+        Returns:
+            str: Embedding directive (e.g., "Embedding Electronic")
+
+        Raises:
+            ValueError: If invalid embedding type specified
+        """
         embedding_type = "Embedding "
         if self.embedding_type.lower() == "electronic":
             embedding_type += "Electronic"
@@ -1267,9 +1337,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return embedding_type
 
     def _get_charge_and_multiplicity(self):
-        """Get the charge and multiplicity of total system (for QM/MM) or QM2 (for QM/QM2/MM).
-        note that in ORCA multiscale jobs the total/medium charge/multiplicity is specified in %qmmm block,
-        and QM charge/multiplicity are specified in the coordination block"""
+        """
+        Generate charge and multiplicity lines for %qmmm block.
+
+        Returns charge/multiplicity for total system (QM/MM) or medium system (QM/QM2/MM).
+        ORCA specifies total/medium charge/multiplicity in %qmmm block while
+        QM charge/multiplicity are specified in the coordinate section.
+
+        Returns:
+            tuple: (charge_str, mult_str) for %qmmm block
+        """
         if self.qm2_atoms is not None:
             charge = f"Charge_Medium {self.charge_medium}"
             mult = f"Mult_Medium {self.mult_medium}"
@@ -1279,8 +1356,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return charge, mult
 
     def _get_partition_string(self):
-        """Get the partition string for QM and QM2 atoms.
-        e.g. 'QMAtoms {1:10 15:20} end'"""
+        """
+        Generate atom partition specifications for QM and QM2 regions.
+
+        Returns:
+            str: Partition block with QMAtoms and QM2Atoms directives
+
+        Example:
+            QMAtoms {1:10 15:20} end
+            QM2Atoms {21:30} end
+        """
 
         partition_string = ""
         qm_fmt = self._get_formatted_partition_strings(self.qm_atoms)
@@ -1292,14 +1377,21 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return partition_string
 
     def _get_formatted_partition_strings(self, atom_id):
-        """Normalize atom specification to sorted unique ints and compress into ranges.
+        """
+        Convert atom specifications to ORCA-formatted range strings.
 
-        Acceptable inputs:
-          - list/tuple of ints
-          - iterable of ints
-          - string like '1-15,37,39' or '1:15 37 39'
+        Normalizes various atom specification formats to sorted unique integers
+        and compresses contiguous sequences into compact range notation.
 
-        Returns a string like '1:15 37 39' (ranges use ':' and tokens are space-separated).
+        Args:
+            atom_id: Atom specification (list/tuple of ints, string ranges, etc.)
+
+        Returns:
+            str: Formatted string with ranges and individual atoms
+
+        Examples:
+            Input: [1,2,3,5,7,8,9] → Output: "1:3 5 7:9"
+            Input: "1-15,37,39" → Output: "1:15 37 39"
         """
         if atom_id is None:
             return None
@@ -1362,28 +1454,32 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return " ".join(ranges)
 
     def _write_qmmm_block(self):
-        """Writes the QMMM block options.
+        """
+        Generate complete %qmmm block for ORCA multiscale calculations.
 
-        QMMM block input example below:
-        !QM/HF-3c/MM Opt B3LYP def2-TZVP def2/J NumFreq
-        %qmmm
-        ORCAFFFilename "peptideChain.ORCAFF.prms"
-        QMAtoms {16:33 68:82} end
-        QM2Atoms {0:12 83:104} end
-        ActiveAtoms { 0:38 65:120} end
-        Charge_Medium 0
-        end
-        *pdbfile -1 1 peptideChain.pdb
+        Constructs the full %qmmm block containing all necessary parameters
+        for QM/MM calculations including atom partitions, charges, force fields,
+        embedding options, and crystal-specific parameters.
+
+        Returns:
+            str: Complete %qmmm block ready for ORCA input file
+
+        Example output:
+            %qmmm
+            QMAtoms {16:33 68:82} end
+            QM2Atoms {0:12 83:104} end
+            Charge_Medium 0
+            ORCAFFFilename "system.prms"
+            end
         """
         full_qm_block = "%qmmm\n"
 
-        # Partition strings (QMAtoms and QM2Atoms) using dedicated helper
+        # Add atom partition specifications
         partition_block = self._get_partition_string()
         if partition_block:
-            # partition_block already contains trailing newlines between lines
             full_qm_block += partition_block
 
-        # Charge / multiplicity lines for medium/total
+        # Add charge/multiplicity for medium or total system
         charge_str, mult_str = self._get_charge_and_multiplicity()
         # Only include lines that do not contain the string 'None'
         if charge_str and "None" not in str(charge_str):
@@ -1391,18 +1487,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if mult_str and "None" not in str(mult_str):
             full_qm_block += f"{mult_str}\n"
 
-        # QM2 solvation scheme
+        # Add QM2 solvation if specified
         if self.qm2_solvation is not None:
             full_qm_block += f"solv_scheme {self.qm2_solvation}\n"
 
-        # Active atoms (if provided) - format with helper
+        # Add active atoms specification
         active_fmt = self._get_formatted_partition_strings(self.active_atoms)
         if active_fmt is not None:
             full_qm_block += f"ActiveAtoms {{{active_fmt}}} end\n"
 
-        # QM2 custom method / basis when provided.
-        # Avoid calling _get_level_of_theory() here because it may perform
-        # validations that are not relevant when building the %qmmm block.
+        # Add QM2 method/basis specifications
         if self.qm2_method is not None and self.qm2_method.strip():
             # QM2 method provided via external file
             full_qm_block += f'QM2CustomFile "{self.qm2_method}" end\n'
@@ -1415,7 +1509,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             if self.qm2_basis is not None and self.qm2_basis.strip():
                 full_qm_block += f'QM2CUSTOMBASIS "{self.qm2_basis}" end\n'
 
-        # Force field file for specific job types
+        # Add force field for specific job types
         if self.jobtype and self.jobtype.upper() in [
             "QM/MM",
             "QM/QM2/MM",
@@ -1423,7 +1517,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         ]:
             assert (
                 self.mm_force_field is not None
-            ), f"Force field file is missing for {self.jobtype} job!"
+            ), f"Force field file missing for {self.jobtype} job!"
             full_qm_block += f'ORCAFFFilename "{self.mm_force_field}"\n'
 
         # Fixed atoms options
@@ -1436,7 +1530,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             if fixed_fmt is not None:
                 full_qm_block += f"OptRegion_FixedAtoms {{{fixed_fmt}}} end\n"
 
-        # H-bond lengths block
+        # Add custom H-bond lengths
         if self.qm_h_bond_length is not None:
             h_block = self._get_h_bond_length()
             if h_block:
@@ -1445,6 +1539,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                     f"{h_block}\n" if not h_block.endswith("\n") else h_block
                 )
 
+        # Add double-counting removal options
         if self.delete_la_double_counting is True:
             full_qm_block += "Delete_LA_Double_Counting true\n"
         if self.delete_la_bond_double_counting_atoms:
@@ -1452,7 +1547,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if self.embedding_type is not None:
             full_qm_block += f"{self._get_embedding_type()}\n"
 
-        # Append crystal subblock if any
+        # Add crystal QM/MM parameters if any
         crystal_sub = self._write_crystal_qmmm_subblock()
         if crystal_sub is not None:
             full_qm_block += crystal_sub
@@ -1461,6 +1556,15 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         return full_qm_block
 
     def _write_crystal_qmmm_subblock(self):
+        """
+        Generate crystal-specific parameters for %qmmm block.
+
+        Creates parameter block for MOL-CRYSTAL-QMMM and IONIC-CRYSTAL-QMMM
+        calculations including charge convergence, ECP settings, and scaling factors.
+
+        Returns:
+            str: Crystal QM/MM parameter block
+        """
         crystal_qmmm_subblock = " "
         if not self.conv_charges:
             crystal_qmmm_subblock += "Conv_Charges False \n"

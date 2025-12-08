@@ -305,6 +305,15 @@ Works for all Gaussian jobs
    -  -  ``scan``
       -  for running Gaussian scan jobs
 
+.. list-table:: Multiscale QM/MM Calculations
+   :header-rows: 1
+   :widths: 15 85
+
+   -  -  Subcommand
+      -  Description
+   -  -  ``qmmm``
+      -  for multiscale QM/MM calculations using ONIOM
+
 .. list-table:: Electronic Structure Properties & Analyses
    :header-rows: 1
    :widths: 15 85
@@ -346,5 +355,6 @@ For specific calculation types, see the detailed tutorials:
 -  Submit Conformational Sampling & Dynamics Jobs
 -  Submit Structure Optimization Jobs
 -  Submit Transition State Search Jobs
+-  Submit QM/MM Multiscale Jobs
 -  Submit Electronic Structure Properties & Analyses Jobs
 -  Submit Other Jobs

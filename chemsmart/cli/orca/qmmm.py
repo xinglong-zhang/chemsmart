@@ -15,16 +15,19 @@ logger = logging.getLogger(__name__)
 
 def _populate_charge_and_multiplicity_on_settings(qs):
     """
-    Populate top-level `charge` and `multiplicity` on an ORCAQMMMJobSettings
-    instance `qs` from QMMM-specific fields following the preference order:
-      1. medium (charge_medium, mult_medium)
-      2. qm (charge_qm, mult_qm)
-      3. total (charge_total, mult_total)
+    Populate top-level charge/multiplicity from QMMM-specific fields.
 
-    This is necessary because the ORCAQMMMJobSettings __init__ only sets
-    these parent attributes during construction; when CLI later assigns
-    the per-layer attributes we must propagate them back to `.charge` and
-    `.multiplicity` for downstream writers.
+    Sets the parent class charge and multiplicity attributes from
+    layer-specific values following the preference order:
+    1. medium (charge_medium, mult_medium)
+    2. qm (charge_qm, mult_qm)
+    3. total (charge_total, mult_total)
+
+    This ensures proper charge/multiplicity values are available
+    for downstream ORCA input file writers.
+
+    Args:
+        qs: ORCAQMMMJobSettings instance to update
     """
     charge = getattr(qs, "charge", None)
     mult = getattr(qs, "multiplicity", None)
@@ -70,121 +73,121 @@ def _populate_charge_and_multiplicity_on_settings(qs):
         ],
         case_sensitive=False,
     ),
-    help="Please specify the job type you want to run.",
+    help="Multiscale calculation type",
 )
 @click.option(
     "-qx",
     "--qm-functional",
     type=str,
-    help="Functional of QM region",
+    help="DFT functional for QM region",
 )
 @click.option(
     "-qb",
     "--qm-basis",
     type=str,
-    help="Basis set of QM region",
+    help="Basis set for QM region",
 )
 @click.option(
     "-qx2",
     "--qm2-functional",
     type=str,
-    help="Functional of QM2 region",
+    help="DFT functional for QM2 region",
 )
 @click.option(
     "-qb2",
     "--qm2-basis",
     type=str,
-    help="Basis set of QM2 region",
+    help="Basis set for QM2 region",
 )
 @click.option(
     "-qm2m",
     "--qm2-methods",
     type=str,
-    help="Methods of MM region",
+    help="Built-in method for QM2 region",
 )
 @click.option(
     "-mf",
     "--mm-force-field",
     type=str,
-    help="Force field of MM region",
+    help="Force field for MM region",
 )
 @click.option(
     "-qa",
     "--qm-atoms",
     type=str,
-    help="Indices of QM atoms",
+    help="QM atom indices (e.g., '1-15,20')",
 )
 @click.option(
     "-qa2",
     "--qm2-atoms",
     type=str,
-    help="Indices of QM2 atoms",
+    help="QM2 atom indices (e.g., '16-30')",
 )
 @click.option(
     "-ct",
     "--charge-total",
     type=int,
-    help="Charge of the total system",
+    help="Total system charge",
 )
 @click.option(
     "-mt",
     "--mult-total",
     type=str,
-    help="Multiplicity of the total system",
+    help="Total system multiplicity",
 )
 @click.option(
     "-cm",
     "--charge-medium",
     type=int,
-    help="Charge of the medium system",
+    help="Medium layer charge",
 )
 @click.option(
     "-mm",
     "--mult-medium",
     type=str,
-    help="Multiplicity of the medium system",
+    help="Medium layer multiplicity",
 )
 @click.option(
     "-cq",
     "--charge-qm",
     type=int,
-    help="Charge of the QM system",
+    help="QM region charge",
 )
 @click.option(
     "-mq",
     "--mult-qm",
     type=str,
-    help="Multiplicity of the QM system",
+    help="QM region multiplicity",
 )
 @click.option(
     "-s",
     "--qm2-solvation",
     type=str,
-    help="Solvation model for QM2 level of theory",
+    help="Solvation model for QM2 region",
 )
 @click.option(
     "-a",
     "--active-atoms",
     type=str,
-    help="Indices of acitve atoms",
+    help="Active atom indices for optimization",
 )
 @click.option(
     "-ua",
     "--use-active-info-from-pbc",
     type=str,
-    help="Get the definition of active atoms from the pdb file, default False",
+    help="Use active atom info from PDB file",
 )
 @click.option(
     "-o",
     "--optregion-fixed-atoms",
     type=str,
-    help="Indices of fixed atoms in the optimization region",
+    help="Fixed atom indices in optimization",
 )
 @click.option(
     "-h",
     "--qm-h-bond-length",
     type=dict,
-    help="Customized bond length for two bonding atoms",
+    help="Custom QM-H bond lengths",
 )
 @click.option(
     "-d",
@@ -208,49 +211,49 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     "-cc",
     "--conv-charges",
     type=bool,
-    help="Whether to use the converged charges",
+    help="Use converged charges for crystal QM/MM",
 )
 @click.option(
     "-xn",
     "--conv-charges-max-n-cycles",
     type=int,
-    help="Maximum number of cycles for charge convergence",
+    help="Max cycles for charge convergence",
 )
 @click.option(
     "-t",
     "--conv-charges-conv-thresh",
     type=float,
-    help="Convergence threshold for charge convergence",
+    help="Charge convergence threshold",
 )
 @click.option(
     "-sc",
     "--scale-formal-charge-mm-atom",
     type=float,
-    help="Scale the formal charge of MM atoms",
+    help="MM atom charge scaling factor",
 )
 @click.option(
     "-nc",
     "--n-unit-cell-atoms",
     type=int,
-    help="Number of atoms in the unit cell",
+    help="Atoms per unit cell (MOL-CRYSTAL-QMMM)",
 )
 @click.option(
     "-ecp",
     "--ecp-layer-ecp",
     type=str,
-    help="ECP layer for ECP atoms",
+    help="ECP type for boundary region",
 )
 @click.option(
     "-ecpn",
     "--ecp-layer",
     type=int,
-    help="number of cECP layers around the QM region",
+    help="Number of ECP layers around QM region",
 )
 @click.option(
     "-sc2",
     "--scale-formal-charge-ecp-atom",
     type=float,
-    help="Scale the formal charge of ECP atoms",
+    help="ECP atom charge scaling factor",
 )
 @click.pass_context
 def qmmm(
@@ -290,22 +293,25 @@ def qmmm(
     **kwargs,
 ):
     """
-    QM/MM calculation using ORCA.
+    Set up and submit ORCA multiscale QM/MM calculations.
+
+    Supports additive QM/MM, subtractive ONIOM schemes, and crystal QM/MM
+    methods. Configures calculation parameters, validates settings, and
+    creates ORCAQMMMJob instance for execution.
     """
     from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
-    # get jobrunner for running Gaussian QMMM jobs
+    # Get execution context and initialize QM/MM flag
     jobrunner = ctx.obj["jobrunner"]
     ctx.obj["qmmm"] = True
-    # get settings from project
     project_settings = ctx.obj["project_settings"]
     logger.debug("Project settings: %s", ctx.obj["project_settings"].__dict__)
-    # job setting from filename or default, with updates from user in cli specified in keywords
-    # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
+
+    # Get base job settings and CLI keywords
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # Initialize qmmm_settings from project; fall back to defaults if missing
+    # Initialize QMMM settings from project or defaults
     qmmm_settings = project_settings.qmmm_settings()
     if qmmm_settings is None:
         logger.warning(
@@ -313,16 +319,14 @@ def qmmm(
         )
         qmmm_settings = ORCAQMMMJobSettings()
 
-    # Merge project qmmm settings with job settings and CLI-specified keywords.
+    # Merge settings with error handling
     try:
         qmmm_merged = qmmm_settings.merge(job_settings, keywords=keywords)
     except Exception as exc:
         logger.debug("qmmm_settings.merge failed or is unavailable: %s", exc)
-        # If merge failed, prefer job_settings if available, otherwise keep defaults
+        # Fallback to job_settings or keep defaults
         if job_settings is not None:
-            # Try to normalize job_settings into a GaussianQMMMJobSettings if possible
             try:
-                # job_settings may be a settings instance or a dict-like
                 qmmm_merged = ORCAQMMMJobSettings(
                     **getattr(job_settings, "__dict__", job_settings)
                 )
@@ -331,7 +335,7 @@ def qmmm(
         else:
             qmmm_merged = qmmm_settings
 
-    # Ensure the final settings object is a GaussianQMMMJobSettings instance
+    # Ensure final settings is ORCAQMMMJobSettings instance
     if isinstance(qmmm_merged, ORCAQMMMJobSettings):
         qmmm_settings = qmmm_merged
     else:
@@ -342,30 +346,13 @@ def qmmm(
         except Exception:
             qmmm_settings = ORCAQMMMJobSettings()
 
-    # get label for the job
     label = ctx.obj.get("label")
     logger.debug("Label for job: %s", label)
 
-    # jobrunner = ctx.obj["jobrunner"]
-    # project_settings = ctx.obj["project_settings"]
-    # qmmm_settings = project_settings.qmmm_settings()
-    #
-    # # job setting from filename or default, with updates from user in cli specified in keywords
-    # # e.g., `chemsmart sub orca qmmm -qf <qm_functional> -qb <qm_basis>`
-    # job_settings = ctx.obj["job_settings"]
-    # keywords = ctx.obj["keywords"]
-    #
-    # # merge project settings with job settings from cli keywords from cli.orca.py subcommands
-    # qmmm_settings = qmmm_settings.merge(job_settings, keywords=keywords)
-    #
-    # # get label for the job
-    # label = ctx.obj["label"]
-    # logger.debug(f"Label for job: {label}")
-
-    # convert from ORCAJobSettings instance to ORCAQMMMJobSettings instance
+    # Convert settings to ORCAQMMMJobSettings if needed
     qmmm_settings = ORCAQMMMJobSettings(**qmmm_settings.__dict__)
 
-    # populate cli options (only override if CLI value is provided)
+    # Update settings with CLI-provided options (only if specified)
     if job_type is not None:
         qmmm_settings.jobtype = job_type
     if qm_functional is not None:
@@ -432,13 +419,15 @@ def qmmm(
         qmmm_settings.scale_formal_charge_ecp_atom = (
             scale_formal_charge_ecp_atom
         )
-    # populate top-level charge/multiplicity on settings for downstream writers
+
+    # Set top-level charge/multiplicity from layer-specific values
     _populate_charge_and_multiplicity_on_settings(qmmm_settings)
-    # get molecule
+
+    # Configure molecule with QM/MM partition parameters
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]
     logger.info(f"QMMM job settings from project: {qmmm_settings.__dict__}")
-    # populate cli options by attaching QMMM parameters to the molecule
+
     if qm_atoms is not None:
         qm_atoms = convert_string_to_slices(qm_atoms)
         molecule.high_level_atoms = qm_atoms

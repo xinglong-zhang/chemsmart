@@ -275,6 +275,15 @@ Works for all ORCA jobs
    -  -  ``scan``
       -  CLI for running ORCA scan jobs
 
+.. list-table:: Multiscale QM/MM Calculations
+   :header-rows: 1
+   :widths: 15 85
+
+   -  -  Subcommand
+      -  Description
+   -  -  ``qmmm``
+      -  CLI for multiscale QM/MM calculations using ORCA
+
 .. list-table:: Direct Input File Execution
    :header-rows: 1
    :widths: 15 85
@@ -292,4 +301,5 @@ For specific calculation types, see the detailed tutorials:
 
 -  Submit Structure Optimization and Singlet Point Jobs
 -  Submit Transition State Search Jobs
+-  Submit QM/MM Multiscale Jobs
 -  Submit Direct Input File ORCA Jobs
