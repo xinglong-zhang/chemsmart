@@ -926,14 +926,6 @@ class Thermochemistry:
 
     def compute_thermochemistry(self):
         """Compute Boltzmann-averaged properties."""
-        # Check if file terminated normally
-        if self.file_object is None:
-            logger.warning(
-                f"Skipping thermochemistry calculation for '{self.filename}': "
-                "file did not terminate normally."
-            )
-            return None
-
         logger.debug(f"Computing thermochemistry for {self.filename}...")
         return self._compute_thermochemistry()
 
