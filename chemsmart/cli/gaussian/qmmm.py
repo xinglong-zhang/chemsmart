@@ -15,8 +15,6 @@ from chemsmart.utils.utils import get_list_from_string_range
 logger = logging.getLogger(__name__)
 
 
-# @gaussian.command("qmmm", cls=MyCommand)
-# @click_job_options
 @click.option(
     "-j",
     "--jobtype",

@@ -2031,6 +2031,10 @@ class QMMMMolecule(Molecule):
         scale_factors=None,
         **kwargs,
     ):
+        # store reference to the original molecule early to avoid
+        # __getattr__ recursion when attribute access falls back to it.
+        self.molecule = molecule
+
         if molecule is not None:
             # inherit all parameters from the molecule object including class methods
             sig = inspect.signature(Molecule.__init__)
@@ -2062,9 +2066,16 @@ class QMMMMolecule(Molecule):
             self.multiplicity = self.real_multiplicity
 
     def __getattr__(self, name):
-        # Forward any missing attribute to the underlying Molecule
-        if hasattr(self.molecule, name):
-            return getattr(self.molecule, name)
+        # Forward any missing attribute to the underlying Molecule.
+        # Use object.__getattribute__ to avoid re-entering this __getattr__
+        # when accessing self.molecule (which would cause recursion).
+        try:
+            mol = object.__getattribute__(self, "molecule")
+        except AttributeError:
+            raise AttributeError(f"'QMMM' object has no attribute '{name}'")
+
+        if mol is not None and hasattr(mol, name):
+            return getattr(mol, name)
         raise AttributeError(f"'QMMM' object has no attribute '{name}'")
 
     @property
