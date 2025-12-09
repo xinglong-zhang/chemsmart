@@ -11,6 +11,7 @@ from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.input import ORCAInput
 from chemsmart.io.orca.output import ORCAEngradFile, ORCANEBFile, ORCAOutput
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.jobs.orca.settings import ORCANEBJobSettings
 
 
 class TestORCARoute:
@@ -2576,3 +2577,53 @@ class TestORCANEB:
         assert orca_neb.ts_max_abs_force == 0.00543
         assert orca_neb.ts_energy == -219.09056
         assert orca_neb.preopt_ends
+
+
+class TestORCANEBJobSettings:
+    """Test suite for ORCANEBJobSettings class."""
+
+    def test_init_default(self):
+        """Test default initialization."""
+        settings = ORCANEBJobSettings()
+        assert settings.jobtype is None
+        assert settings.nimages is None
+        assert settings.preopt_ends is False
+
+    def test_init_with_parameters(self):
+        """Test initialization with parameters."""
+        settings = ORCANEBJobSettings(
+            jobtype="NEB-TS", nimages=8, semiempirical="XTB2"
+        )
+        assert settings.jobtype == "NEB-TS"
+        assert settings.nimages == 8
+        assert settings.semiempirical == "XTB2"
+
+    def test_route_string_generation(self):
+        """Test route string generation."""
+        settings = ORCANEBJobSettings(jobtype="NEB-CI", semiempirical="XTB2")
+        assert settings.route_string == "! XTB2 NEB-CI"
+
+    def test_neb_block_basic(self):
+        """Test basic NEB block generation."""
+        settings = ORCANEBJobSettings(
+            nimages=5, starting_xyz="start.xyz", ending_xyzfile="end.xyz"
+        )
+        neb_block = settings.neb_block
+        assert "%neb" in neb_block
+        assert "NImages 5" in neb_block
+        assert 'NEB_END_XYZFile "end.xyz"' in neb_block
+
+    def test_inheritance(self):
+        """Test inheritance from ORCAJobSettings."""
+        settings = ORCANEBJobSettings(functional="B3LYP", basis="def2-SVP")
+        assert isinstance(settings, ORCANEBJobSettings)
+        assert settings.functional == "B3LYP"
+        assert settings.basis == "def2-SVP"
+
+    def test_validation_errors(self):
+        """Test validation raises appropriate errors."""
+        settings = ORCANEBJobSettings(starting_xyz="start.xyz")
+        with pytest.raises(
+            AssertionError, match="The number of images is missing"
+        ):
+            _ = settings.neb_block

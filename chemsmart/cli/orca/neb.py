@@ -59,8 +59,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "-o",
-    "--pre-optimization",
-    type=bool,
+    "--pre-optimization/--no-pre-optimization",
     default=False,
     help="Whether to optimize the input geometries.",
 )
@@ -152,8 +151,8 @@ def neb(
         neb_settings.intermediate_xyzfile = intermediate_xyzfile
     if restarting_xyzfile:
         neb_settings.restarting_xyzfile = restarting_xyzfile
-    if pre_optimization:
-        neb_settings.preopt_ends = pre_optimization
+    # Always set pre_optimization since it's now a proper boolean flag
+    neb_settings.preopt_ends = pre_optimization
     if semiempirical:
         neb_settings.semiempirical = semiempirical
 
