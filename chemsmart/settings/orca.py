@@ -187,7 +187,15 @@ class ORCAProjectSettings(RegistryMixin):
         return settings
 
     def neb_settings(self):
-        """ORCA default settings for NEB job."""
+        """
+        Create default ORCA NEB job settings.
+
+        Returns ORCANEBJobSettings instance with base configuration
+        inherited from main settings and NEB-specific defaults.
+
+        Returns:
+            ORCANEBJobSettings: Default NEB settings with freq disabled
+        """
         settings = self.main_settings().copy()
         settings = ORCANEBJobSettings(
             **settings.__dict__
@@ -358,6 +366,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
             sp_settings: Settings for single point calculations.
             td_settings: Settings for TD-DFT calculations.
             wbi_settings: Settings for Wiberg bond index calculations.
+            neb_settings: Settings for NEB calculations.
         """
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -452,6 +461,12 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         return self._wbi_settings
 
     def neb_settings(self):
+        """
+        Get Nudged Elastic Band calculation settings.
+
+        Returns:
+            ORCANEBJobSettings: Pre-configured NEB calculation settings.
+        """
         return self._neb_settings
 
     @classmethod

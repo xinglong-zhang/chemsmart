@@ -505,6 +505,12 @@ class ORCAInputWriter(InputWriter):
             self._write_irc_block_for_irc(f)
 
     def _write_neb_block(self, f):
+        """
+        Write NEB block section if settings is ORCANEBJobSettings.
+
+        Args:
+            f: File object to write to
+        """
         if isinstance(self.settings, ORCANEBJobSettings):
             self._write_neb_block_for_neb(f)
 
@@ -624,15 +630,23 @@ class ORCAInputWriter(InputWriter):
         f.write("end\n")
 
     def _write_neb_block_for_neb(self, f):
-        """Writes the IRC block options.
-        NEB block input example below:
-        ! GFN2-xTB NEB-TS
-        %NEB
-        NImages 8
-        NEB_END_XYZFILE "R-INT2-Si_opt.xyz"
-        PREOPT_ENDS FALSE
-        END
-        * xyzfile 0 1 R-INT1-Si_opt.xyz
+        """
+        Write ORCA NEB block configuration to input file.
+
+        Generates the %NEB block with NEB-specific options including number
+        of images, geometry files, and optimization settings. Only writes
+        the block if NEB-specific settings are present.
+
+        Args:
+            f: File object to write to
+
+        Example output:
+            %NEB
+            NIMAGES 8
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            PREOPT_ENDS True
+            end
         """
         neb_settings_keys = self.settings.__dict__.keys()
         from chemsmart.jobs.orca.settings import ORCAJobSettings

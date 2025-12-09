@@ -31,49 +31,31 @@ logger = logging.getLogger(__name__)
         ],
         case_sensitive=False,
     ),
-    help="Option to run NEB jobs.",
-)
-@click.option(
-    "-s",
-    "--starting-xyzfile",
-    type=str,
-    help="Filename of starting geometry.",
+    help="NEB calculation type (e.g., NEB-TS for transition state search).",
 )
 @click.option(
     "-e",
     "--ending-xyzfile",
     type=str,
-    help="Filename of ending geometry.",
+    help="Product geometry file path.",
 )
 @click.option(
     "-i",
     "--intermediate-xyzfile",
     type=str,
-    help="Filename of intermediate geometry.",
+    help="Initial TS geometry guess file path.",
 )
 @click.option(
     "-r",
     "--restarting-xyzfile",
     type=str,
-    help="Filename of geometry for restarting.",
+    help="Restart file path for continuation.",
 )
 @click.option(
     "-o",
     "--pre-optimization/--no-pre-optimization",
     default=False,
     help="Whether to optimize the input geometries.",
-)
-@click.option(
-    "-c",
-    "--charge",
-    type=int,
-    help="Charge of the starting geometries.",
-)
-@click.option(
-    "-m",
-    "--multiplicity",
-    type=int,
-    help="Multiplicity of the starting geometries.",
 )
 @click.option(
     "-A",
@@ -86,13 +68,12 @@ logger = logging.getLogger(__name__)
         ],
         case_sensitive=False,
     ),
-    help="Option to run NEB jobs.",
+    help="Semiempirical method for NEB calculation.",
 )
 @click.pass_context
 def neb(
     ctx,
     job_type,
-    starting_xyzfile,
     ending_xyzfile,
     intermediate_xyzfile,
     restarting_xyzfile,
@@ -101,25 +82,41 @@ def neb(
     **kwargs,
 ):
     """
-    Nudged Elastic Band (NEB) calculation using ORCA.
+    Run ORCA Nudged Elastic Band (NEB) calculations.
 
-    NEB calculations find transition states and reaction pathways by optimizing
-    a chain of molecular structures connecting reactant and product geometries.
+    Finds minimum energy pathways and transition states by optimizing a chain
+    of molecular structures connecting reactant and product geometries.
+
+    The reactant geometry is provided via the main -f option. At minimum, you
+    need both reactant (-f) and product (-e) geometries.
 
     Examples:
-        Basic NEB calculation:
+        Standard NEB calculation:
         $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -A XTB2
 
-        NEB with intermediate guess:
+        NEB with climbing image for precise TS location:
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-CI -e product.xyz -A XTB1
+
+        NEB with intermediate TS guess:
         $ chemsmart sub orca -f reactant.xyz neb -j NEB-CI -e product.xyz -i ts_guess.xyz
 
         Restart from previous calculation:
-        $ chemsmart sub orca -f reactant.xyz neb -j NEB -r restart.xyz
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB -r restart.allxyz
+
+        Pre-optimize endpoint geometries:
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -o -A XTB2
+
+    Args:
+        job_type: NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+        ending_xyzfile: Product geometry file
+        intermediate_xyzfile: Intermediate/TS geometry guess file
+        restarting_xyzfile: Restart file from previous calculation
+        pre_optimization: Pre-optimize endpoint geometries before NEB
+        semiempirical: Semiempirical method (XTB0, XTB1, XTB2)
 
     Note:
-        - At minimum, you need starting geometry (-f) and ending geometry (-e)
-        - For TS searches, use NEB-TS or NEB-CI job types
-        - Semiempirical methods (XTB) are recommended for initial exploration
+        Use NEB-TS or NEB-CI for transition state searches.
+        Semiempirical methods (XTB) recommended for initial exploration.
     """
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -130,7 +127,7 @@ def neb(
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project irc settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project NEB settings with job settings from cli keywords from cli.orca.py subcommands
     neb_settings = neb_project_settings.merge(job_settings, keywords=keywords)
 
     # get label for the job
@@ -141,10 +138,6 @@ def neb(
     # then the project value should be used and unmodified, ie, should not be merged.
     # update value only if user specifies a value for the attribute:
     neb_settings.jobtype = job_type
-    if starting_xyzfile:
-        neb_settings.starting_xyz = (
-            starting_xyzfile  # Fixed: use correct attribute name
-        )
     if ending_xyzfile:
         neb_settings.ending_xyzfile = ending_xyzfile
     if intermediate_xyzfile:

@@ -954,10 +954,10 @@ class ORCANEBJobSettings(ORCAJobSettings):
     """
     Settings for ORCA Nudged Elastic Band (NEB) calculations.
 
-    NEB is a method for finding transition states and reaction pathways by
-    optimizing a series of structures (images) connecting reactant and product
-    geometries. The images are connected by spring forces to form an elastic
-    band that converges to the minimum energy pathway.
+    NEB finds minimum energy pathways and transition states by optimizing a
+    series of molecular structures (images) connecting reactant and product
+    geometries. Images are connected by spring forces forming an elastic band
+    that converges to the minimum energy pathway.
 
     Supported NEB job types:
     - NEB: Standard NEB calculation
@@ -970,14 +970,14 @@ class ORCANEBJobSettings(ORCAJobSettings):
     - NEB-IDPP: Image-dependent pair potential initialization
 
     Attributes:
-        jobtype (str): Type of NEB calculation
-        nimages (int): Number of intermediate images (excluding endpoints)
-        starting_xyz (str): Path to reactant geometry file
-        ending_xyzfile (str): Path to product geometry file
-        intermediate_xyzfile (str): Path to intermediate/TS geometry guess
-        restarting_xyzfile (str): Path to restart file for continuation
-        preopt_ends (bool): Whether to pre-optimize endpoint geometries
-        semiempirical (str): Semiempirical method (XTB0, XTB1, XTB2)
+        jobtype (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+        nimages (int): Number of intermediate images between endpoints
+        starting_xyz (str): Reactant geometry file path (inherited)
+        ending_xyzfile (str): Product geometry file path
+        intermediate_xyzfile (str): Initial TS guess file path (optional)
+        restarting_xyzfile (str): Restart file for continuation (optional)
+        preopt_ends (bool): Pre-optimize endpoint geometries
+        semiempirical (str): Semiempirical method (XTB0/XTB1/XTB2)
     """
 
     def __init__(
@@ -987,7 +987,6 @@ class ORCANEBJobSettings(ORCAJobSettings):
         nimages=None,
         ending_xyzfile=None,
         intermediate_xyzfile=None,
-        starting_xyz=None,
         restarting_xyzfile=None,
         preopt_ends=False,
         **kwargs,
@@ -996,21 +995,24 @@ class ORCANEBJobSettings(ORCAJobSettings):
         Initialize ORCA NEB job settings.
 
         Args:
-            jobtype (str): Type of NEB jobs to run (NEB, NEB-CI, NEB-TS, etc.)
-            nimages (int): Number of images in the NEB calculation
-            ending_xyzfile (str): Path of the .xyz file containing product geometry
-            intermediate_xyzfile (str): Path of intermediate/TS geometry file
-            starting_xyz (str): Path of the .xyz file containing reactant geometry
-            restarting_xyzfile (str): Path of geometry file for restarting calculation
-            preopt_ends (bool): Whether to pre-optimize the end geometries
+            jobtype (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+            nimages (int): Number of intermediate images in NEB chain
+            ending_xyzfile (str): Product geometry file path
+            intermediate_xyzfile (str): Initial TS geometry guess file path
+            restarting_xyzfile (str): Restart file path for continuation
+            preopt_ends (bool): Pre-optimize endpoint geometries before NEB
             semiempirical (str): Semiempirical method (XTB0, XTB1, XTB2)
+            **kwargs: Additional arguments passed to parent ORCAJobSettings
+
+        Note:
+            Reactant geometry (starting_xyz) is typically set via parent class
+            from the main molecule input file.
         """
         super().__init__(**kwargs)
         self.jobtype = jobtype
         self.nimages = nimages
         self.ending_xyzfile = ending_xyzfile
         self.intermediate_xyzfile = intermediate_xyzfile
-        self.starting_xyz = starting_xyz
         self.restarting_xyzfile = restarting_xyzfile
         self.preopt_ends = preopt_ends
         self.semiempirical = semiempirical
@@ -1018,9 +1020,25 @@ class ORCANEBJobSettings(ORCAJobSettings):
     # populate attribute from parent class (optional)
     @property
     def route_string(self):
+        """
+        Generate ORCA route line for NEB calculation.
+
+        Returns:
+            str: Route string with method and NEB job type
+        """
         return self._get_neb_route_string()
 
     def _get_neb_route_string(self):
+        """
+        Generate ORCA route line for NEB calculation.
+
+        Returns:
+            str: Route string combining method and NEB job type
+
+        Examples:
+            "! XTB2 NEB-TS" (with semiempirical)
+            "! B3LYP def2-SVP NEB-CI" (with DFT)
+        """
         if self.semiempirical:
             return f"! {self.semiempirical} {self.jobtype}"
         else:
@@ -1028,18 +1046,34 @@ class ORCANEBJobSettings(ORCAJobSettings):
 
     @property
     def neb_block(self):
+        """
+        Generate ORCA NEB input block.
+
+        Returns:
+            str: Formatted %neb block for ORCA input file
+        """
         return self._write_neb_block()
 
     def _write_neb_block(self):
-        """write the NEB blcok options
-        NEB block input example below:
-        ! GFN2-xTB NEB-TS
-        %NEB
-        NImages 8
-        NEB_END_XYZFILE "R-INT2-Si_opt.xyz"
-        PREOPT_ENDS FALSE
-        END
-        * xyzfile 0 1 R-INT1-Si_opt.xyz
+        """
+        Generate ORCA NEB input block.
+
+        Creates the %neb block with configuration for the NEB calculation
+        including number of images, file paths, and optimization settings.
+
+        Returns:
+            str: Formatted NEB block for ORCA input file
+
+        Example output:
+            %neb
+            NImages 8
+            NEB_END_XYZFILE "product.xyz"
+            PREOPT_ENDS FALSE
+            NEB_TS_XYZFILE "ts_guess.xyz"  # if provided
+            END
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
         """
         assert self.nimages, "The number of images is missing!"
         lines = [
@@ -1047,13 +1081,12 @@ class ORCANEBJobSettings(ORCAJobSettings):
             f"NImages {self.nimages}",
         ]
         assert self.restarting_xyzfile or (
-            self.ending_xyzfile and self.starting_xyz
+            self.ending_xyzfile
         ), "No valid input geomertry is given!"
         if self.restarting_xyzfile:
             lines.append(f'Restart_ALLXYZFile "{self.restarting_xyzfile}"')
         else:
             assert self.ending_xyzfile, "No end geometry file is given!"
-            assert self.starting_xyz, "No starting geometry is given!"
             lines.append(f'NEB_END_XYZFile "{self.ending_xyzfile}"')
             lines.append(f"PREOPT_ENDS {self.preopt_ends}")
             if self.intermediate_xyzfile:

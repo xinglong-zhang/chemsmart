@@ -2,7 +2,7 @@
  Transition State Search (ORCA)
 ################################
 
-This page covers transition state optimization, IRC calculations, and coordinate scanning using ORCA.
+This page covers transition state optimization, NEB calculations, IRC calculations, and coordinate scanning using ORCA.
 
 *************************
  Transition State Search
@@ -95,6 +95,141 @@ ScanTS mode with full scan:
 .. code:: bash
 
    chemsmart sub orca -p project -f molecule.xyz ts -ts scants -fs
+
+***************************
+ Nudged Elastic Band (NEB)
+***************************
+
+Find reaction pathways and transition states by optimizing a chain of molecular structures connecting reactant and
+product geometries.
+
+.. code:: bash
+
+   chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] neb [SUBCMD_OPTIONS]
+
+NEB Options
+===========
+
+.. list-table:: Job Type Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-j, --job-type``
+      -  choice
+      -  NEB calculation type: NEB, NEB-CI, NEB-TS, FAST-NEB-TS, TIGHT-NEB-TS, LOOSE-NEB, ZOOM-NEB, ZOOM-NEB-CI,
+         ZOOM-NEB-TS, NEB-IDPP
+
+.. list-table:: Structure Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-e, --ending-xyzfile``
+      -  string
+      -  Filename of ending geometry (product)
+
+   -  -  ``-i, --intermediate-xyzfile``
+      -  string
+      -  Filename of intermediate geometry (TS guess)
+
+   -  -  ``-r, --restarting-xyzfile``
+      -  string
+      -  Filename of geometry for restarting calculation
+
+.. list-table:: Optimization Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-o, --pre-optimization/--no-pre-optimization``
+      -  flag
+      -  Whether to optimize input geometries (default: disabled)
+
+   -  -  ``-A, --semiempirical``
+      -  choice
+      -  Semiempirical method: XTB0, XTB1, XTB2
+
+Basic Usage
+===========
+
+Standard NEB calculation:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-TS -e product.xyz -A XTB2
+
+NEB with climbing image:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-CI -e product.xyz -A XTB1
+
+NEB with intermediate guess:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-CI -e product.xyz -i ts_guess.xyz
+
+Restart from previous calculation:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz neb -j NEB -r restart.allxyz
+
+NEB with geometry pre-optimization:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-TS -e product.xyz -o -A XTB2
+
+Job Types
+=========
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   -  -  Job Type
+      -  Description
+   -  -  ``NEB``
+      -  Standard nudged elastic band calculation
+   -  -  ``NEB-CI``
+      -  NEB with climbing image to find exact saddle point
+   -  -  ``NEB-TS``
+      -  NEB calculation optimized for transition state search
+   -  -  ``FAST-NEB-TS``
+      -  Fast convergence NEB for TS search with loose criteria
+   -  -  ``TIGHT-NEB-TS``
+      -  Tight convergence NEB for accurate TS search
+   -  -  ``LOOSE-NEB``
+      -  NEB calculation with loose convergence criteria
+   -  -  ``ZOOM-NEB``
+      -  Variable density NEB with focus on important regions
+   -  -  ``ZOOM-NEB-CI``
+      -  ZOOM-NEB with climbing image
+   -  -  ``ZOOM-NEB-TS``
+      -  ZOOM-NEB optimized for TS search
+   -  -  ``NEB-IDPP``
+      -  NEB with image-dependent pair potential interpolation
+
+Requirements
+============
+
+-  Starting geometry (``-f`` option): reactant structure
+-  Ending geometry (``-e`` option): product structure
+-  At minimum, NEB requires reactant and product geometries
+-  For TS searches, use NEB-TS or NEB-CI job types
+-  Semiempirical methods (XTB) are recommended for initial exploration
 
 *************
  Modred Jobs
