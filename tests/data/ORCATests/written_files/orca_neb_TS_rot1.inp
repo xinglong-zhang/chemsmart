@@ -4,8 +4,8 @@
 # Memory per core
 %maxcore 4687
 %NEB
-NEB_END_XYZFILE 'product.xyz'
-NEB_TS_XYZFILE 'ts.xyz'
+NEB_END_XYZFILE "product.xyz"
+NEB_TS_XYZFILE "ts.xyz"
 NIMAGES 5
 PREOPT_ENDS True
 end
