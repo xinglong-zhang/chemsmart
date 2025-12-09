@@ -951,7 +951,34 @@ class ORCAIRCJobSettings(ORCAJobSettings):
 
 
 class ORCANEBJobSettings(ORCAJobSettings):
-    """Settings for ORCA NEB jobs"""
+    """
+    Settings for ORCA Nudged Elastic Band (NEB) calculations.
+
+    NEB is a method for finding transition states and reaction pathways by
+    optimizing a series of structures (images) connecting reactant and product
+    geometries. The images are connected by spring forces to form an elastic
+    band that converges to the minimum energy pathway.
+
+    Supported NEB job types:
+    - NEB: Standard NEB calculation
+    - NEB-CI: Climbing Image NEB for accurate transition state location
+    - NEB-TS: NEB with transition state optimization
+    - FAST-NEB-TS: Fast convergence variant
+    - TIGHT-NEB-TS: Tight convergence criteria
+    - LOOSE-NEB: Loose convergence for initial screening
+    - ZOOM-NEB: Zoomed NEB for specific pathway regions
+    - NEB-IDPP: Image-dependent pair potential initialization
+
+    Attributes:
+        jobtype (str): Type of NEB calculation
+        nimages (int): Number of intermediate images (excluding endpoints)
+        starting_xyz (str): Path to reactant geometry file
+        ending_xyzfile (str): Path to product geometry file
+        intermediate_xyzfile (str): Path to intermediate/TS geometry guess
+        restarting_xyzfile (str): Path to restart file for continuation
+        preopt_ends (bool): Whether to pre-optimize endpoint geometries
+        semiempirical (str): Semiempirical method (XTB0, XTB1, XTB2)
+    """
 
     def __init__(
         self,
@@ -966,8 +993,17 @@ class ORCANEBJobSettings(ORCAJobSettings):
         **kwargs,
     ):
         """
-        jobtype: str, type of NEB jobs to run.
-        neb_end_xyzfile: str, path of the .xyz file containing product geometry.
+        Initialize ORCA NEB job settings.
+
+        Args:
+            jobtype (str): Type of NEB jobs to run (NEB, NEB-CI, NEB-TS, etc.)
+            nimages (int): Number of images in the NEB calculation
+            ending_xyzfile (str): Path of the .xyz file containing product geometry
+            intermediate_xyzfile (str): Path of intermediate/TS geometry file
+            starting_xyz (str): Path of the .xyz file containing reactant geometry
+            restarting_xyzfile (str): Path of geometry file for restarting calculation
+            preopt_ends (bool): Whether to pre-optimize the end geometries
+            semiempirical (str): Semiempirical method (XTB0, XTB1, XTB2)
         """
         super().__init__(**kwargs)
         self.jobtype = jobtype
@@ -1014,7 +1050,7 @@ class ORCANEBJobSettings(ORCAJobSettings):
             self.ending_xyzfile and self.starting_xyz
         ), "No valid input geomertry is given!"
         if self.restarting_xyzfile:
-            lines.append(f"Restart_ALLXYZFile {self.intermediate_xyzfile}")
+            lines.append(f"Restart_ALLXYZFile '{self.restarting_xyzfile}'")
         else:
             assert self.ending_xyzfile, "No end geometry file is given!"
             assert self.starting_xyz, "No starting geometry is given!"

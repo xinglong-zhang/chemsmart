@@ -102,7 +102,25 @@ def neb(
     **kwargs,
 ):
     """
-    NEB calculation using ORCA.
+    Nudged Elastic Band (NEB) calculation using ORCA.
+
+    NEB calculations find transition states and reaction pathways by optimizing
+    a chain of molecular structures connecting reactant and product geometries.
+
+    Examples:
+        Basic NEB calculation:
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-TS -e product.xyz -A XTB2
+
+        NEB with intermediate guess:
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB-CI -e product.xyz -i ts_guess.xyz
+
+        Restart from previous calculation:
+        $ chemsmart sub orca -f reactant.xyz neb -j NEB -r restart.xyz
+
+    Note:
+        - At minimum, you need starting geometry (-f) and ending geometry (-e)
+        - For TS searches, use NEB-TS or NEB-CI job types
+        - Semiempirical methods (XTB) are recommended for initial exploration
     """
     # get settings from project
     project_settings = ctx.obj["project_settings"]
@@ -125,7 +143,9 @@ def neb(
     # update value only if user specifies a value for the attribute:
     neb_settings.jobtype = job_type
     if starting_xyzfile:
-        neb_settings.neb_start_xyz = starting_xyzfile
+        neb_settings.starting_xyz = (
+            starting_xyzfile  # Fixed: use correct attribute name
+        )
     if ending_xyzfile:
         neb_settings.ending_xyzfile = ending_xyzfile
     if intermediate_xyzfile:
