@@ -166,31 +166,31 @@ Standard NEB calculation:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-TS -e product.xyz -A XTB2
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -A XTB2
 
 NEB with climbing image:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-CI -e product.xyz -A XTB1
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-CI -e product.xyz -A XTB1
 
 NEB with intermediate guess:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-CI -e product.xyz -i ts_guess.xyz
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-CI -e product.xyz -i ts_guess.xyz
 
 Restart from previous calculation:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz neb -j NEB -r restart.allxyz
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB -r restart.allxyz
 
 NEB with geometry pre-optimization:
 
 .. code:: bash
 
-   chemsmart sub orca -p project -f reactant.xyz neb -j NEB-TS -e product.xyz -o -A XTB2
+   chemsmart sub orca -p project -f reactant.xyz -c 0 -m 1 neb -j NEB-TS -e product.xyz -o -A XTB2
 
 Job Types
 =========
