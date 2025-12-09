@@ -7,6 +7,8 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.io import (
     clean_duplicate_structure,
+    clean_label,
+    convert_string_indices_to_pymol_id_indices,
     create_molecule_list,
     line_of_all_integers,
     line_of_integer_followed_by_floats,
@@ -546,6 +548,76 @@ class TestIOUtilities:
         assert (
             line_of_integer_followed_by_floats("2 3e0") is True
         )  # exponent present
+
+    def test_clean_label(self):
+        # spaces -> "_"
+        assert clean_label("label with space") == "label_with_space"
+
+        # commas -> "_"
+        assert clean_label("label,with,comma") == "label_with_comma"
+
+        # periods and parentheses -> "_"
+        assert clean_label("Fig. 1(a)") == "Fig_1_a"
+
+        # apostrophe -> "_prime_"
+        assert clean_label("O'Hara") == "O_prime_Hara"
+
+        # asterisk -> "_star_"
+        assert clean_label("label*") == "label_star"
+
+        # combination of several special characters
+        assert (
+            clean_label("O'Hara* test, v1.0") == "O_prime_Hara_star_test_v1_0"
+        )
+
+        # --- edge cases around underscore collapsing/stripping ---
+        # 1) Empty string input
+        assert clean_label("") == ""
+
+        # 2) String with only special characters
+        # "***" -> "_star__star__star_" -> collapse + strip -> "star_star_star"
+        assert clean_label("***") == "star_star_star"
+
+        # 3) Leading/trailing underscores after conversion
+        # "*label*" -> "_star_label_star_" -> collapse + strip -> "star_label_star"
+        assert clean_label("*label*") == "star_label_star"
+
+        # 4) Multiple consecutive special characters
+        # "label...test" -> "label___test" -> collapse -> "label_test"
+        assert clean_label("label...test") == "label_test"
+
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            ("1-10", "id 1-10"),
+            ("11", "id 11"),
+            ("1-10,11", "id 1-10 or id 11"),
+            ("1-10,11,14,19-30", "id 1-10 or id 11 or id 14 or id 19-30"),
+        ],
+    )
+    def test_basic_conversion(self, input_str, expected):
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    def test_conversion_strips_whitespace(self):
+        input_str = " 1-10,  11 ,14 ,  19-30  "
+        expected = "id 1-10 or id 11 or id 14 or id 19-30"
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    def test_trailing_comma_is_ignored(self):
+        input_str = "1-10,"
+        expected = "id 1-10"
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    @pytest.mark.parametrize("bad_input", ["", "   ", ",,,", ",  ,"])
+    def test_raises_value_error_on_empty_or_invalid_input(self, bad_input):
+        with pytest.raises(ValueError):
+            convert_string_indices_to_pymol_id_indices(bad_input)
 
 
 class TestNaturallySorted:

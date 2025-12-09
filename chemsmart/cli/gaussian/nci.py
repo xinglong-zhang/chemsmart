@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def nci(ctx, **kwargs):
-    """CLI for running Gaussian NCI jobs."""
+    """CLI subcommand for running Gaussian NCI jobs."""
 
     # get jobrunner for running Gaussian NCI jobs
     jobrunner = ctx.obj["jobrunner"]

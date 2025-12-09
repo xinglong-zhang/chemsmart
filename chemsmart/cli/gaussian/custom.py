@@ -13,18 +13,18 @@ logger = logging.getLogger(__name__)
 @gaussian.command("userjob", cls=MyCommand)
 @click_job_options
 @click.option(
-    "-r", "--route", required=True, type=str, help="user-defined route"
+    "-r", "--route", required=True, type=str, help="User-defined route."
 )
 @click.option(
     "-a",
     "--append-info",
     type=str,
     default=None,
-    help="information to be appended at the end of the file",
+    help="Information to be appended at the end of the file.",
 )
 @click.pass_context
 def userjob(ctx, route, append_info, **kwargs):
-    """CLI for running Gaussian custom jobs."""
+    """CLI subcommand for running Gaussian custom jobs."""
 
     # get jobrunner for running Gaussian custom jobs
     jobrunner = ctx.obj["jobrunner"]

@@ -1,3 +1,4 @@
+import ast
 import logging
 
 import click
@@ -19,9 +20,25 @@ logger = logging.getLogger(__name__)
 @gaussian.command("scan", cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click.option(
+    "-cc",
+    "--constrained-coordinates",
+    default=None,
+    help="Additional modredundant constraints for scan jobs. "
+    "Format: List of constraints separated by semicolons. "
+    "Example: [[1,2],[3,4,5],[1,2,3,4]]. 1-indexed.",
+)
 @click.pass_context
-def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
-    """CLI for running Gaussian scan jobs."""
+def scan(
+    ctx,
+    jobtype,
+    coordinates,
+    step_size,
+    num_steps,
+    constrained_coordinates=None,
+    **kwargs,
+):
+    """CLI subcommand for running Gaussian scan jobs."""
 
     # get jobrunner for running Gaussian scan jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -46,6 +63,13 @@ def scan(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     scan_settings = scan_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(scan_settings)
 
+    if constrained_coordinates is not None:
+        constrained_coordinates_info = ast.literal_eval(
+            constrained_coordinates
+        )
+        scan_settings.modred["constrained_coordinates"] = (
+            constrained_coordinates_info
+        )
     # get molecule
     molecules = ctx.obj["molecules"]
     molecule = molecules[-1]

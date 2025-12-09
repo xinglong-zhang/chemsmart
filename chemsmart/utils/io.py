@@ -12,7 +12,10 @@ Key functionality includes:
 """
 
 import logging
+import os
 import re
+import string
+from pathlib import Path
 
 import numpy as np
 
@@ -20,6 +23,8 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
+
+SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 
 def create_molecule_list(
@@ -196,3 +201,268 @@ def line_of_integer_followed_by_floats(line) -> bool:
 
     # Remaining tokens: floats
     return all(float_pattern.fullmatch(t) for t in tokens[1:])
+
+
+def match_outfile_pattern(line) -> str | None:
+    """
+    Match a line of text to known quantum chemistry program signatures.
+
+    Args:
+        line (str): Line from an output file.
+
+    Returns:
+        str | None: Program name ("gaussian", "orca", "xtb", "crest") if matched, else None.
+    """
+    patterns = {
+        "crest": [
+            "C R E S T",
+            "Conformer-Rotamer Ensemble Sampling Tool",
+            "https://crest-lab.github.io/crest-docs/",
+            "$ crest",
+        ],
+        "gaussian": [
+            "Entering Gaussian System",
+            "Gaussian, Inc.",
+            "Gaussian(R)",
+        ],
+        "orca": [
+            "* O   R   C   A *",
+            "Your ORCA version",
+            "ORCA versions",
+        ],
+        "xtb": ["x T B", "xtb version", "xtb is free software:"],
+    }
+    for program, keywords in patterns.items():
+        if any(keyword in line for keyword in keywords):
+            return program
+    return None
+
+
+def get_outfile_format(filepath) -> str:
+    """
+    Detect the type of quantum chemistry output file.
+
+    Reads only the first 200 lines and scans for characteristic keywords
+    of major QC packages to improve efficiency on large output files.
+
+    Args:
+        filepath (str): Path to the quantum chemistry output file.
+
+    Returns:
+        str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
+    """
+    max_lines = 200
+    try:
+        with open(filepath, "r") as f:
+            for i, line in enumerate(f):
+                if i >= max_lines:
+                    break
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if program := match_outfile_pattern(stripped):
+                    logger.debug(
+                        f"Detected output format for '{os.path.basename(filepath)}': {program}."
+                    )
+                    return program
+    except Exception as e:
+        logger.error(f"Error reading file '{filepath}': {e}.")
+        return "unknown"
+
+    logger.debug(
+        f"Could not detect output format for '{os.path.basename(filepath)}'."
+    )
+    return "unknown"
+
+
+def find_output_files_in_directory(directory, program):
+    """
+    Find quantum chemistry output files in a directory by program.
+
+    Args:
+        directory (str): Path to the directory to search.
+        program (str): Target QC program, e.g., "gaussian", "orca", "xtb", "crest".
+
+    Returns:
+        list[str]: List of file paths matching the specified program.
+    """
+    PROGRAM_SUFFIXES = {
+        "gaussian": [".log", ".out"],
+        "orca": [".out"],
+        "xtb": [".out"],
+        "crest": [".out"],
+    }
+
+    directory = os.path.abspath(directory)
+    logger.info(f"Obtaining {program} output files in directory: {directory}")
+    suffixes = PROGRAM_SUFFIXES.get(program)
+
+    outfiles = []
+    for subdir, _dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(tuple(suffixes)):
+                outfiles.append(os.path.join(subdir, file))
+
+    matched_files = [
+        file for file in outfiles if get_outfile_format(file) == program
+    ]
+    return matched_files
+
+
+def load_molecules_from_paths(
+    file_paths,
+    index,
+    add_index_suffix_for_single=False,
+    check_exists=False,
+):
+    """
+    Load molecules from a list of file paths, assigning unique names to each molecule.
+
+    For each file in `file_paths`, this function loads one or more molecular structures
+    using `Molecule.from_filepath`, assigns a unique name to each molecule based on the
+    file name and structure index, and returns a list of all loaded molecules.
+
+    Args:
+        file_paths (list of str or Path): List of file paths to load molecules from.
+        index (int or str): Index or slice to select specific structures from each file.
+        add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
+            the molecule name even if only a single structure is loaded from a file.
+        check_exists (bool, optional): If True, checks that each file exists before loading.
+
+    Returns:
+        list of Molecule: List of loaded Molecule objects, each with a unique name.
+
+    Raises:
+        FileNotFoundError: If `check_exists` is True and a file does not exist.
+        Exception: If an error occurs during molecule loading from a file.
+    """
+    loaded = []
+
+    for i, file_path in enumerate(file_paths):
+        logger.debug(f"Processing file {i+1}/{len(file_paths)}: {file_path}")
+
+        if not file_path:
+            logger.warning(f"Skipping invalid file path: {file_path}")
+            continue
+
+        p = Path(file_path)
+
+        if check_exists and not p.is_file():
+            logger.error(f"File not found or not a regular file: {file_path}")
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        file_path = str(p)
+
+        try:
+            mols = Molecule.from_filepath(
+                filepath=file_path,
+                index=index,
+                return_list=True,
+            )
+
+            # assign unique names per-structure when file contains multiple structures
+            base = os.path.splitext(os.path.basename(file_path))[0]
+            if isinstance(mols, list) and len(mols) > 1:
+                for j, mol in enumerate(mols, start=1):
+                    mol.name = f"{base}_{j}"
+            else:
+                # Optional suffix for single-structure files (filenames branch).
+                if add_index_suffix_for_single and index not in (":", "-1"):
+                    for mol in mols:
+                        mol.name = f"{base}_idx{index}"
+                else:
+                    for mol in mols:
+                        mol.name = base
+
+            loaded += mols
+            logger.debug(
+                f"Successfully loaded {len(mols)} molecules from {file_path}"
+            )
+        except Exception as e:
+            logger.error(f"Error loading molecules from {file_path}: {e}")
+            raise
+
+    return loaded
+
+
+def clean_label(label: str) -> str:
+    """
+    Make a label that is safe for filenames, DB keys, RST labels, etc.
+    - Keeps letters, digits, `_` and `-`.
+    - Replaces spaces, commas, dots, parentheses, etc. with `_`.
+    - Encodes "'" as `_prime_` and "*" as `_star_`.
+    - Collapses multiple underscores and strips leading/trailing `_`.
+    """
+
+    # Preserve your special semantics
+    label = label.replace("'", "_prime_")
+    label = label.replace("*", "_star_")
+
+    out = []
+    for ch in label:
+        if ch in SAFE_CHARS:
+            out.append(ch)
+        else:
+            # includes ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}
+            # drop any other weird character, or map to "_"
+            out.append("_")
+
+    cleaned = "".join(out)
+    # collapse runs of underscores
+    cleaned = re.sub(r"_+", "_", cleaned)
+    # strip leading/trailing underscores
+    cleaned = cleaned.strip("_")
+    return cleaned
+
+
+def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
+    """
+    Convert a comma-separated list of atom index ranges into a PyMOL `id` selection.
+
+    The input is expected to be a string of indices and/or index ranges separated
+    by commas, e.g.:
+
+        "1-10,11,14,19-30"
+
+    This will be converted into a PyMOL selection string where each element is
+    prefixed with `id` and combined with `or`, e.g.:
+
+        "id 1-10 or id 11 or id 14 or id 19-30"
+
+    Note: PyMOL selection:
+    `select mysel, id 1 or id 2 or id 8-10`
+    selects all atoms where (id == 1) OR (id == 2) OR (id is in 8-10)
+    So any atom that satisfies any one of those conditions is included in the selection.
+    That gives you atoms 1, 2, 8, 9, 10.
+    This is proper boolean logic:
+    or -> set union (combine atoms from all conditions)
+
+    Parameters
+    ----------
+    string_indices : str
+        Comma-separated atom indices and/or ranges, as understood by PyMOL.
+
+    Returns
+    -------
+    str
+        A PyMOL selection string using `id` and `or`.
+
+    Raises
+    ------
+    ValueError
+        If the input string is empty or contains no valid indices after stripping.
+    """
+    # Split on commas and normalise whitespace.
+    parts = [
+        part.strip() for part in string_indices.split(",") if part.strip()
+    ]
+
+    if not parts:
+        raise ValueError(
+            "string_indices must contain at least one index or range."
+        )
+
+    if len(parts) == 1:
+        return f"id {parts[0]}"
+
+    return " or ".join(f"id {part}" for part in parts)
