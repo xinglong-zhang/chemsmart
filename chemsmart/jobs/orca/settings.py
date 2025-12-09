@@ -1050,13 +1050,13 @@ class ORCANEBJobSettings(ORCAJobSettings):
             self.ending_xyzfile and self.starting_xyz
         ), "No valid input geomertry is given!"
         if self.restarting_xyzfile:
-            lines.append(f"Restart_ALLXYZFile '{self.restarting_xyzfile}'")
+            lines.append(f'Restart_ALLXYZFile "{self.restarting_xyzfile}"')
         else:
             assert self.ending_xyzfile, "No end geometry file is given!"
             assert self.starting_xyz, "No starting geometry is given!"
-            lines.append(f"NEB_END_XYZFile '{self.ending_xyzfile}'")
+            lines.append(f'NEB_END_XYZFile "{self.ending_xyzfile}"')
             lines.append(f"PREOPT_ENDS {self.preopt_ends}")
             if self.intermediate_xyzfile:
-                lines.append(f"NEB_TS_XYZFILE {self.intermediate_xyzfile}")
+                lines.append(f'NEB_TS_XYZFILE "{self.intermediate_xyzfile}"')
         lines.append("END")
         return "\n".join(lines)

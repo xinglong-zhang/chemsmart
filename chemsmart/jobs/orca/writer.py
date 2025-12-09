@@ -656,11 +656,11 @@ class ORCAInputWriter(InputWriter):
             if key == "nimages":
                 f.write(f"{key.upper()} {value}\n")
             if key == "ending_xyzfile":
-                f.write(f"NEB_END_XYZFILE '{value}'\n")
+                f.write(f'NEB_END_XYZFILE "{value}"\n')
             if key == "starting_xyz":
                 pass
             if key == "intermediate_xyzfile":
-                f.write(f"NEB_TS_XYZFILE '{value}'\n")
+                f.write(f'NEB_TS_XYZFILE "{value}"\n')
             if key == "preopt_ends":
                 if value:
                     f.write("PREOPT_ENDS True\n")
