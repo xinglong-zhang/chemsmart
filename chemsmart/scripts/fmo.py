@@ -89,8 +89,8 @@ def entry_point(filename, unit, debug, stream):
         # obtain chemical potential, μ = 1/2 * (lumo_energy + homo_energy)
         # Chemical hardness, η = 1/2 * (lumo_energy - homo_energy)
         # Electrophilicity index = ω = μ^2/2η
-        chemical_potential = 1 / 2 * (lumo_energy + homo_energy)
-        chemical_hardness = 1 / 2 * (lumo_energy - homo_energy)
+        chemical_potential = 0.5 * (lumo_energy + homo_energy)
+        chemical_hardness = 0.5 * (lumo_energy - homo_energy)
         electrophilicity_index = chemical_potential**2 / (
             2 * chemical_hardness
         )
@@ -140,8 +140,8 @@ def entry_point(filename, unit, debug, stream):
             logger.info(f"α-HOMO-LUMO gap: {alpha_fmo_gap:.4f} {energy_unit}")
 
             # Reactivity descriptors of alpha channel for open-shell systems
-            chemical_potential_alpha = 1 / 2 * (alpha_lumo + alpha_homo)
-            chemical_hardness_alpha = 1 / 2 * (alpha_lumo - alpha_homo)
+            chemical_potential_alpha = 0.5 * (alpha_lumo + alpha_homo)
+            chemical_hardness_alpha = 0.5 * (alpha_lumo - alpha_homo)
             electrophilicity_index_alpha = chemical_potential_alpha**2 / (
                 2 * chemical_hardness_alpha
             )
@@ -169,8 +169,8 @@ def entry_point(filename, unit, debug, stream):
             logger.info(f"β-HOMO-LUMO gap: {beta_fmo_gap:.4f} {energy_unit}")
 
             # Reactivity descriptors of beta channel for open-shell systems
-            chemical_potential_beta = 1 / 2 * (beta_lumo + beta_homo)
-            chemical_hardness_beta = 1 / 2 * (beta_lumo - beta_homo)
+            chemical_potential_beta = 0.5 * (beta_lumo + beta_homo)
+            chemical_hardness_beta = 0.5 * (beta_lumo - beta_homo)
             electrophilicity_index_beta = chemical_potential_beta**2 / (
                 2 * chemical_hardness_beta
             )
