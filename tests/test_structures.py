@@ -9,13 +9,13 @@ from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
+from chemsmart.io.file import CDXFile
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import (
-    CDXFile,
     CoordinateBlock,
     Molecule,
-    XYZFile,
 )
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import is_pubchem_network_available
 
 
@@ -1499,7 +1499,7 @@ M  END
 10
 
 $$$$"""
-        from chemsmart.io.molecules.structure import SDFFile
+        from chemsmart.io.file import SDFFile
 
         tmpfile = os.path.join(tmpdir, "test.sdf")
         with open(tmpfile, "w") as f:
@@ -1620,7 +1620,9 @@ class TestCDXFile:
         assert mol1.chemical_formula == "CH2O"
 
         # Get last molecule
-        mol_last = Molecule.from_filepath(multi_molecule_cdxml_file, index="-1")
+        mol_last = Molecule.from_filepath(
+            multi_molecule_cdxml_file, index="-1"
+        )
         assert mol_last.chemical_formula == "N2"
 
     def test_molecule_from_filepath_cdxml_return_list(
@@ -1658,7 +1660,9 @@ class TestCDXFile:
         second_mol = cdx_file.get_molecules(index="2")
         assert second_mol.chemical_formula == "N2"
 
-    def test_cdx_molecule_to_rdkit_conversion(self, single_molecule_cdxml_file):
+    def test_cdx_molecule_to_rdkit_conversion(
+        self, single_molecule_cdxml_file
+    ):
         """Test that molecules from CDXML can be converted to RDKit."""
         mol = Molecule.from_filepath(single_molecule_cdxml_file)
         rdkit_mol = mol.to_rdkit()
