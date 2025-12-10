@@ -1,9 +1,6 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-import tomlkit
-
 from chemsmart.cli.update import Updater
 
 
