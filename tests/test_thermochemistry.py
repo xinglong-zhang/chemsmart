@@ -3222,7 +3222,7 @@ class TestThermochemistryBatchMode:
             or line.startswith(structure3)
         ]
 
-        # Should have exactly 3 data lines after second write
+        # Should have exactly 3 data lines after third write
         assert len(data_lines3) == 3
 
         # Verify that the data lines contain numeric values
