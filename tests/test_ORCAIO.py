@@ -2559,7 +2559,17 @@ class TestORCAEngrad:
 
 class TestORCANEB:
     def test_read_neb_output(self, orca_neb_output_file):
-        orca_neb = ORCANEBFile(filename=orca_neb_output_file)
+        import pathlib
+
+        # Create a temporary UTF-8 version of the file
+        src = pathlib.Path(orca_neb_output_file)
+        tmp_file = src.parent / (src.stem + "_utf8.out")
+        tmp_file.write_text(
+            src.read_text(encoding="utf-8", errors="replace"), encoding="utf-8"
+        )
+
+        # Pass the UTF-8 version to the parser
+        orca_neb = ORCANEBFile(filename=str(tmp_file))
         assert orca_neb.nimages == 10
         assert orca_neb.num_atoms == 148
         assert orca_neb.ci_converged is True
