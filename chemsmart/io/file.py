@@ -2,7 +2,6 @@ import logging
 import re
 
 import numpy as np
-from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.mixins import FileMixin
@@ -79,16 +78,58 @@ class CDXFile(FileMixin):
         Parse the ChemDraw file and return a list of Molecule objects.
 
         Uses RDKit to parse the file and generate 3D coordinates.
+        Falls back to Open Babel for .cdx if RDKit cannot read it.
 
         Returns:
             list[Molecule]: List of Molecule objects with 3D coordinates.
         """
+        from pathlib import Path
+
+        from rdkit import Chem
         from rdkit.Chem import AllChem
 
-        # RDKit's MolsFromCDXMLFile works for both .cdx and .cdxml
-        rdkit_mols = list(
-            Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
-        )
+        suffix = Path(self.filename).suffix.lower()
+
+        rdkit_mols = []
+        try:
+            # NOTE: RDKit's MolsFromCDXMLFile always supports CDXML.
+            # CDX files are only supported if RDKit was built with ChemDraw CDX support
+            rdkit_mols = list(
+                Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
+            )
+        except Exception as e:
+            logger.debug(
+                f"RDKit MolsFromCDXMLFile failed for {self.filename}: {e}"
+            )
+
+        # Fallback for .cdx: use Open Babel / Pybel if RDKit gave nothing ---
+        if not rdkit_mols and suffix == ".cdx":
+            try:
+                from openbabel import pybel
+            except ImportError as e:
+                raise ValueError(
+                    "RDKit could not read the .cdx file and Open Babel "
+                    "is not installed. Install openbabel/pybel or save the "
+                    "ChemDraw file as .cdxml format instead. "
+                    f"File: {self.filename}"
+                ) from e
+
+            logger.debug(
+                "RDKit returned no molecules for %s; "
+                "falling back to Open Babel CDX reader.",
+                self.filename,
+            )
+
+            for obmol in pybel.readfile("cdx", self.filename):
+                try:
+                    smiles = obmol.write("smi").strip()
+                    mol = Chem.MolFromSmiles(smiles)
+                    if mol is not None:
+                        rdkit_mols.append(mol)
+                except Exception as e:
+                    logger.debug(
+                        f"Failed to convert Open Babel molecule to RDKit mol for {self.filename}: {e}"
+                    )
 
         if not rdkit_mols:
             raise ValueError(
@@ -122,7 +163,13 @@ class CDXFile(FileMixin):
                         continue
 
                 # Optimize the geometry
-                AllChem.MMFFOptimizeMolecule(rdkit_mol)
+                try:
+                    AllChem.MMFFOptimizeMolecule(rdkit_mol)
+                except Exception as e:
+                    # MMFF might not be parameterized for all atom types
+                    logger.debug(
+                        f"MMFF optimization failed for a molecule in {self.filename}: {e}"
+                    )
 
             except Exception as e:
                 logger.warning(

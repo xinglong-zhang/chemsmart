@@ -1702,3 +1702,21 @@ class TestCDXFile:
         assert len(graph.nodes) == 12  # benzene with hydrogens
         # Benzene should have 6 C-C bonds + 6 C-H bonds = 12 bonds
         assert len(graph.edges) == 12
+
+    def test_read_single_molecule_cdx_file_imidazole(
+        self, single_molecule_cdx_file_imidazole
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdx_file_imidazole)
+        assert os.path.isfile(single_molecule_cdx_file_imidazole)
+
+        cdx_file = CDXFile(filename=single_molecule_cdx_file_imidazole)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+        assert mol.num_atoms == 12
+        assert mol.is_aromatic

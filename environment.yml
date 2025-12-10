@@ -6,6 +6,8 @@ dependencies:
   - python=3.10
   - pymol-open-source=3.1.0
   - ffmpeg=7.1.1  # movie support for pymol
+  - rdkit
+  - openbabel 
   - pip
   - pip:
       - -e .[dev,test,docs]   # pulls all Python deps from pyproject.toml
