@@ -3298,5 +3298,5 @@ class TestThermochemistryBatchMode:
         # Only one data line
         assert len(data_lines4) == 1
 
-        # Verify that the data line contain correct values (structure4)
+        # Verify that the data line contains correct values (structure4)
         assert f"{gibbs_free_energy4:.6f}" in data_lines4[0]
