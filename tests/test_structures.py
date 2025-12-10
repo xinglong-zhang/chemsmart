@@ -1554,12 +1554,14 @@ $$$$"""
 class TestCDXFile:
     """Tests for ChemDraw file reading functionality."""
 
-    def test_read_single_molecule_cdxml_file(self, single_molecule_cdxml_file):
+    def test_read_single_molecule_cdxml_file_benzene(
+        self, single_molecule_cdxml_file_benzene
+    ):
         """Test reading a single molecule from a CDXML file."""
-        assert os.path.exists(single_molecule_cdxml_file)
-        assert os.path.isfile(single_molecule_cdxml_file)
+        assert os.path.exists(single_molecule_cdxml_file_benzene)
+        assert os.path.isfile(single_molecule_cdxml_file_benzene)
 
-        cdx_file = CDXFile(filename=single_molecule_cdxml_file)
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_benzene)
         molecules = cdx_file.molecules
 
         assert isinstance(molecules, list)
@@ -1569,6 +1571,24 @@ class TestCDXFile:
         assert mol.chemical_formula == "C6H6"
         assert mol.num_atoms == 12  # benzene with hydrogens
         assert mol.is_aromatic
+
+    def test_read_single_molecule_cdxml_file_methane(
+        self, single_molecule_cdxml_file_methane
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdxml_file_methane)
+        assert os.path.isfile(single_molecule_cdxml_file_methane)
+
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_methane)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "CH4"
+        assert mol.num_atoms == 5  # benzene with hydrogens
+        assert not mol.is_aromatic
 
     def test_read_multi_molecule_cdxml_file(self, multi_molecule_cdxml_file):
         """Test reading multiple molecules from a CDXML file."""
@@ -1583,9 +1603,11 @@ class TestCDXFile:
         assert molecules[0].chemical_formula == "CH2O"  # formaldehyde
         assert molecules[1].chemical_formula == "N2"  # nitrogen
 
-    def test_molecule_from_filepath_cdxml(self, single_molecule_cdxml_file):
+    def test_molecule_from_filepath_cdxml(
+        self, single_molecule_cdxml_file_benzene
+    ):
         """Test Molecule.from_filepath with CDXML file."""
-        mol = Molecule.from_filepath(single_molecule_cdxml_file)
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
 
         assert isinstance(mol, Molecule)
         assert mol.chemical_formula == "C6H6"
@@ -1595,10 +1617,10 @@ class TestCDXFile:
         assert mol.positions.shape == (12, 3)
 
     def test_molecule_from_filepath_cdxml_pathlib(
-        self, single_molecule_cdxml_file
+        self, single_molecule_cdxml_file_benzene
     ):
         """Test Molecule.from_filepath with pathlib.Path."""
-        path = Path(single_molecule_cdxml_file)
+        path = Path(single_molecule_cdxml_file_benzene)
         mol = Molecule.from_filepath(path)
 
         assert isinstance(mol, Molecule)
@@ -1626,16 +1648,16 @@ class TestCDXFile:
         assert mol_last.chemical_formula == "N2"
 
     def test_molecule_from_filepath_cdxml_return_list(
-        self, single_molecule_cdxml_file
+        self, single_molecule_cdxml_file_benzene
     ):
         """Test return_list parameter with single molecule CDXML file."""
         mol_single = Molecule.from_filepath(
-            single_molecule_cdxml_file, return_list=False
+            single_molecule_cdxml_file_benzene, return_list=False
         )
         assert isinstance(mol_single, Molecule)
 
         mol_list = Molecule.from_filepath(
-            single_molecule_cdxml_file, return_list=True
+            single_molecule_cdxml_file_benzene, return_list=True
         )
         assert isinstance(mol_list, list)
         assert len(mol_list) == 1
@@ -1661,19 +1683,19 @@ class TestCDXFile:
         assert second_mol.chemical_formula == "N2"
 
     def test_cdx_molecule_to_rdkit_conversion(
-        self, single_molecule_cdxml_file
+        self, single_molecule_cdxml_file_benzene
     ):
         """Test that molecules from CDXML can be converted to RDKit."""
-        mol = Molecule.from_filepath(single_molecule_cdxml_file)
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
         rdkit_mol = mol.to_rdkit()
 
         assert isinstance(rdkit_mol, Chem.Mol)
         assert rdkit_mol.GetNumAtoms() == 12
         assert rdkit_mol.GetNumConformers() == 1
 
-    def test_cdx_molecule_to_graph(self, single_molecule_cdxml_file):
+    def test_cdx_molecule_to_graph(self, single_molecule_cdxml_file_benzene):
         """Test that molecules from CDXML can be converted to graph."""
-        mol = Molecule.from_filepath(single_molecule_cdxml_file)
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
         graph = mol.to_graph()
 
         assert isinstance(graph, nx.Graph)

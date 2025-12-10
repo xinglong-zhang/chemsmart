@@ -1177,8 +1177,13 @@ def chemdraw_directory(structure_test_directory):
 
 
 @pytest.fixture()
-def single_molecule_cdxml_file(chemdraw_directory):
+def single_molecule_cdxml_file_benzene(chemdraw_directory):
     return os.path.join(chemdraw_directory, "benzene.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_methane(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "methane.cdxml")
 
 
 @pytest.fixture()
