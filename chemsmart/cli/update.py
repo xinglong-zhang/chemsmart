@@ -161,8 +161,11 @@ class Updater:
         }  # For display
 
         # Function to extract package name (for comparison)
+        # Normalizes according to PEP 503: lowercase and replace [-_.] with -
         def extract_pkg_name(dep):
-            pkg_name = re.split(r"[=<>~!]", dep, maxsplit=1)[0].lower().strip()
+            pkg_name = re.split(r"[=<>~!]", dep, maxsplit=1)[0].strip()
+            # PEP 503 normalization: lowercase and replace runs of [-_.] with single dash
+            pkg_name = re.sub(r"[-_.]+", "-", pkg_name).lower()
             return package_mapping.get(pkg_name, pkg_name)
 
         # Normalize package names for comparison
