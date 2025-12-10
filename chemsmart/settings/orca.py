@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
+    ORCANEBJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -185,6 +186,24 @@ class ORCAProjectSettings(RegistryMixin):
         settings.basis = self.large_basis
         return settings
 
+    def neb_settings(self):
+        """
+        Create default ORCA NEB job settings.
+
+        Returns ORCANEBJobSettings instance with base configuration
+        inherited from main settings and NEB-specific defaults.
+
+        Returns:
+            ORCANEBJobSettings: Default NEB settings with freq disabled
+        """
+        settings = self.main_settings().copy()
+        settings = ORCANEBJobSettings(
+            **settings.__dict__
+        )  # convert settings to ORCANEBJobSettings
+        settings.job_type = "neb"
+        settings.freq = False
+        return settings
+
     @classmethod
     def from_project(cls, project):
         """
@@ -332,6 +351,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        neb_settings,
     ):
         """
         Initialize YAML-based ORCA project settings.
@@ -346,6 +366,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
             sp_settings: Settings for single point calculations.
             td_settings: Settings for TD-DFT calculations.
             wbi_settings: Settings for Wiberg bond index calculations.
+            neb_settings: Settings for NEB calculations.
         """
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -356,6 +377,7 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._neb_settings = neb_settings
 
     def opt_settings(self):
         """
@@ -438,17 +460,17 @@ class YamlORCAProjectSettings(ORCAProjectSettings):
         """
         return self._wbi_settings
 
-    @classmethod
-    def from_yaml(cls, filename):
+    def neb_settings(self):
         """
-        Create project settings from YAML configuration file.
-
-        Args:
-            filename (str): Path to YAML configuration file.
+        Get Nudged Elastic Band calculation settings.
 
         Returns:
-            YamlORCAProjectSettings: Configured project settings instance.
+            ORCANEBJobSettings: Pre-configured NEB calculation settings.
         """
+        return self._neb_settings
+
+    @classmethod
+    def from_yaml(cls, filename):
         builder = YamlORCAProjectSettingsBuilder(filename=filename)
         return builder.build()
 
@@ -500,6 +522,7 @@ class YamlORCAProjectSettingsBuilder:
         sp_settings = self._project_settings_for_job(job_type="sp")
         td_settings = self._project_settings_for_job(job_type="td")
         wbi_settings = self._project_settings_for_job(job_type="wbi")
+        neb_settings = self._project_settings_for_job(job_type="neb")
 
         # Create complete project settings with all job configurations
         project_settings = YamlORCAProjectSettings(
@@ -512,6 +535,7 @@ class YamlORCAProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            neb_settings=neb_settings,
         )
 
         # Set project name from filename and return
@@ -551,6 +575,12 @@ class YamlORCAProjectSettingsBuilder:
         """
         # Map job types to their specific settings classes
         settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
+        # Define a dictionary to map job_type to corresponding settings class
+        settings_mapping = {
+            "irc": ORCAIRCJobSettings,
+            "ts": ORCATSJobSettings,
+            "neb": ORCANEBJobSettings,
+        }
 
         try:
             job_type_config = self._read_config().get(job_type)
@@ -559,6 +589,12 @@ class YamlORCAProjectSettingsBuilder:
                 return settings_mapping.get(
                     job_type, ORCAJobSettings
                 ).from_dict(job_type_config)
+            else:
+                # The current block is for neb jobs as  self._read_config().get(job_type) return None.
+                # todo: needs to be unified this with other job types.
+                return settings_mapping.get(
+                    job_type, ORCAJobSettings
+                ).default()
         except KeyError as e:
             available_jobs = list(self._read_config().keys())
             raise RuntimeError(

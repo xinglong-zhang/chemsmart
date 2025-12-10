@@ -948,3 +948,148 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             else:  # all other keys with given values
                 f.write(f"  {key} {value}\n")
         f.write("end\n")
+
+
+class ORCANEBJobSettings(ORCAJobSettings):
+    """
+    Settings for ORCA Nudged Elastic Band (NEB) calculations.
+
+    NEB finds minimum energy pathways and transition states by optimizing a
+    series of molecular structures (images) connecting reactant and product
+    geometries. Images are connected by spring forces forming an elastic band
+    that converges to the minimum energy pathway.
+
+    Supported NEB job types:
+    - NEB: Standard NEB calculation
+    - NEB-CI: Climbing Image NEB for accurate transition state location
+    - NEB-TS: NEB with transition state optimization
+    - FAST-NEB-TS: Fast convergence variant
+    - TIGHT-NEB-TS: Tight convergence criteria
+    - LOOSE-NEB: Loose convergence for initial screening
+    - ZOOM-NEB: Zoomed NEB for specific pathway regions
+    - NEB-IDPP: Image-dependent pair potential initialization
+
+    Attributes:
+        jobtype (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+        nimages (int): Number of intermediate images between endpoints
+        starting_xyz (str): Reactant geometry file path (inherited)
+        ending_xyzfile (str): Product geometry file path
+        intermediate_xyzfile (str): Initial TS guess file path (optional)
+        restarting_xyzfile (str): Restart file for continuation (optional)
+        preopt_ends (bool): Pre-optimize endpoint geometries
+        semiempirical (str): Semiempirical method (XTB0/XTB1/XTB2)
+    """
+
+    def __init__(
+        self,
+        semiempirical=None,
+        jobtype=None,
+        nimages=None,
+        ending_xyzfile=None,
+        intermediate_xyzfile=None,
+        restarting_xyzfile=None,
+        preopt_ends=False,
+        **kwargs,
+    ):
+        """
+        Initialize ORCA NEB job settings.
+
+        Args:
+            jobtype (str): NEB calculation type (NEB, NEB-CI, NEB-TS, etc.)
+            nimages (int): Number of intermediate images in NEB chain
+            ending_xyzfile (str): Product geometry file path
+            intermediate_xyzfile (str): Initial TS geometry guess file path
+            restarting_xyzfile (str): Restart file path for continuation
+            preopt_ends (bool): Pre-optimize endpoint geometries before NEB
+            semiempirical (str): Semiempirical method (XTB0, XTB1, XTB2)
+            **kwargs: Additional arguments passed to parent ORCAJobSettings
+
+        Note:
+            Reactant geometry (starting_xyz) is typically set via parent class
+            from the main molecule input file.
+        """
+        super().__init__(**kwargs)
+        self.jobtype = jobtype
+        self.nimages = nimages
+        self.ending_xyzfile = ending_xyzfile
+        self.intermediate_xyzfile = intermediate_xyzfile
+        self.restarting_xyzfile = restarting_xyzfile
+        self.preopt_ends = preopt_ends
+        self.semiempirical = semiempirical
+
+    # populate attribute from parent class (optional)
+    @property
+    def route_string(self):
+        """
+        Generate ORCA route line for NEB calculation.
+
+        Returns:
+            str: Route string with method and NEB job type
+        """
+        return self._get_neb_route_string()
+
+    def _get_neb_route_string(self):
+        """
+        Generate ORCA route line for NEB calculation.
+
+        Returns:
+            str: Route string combining method and NEB job type
+
+        Examples:
+            "! XTB2 NEB-TS" (with semiempirical)
+            "! B3LYP def2-SVP NEB-CI" (with DFT)
+        """
+        if self.semiempirical:
+            return f"! {self.semiempirical} {self.jobtype}"
+        else:
+            return f"! {self._get_level_of_theory()} {self.jobtype}"
+
+    @property
+    def neb_block(self):
+        """
+        Generate ORCA NEB input block.
+
+        Returns:
+            str: Formatted %neb block for ORCA input file
+        """
+        return self._write_neb_block()
+
+    def _write_neb_block(self):
+        """
+        Generate ORCA NEB input block.
+
+        Creates the %neb block with configuration for the NEB calculation
+        including number of images, file paths, and optimization settings.
+
+        Returns:
+            str: Formatted NEB block for ORCA input file
+
+        Example output:
+            %neb
+            NImages 8
+            NEB_END_XYZFILE "product.xyz"
+            PREOPT_ENDS FALSE
+            NEB_TS_XYZFILE "ts_guess.xyz"  # if provided
+            END
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+        """
+        assert self.nimages, "The number of images is missing!"
+        lines = [
+            "%neb",
+            f"NImages {self.nimages}",
+        ]
+        assert self.restarting_xyzfile or (
+            self.ending_xyzfile
+        ), "No valid input geomertry is given!"
+        if self.restarting_xyzfile:
+            lines.append(f'Restart_ALLXYZFile "{self.restarting_xyzfile}"')
+        else:
+            assert self.ending_xyzfile, "No end geometry file is given!"
+            lines.append(f'NEB_END_XYZFile "{self.ending_xyzfile}"')
+            lines.append(f"PREOPT_ENDS {self.preopt_ends}")
+            if self.intermediate_xyzfile:
+                lines.append(f'NEB_TS_XYZFILE "{self.intermediate_xyzfile}"')
+        lines.append("END")
+        return "\n".join(lines)
