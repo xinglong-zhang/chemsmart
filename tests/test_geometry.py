@@ -6,8 +6,8 @@ import pytest
 from chemsmart.utils.geometry import (
     calculate_crude_occupied_volume,
     calculate_grid_vdw_volume,
-    calculate_moments_of_inertia,
     calculate_molecular_volume_vdp,
+    calculate_moments_of_inertia,
     calculate_vdw_volume,
     is_collinear,
 )

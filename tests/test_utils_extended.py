@@ -20,7 +20,6 @@ from chemsmart.utils.utils import (
     kabsch_align,
     kabsch_align2,
     return_objects_from_string_index,
-    str_indices_range_to_list,
     string2index_1based,
     strip_out_comments,
     two_files_have_similar_contents,
@@ -372,9 +371,10 @@ class TestTwoFilesHaveSimilarContents:
 
     def test_identical_files(self):
         """Test identical files return True."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False
-        ) as f1, tempfile.NamedTemporaryFile(mode="w", delete=False) as f2:
+        with (
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f1,
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f2,
+        ):
             f1.write("line1\nline2\n")
             f2.write("line1\nline2\n")
             f1.flush()
@@ -388,9 +388,10 @@ class TestTwoFilesHaveSimilarContents:
 
     def test_different_files(self):
         """Test different files return False."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False
-        ) as f1, tempfile.NamedTemporaryFile(mode="w", delete=False) as f2:
+        with (
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f1,
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f2,
+        ):
             f1.write("line1\nline2\n")
             f2.write("line1\nline3\n")
             f1.flush()
@@ -404,9 +405,10 @@ class TestTwoFilesHaveSimilarContents:
 
     def test_with_ignored_string(self):
         """Test with ignored string."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False
-        ) as f1, tempfile.NamedTemporaryFile(mode="w", delete=False) as f2:
+        with (
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f1,
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f2,
+        ):
             f1.write("line1\ntimestamp: 12345\n")
             f2.write("line1\ntimestamp: 67890\n")
             f1.flush()
@@ -447,7 +449,9 @@ class TestTwoListsHaveSimilarContents:
         list1 = ["a", "timestamp: 123", "c"]
         list2 = ["a", "timestamp: 456", "c"]
         assert (
-            two_lists_have_similar_contents(list1, list2, ignore_string="timestamp")
+            two_lists_have_similar_contents(
+                list1, list2, ignore_string="timestamp"
+            )
             is True
         )
 

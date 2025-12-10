@@ -3,6 +3,7 @@
 import os
 import tempfile
 
+import numpy as np
 import pytest
 
 from chemsmart.utils.io import (
@@ -11,13 +12,9 @@ from chemsmart.utils.io import (
     convert_string_indices_to_pymol_id_indices,
     get_outfile_format,
     increment_numbers,
-    line_of_all_integers,
-    line_of_integer_followed_by_floats,
     match_outfile_pattern,
     remove_keyword,
 )
-
-import numpy as np
 
 
 class TestIncrementNumbers:
