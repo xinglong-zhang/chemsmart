@@ -3182,26 +3182,6 @@ class ORCAQMMMOutput(ORCAOutput):
                     )
                 else:
                     qm_energy = float(match.group("energy")) * units.Hartree
-            #
-            # if "FINAL SINGLE POINT ENERGY" in line:
-            #     match = re.search(
-            #         r"FINAL SINGLE POINT ENERGY\s+\.{3}\s+(?P<energy>-?\d+\.\d+)",
-            #         line,
-            #     )
-            #     if "(L-QM2)" in line:
-            #         qm2_energy_of_large_system = (
-            #             float(match.group("energy")) * units.Hartree
-            #         )
-            #     elif "(S-QM2)" in line:
-            #         qm2_energy_of_small_system = (
-            #             float(match.group("energy")) * units.Hartree
-            #         )
-            #     elif "(QM/QM2)" in line:
-            #         qm_qm2_energy = (
-            #             float(match.group("energy")) * units.Hartree
-            #         )
-            #     else:
-            #         qm_energy = float(match.group("energy")) * units.Hartree
         return (
             qm2_energy_of_large_system,
             qm2_energy_of_small_system,
