@@ -12,7 +12,9 @@ class TestUpdater:
         updater = Updater()
         
         # Create a temporary requirements file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tmp:
+        with tempfile.NamedTemporaryFile(
+            mode='w', delete=False, suffix='.txt'
+        ) as tmp:
             tmp.write("scikit_learn>=1.6.1\n")
             tmp.write("pandas>=2.0.0\n")
             tmp.write("some-package>=1.0.0\n")
@@ -30,19 +32,20 @@ class TestUpdater:
             original_method = updater._get_existing_dependencies
             updater._get_existing_dependencies = lambda: existing_deps
             
-            # Get missing dependencies
-            missing = updater._get_missing_dependencies(tmp_path)
-            
-            # Restore original method
-            updater._get_existing_dependencies = original_method
-            
-            # Assert no duplicates are found
-            # scikit_learn should match scikit-learn
-            # pandas should match pandas
-            # some-package should match some_package
-            assert len(missing) == 0, f"Expected no missing deps, got: {missing}"
-            
+            try:
+                # Get missing dependencies
+                missing = updater._get_missing_dependencies(tmp_path)
+                
+                # Assert no duplicates are found
+                # scikit_learn should match scikit-learn
+                # pandas should match pandas
+                # some-package should match some_package
+                assert len(missing) == 0, f"Expected no missing deps, got: {missing}"
+            finally:
+                # Restore original method
+                updater._get_existing_dependencies = original_method
         finally:
+            # Always cleanup temporary file
             tmp_path.unlink()
     
     def test_underscore_dash_equivalence(self):
@@ -50,7 +53,9 @@ class TestUpdater:
         updater = Updater()
         
         # Create a temporary requirements file with underscore
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tmp:
+        with tempfile.NamedTemporaryFile(
+            mode='w', delete=False, suffix='.txt'
+        ) as tmp:
             tmp.write("pytest_mock>=3.14.0\n")
             tmp_path = Path(tmp.name)
         
@@ -61,13 +66,13 @@ class TestUpdater:
             original_method = updater._get_existing_dependencies
             updater._get_existing_dependencies = lambda: existing_deps
             
-            missing = updater._get_missing_dependencies(tmp_path)
-            
-            updater._get_existing_dependencies = original_method
-            
-            # Should not consider pytest_mock as missing since pytest-mock exists
-            assert len(missing) == 0, f"Expected no missing deps, got: {missing}"
-            
+            try:
+                missing = updater._get_missing_dependencies(tmp_path)
+                
+                # Should not consider pytest_mock as missing since pytest-mock exists
+                assert len(missing) == 0, f"Expected no missing deps, got: {missing}"
+            finally:
+                updater._get_existing_dependencies = original_method
         finally:
             tmp_path.unlink()
     
@@ -76,7 +81,9 @@ class TestUpdater:
         updater = Updater()
         
         # Create a temporary requirements file with dash
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tmp:
+        with tempfile.NamedTemporaryFile(
+            mode='w', delete=False, suffix='.txt'
+        ) as tmp:
             tmp.write("scikit-learn>=1.6.1\n")
             tmp_path = Path(tmp.name)
         
@@ -87,13 +94,13 @@ class TestUpdater:
             original_method = updater._get_existing_dependencies
             updater._get_existing_dependencies = lambda: existing_deps
             
-            missing = updater._get_missing_dependencies(tmp_path)
-            
-            updater._get_existing_dependencies = original_method
-            
-            # Should not consider scikit-learn as missing since scikit_learn exists
-            assert len(missing) == 0, f"Expected no missing deps, got: {missing}"
-            
+            try:
+                missing = updater._get_missing_dependencies(tmp_path)
+                
+                # Should not consider scikit-learn as missing since scikit_learn exists
+                assert len(missing) == 0, f"Expected no missing deps, got: {missing}"
+            finally:
+                updater._get_existing_dependencies = original_method
         finally:
             tmp_path.unlink()
     
@@ -102,7 +109,9 @@ class TestUpdater:
         updater = Updater()
         
         # Create a temporary requirements file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tmp:
+        with tempfile.NamedTemporaryFile(
+            mode='w', delete=False, suffix='.txt'
+        ) as tmp:
             tmp.write("new-package>=1.0.0\n")
             tmp.write("scikit-learn>=1.6.1\n")
             tmp_path = Path(tmp.name)
@@ -114,13 +123,13 @@ class TestUpdater:
             original_method = updater._get_existing_dependencies
             updater._get_existing_dependencies = lambda: existing_deps
             
-            missing = updater._get_missing_dependencies(tmp_path)
-            
-            updater._get_existing_dependencies = original_method
-            
-            # Should detect new-package as missing, but not scikit-learn
-            assert len(missing) == 1
-            assert "new-package>=1.0.0" in missing
-            
+            try:
+                missing = updater._get_missing_dependencies(tmp_path)
+                
+                # Should detect new-package as missing, but not scikit-learn
+                assert len(missing) == 1
+                assert "new-package>=1.0.0" in missing
+            finally:
+                updater._get_existing_dependencies = original_method
         finally:
             tmp_path.unlink()
