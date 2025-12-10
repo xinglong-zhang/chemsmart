@@ -196,12 +196,12 @@ def entry_point(filename, unit, debug, stream):
             for i, energy in enumerate(somo, 1):
                 logger.info(f"SOMO-{i} energy: {energy:.4f} {energy_unit}")
 
-            lowest_somo *= conversion_factor
-            highest_somo *= conversion_factor
-            logger.info(f"Lowest SOMO energy: {lowest_somo:.4f} {energy_unit}")
-            logger.info(
-                f"Highest SOMO energy: {highest_somo:.4f} {energy_unit}"
-            )
+            if lowest_somo is not None:
+                lowest_somo *= conversion_factor
+                logger.info(f"Lowest SOMO energy: {lowest_somo:.4f} {energy_unit}")
+            if highest_somo is not None:
+                highest_somo *= conversion_factor
+                logger.info(f"Highest SOMO energy: {highest_somo:.4f} {energy_unit}")
             logger.info("")
 
         # Overall FMO gap
