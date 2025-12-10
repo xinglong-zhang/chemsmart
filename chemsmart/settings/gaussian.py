@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.gaussian.settings import (
     GaussianIRCJobSettings,
     GaussianJobSettings,
+    GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -152,6 +153,14 @@ class GaussianProjectSettings(RegistryMixin):
         settings.basis = self.large_basis  # Use high-accuracy basis set
         return settings
 
+    def qmmm_settings(self):
+        """Gaussian default settings for qmmm job."""
+        settings = self.main_settings().copy()
+        settings = GaussianQMMMJobSettings(**settings.__dict__)
+        settings.job_type = "qmmm"
+        settings.freq = False
+        return settings
+
     @classmethod
     def from_project(cls, project):
         """
@@ -283,6 +292,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         sp_settings,
         td_settings,
         wbi_settings,
+        qmmm_settings,
     ):
         """
         Initialize YAML-based project settings.
@@ -307,6 +317,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._sp_settings = sp_settings
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
+        self._qmmm_settings = qmmm_settings
 
     def opt_settings(self):
         return self._opt_settings
@@ -334,6 +345,9 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
 
     def wbi_settings(self):
         return self._wbi_settings
+
+    def qmmm_settings(self):
+        return self._qmmm_settings
 
     @classmethod
     def from_yaml(cls, filename):
@@ -382,6 +396,7 @@ class YamlGaussianProjectSettingsBuilder:
         sp_settings = self._project_settings_for_job(job_type="sp")
         td_settings = self._project_settings_for_job(job_type="td")
         wbi_settings = self._project_settings_for_job(job_type="wbi")
+        qmmm_settings = self._project_settings_for_job(job_type="qmmm")
 
         # Create the project settings instance
         project_settings = YamlGaussianProjectSettings(
@@ -394,6 +409,7 @@ class YamlGaussianProjectSettingsBuilder:
             sp_settings=sp_settings,
             td_settings=td_settings,
             wbi_settings=wbi_settings,
+            qmmm_settings=qmmm_settings,
         )
 
         # Set project name from filename and return
@@ -432,15 +448,23 @@ class YamlGaussianProjectSettingsBuilder:
         settings_mapping = {
             "irc": GaussianIRCJobSettings,
             "td": GaussianTDDFTJobSettings,
+            "qmmm": GaussianQMMMJobSettings,
         }
 
         try:
+            logger.debug(f"Reading Configuration from {self.filename}")
             job_type_config = self._read_config().get(job_type)
+            logger.debug(
+                f"Getting job type configuration for {job_type} settings from {self.filename}\n"
+                f"Obtained {job_type_config}"
+            )
             if job_type_config is not None:
                 # Use specific settings class if available, otherwise default
-                return settings_mapping.get(
+                settings = settings_mapping.get(
                     job_type, GaussianJobSettings
                 ).from_dict(job_type_config)
+                logger.debug(f"Job settings for {job_type} is {settings}.")
+                return settings
         except KeyError as e:
             available_jobs = list(self._read_config().keys())
             raise RuntimeError(

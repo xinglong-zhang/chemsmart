@@ -11,6 +11,7 @@ from .irc import irc
 from .modred import modred
 from .opt import opt
 from .orca import orca
+from .qmmm import qmmm
 from .qrc import qrc
 from .scan import scan
 from .singlepoint import sp
@@ -26,4 +27,6 @@ __all__ = [
     "scan",
     "sp",
     "ts",
+    "qmmm",
 ]
+__all__ = ["inp", "irc", "modred", "opt", "orca", "scan", "sp", "ts", "qmmm"]

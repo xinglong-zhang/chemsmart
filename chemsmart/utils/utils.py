@@ -1230,3 +1230,40 @@ def safe_min_lengths(*lists):
     """
     lengths = [len(lst) for lst in lists if lst is not None]
     return min(lengths) if lengths else 0
+
+
+def get_range_from_list(list_of_indices):
+    """Convert a list of indices to a string range.
+    e.g., [1, 2, 3, 7,8,9] -> ['1-3','7-9']
+    """
+    list_of_indices = sorted(list_of_indices)
+    ranges = []
+    for k, g in groupby(enumerate(list_of_indices), lambda ix: ix[0] - ix[1]):
+        group = list(map(lambda x: x[1], g))
+        if len(group) > 1:
+            ranges.append(f"{group[0]}-{group[-1]}")
+        else:
+            ranges.append(str(group[0]))
+    return ranges
+
+
+def convert_string_to_slices(index_str):
+    """
+    Converts a string to a list of slices and indices, 0-based.
+    e.g. '[1-3, 6-9, 7, 8, 10]' --> ['0:3', '5:9', 6, 7, 9]
+    """
+    # Remove brackets and split by comma
+    items = re.findall(r"\d+\s*-\s*\d+|\d+", index_str)
+
+    result = []
+    for item in items:
+        if "-" in item:
+            start_str, end_str = map(str.strip, item.split("-"))
+            start = int(start_str) - 1  # convert to 0-based
+            end = int(
+                end_str
+            )  # upper bound remains because Python slice is exclusive
+            result.append(f"{start}:{end}")
+        else:
+            result.append(int(item) - 1)
+    return result
