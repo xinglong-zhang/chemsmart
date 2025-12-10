@@ -1755,3 +1755,38 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
                 updated_list.append(str(charge_and_multiplicity))
             charge_and_multiplicity = " ".join(updated_list)
         return charge_and_multiplicity
+
+    def __eq__(self, other):
+        """
+        Compare two GaussianQMMMJobSettings objects for equality.
+
+        Compares all attributes between two QMMM settings objects, including the
+        QMMM-specific attributes that are not present in the parent class.
+
+        Args:
+            other (GaussianQMMMJobSettings): Settings object to compare with.
+
+        Returns:
+            bool or NotImplemented: True if equal, False if different,
+                NotImplemented if types don't match.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+
+        # Get dictionaries of both objects
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+
+        # Exclude append_additional_info from the comparison (inherited behavior)
+        self_dict.pop("append_additional_info", None)
+        other_dict.pop("append_additional_info", None)
+
+        is_equal = self_dict == other_dict
+        if not is_equal:
+            import dictdiffer
+
+            logger.info("Gaussian QMMM job settings are not equal.")
+            for diff in list(dictdiffer.diff(self_dict, other_dict)):
+                logger.info(f"Difference: {diff}")
+
+        return self_dict == other_dict

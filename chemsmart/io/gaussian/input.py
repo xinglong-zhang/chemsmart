@@ -116,11 +116,6 @@ class Gaussian16Input(GaussianFileMixin):
         """
         _, multiplicity = self._get_charge_and_multiplicity()
         return multiplicity
-        try:
-            _, multiplicity = self._get_charge_and_multiplicity()
-            return multiplicity
-        except (TypeError, ValueError):
-            return None
 
     @property
     def oniom_charge(self):

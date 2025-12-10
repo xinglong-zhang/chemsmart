@@ -1730,27 +1730,6 @@ class CoordinateBlock:
             pbc_conditions=self.pbc_conditions,
             translation_vectors=self.translation_vectors,
         )
-        """Function to convert coordinate block supplied as text or as a list of lines into
-        Molecule class."""
-        if not self.partitions:
-            return Molecule(
-                symbols=self.symbols,
-                positions=self.positions,
-                frozen_atoms=self.constrained_atoms,
-                pbc_conditions=self.pbc_conditions,
-                translation_vectors=self.translation_vectors,
-            )
-        else:
-            return QMMMMolecule(
-                symbols=self.symbols,
-                positions=self.positions,
-                frozen_atoms=self.constrained_atoms,
-                pbc_conditions=self.pbc_conditions,
-                translation_vectors=self.translation_vectors,
-                high_level_atoms=self.partitions[1],
-                medium_level_atoms=self.partitions[2],
-                low_level_atoms=self.partitions[3],
-            )
 
     def _get_symbols(self):
         symbols = []
@@ -1929,8 +1908,6 @@ class CoordinateBlock:
                     low_level_atoms.append(i)
                     partitions.append("L")
                 i += 1
-            # else:
-            #     raise ValueError(f"Partition level not found in the coordinate block: {self.coordinate_block}!")
         return (
             partitions,
             high_level_atoms,
@@ -2048,7 +2025,7 @@ class QMMMMolecule(Molecule):
             }
             init_params.update(kwargs)
 
-            super().__init__(**init_params)
+            self.__dict__.update(molecule.__dict__)
         else:
             # Otherwise, let QMMM behave like a Molecule itself
             super().__init__(**kwargs)

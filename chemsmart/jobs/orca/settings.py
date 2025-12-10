@@ -1264,7 +1264,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 None, None, self.mm_force_field, level_name="mm"
             )
             # only "!QMMM" will be used for additive QMMM
-            level_of_theory = "!QMMM"
             level_of_theory += f"/{self.qm2_level_of_theory}"
             if self.mm_level_of_theory is not None:
                 if self.jobtype.upper() == "QMMM":
@@ -1592,3 +1591,30 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if self.scale_formal_charge_ecp_atom is not None:
             crystal_qmmm_subblock += f"Scale_FormalCharge_ECPAtom {self.scale_formal_charge_ecp_atom} \n"
         return crystal_qmmm_subblock
+
+    def __eq__(self, other):
+        """
+        Compare two ORCAQMMMJobSettings objects for equality.
+
+        Compares all attributes between two ORCA QMMM settings objects, including the
+        QMMM-specific attributes that are not present in the parent class.
+
+        Args:
+            other (ORCAQMMMJobSettings): Settings object to compare with.
+
+        Returns:
+            bool or NotImplemented: True if equal, False if different,
+                NotImplemented if types don't match.
+        """
+        if type(self) is not type(other):
+            return NotImplemented
+
+        # Get dictionaries of both objects
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+
+        # Exclude append_additional_info from the comparison (inherited behavior)
+        self_dict.pop("append_additional_info", None)
+        other_dict.pop("append_additional_info", None)
+
+        return self_dict == other_dict

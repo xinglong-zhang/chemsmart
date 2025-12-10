@@ -73,17 +73,16 @@ class XYZFile(FileMixin):
         if len(comments) != 0:
             for i, comment in enumerate(comments):
                 try:
-                    energy = float(comment)
+                    molecules[i].energy = float(comment)
                 except ValueError:
                     # example case:
                     # "Empirical formula: C191H241Cu2N59O96P14    Energy(Hartree): -25900.214629"
                     match = re.search(r"(-?\d+\.\d+)", comment)
                     if match:
-                        energy = float(match.group(1))
+                        molecules[i].energy = float(match.group(1))
                     else:
                         # No energy found, skip
                         continue
-                    molecules[i].energy = energy  # Assign energy
 
         if return_list:
             return molecules
