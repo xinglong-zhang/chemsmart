@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
     'options. Defaults to "guess=mix".',
 )
 @click.option(
-    "--route", type=str, default=None, help="Route for link section."
+    "--route", type=str, default=None, help="Route for the link section."
 )
 @click.pass_context
 def link(
@@ -67,7 +67,7 @@ def link(
     direction,
     **kwargs,
 ):
-    """CLI for running Gaussian link jobs."""
+    """CLI subcommand for running Gaussian link jobs."""
 
     # get jobrunner for running Gaussian link jobs
     jobrunner = ctx.obj["jobrunner"]

@@ -20,6 +20,7 @@ from chemsmart.cli.job import (
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import return_objects_from_string_index
 
 logger = logging.getLogger(__name__)
@@ -57,14 +58,18 @@ def click_orca_settings_options(f):
         "-t", "--title", type=str, default=None, help="ORCA job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the molecule"
+        "-c",
+        "--charge",
+        type=int,
+        default=None,
+        help="Charge of the molecule.",
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the molecule",
+        help="Multiplicity of the molecule.",
     )
     @click.option(
         "-A",
@@ -112,7 +117,7 @@ def click_orca_settings_options(f):
         ),
         default="defgrid2",  # default used in ORCA is defgrid2
         help="Grid for numerical integration. Choices are "
-        "['defgrid1', 'defgrid2', 'defgrid3']",
+        "['defgrid1', 'defgrid2', 'defgrid3'].",
     )
     @click.option(
         "--scf-tol",
@@ -135,8 +140,8 @@ def click_orca_settings_options(f):
         type=click.Choice(
             ["GDIIS", "DIIS", "SOSCF", "AutoTRAH"], case_sensitive=False
         ),  # SOSCF is an approximately quadratically convergent variant of
-        # the SCF procedure
-        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle,
+        # the SCF procedure.
+        # In cases where conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle,
         # we invoke TRAH-SCF automatically (AutoTRAH).
         default=None,
         help="SCF algorithm to use.",
@@ -157,19 +162,19 @@ def click_orca_settings_options(f):
         "--dipole/--no-dipole",
         default=None,
         type=bool,
-        help="Dipole moment calculation.",
+        help="Enable dipole moment calculation.",
     )
     @click.option(
         "--quadrupole/--no-quadrupole",
         default=None,
         type=bool,
-        help="Quadrupole moment calculation.",
+        help="Enable quadrupole moment calculation.",
     )
     @click.option(
         "--mdci-cutoff",
         type=click.Choice(["loose", "normal", "tight"], case_sensitive=False),
         default=None,
-        help="MDCI cutoff. Choices are ['loose', 'normal', 'tight']",
+        help="MDCI cutoff. Choices are ['loose', 'normal', 'tight'].",
     )
     @click.option(
         "--mdci-density",
@@ -177,17 +182,19 @@ def click_orca_settings_options(f):
             ["none", "unrelaxed", "relaxed"], case_sensitive=False
         ),
         default=None,
-        help="MDCI density. Choices are ['none', 'unrelaxed', 'relaxed']",
+        help="MDCI density. Choices are ['none', 'unrelaxed', 'relaxed'].",
     )
     @click.option(
         "-r",
         "--additional-route-parameters",
         type=str,
         default=None,
-        help="additional route parameters",
+        help="Additional route parameters.",
     )
     @click.option(
-        "--forces/--no-forces", default=False, help="Forces calculation."
+        "--forces/--no-forces",
+        default=False,
+        help="Enable forces calculation.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -210,32 +217,32 @@ def click_orca_jobtype_options(f):
         "--jobtype",
         type=str,
         default=None,
-        help='ORCA job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='ORCA job type. Options: ["opt", "ts", "modred", "scan", "sp"].',
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. "
+        help="List of coordinates to be fixed for modred or scan jobs. "
         "1-indexed.",
     )
     @click.option(
         "-x",
         "--dist-start",
         default=None,
-        help="starting distance to scan, in Angstroms.",
+        help="Starting distance to scan, in Angstroms.",
     )
     @click.option(
         "-y",
         "--dist-end",
         default=None,
-        help="ending distance to scan, in Angstroms.",
+        help="Ending distance to scan, in Angstroms.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="Step size of coordinates to scan.",
+        help="Number of intermediate points for coordinate scans.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -427,6 +434,8 @@ def orca(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
         logger.debug(f"Created default label: {label}")
+
+    label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list

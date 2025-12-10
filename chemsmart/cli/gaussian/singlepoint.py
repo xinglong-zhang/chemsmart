@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def sp(
     ctx, remove_solvent, solvent_model, solvent_id, solvent_options, **kwargs
 ):
-    """CLI for single point calculation for Gaussian."""
+    """CLI subcommand for running Gaussian single point calculation."""
 
     # get jobrunner for single point
     jobrunner = ctx.obj["jobrunner"]

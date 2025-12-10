@@ -14,6 +14,7 @@ Key functionality includes:
 import logging
 import os
 import re
+import string
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,8 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
+
+SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 
 def create_molecule_list(
@@ -380,3 +383,86 @@ def load_molecules_from_paths(
             raise
 
     return loaded
+
+
+def clean_label(label: str) -> str:
+    """
+    Make a label that is safe for filenames, DB keys, RST labels, etc.
+    - Keeps letters, digits, `_` and `-`.
+    - Replaces spaces, commas, dots, parentheses, etc. with `_`.
+    - Encodes "'" as `_prime_` and "*" as `_star_`.
+    - Collapses multiple underscores and strips leading/trailing `_`.
+    """
+
+    # Preserve your special semantics
+    label = label.replace("'", "_prime_")
+    label = label.replace("*", "_star_")
+
+    out = []
+    for ch in label:
+        if ch in SAFE_CHARS:
+            out.append(ch)
+        else:
+            # includes ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}
+            # drop any other weird character, or map to "_"
+            out.append("_")
+
+    cleaned = "".join(out)
+    # collapse runs of underscores
+    cleaned = re.sub(r"_+", "_", cleaned)
+    # strip leading/trailing underscores
+    cleaned = cleaned.strip("_")
+    return cleaned
+
+
+def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
+    """
+    Convert a comma-separated list of atom index ranges into a PyMOL `id` selection.
+
+    The input is expected to be a string of indices and/or index ranges separated
+    by commas, e.g.:
+
+        "1-10,11,14,19-30"
+
+    This will be converted into a PyMOL selection string where each element is
+    prefixed with `id` and combined with `or`, e.g.:
+
+        "id 1-10 or id 11 or id 14 or id 19-30"
+
+    Note: PyMOL selection:
+    `select mysel, id 1 or id 2 or id 8-10`
+    selects all atoms where (id == 1) OR (id == 2) OR (id is in 8-10)
+    So any atom that satisfies any one of those conditions is included in the selection.
+    That gives you atoms 1, 2, 8, 9, 10.
+    This is proper boolean logic:
+    or -> set union (combine atoms from all conditions)
+
+    Parameters
+    ----------
+    string_indices : str
+        Comma-separated atom indices and/or ranges, as understood by PyMOL.
+
+    Returns
+    -------
+    str
+        A PyMOL selection string using `id` and `or`.
+
+    Raises
+    ------
+    ValueError
+        If the input string is empty or contains no valid indices after stripping.
+    """
+    # Split on commas and normalise whitespace.
+    parts = [
+        part.strip() for part in string_indices.split(",") if part.strip()
+    ]
+
+    if not parts:
+        raise ValueError(
+            "string_indices must contain at least one index or range."
+        )
+
+    if len(parts) == 1:
+        return f"id {parts[0]}"
+
+    return " or ".join(f"id {part}" for part in parts)

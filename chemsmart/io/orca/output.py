@@ -1492,49 +1492,139 @@ class ORCAOutput(ORCAFileMixin):
         Get the last section of orbital energies
         """
         reversed_lines = []
+        collecting = False
         for line in reversed(self.contents):
-            if "ORBITAL ENERGIES" not in line:
-                reversed_lines.append(line)
-            else:
+            if "* MULLIKEN POPULATION ANALYSIS *" in line:
+                collecting = True
+            if "ORBITAL ENERGIES" in line and collecting:
                 break
+            if collecting:
+                reversed_lines.append(line)
         return reversed_lines[::-1]
 
-    @property
-    def homo_energy(self):
-        """
-        Get the HOMO (Highest Occupied Molecular Orbital) energy in eV.
-        """
-        # get all filled orbitals
-        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        occupied_energies = [
-            energy for energy, occupancy in orbitals if occupancy == 2
-        ]
-        # return the highest occupied MO energy
-        return max(occupied_energies)
-
-    @property
-    def lumo_energy(self):
-        """
-        Get the LUMO (Lowest Unoccupied Molecular Orbital) energy in eV.
-        """
-        # get all empty orbitals
-        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
-        unoccupied_energies = [
-            energy for energy, occupancy in orbitals if occupancy == 0
-        ]
-        # return the lowest unoccupied MO energy
-        return min(unoccupied_energies)
-
     @cached_property
-    def fmo_gap(self):
+    def _spin_resolved_orbital_data(self):
+        """Parse spin-resolved orbital data for unrestricted calculations.
+
+        For unrestricted calculations, ORCA outputs separate 'SPIN UP ORBITALS'
+        and 'SPIN DOWN ORBITALS' sections. This method parses both.
+
+        Returns:
+            tuple: (alpha_energies, alpha_occ, beta_energies, beta_occ)
+                   Each list is in order from lowest to highest orbital index.
+                   Energies are in eV.
         """
-        Get the HOMO-LUMO gap in eV for closed-shell systems.
+        alpha_energies = []
+        alpha_occupancy = []
+        beta_energies = []
+        beta_occupancy = []
+
+        section = self._get_last_orbital_energies_section()
+
+        in_alpha = False
+        in_beta = False
+
+        for line in section:
+            line_stripped = line.strip()
+
+            if "SPIN UP ORBITALS" in line_stripped:
+                in_alpha = True
+                in_beta = False
+                continue
+            elif "SPIN DOWN ORBITALS" in line_stripped:
+                in_alpha = False
+                in_beta = True
+                continue
+
+            line_elements = line_stripped.split()
+            if len(line_elements) == 4 and not line_stripped.startswith("NO"):
+                try:
+                    occ = float(line_elements[1])
+                    energy_in_hartree = float(line_elements[2])
+                    energy_in_eV = energy_in_hartree * units.Hartree
+
+                    if in_alpha:
+                        alpha_occupancy.append(occ)
+                        alpha_energies.append(energy_in_eV)
+                    elif in_beta:
+                        beta_occupancy.append(occ)
+                        beta_energies.append(energy_in_eV)
+                except ValueError:
+                    continue
+
+        return alpha_energies, alpha_occupancy, beta_energies, beta_occupancy
+
+    @property
+    def is_unrestricted(self):
+        """Check if the calculation is unrestricted.
+
+        Returns True if the calculation used separate alpha and beta spin orbitals.
         """
-        if self.multiplicity == 1:
-            return self.lumo_energy - self.homo_energy
-        else:
-            # to implement for radical systems
-            pass
+        return self.spin == "unrestricted"
+
+    @property
+    def alpha_occ_eigenvalues(self):
+        """Get α occupied orbital energies in eV.
+
+        For unrestricted calculations, returns the α spin channel occupied
+        orbital energies. For restricted calculations, returns the occupied
+        orbital energies (all doubly occupied).
+        """
+        if self.is_unrestricted:
+            alpha_e, alpha_occ, _, _ = self._spin_resolved_orbital_data
+            if alpha_e:
+                return [e for e, occ in zip(alpha_e, alpha_occ) if occ > 0.5]
+        # Fall back to restricted case
+        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
+        return [e for e, occ in orbitals if occ > 0]
+
+    @property
+    def alpha_virtual_eigenvalues(self):
+        """Get α virtual (unoccupied) orbital energies in eV.
+
+        For unrestricted calculations, returns the α spin channel virtual
+        orbital energies. For restricted calculations, returns the virtual
+        orbital energies.
+        """
+        if self.is_unrestricted:
+            alpha_e, alpha_occ, _, _ = self._spin_resolved_orbital_data
+            if alpha_e:
+                return [e for e, occ in zip(alpha_e, alpha_occ) if occ < 0.5]
+        # Fall back to restricted case
+        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
+        return [e for e, occ in orbitals if occ == 0]
+
+    @property
+    def beta_occ_eigenvalues(self):
+        """Get β occupied orbital energies in eV.
+
+        For unrestricted calculations, returns the β spin channel occupied
+        orbital energies. For restricted calculations, returns the occupied
+        orbital energies (all doubly occupied).
+        """
+        if self.is_unrestricted:
+            _, _, beta_e, beta_occ = self._spin_resolved_orbital_data
+            if beta_e:
+                return [e for e, occ in zip(beta_e, beta_occ) if occ > 0.5]
+        # Fall back to restricted case (same as alpha)
+        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
+        return [e for e, occ in orbitals if occ > 0]
+
+    @property
+    def beta_virtual_eigenvalues(self):
+        """Get β virtual (unoccupied) orbital energies in eV.
+
+        For unrestricted calculations, returns the β spin channel virtual
+        orbital energies. For restricted calculations, returns the virtual
+        orbital energies.
+        """
+        if self.is_unrestricted:
+            _, _, beta_e, beta_occ = self._spin_resolved_orbital_data
+            if beta_e:
+                return [e for e, occ in zip(beta_e, beta_occ) if occ < 0.5]
+        # Fall back to restricted case (same as alpha)
+        orbitals = list(zip(self.orbital_energies, self.orbital_occupancy))
+        return [e for e, occ in orbitals if occ == 0]
 
     @property
     def mulliken_atomic_charges(self):

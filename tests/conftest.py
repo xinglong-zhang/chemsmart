@@ -14,6 +14,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
+    PyMOLHybridVisualizationJobRunner,
     PyMOLIRCMovieJobRunner,
     PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
@@ -981,6 +982,36 @@ def hirshfeld_full_print(orca_outputs_directory):
 
 
 @pytest.fixture()
+def fe2_singlet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_singlet.out")
+
+
+@pytest.fixture()
+def fe2_triplet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_triplet.out")
+
+
+@pytest.fixture()
+def fe2_quintet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_quintet.out")
+
+
+@pytest.fixture()
+def fe3_doublet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_doublet.out")
+
+
+@pytest.fixture()
+def fe3_quartet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_quartet.out")
+
+
+@pytest.fixture()
+def fe3_sextet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_sextet.out")
+
+
+@pytest.fixture()
 def water_engrad_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.engrad")
 
@@ -1172,6 +1203,11 @@ def extended_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def dna_hybrid_visualized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "dna_hybrid.xyz")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
@@ -1216,6 +1252,11 @@ def orca_jobrunner_scratch(tmpdir, pbs_server):
 @pytest.fixture()
 def pymol_visualization_jobrunner(pbs_server):
     return PyMOLVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_hybrid_visualization_jobrunner(pbs_server):
+    return PyMOLHybridVisualizationJobRunner(server=pbs_server, scratch=False)
 
 
 @pytest.fixture()
