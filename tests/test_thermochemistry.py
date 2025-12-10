@@ -3088,7 +3088,7 @@ class TestThermochemistryBatchMode:
         # Should have exactly 1 data line after first write
         assert len(data_lines1) == 1
 
-        # Verify that the data line contain numeric values
+        # Verify that the data line contains numeric values
         assert f"{gibbs_free_energy1:.6f}" in data_lines1[0]
 
         # Create settings for the second job with write_header=False
