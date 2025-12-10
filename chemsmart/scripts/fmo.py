@@ -140,8 +140,8 @@ def entry_point(filename, unit, debug, stream):
             logger.info(f"α-HOMO-LUMO gap: {alpha_fmo_gap:.4f} {energy_unit}")
 
             # Reactivity descriptors of alpha channel for open-shell systems
-            chemical_potential_alpha = 0.5 * (alpha_lumo + alpha_homo)
-            chemical_hardness_alpha = 0.5 * (alpha_lumo - alpha_homo)
+            chemical_potential_alpha = 1 / 2 * (alpha_lumo + alpha_homo)
+            chemical_hardness_alpha = 1 / 2 * (alpha_lumo - alpha_homo)
             electrophilicity_index_alpha = chemical_potential_alpha**2 / (
                 2 * chemical_hardness_alpha
             )
@@ -169,8 +169,8 @@ def entry_point(filename, unit, debug, stream):
             logger.info(f"β-HOMO-LUMO gap: {beta_fmo_gap:.4f} {energy_unit}")
 
             # Reactivity descriptors of beta channel for open-shell systems
-            chemical_potential_beta = 0.5 * (beta_lumo + beta_homo)
-            chemical_hardness_beta = 0.5 * (beta_lumo - beta_homo)
+            chemical_potential_beta = 1 / 2 * (beta_lumo + beta_homo)
+            chemical_hardness_beta = 1 / 2 * (beta_lumo - beta_homo)
             electrophilicity_index_beta = chemical_potential_beta**2 / (
                 2 * chemical_hardness_beta
             )
@@ -198,10 +198,14 @@ def entry_point(filename, unit, debug, stream):
 
             if lowest_somo is not None:
                 lowest_somo *= conversion_factor
-                logger.info(f"Lowest SOMO energy: {lowest_somo:.4f} {energy_unit}")
+                logger.info(
+                    f"Lowest SOMO energy: {lowest_somo:.4f} {energy_unit}"
+                )
             if highest_somo is not None:
                 highest_somo *= conversion_factor
-                logger.info(f"Highest SOMO energy: {highest_somo:.4f} {energy_unit}")
+                logger.info(
+                    f"Highest SOMO energy: {highest_somo:.4f} {energy_unit}"
+                )
             logger.info("")
 
         # Overall FMO gap
