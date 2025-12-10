@@ -12,6 +12,7 @@ from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
+from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.cluster import is_pubchem_network_available
 from chemsmart.utils.constants import (
@@ -3002,3 +3003,300 @@ class TestBoltzmannWeightedAverage:
             expected_boltzmann_qrrho_gibbs_free_energy2,
             atol=1e-6,
         )
+
+
+class TestThermochemistryBatchMode:
+    """Tests for batch processing behavior in thermochemistry output."""
+
+    def test_batch_mode_header_writing(
+        self,
+        tmpdir,
+        gaussian_singlet_opt_outfile,
+        gaussian_triplet_opt_outfile,
+        gaussian_quintet_opt_outfile,
+    ):
+        """
+        Test that in batch mode, the header is written only once when multiple
+        structures are written to the same output file.
+
+        Verifies the following behavior:
+        - First CLI call (T=298.15K): Processes 2 files (singlet + triplet) with header written once
+        - Second CLI call (T=398.15K): Processes 1 file (singlet) with new header for different temperature
+        - Third CLI call (T=198.15K): Processes 1 file (quintet) with overwrite enabled, replacing all previous content
+        """
+        # Create a temporary output file path
+        output_file = os.path.join(tmpdir, "batch_thermochemistry.dat")
+
+        # Create settings with write_header=True for the first job
+        settings1 = ThermochemistryJobSettings(
+            temperature=298.15,
+            outputfile=output_file,
+            write_header=True,
+        )
+
+        # Create first thermochemistry job
+        thermochem1 = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=settings1.temperature,
+            outputfile=settings1.outputfile,
+        )
+
+        # Compute and write first result with header
+        (
+            structure1,
+            electronic_energy1,
+            zero_point_energy1,
+            enthalpy1,
+            qrrho_enthalpy1,
+            entropy_times_temperature1,
+            qrrho_entropy_times_temperature1,
+            gibbs_free_energy1,
+            qrrho_gibbs_free_energy1,
+        ) = thermochem1.compute_thermochemistry()
+
+        thermochem1.log_results_to_file(
+            structure1,
+            electronic_energy1,
+            zero_point_energy1,
+            enthalpy1,
+            qrrho_enthalpy1,
+            entropy_times_temperature1,
+            qrrho_entropy_times_temperature1,
+            gibbs_free_energy1,
+            qrrho_gibbs_free_energy1,
+            outputfile=settings1.outputfile,
+            write_header=settings1.write_header,
+        )
+
+        # Verify that the file was created
+        assert os.path.exists(output_file)
+
+        # Read the file content after first write
+        with open(output_file, "r") as f:
+            content1 = f.read()
+
+        # Verify that header is present in the first write
+        assert "Temperature: 298.15 K" in content1
+        assert "Pressure: 1.0 atm" in content1
+        assert "Structure" in content1
+        assert "===" in content1  # Header separator line
+
+        # Count the number of data lines (excluding header and separator)
+        lines1 = content1.strip().split("\n")
+        data_lines1 = [line for line in lines1 if line.startswith(structure1)]
+
+        # Should have exactly 1 data line after first write
+        assert len(data_lines1) == 1
+
+        # Verify that the data line contain numeric values
+        assert f"{gibbs_free_energy1:.6f}" in data_lines1[0]
+
+        # Create settings for the second job with write_header=False
+        # This simulates the batch mode where header should NOT be written again
+        settings2 = ThermochemistryJobSettings(
+            temperature=298.15,
+            outputfile=output_file,
+            write_header=False,  # No header for subsequent writes
+        )
+
+        # Create second thermochemistry job with a different file
+        thermochem2 = Thermochemistry(
+            filename=gaussian_triplet_opt_outfile,
+            temperature=settings2.temperature,
+            outputfile=settings2.outputfile,
+        )
+
+        # Compute and append second result WITHOUT header
+        (
+            structure2,
+            electronic_energy2,
+            zero_point_energy2,
+            enthalpy2,
+            qrrho_enthalpy2,
+            entropy_times_temperature2,
+            qrrho_entropy_times_temperature2,
+            gibbs_free_energy2,
+            qrrho_gibbs_free_energy2,
+        ) = thermochem2.compute_thermochemistry()
+
+        thermochem2.log_results_to_file(
+            structure2,
+            electronic_energy2,
+            zero_point_energy2,
+            enthalpy2,
+            qrrho_enthalpy2,
+            entropy_times_temperature2,
+            qrrho_entropy_times_temperature2,
+            gibbs_free_energy2,
+            qrrho_gibbs_free_energy2,
+            outputfile=settings2.outputfile,
+            write_header=settings2.write_header,
+        )
+
+        # Read the file content after second write
+        with open(output_file, "r") as f:
+            content2 = f.read()
+
+        # Verify that header appears only ONCE in the entire file
+        assert content2.count("Temperature:") == 1
+
+        # Verify that the separator line appears only ONCE
+        separator_count = sum(
+            1 for line in content2.split("\n") if set(line.strip()) == {"="}
+        )
+        assert separator_count == 1
+
+        # Count data lines after second write
+        lines2 = content2.strip().split("\n")
+        data_lines2 = [
+            line
+            for line in lines2
+            if line.startswith(structure1) or line.startswith(structure2)
+        ]
+
+        # Should have exactly 2 data lines after second write
+        assert len(data_lines2) == 2
+
+        # Verify that the data lines contain numeric values
+        assert f"{gibbs_free_energy1:.6f}" in data_lines2[0]
+        assert f"{gibbs_free_energy2:.6f}" in data_lines2[1]
+
+        # Create settings for the third job with write_header=True
+        # Simulates a new CLI call with DIFFERENT temperature
+        settings3 = ThermochemistryJobSettings(
+            temperature=398.15,
+            outputfile=output_file,
+            write_header=True,  # New CLI → header expected again
+        )
+
+        thermochem3 = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=settings3.temperature,
+            outputfile=settings3.outputfile,
+        )
+
+        (
+            structure3,
+            electronic_energy3,
+            zero_point_energy3,
+            enthalpy3,
+            qrrho_enthalpy3,
+            entropy_times_temperature3,
+            qrrho_entropy_times_temperature3,
+            gibbs_free_energy3,
+            qrrho_gibbs_free_energy3,
+        ) = thermochem3.compute_thermochemistry()
+
+        thermochem3.log_results_to_file(
+            structure3,
+            electronic_energy3,
+            zero_point_energy3,
+            enthalpy3,
+            qrrho_enthalpy3,
+            entropy_times_temperature3,
+            qrrho_entropy_times_temperature3,
+            gibbs_free_energy3,
+            qrrho_gibbs_free_energy3,
+            outputfile=settings3.outputfile,
+            write_header=settings3.write_header,
+        )
+
+        # Read file after third write
+        with open(output_file, "r") as f:
+            content3 = f.read()
+
+        # Now BOTH temperatures (298.15 & 398.15) should appear once
+        assert content3.count("Temperature: 298.15 K") == 1
+        assert content3.count("Temperature: 398.15 K") == 1
+
+        # Verify that header appears only TWICE
+        assert content3.count("Temperature:") == 2
+
+        # Count data lines after third write
+        lines3 = content3.strip().split("\n")
+        data_lines3 = [
+            line
+            for line in lines3
+            if line.startswith(structure1)
+            or line.startswith(structure2)
+            or line.startswith(structure3)
+        ]
+
+        # Should have exactly 3 data lines after second write
+        assert len(data_lines3) == 3
+
+        # Verify that the data lines contain numeric values
+        assert f"{gibbs_free_energy1:.6f}" in data_lines3[0]
+        assert f"{gibbs_free_energy2:.6f}" in data_lines3[1]
+        assert f"{gibbs_free_energy3:.6f}" in data_lines3[2]
+
+        # Create settings for the fourth job with overwrite=True
+        # Simulates a new CLI call with OVERWRITE enabled
+        settings4 = ThermochemistryJobSettings(
+            temperature=198.15,
+            outputfile=output_file,
+            overwrite=True,
+            write_header=True,
+        )
+
+        thermochem4 = Thermochemistry(
+            filename=gaussian_quintet_opt_outfile,
+            temperature=settings4.temperature,
+            outputfile=settings4.outputfile,
+        )
+
+        (
+            structure4,
+            electronic_energy4,
+            zero_point_energy4,
+            enthalpy4,
+            qrrho_enthalpy4,
+            entropy_times_temperature4,
+            qrrho_entropy_times_temperature4,
+            gibbs_free_energy4,
+            qrrho_gibbs_free_energy4,
+        ) = thermochem4.compute_thermochemistry()
+
+        thermochem4.log_results_to_file(
+            structure4,
+            electronic_energy4,
+            zero_point_energy4,
+            enthalpy4,
+            qrrho_enthalpy4,
+            entropy_times_temperature4,
+            qrrho_entropy_times_temperature4,
+            gibbs_free_energy4,
+            qrrho_gibbs_free_energy4,
+            outputfile=settings4.outputfile,
+            overwrite=settings4.overwrite,
+            write_header=settings4.write_header,
+        )
+
+        # Read file after overwrite
+        with open(output_file, "r") as f:
+            content4 = f.read()
+
+        # After overwrite: ONLY the 198.15 K header should exist
+        assert content4.count("Temperature: 298.15 K") == 0
+        assert content4.count("Temperature: 398.15 K") == 0
+        assert content4.count("Temperature: 198.15 K") == 1
+
+        # Verify that header appears only ONCE
+        assert content4.count("Temperature:") == 1
+
+        # Count data lines after fourth write
+        lines4 = content4.strip().split("\n")
+        data_lines4 = [
+            line
+            for line in lines4
+            if line.startswith(structure1)
+            or line.startswith(structure2)
+            or line.startswith(structure3)
+            or line.startswith(structure4)
+        ]
+
+        # Only one data line
+        assert len(data_lines4) == 1
+
+        # Verify that the data line contain correct values (structure4)
+        assert f"{gibbs_free_energy4:.6f}" in data_lines4[0]
