@@ -140,8 +140,8 @@ def entry_point(filename, unit, debug, stream):
             logger.info(f"α-HOMO-LUMO gap: {alpha_fmo_gap:.4f} {energy_unit}")
 
             # Reactivity descriptors of alpha channel for open-shell systems
-            chemical_potential_alpha = 1 / 2 * (alpha_lumo + alpha_homo)
-            chemical_hardness_alpha = 1 / 2 * (alpha_lumo - alpha_homo)
+            chemical_potential_alpha = 0.5 * (alpha_lumo + alpha_homo)
+            chemical_hardness_alpha = 0.5 * (alpha_lumo - alpha_homo)
             electrophilicity_index_alpha = chemical_potential_alpha**2 / (
                 2 * chemical_hardness_alpha
             )
