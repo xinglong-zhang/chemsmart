@@ -31,6 +31,12 @@ This guide covers installing Chemsmart on Windows using Git Bash.
 
       git clone https://github.com/xinglong-zhang/chemsmart.git
 
+#. Initialize conda for Git Bash in the Anaconda prompt:
+
+   .. code:: bash
+
+      conda init bash
+
 #. Create the conda environment:
 
    .. code:: bash
