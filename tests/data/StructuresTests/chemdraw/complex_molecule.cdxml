@@ -3,7 +3,7 @@
 <CDXML
  CreationProgram="ChemDraw 25.0.2.7"
  Name="complex_molecule.cdxml"
- BoundingBox="220.05 319.76 319.95 400.24"
+ BoundingBox="220.05 319.76 319.95 403.21"
  WindowPosition="0 0"
  WindowSize="0 0"
  FractionalWidths="yes"
@@ -19,6 +19,7 @@
  ShowTerminalCarbonLabels="no"
  ShowNonTerminalCarbonLabels="no"
  HideImplicitHydrogens="no"
+ Magnification="337"
  LabelFont="60"
  LabelSize="10"
  LabelFace="96"
@@ -40,6 +41,7 @@
  ShowPrimeLabels="no"
  ResidueWrapCount="40"
  PrintMargins="36 36 36 36"
+ MacPrintInfo="000300000048004800000000030F022FFFEEFFEE033802410367057B03DF000200000048004800000000030F022F000100000064000000010001010100000001270F000100010000000000000000000000000002001901900000000000400000000000000000000100000000000000000000000000000000"
  ChemPropName=""
  ChemPropFormula="Chemical Formula: "
  ChemPropExactMass="Exact Mass: "
@@ -80,8 +82,8 @@
 </colortable><fonttable>
 <font id="60" charset="x-mac-roman" name="Arial"/>
 </fonttable><page
- id="2095920430"
- BoundingBox="0 0 540 720"
+ id="2095920432"
+ BoundingBox="0 0 523 770"
  HeaderPosition="36"
  FooterPosition="36"
  PrintTrimMarks="yes"
@@ -89,11 +91,11 @@
  WidthPages="1"
 ><group
  id="2095919817"
- BoundingBox="220.05 319.76 319.95 400.24"
+ BoundingBox="220.05 319.76 319.95 403.21"
  Z="180"
 ><fragment
  id="2095919818"
- BoundingBox="220.05 319.76 319.95 400.24"
+ BoundingBox="220.05 319.76 319.95 403.21"
  Z="160"
 ><n
  id="2095919819"
@@ -125,8 +127,8 @@
  AS="N"
  AtomID="4"
 ><t
- p="255.10 357"
- BoundingBox="255.58 349.71 262.43 357.12"
+ p="255.10 356.99"
+ BoundingBox="255.58 349.71 262.43 357.11"
  LabelJustification="Left"
 ><s font="60" size="10" color="0" face="96">O</s></t></n><n
  id="2095919823"
@@ -145,7 +147,7 @@
  AS="N"
  AtomID="6"
 ><fragment
- id="2095920431"
+ id="2095920433"
 ><n
  id="2095919826"
  p="296.37 374.86"
@@ -162,7 +164,7 @@
  B="2095919827"
  E="2095919826"
 /></fragment><t
- p="292.21 378.44"
+ p="292.20 378.44"
  BoundingBox="292.95 371.28 305.68 378.56"
  LabelJustification="Left"
  LabelAlignment="Left"
@@ -215,7 +217,7 @@
  AS="N"
  AtomID="11"
 ><fragment
- id="2095920432"
+ id="2095920434"
 ><n
  id="2095919835"
  p="230.42 354.92"
@@ -262,7 +264,7 @@
  LabelAlignment="Below"
 ><s font="60" size="10" color="12" face="96">N</s></t></n><n
  id="2095919840"
- p="258.96 396.47"
+ p="261.25 399.45"
  Z="187"
  color="12"
  NodeType="Nickname"
@@ -270,64 +272,64 @@
  AS="N"
  AtomID="14"
 ><fragment
- id="2095920433"
+ id="2095920435"
 ><n
  id="2095919842"
- p="209.24 367.78"
+ p="211.53 370.76"
  Z="110"
 /><n
  id="2095919843"
- p="196.82 374.96"
+ p="199.11 377.94"
  Z="111"
 /><n
  id="2095919844"
- p="196.82 389.31"
+ p="199.11 392.29"
  Z="112"
 /><n
  id="2095919845"
- p="209.25 396.48"
+ p="211.54 399.46"
  Z="113"
 /><n
  id="2095919846"
- p="221.67 389.31"
+ p="223.96 392.29"
  Z="114"
 /><n
  id="2095919847"
- p="221.67 374.96"
+ p="223.96 377.94"
  Z="115"
 /><n
  id="2095919848"
- p="234.10 396.48"
+ p="236.39 399.46"
  Z="116"
 /><n
  id="2095919849"
- p="246.53 389.30"
+ p="248.82 392.28"
  Z="117"
  Element="8"
  NumHydrogens="0"
  NeedsClean="yes"
 ><t
- p="242.64 392.95"
- BoundingBox="243.12 385.66 249.97 393.07"
+ p="244.93 395.92"
+ BoundingBox="245.41 388.64 252.26 396.05"
  LabelJustification="Left"
 ><s font="60" size="10" color="0" face="96">O</s></t></n><n
  id="2095919850"
- p="258.96 396.47"
+ p="261.25 399.45"
  Z="118"
 /><n
  id="2095919851"
- p="258.96 410.82"
+ p="261.25 413.80"
  Z="119"
  Element="8"
  NumHydrogens="0"
  NeedsClean="yes"
 ><t
- p="255.07 414.47"
- BoundingBox="255.55 407.18 262.40 414.59"
+ p="257.36 417.44"
+ BoundingBox="257.84 410.16 264.69 417.57"
  LabelJustification="Left"
 ><s font="60" size="10" color="0" face="96">O</s></t></n><n
  id="2095919852"
- p="271.38 389.29"
+ p="273.67 392.27"
  Z="120"
  NodeType="ExternalConnectionPoint"
  ExternalConnectionNum="1"
@@ -394,8 +396,8 @@
  B="2095919852"
  E="2095919850"
 /></fragment><t
- p="261.46 400.11"
- BoundingBox="244.18 392.83 261.25 400.24"
+ p="263.75 403.09"
+ BoundingBox="246.46 395.81 263.53 403.21"
  color="12"
  LabelJustification="Right"
  Justification="Right"
@@ -410,7 +412,7 @@
  AS="N"
  AtomID="15"
 ><fragment
- id="2095920434"
+ id="2095920436"
 ><n
  id="2095919866"
  p="283.90 396.47"
@@ -460,8 +462,8 @@
  NumHydrogens="0"
  NeedsClean="yes"
 ><t
- p="304.86 400.11"
- BoundingBox="305.34 392.82 312.19 400.23"
+ p="304.86 400.10"
+ BoundingBox="305.34 392.82 312.19 400.22"
  LabelJustification="Left"
 ><s font="60" size="10" color="0" face="96">O</s></t></n><n
  id="2095919875"
@@ -475,8 +477,8 @@
  NumHydrogens="0"
  NeedsClean="yes"
 ><t
- p="292.43 378.59"
- BoundingBox="292.91 371.30 299.76 378.71"
+ p="292.43 378.58"
+ BoundingBox="292.91 371.30 299.76 378.70"
  LabelJustification="Left"
 ><s font="60" size="10" color="0" face="96">O</s></t></n><n
  id="2095919877"
@@ -553,7 +555,7 @@
  E="2095919866"
 /></fragment><t
  p="280.29 400.11"
- BoundingBox="281.05 392.83 312.30 400.24"
+ BoundingBox="281.05 392.83 312.30 400.23"
  color="12"
  LabelJustification="Left"
  LabelAlignment="Left"

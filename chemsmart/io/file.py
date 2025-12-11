@@ -78,10 +78,15 @@ class CDXFile(FileMixin):
         Parse the ChemDraw file and return a list of Molecule objects.
 
         Uses RDKit to parse the file and generate 3D coordinates.
-        Falls back to Open Babel for .cdx if RDKit cannot read it.
+        Falls back to Open Babel (via obtain_mols_from_cdx_via_obabel) for .cdx
+        if RDKit cannot read it.
 
         Returns:
             list[Molecule]: List of Molecule objects with 3D coordinates.
+
+        Raises:
+            ValueError: If no molecules can be read or no valid 3D structures
+            can be generated from the ChemDraw file.
         """
         from pathlib import Path
 
@@ -93,7 +98,8 @@ class CDXFile(FileMixin):
         rdkit_mols = []
         try:
             # NOTE: RDKit's MolsFromCDXMLFile always supports CDXML.
-            # CDX files are only supported if RDKit was built with ChemDraw CDX support
+            # CDX files are only supported if RDKit was built with
+            # ChemDraw CDX support.
             rdkit_mols = list(
                 Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
             )
@@ -102,34 +108,20 @@ class CDXFile(FileMixin):
                 f"RDKit MolsFromCDXMLFile failed for {self.filename}: {e}"
             )
 
-        # Fallback for .cdx: use Open Babel / Pybel if RDKit gave nothing ---
+        # Fallback for .cdx: use Open Babel helper if RDKit gave nothing.
         if not rdkit_mols and suffix == ".cdx":
-            try:
-                from openbabel import pybel
-            except ImportError as e:
-                raise ValueError(
-                    "RDKit could not read the .cdx file and Open Babel "
-                    "is not installed. Install openbabel/pybel or save the "
-                    "ChemDraw file as .cdxml format instead. "
-                    f"File: {self.filename}"
-                ) from e
-
             logger.debug(
-                "RDKit returned no molecules for %s; "
-                "falling back to Open Babel CDX reader.",
-                self.filename,
+                f"RDKit did not return any molecules for {self.filename}; "
+                "falling back to Open Babel CDX reader."
             )
+            try:
+                from chemsmart.utils.io import obtain_mols_from_cdx_via_obabel
 
-            for obmol in pybel.readfile("cdx", self.filename):
-                try:
-                    smiles = obmol.write("smi").strip()
-                    mol = Chem.MolFromSmiles(smiles)
-                    if mol is not None:
-                        rdkit_mols.append(mol)
-                except Exception as e:
-                    logger.debug(
-                        f"Failed to convert Open Babel molecule to RDKit mol for {self.filename}: {e}"
-                    )
+                rdkit_mols = obtain_mols_from_cdx_via_obabel(self.filename)
+            except Exception as e:
+                logger.debug(
+                    f"Open Babel CDX fallback failed for {self.filename}: {e}"
+                )
 
         if not rdkit_mols:
             raise ValueError(
@@ -149,7 +141,7 @@ class CDXFile(FileMixin):
                 # Try to embed the molecule to get 3D coordinates
                 result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
                 if result == -1:
-                    # Embedding failed, try with random seed
+                    # Embedding failed, try with random coordinates
                     result = AllChem.EmbedMolecule(
                         rdkit_mol,
                         useRandomCoords=True,
@@ -162,28 +154,27 @@ class CDXFile(FileMixin):
                         )
                         continue
 
-                # Optimize the geometry
+                # Optimize the geometry (may fail for exotic atom types)
                 try:
                     AllChem.MMFFOptimizeMolecule(rdkit_mol)
                 except Exception as e:
-                    # MMFF might not be parameterized for all atom types
                     logger.debug(
                         f"MMFF optimization failed for a molecule in {self.filename}: {e}"
                     )
 
             except Exception as e:
                 logger.warning(
-                    f"Error generating 3D coordinates for molecule: {str(e)}"
+                    f"Error generating 3D coordinates for molecule in {self.filename}: {e}"
                 )
                 continue
 
-            # Convert RDKit mol to Molecule
+            # Convert RDKit Mol to Molecule
             mol = Molecule.from_rdkit_mol(rdkit_mol)
             molecules.append(mol)
 
         if not molecules:
             raise ValueError(
-                f"No valid molecules with 3D coordinates could be generated "
+                "No valid molecules with 3D coordinates could be generated "
                 f"from ChemDraw file: {self.filename}"
             )
 

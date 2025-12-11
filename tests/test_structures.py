@@ -1717,6 +1717,6 @@ class TestCDXFile:
         assert len(molecules) == 1
         mol = molecules[0]
         assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C6H6"
-        assert mol.num_atoms == 12
+        assert mol.chemical_formula == "C8H10N2O"
+        assert mol.num_atoms == 21
         assert mol.is_aromatic
