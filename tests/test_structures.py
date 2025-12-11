@@ -1720,3 +1720,21 @@ class TestCDXFile:
         assert mol.chemical_formula == "C8H10N2O"
         assert mol.num_atoms == 21
         assert mol.is_aromatic
+
+    def test_read_complex_molecule_cdxml_file_(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(complex_molecule_cdxml_file)
+        assert os.path.isfile(complex_molecule_cdxml_file)
+
+        cdx_file = CDXFile(filename=complex_molecule_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C32H31N5O5"
+        assert mol.num_atoms == 73  # benzene with hydrogens
+        assert mol.is_aromatic
