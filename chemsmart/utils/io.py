@@ -14,10 +14,16 @@ Key functionality includes:
 import logging
 import os
 import re
+import shutil
 import string
 import subprocess
-import tempfile
+from io import BytesIO
+
+# from rdkit import Chem
+#
+# import tempfile
 from pathlib import Path
+from typing import List
 
 import numpy as np
 from rdkit import Chem
@@ -471,28 +477,81 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
     return " or ".join(f"id {part}" for part in parts)
 
 
-def obtain_mols_from_cdx_via_obabel(filename: str):
-    """
-    Obtain a list of RDKit molecules from a CDX file.
-    """
-    filename = str(filename)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        sdf_path = Path(tmpdir) / "chemdraw.sdf"
+# def obtain_mols_from_cdx_via_obabel(filename: str):
+#     """
+#     Obtain a list of RDKit molecules from a CDX file.
+#     """
+#     filename = str(filename)
+#     with tempfile.TemporaryDirectory() as tmpdir:
+#         sdf_path = Path(tmpdir) / "chemdraw.sdf"
+#
+#         # Call Open Babel CLI
+#         result = subprocess.run(
+#             ["obabel", "-icdx", filename, "-osdf", "-O", str(sdf_path)],
+#             check=False,
+#             capture_output=True,
+#             text=True,
+#         )
+#
+#         if result.returncode != 0:
+#             raise RuntimeError(
+#                 f"obabel failed to convert {filename!r} to SDF "
+#                 f"(exit code {result.returncode}). stderr:\n{result.stderr}"
+#             )
+#
+#         suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+#         mols = [mol for mol in suppl if mol is not None]
+#         return mols
 
-        # Call Open Babel CLI
-        result = subprocess.run(
-            ["obabel", "-icdx", filename, "-osdf", "-O", str(sdf_path)],
-            check=False,
-            capture_output=True,
-            text=True,
+
+def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
+    """
+    Use the Open Babel CLI ('obabel') to convert a CDX file to SDF and
+    return a list of RDKit Mol objects.
+
+    This implementation writes no temporary files; it streams SDF from
+    stdout into RDKit, which avoids Windows path issues.
+
+    Args:
+        filename: Path to the .cdx file.
+
+    Returns:
+        List of RDKit Mol objects.
+
+    Raises:
+        ValueError: If 'obabel' is not available or no molecules can be read.
+        RuntimeError: If the obabel subprocess fails.
+    """
+    obabel = shutil.which("obabel")
+    if obabel is None:
+        raise ValueError(
+            "Open Babel CLI ('obabel') is not available on PATH. "
+            "Install Open Babel or save the ChemDraw file as CDXML instead."
         )
 
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"obabel failed to convert {filename!r} to SDF "
-                f"(exit code {result.returncode}). stderr:\n{result.stderr}"
-            )
+    # Run: obabel -icdx input.cdx -osdf
+    # This writes SDF directly to stdout.
+    result = subprocess.run(
+        [obabel, "-icdx", filename, "-osdf"],
+        check=False,
+        capture_output=True,
+    )
 
-        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
-        mols = [mol for mol in suppl if mol is not None]
-        return mols
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"obabel failed to convert {filename!r} to SDF "
+            f"(exit code {result.returncode}). stderr:\n{result.stderr.decode(errors='replace')}"
+        )
+
+    # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
+    sdf_stream = BytesIO(result.stdout)
+    suppl = Chem.ForwardSDMolSupplier(sdf_stream, removeHs=False)
+
+    mols = [mol for mol in suppl if mol is not None]
+
+    if not mols:
+        raise ValueError(
+            f"Open Babel produced no valid molecules from CDX file: {filename}"
+        )
+
+    return mols
