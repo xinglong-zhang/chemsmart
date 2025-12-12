@@ -768,9 +768,9 @@ class Molecule:
             return cls._read_orca_inputfile(filepath, **kwargs)
 
         if basename.endswith(".out"):
-            from chemsmart.utils.io import get_outfile_format
+            from chemsmart.utils.io import get_program_type_from_file
 
-            program = get_outfile_format(filepath)
+            program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
             if program == "gaussian":

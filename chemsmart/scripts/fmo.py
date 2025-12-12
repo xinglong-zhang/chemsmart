@@ -13,7 +13,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def entry_point(filename, unit):
     Calculate and display frontier molecular orbital (FMO) properties.
     """
     create_logger()
-    program = get_outfile_format(filename)
+    program = get_program_type_from_file(filename)
     if program == "gaussian":
         outputfile = Gaussian16Output(filename=filename)
     elif program == "orca":

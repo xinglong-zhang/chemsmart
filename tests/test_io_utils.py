@@ -10,7 +10,7 @@ from chemsmart.utils.io import (
     clean_duplicate_structure,
     clean_label,
     convert_string_indices_to_pymol_id_indices,
-    get_outfile_format,
+    get_program_type_from_file,
     increment_numbers,
     match_outfile_pattern,
     remove_keyword,
@@ -111,12 +111,12 @@ class TestGetOutfileFormat:
 
     def test_gaussian_output_detection(self, gaussian_singlet_opt_outfile):
         """Test detection of Gaussian output file."""
-        result = get_outfile_format(gaussian_singlet_opt_outfile)
+        result = get_program_type_from_file(gaussian_singlet_opt_outfile)
         assert result == "gaussian"
 
     def test_orca_output_detection(self, water_output_gas_path):
         """Test detection of ORCA output file."""
-        result = get_outfile_format(water_output_gas_path)
+        result = get_program_type_from_file(water_output_gas_path)
         assert result == "orca"
 
     def test_unknown_format(self):
@@ -124,7 +124,7 @@ class TestGetOutfileFormat:
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write("This is just random text\n" * 10)
             f.flush()
-            result = get_outfile_format(f.name)
+            result = get_program_type_from_file(f.name)
             assert result == "unknown"
             os.unlink(f.name)
 

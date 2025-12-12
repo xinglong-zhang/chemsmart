@@ -247,7 +247,7 @@ def match_outfile_pattern(line) -> str | None:
     return None
 
 
-def get_outfile_format(filepath) -> str:
+def get_program_type_from_file(filepath) -> str:
     """
     Detect the type of quantum chemistry output file.
 
@@ -258,7 +258,8 @@ def get_outfile_format(filepath) -> str:
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
+        str: Program name, one of: "gaussian", "orca", "xtb", "crest",
+        or "unknown" if the format cannot be detected.
     """
     max_lines = 200
     try:
@@ -313,7 +314,9 @@ def find_output_files_in_directory(directory, program):
                 outfiles.append(os.path.join(subdir, file))
 
     matched_files = [
-        file for file in outfiles if get_outfile_format(file) == program
+        file
+        for file in outfiles
+        if get_program_type_from_file(file) == program
     ]
     return matched_files
 

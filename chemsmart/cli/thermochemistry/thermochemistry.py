@@ -14,7 +14,7 @@ from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import (
     find_output_files_in_directory,
-    get_outfile_format,
+    get_program_type_from_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -239,7 +239,7 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if get_outfile_format(file) not in {"gaussian", "orca"}:
+            if get_program_type_from_file(file) not in {"gaussian", "orca"}:
                 raise ValueError(
                     f"Unsupported output file type for '{file}'. Use Gaussian or "
                     f"ORCA output files."
