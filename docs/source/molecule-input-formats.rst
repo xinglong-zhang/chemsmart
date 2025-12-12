@@ -29,10 +29,10 @@ calculations:
            └─── PubChem queries (by name, CID, or SMILES)
            │
            ▼
-   ┌──────────────────┐
-   │  chemsmart.io    │  ──────►  Creates Molecule Object
-   │  PubChem Query   │           (SMILES → RDKit → 3D coordinates)
-   └──────────────────┘
+   ┌──────────────────────────────┐
+   │  Input Processing            │  ──────►  Creates Molecule Object
+   │  (chemsmart.io)              │           (parses all supported input formats)
+   └──────────────────────────────┘
            │
            ▼
    ┌──────────────────┐
