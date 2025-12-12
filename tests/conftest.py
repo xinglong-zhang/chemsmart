@@ -1172,6 +1172,36 @@ def dna_hybrid_visualized_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def chemdraw_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "chemdraw")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_benzene(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "benzene.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_methane(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "methane.cdxml")
+
+
+@pytest.fixture()
+def multi_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "two_molecules.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdx_file_imidazole(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "imidazole.cdx")
+
+
+@pytest.fixture()
+def complex_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
