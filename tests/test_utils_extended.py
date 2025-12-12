@@ -379,12 +379,14 @@ class TestTwoFilesHaveSimilarContents:
             f2.write("line1\nline2\n")
             f1.flush()
             f2.flush()
+            temp_name1 = f1.name
+            temp_name2 = f2.name
 
-            result = two_files_have_similar_contents(f1.name, f2.name)
+            result = two_files_have_similar_contents(temp_name1, temp_name2)
             assert result is True
 
-            os.unlink(f1.name)
-            os.unlink(f2.name)
+            os.unlink(temp_name1)
+            os.unlink(temp_name2)
 
     def test_different_files(self):
         """Test different files return False."""
@@ -396,12 +398,13 @@ class TestTwoFilesHaveSimilarContents:
             f2.write("line1\nline3\n")
             f1.flush()
             f2.flush()
-
-            result = two_files_have_similar_contents(f1.name, f2.name)
+            temp_name1 = f1.name
+            temp_name2 = f2.name
+            result = two_files_have_similar_contents(temp_name1, temp_name2)
             assert result is False
 
-            os.unlink(f1.name)
-            os.unlink(f2.name)
+            os.unlink(temp_name1)
+            os.unlink(temp_name2)
 
     def test_with_ignored_string(self):
         """Test with ignored string."""
@@ -413,14 +416,16 @@ class TestTwoFilesHaveSimilarContents:
             f2.write("line1\ntimestamp: 67890\n")
             f1.flush()
             f2.flush()
+            temp_name1 = f1.name
+            temp_name2 = f2.name
 
             result = two_files_have_similar_contents(
-                f1.name, f2.name, ignored_string="timestamp"
+                temp_name1, temp_name2, ignored_string="timestamp"
             )
             assert result is True
 
-            os.unlink(f1.name)
-            os.unlink(f2.name)
+            os.unlink(temp_name1)
+            os.unlink(temp_name2)
 
 
 class TestTwoListsHaveSimilarContents:
