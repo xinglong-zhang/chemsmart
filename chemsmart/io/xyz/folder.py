@@ -1,6 +1,6 @@
 import logging
 
-from chemsmart.utils.mixins import BaseFolder
+from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()
