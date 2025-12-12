@@ -124,9 +124,10 @@ class TestGetOutfileFormat:
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write("This is just random text\n" * 10)
             f.flush()
-            result = get_program_type_from_file(f.name)
-            assert result == "unknown"
-            os.unlink(f.name)
+            temp_name = f.name
+        result = get_program_type_from_file(temp_name)
+        assert result == "unknown"
+        os.unlink(f.name)
 
 
 class TestCleanDuplicateStructure:
