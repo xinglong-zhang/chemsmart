@@ -200,7 +200,7 @@ Query PubChem directly by name, CID, or SMILES:
    chemsmart sub -s server gaussian -p project -P 962 -c 0 -m 1 -l water opt
 
    # By SMILES string
-   chemsmart sub -s server gaussian -p project -P "O=C1C=CC=CC=C1" -c 0 -m 1 -l benzaldehyde opt
+   chemsmart sub -s server gaussian -p project -P "O=Cc1ccccc1" -c 0 -m 1 -l benzaldehyde opt
 
 .. note::
 
