@@ -139,12 +139,18 @@ class Thermochemistry:
         """Open the file and return the file object."""
         program = get_outfile_format(self.filename)
         if program == "gaussian":
-            return Gaussian16Output(self.filename)
+            output = Gaussian16Output(self.filename)
         elif program == "orca":
-            return ORCAOutput(self.filename)
+            output = ORCAOutput(self.filename)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")
+        if not output.normal_termination:
+            raise ValueError(
+                f"File '{self.filename}' did not terminate normally. "
+                "Skipping thermochemistry calculation for this file."
+            )
+        return output
 
     @property
     def job_type(self):
@@ -661,6 +667,8 @@ class Thermochemistry:
         if self.v is None:
             return None
         bav = self.Bav
+        if bav is None:
+            return []
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
         entropy = [
@@ -1085,6 +1093,7 @@ class Thermochemistry:
         qrrho_gibbs_free_energy,
         outputfile=None,
         overwrite=False,
+        write_header=True,
     ):
         """
         Log thermochemistry results to a structured output file.
@@ -1138,6 +1147,10 @@ class Thermochemistry:
             If True, existing files are replaced. If False, results are
             appended
             (header is repeated to reflect possible changes in conditions).
+        write_header : bool, default=True
+            If True, writes the header block before results. Set to False
+            to skip header writing (useful when appending multiple times
+            without changing conditions).
 
         Notes
         -----
@@ -1182,7 +1195,7 @@ class Thermochemistry:
                 if not self.use_weighted_mass
                 else "Natural Abundance Weighted Masses"
             )
-            header = f"Temperature: {self.temperature:.2f} K\n"
+            header = f"\nTemperature: {self.temperature:.2f} K\n"
             if self.concentration is not None:
                 header += f"Concentration: {self.concentration:.1f} mol/L\n"
             else:
@@ -1315,15 +1328,11 @@ class Thermochemistry:
             if overwrite:
                 mode = "w"
                 logger.info(f"Overwriting {outputfile}.")
-                write_header = True
             else:
                 mode = "a"
                 logger.info(f"Appending to {outputfile}.")
-                # Always repeat header when appending (different conditions may be used)
-                write_header = True
         else:
             mode = "w"
-            write_header = True
 
         with open(outputfile, mode) as out:
             if write_header:
