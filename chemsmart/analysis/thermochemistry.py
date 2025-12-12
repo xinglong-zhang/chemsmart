@@ -15,7 +15,7 @@ from chemsmart.utils.constants import (
     energy_conversion,
     hartree_to_joules,
 )
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -137,7 +137,7 @@ class Thermochemistry:
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        program = get_outfile_format(self.filename)
+        program = get_program_type_from_file(self.filename)
         if program == "gaussian":
             output = Gaussian16Output(self.filename)
         elif program == "orca":

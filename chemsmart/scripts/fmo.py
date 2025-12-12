@@ -14,7 +14,7 @@ import click
 from chemsmart.cli.logger import logger_options
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -44,8 +44,8 @@ def entry_point(filename, unit, debug, stream):
 
     Supports both closed-shell and open-shell systems.
     """
-    create_logger(debug=debug, stream=stream)
-    program = get_outfile_format(filename)
+    create_logger()
+    program = get_program_type_from_file(filename)
     if program == "gaussian":
         outputfile = Gaussian16Output(filename=filename)
     elif program == "orca":
