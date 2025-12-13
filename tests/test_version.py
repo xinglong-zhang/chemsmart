@@ -4,8 +4,6 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-import pytest
-
 
 class TestVersion:
     """Test the version loading logic from chemsmart/__init__.py."""
@@ -51,32 +49,29 @@ class TestVersion:
 
     def test_version_fallback_when_file_unreadable(self):
         """Test that fallback to '0.0.0' works when VERSION file is unreadable."""
-        # Create a temporary VERSION file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmpfile:
-            tmpfile.write("1.0.0")
-            tmpfile.flush()
-            version_path = Path(tmpfile.name)
-        
-        try:
-            # Mock the read_text method to raise a PermissionError
-            with mock.patch.object(Path, "read_text", side_effect=PermissionError):
-                # Simulate the version loading logic
-                try:
-                    version = version_path.read_text(encoding="utf-8").strip()
-                except Exception:
-                    version = "0.0.0"
-                
-                assert version == "0.0.0"
-        finally:
-            # Clean up the temporary file
-            version_path.unlink()
+        # Mock the read_text method to raise a PermissionError
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError):
+            # Simulate the version loading logic
+            try:
+                fake_path = Path("/fake/path/VERSION")
+                version = fake_path.read_text(encoding="utf-8").strip()
+            except Exception:
+                version = "0.0.0"
+            
+            assert version == "0.0.0"
 
     def test_version_format(self):
         """Test that the version follows a reasonable format."""
+        import re
+
         import chemsmart
 
         # Version should be non-empty
         assert len(chemsmart.__version__) > 0
         
-        # Version should contain at least one digit or be "0.0.0"
-        assert any(char.isdigit() for char in chemsmart.__version__) or chemsmart.__version__ == "0.0.0"
+        # Version should follow semantic versioning format: major.minor.patch[optional]
+        # Examples: "1.0.0", "0.1.16", "2.3.4-dev", "1.2.3.post1"
+        version_pattern = r"^\d+\.\d+\.\d+.*$"
+        assert re.match(version_pattern, chemsmart.__version__), (
+            f"Version '{chemsmart.__version__}' does not follow semantic versioning format"
+        )
