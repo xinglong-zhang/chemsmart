@@ -1,6 +1,5 @@
 """Tests for version loading in chemsmart/__init__.py."""
 
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -27,25 +26,16 @@ class TestVersion:
 
     def test_version_fallback_when_file_missing(self):
         """Test that fallback to '0.0.0' works when VERSION file is missing."""
-        # Create a temporary directory and mock the __file__ path
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create a fake __init__.py path in the temp directory
-            fake_init_path = Path(tmpdir) / "__init__.py"
-            fake_init_path.touch()
+        # Mock the read_text method to raise a FileNotFoundError
+        with mock.patch.object(Path, "read_text", side_effect=FileNotFoundError):
+            # Simulate the version loading logic
+            try:
+                fake_path = Path("/nonexistent/path/VERSION")
+                version = fake_path.read_text(encoding="utf-8").strip()
+            except Exception:
+                version = "0.0.0"
             
-            # Mock Path(__file__) to return our fake path
-            # The VERSION file won't exist at fake_init_path.with_name("VERSION")
-            with mock.patch("pathlib.Path") as mock_path:
-                mock_path.return_value.with_name.return_value.read_text.side_effect = FileNotFoundError
-                
-                # Simulate the version loading logic
-                try:
-                    _version_file = Path(str(fake_init_path)).with_name("VERSION")
-                    version = _version_file.read_text(encoding="utf-8").strip()
-                except Exception:
-                    version = "0.0.0"
-                
-                assert version == "0.0.0"
+            assert version == "0.0.0"
 
     def test_version_fallback_when_file_unreadable(self):
         """Test that fallback to '0.0.0' works when VERSION file is unreadable."""
