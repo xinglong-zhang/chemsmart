@@ -13,28 +13,30 @@ class TestVersion:
 
         # Verify that __version__ attribute exists
         assert hasattr(chemsmart, "__version__")
-        
+
         # Verify it's a string
         assert isinstance(chemsmart.__version__, str)
-        
+
         # Verify it's not the fallback value (unless VERSION file is actually "0.0.0")
         # Read the actual VERSION file to compare
         version_file = Path(chemsmart.__file__).with_name("VERSION")
         expected_version = version_file.read_text(encoding="utf-8").strip()
-        
+
         assert chemsmart.__version__ == expected_version
 
     def test_version_fallback_when_file_missing(self):
         """Test that fallback to '0.0.0' works when VERSION file is missing."""
         # Mock the read_text method to raise a FileNotFoundError
-        with mock.patch.object(Path, "read_text", side_effect=FileNotFoundError):
+        with mock.patch.object(
+            Path, "read_text", side_effect=FileNotFoundError
+        ):
             # Simulate the version loading logic
             try:
                 fake_path = Path("/nonexistent/path/VERSION")
                 version = fake_path.read_text(encoding="utf-8").strip()
             except Exception:
                 version = "0.0.0"
-            
+
             assert version == "0.0.0"
 
     def test_version_fallback_when_file_unreadable(self):
@@ -47,7 +49,7 @@ class TestVersion:
                 version = fake_path.read_text(encoding="utf-8").strip()
             except Exception:
                 version = "0.0.0"
-            
+
             assert version == "0.0.0"
 
     def test_version_format(self):
@@ -58,10 +60,10 @@ class TestVersion:
 
         # Version should be non-empty
         assert len(chemsmart.__version__) > 0
-        
+
         # Version should follow semantic versioning format: major.minor.patch[optional]
         # Examples: "1.0.0", "0.1.16", "2.3.4-dev", "1.2.3.post1"
         version_pattern = r"^\d+\.\d+\.\d+.*$"
-        assert re.match(version_pattern, chemsmart.__version__), (
-            f"Version '{chemsmart.__version__}' does not follow semantic versioning format"
-        )
+        assert re.match(
+            version_pattern, chemsmart.__version__
+        ), f"Version '{chemsmart.__version__}' does not follow semantic versioning format"
