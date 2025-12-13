@@ -76,6 +76,9 @@ homepage = "https://github.com/xinglong-zhang/chemsmart/"
 [tool.setuptools.packages.find]
 exclude = [".github"]
 
+[tool.setuptools.package-data]
+"chemsmart" = ["VERSION"]
+
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]
 extend-ignore = ["E203"]
