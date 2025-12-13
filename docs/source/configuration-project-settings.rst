@@ -9,7 +9,8 @@ Configure project-specific settings for Gaussian and ORCA calculations.
 ***************************
 
 The ``~/.chemsmart/gaussian/`` directory contains project settings files specifying DFT functionals, basis sets, and
-other calculation parameters.
+other calculation parameters. This folder is created automatically when configuring CHEMSMART. Users can access and
+freely modify the contents in this folder without affecting the CHEMSMART codes.
 
 Job Type Settings
 =================
@@ -20,6 +21,8 @@ of your calculations:
 -  ``gas``: Used for geometry optimization, transition state searches, and other gas-phase structural calculations.
 -  ``solv``: Used for single point energy calculations in solution.
 -  ``td``: Used for TD-DFT (time-dependent DFT) calculations for excited states and UV-Vis spectra.
+
+If ``gas: Null`` is set, then all job types will be run in solvent phase specified by ``solv``.
 
 Example 1: Basic Multi-Phase Settings
 =====================================
@@ -54,13 +57,13 @@ In this configuration:
 
 -  **Gas phase** optimizations use M062X/def2-SVP with SMD(dichloroethane) implicit solvation
 -  **Solution phase** single points use M062X/def2-TZVP with higher basis set for better energies
--  **TD-DFT** calculations use CAM-B3LYP with mixed basis sets (GENECP) for systems containing iodine
+-  **TD-DFT** calculations use CAM-B3LYP with mixed basis sets (GENECP) for systems containing iodine where ``I`` element takes def2-SVPD basis set whereas all other elements take def2-SVP basis set.
 
 Example 2: Mixed Element Basis Sets
 ===================================
 
-For systems with transition metals or heavy elements, you can specify different basis sets for different elements
-(``~/.chemsmart/gaussian/test2.yaml``):
+For systems with transition metals or heavy elements (or in fact any system), you can specify different basis sets for different elements,
+as seen in example project settings file in ``~/.chemsmart/gaussian/test2.yaml``:
 
 .. code:: yaml
 
@@ -82,9 +85,9 @@ For systems with transition metals or heavy elements, you can specify different 
 This configuration:
 
 -  Uses B3LYP-D3(BJ) functional with Grimme's D3 dispersion correction
--  Assigns def2-TZVPPD basis to heavy elements (Pd, Ag, Br, Cu, Mn)
--  Assigns def2-SVP basis to light elements (H, C, N, O, etc.)
--  Solution phase calculations use uniform def2-QZVP basis for high accuracy
+-  Assigns def2-TZVPPD basis to heavy elements (Pd, Ag, Br, Cu, Mn); if such elements do not occur in the molecule, it will be simply ignored.
+-  Assigns def2-SVP basis to all other light elements (H, C, N, O, etc.)
+-  Solution phase calculations use uniform def2-QZVP basis set for all atoms for high accuracy
 
 Example 3: Custom Solvent Parameters
 ====================================
@@ -129,6 +132,21 @@ To run all calculations with solvent (skip gas phase), set ``gas: Null``:
 .. code:: yaml
 
    gas: Null
+
+Other project settings can also be specified, for example, if one requires ``#p`` dieze tag for Gaussian input, then
+in the project settings, one can add
+
+.. code:: yaml
+
+   gas:
+     dieze_tag: p
+     functional: M062X
+     basis: def2svp
+to specify it and allow automatically inclusion of it in input file writing.
+
+.. note::
+
+   If ``freq: False`` is not set, frequency calculations are performed by default for all geometry optimization jobs.
 
 ***********************
  ORCA Project Settings
@@ -184,7 +202,8 @@ This configuration:
    -  MDCI (Modified Davidson Configuration Interaction) cutoff parameters
 
 This workflow is efficient for obtaining highly accurate energies on DFT-optimized geometries, commonly used for
-thermochemistry and reaction energetics.
+thermochemistry and reaction energetics. One can simply use Gaussian .log file as input for chemsmart to automatically
+create ORCA single-point .inp file in a single command (see later examples).
 
 Key ORCA-Specific Parameters
 ============================
@@ -208,7 +227,3 @@ Set up scratch directories for Gaussian and ORCA jobs:
 .. code:: bash
 
    ln -s /path/to/scratch/ ~/scratch
-
-.. note::
-
-   If ``freq: False`` is not set, frequency calculations are performed by default for all geometry optimization jobs.
