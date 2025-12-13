@@ -4,7 +4,8 @@
 
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
 stored in the ``~/.chemsmart/server/`` directory that define how Chemsmart submits and executes computational chemistry
-jobs.
+jobs.  This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents 
+in this folder without affecting the CHEMSMART codes.
 
 **********************
  Server Configuration
@@ -14,8 +15,8 @@ Overview
 ========
 
 The ``~/.chemsmart/server/`` directory contains YAML files for different computing environments. Each file defines the
-server configuration needed to generate submission scripts. Chemsmart provides several template configurations in
-``chemsmart/settings/templates/.chemsmart/server/``:
+server configuration needed to generate submission scripts. CHEMSMART provides several template configurations in
+``/path/to/chemsmart/chemsmart/settings/templates/.chemsmart/server/``:
 
 -  ``SLURM.yaml`` - For clusters using the SLURM scheduler
 -  ``PBS.yaml`` - For clusters using the PBS/Torque scheduler
@@ -196,7 +197,8 @@ SCRATCH_DIR
 **Type:** String or Null
 
 **Description:** Path to the scratch directory for temporary files. Set to ``null`` if not using a specific scratch
-location.
+location. Note that both Gaussian and ORCA calculations are by default run in scratch directory, thus, it is recommended
+to set up the path to scratch directory. See the section on setting up scratch directory.
 
 **Examples:**
 
@@ -453,7 +455,7 @@ ENVARS
 NCIPLOT Section
 ---------------
 
-Configuration for NCIPLOT (Non-Covalent Interactions) software.
+Configuration for NCIPLOT software for Non-Covalent Interactions analysis.
 
 EXEFOLDER
 ^^^^^^^^^
@@ -580,7 +582,7 @@ Complete example for a SLURM-based HPC cluster:
            export GAUSS_EXEDIR=~/bin/g16
            export g16root=~/bin/g16
    ORCA:
-       EXEFOLDER: ~/bin/orca_6_0_0
+       EXEFOLDER: ~/bin/orca_6_1_0
        LOCAL_RUN: False
        SCRATCH: True
        CONDA_ENV: |
@@ -740,6 +742,7 @@ When customizing server configuration files:
 #. **Module system**: Update MODULES sections to load the correct versions of libraries and tools available on your
    system.
 #. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT.
+   This will be automatically updated when configuring CHEMSMART during the configuration phase.
 #. **Scratch directories**: Set SCRATCH environment variables to valid paths on your system. Some HPC systems provide
    node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
 #. **Conda environments**: Adjust conda activation commands to match your conda installation path and environment names.
@@ -761,6 +764,6 @@ After creating a custom server configuration file:
 
       chemsmart sub -s myserver -g opt -i input.xyz
 
-#. Verify the generated submission script before submitting to ensure all paths and settings are correct
+#. Verify the generated submission script to ensure all paths and settings are correct
 
 #. Test with a small job first to validate the configuration works correctly on your system
