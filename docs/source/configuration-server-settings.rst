@@ -4,7 +4,7 @@
 
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
 stored in the ``~/.chemsmart/server/`` directory that define how Chemsmart submits and executes computational chemistry
-jobs.  This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents 
+jobs. This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents
 in this folder without affecting the CHEMSMART codes.
 
 **********************
@@ -741,8 +741,8 @@ When customizing server configuration files:
 #. **Resource limits**: Set NUM_HOURS, MEM_GB, NUM_CORES to match your cluster's queue limits and job requirements.
 #. **Module system**: Update MODULES sections to load the correct versions of libraries and tools available on your
    system.
-#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT.
-   This will be automatically updated when configuring CHEMSMART during the configuration phase.
+#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
+   will be automatically updated when configuring CHEMSMART during the configuration phase.
 #. **Scratch directories**: Set SCRATCH environment variables to valid paths on your system. Some HPC systems provide
    node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
 #. **Conda environments**: Adjust conda activation commands to match your conda installation path and environment names.

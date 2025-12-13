@@ -57,13 +57,14 @@ In this configuration:
 
 -  **Gas phase** optimizations use M062X/def2-SVP with SMD(dichloroethane) implicit solvation
 -  **Solution phase** single points use M062X/def2-TZVP with higher basis set for better energies
--  **TD-DFT** calculations use CAM-B3LYP with mixed basis sets (GENECP) for systems containing iodine where ``I`` element takes def2-SVPD basis set whereas all other elements take def2-SVP basis set.
+-  **TD-DFT** calculations use CAM-B3LYP with mixed basis sets (GENECP) for systems containing iodine where ``I``
+   element takes def2-SVPD basis set whereas all other elements take def2-SVP basis set.
 
 Example 2: Mixed Element Basis Sets
 ===================================
 
-For systems with transition metals or heavy elements (or in fact any system), you can specify different basis sets for different elements,
-as seen in example project settings file in ``~/.chemsmart/gaussian/test2.yaml``:
+For systems with transition metals or heavy elements (or in fact any system), you can specify different basis sets for
+different elements, as seen in example project settings file in ``~/.chemsmart/gaussian/test2.yaml``:
 
 .. code:: yaml
 
@@ -85,7 +86,8 @@ as seen in example project settings file in ``~/.chemsmart/gaussian/test2.yaml``
 This configuration:
 
 -  Uses B3LYP-D3(BJ) functional with Grimme's D3 dispersion correction
--  Assigns def2-TZVPPD basis to heavy elements (Pd, Ag, Br, Cu, Mn); if such elements do not occur in the molecule, it will be simply ignored.
+-  Assigns def2-TZVPPD basis to heavy elements (Pd, Ag, Br, Cu, Mn); if such elements do not occur in the molecule, it
+   will be simply ignored.
 -  Assigns def2-SVP basis to all other light elements (H, C, N, O, etc.)
 -  Solution phase calculations use uniform def2-QZVP basis set for all atoms for high accuracy
 
@@ -133,8 +135,8 @@ To run all calculations with solvent (skip gas phase), set ``gas: Null``:
 
    gas: Null
 
-Other project settings can also be specified, for example, if one requires ``#p`` dieze tag for Gaussian input, then
-in the project settings, one can add
+Other project settings can also be specified, for example, if one requires ``#p`` dieze tag for Gaussian input, then in
+the project settings, one can add
 
 .. code:: yaml
 
@@ -142,6 +144,7 @@ in the project settings, one can add
      dieze_tag: p
      functional: M062X
      basis: def2svp
+
 to specify it and allow automatically inclusion of it in input file writing.
 
 .. note::
