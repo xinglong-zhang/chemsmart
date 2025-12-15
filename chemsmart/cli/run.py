@@ -127,6 +127,20 @@ def process_pipeline(ctx, *args, **kwargs):
         # Attach jobrunner to job and run the job with the jobrunner
         job.jobrunner = jobrunner
         job.run()
+    elif isinstance(job, list):
+        for single_job in job:
+            jobrunner = jobrunner.from_job(
+                job=single_job,
+                server=jobrunner.server,
+                scratch=jobrunner.scratch,
+                fake=jobrunner.fake,
+                delete_scratch=jobrunner.delete_scratch,
+                num_cores=jobrunner.num_cores,
+                num_gpus=jobrunner.num_gpus,
+                mem_gb=jobrunner.mem_gb,
+            )
+            single_job.jobrunner = jobrunner
+            single_job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 
