@@ -1,8 +1,6 @@
 import os
 from shutil import copy
 
-import pytest
-
 from chemsmart.jobs.nciplot import NCIPLOTJob
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from chemsmart.jobs.nciplot.writer import NCIPLOTInputWriter
@@ -166,7 +164,7 @@ class TestNCIPLOTInputWriter:
         nciplot_jobrunner_scratch,
     ):
         """Test that promolecular density files are found in scratch directory.
-        
+
         This test reproduces the bug where the writer looks for files in the
         wrong directory when using scratch and promolecular density.
         """
@@ -193,15 +191,17 @@ class TestNCIPLOTInputWriter:
 
         # Now write the input file - this should not raise FileNotFoundError
         nciplot_writer = NCIPLOTInputWriter(job=job)
-        nciplot_writer.write(target_directory=nciplot_jobrunner_scratch.running_directory)
+        nciplot_writer.write(
+            target_directory=nciplot_jobrunner_scratch.running_directory
+        )
 
         # Verify the input file was created correctly
         nci_file = os.path.join(
             nciplot_jobrunner_scratch.running_directory,
-            "test_molecule_promolecular.nci"
+            "test_molecule_promolecular.nci",
         )
         assert os.path.exists(nci_file)
-        
+
         # Check that the filename is written correctly
         with open(nci_file, "r") as f:
             lines = f.readlines()
