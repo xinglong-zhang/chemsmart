@@ -58,11 +58,14 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
 
     from chemsmart.jobs.gaussian.ts import GaussianTSJob
 
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get("molecule_indices", list(range(1, len(molecules) + 1)))
+
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1:
         logger.info(f"Creating {len(molecules)} TS jobs")
         jobs = []
-        for idx, molecule in enumerate(molecules, start=1):
+        for molecule, idx in zip(molecules, molecule_indices):
             # Create a copy to avoid side effects from mutation
             molecule = molecule.copy()
             molecule_label = f"{label}_idx{idx}"
@@ -92,7 +95,7 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
         return jobs
     else:
         # Single molecule case
-        molecule = molecules[-1]
+        molecule = molecules[-1].copy()
 
         if freeze_atoms is not None:
             frozen_atoms_list = get_list_from_string_range(freeze_atoms)

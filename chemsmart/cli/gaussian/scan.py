@@ -81,11 +81,14 @@ def scan(
 
     from chemsmart.jobs.gaussian.scan import GaussianScanJob
 
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get("molecule_indices", list(range(1, len(molecules) + 1)))
+
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1:
         logger.info(f"Creating {len(molecules)} scan jobs")
         jobs = []
-        for idx, molecule in enumerate(molecules, start=1):
+        for molecule, idx in zip(molecules, molecule_indices):
             molecule_label = f"{label}_idx{idx}"
             logger.info(
                 f"Running scan for molecule {idx}: {molecule} with label {molecule_label}"

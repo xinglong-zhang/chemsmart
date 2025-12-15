@@ -100,11 +100,14 @@ def scan(
 
     from chemsmart.jobs.orca.scan import ORCAScanJob
 
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get("molecule_indices", list(range(1, len(molecules) + 1)))
+
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1:
         logger.info(f"Creating {len(molecules)} ORCA scan jobs")
         jobs = []
-        for idx, molecule in enumerate(molecules, start=1):
+        for molecule, idx in zip(molecules, molecule_indices):
             molecule_label = f"{label}_idx{idx}"
             logger.info(
                 f"Running coordinate scan for molecule {idx}: {molecule} with label {molecule_label}"
