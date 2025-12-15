@@ -101,7 +101,9 @@ def scan(
     from chemsmart.jobs.orca.scan import ORCAScanJob
 
     # Get the original molecule indices from context
-    molecule_indices = ctx.obj.get("molecule_indices", list(range(1, len(molecules) + 1)))
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
+    )
 
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1:

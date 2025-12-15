@@ -14,7 +14,6 @@ from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import (
     return_objects_and_indices_from_string_index,
-    return_objects_from_string_index,
 )
 
 logger = logging.getLogger(__name__)
@@ -508,13 +507,17 @@ def gaussian(
     # then return that structure as a list and track the original indices
     molecule_indices = None
     if index is not None:
-        molecules, molecule_indices = return_objects_and_indices_from_string_index(
-            list_of_objects=molecules, index=index
+        molecules, molecule_indices = (
+            return_objects_and_indices_from_string_index(
+                list_of_objects=molecules, index=index
+            )
         )
 
     if not isinstance(molecules, list):
         molecules = [molecules]
-        if molecule_indices is not None and not isinstance(molecule_indices, list):
+        if molecule_indices is not None and not isinstance(
+            molecule_indices, list
+        ):
             molecule_indices = [molecule_indices]
     else:
         # If molecules is a list but molecule_indices is not set, create sequential indices
@@ -531,7 +534,9 @@ def gaussian(
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
     )
-    ctx.obj["molecule_indices"] = molecule_indices  # Store original 1-based indices
+    ctx.obj["molecule_indices"] = (
+        molecule_indices  # Store original 1-based indices
+    )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
 
