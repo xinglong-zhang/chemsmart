@@ -61,41 +61,16 @@ def sp(
     )
 
     from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+    from chemsmart.utils.cli import create_sp_label
 
-    def _create_sp_label(label, sp_settings):
-        """Helper to create label with solvent info."""
-        # either supplied or not from cli, would still want label to have model
-        # and id, if both given;
-        # will not be activated when both are not given, e.g., in the gaussian
-        # calculator calling the sp job
-        if (
-            sp_settings.solvent_model is not None
-            and sp_settings.solvent_id is not None
-        ):
-            # replace , by _ if it occurs in the solvent name, as , in file will
-            # cause gaussian run error
-            solvent_label = sp_settings.solvent_id.replace(",", "_")
-            solvent_label = solvent_label.replace("-", "_")
-            label = f"{label}_{sp_settings.solvent_model}_{solvent_label}"
-        elif (
-            sp_settings.solvent_model is None
-            and sp_settings.solvent_id is None
-        ):
-            label = (
-                f"{label}_gas_phase"
-                if sp_settings.custom_solvent is None
-                else f"{label}_custom_solvent"
-            )
-        return label
-
-        # Handle multiple molecules: create one job per molecule
+    # Handle multiple molecules: create one job per molecule
 
     if len(molecules) > 1:
         logger.info(f"Creating {len(molecules)} single point jobs")
         jobs = []
         for idx, molecule in enumerate(molecules, start=1):
             molecule_label = f"{label}_idx{idx}"
-            final_label = _create_sp_label(molecule_label, sp_settings)
+            final_label = create_sp_label(molecule_label, sp_settings)
             logger.info(
                 f"Running single point for molecule {idx}: {molecule} with label {final_label}"
             )
@@ -112,7 +87,10 @@ def sp(
     else:
         # Single molecule case
         molecule = molecules[-1]
-        label = _create_sp_label(label, sp_settings)
+        label = create_sp_label(label, sp_settings)
+        logger.info(
+            f"Running single point calculation on molecule: {molecule} with label: {label}"
+        )
 
         return GaussianSinglePointJob(
             molecule=molecule,

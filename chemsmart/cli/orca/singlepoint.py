@@ -59,6 +59,7 @@ def sp(ctx, **kwargs):
     label = ctx.obj["label"]
 
     from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+    from chemsmart.utils.cli import create_sp_label
 
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1:
@@ -66,14 +67,15 @@ def sp(ctx, **kwargs):
         jobs = []
         for idx, molecule in enumerate(molecules, start=1):
             molecule_label = f"{label}_idx{idx}"
+            final_label = create_sp_label(molecule_label, sp_settings)
             logger.info(
-                f"Running single point for molecule {idx}: {molecule} with label {molecule_label}"
+                f"Running single point for molecule {idx}: {molecule} with label {final_label}"
             )
 
             job = ORCASinglePointJob(
                 molecule=molecule,
                 settings=sp_settings,
-                label=molecule_label,
+                label=final_label,
                 **kwargs,
             )
             jobs.append(job)
@@ -82,8 +84,9 @@ def sp(ctx, **kwargs):
     else:
         # Single molecule case
         molecule = molecules[-1]
+        label = create_sp_label(label, sp_settings)
         logger.info(
-            f"Running single point calculation on molecule: {molecule}"
+            f"Running single point calculation on molecule: {molecule} with label: {label}"
         )
 
         job = ORCASinglePointJob(
