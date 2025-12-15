@@ -519,6 +519,62 @@ def return_objects_from_string_index(list_of_objects, index):
     return objects
 
 
+def return_objects_and_indices_from_string_index(list_of_objects, index):
+    """
+    Return objects and their original 1-based indices from a list based on the given index.
+    
+    This function is similar to return_objects_from_string_index but also returns
+    the original 1-based indices that were used to select the objects.
+    
+    Args:
+        list_of_objects: List of objects to select from.
+        index: String or integer representing the index/indices to select (1-based).
+    
+    Returns:
+        tuple: (objects, indices_1based) where:
+            - objects: List of selected objects (or single object if single index)
+            - indices_1based: List of original 1-based indices (or single index if single index)
+    
+    Examples:
+        >>> objects = ['a', 'b', 'c', 'd', 'e']
+        >>> # '2:4' in 1-based means items 2 and 3 (exclusive of 4, like Python slicing)
+        >>> return_objects_and_indices_from_string_index(objects, '2:4')
+        (['b', 'c'], [2, 3])
+        >>> # Single index '5' returns the 5th item
+        >>> return_objects_and_indices_from_string_index(objects, '5')
+        ('e', 5)
+    """
+    # convert index from 1-based (user input) to 0-based (python code-needed)
+    index_0based = convert_string_index_from_1_based_to_0_based(index)
+    
+    if isinstance(index_0based, list):
+        # if index is a list, use it to select objects
+        objects = [list_of_objects[i] for i in index_0based]
+        # Convert back to 1-based for tracking
+        indices_1based = [i + 1 for i in index_0based]
+    elif isinstance(index_0based, int):
+        # if index is a single integer, use it to select a single object
+        objects = list_of_objects[index_0based]
+        indices_1based = index_0based + 1
+    else:
+        # index is a Slice
+        objects = list_of_objects[index_0based]
+        # Convert slice to list of indices
+        if isinstance(objects, list):
+            # Figure out which indices were actually selected
+            start = index_0based.start if index_0based.start is not None else 0
+            stop = index_0based.stop if index_0based.stop is not None else len(list_of_objects)
+            step = index_0based.step if index_0based.step is not None else 1
+            indices_0based = list(range(start, stop, step))
+            indices_1based = [i + 1 for i in indices_0based]
+        else:
+            # Single object from slice
+            start = index_0based.start if index_0based.start is not None else 0
+            indices_1based = start + 1
+
+    return objects, indices_1based
+
+
 def get_value_by_number(num, data):
     """
     Retrieve dictionary value by matching numeric part of keys.

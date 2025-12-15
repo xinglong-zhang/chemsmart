@@ -81,11 +81,14 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
         get_list_from_string_range,
     )
 
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get("molecule_indices", list(range(1, len(molecules) + 1)))
+
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1:
         logger.info(f"Creating {len(molecules)} ORCA optimization jobs")
         jobs = []
-        for idx, molecule in enumerate(molecules, start=1):
+        for molecule, idx in zip(molecules, molecule_indices):
             # Create a copy to avoid side effects from mutation
             molecule = molecule.copy()
             molecule_label = f"{label}_idx{idx}"

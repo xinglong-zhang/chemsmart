@@ -63,12 +63,15 @@ def sp(
     from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
     from chemsmart.utils.cli import create_sp_label
 
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get("molecule_indices", list(range(1, len(molecules) + 1)))
+
     # Handle multiple molecules: create one job per molecule
 
     if len(molecules) > 1:
         logger.info(f"Creating {len(molecules)} single point jobs")
         jobs = []
-        for idx, molecule in enumerate(molecules, start=1):
+        for molecule, idx in zip(molecules, molecule_indices):
             molecule_label = f"{label}_idx{idx}"
             final_label = create_sp_label(molecule_label, sp_settings)
             logger.info(
