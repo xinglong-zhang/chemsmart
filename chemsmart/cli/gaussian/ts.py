@@ -40,15 +40,8 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
 
     check_charge_and_multiplicity(ts_settings)
 
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[
-        -1
-    ]  # get last molecule from list of molecules from cli.gaussian.py subcommands
-    # index = '-1' would access the right structure from the list of molecule
-    # returned from cli.gaussian.py subcommands
-    # user specified index was used there to return the right molecule and
-    # store it as a list of single element/itself
 
     # get label for the job
     label = ctx.obj["label"]
@@ -61,22 +54,66 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
         get_list_from_string_range,
     )
 
-    if freeze_atoms is not None:
-        frozen_atoms_list = get_list_from_string_range(freeze_atoms)
-        logger.debug(f"Freezing atoms: {frozen_atoms_list}")
-        molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
-            frozen_atoms_list, molecule
-        )
-
     logger.info(f"TS job settings from project: {ts_settings.__dict__}")
 
     from chemsmart.jobs.gaussian.ts import GaussianTSJob
 
-    return GaussianTSJob(
-        molecule=molecule,
-        settings=ts_settings,
-        label=label,
-        jobrunner=jobrunner,
-        skip_completed=skip_completed,
-        **kwargs,
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
     )
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1:
+        logger.info(f"Creating {len(molecules)} TS jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            # Create a copy to avoid side effects from mutation
+            molecule = molecule.copy()
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running TS search for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            # Apply frozen atoms if specified
+            if freeze_atoms is not None:
+                frozen_atoms_list = get_list_from_string_range(freeze_atoms)
+                logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+                molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
+                    frozen_atoms_list, molecule
+                )
+            else:
+                logger.debug("No atoms will be frozen during TS search")
+
+            job = GaussianTSJob(
+                molecule=molecule,
+                settings=ts_settings,
+                label=molecule_label,
+                jobrunner=jobrunner,
+                skip_completed=skip_completed,
+                **kwargs,
+            )
+            jobs.append(job)
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        molecule = molecule.copy()
+
+        if freeze_atoms is not None:
+            frozen_atoms_list = get_list_from_string_range(freeze_atoms)
+            logger.debug(f"Freezing atoms: {frozen_atoms_list}")
+            molecule.frozen_atoms = convert_list_to_gaussian_frozen_list(
+                frozen_atoms_list, molecule
+            )
+        else:
+            logger.debug("No atoms will be frozen during TS search")
+
+        return GaussianTSJob(
+            molecule=molecule,
+            settings=ts_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
+        )

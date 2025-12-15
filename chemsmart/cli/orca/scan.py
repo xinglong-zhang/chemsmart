@@ -91,10 +91,8 @@ def scan(
             constrained_coordinates_info
         )
 
-    # get molecule from context (use the last molecule if multiple)
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running coordinate scan on molecule: {molecule}")
 
     # get label for the job output files
     label = ctx.obj["label"]
@@ -102,11 +100,40 @@ def scan(
 
     from chemsmart.jobs.orca.scan import ORCAScanJob
 
-    job = ORCAScanJob(
-        molecule=molecule,
-        settings=scan_settings,
-        label=label,
-        **kwargs,
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
     )
-    logger.debug(f"Created ORCA scan job: {job}")
-    return job
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1:
+        logger.info(f"Creating {len(molecules)} ORCA scan jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running coordinate scan for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = ORCAScanJob(
+                molecule=molecule,
+                settings=scan_settings,
+                label=molecule_label,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA scan jobs")
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        logger.info(f"Running coordinate scan on molecule: {molecule}")
+
+        job = ORCAScanJob(
+            molecule=molecule,
+            settings=scan_settings,
+            label=label,
+            **kwargs,
+        )
+        logger.debug(f"Created ORCA scan job: {job}")
+        return job

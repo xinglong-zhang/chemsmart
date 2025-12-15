@@ -52,21 +52,53 @@ def sp(ctx, **kwargs):
     # validate charge and multiplicity consistency
     check_charge_and_multiplicity(sp_settings)
 
-    # get molecule from context (use the last molecule if multiple)
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running single point calculation on molecule: {molecule}")
 
     # get label for the job output files
     label = ctx.obj["label"]
 
     from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
+    from chemsmart.utils.cli import create_sp_label
 
-    job = ORCASinglePointJob(
-        molecule=molecule,
-        settings=sp_settings,
-        label=label,
-        **kwargs,
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
     )
-    logger.debug(f"Created ORCA single point job: {job}")
-    return job
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1:
+        logger.info(f"Creating {len(molecules)} ORCA single point jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            final_label = create_sp_label(molecule_label, sp_settings)
+            logger.info(
+                f"Running single point for molecule {idx}: {molecule} with label {final_label}"
+            )
+
+            job = ORCASinglePointJob(
+                molecule=molecule,
+                settings=sp_settings,
+                label=final_label,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA single point jobs")
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        label = create_sp_label(label, sp_settings)
+        logger.info(
+            f"Running single point calculation on molecule: {molecule} with label: {label}"
+        )
+
+        job = ORCASinglePointJob(
+            molecule=molecule,
+            settings=sp_settings,
+            label=label,
+            **kwargs,
+        )
+        logger.debug(f"Created ORCA single point job: {job}")
+        return job
