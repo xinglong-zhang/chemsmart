@@ -95,7 +95,8 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
         return jobs
     else:
         # Single molecule case
-        molecule = molecules[-1].copy()
+        molecule = molecules[-1]
+        molecule = molecule.copy()
         logger.info(f"Optimizing molecule: {molecule}.")
 
         if freeze_atoms is not None:

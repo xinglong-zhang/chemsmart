@@ -95,7 +95,8 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
         return jobs
     else:
         # Single molecule case
-        molecule = molecules[-1].copy()
+        molecule = molecules[-1]
+        molecule = molecule.copy()
 
         if freeze_atoms is not None:
             frozen_atoms_list = get_list_from_string_range(freeze_atoms)
