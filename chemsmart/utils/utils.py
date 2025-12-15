@@ -538,7 +538,7 @@ def return_objects_and_indices_from_string_index(list_of_objects, index):
     Examples:
         >>> objects = ['a', 'b', 'c', 'd', 'e']
         >>> return_objects_and_indices_from_string_index(objects, '2:4')
-        (['b', 'c', 'd'], [2, 3, 4])
+        (['b', 'c'], [2, 3])
         >>> return_objects_and_indices_from_string_index(objects, '5')
         ('e', 5)
     """
