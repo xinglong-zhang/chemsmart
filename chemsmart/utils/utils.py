@@ -555,7 +555,11 @@ def return_objects_and_indices_from_string_index(list_of_objects, index):
     elif isinstance(index_0based, int):
         # if index is a single integer, use it to select a single object
         objects = list_of_objects[index_0based]
-        indices_1based = index_0based + 1
+        # Handle negative indices: convert to positive 0-based first, then to 1-based
+        if index_0based < 0:
+            indices_1based = len(list_of_objects) + index_0based + 1
+        else:
+            indices_1based = index_0based + 1
     else:
         # index is a Slice
         objects = list_of_objects[index_0based]
