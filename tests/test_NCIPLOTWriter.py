@@ -203,6 +203,7 @@ class TestNCIPLOTInputWriter:
         assert os.path.exists(nci_file)
         
         # Check that the filename is written correctly
-        lines = open(nci_file, "r").readlines()
+        with open(nci_file, "r") as f:
+            lines = f.readlines()
         assert lines[0] == "1\n"
         assert lines[1] == "test_molecule.xyz\n"
