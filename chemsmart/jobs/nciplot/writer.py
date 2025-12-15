@@ -118,18 +118,9 @@ class NCIPLOTInputWriter(InputWriter):
 
                     logger.debug(f"Writing filename: {file}.")
 
-                    # Determine file path based on execution mode
-                    if self.jobrunner.scratch:
-                        file_path = os.path.join(
-                            self.jobrunner.scratch_dir,
-                            os.path.splitext(os.path.basename(file))[0],
-                        )
-                        logger.info(
-                            f"Running in scratch directory: {file_path}"
-                        )
-                    else:
-                        file_path = self.job.folder
-                        logger.info(f"Running in job directory: {file_path}")
+                    # Use the running directory from jobrunner
+                    file_path = self.jobrunner.running_directory
+                    logger.info(f"Running in directory: {file_path}")
 
                     # Validate file existence
                     full_path = os.path.join(file_path, file)
