@@ -105,9 +105,26 @@ def process_pipeline(ctx, *args, **kwargs):
         )
         return None
 
-    # Handle list of jobs
-    if isinstance(job, list) and len(job) == 1:
-        job = job[0]
+    # Handle list of jobs (when multiple molecules are specified with --index)
+    if isinstance(job, list):
+        logger.info(f"Running {len(job)} jobs")
+        for single_job in job:
+            logger.info(f"Running job: {single_job.label}")
+            # Instantiate a specific jobrunner based on job type
+            job_specific_runner = jobrunner.from_job(
+                job=single_job,
+                server=jobrunner.server,
+                scratch=jobrunner.scratch,
+                fake=jobrunner.fake,
+                delete_scratch=jobrunner.delete_scratch,
+                num_cores=jobrunner.num_cores,
+                num_gpus=jobrunner.num_gpus,
+                mem_gb=jobrunner.mem_gb,
+            )
+            # Attach jobrunner to job and run the job with the jobrunner
+            single_job.jobrunner = job_specific_runner
+            single_job.run()
+        return None
 
     # Instantiate a specific jobrunner based on job type
     # jobrunner at this stage is an instance of specific JobRunner subclass
@@ -127,20 +144,6 @@ def process_pipeline(ctx, *args, **kwargs):
         # Attach jobrunner to job and run the job with the jobrunner
         job.jobrunner = jobrunner
         job.run()
-    elif isinstance(job, list):
-        for single_job in job:
-            jobrunner = jobrunner.from_job(
-                job=single_job,
-                server=jobrunner.server,
-                scratch=jobrunner.scratch,
-                fake=jobrunner.fake,
-                delete_scratch=jobrunner.delete_scratch,
-                num_cores=jobrunner.num_cores,
-                num_gpus=jobrunner.num_gpus,
-                mem_gb=jobrunner.mem_gb,
-            )
-            single_job.jobrunner = jobrunner
-            single_job.run()
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 
