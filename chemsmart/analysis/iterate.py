@@ -6,6 +6,7 @@ from ase.data import atomic_numbers as ase_atomic_numbers
 from ase.data import covalent_radii
 from rdkit import Chem
 from scipy.optimize import minimize
+from scipy.spatial.transform import Rotation
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.periodictable import PeriodicTable
@@ -53,6 +54,9 @@ class SkeletonPreprocessor:
         self.skeleton_indices = None
         if skeleton_indices is not None:
             self.skeleton_indices = [i - 1 for i in skeleton_indices]
+        
+        # Store the final indices used to create the processed molecule
+        self._final_indices = None
     
     def run(self) -> Molecule:
         """
@@ -69,6 +73,8 @@ class SkeletonPreprocessor:
                 f"Link atom at index {self.link_index + 1} (1-based) has available bonding position. "
                 "No substituent removal needed."
             )
+            # No removal, so final indices are all atoms
+            self._final_indices = list(range(len(self.molecule)))
             return self.molecule
         
         if self.skeleton_indices is not None:
@@ -86,12 +92,14 @@ class SkeletonPreprocessor:
             
             if len(substituent_branches) == 0:
                 # No substituent to remove at this link_index, return molecule as-is
+                self._final_indices = list(range(len(self.molecule)))
                 return self.molecule
             elif len(substituent_branches) == 1:
                 # Exactly one substituent branch - remove only this branch
                 # Keep all other atoms (including substituents on other link atoms)
                 substituent_indices = substituent_branches[0]
                 keep_indices = self._get_complement_indices(substituent_indices)
+                self._final_indices = sorted(keep_indices)
                 return self._extract_by_indices(keep_indices)
             else:
                 # Multiple substituent branches - ambiguous, fall back to auto-detection
@@ -175,6 +183,7 @@ class SkeletonPreprocessor:
         """
         substituent_indices = self.detect_substituent()
         skeleton_indices = self._get_complement_indices(substituent_indices)
+        self._final_indices = sorted(skeleton_indices)
         return self._extract_by_indices(skeleton_indices)
     
     def _find_non_skeleton_branches(self) -> list[list[int]]:
@@ -372,11 +381,16 @@ class SkeletonPreprocessor:
         int
             New link index (1-based)
         """
-        if self.skeleton_indices is not None:
-            indices = sorted(self.skeleton_indices)
+        if self._final_indices is None:
+            # Should not happen if run() was called
+            # Fallback to auto-detect logic if run() wasn't called (legacy behavior)
+            if self.skeleton_indices is not None:
+                indices = sorted(self.skeleton_indices)
+            else:
+                substituent_indices = self.detect_substituent()
+                indices = sorted(self._get_complement_indices(substituent_indices))
         else:
-            substituent_indices = self.detect_substituent()
-            indices = sorted(self._get_complement_indices(substituent_indices))
+            indices = self._final_indices
         
         # Find position of link_index in sorted indices
         try:
@@ -416,6 +430,9 @@ class SubstituentPreprocessor:
         self.molecule = molecule
         # Convert 1-based to 0-based index
         self.link_index = link_index - 1
+        
+        # Store the final indices used to create the processed molecule
+        self._final_indices = None
     
     def run(self) -> Molecule:
         """
@@ -436,6 +453,7 @@ class SubstituentPreprocessor:
                 f"Substituent link atom at index {self.link_index + 1} (1-based) has available bonding position. "
                 "No removal needed."
             )
+            self._final_indices = list(range(len(self.molecule)))
             return self.molecule
         
         # Auto-detect and remove the smallest group at link position
@@ -515,6 +533,7 @@ class SubstituentPreprocessor:
         """
         removed_indices = self._detect_group_to_remove()
         keep_indices = self._get_complement_indices(removed_indices)
+        self._final_indices = sorted(keep_indices)
         return self._extract_by_indices(keep_indices)
     
     def _detect_group_to_remove(self) -> list[int]:
@@ -631,12 +650,16 @@ class SubstituentPreprocessor:
         int
             New link index (1-based)
         """
-        if self._has_available_bonding_position():
-            # No removal happened, index unchanged
-            return self.link_index + 1
-        
-        removed_indices = self._detect_group_to_remove()
-        indices = sorted(self._get_complement_indices(removed_indices))
+        if self._final_indices is None:
+            # Should not happen if run() was called
+            if self._has_available_bonding_position():
+                # No removal happened, index unchanged
+                return self.link_index + 1
+            
+            removed_indices = self._detect_group_to_remove()
+            indices = sorted(self._get_complement_indices(removed_indices))
+        else:
+            indices = self._final_indices
         
         # Find position of link_index in sorted indices
         try:
@@ -915,18 +938,23 @@ class IterateAnalyzer:
         # Calculate bond distance for equality constraint (sub_link to skeleton_link)
         sub_link_element = sub_elements[sub_link_index]
         skeleton_link_element = skeleton_elements[skeleton_link_index]
-        bond_dist = covalent_radii[sub_link_element] + covalent_radii[skeleton_link_element]
+        bond_dist = covalent_radii[sub_link_element] + covalent_radii[skeleton_link_element] 
         
         # Calculate minimum distance matrix for inequality constraints
         sub_radii = np.array([covalent_radii[z] for z in sub_elements])  # (m,)
         skeleton_radii = np.array([covalent_radii[z] for z in skeleton_elements])  # (n,)
         min_dist_matrix = sub_radii[:, np.newaxis] + skeleton_radii[np.newaxis, :] + buffer  # (m, n)
         
+        # Mask to exclude the link-link pair from inequality constraints
+        # because it is already constrained by the equality constraint
+        ineq_mask = np.ones((n_sub, n_skeleton), dtype=bool)
+        ineq_mask[sub_link_index, skeleton_link_index] = False
+        
         # Select algorithm
         if algorithm == 'lagrange_multipliers':
             optimal_sub = IterateAnalyzer._optimize_lagrange(
                 sub_coord, skeleton_coords, skeleton_link_coords,
-                relative_offsets, bond_dist, min_dist_matrix, sub_link_index
+                relative_offsets, bond_dist, min_dist_matrix, sub_link_index, ineq_mask
             )
         else:
             raise ValueError(f"Unknown algorithm: {algorithm}. Supported: 'lagrange_multipliers'")
@@ -941,7 +969,8 @@ class IterateAnalyzer:
         relative_offsets: np.ndarray,
         bond_dist: float,
         min_dist_matrix: np.ndarray,
-        sub_link_index: int
+        sub_link_index: int,
+        ineq_mask: np.ndarray
     ) -> np.ndarray:
         """
         Lagrange multiplier optimization using SLSQP.
@@ -962,56 +991,57 @@ class IterateAnalyzer:
             Minimum distance matrix for inequality constraints, shape (m, n)
         sub_link_index : int
             Index of the link atom in sub (0-based)
+        ineq_mask : np.ndarray
+            Mask to exclude link-link pair from inequality constraints, shape (m, n)
         
         Returns
         -------
         np.ndarray
             Optimal position of the substituent molecule, shape (m, 4)
         """
+        def get_sub_positions(x):
+            """Helper to calculate sub positions from optimization variables"""
+            pos_link = x[:3]
+            angles = x[3:]
+            
+            # Create rotation matrix
+            r = Rotation.from_euler('xyz', angles)
+            R_matrix = r.as_matrix()  # (3, 3)
+            
+            # Rotate offsets: (m, 3) @ (3, 3).T -> (m, 3)
+            rotated_offsets = relative_offsets @ R_matrix.T
+            
+            # Translate
+            sub_positions = pos_link + rotated_offsets
+            return sub_positions
+
         def objective(x):
             """Negative sum of all pairwise distances (to maximize via minimization)"""
-            sub_positions = x + relative_offsets  # (m, 3)
+            sub_positions = get_sub_positions(x)
             diff = sub_positions[:, np.newaxis, :] - skeleton_coords[np.newaxis, :, :]  # (m, n, 3)
             distances = np.linalg.norm(diff, axis=2)  # (m, n)
             return -np.sum(distances)
         
-        def objective_gradient(x):
-            """Gradient of negative objective function"""
-            sub_positions = x + relative_offsets  # (m, 3)
-            diff = sub_positions[:, np.newaxis, :] - skeleton_coords[np.newaxis, :, :]  # (m, n, 3)
-            distances = np.linalg.norm(diff, axis=2, keepdims=True)  # (m, n, 1)
-            distances = np.maximum(distances, 1e-10)
-            normalized_diff = diff / distances  # (m, n, 3)
-            grad = -np.sum(normalized_diff, axis=(0, 1))  # (3,)
-            return grad
-        
         def eq_constraint(x):
-            """Equality constraint: ||x - skeleton_link||^2 - bond_dist^2 = 0"""
-            diff = x - skeleton_link_coords
+            """Equality constraint: ||x[:3] - skeleton_link||^2 - bond_dist^2 = 0"""
+            pos_link = x[:3]
+            diff = pos_link - skeleton_link_coords
             return np.dot(diff, diff) - bond_dist**2
-        
-        def eq_constraint_gradient(x):
-            """Gradient of equality constraint"""
-            return 2 * (x - skeleton_link_coords)
         
         def ineq_constraint(x):
             """Inequality constraints: ||sub_i - skeleton_j||^2 - min_dist[i,j]^2 >= 0"""
-            sub_positions = x + relative_offsets  # (m, 3)
+            sub_positions = get_sub_positions(x)
             diff = sub_positions[:, np.newaxis, :] - skeleton_coords[np.newaxis, :, :]  # (m, n, 3)
             dist_sq = np.sum(diff**2, axis=2)  # (m, n)
-            constraints = dist_sq - min_dist_matrix**2  # (m, n)
-            return constraints.flatten()  # (m * n,)
+            
+            # Apply mask to exclude link-link pair
+            constraints = (dist_sq - min_dist_matrix**2)[ineq_mask]
+            return constraints
         
-        def ineq_constraint_gradient(x):
-            """Gradient of inequality constraints"""
-            sub_positions = x + relative_offsets  # (m, 3)
-            diff = sub_positions[:, np.newaxis, :] - skeleton_coords[np.newaxis, :, :]  # (m, n, 3)
-            grad = 2 * diff.reshape(-1, 3)  # (m * n, 3)
-            return grad
-        
-        # Initial guess: project onto constraint sphere
-        x_init = sub_coord[sub_link_index, 1:4].copy()
-        init_diff = x_init - skeleton_link_coords
+        # Initial guess
+        # 1. Position: project sub_link onto the constraint sphere
+        x_init_pos = sub_coord[sub_link_index, 1:4].copy()
+        init_diff = x_init_pos - skeleton_link_coords
         init_dist = np.linalg.norm(init_diff)
         
         if init_dist < 1e-6:
@@ -1023,29 +1053,61 @@ class IterateAnalyzer:
                 direction = np.array([1.0, 0.0, 0.0])
             else:
                 direction = direction / dir_norm
-            x_init = skeleton_link_coords + direction * bond_dist
+            x_init_pos = skeleton_link_coords + direction * bond_dist
         else:
-            x_init = skeleton_link_coords + (init_diff / init_dist) * bond_dist
+            x_init_pos = skeleton_link_coords + (init_diff / init_dist) * bond_dist
+        
+        # 2. Rotation: Multi-start optimization to avoid local minima
+        best_result = None
+        best_val = float('inf')
+        
+        # Try identity + random rotations
+        # 12 attempts: 1 identity + 11 random
+        num_attempts = 12
         
         # Define constraints for scipy
         constraints = [
-            {'type': 'eq', 'fun': eq_constraint, 'jac': eq_constraint_gradient},
-            {'type': 'ineq', 'fun': ineq_constraint, 'jac': ineq_constraint_gradient}
+            {'type': 'eq', 'fun': eq_constraint},
+            {'type': 'ineq', 'fun': ineq_constraint}
         ]
         
-        # Solve using SLSQP
-        result = minimize(
-            objective,
-            x_init,
-            method='SLSQP',
-            jac=objective_gradient,
-            constraints=constraints,
-            options={'ftol': 1e-9, 'maxiter': 1000}
-        )
+        for i in range(num_attempts):
+            if i == 0:
+                x_init_rot = np.zeros(3)
+            else:
+                x_init_rot = np.random.uniform(0, 2*np.pi, 3)
+                
+            x_init = np.concatenate([x_init_pos, x_init_rot])
+            
+            try:
+                res = minimize(
+                    objective,
+                    x_init,
+                    method='SLSQP',
+                    constraints=constraints,
+                    options={'ftol': 1e-6, 'maxiter': 1000}
+                )
+                
+                # Prioritize successful runs with lower objective value (max distance)
+                if res.success:
+                    if res.fun < best_val:
+                        best_val = res.fun
+                        best_result = res
+                else:
+                    # If optimization failed, but we don't have any success yet, keep it as fallback
+                    if best_result is None:
+                        best_result = res
+            except Exception as e:
+                logger.warning(f"Optimization attempt {i} failed: {e}")
+                continue
+        
+        if best_result is None:
+             logger.error("All optimization attempts failed. Returning original coordinates.")
+             return sub_coord
         
         # Extract optimal positions
-        optimal_sub_link = result.x  # (3,)
-        optimal_sub_positions = optimal_sub_link + relative_offsets  # (m, 3)
+        optimal_x = best_result.x
+        optimal_sub_positions = get_sub_positions(optimal_x)
         
         # Build result array
         optimal_sub = np.zeros_like(sub_coord)
