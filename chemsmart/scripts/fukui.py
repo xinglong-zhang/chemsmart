@@ -14,7 +14,7 @@ import click
 
 from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.io import get_outfile_format
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -77,14 +77,14 @@ def entry_point(
     charge_for_radical_cation = None
     charge_for_radical_anion = None
 
-    program = get_outfile_format(neutral_filename)
+    program = get_program_type_from_file(neutral_filename)
     cation_program = (
-        get_outfile_format(radical_cation_filename)
+        get_program_type_from_file(radical_cation_filename)
         if radical_cation_filename is not None
         else None
     )
     anion_program = (
-        get_outfile_format(radical_anion_filename)
+        get_program_type_from_file(radical_anion_filename)
         if radical_anion_filename is not None
         else None
     )

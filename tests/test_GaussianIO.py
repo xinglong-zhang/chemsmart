@@ -535,6 +535,7 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert g16_output.fmo_gap == g16_output.alpha_fmo_gap
         assert np.allclose(
             g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
         )
@@ -626,7 +627,32 @@ class TestGaussian16Output:
         assert g16_output.lumo_energy is None
         assert g16_output.num_unpaired_electrons == 2
         assert g16_output.multiplicity == 3
-        assert g16_output.somo_energy == -0.19177 * units.Hartree
+        # somo_energies should return list of 2 SOMOs for triplet
+        assert len(g16_output.somo_energies) == 2
+        assert g16_output.somo_energies == [
+            -0.19177 * units.Hartree,
+            -0.15673 * units.Hartree,
+        ]
+        assert g16_output.lowest_somo_energy == -0.19177 * units.Hartree
+        assert g16_output.highest_somo_energy == -0.15673 * units.Hartree
+        assert g16_output.alpha_homo_energy == -0.15673 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.18923 * units.Hartree
+        assert g16_output.alpha_lumo_energy == -0.07423 * units.Hartree
+        assert g16_output.beta_lumo_energy == -0.05025 * units.Hartree
+        assert np.isclose(
+            g16_output.fmo_gap,
+            (min(-0.07423, -0.05025) - (-0.15673)) * units.Hartree,
+        )
+        assert np.isclose(
+            g16_output.alpha_fmo_gap,
+            (-0.07423 - (-0.15673)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.beta_fmo_gap,
+            (-0.05025 - (-0.18923)) * units.Hartree,
+            rtol=1e-6,
+        )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
@@ -655,11 +681,35 @@ class TestGaussian16Output:
         assert (
             g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
         )
-        assert g16_output.fmo_gap is None
         assert g16_output.num_unpaired_electrons == 4
         assert g16_output.multiplicity == 5
+        # somo_energies should return list of 4 SOMOs for quintet
+        assert len(g16_output.somo_energies) == 4
+        assert g16_output.somo_energies == [
+            -0.22065 * units.Hartree,
+            -0.21055 * units.Hartree,
+            -0.19474 * units.Hartree,
+            -0.18764 * units.Hartree,
+        ]
+        assert g16_output.lowest_somo_energy == -0.22065 * units.Hartree
+        assert g16_output.highest_somo_energy == -0.18764 * units.Hartree
+        assert g16_output.alpha_homo_energy == -0.18764 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.19564 * units.Hartree
+        assert g16_output.alpha_lumo_energy == -0.03881 * units.Hartree
+        assert g16_output.beta_lumo_energy == -0.06116 * units.Hartree
         assert np.isclose(
-            g16_output.somo_energy, -0.22065 * units.Hartree, atol=1e-5
+            g16_output.fmo_gap,
+            (min(-0.03881, -0.06116) - (-0.18764)) * units.Hartree,
+        )
+        assert np.isclose(
+            g16_output.alpha_fmo_gap,
+            (-0.03881 - (-0.18764)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.beta_fmo_gap,
+            (-0.06116 - (-0.19564)) * units.Hartree,
+            rtol=1e-6,
         )
 
     def test_read_gaussian_link_opt_output_file(
@@ -817,9 +867,12 @@ class TestGaussian16Output:
         )
         assert g16_link_modred.multiplicity == 5
         assert g16_link_modred.num_unpaired_electrons == 4
-        assert np.isclose(
-            g16_link_modred.somo_energy, -0.30450 * units.Hartree, atol=1e-5
-        )
+        assert g16_link_modred.somo_energies == [
+            -0.30450 * units.Hartree,
+            -0.29487 * units.Hartree,
+            -0.26983 * units.Hartree,
+            -0.24253 * units.Hartree,
+        ]
 
     def test_read_gaussian_link_sp_output_file(
         self, gaussian_link_sp_outputfile

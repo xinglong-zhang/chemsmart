@@ -14,10 +14,19 @@ Key functionality includes:
 import logging
 import os
 import re
+import shutil
 import string
+import subprocess
+from io import BytesIO
+
+# from rdkit import Chem
+#
+# import tempfile
 from pathlib import Path
+from typing import List
 
 import numpy as np
+from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
@@ -238,7 +247,7 @@ def match_outfile_pattern(line) -> str | None:
     return None
 
 
-def get_outfile_format(filepath) -> str:
+def get_program_type_from_file(filepath) -> str:
     """
     Detect the type of quantum chemistry output file.
 
@@ -249,7 +258,8 @@ def get_outfile_format(filepath) -> str:
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
+        str: Program name, one of: "gaussian", "orca", "xtb", "crest",
+        or "unknown" if the format cannot be detected.
     """
     max_lines = 200
     try:
@@ -304,7 +314,9 @@ def find_output_files_in_directory(directory, program):
                 outfiles.append(os.path.join(subdir, file))
 
     matched_files = [
-        file for file in outfiles if get_outfile_format(file) == program
+        file
+        for file in outfiles
+        if get_program_type_from_file(file) == program
     ]
     return matched_files
 
@@ -466,3 +478,56 @@ def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
         return f"id {parts[0]}"
 
     return " or ".join(f"id {part}" for part in parts)
+
+
+def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
+    """
+    Use the Open Babel CLI ('obabel') to convert a CDX file to SDF and
+    return a list of RDKit Mol objects.
+
+    This implementation writes no temporary files; it streams SDF from
+    stdout into RDKit, which avoids Windows path issues.
+
+    Args:
+        filename: Path to the .cdx file.
+
+    Returns:
+        List of RDKit Mol objects.
+
+    Raises:
+        ValueError: If 'obabel' is not available or no molecules can be read.
+        RuntimeError: If the obabel subprocess fails.
+    """
+    obabel = shutil.which("obabel")
+    if obabel is None:
+        raise ValueError(
+            "Open Babel CLI ('obabel') is not available on PATH. "
+            "Install Open Babel or save the ChemDraw file as CDXML instead."
+        )
+
+    # Run: obabel -icdx input.cdx -osdf
+    # This writes SDF directly to stdout.
+    result = subprocess.run(
+        [obabel, "-icdx", filename, "-osdf"],
+        check=False,
+        capture_output=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"obabel failed to convert {filename!r} to SDF "
+            f"(exit code {result.returncode}). stderr:\n{result.stderr.decode(errors='replace')}"
+        )
+
+    # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
+    sdf_stream = BytesIO(result.stdout)
+    suppl = Chem.ForwardSDMolSupplier(sdf_stream, removeHs=False)
+
+    mols = [mol for mol in suppl if mol is not None]
+
+    if not mols:
+        raise ValueError(
+            f"Open Babel produced no valid molecules from CDX file: {filename}"
+        )
+
+    return mols
