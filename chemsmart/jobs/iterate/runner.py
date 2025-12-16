@@ -268,20 +268,37 @@ class IterateJobRunner(JobRunner):
         ]
 
         # Log results summary
-        successful = sum(1 for _, mol in results if mol is not None)
+        successful_labels = [
+            label for label, mol in results if mol is not None
+        ]
         logger.info(
-            f"Completed: {successful}/{len(results)} molecules generated successfully"
+            f"Completed: {len(successful_labels)}/{len(results)} molecules generated successfully"
         )
 
-        # Print summary of failed/timed out tasks
-        if timed_out_labels:
-            logger.warning(
-                f"Timed out ({len(timed_out_labels)}): {', '.join(timed_out_labels)}"
-            )
-        if failed_labels:
-            logger.warning(
-                f"Failed ({len(failed_labels)}): {', '.join(failed_labels)}"
-            )
+        # Print summary of results
+        if successful_labels or timed_out_labels or failed_labels:
+            logger.info("=" * 40)
+            logger.info("       SUMMARY OF RESULTS")
+            logger.info("=" * 40)
+
+            if successful_labels:
+                logger.info(f"Successful ({len(successful_labels)}):")
+                for label in successful_labels:
+                    logger.info(f"  - {label}")
+
+            if timed_out_labels:
+                logger.warning(f"Timed out ({len(timed_out_labels)}):")
+                for label in timed_out_labels:
+                    logger.warning(f"  - {label}")
+
+            if failed_labels:
+                logger.warning(
+                    f"Failed to find solution ({len(failed_labels)}):"
+                )
+                for label in failed_labels:
+                    logger.warning(f"  - {label}")
+
+            logger.info("=" * 40)
 
         return results
 

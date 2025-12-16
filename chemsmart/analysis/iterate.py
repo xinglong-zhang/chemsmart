@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import networkx as nx
 import numpy as np
@@ -726,14 +727,15 @@ class IterateAnalyzer:
         self.buffer = buffer
         self.algorithm = algorithm
 
-    def run(self) -> Molecule:
+    def run(self) -> Optional[Molecule]:
         """
         Execute the iterate analysis to find optimal substituent position.
 
         Returns
         -------
-        Molecule
-            Combined molecule with skeleton and optimally positioned substituent.
+        Molecule or None
+            Combined molecule with skeleton and optimally positioned substituent,
+            or None if optimization failed.
         """
         # Convert Molecule to np.ndarray [atomic_number, x, y, z]
         skeleton_arr = self._molecule_to_array(self.skeleton)
@@ -748,6 +750,9 @@ class IterateAnalyzer:
             self.buffer,
             self.algorithm,
         )
+
+        if sub_optimal_arr is None:
+            return None
 
         # Update substituent positions with optimized positions
         self.substituent.positions = sub_optimal_arr[:, 1:4]
@@ -903,7 +908,7 @@ class IterateAnalyzer:
         sub_link_index: int,
         buffer: float = DEFAULT_BUFFER,
         algorithm: str = "lagrange_multipliers",
-    ) -> np.ndarray:
+    ) -> Optional[np.ndarray]:
         """
         Find the optimal position for a substituent molecule (sub) to be attached to a
         skeleton molecule, such that the total distance sum is maximized while avoiding
@@ -1022,7 +1027,7 @@ class IterateAnalyzer:
         min_dist_matrix: np.ndarray,
         sub_link_index: int,
         ineq_mask: np.ndarray,
-    ) -> np.ndarray:
+    ) -> Optional[np.ndarray]:
         """
         Lagrange multiplier optimization using SLSQP.
 
@@ -1068,7 +1073,25 @@ class IterateAnalyzer:
             return sub_positions
 
         def objective(x):
-            """Negative sum of all pairwise distances (to maximize via minimization)"""
+            """
+            Objective function to minimize.
+
+            We want to find a conformation where the substituent is as "far away"
+            from the skeleton as possible to avoid crowding, while satisfying constraints.
+            Mathematically, we maximize the sum of all pairwise distances between
+            substituent atoms and skeleton atoms.
+            Since scipy.optimize.minimize finds the minimum, we return the negative sum.
+
+            Parameters
+            ----------
+            x : np.ndarray
+                Optimization variables [x, y, z, alpha, beta, gamma]
+
+            Returns
+            -------
+            float
+                Negative sum of pairwise distances.
+            """
             sub_positions = get_sub_positions(x)
             diff = (
                 sub_positions[:, np.newaxis, :]
@@ -1078,13 +1101,52 @@ class IterateAnalyzer:
             return -np.sum(distances)
 
         def eq_constraint(x):
-            """Equality constraint: ||x[:3] - skeleton_link||^2 - bond_dist^2 = 0"""
+            """
+            Equality constraint function.
+
+            Ensures that the distance between the skeleton's link atom and the
+            substituent's link atom is exactly equal to the target bond distance.
+
+            Constraint equation: distance^2 - target_bond_dist^2 = 0
+
+            Parameters
+            ----------
+            x : np.ndarray
+                Optimization variables
+
+            Returns
+            -------
+            float
+                Residual value (should be 0 when satisfied).
+            """
             pos_link = x[:3]
             diff = pos_link - skeleton_link_coords
             return np.dot(diff, diff) - bond_dist**2
 
         def ineq_constraint(x):
-            """Inequality constraints: ||sub_i - skeleton_j||^2 - min_dist[i,j]^2 >= 0"""
+            """
+            Inequality constraint function.
+
+            Ensures that no atoms overlap (steric hindrance check).
+            For every pair of atoms (one from substituent, one from skeleton),
+            the distance must be greater than or equal to the minimum allowed distance
+            (sum of covalent radii + buffer).
+
+            Constraint equation: distance^2 - min_dist^2 >= 0
+
+            Note: The link-link pair is excluded because its distance is fixed
+            by the equality constraint.
+
+            Parameters
+            ----------
+            x : np.ndarray
+                Optimization variables
+
+            Returns
+            -------
+            np.ndarray
+                Array of values that must be non-negative.
+            """
             sub_positions = get_sub_positions(x)
             diff = (
                 sub_positions[:, np.newaxis, :]
@@ -1161,11 +1223,9 @@ class IterateAnalyzer:
                 logger.warning(f"Optimization attempt {i} failed: {e}")
                 continue
 
-        if best_result is None:
-            logger.error(
-                "All optimization attempts failed. Returning original coordinates."
-            )
-            return sub_coord
+        if best_result is None or not best_result.success:
+            logger.error("All optimization attempts failed. Returning None.")
+            return None
 
         # Extract optimal positions
         optimal_x = best_result.x
