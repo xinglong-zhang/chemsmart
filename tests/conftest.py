@@ -1443,3 +1443,34 @@ def capture_log(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog
+
+
+############ Iterate Fixtures ##################
+@pytest.fixture()
+def iterate_test_directory(test_data_directory):
+    """Returns the absolute path to tests/data/IterateTests."""
+    return os.path.join(test_data_directory, "IterateTests")
+
+
+@pytest.fixture()
+def iterate_input_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/input."""
+    return os.path.join(iterate_test_directory, "input")
+
+
+@pytest.fixture()
+def iterate_expected_output_directory(iterate_test_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output."""
+    return os.path.join(iterate_test_directory, "expected_output")
+
+
+@pytest.fixture()
+def iterate_config_file(iterate_input_directory):
+    """Returns the absolute path to tests/data/IterateTests/input/test_iterate.yaml."""
+    return os.path.join(iterate_input_directory, "test_iterate.yaml")
+
+
+@pytest.fixture()
+def iterate_expected_output_file(iterate_expected_output_directory):
+    """Returns the absolute path to tests/data/IterateTests/expected_output/final.xyz."""
+    return os.path.join(iterate_expected_output_directory, "final.xyz")
