@@ -5,7 +5,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-ITERATE_TEMPLATE = '''# Chemsmart Iterate Configuration Template
+ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
 # =========================================
 # This template defines skeletons and substituents for iterative structure generation.
 #
@@ -91,44 +91,46 @@ substituents:
 # 5. skeleton_indices format: "1, 3-10, 15, 20-25" (ranges and individual indices)
 # 6. Only one source (file_path, smiles, pubchem) should be non-null per entry
 # 7. Use ~ for null/None values
-'''
+"""
 
 
-def generate_template(output_path: str = "iterate_template.yaml", overwrite: bool = False) -> str:
+def generate_template(
+    output_path: str = "iterate_template.yaml", overwrite: bool = False
+) -> str:
     """
     Generate a template YAML configuration file for iterate jobs.
-    
+
     Parameters
     ----------
     output_path : str
         Path to write the template file. Default is 'iterate_template.yaml'.
     overwrite : bool
         If True, overwrite existing file. Default is False.
-    
+
     Returns
     -------
     str
         Path to the generated template file.
-    
+
     Raises
     ------
     FileExistsError
         If file exists and overwrite is False.
     """
     # Add .yaml extension if not present
-    if not output_path.endswith(('.yaml', '.yml')):
+    if not output_path.endswith((".yaml", ".yml")):
         output_path = f"{output_path}.yaml"
-    
+
     # Check if file exists
     if os.path.exists(output_path) and not overwrite:
         raise FileExistsError(
             f"File '{output_path}' already exists. "
             f"Use --overwrite or specify a different filename."
         )
-    
+
     # Write template
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(ITERATE_TEMPLATE)
-    
+
     logger.info(f"Generated template: {output_path}")
     return output_path

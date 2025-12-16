@@ -9,11 +9,11 @@ class IterateJobSettings:
     def __init__(
         self,
         config_file=None,
-        algorithm='lagrange_multipliers',
+        algorithm="lagrange_multipliers",
     ):
         """
         Initialize iterate job settings.
-        
+
         Parameters
         ----------
         config_file : str, optional
@@ -26,7 +26,7 @@ class IterateJobSettings:
         self.skeleton_list: list[dict] = []
         self.substituent_list: list[dict] = []
         self.algorithm = algorithm
-    
+
     def copy(self):
         """
         Create a deep copy of the current settings.

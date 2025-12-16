@@ -6,7 +6,7 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
-from chemsmart.cli.subcommands import subcommands, run_subcommands
+from chemsmart.cli.subcommands import run_subcommands, subcommands
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
