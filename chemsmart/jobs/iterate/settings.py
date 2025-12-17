@@ -10,6 +10,8 @@ class IterateJobSettings:
         self,
         config_file=None,
         algorithm="lagrange_multipliers",
+        sphere_direction_samples_num=96,
+        axial_rotations_sample_num=6,
     ):
         """
         Initialize iterate job settings.
@@ -20,12 +22,18 @@ class IterateJobSettings:
             Path to the YAML configuration file.
         algorithm : str, optional
             Algorithm to use for position optimization. Default is 'lagrange_multipliers'.
+        sphere_direction_samples_num : int, optional
+            Number of points to sample on the unit sphere. Default is 96.
+        axial_rotations_sample_num : int, optional
+            Number of axial rotations per sphere point. Default is 6.
         """
         logger.debug("Initialized iterate job settings.")
         self.config_file = config_file
         self.skeleton_list: list[dict] = []
         self.substituent_list: list[dict] = []
         self.algorithm = algorithm
+        self.sphere_direction_samples_num = sphere_direction_samples_num
+        self.axial_rotations_sample_num = axial_rotations_sample_num
 
     def copy(self):
         """

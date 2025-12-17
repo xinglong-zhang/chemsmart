@@ -699,6 +699,8 @@ class IterateAnalyzer:
         substituent_link_index: int,
         buffer: float = DEFAULT_BUFFER,
         algorithm: str = "lagrange_multipliers",
+        sphere_direction_samples_num: int = 96,
+        axial_rotations_sample_num: int = 6,
     ):
         """
         Initialize IterateAnalyzer.
@@ -718,6 +720,10 @@ class IterateAnalyzer:
         algorithm : str
             Optimization algorithm to use (default: 'lagrange_multipliers')
             Supported: 'lagrange_multipliers'
+        sphere_direction_samples_num : int
+            Number of points to sample on the unit sphere (default: 96)
+        axial_rotations_sample_num : int
+            Number of axial rotations per sphere point (default: 6)
         """
         self.skeleton = skeleton
         self.substituent = substituent
@@ -726,6 +732,8 @@ class IterateAnalyzer:
         self.substituent_link_index = substituent_link_index - 1
         self.buffer = buffer
         self.algorithm = algorithm
+        self.sphere_direction_samples_num = sphere_direction_samples_num
+        self.axial_rotations_sample_num = axial_rotations_sample_num
 
     def run(self) -> Optional[Molecule]:
         """
@@ -749,6 +757,8 @@ class IterateAnalyzer:
             self.substituent_link_index,
             self.buffer,
             self.algorithm,
+            self.sphere_direction_samples_num,
+            self.axial_rotations_sample_num,
         )
 
         if sub_optimal_arr is None:
@@ -908,6 +918,8 @@ class IterateAnalyzer:
         sub_link_index: int,
         buffer: float = DEFAULT_BUFFER,
         algorithm: str = "lagrange_multipliers",
+        sphere_direction_samples_num: int = 96,
+        axial_rotations_sample_num: int = 6,
     ) -> Optional[np.ndarray]:
         """
         Find the optimal position for a substituent molecule (sub) to be attached to a
@@ -931,6 +943,12 @@ class IterateAnalyzer:
         buffer : float
             Buffer for min distance constraint (default: 0.3 Å)
         algorithm : str
+            Optimization algorithm to use (default: 'lagrange_multipliers')
+            Supported: 'lagrange_multipliers'
+        sphere_direction_samples_num : int
+            Number of points to sample on the unit sphere
+        axial_rotations_sample_num : int
+            Number of axial rotations per sphere point
             Optimization algorithm to use (default: 'lagrange_multipliers')
             Supported: 'lagrange_multipliers'
 
@@ -974,7 +992,6 @@ class IterateAnalyzer:
 
         # Get skeleton coordinates
         skeleton_coords = skeleton_coord[:, 1:4]  # shape (n, 3)
-        skeleton_link_coords = skeleton_coords[skeleton_link_index]
 
         # Calculate bond distance for equality constraint (sub_link to skeleton_link)
         sub_link_element = sub_elements[sub_link_index]
@@ -1003,7 +1020,9 @@ class IterateAnalyzer:
             optimal_sub = IterateAnalyzer._optimize_lagrange(
                 sub_coord,
                 skeleton_coords,
-                skeleton_link_coords,
+                sphere_direction_samples_num,
+                axial_rotations_sample_num,
+                skeleton_link_index,
                 relative_offsets,
                 bond_dist,
                 min_dist_matrix,
@@ -1018,10 +1037,51 @@ class IterateAnalyzer:
         return optimal_sub
 
     @staticmethod
+    def _fibonacci_sphere(num_points: int) -> np.ndarray:
+        """
+        Generate nearly uniformly distributed unit vectors on a sphere using the Fibonacci lattice algorithm.
+
+        Parameters
+        ----------
+        num_points : int
+            The number of points to generate on the sphere.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (num_points, 3) containing the Cartesian coordinates (x, y, z)
+            of the generated unit vectors.
+        """
+        indices = np.arange(num_points, dtype=float)
+
+        # Golden ratio
+        golden_ratio = (1 + np.sqrt(5)) / 2
+
+        # Golden angle in radians
+        golden_angle = 2 * np.pi * (1 - 1 / golden_ratio)
+
+        # Z coordinates distributed uniformly from 1 to -1
+        z_coords = 1 - 2 * (indices + 0.5) / num_points
+
+        # Radius in the xy-plane at height z
+        radii_xy = np.sqrt(np.maximum(0.0, 1 - z_coords * z_coords))
+
+        # Theta angles based on the golden angle increment
+        theta_angles = golden_angle * indices
+
+        # Convert to Cartesian coordinates
+        x_coords = radii_xy * np.cos(theta_angles)
+        y_coords = radii_xy * np.sin(theta_angles)
+
+        return np.stack([x_coords, y_coords, z_coords], axis=1)
+
+    @staticmethod
     def _optimize_lagrange(
         sub_coord: np.ndarray,
         skeleton_coords: np.ndarray,
-        skeleton_link_coords: np.ndarray,
+        sphere_direction_samples_num: int,
+        axial_rotations_sample_num: int,
+        skeleton_link_index: int,
         relative_offsets: np.ndarray,
         bond_dist: float,
         min_dist_matrix: np.ndarray,
@@ -1037,8 +1097,8 @@ class IterateAnalyzer:
             Substituent molecule, shape (m, 4)
         skeleton_coords : np.ndarray
             Skeleton coordinates, shape (n, 3)
-        skeleton_link_coords : np.ndarray
-            Skeleton link atom coordinates, shape (3,)
+        skeleton_link_index : int
+            Index of the link atom in skeleton (0-based)
         relative_offsets : np.ndarray
             Relative offsets of sub atoms from sub_link, shape (m, 3)
         bond_dist : float
@@ -1049,30 +1109,37 @@ class IterateAnalyzer:
             Index of the link atom in sub (0-based)
         ineq_mask : np.ndarray
             Mask to exclude link-link pair from inequality constraints, shape (m, n)
+        sphere_direction_samples_num : int
+            Number of points to sample on the unit sphere
+        axial_rotations_sample_num : int
+            Number of axial rotations per sphere point
+        ineq_mask : np.ndarray
+            Mask to exclude link-link pair from inequality constraints, shape (m, n)
 
         Returns
         -------
         np.ndarray
             Optimal position of the substituent molecule, shape (m, 4)
         """
+        skeleton_link_coords = skeleton_coords[skeleton_link_index]
 
-        def get_sub_positions(x):
+        def get_sub_positions(opt_vars):
             """Helper to calculate sub positions from optimization variables"""
-            pos_link = x[:3]
-            angles = x[3:]
+            sub_link_pos = opt_vars[:3]
+            euler_angles = opt_vars[3:]
 
             # Create rotation matrix
-            r = Rotation.from_euler("xyz", angles)
-            R_matrix = r.as_matrix()  # (3, 3)
+            rotation = Rotation.from_euler("xyz", euler_angles)
+            rotation_matrix = rotation.as_matrix()  # (3, 3)
 
             # Rotate offsets: (m, 3) @ (3, 3).T -> (m, 3)
-            rotated_offsets = relative_offsets @ R_matrix.T
+            rotated_offsets = relative_offsets @ rotation_matrix.T
 
             # Translate
-            sub_positions = pos_link + rotated_offsets
+            sub_positions = sub_link_pos + rotated_offsets
             return sub_positions
 
-        def objective(x):
+        def objective(opt_vars):
             """
             Objective function to minimize.
 
@@ -1084,7 +1151,7 @@ class IterateAnalyzer:
 
             Parameters
             ----------
-            x : np.ndarray
+            opt_vars : np.ndarray
                 Optimization variables [x, y, z, alpha, beta, gamma]
 
             Returns
@@ -1092,15 +1159,15 @@ class IterateAnalyzer:
             float
                 Negative sum of pairwise distances.
             """
-            sub_positions = get_sub_positions(x)
-            diff = (
+            sub_positions = get_sub_positions(opt_vars)
+            coord_diff = (
                 sub_positions[:, np.newaxis, :]
                 - skeleton_coords[np.newaxis, :, :]
             )  # (m, n, 3)
-            distances = np.linalg.norm(diff, axis=2)  # (m, n)
+            distances = np.linalg.norm(coord_diff, axis=2)  # (m, n)
             return -np.sum(distances)
 
-        def eq_constraint(x):
+        def eq_constraint(opt_vars):
             """
             Equality constraint function.
 
@@ -1111,7 +1178,7 @@ class IterateAnalyzer:
 
             Parameters
             ----------
-            x : np.ndarray
+            opt_vars : np.ndarray
                 Optimization variables
 
             Returns
@@ -1119,11 +1186,11 @@ class IterateAnalyzer:
             float
                 Residual value (should be 0 when satisfied).
             """
-            pos_link = x[:3]
-            diff = pos_link - skeleton_link_coords
-            return np.dot(diff, diff) - bond_dist**2
+            sub_link_pos = opt_vars[:3]
+            coord_diff = sub_link_pos - skeleton_link_coords
+            return np.dot(coord_diff, coord_diff) - bond_dist**2
 
-        def ineq_constraint(x):
+        def ineq_constraint(opt_vars):
             """
             Inequality constraint function.
 
@@ -1139,7 +1206,7 @@ class IterateAnalyzer:
 
             Parameters
             ----------
-            x : np.ndarray
+            opt_vars : np.ndarray
                 Optimization variables
 
             Returns
@@ -1147,24 +1214,28 @@ class IterateAnalyzer:
             np.ndarray
                 Array of values that must be non-negative.
             """
-            sub_positions = get_sub_positions(x)
-            diff = (
+            sub_positions = get_sub_positions(opt_vars)
+            coord_diff = (
                 sub_positions[:, np.newaxis, :]
                 - skeleton_coords[np.newaxis, :, :]
             )  # (m, n, 3)
-            dist_sq = np.sum(diff**2, axis=2)  # (m, n)
+            dist_squared = np.sum(coord_diff**2, axis=2)  # (m, n)
 
             # Apply mask to exclude link-link pair
-            constraints = (dist_sq - min_dist_matrix**2)[ineq_mask]
+            constraints = (dist_squared - min_dist_matrix**2)[ineq_mask]
             return constraints
 
         # Initial guess
-        # 1. Position: project sub_link onto the constraint sphere
-        x_init_pos = sub_coord[sub_link_index, 1:4].copy()
-        init_diff = x_init_pos - skeleton_link_coords
-        init_dist = np.linalg.norm(init_diff)
+        # 1. Position: Find optimal initial position for sub_link on the constraint sphere
+        # We run a preliminary optimization to place the sub_link atom as far as possible
+        # from the rest of the skeleton, while maintaining the bond distance.
 
-        if init_dist < 1e-6:
+        # Initial guess for the preliminary optimization (projection)
+        current_sub_link_pos = sub_coord[sub_link_index, 1:4]
+        initial_link_diff = current_sub_link_pos - skeleton_link_coords
+        initial_link_dist = np.linalg.norm(initial_link_diff)
+
+        if initial_link_dist < 1e-6:
             # Default direction: opposite to the center of mass of skeleton
             skeleton_com = np.mean(skeleton_coords, axis=0)
             direction = skeleton_link_coords - skeleton_com
@@ -1173,19 +1244,103 @@ class IterateAnalyzer:
                 direction = np.array([1.0, 0.0, 0.0])
             else:
                 direction = direction / dir_norm
-            x_init_pos = skeleton_link_coords + direction * bond_dist
+            initial_projection_pos = skeleton_link_coords + direction * bond_dist
         else:
-            x_init_pos = (
-                skeleton_link_coords + (init_diff / init_dist) * bond_dist
+            initial_projection_pos = (
+                skeleton_link_coords
+                + (initial_link_diff / initial_link_dist) * bond_dist
             )
+
+        def objective_maximize_separation(link_pos_candidate):
+            """
+            Objective function for preliminary optimization: Maximize separation.
+
+            Calculates the negative sum of distances between the candidate link position
+            and all skeleton atoms. Minimizing this value maximizes the total distance,
+            effectively pushing the substituent's anchor point away from the skeleton bulk.
+
+            Parameters
+            ----------
+            link_pos_candidate : np.ndarray
+                Candidate position for the substituent's link atom (x, y, z).
+
+            Returns
+            -------
+            float
+                Negative sum of Euclidean distances.
+            """
+            # link_pos_candidate shape (3,)
+            # skeleton_coords shape (n, 3)
+            diff = link_pos_candidate[np.newaxis, :] - skeleton_coords
+            dists = np.linalg.norm(diff, axis=1)
+            return -np.sum(dists)
+
+        def constraint_bond_length(link_pos_candidate):
+            """
+            Geometric constraint: Bond length preservation.
+
+            Ensures the distance between the candidate link position and the skeleton's
+            link atom equals the required bond distance.
+
+            Equation: |pos - skeleton_link|^2 - bond_dist^2 = 0
+
+            Parameters
+            ----------
+            link_pos_candidate : np.ndarray
+                Candidate position for the substituent's link atom (x, y, z).
+
+            Returns
+            -------
+            float
+                Residual of the constraint equation (0 when satisfied).
+            """
+            diff = link_pos_candidate - skeleton_link_coords
+            return np.dot(diff, diff) - bond_dist**2
+
+        try:
+            pre_opt_result = minimize(
+                objective_maximize_separation,
+                initial_projection_pos,
+                method="SLSQP",
+                constraints={"type": "eq", "fun": constraint_bond_length},
+                options={"ftol": 1e-4, "maxiter": 100},
+            )
+            if pre_opt_result.success:
+                sub_link_init_pos = pre_opt_result.x
+            else:
+                logger.warning(
+                    f"Initial position optimization failed: {pre_opt_result.message}. Using projection."
+                )
+                sub_link_init_pos = initial_projection_pos
+        except Exception as e:
+            logger.warning(
+                f"Initial position optimization error: {e}. Using projection."
+            )
+            sub_link_init_pos = initial_projection_pos
 
         # 2. Rotation: Multi-start optimization to avoid local minima
         best_result = None
         best_val = float("inf")
 
-        # Try identity + random rotations
-        # 12 attempts: 1 identity + 11 random
-        num_attempts = 12
+        # Sampling parameters for global search
+        # sphere_direction_samples_num and axial_rotations_sample_num are passed as arguments
+
+        # Generate uniformly distributed unit vectors on the sphere
+        sphere_sample_vectors = IterateAnalyzer._fibonacci_sphere(sphere_direction_samples_num)
+
+        # Determine the principal axis of the substituent relative to its link atom.
+        # This vector represents the general direction of the substituent body.
+        sub_centroid_vector = np.mean(relative_offsets, axis=0)
+        sub_centroid_norm = np.linalg.norm(sub_centroid_vector)
+
+        if sub_centroid_norm < 1e-3:
+            # Fallback if substituent is centered on link (unlikely)
+            sub_principal_axis = np.array([0.0, 0.0, 1.0])
+        else:
+            sub_principal_axis = sub_centroid_vector / sub_centroid_norm
+
+        # Reshape for Rotation.align_vectors (requires 2D array)
+        sub_principal_axis_reshaped = sub_principal_axis.reshape(1, 3)
 
         # Define constraints for scipy
         constraints = [
@@ -1193,43 +1348,52 @@ class IterateAnalyzer:
             {"type": "ineq", "fun": ineq_constraint},
         ]
 
-        for i in range(num_attempts):
-            if i == 0:
-                x_init_rot = np.zeros(3)
-            else:
-                x_init_rot = np.random.uniform(0, 2 * np.pi, 3)
+        for i in range(sphere_direction_samples_num):
+            target_vec = sphere_sample_vectors[i : i + 1]  # shape (1, 3)
 
-            x_init = np.concatenate([x_init_pos, x_init_rot])
+            # Find rotation that aligns the substituent's principal axis to the target vector
+            R_align, _ = Rotation.align_vectors(target_vec, sub_principal_axis_reshaped)
 
-            try:
-                res = minimize(
-                    objective,
-                    x_init,
-                    method="SLSQP",
-                    constraints=constraints,
-                    options={"ftol": 1e-6, "maxiter": 1000},
-                )
+            for j in range(axial_rotations_sample_num):
+                # Axial rotation around the original principal axis
+                angle = j * (2 * np.pi / axial_rotations_sample_num)
+                R_spin = Rotation.from_rotvec(angle * sub_principal_axis)
 
-                # Prioritize successful runs with lower objective value (max distance)
-                if res.success:
-                    if res.fun < best_val:
-                        best_val = res.fun
-                        best_result = res
-                else:
-                    # If optimization failed, but we don't have any success yet, keep it as fallback
-                    if best_result is None:
-                        best_result = res
-            except Exception as e:
-                logger.warning(f"Optimization attempt {i} failed: {e}")
-                continue
+                # Combine: First spin around axis, then align axis to target
+                R_total = R_align * R_spin
+                initial_euler_angles = R_total.as_euler("xyz")
+
+                initial_guess = np.concatenate([sub_link_init_pos, initial_euler_angles])
+
+                try:
+                    opt_result = minimize(
+                        objective,
+                        initial_guess,
+                        method="SLSQP",
+                        constraints=constraints,
+                        options={"ftol": 1e-6, "maxiter": 1000},
+                    )
+
+                    # Prioritize successful runs with lower objective value (max distance)
+                    if opt_result.success:
+                        if opt_result.fun < best_val:
+                            best_val = opt_result.fun
+                            best_result = opt_result
+                    else:
+                        # If optimization failed, but we don't have any success yet, keep it as fallback
+                        if best_result is None:
+                            best_result = opt_result
+                except Exception as e:
+                    logger.warning(f"Optimization attempt {i}-{j} failed: {e}")
+                    continue
 
         if best_result is None or not best_result.success:
             logger.error("All optimization attempts failed. Returning None.")
             return None
 
         # Extract optimal positions
-        optimal_x = best_result.x
-        optimal_sub_positions = get_sub_positions(optimal_x)
+        optimal_params = best_result.x
+        optimal_sub_positions = get_sub_positions(optimal_params)
 
         # Build result array
         optimal_sub = np.zeros_like(sub_coord)
@@ -1259,6 +1423,8 @@ if __name__ == "__main__":
         substituent=sub1,
         skeleton_link_index=skeleton_index,
         substituent_link_index=sub_index,
+        sphere_direction_samples_num=96,
+        axial_rotations_sample_num=6,
     )
 
     combined = analyzer.run()

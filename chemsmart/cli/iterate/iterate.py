@@ -70,7 +70,7 @@ def click_iterate_options(f):
         help="Timeout in seconds for each worker process.",
     )
     @click.option(
-        "-a",
+        "-A",
         "--algorithm",
         default="lagrange_multipliers",
         type=click.Choice(
@@ -81,6 +81,24 @@ def click_iterate_options(f):
         ),
         show_default=True,
         help="Algorithm to use for substituents' position optimization.",
+    )
+    @click.option(
+        "-s",
+        "--sphere-direction-samples-number",
+        "sphere_direction_samples_num",
+        default=96,
+        type=int,
+        show_default=True,
+        help="Number of points to sample on the unit sphere.",
+    )
+    @click.option(
+        "-a",
+        "--axial-rotations-sample-number",
+        "axial_rotations_sample_num",
+        default=6,
+        type=int,
+        show_default=True,
+        help="Number of axial rotations per sphere point.",
     )
     @click.option(
         "-o",
@@ -110,6 +128,8 @@ def iterate(
     timeout,
     outputfile,
     generate_template_path,
+    sphere_direction_samples_num,
+    axial_rotations_sample_num,
     **kwargs,
 ):
     """
@@ -181,6 +201,8 @@ def iterate(
     job_settings = IterateJobSettings(
         config_file=filename,
         algorithm=algorithm,
+        sphere_direction_samples_num=sphere_direction_samples_num,
+        axial_rotations_sample_num=axial_rotations_sample_num,
     )
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]

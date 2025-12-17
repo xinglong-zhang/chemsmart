@@ -37,6 +37,8 @@ class IterateCombination:
     substituent_label: str
     substituent_link_index: int  # 1-based
     algorithm: str = "lagrange_multipliers"
+    sphere_direction_samples_num: int = 96
+    axial_rotations_sample_num: int = 6
 
     @property
     def label(self) -> str:
@@ -96,6 +98,8 @@ def _run_combination_worker(
             skeleton_link_index=new_skeleton_link_index,
             substituent_link_index=new_substituent_link_index,
             algorithm=combination.algorithm,
+            sphere_direction_samples_num=combination.sphere_direction_samples_num,
+            axial_rotations_sample_num=combination.axial_rotations_sample_num,
         )
 
         result = analyzer.run()
@@ -375,6 +379,8 @@ class IterateJobRunner(JobRunner):
         skeleton_list = job.settings.skeleton_list or []
         substituent_list = job.settings.substituent_list or []
         algorithm = job.settings.algorithm
+        sphere_direction_samples_num = job.settings.sphere_direction_samples_num
+        axial_rotations_sample_num = job.settings.axial_rotations_sample_num
 
         for skel_idx, skel_config in enumerate(skeleton_list):
             skeleton = self._load_molecule(skel_config, "skeleton", skel_idx)
@@ -427,6 +433,8 @@ class IterateJobRunner(JobRunner):
                         skeleton_indices=skeleton_indices,
                         substituent=substituent.copy(),
                         substituent_label=sub_label,
+                        sphere_direction_samples_num=sphere_direction_samples_num,
+                        axial_rotations_sample_num=axial_rotations_sample_num,
                         substituent_link_index=sub_link_idx,
                         algorithm=algorithm,
                     )
