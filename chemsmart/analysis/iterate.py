@@ -1244,7 +1244,9 @@ class IterateAnalyzer:
                 direction = np.array([1.0, 0.0, 0.0])
             else:
                 direction = direction / dir_norm
-            initial_projection_pos = skeleton_link_coords + direction * bond_dist
+            initial_projection_pos = (
+                skeleton_link_coords + direction * bond_dist
+            )
         else:
             initial_projection_pos = (
                 skeleton_link_coords
@@ -1326,7 +1328,9 @@ class IterateAnalyzer:
         # sphere_direction_samples_num and axial_rotations_sample_num are passed as arguments
 
         # Generate uniformly distributed unit vectors on the sphere
-        sphere_sample_vectors = IterateAnalyzer._fibonacci_sphere(sphere_direction_samples_num)
+        sphere_sample_vectors = IterateAnalyzer._fibonacci_sphere(
+            sphere_direction_samples_num
+        )
 
         # Determine the principal axis of the substituent relative to its link atom.
         # This vector represents the general direction of the substituent body.
@@ -1352,7 +1356,9 @@ class IterateAnalyzer:
             target_vec = sphere_sample_vectors[i : i + 1]  # shape (1, 3)
 
             # Find rotation that aligns the substituent's principal axis to the target vector
-            R_align, _ = Rotation.align_vectors(target_vec, sub_principal_axis_reshaped)
+            R_align, _ = Rotation.align_vectors(
+                target_vec, sub_principal_axis_reshaped
+            )
 
             for j in range(axial_rotations_sample_num):
                 # Axial rotation around the original principal axis
@@ -1363,7 +1369,9 @@ class IterateAnalyzer:
                 R_total = R_align * R_spin
                 initial_euler_angles = R_total.as_euler("xyz")
 
-                initial_guess = np.concatenate([sub_link_init_pos, initial_euler_angles])
+                initial_guess = np.concatenate(
+                    [sub_link_init_pos, initial_euler_angles]
+                )
 
                 try:
                     opt_result = minimize(

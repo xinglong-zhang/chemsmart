@@ -379,7 +379,9 @@ class IterateJobRunner(JobRunner):
         skeleton_list = job.settings.skeleton_list or []
         substituent_list = job.settings.substituent_list or []
         algorithm = job.settings.algorithm
-        sphere_direction_samples_num = job.settings.sphere_direction_samples_num
+        sphere_direction_samples_num = (
+            job.settings.sphere_direction_samples_num
+        )
         axial_rotations_sample_num = job.settings.axial_rotations_sample_num
 
         for skel_idx, skel_config in enumerate(skeleton_list):
