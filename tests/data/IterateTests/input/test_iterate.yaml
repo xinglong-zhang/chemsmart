@@ -1,0 +1,87 @@
+# Chemsmart Iterate Configuration Template
+# =========================================
+# This template defines skeletons and substituents for iterative structure generation.
+#
+# Structure Sources (mutually exclusive - use only one per entry):
+#   - file_path: Path to molecular structure file (.xyz, .com, .log, .sdf, etc.)
+#   - smiles: SMILES string for the molecule
+#   - pubchem: PubChem identifier (CID, name, or SMILES)
+#
+# Required Fields:
+#   - label: Unique identifier for this structure
+#   - link_index: Atom index (1-based) where substitution occurs
+#
+# Optional Fields:
+#   - skeleton_indices: Atom indices to keep, format: "1, 3-10, 15" (1-based)
+#                       If not specified, all atoms except link_index are kept
+#
+# Note: Leave empty for null/None values. Strings don't need quotes.
+
+# ==============================================================================
+# SKELETONS
+# ==============================================================================
+# Define base molecular scaffolds that will be modified with substituents.
+# Each skeleton is a list item (starts with "-")
+
+skeletons:
+  # Example 1: Skeleton from file
+  - file_path: ./carbene1_opt.log
+    smiles:
+    pubchem:
+    label: Carbene1
+    link_index: 34,7,8
+    skeleton_indices: 7,10,18
+
+  # Example 2: Skeleton from file
+  - file_path: ./carbene2_opt.log
+    smiles: 
+    pubchem:
+    label: Carbene2
+    link_index: 4-7,17
+    skeleton_indices:
+
+  # Example 3: Skeleton from file
+  - file_path: ./carbene3_opt.log
+    smiles: 
+    pubchem:
+    label: Carbene3
+    link_index: 40
+    skeleton_indices:
+
+  # Add more skeletons as needed...
+
+
+# ==============================================================================
+# SUBSTITUENTS
+# ==============================================================================
+# Define functional groups or fragments to attach to skeletons.
+# Each substituent is a list item (starts with "-")
+
+substituents:
+  # Example 1: Substituent from file
+  - file_path: ./OTf_opt.log
+    smiles:
+    pubchem:
+    label: OTf
+    link_index: 8
+
+  # Example 2: Substituent from SMILES
+  - file_path: ./ome_opt.log
+    smiles: 
+    pubchem:
+    label: ome
+    link_index: 1
+
+  # Add more substituents as needed...
+
+
+# ==============================================================================
+# USAGE NOTES
+# ==============================================================================
+# 1. Atom indices are 1-based (first atom is index 1)
+# 2. link_index specifies the atom that will form the new bond
+# 3. For skeletons, the atom at link_index is typically replaced/removed
+# 4. For substituents, the atom at link_index bonds to the skeleton
+# 5. skeleton_indices format: "1, 3-10, 15, 20-25" (ranges and individual indices)
+# 6. Only one source (file_path, smiles, pubchem) should be non-null per entry
+# 7. Use ~ for null/None values
