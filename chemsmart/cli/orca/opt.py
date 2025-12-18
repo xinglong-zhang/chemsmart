@@ -87,7 +87,7 @@ def opt(ctx, freeze_atoms, invert_constraints, skip_completed, **kwargs):
     )
 
     # Handle multiple molecules: create one job per molecule
-    if len(molecules) > 1:
+    if len(molecules) > 1 and molecule_indices is not None:
         logger.info(f"Creating {len(molecules)} ORCA optimization jobs")
         jobs = []
         for molecule, idx in zip(molecules, molecule_indices):
