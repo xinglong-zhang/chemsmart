@@ -162,7 +162,7 @@ NCIPLOT can analyze multiple molecules simultaneously:
 
    chemsmart sub -s xz nciplot -f molecule1.xyz -f molecule2.xyz
 
-**Result:** Job label will be ``molecule1_and_molecule2_promolecular``
+**Result:** Job label will be ``molecule1_and_molecule2``
 
 ****************************
  Additional NCIPLOT Options
