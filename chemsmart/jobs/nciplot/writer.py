@@ -113,6 +113,10 @@ class NCIPLOTInputWriter(InputWriter):
 
                 for file in self.job.filenames:
                     # Convert non-supported formats to promolecular xyz
+                    # NCIPLOT natively supports .xyz, .wfn, and .wfx
+                    # Other formats (.log, etc.) are converted to .xyz and
+                    # renamed with _promolecular suffix to indicate use of
+                    # promolecular density approximation
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
