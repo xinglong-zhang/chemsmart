@@ -46,6 +46,8 @@ class TestNCIPLOTInputWriter:
             settings=job_settings,
             jobrunner=nciplot_jobrunner_no_scratch,
         )
+        # set up correct variables by calling prerun()
+        nciplot_jobrunner_no_scratch._prerun(job)
         nciplot_writer = NCIPLOTInputWriter(job=job)
 
         # write input file
@@ -120,6 +122,10 @@ class TestNCIPLOTInputWriter:
             label="nci_two_files",
             jobrunner=nciplot_jobrunner_no_scratch,
         )
+
+        # set up correct variables by calling prerun()
+        nciplot_jobrunner_no_scratch._prerun(job)
+
         nciplot_writer = NCIPLOTInputWriter(job=job)
 
         # write input file
