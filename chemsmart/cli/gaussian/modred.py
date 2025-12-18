@@ -58,9 +58,7 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     from chemsmart.jobs.gaussian.modred import GaussianModredJob
 
     # Get the original molecule indices from context
-    molecule_indices = ctx.obj.get(
-        "molecule_indices", list(range(1, len(molecules) + 1))
-    )
+    molecule_indices = ctx.obj["molecule_indices"]
 
     # Handle multiple molecules: create one job per molecule
     if len(molecules) > 1 and molecule_indices is not None:

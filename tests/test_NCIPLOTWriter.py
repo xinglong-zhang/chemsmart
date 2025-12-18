@@ -47,6 +47,7 @@ class TestNCIPLOTInputWriter:
             jobrunner=nciplot_jobrunner_no_scratch,
         )
         nciplot_writer = NCIPLOTInputWriter(job=job)
+        print(f"tmpdir: {tmpdir}")
 
         # write input file
         nciplot_writer.write(target_directory=tmpdir)
