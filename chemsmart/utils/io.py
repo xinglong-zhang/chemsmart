@@ -520,8 +520,11 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
         )
 
     # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
+    # Use sanitize=False to avoid kekulization errors for organometallic complexes
     sdf_stream = BytesIO(result.stdout)
-    suppl = Chem.ForwardSDMolSupplier(sdf_stream, removeHs=False)
+    suppl = Chem.ForwardSDMolSupplier(
+        sdf_stream, sanitize=False, removeHs=False
+    )
 
     mols = [mol for mol in suppl if mol is not None]
 

@@ -91,7 +91,6 @@ class CDXFile(FileMixin):
         from pathlib import Path
 
         from rdkit import Chem
-        from rdkit.Chem import AllChem
 
         suffix = Path(self.filename).suffix.lower()
 
@@ -137,66 +136,13 @@ class CDXFile(FileMixin):
             if rdkit_mol is None:
                 continue
 
-            # Handle organometallic complexes: normalize metal bonds and sanitize
+            # Process molecule (handle organometallic complexes, add H, generate 3D coords)
             try:
-                from chemsmart.utils.io import (
-                    normalize_metal_bonds,
-                    safe_sanitize,
-                )
-                from chemsmart.utils.periodictable import (
-                    NON_METALS_AND_METALLOIDS,
-                )
-
-                # Check if molecule contains metals
-                has_metals = any(
-                    atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
-                    for atom in rdkit_mol.GetAtoms()
-                )
-
-                # Normalize metal bonds first (removes aromatic flags from metal bonds)
-                rdkit_mol = normalize_metal_bonds(rdkit_mol)
-
-                # Sanitize with or without kekulization based on metal presence
-                rdkit_mol = safe_sanitize(rdkit_mol, skip_kekulize=has_metals)
+                rdkit_mol = self._process_cdx_molecule(rdkit_mol)
             except Exception as e:
                 logger.warning(
-                    f"Error normalizing metal bonds or sanitizing molecule "
-                    f"in {self.filename}: {e}. Skipping this molecule."
-                )
-                continue
-
-            # Add explicit hydrogens for proper structure
-            rdkit_mol = Chem.AddHs(rdkit_mol)
-
-            # Generate 3D coordinates
-            try:
-                # Try to embed the molecule to get 3D coordinates
-                result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
-                if result == -1:
-                    # Embedding failed, try with random coordinates
-                    result = AllChem.EmbedMolecule(
-                        rdkit_mol,
-                        useRandomCoords=True,
-                        randomSeed=42,
-                    )
-                    if result == -1:
-                        logger.warning(
-                            f"Could not generate 3D coordinates for a molecule "
-                            f"in {self.filename}. Skipping this molecule."
-                        )
-                        continue
-
-                # Optimize the geometry (may fail for exotic atom types)
-                try:
-                    AllChem.MMFFOptimizeMolecule(rdkit_mol)
-                except Exception as e:
-                    logger.debug(
-                        f"MMFF optimization failed for a molecule in {self.filename}: {e}"
-                    )
-
-            except Exception as e:
-                logger.warning(
-                    f"Error generating 3D coordinates for molecule in {self.filename}: {e}"
+                    f"Error processing molecule in {self.filename}: {e}. "
+                    f"Skipping this molecule."
                 )
                 continue
 
@@ -211,6 +157,69 @@ class CDXFile(FileMixin):
             )
 
         return molecules
+
+    def _process_cdx_molecule(self, rdkit_mol):
+        """
+        Process a molecule from ChemDraw file, handling organometallic complexes.
+
+        This method normalizes metal bonds and sanitizes the molecule appropriately
+        for both organic and organometallic structures. It then adds hydrogens and
+        generates 3D coordinates.
+
+        Args:
+            rdkit_mol (rdkit.Chem.Mol): RDKit molecule to process.
+
+        Returns:
+            rdkit.Chem.Mol: Processed molecule with hydrogens and 3D coordinates.
+
+        Raises:
+            Exception: If molecule processing fails.
+        """
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        from chemsmart.utils.io import normalize_metal_bonds, safe_sanitize
+        from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+        # Check if molecule contains metals
+        has_metals = any(
+            atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+            for atom in rdkit_mol.GetAtoms()
+        )
+
+        # Normalize metal bonds first (removes aromatic flags from metal bonds)
+        rdkit_mol = normalize_metal_bonds(rdkit_mol)
+
+        # Sanitize with or without kekulization based on metal presence
+        rdkit_mol = safe_sanitize(rdkit_mol, skip_kekulize=has_metals)
+
+        # Add explicit hydrogens for proper structure
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+
+        # Generate 3D coordinates
+        # Try to embed the molecule to get 3D coordinates
+        result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+        if result == -1:
+            # Embedding failed, try with random coordinates
+            result = AllChem.EmbedMolecule(
+                rdkit_mol,
+                useRandomCoords=True,
+                randomSeed=42,
+            )
+            if result == -1:
+                raise ValueError(
+                    "Could not generate 3D coordinates for molecule"
+                )
+
+        # Optimize the geometry (may fail for exotic atom types)
+        try:
+            AllChem.MMFFOptimizeMolecule(rdkit_mol)
+        except Exception as e:
+            logger.debug(
+                f"MMFF optimization failed for a molecule in {self.filename}: {e}"
+            )
+
+        return rdkit_mol
 
     def get_molecules(self, index="-1", return_list=False):
         """
