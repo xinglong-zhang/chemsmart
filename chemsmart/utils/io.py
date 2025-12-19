@@ -531,3 +531,83 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
         )
 
     return mols
+
+
+def safe_sanitize(mol):
+    """
+    Safely sanitize an RDKit molecule, handling organometallic complexes.
+
+    For organometallic/aromatic-metal complexes, RDKit's kekulization often
+    fails because aromatic rings coordinated to metals cannot be properly
+    kekulized. This function attempts normal sanitization first, and if that
+    fails, retries with kekulization skipped.
+
+    Args:
+        mol (rdkit.Chem.Mol): RDKit molecule to sanitize.
+
+    Returns:
+        rdkit.Chem.Mol: Sanitized molecule.
+
+    Raises:
+        Exception: If sanitization fails even without kekulization.
+    """
+    try:
+        Chem.SanitizeMol(mol)
+        return mol
+    except Exception:
+        # Common for organometallic/aromatic-metal complexes:
+        # keep most sanitation but skip kekulization
+        logger.debug(
+            "Standard sanitization failed, retrying without kekulization "
+            "(common for organometallic complexes)."
+        )
+        ops = (
+            Chem.SanitizeFlags.SANITIZE_ALL
+            ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE
+        )
+        Chem.SanitizeMol(mol, sanitizeOps=ops)
+        return mol
+
+
+def normalize_metal_bonds(mol):
+    """
+    Remove aromatic flags from bonds involving metal atoms.
+
+    RDKit does not support aromatic bonds to metal atoms. This function
+    identifies bonds to metals and converts any aromatic bonds to single
+    bonds, which prevents kekulization and sanitization errors.
+
+    Args:
+        mol (rdkit.Chem.Mol): RDKit molecule to normalize.
+
+    Returns:
+        rdkit.Chem.Mol: Molecule with normalized metal bonds.
+
+    Notes:
+        - Identifies metals using a comprehensive classification based on
+          the periodic table (excludes non-metals and metalloids).
+        - Converts aromatic bonds to metals to single bonds.
+        - Uses element classifications from chemsmart.utils.periodictable.
+    """
+    from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+    # Identify metal atom indices
+    # Metals are elements that are neither non-metals nor metalloids
+    metal_idxs = {
+        a.GetIdx()
+        for a in mol.GetAtoms()
+        if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+    }
+
+    # Clear aromatic flags from bonds to metals
+    for bond in mol.GetBonds():
+        begin_idx = bond.GetBeginAtomIdx()
+        end_idx = bond.GetEndAtomIdx()
+
+        if begin_idx in metal_idxs or end_idx in metal_idxs:
+            if bond.GetIsAromatic():
+                bond.SetIsAromatic(False)
+            if bond.GetBondType() == Chem.BondType.AROMATIC:
+                bond.SetBondType(Chem.BondType.SINGLE)
+
+    return mol

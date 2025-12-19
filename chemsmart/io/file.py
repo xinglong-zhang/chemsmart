@@ -133,6 +133,21 @@ class CDXFile(FileMixin):
             if rdkit_mol is None:
                 continue
 
+            # Handle organometallic complexes: normalize metal bonds and sanitize
+            try:
+                from chemsmart.utils.io import (
+                    normalize_metal_bonds,
+                    safe_sanitize,
+                )
+
+                rdkit_mol = normalize_metal_bonds(rdkit_mol)
+                rdkit_mol = safe_sanitize(rdkit_mol)
+            except Exception as e:
+                logger.warning(
+                    f"Error normalizing metal bonds or sanitizing molecule "
+                    f"in {self.filename}: {e}. Continuing with original molecule."
+                )
+
             # Add explicit hydrogens for proper structure
             rdkit_mol = Chem.AddHs(rdkit_mol)
 

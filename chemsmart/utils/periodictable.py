@@ -12,6 +12,52 @@ from ase.data.vdw import vdw_radii
 
 from chemsmart.utils.isotopes_data import isotopes
 
+# Comprehensive classification of elements based on standard periodic table
+# Non-metals: H, noble gases, halogens, and main group non-metals
+# Note: Se and At are classified as non-metals here (halogens/chalcogens)
+# though their classification is sometimes debated. For organometallic
+# chemistry purposes, they don't typically form the problematic aromatic
+# metal-ligand bonds.
+NONMETALS = frozenset(
+    {
+        1,  # H - Hydrogen
+        2,  # He - Helium
+        6,  # C - Carbon
+        7,  # N - Nitrogen
+        8,  # O - Oxygen
+        9,  # F - Fluorine
+        10,  # Ne - Neon
+        15,  # P - Phosphorus
+        16,  # S - Sulfur
+        17,  # Cl - Chlorine
+        18,  # Ar - Argon
+        34,  # Se - Selenium (chalcogen, predominantly non-metallic)
+        35,  # Br - Bromine
+        36,  # Kr - Krypton
+        53,  # I - Iodine
+        54,  # Xe - Xenon
+        85,  # At - Astatine (halogen, though radioactive and rare)
+        86,  # Rn - Radon
+    }
+)
+
+# Metalloids (semi-metals): elements with properties between metals and non-metals
+# These typically don't form organometallic complexes with aromatic ligands
+METALLOIDS = frozenset(
+    {
+        5,  # B - Boron
+        14,  # Si - Silicon
+        32,  # Ge - Germanium
+        33,  # As - Arsenic
+        51,  # Sb - Antimony
+        52,  # Te - Tellurium
+        84,  # Po - Polonium
+    }
+)
+
+# Combined set of non-metals and metalloids for convenience
+NON_METALS_AND_METALLOIDS = NONMETALS | METALLOIDS
+
 
 class PeriodicTable:
     """
