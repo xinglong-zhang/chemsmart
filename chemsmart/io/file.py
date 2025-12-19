@@ -101,7 +101,9 @@ class CDXFile(FileMixin):
             # CDX files are only supported if RDKit was built with
             # ChemDraw CDX support.
             rdkit_mols = list(
-                Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
+                Chem.MolsFromCDXMLFile(
+                    self.filename, sanitize=False, removeHs=False
+                )
             )
         except Exception as e:
             logger.debug(
