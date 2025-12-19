@@ -100,6 +100,8 @@ class CDXFile(FileMixin):
             # NOTE: RDKit's MolsFromCDXMLFile always supports CDXML.
             # CDX files are only supported if RDKit was built with
             # ChemDraw CDX support.
+            # Use sanitize=False to avoid kekulization errors during parsing
+            # of organometallic complexes. We'll handle sanitization later.
             rdkit_mols = list(
                 Chem.MolsFromCDXMLFile(
                     self.filename, sanitize=False, removeHs=False
@@ -141,14 +143,27 @@ class CDXFile(FileMixin):
                     normalize_metal_bonds,
                     safe_sanitize,
                 )
+                from chemsmart.utils.periodictable import (
+                    NON_METALS_AND_METALLOIDS,
+                )
 
+                # Check if molecule contains metals
+                has_metals = any(
+                    atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+                    for atom in rdkit_mol.GetAtoms()
+                )
+
+                # Normalize metal bonds first (removes aromatic flags from metal bonds)
                 rdkit_mol = normalize_metal_bonds(rdkit_mol)
-                rdkit_mol = safe_sanitize(rdkit_mol)
+
+                # Sanitize with or without kekulization based on metal presence
+                rdkit_mol = safe_sanitize(rdkit_mol, skip_kekulize=has_metals)
             except Exception as e:
                 logger.warning(
                     f"Error normalizing metal bonds or sanitizing molecule "
-                    f"in {self.filename}: {e}. Continuing with original molecule."
+                    f"in {self.filename}: {e}. Skipping this molecule."
                 )
+                continue
 
             # Add explicit hydrogens for proper structure
             rdkit_mol = Chem.AddHs(rdkit_mol)

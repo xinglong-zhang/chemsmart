@@ -533,32 +533,41 @@ def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
     return mols
 
 
-def safe_sanitize(mol):
+def safe_sanitize(mol, skip_kekulize=False):
     """
     Safely sanitize an RDKit molecule, handling organometallic complexes.
 
     For organometallic/aromatic-metal complexes, RDKit's kekulization often
     fails because aromatic rings coordinated to metals cannot be properly
-    kekulized. This function attempts normal sanitization first, and if that
-    fails, retries with kekulization skipped.
+    kekulized. This function can skip kekulization for such molecules.
 
     Args:
         mol (rdkit.Chem.Mol): RDKit molecule to sanitize.
+        skip_kekulize (bool): If True, skip kekulization step. Default False.
 
     Returns:
         rdkit.Chem.Mol: Sanitized molecule.
 
     Raises:
-        Exception: If sanitization fails even without kekulization.
+        Exception: If sanitization fails.
     """
+    if skip_kekulize:
+        # Skip kekulization for organometallic complexes
+        ops = (
+            Chem.SanitizeFlags.SANITIZE_ALL
+            ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE
+        )
+        Chem.SanitizeMol(mol, sanitizeOps=ops)
+        return mol
+
     try:
         Chem.SanitizeMol(mol)
         return mol
-    except Exception:
+    except Exception as e:
         # Common for organometallic/aromatic-metal complexes:
         # keep most sanitation but skip kekulization
         logger.debug(
-            "Standard sanitization failed, retrying without kekulization "
+            f"Standard sanitization failed ({e}), retrying without kekulization "
             "(common for organometallic complexes)."
         )
         ops = (
