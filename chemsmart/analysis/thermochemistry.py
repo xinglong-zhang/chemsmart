@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+from functools import cached_property
 
 import numpy as np
 from ase import units
@@ -8,13 +9,13 @@ from ase import units
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
     R,
     atm_to_pa,
     energy_conversion,
     hartree_to_joules,
 )
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -133,23 +134,23 @@ class Thermochemistry:
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
 
-    @property
+    @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        if str(self.filename).endswith(".log"):
-            # create a Gaussian16Output object if .log file
-            return Gaussian16Output(self.filename)
-        elif str(self.filename).endswith(".out"):
-            # create an OrcaOutput object if .out file
-            return ORCAOutput(self.filename)
-        elif str(self.filename).endswith(".xtbout"):
-            # create an XTBOutput object if .xtbout file
-            return XTBOutput(self.filename)
+        program = get_program_type_from_file(self.filename)
+        if program == "gaussian":
+            output = Gaussian16Output(self.filename)
+        elif program == "orca":
+            output = ORCAOutput(self.filename)
         else:
             # can be added in future to parse other file formats
+            raise ValueError("Unsupported file format.")
+        if not output.normal_termination:
             raise ValueError(
-                "Unsupported file format. Use .log or .out files."
+                f"File '{self.filename}' did not terminate normally. "
+                "Skipping thermochemistry calculation for this file."
             )
+        return output
 
     @property
     def job_type(self):
@@ -666,6 +667,8 @@ class Thermochemistry:
         if self.v is None:
             return None
         bav = self.Bav
+        if bav is None:
+            return []
         mu = [units._hplanck / (8 * np.pi**2 * vk) for vk in self.v]
         mu_prime = [mu_k * bav / (mu_k + bav) for mu_k in mu]
         entropy = [
@@ -1090,6 +1093,7 @@ class Thermochemistry:
         qrrho_gibbs_free_energy,
         outputfile=None,
         overwrite=False,
+        write_header=True,
     ):
         """
         Log thermochemistry results to a structured output file.
@@ -1143,6 +1147,10 @@ class Thermochemistry:
             If True, existing files are replaced. If False, results are
             appended
             (header is repeated to reflect possible changes in conditions).
+        write_header : bool, default=True
+            If True, writes the header block before results. Set to False
+            to skip header writing (useful when appending multiple times
+            without changing conditions).
 
         Notes
         -----
@@ -1187,7 +1195,7 @@ class Thermochemistry:
                 if not self.use_weighted_mass
                 else "Natural Abundance Weighted Masses"
             )
-            header = f"Temperature: {self.temperature:.2f} K\n"
+            header = f"\nTemperature: {self.temperature:.2f} K\n"
             if self.concentration is not None:
                 header += f"Concentration: {self.concentration:.1f} mol/L\n"
             else:
@@ -1320,15 +1328,11 @@ class Thermochemistry:
             if overwrite:
                 mode = "w"
                 logger.info(f"Overwriting {outputfile}.")
-                write_header = True
             else:
                 mode = "a"
                 logger.info(f"Appending to {outputfile}.")
-                # Always repeat header when appending (different conditions may be used)
-                write_header = True
         else:
             mode = "w"
-            write_header = True
 
         with open(outputfile, mode) as out:
             if write_header:
@@ -1354,16 +1358,12 @@ class BoltzmannAverageThermochemistry(Thermochemistry):
         Parameters
         ----------
         files : list of str
-            List of file paths (.log or .out) containing thermochemistry data for conformers.
+            List of file paths containing thermochemistry data for conformers.
         energy_type : str, optional
             Energy type to use for Boltzmann weighting ("electronic" or "gibbs"). Default is "gibbs".
         """
         if not files:
             raise ValueError("List of files cannot be empty.")
-        if not all(
-            isinstance(f, str) and f.endswith((".log", ".out")) for f in files
-        ):
-            raise ValueError("All files must be .log or .out files.")
 
         # Check that all files have the same molecular structure
         molecules = [Molecule.from_filepath(f) for f in files]

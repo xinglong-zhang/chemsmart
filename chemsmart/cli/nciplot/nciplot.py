@@ -4,38 +4,18 @@ import logging
 
 import click
 
-from chemsmart.cli.job import click_job_options, click_pubchem_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filenames_options,
+    click_job_options,
+    click_pubchem_options,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.io import clean_label
 
 logger = logging.getLogger(__name__)
-
-
-def click_nciplot_job_options(f):
-    """Common click options for NCIPLOT Job."""
-
-    @click.option(
-        "-f",
-        "--filenames",
-        type=str,
-        multiple=True,
-        default=None,
-        help="Input files for the NCIPLOT job. Can be specified multiple "
-        "times.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="Label for the NCIPLOT job, used to name output files.",
-    )
-    @functools.wraps(f)
-    def wrapper_common_options(*args, **kwargs):
-        return f(*args, **kwargs)
-
-    return wrapper_common_options
 
 
 def click_nciplot_settings_options(f):
@@ -95,8 +75,8 @@ def click_nciplot_settings_options(f):
         "--increments",
         type=str,
         default=None,
-        help="Increments along the x, y, z directions of the cube in Å. "
-        "The default is set to 0.1, 0.1, 0.1."
+        help="Increments along the x, y, z directions of the cube in Angstroms. "
+        "The default is set to 0.1, 0.1, 0.1. "
         "Accepts strings in the form of 'x,y,z' or as a tuple (x, y, z).",
     )
     @click.option(
@@ -178,7 +158,8 @@ def click_nciplot_settings_options(f):
 
 @click.command(cls=MyCommand)
 @click_job_options
-@click_nciplot_job_options
+@click_filenames_options
+@click_file_label_and_index_options
 @click_nciplot_settings_options
 @click_pubchem_options
 @click.pass_context
@@ -206,10 +187,31 @@ def nciplot(
     pubchem,
     **kwargs,
 ):
-    """CLI for running NCIPLOT jobs using the chemsmart framework.
+    """
+    CLI subcommand for running NCIPLOT jobs using the chemsmart framework.
+
+    NCIPLOT uses different density calculation methods based on input file type:
+    - .wfn/.wfx files: Uses SCF wavefunction density
+    - .xyz/.log/other files: Uses promolecular density approximation
+
+    When using promolecular density, the job label automatically gets
+    "_promolecular" appended to distinguish the output files.
+
     Example usage:
-    chemsmart run nciplot -f test.xyz -f test2.xyz -l nci_test \\
-    --fragments "{1: [1,4,5], 2: [3,4,5]}"
+        # Promolecular density (label will be "test_promolecular")
+        chemsmart sub -s xz nciplot -f test.xyz
+        chemsmart run nciplot -f test.xyz
+
+        # Wavefunction density (label will be "test")
+        chemsmart sub -s xz nciplot -f test.wfn
+        chemsmart run nciplot -f test.wfn
+
+        # Multiple files with custom label
+        chemsmart sub -s xz nciplot -f test.xyz -f test2.xyz -l nci_test \\
+        --fragments "{1: [1,4,5], 2: [3,4,5]}"
+
+    For detailed documentation on file types and behavior, see the NCIPLOT tutorial
+    in the documentation.
     """
 
     from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
@@ -285,6 +287,9 @@ def nciplot(
                 )
             elif len(filenames) == 1:
                 label = filenames[0].split(".")[0] if label is None else label
+                # Add _promolecular suffix for non-wavefunction files
+                # (.xyz, .log, etc. use promolecular density)
+                # (.wfn, .wfx use SCF wavefunction density without suffix)
                 if not filenames[0].endswith((".wfn", ".wfx")):
                     if label is not None and not label.endswith(
                         "promolecular"
@@ -299,6 +304,7 @@ def nciplot(
                     if label is None
                     else label
                 )
+    label = clean_label(label)
 
     return NCIPLOTJob(
         filenames=filenames,  # accepts multiple files

@@ -11,6 +11,10 @@ from rdkit import Chem
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
+    PyMOLAlignJobRunner,
+    PyMOLHybridVisualizationJobRunner,
+    PyMOLIRCMovieJobRunner,
+    PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
@@ -604,8 +608,33 @@ def gaussian_written_modred_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
-def gaussian_written_scan_file(gaussian_written_files_directory):
-    return os.path.join(gaussian_written_files_directory, "gaussian_scan.com")
+def gaussian_written_scan_single_degree_of_freedom_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_single_degree_of_freedom.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_multiple_degrees_of_freedom_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_multiple_degrees_of_freedom.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_multiple_degrees_of_freedom_with_constraints_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_multiple_degrees_of_freedom_with_constraints.com",
+    )
 
 
 @pytest.fixture()
@@ -922,6 +951,36 @@ def hirshfeld_full_print(orca_outputs_directory):
 
 
 @pytest.fixture()
+def fe2_singlet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_singlet.out")
+
+
+@pytest.fixture()
+def fe2_triplet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_triplet.out")
+
+
+@pytest.fixture()
+def fe2_quintet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_quintet.out")
+
+
+@pytest.fixture()
+def fe3_doublet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_doublet.out")
+
+
+@pytest.fixture()
+def fe3_quartet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_quartet.out")
+
+
+@pytest.fixture()
+def fe3_sextet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_sextet.out")
+
+
+@pytest.fixture()
 def water_engrad_path(orca_outputs_directory):
     return os.path.join(orca_outputs_directory, "water_opt.engrad")
 
@@ -981,8 +1040,32 @@ def orca_written_modred_file(orca_written_files_directory):
 
 
 @pytest.fixture()
-def orca_written_scan_file(orca_written_files_directory):
-    return os.path.join(orca_written_files_directory, "orca_scan.inp")
+def orca_written_scan_single_degree_of_freedom_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory, "orca_scan_single_degree_of_freedom.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_scan_multiple_degrees_of_freedom_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory,
+        "orca_scan_multiple_degrees_of_freedom.inp",
+    )
+
+
+@pytest.fixture()
+def orca_written_scan_multiple_degrees_of_freedom_with_constraints_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory,
+        "orca_scan_multiple_degrees_of_freedom_with_constraints.inp",
+    )
 
 
 @pytest.fixture()
@@ -1144,6 +1227,41 @@ def extended_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def dna_hybrid_visualized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "dna_hybrid.xyz")
+
+
+@pytest.fixture()
+def chemdraw_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "chemdraw")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_benzene(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "benzene.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_methane(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "methane.cdxml")
+
+
+@pytest.fixture()
+def multi_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "two_molecules.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdx_file_imidazole(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "imidazole.cdx")
+
+
+@pytest.fixture()
+def complex_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 
@@ -1191,6 +1309,11 @@ def pymol_visualization_jobrunner(pbs_server):
 
 
 @pytest.fixture()
+def pymol_hybrid_visualization_jobrunner(pbs_server):
+    return PyMOLHybridVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
 def pymol_movie_jobrunner(pbs_server):
     return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
 
@@ -1205,6 +1328,21 @@ def nciplot_jobrunner_scratch(tmpdir, pbs_server):
     return FakeNCIPLOTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
+
+
+@pytest.fixture()
+def pymol_align_jobrunner(pbs_server):
+    return PyMOLAlignJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_ircmovie_jobrunner(pbs_server):
+    return PyMOLIRCMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_mo_jobrunner(pbs_server):
+    return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing

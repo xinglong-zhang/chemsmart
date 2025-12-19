@@ -165,6 +165,7 @@ class Gaussian16Output(GaussianFileMixin):
                 else:
                     spin = None
                 return spin
+        return None
 
     @cached_property
     def input_coordinates_block(self):
@@ -1152,7 +1153,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def alpha_occ_eigenvalues(self):
         """
-        Obtain all eigenenergies of the alpha occuplied orbitals and convert to eV.
+        Obtain all eigenenergies of the alpha occupied orbitals and convert to eV.
         """
         alpha_occ_eigenvalues = []
 
@@ -1192,7 +1193,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def alpha_virtual_eigenvalues(self):
         """
-        Obtain all eigenenergies of the alpha unoccuplied orbitals.
+        Obtain all eigenenergies of the alpha unoccupied orbitals.
         Units of eV, as for orbital energies.
         """
 
@@ -1232,7 +1233,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def beta_occ_eigenvalues(self):
         """
-        Obtain all eigenenergies of the beta occuplied orbitals.
+        Obtain all eigenenergies of the beta occupied orbitals.
         Units of eV, as for orbital energies.
         """
         # Iterate through lines in reverse to find the last block of eigenvalues
@@ -1271,7 +1272,7 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def beta_virtual_eigenvalues(self):
         """
-        Obtain all eigenenergies of the beta unoccuplied orbitals.
+        Obtain all eigenenergies of the beta unoccupied orbitals.
         Units of eV, as for orbital energies.
         """
 
@@ -1307,52 +1308,6 @@ class Gaussian16Output(GaussianFileMixin):
                 value * units.Hartree for value in last_block_values
             ]
             return beta_virtual_eigenvalues
-
-    @cached_property
-    def homo_energy(self):
-        if self.multiplicity == 1:
-            return self.alpha_occ_eigenvalues[-1]
-
-    @cached_property
-    def num_unpaired_electrons(self):
-        if self.multiplicity != 1:
-            # the multiplicity is the number of unpaired electrons + 1
-            assert (
-                len(self.alpha_occ_eigenvalues)
-                - len(self.beta_occ_eigenvalues)
-                + 1
-                == self.multiplicity
-            )
-            return len(self.alpha_occ_eigenvalues) - len(
-                self.beta_occ_eigenvalues
-            )
-
-    @cached_property
-    def somo_energy(self):
-        """The SOMO energy should be the next alpha occ. orbital after
-        same number of alpha and beta orbitals."""
-        if self.multiplicity != 1:
-            # the multiplicity is the number of unpaired electrons + 1
-            assert (
-                len(self.alpha_occ_eigenvalues)
-                - len(self.beta_occ_eigenvalues)
-                + 1
-                == self.multiplicity
-            )
-            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons]
-
-    @cached_property
-    def lumo_energy(self):
-        if self.multiplicity == 1:
-            return self.alpha_virtual_eigenvalues[0]
-
-    @cached_property
-    def fmo_gap(self):
-        if self.multiplicity == 1:
-            return self.lumo_energy - self.homo_energy
-        else:
-            # to implement for radical systems
-            pass
 
     @cached_property
     def mulliken_atomic_charges(self):

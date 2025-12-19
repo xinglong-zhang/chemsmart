@@ -113,23 +113,18 @@ class NCIPLOTInputWriter(InputWriter):
 
                 for file in self.job.filenames:
                     # Convert non-supported formats to promolecular xyz
+                    # NCIPLOT natively supports .xyz, .wfn, and .wfx
+                    # Other formats (.log, etc.) are converted to .xyz and
+                    # renamed with _promolecular suffix to indicate use of
+                    # promolecular density approximation
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
                     logger.debug(f"Writing filename: {file}.")
 
-                    # Determine file path based on execution mode
-                    if self.jobrunner.scratch:
-                        file_path = os.path.join(
-                            self.jobrunner.scratch_dir,
-                            os.path.splitext(os.path.basename(file))[0],
-                        )
-                        logger.info(
-                            f"Running in scratch directory: {file_path}"
-                        )
-                    else:
-                        file_path = self.job.folder
-                        logger.info(f"Running in job directory: {file_path}")
+                    # Use the running directory from jobrunner
+                    file_path = self.jobrunner.running_directory
+                    logger.info(f"Running in directory: {file_path}")
 
                     # Validate file existence
                     full_path = os.path.join(file_path, file)

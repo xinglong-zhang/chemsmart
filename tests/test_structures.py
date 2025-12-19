@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
@@ -8,8 +9,13 @@ from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
+from chemsmart.io.file import CDXFile
 from chemsmart.io.gaussian.input import Gaussian16Input
-from chemsmart.io.molecules.structure import CoordinateBlock, Molecule, XYZFile
+from chemsmart.io.molecules.structure import (
+    CoordinateBlock,
+    Molecule,
+)
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.cluster import is_pubchem_network_available
 
 
@@ -105,6 +111,7 @@ class TestStructures:
         assert isinstance(molecule, Molecule)
         assert len(molecule.chemical_symbols) == 71
         assert molecule.is_chiral
+        assert molecule.is_aromatic
 
         # test conversion of molecule to RDKit molecule
         rdkit_mol = molecule.to_rdkit()
@@ -1014,6 +1021,9 @@ class TestChemicalFeatures:
         assert not ozone.is_chiral
         rdkit_mol = ozone.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) == []
+        assert ozone.chemical_symbols == ["O", "O", "O"]
+        assert ozone.atomic_radii_list == [0.66, 0.66, 0.66]
+        assert ozone.vdw_radii_list == [1.52, 1.52, 1.52]
 
         graph = ozone.to_graph()
         assert any(
@@ -1055,6 +1065,79 @@ class TestChemicalFeatures:
         # check there are 6 aromatic C-C bonds and 6 single C-H bonds in benzene
         assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
         assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
+
+    def test_volume(
+        self, gaussian_ozone_opt_outfile, gaussian_acetone_opt_outfile
+    ):
+        """Test volume calculation for molecules.
+
+        Tests various volume calculation methods:
+        - voronoi_dirichlet_occupied_volume (requires pyvoro, optional)
+        - crude_volume_by_vdw_radii
+        - crude_volume_by_atomic_radii
+        - vdw_volume
+        - vdw_volume_from_rdkit
+        - voronoi_dirichlet_polyhedra_occupied_volume
+        """
+        ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+
+        # Test pyvoro-based method (optional, may not be available in Python 3.12+)
+        try:
+            ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+            assert ozone_vd_vol > 0
+            assert np.isclose(ozone_vd_vol, 42.796979883456515, rtol=0.01)
+        except ImportError:
+            pass  # pyvoro not available, skip this test
+
+        # Test other volume methods that don't require pyvoro
+        assert np.isclose(
+            ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
+        )
+        assert np.isclose(
+            ozone.crude_volume_by_atomic_radii, 3.612781286145805, rtol=0.01
+        )
+        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
+        # grid_vdw_volume uses grid-based integration (similar to RDKit)
+        assert np.isclose(ozone.grid_vdw_volume, 31.464, rtol=0.05)
+        assert np.isclose(
+            ozone.vdw_volume_from_rdkit, 25.533471711063285, rtol=0.01
+        )
+        assert np.isclose(
+            ozone.voronoi_dirichlet_polyhedra_occupied_volume,
+            20.94252748967074,
+            rtol=0.01,
+        )
+
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+
+        # Test pyvoro-based method (optional)
+        try:
+            acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+            assert acetone_vd_vol > 0
+            assert np.isclose(acetone_vd_vol, 108.73483002110545, rtol=0.01)
+        except ImportError:
+            pass  # pyvoro not available, skip this test
+
+        # Test other volume methods
+        assert np.isclose(
+            acetone.crude_volume_by_vdw_radii, 119.87818262306239, rtol=0.01
+        )
+        assert np.isclose(
+            acetone.crude_volume_by_atomic_radii, 7.469325029468949, rtol=0.01
+        )
+        assert np.isclose(
+            acetone.voronoi_dirichlet_polyhedra_occupied_volume,
+            12.369068467588548,
+            rtol=0.01,
+        )
+        # vdw_volume uses exact lens-shaped intersection formula for overlap correction
+        assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
+        # grid_vdw_volume uses grid-based integration (similar to RDKit)
+        assert np.isclose(acetone.grid_vdw_volume, 64.832, rtol=0.05)
+        assert np.isclose(
+            acetone.vdw_volume_from_rdkit, 61.98249809788294, rtol=0.01
+        )
 
 
 class TestStructuresFromGaussianInput:
@@ -1416,7 +1499,7 @@ M  END
 10
 
 $$$$"""
-        from chemsmart.io.molecules.structure import SDFFile
+        from chemsmart.io.file import SDFFile
 
         tmpfile = os.path.join(tmpdir, "test.sdf")
         with open(tmpfile, "w") as f:
@@ -1466,3 +1549,192 @@ $$$$"""
         )
 
         assert np.all(sdf_molecule.positions == structure_coords)
+
+
+class TestCDXFile:
+    """Tests for ChemDraw file reading functionality."""
+
+    def test_read_single_molecule_cdxml_file_benzene(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdxml_file_benzene)
+        assert os.path.isfile(single_molecule_cdxml_file_benzene)
+
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_benzene)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+        assert mol.num_atoms == 12  # benzene with hydrogens
+        assert mol.is_aromatic
+
+    def test_read_single_molecule_cdxml_file_methane(
+        self, single_molecule_cdxml_file_methane
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdxml_file_methane)
+        assert os.path.isfile(single_molecule_cdxml_file_methane)
+
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_methane)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "CH4"
+        assert mol.num_atoms == 5  # benzene with hydrogens
+        assert not mol.is_aromatic
+
+    def test_read_multi_molecule_cdxml_file(self, multi_molecule_cdxml_file):
+        """Test reading multiple molecules from a CDXML file."""
+        assert os.path.exists(multi_molecule_cdxml_file)
+        assert os.path.isfile(multi_molecule_cdxml_file)
+
+        cdx_file = CDXFile(filename=multi_molecule_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 2
+        assert molecules[0].chemical_formula == "CH2O"  # formaldehyde
+        assert molecules[1].chemical_formula == "N2"  # nitrogen
+
+    def test_molecule_from_filepath_cdxml(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test Molecule.from_filepath with CDXML file."""
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
+
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+        assert mol.num_atoms == 12
+        assert mol.is_aromatic
+        assert mol.positions is not None
+        assert mol.positions.shape == (12, 3)
+
+    def test_molecule_from_filepath_cdxml_pathlib(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test Molecule.from_filepath with pathlib.Path."""
+        path = Path(single_molecule_cdxml_file_benzene)
+        mol = Molecule.from_filepath(path)
+
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+
+    def test_molecule_from_filepath_cdxml_multi_molecules(
+        self, multi_molecule_cdxml_file
+    ):
+        """Test reading multiple molecules from CDXML using from_filepath."""
+        # Get all molecules
+        molecules = Molecule.from_filepath(
+            multi_molecule_cdxml_file, index=":", return_list=True
+        )
+        assert isinstance(molecules, list)
+        assert len(molecules) == 2
+
+        # Get first molecule (1-based indexing)
+        mol1 = Molecule.from_filepath(multi_molecule_cdxml_file, index="1")
+        assert mol1.chemical_formula == "CH2O"
+
+        # Get last molecule
+        mol_last = Molecule.from_filepath(
+            multi_molecule_cdxml_file, index="-1"
+        )
+        assert mol_last.chemical_formula == "N2"
+
+    def test_molecule_from_filepath_cdxml_return_list(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test return_list parameter with single molecule CDXML file."""
+        mol_single = Molecule.from_filepath(
+            single_molecule_cdxml_file_benzene, return_list=False
+        )
+        assert isinstance(mol_single, Molecule)
+
+        mol_list = Molecule.from_filepath(
+            single_molecule_cdxml_file_benzene, return_list=True
+        )
+        assert isinstance(mol_list, list)
+        assert len(mol_list) == 1
+        assert isinstance(mol_list[0], Molecule)
+
+    def test_cdxfile_get_molecules_index(self, multi_molecule_cdxml_file):
+        """Test CDXFile.get_molecules with various index specifications."""
+        cdx_file = CDXFile(filename=multi_molecule_cdxml_file)
+
+        # Test index=":"
+        all_mols = cdx_file.get_molecules(index=":")
+        assert len(all_mols) == 2
+
+        # Test index="-1"
+        last_mol = cdx_file.get_molecules(index="-1")
+        assert last_mol.chemical_formula == "N2"
+
+        # Test 1-based indexing
+        first_mol = cdx_file.get_molecules(index="1")
+        assert first_mol.chemical_formula == "CH2O"
+
+        second_mol = cdx_file.get_molecules(index="2")
+        assert second_mol.chemical_formula == "N2"
+
+    def test_cdx_molecule_to_rdkit_conversion(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test that molecules from CDXML can be converted to RDKit."""
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
+        rdkit_mol = mol.to_rdkit()
+
+        assert isinstance(rdkit_mol, Chem.Mol)
+        assert rdkit_mol.GetNumAtoms() == 12
+        assert rdkit_mol.GetNumConformers() == 1
+
+    def test_cdx_molecule_to_graph(self, single_molecule_cdxml_file_benzene):
+        """Test that molecules from CDXML can be converted to graph."""
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
+        graph = mol.to_graph()
+
+        assert isinstance(graph, nx.Graph)
+        assert len(graph.nodes) == 12  # benzene with hydrogens
+        # Benzene should have 6 C-C bonds + 6 C-H bonds = 12 bonds
+        assert len(graph.edges) == 12
+
+    def test_read_single_molecule_cdx_file_imidazole(
+        self, single_molecule_cdx_file_imidazole
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdx_file_imidazole)
+        assert os.path.isfile(single_molecule_cdx_file_imidazole)
+
+        cdx_file = CDXFile(filename=single_molecule_cdx_file_imidazole)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C8H10N2O"
+        assert mol.num_atoms == 21
+        assert mol.is_aromatic
+
+    def test_read_complex_molecule_cdxml_file_(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(complex_molecule_cdxml_file)
+        assert os.path.isfile(complex_molecule_cdxml_file)
+
+        cdx_file = CDXFile(filename=complex_molecule_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C32H31N5O5"
+        assert mol.num_atoms == 73  # benzene with hydrogens
+        assert mol.is_aromatic

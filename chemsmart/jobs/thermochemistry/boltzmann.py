@@ -138,18 +138,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
 
         Returns:
             BoltzmannAverageThermochemistryJob: Configured job instance
-
-        Raises:
-            ValueError: If files have unsupported extensions
         """
-
-        # Validate file extensions
-        for file in files:
-            if not file.endswith((".log", ".out")):
-                raise ValueError(
-                    f"Unsupported file extension for '{file}'. "
-                    f"Only .log or .out files are accepted."
-                )
 
         # Create jobrunner if not provided
         if jobrunner is None:
@@ -238,6 +227,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
                 qrrho_gibbs_free_energy,
                 outputfile=self.settings.outputfile,
                 overwrite=self.settings.overwrite,
+                write_header=self.settings.write_header,
             )
 
         except Exception as e:

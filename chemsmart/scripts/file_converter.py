@@ -11,6 +11,7 @@ import os
 
 import click
 
+from chemsmart.cli.logger import logger_options
 from chemsmart.io.converter import FileConverter
 from chemsmart.utils.logger import create_logger
 
@@ -48,13 +49,20 @@ os.environ["OMP_NUM_THREADS"] = "1"
     default=False,
     help="Include intermediate structures in the conversion.",
 )
+@logger_options
 def entry_point(
-    directory, type, filename, output_filetype, include_intermediate_structures
+    directory,
+    type,
+    filename,
+    output_filetype,
+    include_intermediate_structures,
+    debug,
+    stream,
 ):
     """
     Script for converting structures in different formats.
     """
-    create_logger()
+    create_logger(debug=debug, stream=stream)
     if directory is not None:
         logger.info(f"Converting files in directory: {directory}")
         assert (

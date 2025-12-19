@@ -46,6 +46,8 @@ class TestNCIPLOTInputWriter:
             settings=job_settings,
             jobrunner=nciplot_jobrunner_no_scratch,
         )
+        # set up correct variables by calling prerun()
+        nciplot_jobrunner_no_scratch._prerun(job)
         nciplot_writer = NCIPLOTInputWriter(job=job)
 
         # write input file
@@ -120,6 +122,10 @@ class TestNCIPLOTInputWriter:
             label="nci_two_files",
             jobrunner=nciplot_jobrunner_no_scratch,
         )
+
+        # set up correct variables by calling prerun()
+        nciplot_jobrunner_no_scratch._prerun(job)
+
         nciplot_writer = NCIPLOTInputWriter(job=job)
 
         # write input file
@@ -156,3 +162,54 @@ class TestNCIPLOTInputWriter:
         # job run will result in the job being run and the output file copied back to run folder
         # job.run()
         # assert job.is_complete()
+
+    def test_write_nci_promolecular_with_scratch(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        nciplot_jobrunner_scratch,
+    ):
+        """Test that promolecular density files are found in scratch directory.
+
+        This test reproduces the bug where the writer looks for files in the
+        wrong directory when using scratch and promolecular density.
+        """
+        job_settings = NCIPLOTJobSettings()
+
+        # copy file to tmpdir to simulate original location
+        tmpdir_xyz_file = os.path.join(tmpdir, "test_molecule.xyz")
+        copy(single_molecule_xyz_file, tmpdir_xyz_file)
+
+        # change to tmpdir
+        os.chdir(tmpdir)
+
+        # create nciplot job with promolecular suffix in label
+        # This simulates what happens in the CLI when processing .xyz files
+        job = NCIPLOTJob(
+            filenames=("test_molecule.xyz",),
+            settings=job_settings,
+            label="test_molecule_promolecular",
+            jobrunner=nciplot_jobrunner_scratch,
+        )
+
+        # Simulate the runner's prerun which creates scratch dir and copies files
+        nciplot_jobrunner_scratch._prerun(job)
+
+        # Now write the input file - this should not raise FileNotFoundError
+        nciplot_writer = NCIPLOTInputWriter(job=job)
+        nciplot_writer.write(
+            target_directory=nciplot_jobrunner_scratch.running_directory
+        )
+
+        # Verify the input file was created correctly
+        nci_file = os.path.join(
+            nciplot_jobrunner_scratch.running_directory,
+            "test_molecule_promolecular.nci",
+        )
+        assert os.path.exists(nci_file)
+
+        # Check that the filename is written correctly
+        with open(nci_file, "r") as f:
+            lines = f.readlines()
+        assert lines[0] == "1\n"
+        assert lines[1] == "test_molecule.xyz\n"

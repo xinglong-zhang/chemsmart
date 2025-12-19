@@ -7,16 +7,14 @@ logger = logging.getLogger(__name__)
 
 
 def click_jobrunner_options(f):
-    """
-    Common job runner configuration options.
-    """
+    """Common job runner configuration options."""
 
     @click.option(
         "-s",
         "--server",
         type=str,
         default=None,
-        help="Server. If not specified, will try to automatically "
+        help="Server name. If not specified, will try to automatically "
         "determine and use the current server.",
     )
     @click.option(
@@ -30,29 +28,29 @@ def click_jobrunner_options(f):
         "--num-gpus",
         type=int,
         default=None,
-        help="Number of gpus per node. Defaults to number of GPUs on "
-        "specified server if None.",
+        help="Number of GPUs per node. Defaults to number of GPUs on "
+        "the specified server if None.",
     )
     @click.option(
-        "-m", "--mem-gb", type=int, default=None, help="Memory in GBs"
+        "-m", "--mem-gb", type=int, default=None, help="Memory in GB."
     )
     @click.option(
         "--fake/--no-fake",
         default=False,
         type=bool,
-        help="If true, fake jobrunners will be used.",
+        help="If true, fake job runners will be used.",
     )
     @click.option(
         "--scratch/--no-scratch",
         default=None,
         type=bool,
-        help="Run in scratch mode or without scratch folder.",
+        help="Run in scratch mode or without a scratch folder.",
     )
     @click.option(
         "--delete-scratch/--no-delete-scratch",
         default=False,
         type=bool,
-        help="If job was run in scratch, delete scratch folder after job "
+        help="If job was run in scratch, delete the scratch folder after the job "
         "is completed successfully.",
     )
     @functools.wraps(f)

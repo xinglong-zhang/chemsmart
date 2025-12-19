@@ -367,8 +367,8 @@ def get_setting_from_jobtype_for_gaussian(
         project_settings: Gaussian project settings object.
         jobtype (str): Type of calculation (opt, ts, modred, irc, scan, etc.).
         coordinates: Coordinate specification for modred/scan jobs.
-        step_size (float): Step size for scan calculations.
-        num_steps (int): Number of steps for scan calculations.
+        step_size: Step size for scan calculations.
+        num_steps: Number of steps for scan calculations.
 
     Returns:
         GaussianJobSettings or None: Configured settings object for the job
@@ -411,10 +411,24 @@ def get_setting_from_jobtype_for_gaussian(
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":
+            num_steps_info = ast.literal_eval(num_steps)
+            step_size_info = ast.literal_eval(step_size)
+            if not isinstance(num_steps_info, list):
+                num_steps_info = [num_steps_info]
+            if not isinstance(step_size_info, list):
+                step_size_info = [step_size_info]
+
+            # explicit type conversion
+            step_size_info = [float(size) for size in step_size_info]
+            num_steps_info = [int(num) for num in num_steps_info]
+
+            check_scan_parameters_consistency_gaussian(
+                modred_info, step_size_info, num_steps_info
+            )
             scan_info = {
                 "coords": modred_info,
-                "num_steps": int(num_steps),
-                "step_size": float(step_size),
+                "num_steps": num_steps_info,
+                "step_size": step_size_info,
             }
             settings.modred = scan_info
 
@@ -431,8 +445,8 @@ def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
 
     Args:
         coordinates: Coordinate specification for the scan.
-        step_size (float): Step size for the scan.
-        num_steps (int): Number of scan steps.
+        step_size: Step size for the scan.
+        num_steps: Number of scan steps.
 
     Raises:
         AssertionError: If any required parameter is None, with detailed
@@ -444,6 +458,51 @@ def check_scan_coordinates_gaussian(coordinates, step_size, num_steps):
         "Use the flags `-c -s -n` for coordinates, step-size and num-steps respectively.\n"
         "Example usage: `-c [[2,3],[6,7]] -s 0.1 -n 15`"
     )
+
+
+def check_scan_parameters_consistency_gaussian(
+    coords: list, step_size: list, num_steps: list
+):
+    """
+    Validate consistency between scan coordinates and their parameters.
+
+    Ensures that the number of coordinates matches the number of step_size
+    and num_steps values provided. Handles both single coordinate and
+    multi-coordinate scan scenarios.
+
+    Args:
+        coords: Coordinate specification - list[int] for single coordinate
+                or list[list[int]] for multiple coordinates.
+        step_size: List of step sizes - must match number of coordinates.
+        num_steps: List of step counts - must match number of coordinates.
+
+    Raises:
+        ValueError: If the number of coordinates doesn't match the number
+                   of step_size or num_steps values, with detailed error
+                   message showing the mismatch.
+
+    Examples:
+        # Valid single coordinate
+        check_scan_parameters_consistency([1,2], [0.1], [10])
+
+        # Valid multiple coordinates
+        check_scan_parameters_consistency([[1,2],[3,4]], [0.1,0.2], [10,15])
+
+        # Invalid - mismatched counts
+        check_scan_parameters_consistency([[1,2],[3,4]], [0.1], [10,15])
+        # Raises ValueError
+    """
+    if isinstance(coords[0], list):
+        coords_num = len(coords)
+    elif isinstance(coords[0], int):
+        coords_num = 1
+    else:
+        raise ValueError("Invalid format for coordinates.")
+    if len(step_size) != coords_num or len(num_steps) != coords_num:
+        raise ValueError(
+            f"Mismatch in number of coordinates and step parameters: "
+            f"coords={coords_num}, step_size={len(step_size)}, num_steps={len(num_steps)}"
+        )
 
 
 def get_setting_from_jobtype_for_orca(
@@ -507,11 +566,29 @@ def get_setting_from_jobtype_for_orca(
         if jobtype == "modred":
             settings.modred = modred_info
         elif jobtype == "scan":
+            dist_start_info = ast.literal_eval(dist_start)
+            dist_end_info = ast.literal_eval(dist_end)
+            num_steps_info = ast.literal_eval(num_steps)
+            if not isinstance(dist_start_info, list):
+                dist_start_info = [dist_start_info]
+            if not isinstance(dist_end_info, list):
+                dist_end_info = [dist_end_info]
+            if not isinstance(num_steps_info, list):
+                num_steps_info = [num_steps_info]
+
+            # explicit type conversion
+            dist_start_info = [float(dist) for dist in dist_start_info]
+            dist_end_info = [float(dist) for dist in dist_end_info]
+            num_steps_info = [int(num) for num in num_steps_info]
+
+            check_scan_parameters_consistency_orca(
+                modred_info, dist_start_info, dist_end_info, num_steps_info
+            )
             scan_info = {
                 "coords": modred_info,
-                "dist_start": float(dist_start),
-                "dist_end": float(dist_end),
-                "num_steps": int(num_steps),
+                "dist_start": dist_start_info,
+                "dist_end": dist_end_info,
+                "num_steps": num_steps_info,
             }
             settings.modred = scan_info
 
@@ -548,6 +625,57 @@ def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
     )
 
 
+def check_scan_parameters_consistency_orca(
+    coords: list, dist_start: list, dist_end: list, num_steps: list
+):
+    """
+    Validate consistency between scan coordinates and their parameters for ORCA.
+
+    Ensures that the number of coordinates matches the number of dist_start,
+    dist_end and num_steps values provided. Handles both single coordinate and
+    multi-coordinate scan scenarios.
+
+    Args:
+        coords: Coordinate specification - list[int] for single coordinate
+                or list[list[int]] for multiple coordinates.
+        dist_start: List of starting distances - must match number of coordinates.
+        dist_end: List of ending distances - must match number of coordinates.
+        num_steps: List of step counts - must match number of coordinates.
+
+    Raises:
+        ValueError: If the number of coordinates doesn't match the number
+                   of dist_start, dist_end or num_steps values, with detailed
+                   error message showing the mismatch.
+
+    Examples:
+        # Valid single coordinate
+        check_scan_parameters_consistency_orca([1,2], [3.0], [1.2], [10])
+
+        # Valid multiple coordinates
+        check_scan_parameters_consistency_orca([[1,2],[3,4]], [3.0,2.5], [1.2,1.0], [10,15])
+
+        # Invalid - mismatched counts
+        check_scan_parameters_consistency_orca([[1,2],[3,4]], [3.0], [1.2,1.0], [10,15])
+        # Raises ValueError
+    """
+    if isinstance(coords[0], list):
+        coords_num = len(coords)
+    elif isinstance(coords[0], int):
+        coords_num = 1
+    else:
+        raise ValueError("Invalid format for coordinates.")
+    if (
+        len(dist_start) != coords_num
+        or len(dist_end) != coords_num
+        or len(num_steps) != coords_num
+    ):
+        raise ValueError(
+            f"Mismatch in number of coordinates and scan parameters: "
+            f"coords={coords_num}, dist_start={len(dist_start)}, "
+            f"dist_end={len(dist_end)}, num_steps={len(num_steps)}"
+        )
+
+
 def update_irc_label(label, direction, flat_irc):
     """
     Update the job label based on IRC direction and flat IRC flag.
@@ -574,4 +702,28 @@ def update_irc_label(label, direction, flat_irc):
             )
     if flat_irc:
         label += "_flat"
+    return label
+
+
+def create_sp_label(label, sp_settings):
+    """Helper to create label with solvent info."""
+    # either supplied or not from cli, would still want label to have model
+    # and id, if both given;
+    # will not be activated when both are not given, e.g., in the gaussian
+    # calculator calling the sp job
+    if (
+        sp_settings.solvent_model is not None
+        and sp_settings.solvent_id is not None
+    ):
+        # replace , by _ if it occurs in the solvent name, as , in file will
+        # cause gaussian run error
+        solvent_label = sp_settings.solvent_id.replace(",", "_")
+        solvent_label = solvent_label.replace("-", "_")
+        label = f"{label}_{sp_settings.solvent_model}_{solvent_label}"
+    elif sp_settings.solvent_model is None and sp_settings.solvent_id is None:
+        label = (
+            f"{label}_gas_phase"
+            if sp_settings.custom_solvent is None
+            else f"{label}_custom_solvent"
+        )
     return label

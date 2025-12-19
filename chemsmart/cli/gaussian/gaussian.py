@@ -4,10 +4,17 @@ import os
 
 import click
 
-from chemsmart.cli.job import click_pubchem_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filename_options,
+    click_pubchem_options,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import return_objects_from_string_index
+from chemsmart.utils.io import clean_label
+from chemsmart.utils.utils import (
+    return_objects_and_indices_from_string_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,38 +36,21 @@ def click_gaussian_settings_options(f):
     """Common click options for Gaussian Settings."""
 
     @click.option(
-        "-f",
-        "--filename",
-        type=str,
-        default=None,
-        help="filename from which new Gaussian input is prepared.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="write user input filename for the job (without extension)",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
-    @click.option(
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the molecule"
+        "-c",
+        "--charge",
+        type=int,
+        default=None,
+        help="Charge of the molecule.",
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the molecule",
+        help="Multiplicity of the molecule.",
     )
     @click.option(
         "-x",
@@ -80,50 +70,42 @@ def click_gaussian_settings_options(f):
         help="Semiempirical method to run.",
     )
     @click.option(
-        "-i",
-        "--index",
-        type=str,
-        default=None,
-        help="Index of molecules to use; 1-based indices. "
-        "Default to the last molecule structure. 1-based index.",
-    )
-    @click.option(
         "-o",
         "--additional-opt-options",
         type=str,
         default=None,
-        help="additional opt options",
+        help="Additional optimization options.",
     )
     @click.option(
         "-r",
         "--additional-route-parameters",
         type=str,
         default=None,
-        help="additional route parameters",
+        help="Additional route parameters.",
     )
     @click.option(
         "-A",
         "--append-additional-info",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the "
-        "input file. E.g, scrf=read",
+        help="Additional information to be appended at the end of the "
+        "input file (e.g., scrf=read).",
     )
     @click.option(
         "-C",
         "--custom-solvent",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the "
-        "input file. E.g, scrf=read",
+        help="Custom solvent information to be appended at the end of the "
+        "input file (e.g., scrf=read).",
     )
     @click.option(
         "-d",
         "--dieze-tag",
         type=str,
         default=None,
-        help="dieze tag for gaussian job; possible options include "
-        '"n", "p", "t" to get "#n", "#p", "#t", respectively',
+        help="Dieze tag for Gaussian job. Possible options include "
+        '"n", "p", "t" to get "#n", "#p", "#t", respectively.',
     )
     @click.option(
         "--forces/--no-forces",
@@ -145,7 +127,7 @@ def click_gaussian_irc_options(f):
         "--flat-irc/--no-flat-irc",
         type=bool,
         default=False,
-        help="whether to run flat irc or not",
+        help="Whether to run flat IRC or not.",
     )
     @click.option(
         "-pt",
@@ -154,7 +136,7 @@ def click_gaussian_irc_options(f):
             ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
         ),
         default=None,
-        help="Type of predictors used for IRC. Examples include[HPC, EulerPC, "
+        help="Type of predictor used for IRC. Examples include [HPC, EulerPC, "
         "LQA, DVV, Euler].",
     )
     @click.option(
@@ -162,7 +144,7 @@ def click_gaussian_irc_options(f):
         "--recorrect",
         type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
         default=None,
-        help="Recorrection step of HPC and EulerPC IRCs. options are: "
+        help="Recorrection step of HPC and EulerPC IRCs. Options are: "
         '["Never", "Always", "Test"].',
     )
     @click.option(
@@ -171,35 +153,35 @@ def click_gaussian_irc_options(f):
         type=int,
         default=6,
         help="Compute the Hessian analytically every N predictor steps or every "
-        "|N| corrector steps if N<0. ",
+        "|N| corrector steps if N < 0.",
     )
     @click.option(
         "-mp",
         "--maxpoints",
         type=int,
         default=512,
-        help="Number of points along reaction path to examine.",
+        help="Number of points along the reaction path to examine.",
     )
     @click.option(
         "-mc",
         "--maxcycles",
         type=int,
         default=128,
-        help="Maximum number of steps along IRC to run.",
+        help="Maximum number of steps along the IRC to run.",
     )
     @click.option(
         "-ss",
         "--stepsize",
         type=int,
         default=20,
-        help="Step size along reaction path, in units of 0.01 Bohr.",
+        help="Step size along the reaction path, in units of 0.01 Bohr.",
     )
     @click.option(
         "-d",
         "--direction",
         type=click.Choice(["forward", "reverse"], case_sensitive=False),
         default=None,
-        help="Only run the forward or reverse IRC, default to run both directions.",
+        help="Only run the forward or reverse IRC. Defaults to run both directions.",
     )
     @functools.wraps(f)
     def wrapper_irc_options(*args, **kwargs):
@@ -217,26 +199,26 @@ def click_gaussian_jobtype_options(f):
         type=str,
         default=None,
         help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", '
-        '"sp", "irc"]',
+        '"sp", "irc"].',
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. "
+        help="List of coordinates to be fixed for modred or scan jobs. "
         "1-indexed.",
     )
     @click.option(
         "-s",
         "--step-size",
         default=None,
-        help="Step size of coordinates to scan.",
+        help="Step size for coordinate scans.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="Step size of coordinates to scan.",
+        help="Number of steps for coordinate scans.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -263,21 +245,22 @@ def click_gaussian_grouper_options(f):
         "--threshold",
         type=float,
         default=None,
-        help="Threshold for grouping. If not specified, uses strategy-specific defaults: RMSD=0.5, Tanimoto=0.9, Connectivity=0.0.",
+        help="Threshold for grouping. If not specified, uses strategy-specific "
+        "defaults: RMSD=0.5, Tanimoto=0.9, Connectivity=0.0.",
     )
     @click.option(
         "-i",
         "--ignore-hydrogens",
         is_flag=True,
         default=False,
-        help="Whether to ignore hydrogens in the grouping.",
+        help="Whether to ignore hydrogens in grouping.",
     )
     @click.option(
         "-p",
         "--num-procs",
         type=int,
         default=1,
-        help="Number of processors to use for grouper.",
+        help="Number of processors to use for the grouper.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -287,14 +270,14 @@ def click_gaussian_grouper_options(f):
 
 
 def click_gaussian_solvent_options(f):
-    """Common click solvent options for Gaussian jobs."""
+    """Common click options for Gaussian solvent settings."""
 
     @click.option(
         "--remove-solvent/--no-remove-solvent",
         "-r/ ",
         type=bool,
         default=False,
-        help="Whether to use solvent model in the job. Defaults to project "
+        help="Whether to remove the solvent model from the job. Defaults to project "
         "settings.",
     )
     @click.option(
@@ -302,14 +285,14 @@ def click_gaussian_solvent_options(f):
         "--solvent-model",
         type=str,
         default=None,
-        help="Solvent model to be used for single point.",
+        help="Solvent model to be used for single point calculations.",
     )
     @click.option(
         "-si",
         "--solvent-id",
         type=str,
         default=None,
-        help="Solvent ID to be used for single point.",
+        help="Solvent ID to be used for single point calculations.",
     )
     @click.option(
         "-so",
@@ -317,9 +300,9 @@ def click_gaussian_solvent_options(f):
         type=str,
         default=None,
         help="Additional solvent options in scrf=() route. "
-        "E.g., `iterative` in scrf=(smd,water,iterative) via"
-        "chemsmart sub -s xz gaussian -p dnam -f outout.log -a scrf_iter sp "
-        "-so iterative",
+        "E.g., `iterative` in scrf=(smd,water,iterative) via "
+        "chemsmart sub -s xz gaussian -p dnam -f output.log -a scrf_iter sp "
+        "-so iterative.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -329,6 +312,8 @@ def click_gaussian_solvent_options(f):
 
 
 def click_gaussian_td_options(f):
+    """Common click options for Gaussian TDDFT calculations."""
+
     @click.option(
         "-s",
         "--states",
@@ -336,22 +321,23 @@ def click_gaussian_td_options(f):
             ["singlets", "triplets", "50-50"], case_sensitive=False
         ),
         default="singlets",
-        help="States for closed-shell singlet systems.\n"
-        'Options choice =["Singlets", "Triplets", "50-50"]',
+        help="States for closed-shell singlet systems. "
+        'Options: ["Singlets", "Triplets", "50-50"].',
     )
     @click.option(
         "-r",
         "--root",
         type=int,
         default=1,
-        help="Specifies the “state of interest”. The default is the first excited state (N=1).",
+        help='Specifies the "state of interest". '
+        "The default is the first excited state (N=1).",
     )
     @click.option(
         "-n",
         "--nstates",
         type=int,
         default=3,
-        help="Solve for M states (the default is 3). "
+        help="Number of states to solve for (default is 3). "
         "If 50-50, this gives the number of each type of state to solve "
         "(i.e., 3 singlets and 3 triplets).",
     )
@@ -361,7 +347,7 @@ def click_gaussian_td_options(f):
         type=str,
         default=None,
         help="Whether to perform equilibrium or non-equilibrium PCM solvation. "
-        "NonEqSolv is the default except for excited state opt and when "
+        "NonEqSolv is the default except for excited state optimization and when "
         "excited state density is requested (e.g., Density=Current or All).",
     )
     @functools.wraps(f)
@@ -373,6 +359,8 @@ def click_gaussian_td_options(f):
 
 @click.group(cls=MyGroup)
 @click_gaussian_options
+@click_filename_options
+@click_file_label_and_index_options
 @click_gaussian_settings_options
 @click_pubchem_options
 @click.pass_context
@@ -397,7 +385,7 @@ def gaussian(
     forces,
     pubchem,
 ):
-    """CLI for running Gaussian jobs using the chemsmart framework."""
+    """CLI subcommand for running Gaussian jobs using the chemsmart framework."""
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -513,17 +501,27 @@ def gaussian(
         label = os.path.splitext(os.path.basename(filename))[0]
         label = f"{label}_{ctx.invoked_subcommand}"
 
+    label = clean_label(label)
+
     # if user has specified an index to use to access particular structure
-    # then return that structure as a list
+    # then return that structure as a list and track the original indices
+    molecule_indices = None
     if index is not None:
-        molecules = return_objects_from_string_index(
-            list_of_objects=molecules, index=index
+        molecules, molecule_indices = (
+            return_objects_and_indices_from_string_index(
+                list_of_objects=molecules, index=index
+            )
         )
 
     if not isinstance(molecules, list):
         molecules = [molecules]
+        if molecule_indices is not None and not isinstance(
+            molecule_indices, list
+        ):
+            molecule_indices = [molecule_indices]
 
     logger.debug(f"Obtained molecules: {molecules}")
+    logger.debug(f"Molecule indices: {molecule_indices}")
 
     # store objects
     ctx.obj["project_settings"] = project_settings
@@ -531,6 +529,9 @@ def gaussian(
     ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
+    )
+    ctx.obj["molecule_indices"] = (
+        molecule_indices  # Store original 1-based indices
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
