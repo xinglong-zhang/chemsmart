@@ -9,8 +9,9 @@ from ase import units
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.io.orca import ORCARefs
 from chemsmart.io.orca.input import ORCAInput
-from chemsmart.io.orca.output import ORCAEngradFile, ORCAOutput
+from chemsmart.io.orca.output import ORCAEngradFile, ORCANEBFile, ORCAOutput
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.jobs.orca.settings import ORCANEBJobSettings
 
 
 class TestORCARoute:
@@ -193,12 +194,12 @@ class TestORCAInput:
         assert os.path.exists(orca_input_nebts_ts_xyz_file_tmp)
 
         orca_inp = ORCAInput(filename=orca_input_nebts_file)
-        assert orca_inp.route_string == "!  GFN2-xTB NEB-TS Freq".lower()
+        assert orca_inp.route_string == "! gfn2-xtb neb-ts freq".lower()
         assert orca_inp.functional is None
         assert orca_inp.basis is None
         assert orca_inp.coordinate_type == "xyzfile"  # xyzfile is specified
         assert orca_inp.charge == 0
-        assert orca_inp.multiplicity == 1
+        assert orca_inp.multiplicity == 2
         assert orca_inp.molecule.num_atoms == 40
         assert isinstance(orca_inp.molecule, Molecule)
         assert orca_inp.molecule.empirical_formula == "C23H15NO"
@@ -2554,3 +2555,85 @@ class TestORCAEngrad:
         assert np.allclose(
             orca_engrad.molecule.positions, coordinates, rtol=1e-6
         )
+
+
+class TestORCANEB:
+    def test_read_neb_output(self, orca_neb_output_file):
+        import pathlib
+
+        # Create a temporary UTF-8 version of the file
+        src = pathlib.Path(orca_neb_output_file)
+        tmp_file = src.parent / (src.stem + "_utf8.out")
+        tmp_file.write_text(
+            src.read_text(encoding="utf-8", errors="replace"), encoding="utf-8"
+        )
+
+        # Pass the UTF-8 version to the parser
+        orca_neb = ORCANEBFile(filename=str(tmp_file))
+        assert orca_neb.nimages == 10
+        assert orca_neb.num_atoms == 148
+        assert orca_neb.ci_converged is True
+        assert orca_neb.ts_converged is True
+        assert orca_neb.ci == "Climbing Image:  image 4."
+        assert orca_neb.ci_energy == -219.0833212
+        assert (
+            orca_neb.reactant.empirical_formula
+            == orca_neb.reactant.empirical_formula
+            == "C72H68NO6P"
+        )
+        assert orca_neb.ci_max_abs_force == 0.001963
+        assert orca_neb.ts_delta_energy == 4.02
+        assert orca_neb.ts_rms_force == 0.00034
+        assert orca_neb.ts_max_abs_force == 0.00543
+        assert orca_neb.ts_energy == -219.09056
+        assert orca_neb.preopt_ends
+
+
+class TestORCANEBJobSettings:
+    """Test suite for ORCANEBJobSettings class."""
+
+    def test_init_default(self):
+        """Test default initialization."""
+        settings = ORCANEBJobSettings()
+        assert settings.jobtype is None
+        assert settings.nimages is None
+        assert settings.preopt_ends is False
+
+    def test_init_with_parameters(self):
+        """Test initialization with parameters."""
+        settings = ORCANEBJobSettings(
+            jobtype="NEB-TS", nimages=8, semiempirical="XTB2"
+        )
+        assert settings.jobtype == "NEB-TS"
+        assert settings.nimages == 8
+        assert settings.semiempirical == "XTB2"
+
+    def test_route_string_generation(self):
+        """Test route string generation."""
+        settings = ORCANEBJobSettings(jobtype="NEB-CI", semiempirical="XTB2")
+        assert settings.route_string == "! XTB2 NEB-CI"
+
+    def test_neb_block_basic(self):
+        """Test basic NEB block generation."""
+        settings = ORCANEBJobSettings(
+            nimages=5, starting_xyz="start.xyz", ending_xyzfile="end.xyz"
+        )
+        neb_block = settings.neb_block
+        assert "%neb" in neb_block
+        assert "NImages 5" in neb_block
+        assert 'NEB_END_XYZFile "end.xyz"' in neb_block
+
+    def test_inheritance(self):
+        """Test inheritance from ORCAJobSettings."""
+        settings = ORCANEBJobSettings(functional="B3LYP", basis="def2-SVP")
+        assert isinstance(settings, ORCANEBJobSettings)
+        assert settings.functional == "B3LYP"
+        assert settings.basis == "def2-SVP"
+
+    def test_validation_errors(self):
+        """Test validation raises appropriate errors."""
+        settings = ORCANEBJobSettings(starting_xyz="start.xyz")
+        with pytest.raises(
+            AssertionError, match="The number of images is missing"
+        ):
+            _ = settings.neb_block
