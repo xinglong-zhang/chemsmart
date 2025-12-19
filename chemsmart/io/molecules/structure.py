@@ -773,12 +773,15 @@ class Molecule:
             program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
-            if program == "gaussian":
+            elif program == "xtb":
+                return cls._read_xtb_outfile(filepath, index, **kwargs)
+            elif program == "gaussian":
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
-            raise ValueError(
-                f"Unsupported .out file program type: {program}. "
-                "Only Gaussian and ORCA are currently supported."
-            )
+            else:
+                raise ValueError(
+                    f"Unsupported .out file program type: {program}. "
+                    "Only Gaussian and ORCA are currently supported."
+                )
 
         if basename.endswith(".gro"):
             return cls._read_gromacs_gro(filepath, index, **kwargs)
@@ -917,6 +920,24 @@ class Molecule:
         return chemdraw_file.get_molecules(
             index=index, return_list=return_list
         )
+
+    @staticmethod
+    @file_cache()
+    def _read_xtb_outfile(filepath, index, **kwargs):
+        """
+        Read XTB output file and XTB trajectory file, xtbopt.log.
+
+        Args:
+            filepath (str): Path to xtb output file
+            index (str or int): Index for multi-structure files
+
+        Returns:
+            Molecule: Molecule object from xtb output file
+        """
+        from chemsmart.io.xtb.output import XTBOutput
+
+        xtb_output = XTBOutput(folder=filepath)
+        return xtb_output.get_molecule(index=index)
 
     # @staticmethod
     # @file_cache()

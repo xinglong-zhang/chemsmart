@@ -3,14 +3,16 @@ from functools import cached_property
 
 import numpy as np
 
-from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.io import create_molecule_list
+from chemsmart.utils.mixins import FolderMixin
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
 
-class XTBOutput(FileMixin):
-    def __init__(self, filename):
-        self.filename = filename
+class XTBOutput(FolderMixin):
+    def __init__(self, folder):
+        self.folder = folder
 
     @property
     def xtb_version(self):
@@ -991,6 +993,71 @@ class XTBOutput(FileMixin):
                 energy = float(line.split(":")[1].split()[0].strip())
                 energies.append(energy)
         return energies or [self.total_energy]
+
+    @cached_property
+    def forces(self):
+        """
+        Return forces of the system from xTB output file.
+        """
+        return self._get_forces()
+
+    def _get_forces(self):
+        """TODO"""
+        pass
+
+    @cached_property
+    def all_structures(self):
+        """
+        XTB-specific:
+        Structures come from xtbopt.log (XYZ trajectory).
+        Energies come from the main output file.
+        """
+        return self._get_all_molecular_structures()
+
+    def _get_all_molecular_structures(self):
+        from chemsmart.io.xyz.xyzfile import XYZFile
+
+        # 1) Read Trajectory from xtbopt.log
+        if not self.has_xtbopt_log:
+            raise FileNotFoundError(
+                f"xtbopt.log not found at expected location: {self._xtbopt_log_path()}"
+            )
+        xyz = XYZFile(filename=self._xtbopt_log_path())
+        mols = xyz.get_molecules(index=":", return_list=True)
+
+        orientations = [mol.positions for mol in mols]
+        symbols = [mol.symbols for mol in mols]
+        n = len(orientations)
+
+        orientations_pbc = [None] * n  # None for PBC in xTB optimizations
+
+        energies = list(self.energies) if self.energies else None
+
+        # 2) Align number of energies with number of structures
+
+        if energies is not None:
+            if len(energies) > n:
+                energies = energies[:n]
+            elif len(energies) < n:
+                energies = energies + [None] * (n - len(energies))
+
+        forces = [None] * (len(energies) if energies is not None else n)
+
+        # 3) Build Molecule list
+        create_molecule_list(
+            orientations=orientations,
+            orientations_pbc=orientations_pbc,
+            energies=energies,
+            forces=forces,
+            symbols=symbols,
+            multiplicity=self.multiplicity,
+            frozen_atoms=None,
+            pbc_conditions=None,
+        )
+
+    def get_molecule(self, index="-1"):
+        index = string2index_1based(index)
+        return self.all_structures[index]
 
     def _extract_final_information(self, keyword):
         for line in reversed(self.contents):
