@@ -139,14 +139,14 @@ class CDXFile(FileMixin):
             raise ValueError(
                 f"No molecules could be read from ChemDraw file: {self.filename}"
             )
-        
+
         # Update property cache for all molecules read from CDXML
         # This is necessary to avoid "Pre-condition Violation" errors
         # when checking atom properties like GetTotalNumHs()
         for mol in rdkit_mols:
             if mol is not None:
                 mol.UpdatePropertyCache(strict=False)
-        
+
         # Combine metal fragments with their aromatic ligands
         # ChemDraw sometimes draws metal complexes as separate fragments
         logger.debug("Combining metal fragments with ligands")
@@ -268,24 +268,25 @@ class CDXFile(FileMixin):
     def _combine_metal_and_ligand_fragments(self, rdkit_mols):
         """
         Combine metal fragments with their aromatic ligand fragments.
-        
+
         ChemDraw sometimes draws organometallic complexes as separate fragments
         (e.g., a metal center with coordinated aromatic rings as separate fragments).
         This method detects such cases and combines them into single molecules.
-        
+
         The heuristic used:
         - A small metal-containing fragment (< 10 atoms) followed by aromatic ring
           fragments (6-atom benzene rings) are combined.
-        
+
         Args:
             rdkit_mols (list[rdkit.Chem.Mol]): List of RDKit molecules (fragments).
-            
+
         Returns:
             list[rdkit.Chem.Mol]: List of combined molecules.
         """
         from rdkit import Chem
+
         from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
-        
+
         def has_metal(mol):
             """Check if molecule contains metal atoms."""
             if mol is None:
@@ -294,7 +295,7 @@ class CDXFile(FileMixin):
                 atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
                 for atom in mol.GetAtoms()
             )
-        
+
         def is_small_ligand_ring(mol):
             """Check if molecule is a small aromatic ring (e.g., benzene, Cp)."""
             if mol is None:
@@ -306,28 +307,30 @@ class CDXFile(FileMixin):
             for ring in ri.AtomRings():
                 if len(ring) in (5, 6):
                     ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
-                    if all(a.GetSymbol() == 'C' for a in ring_atoms):
+                    if all(a.GetSymbol() == "C" for a in ring_atoms):
                         return True
             return False
-        
+
         combined_mols = []
         i = 0
         while i < len(rdkit_mols):
             mol = rdkit_mols[i]
-            
+
             if mol is None:
                 i += 1
                 continue
-            
+
             # Check if this is a small metal-containing fragment
             if has_metal(mol) and mol.GetNumAtoms() < 10:
                 # Look ahead for aromatic ligand fragments
                 ligands = []
                 j = i + 1
-                while j < len(rdkit_mols) and is_small_ligand_ring(rdkit_mols[j]):
+                while j < len(rdkit_mols) and is_small_ligand_ring(
+                    rdkit_mols[j]
+                ):
                     ligands.append(rdkit_mols[j])
                     j += 1
-                
+
                 # If we found ligands, combine them with the metal fragment
                 if ligands:
                     logger.debug(
@@ -336,7 +339,7 @@ class CDXFile(FileMixin):
                     combined = Chem.CombineMols(mol, ligands[0])
                     for k in range(1, len(ligands)):
                         combined = Chem.CombineMols(combined, ligands[k])
-                    
+
                     # Update property cache after combining molecules
                     # This is critical to avoid "Pre-condition Violation" errors
                     combined.UpdatePropertyCache(strict=False)
@@ -348,7 +351,7 @@ class CDXFile(FileMixin):
             else:
                 combined_mols.append(mol)
                 i += 1
-        
+
         return combined_mols
 
     def get_molecules(self, index="-1", return_list=False):

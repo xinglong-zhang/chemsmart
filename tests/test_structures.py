@@ -1751,14 +1751,14 @@ class TestCDXFile:
 
         assert isinstance(molecules, list)
         assert len(molecules) == 7
-        
+
         # Test molecule 0: Ti complex with Cp ligands
         mol = molecules[0]
         assert isinstance(mol, Molecule)
         assert mol.chemical_formula == "C14H30Ti"
         assert mol.num_atoms == 45
         assert mol.is_aromatic
-        
+
         # Test molecule 5: Ir complex with aromatic benzene ligands
         mol = molecules[5]
         assert isinstance(mol, Molecule)

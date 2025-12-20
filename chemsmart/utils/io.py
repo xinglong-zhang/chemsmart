@@ -628,7 +628,7 @@ def fix_cyclopentadienyl_aromaticity(mol: Chem.Mol) -> Chem.Mol:
     RDKit cannot sanitize a neutral aromatic 5-member carbon ring (c1cccc1).
     ChemDraw often uses that for Cp. Convert each such ring into a Cp- by
     making one atom [cH-] (formal charge -1 + explicit H).
-    
+
     Also de-aromatizes the ring to prevent further processing by attach_one_bond_per_cp_ring.
     """
     rw = Chem.RWMol(mol)
@@ -654,12 +654,12 @@ def fix_cyclopentadienyl_aromaticity(mol: Chem.Mol) -> Chem.Mol:
         a0.SetFormalCharge(-1)
         a0.SetNumExplicitHs(1)  # important: keep it as [cH-], not [c-]
         a0.SetNoImplicit(True)  # prevent RDKit from dropping that H
-        
+
         # De-aromatize the ring atoms and bonds to prevent attach_one_bond_per_cp_ring
         # from processing this ring again
         for idx in ring:
             rw.GetAtomWithIdx(idx).SetIsAromatic(False)
-        
+
         # De-aromatize the ring bonds
         for i in range(len(ring)):
             a = ring[i]
