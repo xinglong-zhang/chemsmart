@@ -1742,7 +1742,7 @@ class TestCDXFile:
     def test_read_metal_ligand_molecules_cdxml_file_(
         self, metal_ligand_molecules_cdxml_file
     ):
-        """Test reading a single molecule from a CDXML file."""
+        """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
         assert os.path.exists(metal_ligand_molecules_cdxml_file)
         assert os.path.isfile(metal_ligand_molecules_cdxml_file)
 
@@ -1751,8 +1751,17 @@ class TestCDXFile:
 
         assert isinstance(molecules, list)
         assert len(molecules) == 7
+        
+        # Test molecule 0: Ti complex with Cp ligands
         mol = molecules[0]
         assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C32H31N5O5"
-        assert mol.num_atoms == 73  # benzene with hydrogens
+        assert mol.chemical_formula == "C14H30Ti"
+        assert mol.num_atoms == 45
+        assert mol.is_aromatic
+        
+        # Test molecule 5: Ir complex with aromatic benzene ligands
+        mol = molecules[5]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C14H18Ir"
+        assert mol.num_atoms == 33
         assert mol.is_aromatic
