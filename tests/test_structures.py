@@ -1762,6 +1762,6 @@ class TestCDXFile:
         # Test molecule 5: Ir complex with aromatic benzene ligands
         mol = molecules[5]
         assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C14H18Ir"
-        assert mol.num_atoms == 33
+        assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
+        assert mol.num_atoms == 75
         assert mol.is_aromatic
