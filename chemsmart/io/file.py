@@ -149,7 +149,7 @@ class CDXFile(FileMixin):
         
         # Combine metal fragments with their aromatic ligands
         # ChemDraw sometimes draws metal complexes as separate fragments
-        logger.debug(f"Combining metal fragments with ligands")
+        logger.debug("Combining metal fragments with ligands")
         rdkit_mols = self._combine_metal_and_ligand_fragments(rdkit_mols)
 
         molecules = []
