@@ -4,6 +4,10 @@ import re
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.io import (
+    attach_one_bond_per_cp_ring,
+    fix_cyclopentadienyl_aromaticity,
+)
 from chemsmart.utils.mixins import FileMixin
 
 logger = logging.getLogger(__name__)
@@ -97,10 +101,12 @@ class CDXFile(FileMixin):
         rdkit_mols = []
         try:
             # NOTE: RDKit's MolsFromCDXMLFile always supports CDXML.
-            # CDX files are only supported if RDKit was built with
-            # ChemDraw CDX support.
+            # CDX files are only supported if RDKit was built with ChemDraw CDX support.
             # Use sanitize=False to avoid kekulization errors during parsing
             # of organometallic complexes. We'll handle sanitization later.
+            logger.debug(
+                f"Generating rdkit mols from {self.filename} using RDKit"
+            )
             rdkit_mols = list(
                 Chem.MolsFromCDXMLFile(
                     self.filename, sanitize=False, removeHs=False
@@ -120,6 +126,9 @@ class CDXFile(FileMixin):
             try:
                 from chemsmart.utils.io import obtain_mols_from_cdx_via_obabel
 
+                logger.debug(
+                    f"Generating rdkit mols from {self.filename} using obabel"
+                )
                 rdkit_mols = obtain_mols_from_cdx_via_obabel(self.filename)
             except Exception as e:
                 logger.debug(
@@ -138,6 +147,7 @@ class CDXFile(FileMixin):
 
             # Process molecule (handle organometallic complexes, add H, generate 3D coords)
             try:
+                logger.debug(f"Processing rdkit mol: {rdkit_mol}")
                 rdkit_mol = self._process_cdx_molecule(rdkit_mol)
             except Exception as e:
                 logger.warning(
@@ -186,21 +196,42 @@ class CDXFile(FileMixin):
             atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
             for atom in rdkit_mol.GetAtoms()
         )
+        logger.debug(
+            f"The molecule: {rdkit_mol} has {has_metals} metal atoms."
+        )
+
+        logger.debug(f"Building metal indices for {rdkit_mol}.")
+        metal_idxs = {
+            a.GetIdx()
+            for a in rdkit_mol.GetAtoms()
+            if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+        }
 
         # Normalize metal bonds first (removes aromatic flags from metal bonds)
+        logger.debug(f"Normalize metal bonds in {rdkit_mol}.")
         rdkit_mol = normalize_metal_bonds(rdkit_mol)
 
+        if has_metals:
+            logger.debug(f"Fix cyclopentadienyl aromaticity in {rdkit_mol}.")
+            rdkit_mol = fix_cyclopentadienyl_aromaticity(rdkit_mol)
+            logger.debug(f"Attach one bond per Cp ring in {rdkit_mol}.")
+            rdkit_mol = attach_one_bond_per_cp_ring(rdkit_mol, metal_idxs)
+
         # Sanitize with or without kekulization based on metal presence
+        logger.debug(f"Sanitize metal bonds in {rdkit_mol}.")
         rdkit_mol = safe_sanitize(rdkit_mol, skip_kekulize=has_metals)
 
         # Add explicit hydrogens for proper structure
+        logger.debug(f"Adding explicit hydrogens in {rdkit_mol}.")
         rdkit_mol = Chem.AddHs(rdkit_mol)
 
         # Generate 3D coordinates
         # Try to embed the molecule to get 3D coordinates
+        logger.debug(f"Embed molecule in {rdkit_mol}.")
         result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
         if result == -1:
             # Embedding failed, try with random coordinates
+            logger.debug(f"Failed to embed molecule in {rdkit_mol}.")
             result = AllChem.EmbedMolecule(
                 rdkit_mol,
                 useRandomCoords=True,
@@ -213,6 +244,7 @@ class CDXFile(FileMixin):
 
         # Optimize the geometry (may fail for exotic atom types)
         try:
+            logger.debug(f"Optimize molecule {rdkit_mol} using MMFF.")
             AllChem.MMFFOptimizeMolecule(rdkit_mol)
         except Exception as e:
             logger.debug(

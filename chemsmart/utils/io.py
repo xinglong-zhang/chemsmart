@@ -11,6 +11,8 @@ Key functionality includes:
 - Text processing for chemical file formats
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import re
@@ -18,10 +20,6 @@ import shutil
 import string
 import subprocess
 from io import BytesIO
-
-# from rdkit import Chem
-#
-# import tempfile
 from pathlib import Path
 from typing import List
 
@@ -623,3 +621,152 @@ def normalize_metal_bonds(mol):
                 bond.SetBondType(Chem.BondType.SINGLE)
 
     return mol
+
+
+def fix_cyclopentadienyl_aromaticity(mol: Chem.Mol) -> Chem.Mol:
+    """
+    RDKit cannot sanitize a neutral aromatic 5-member carbon ring (c1cccc1).
+    ChemDraw often uses that for Cp. Convert each such ring into a Cp- by
+    making one atom [cH-] (formal charge -1 + explicit H).
+    """
+    rw = Chem.RWMol(mol)
+    ri = mol.GetRingInfo()
+
+    for ring in ri.AtomRings():
+        if len(ring) != 5:
+            continue
+        atoms = [mol.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" and a.GetIsAromatic() for a in atoms):
+            continue
+        # "Cp as aromatic": 5 aromatic C, each degree 2, each has 1 H, all charges 0
+        if not all(
+            a.GetDegree() == 2
+            and a.GetTotalNumHs() == 1
+            and a.GetFormalCharge() == 0
+            for a in atoms
+        ):
+            continue
+
+        i0 = ring[0]
+        a0 = rw.GetAtomWithIdx(i0)
+        a0.SetFormalCharge(-1)
+        a0.SetNumExplicitHs(1)  # important: keep it as [cH-], not [c-]
+        a0.SetNoImplicit(True)  # prevent RDKit from dropping that H
+
+    return rw.GetMol()
+
+
+def _order_ring_atoms_by_walk(
+    m: Chem.Mol, ring: tuple[int, ...]
+) -> list[int] | None:
+    """Return ring atoms in cyclic order by walking ring neighbors."""
+    ring_set = set(ring)
+    start = ring[0]
+    # ring neighbors within ring
+    nbrs0 = [
+        n.GetIdx()
+        for n in m.GetAtomWithIdx(start).GetNeighbors()
+        if n.GetIdx() in ring_set
+    ]
+    if len(nbrs0) != 2:
+        return None
+
+    order = [start, nbrs0[0]]
+    prev, cur = start, nbrs0[0]
+    while True:
+        nbrs = [
+            n.GetIdx()
+            for n in m.GetAtomWithIdx(cur).GetNeighbors()
+            if n.GetIdx() in ring_set
+        ]
+        if len(nbrs) != 2:
+            return None
+        nxt = nbrs[0] if nbrs[1] == prev else nbrs[1]
+        if nxt == start:
+            break
+        if nxt in order:
+            return None
+        order.append(nxt)
+        prev, cur = cur, nxt
+
+    if len(order) != len(ring):
+        return None
+    return order
+
+
+def attach_one_bond_per_cp_ring(
+    mol: Chem.Mol, metal_idxs: set[int]
+) -> Chem.Mol:
+    """
+    Approximate η5 Cp coordination by:
+      - finding aromatic 5-member all-carbon rings (Cp drawn aromatic)
+      - de-aromatizing ring to alternating single/double bonds (kekulizable)
+      - adding ONE single bond from a metal to an anchor carbon in each ring (if none exists)
+    """
+    if not metal_idxs:
+        return mol
+
+    rw = Chem.RWMol(mol)
+    Chem.GetSymmSSSR(rw)  # ensure rings are perceived
+
+    metal_idx = min(metal_idxs)  # heuristic
+
+    ring_info = rw.GetRingInfo()
+    for ring in ring_info.AtomRings():
+        if len(ring) != 5:
+            continue
+
+        atoms = [rw.GetAtomWithIdx(i) for i in ring]
+        if not all(a.GetSymbol() == "C" and a.GetIsAromatic() for a in atoms):
+            continue
+
+        # reconstruct cyclic order robustly
+        ordered = _order_ring_atoms_by_walk(rw, ring)
+        if ordered is None:
+            continue
+
+        # already connected to any metal?
+        already_connected = any(
+            nb.GetIdx() in metal_idxs
+            for i in ordered
+            for nb in rw.GetAtomWithIdx(i).GetNeighbors()
+        )
+
+        # de-aromatize ring atoms
+        for i in ordered:
+            rw.GetAtomWithIdx(i).SetIsAromatic(False)
+
+        # de-aromatize ring bonds and set alternating pattern
+        cycle_bonds = []
+        for i in range(5):
+            a = ordered[i]
+            b = ordered[(i + 1) % 5]
+            bond = rw.GetBondBetweenAtoms(a, b)
+            if bond is None:
+                cycle_bonds = []
+                break
+            bond.SetIsAromatic(False)
+            bond.SetBondType(Chem.BondType.SINGLE)
+            cycle_bonds.append(bond)
+
+        if not cycle_bonds:
+            continue
+
+        # set 2 double bonds (cyclopentadiene-like)
+        cycle_bonds[0].SetBondType(Chem.BondType.DOUBLE)
+        cycle_bonds[2].SetBondType(Chem.BondType.DOUBLE)
+
+        # add one metal-anchor bond if needed
+        if not already_connected:
+            anchor = None
+            for i in ordered:
+                if rw.GetAtomWithIdx(i).GetTotalNumHs() > 0:
+                    anchor = i
+                    break
+            if anchor is None:
+                anchor = ordered[0]
+            rw.AddBond(metal_idx, anchor, Chem.BondType.SINGLE)
+
+    new_mol = rw.GetMol()
+    new_mol.UpdatePropertyCache(strict=False)
+    return new_mol

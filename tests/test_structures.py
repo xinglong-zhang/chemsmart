@@ -1738,3 +1738,21 @@ class TestCDXFile:
         assert mol.chemical_formula == "C32H31N5O5"
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
+
+    def test_read_metal_ligand_molecules_cdxml_file_(
+        self, metal_ligand_molecules_cdxml_file
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(metal_ligand_molecules_cdxml_file)
+        assert os.path.isfile(metal_ligand_molecules_cdxml_file)
+
+        cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 7
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C32H31N5O5"
+        assert mol.num_atoms == 73  # benzene with hydrogens
+        assert mol.is_aromatic
