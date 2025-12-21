@@ -140,7 +140,7 @@ def entry_point(
         logger.info(f"Chemical potential = {chemical_potential}")
         logger.info(f"Chemical hardness = {chemical_hardness}")
         logger.info(
-            f"Global electrophilicity_index = {global_electrophilicity_index}"
+            f"Global electrophilicity index = {global_electrophilicity_index}"
         )
 
     if mode == "mulliken":
