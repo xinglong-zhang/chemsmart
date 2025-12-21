@@ -796,6 +796,9 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff")):
+            return cls._read_image_file(filepath)
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -934,6 +937,73 @@ class Molecule:
     #
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
+
+    @classmethod
+    @file_cache()
+    def _read_image_file(cls, filepath):
+        """
+        Read molecular structure from an image file using DECIMER.
+
+        Converts chemical structure images (PNG, JPG, JPEG, TIF, TIFF) to
+        molecular structures by first extracting SMILES representation using
+        DECIMER, then converting to a Molecule object via RDKit.
+
+        Args:
+            filepath (str): Path to the image file containing chemical structure
+
+        Returns:
+            Molecule: Molecule object created from the image
+
+        Raises:
+            ImportError: If DECIMER or Pillow is not installed
+            ValueError: If the image cannot be processed or converted
+        """
+        try:
+            from DECIMER import predict_SMILES
+            from PIL import Image
+        except ImportError as e:
+            raise ImportError(
+                "DECIMER and Pillow are required to read image files. "
+                "Install them with: pip install decimer Pillow"
+            ) from e
+
+        try:
+            # Load the image
+            logger.info(f"Reading chemical structure from image: {filepath}")
+            image = Image.open(filepath)
+
+            # Convert image to SMILES using DECIMER
+            logger.debug("Converting image to SMILES using DECIMER...")
+            smiles = predict_SMILES(image)
+            logger.info(f"Extracted SMILES from image: {smiles}")
+
+            # Convert SMILES to RDKit molecule
+            rdkit_mol = Chem.MolFromSmiles(smiles)
+            if rdkit_mol is None:
+                raise ValueError(
+                    f"Failed to create valid molecule from SMILES: {smiles}"
+                )
+
+            # Generate 3D coordinates
+            from rdkit.Chem import AllChem
+
+            rdkit_mol = Chem.AddHs(rdkit_mol)
+            AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+            AllChem.MMFFOptimizeMolecule(rdkit_mol)
+
+            # Convert RDKit molecule to Molecule object using the classmethod
+            molecule = cls.from_rdkit_mol(rdkit_mol)
+
+            logger.info(
+                f"Successfully created molecule from image with formula: "
+                f"{molecule.chemical_formula}"
+            )
+            return molecule
+
+        except Exception as e:
+            raise ValueError(
+                f"Failed to read molecular structure from image {filepath}: {str(e)}"
+            ) from e
 
     @staticmethod
     @file_cache()

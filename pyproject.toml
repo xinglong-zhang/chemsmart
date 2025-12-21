@@ -39,6 +39,8 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
     "pyvoro>=1.3.2",  # Note: pyvoro requires Python < 3.12
+    "Pillow>=10.0.0",  # For image handling
+    "decimer>=2.3.0",  # For image-to-molecule conversion
 ]
 
 [project.optional-dependencies]
