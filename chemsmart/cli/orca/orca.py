@@ -14,6 +14,7 @@ import os
 import click
 
 from chemsmart.cli.job import (
+    click_ccdc_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
@@ -255,6 +256,7 @@ def click_orca_jobtype_options(f):
 
 @click.group(cls=MyGroup)
 @click_orca_options
+@click_ccdc_options
 @click_filename_options
 @click_file_label_and_index_options
 @click_orca_settings_options
@@ -288,6 +290,7 @@ def orca(
     additional_route_parameters,
     forces,
     pubchem,
+    ccdc,
 ):
     """
     Main CLI command group for running ORCA jobs using the chemsmart framework.
@@ -393,16 +396,19 @@ def orca(
         job_settings.forces = forces
         keywords += ("forces",)
 
-    # obtain molecule structure from file or PubChem
+    # obtain molecule structure from file, PubChem or CCDC
     molecules = None
-    if filename is None and pubchem is None:
+    if filename is None and pubchem is None and ccdc is None:
         raise ValueError(
-            "[filename] or [pubchem] has not been specified!\n"
+            "[filename], [pubchem] or [ccdc] has not been specified!\n"
             "Please specify one of them!"
         )
-    if filename and pubchem:
+
+    # Count how many sources are specified
+    sources_specified = sum([bool(filename), bool(pubchem), bool(ccdc)])
+    if sources_specified > 1:
         raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\n"
+            "Multiple sources ([filename], [pubchem], [ccdc]) have been specified!\n"
             "Please specify only one of them."
         )
 
@@ -422,6 +428,15 @@ def orca(
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
+    if ccdc:
+        molecules = Molecule.from_ccdc(
+            deposition_number=ccdc, return_list=True
+        )
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from CCDC deposition {ccdc}!"
+        logger.debug(f"Obtained molecule {molecules} from CCDC {ccdc}")
+
     # update job labels for output file naming
     if label is not None and append_label is not None:
         raise ValueError(
@@ -429,11 +444,21 @@ def orca(
             "but not both!"
         )
     if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        elif pubchem:
+            label = str(pubchem)
+        elif ccdc:
+            label = f"ccdc_{ccdc}"
         label = f"{label}_{append_label}"
         logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        elif pubchem:
+            label = str(pubchem)
+        elif ccdc:
+            label = f"ccdc_{ccdc}"
         label = f"{label}_{ctx.invoked_subcommand}"
         logger.debug(f"Created default label: {label}")
 

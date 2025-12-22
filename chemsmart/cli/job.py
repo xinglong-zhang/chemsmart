@@ -57,6 +57,29 @@ def click_pubchem_options(f):
     return wrapper_common_options
 
 
+def click_ccdc_options(f):
+    """
+    CCDC integration options for molecular structure retrieval.
+
+    Provides command-line options for querying molecular structures
+    from the CCDC database using deposition numbers.
+    """
+
+    @click.option(
+        "-C",
+        "--ccdc",
+        type=str,
+        default=None,
+        help="Queries structure from CCDC database using deposition number "
+        "(e.g., 1428476).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_folder_options(f):
     """
     Common click options for specifying directories and file types via CLI.

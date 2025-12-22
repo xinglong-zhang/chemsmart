@@ -796,6 +796,13 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith(".cif"):
+            return cls._read_cif_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -918,6 +925,79 @@ class Molecule:
             index=index, return_list=return_list
         )
 
+    @classmethod
+    def _read_cif_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read CIF (Crystallographic Information File) format.
+
+        Args:
+            filepath (str): Path to CIF file
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+            return_list (bool): If True, return a list of molecules.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from CIF file.
+
+        Note:
+            - CIF files can contain crystal structure data.
+            - ASE is used to read the CIF file format.
+            - For multi-structure CIF files, use index to select specific structures.
+        """
+        from .atoms import AtomsChargeMultiplicity
+
+        # supplied index is 1-indexed, thus need to convert
+        index = string2index_1based(index)
+
+        ase_atoms = ase_read(filepath, index=index, format="cif")
+        logger.debug(f"Read CIF file: {filepath} at index {index}")
+
+        if isinstance(ase_atoms, list):
+            logger.debug(f"Read {len(ase_atoms)} structures from CIF.")
+            molecules = [
+                AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
+                for atoms in ase_atoms
+            ]
+            return molecules if return_list else molecules[0]
+
+        molecule = AtomsChargeMultiplicity.from_atoms(ase_atoms).to_molecule()
+        return [molecule] if return_list else molecule
+
+    @classmethod
+    def from_cif_file(cls, filepath, index="-1", return_list=False):
+        """
+        Create molecule from CIF (Crystallographic Information File).
+
+        Args:
+            filepath (str): Path to CIF file
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+                Default is "-1" (last structure).
+            return_list (bool): If True, return a list of molecules.
+                Default is False.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from CIF file.
+
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ValueError: If the file cannot be parsed
+
+        Example:
+            >>> mol = Molecule.from_cif_file('structure.cif')
+            >>> mols = Molecule.from_cif_file('structure.cif', index=':', return_list=True)
+        """
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"{filepath} could not be found!")
+
+        if os.path.getsize(filepath) == 0:
+            raise ValueError(f"{filepath} is empty!")
+
+        return cls._read_cif_file(
+            filepath, index=index, return_list=return_list
+        )
+
     # @staticmethod
     # @file_cache()
     # def _read_gromacs_gro(filepath, index, **kwargs):
@@ -992,6 +1072,43 @@ class Molecule:
                 return molecule
 
         logger.debug("Could not create structure from pubchem.")
+        return None
+
+    @classmethod
+    @lru_cache(maxsize=128)
+    def from_ccdc(cls, deposition_number, return_list=False):
+        """
+        Create molecule object from CCDC database.
+
+        Args:
+            deposition_number (str or int): CCDC deposition number (e.g., 1428476)
+            return_list (bool): Whether to return list format. Default False
+
+        Returns:
+            Molecule or list or None: Molecule object from CCDC, None if not found
+
+        Raises:
+            ValueError: If deposition number is invalid or structure cannot be retrieved
+            requests.exceptions.RequestException: For network or HTTP-related issues
+
+        Example:
+            >>> mol = Molecule.from_ccdc(1428476)
+            >>> mols = Molecule.from_ccdc(1428476, return_list=True)
+        """
+        from chemsmart.io.molecules.ccdc import ccdc_search
+
+        molecule = ccdc_search(deposition_number, fail_silently=False)
+        if molecule is not None:
+            logger.info(
+                f"Structure successfully created from CCDC deposition {deposition_number}"
+            )
+            if return_list:
+                return [molecule]
+            return molecule
+
+        logger.debug(
+            f"Could not create structure from CCDC deposition {deposition_number}."
+        )
         return None
 
     @classmethod
