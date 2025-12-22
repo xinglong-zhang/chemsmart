@@ -1201,6 +1201,19 @@ def complex_molecule_cdxml_file(chemdraw_directory):
     return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
 
 
+############ CIF File Fixtures ##################
+@pytest.fixture()
+def cif_test_directory(test_data_directory):
+    """Directory containing CIF test files."""
+    return os.path.join(test_data_directory, "cif")
+
+
+@pytest.fixture()
+def benzene_cif_file(cif_test_directory):
+    """Path to benzene CIF test file."""
+    return os.path.join(cif_test_directory, "benzene.cif")
+
+
 @pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
