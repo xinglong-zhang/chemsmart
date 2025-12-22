@@ -1205,7 +1205,7 @@ def complex_molecule_cdxml_file(chemdraw_directory):
 @pytest.fixture()
 def cif_test_directory(test_data_directory):
     """Directory containing CIF test files."""
-    return os.path.join(test_data_directory, "cif")
+    return os.path.join(test_data_directory, "StructuresTests", "cif")
 
 
 @pytest.fixture()
