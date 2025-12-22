@@ -33,7 +33,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
+def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 30):
     """Search PubChem for structure.
 
     Changelog:
@@ -45,7 +45,7 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
         search (str): The search term (e.g., CID, SMILES, name).
         field (str): The field to search (e.g., 'cid', 'smiles', 'name', 'conformers').
         suffix (str): The suffix for the request (e.g., '3d', '2d'). Default is '3d'.
-        timeout (int): Request timeout in seconds. Default is 10.
+        timeout (int): Request timeout in seconds. Default is 30.
 
     Returns:
         str: The raw SDF or JSON response decoded as UTF-8.
@@ -105,9 +105,7 @@ def search_pubchem_raw(search, field, suffix: str = "3d", timeout: int = 10):
 @lru_cache(maxsize=128)
 @retry(
     stop=stop_after_attempt(3),  # Retry up to 3 times
-    wait=wait_exponential(
-        multiplier=1, min=2, max=10
-    ),  # Wait 2, 4, then 8 seconds
+    wait=wait_exponential(multiplier=1, min=2, max=30),
     retry=retry_if_exception_type(Timeout),  # Retry on timeout
     before_sleep=lambda retry_state: logger.debug(
         f"Retrying PubChem search (attempt {retry_state.attempt_number}) "
@@ -143,7 +141,7 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
 
         try:
             raw_pubchem = search_pubchem_raw(
-                search, field, suffix="3d", timeout=10
+                search, field, suffix="3d", timeout=30
             )
         except RequestsHTTPError as e:
             error_substrings = ["400", "404"]  # Match status codes as strings
@@ -158,7 +156,7 @@ def pubchem_search(*args, fail_silently=True, **kwargs):
 
             try:
                 raw_pubchem = search_pubchem_raw(
-                    search, field, suffix="2d", timeout=10
+                    search, field, suffix="2d", timeout=30
                 )
                 raw_pubchem = _pubchem_2d_to_3d(raw_pubchem)
                 logger.info(
