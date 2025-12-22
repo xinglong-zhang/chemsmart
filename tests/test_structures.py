@@ -1821,7 +1821,7 @@ class TestCCDCIntegration:
 
     @patch("chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc")
     def test_from_ccdc_basic_mock(
-        self, mock_fetch, benzene_cif_file
+        self, mock_fetch
     ):
         """Test from_ccdc with mocked download."""
         # Create a temporary CIF file for testing
