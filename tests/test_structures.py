@@ -1739,58 +1739,24 @@ class TestCDXFile:
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
 
-    def test_read_molecule_from_image_file_mocked(self, mocker, tmp_path):
-        """Test reading a molecule from an image file using mocked DECIMER."""
-        import sys
-        from unittest.mock import MagicMock, patch
 
-        # Create a temporary image file
-        image_path = tmp_path / "benzene.png"
-        image_path.write_bytes(b"fake image data")
+class TestStructuresFromImage:
+    def test_read_molecule_from_image_file1(self, thiol1_image):
+        """Test reading a molecule from an image file thiol1."""
+        # Read molecule from image
+        molecule = Molecule.from_filepath(thiol1_image)
 
-        # Mock the imports and functions
-        mock_decimer = MagicMock()
-        mock_pil = MagicMock()
-        benzene_smiles = "C1=CC=CC=C1"
+        # Verify the molecule was created correctly
+        assert isinstance(molecule, Molecule)
+        assert molecule.chemical_formula == "C9H17NO4S"
+        assert molecule.num_atoms == 32
 
-        mock_decimer.predict_SMILES = MagicMock(return_value=benzene_smiles)
-        mock_image = MagicMock()
-        mock_pil.Image.open = MagicMock(return_value=mock_image)
+    def test_read_molecule_from_image_file2(self, thiol2_image):
+        """Test reading a molecule from an image file thiol2, Ad-SH."""
+        # Read molecule from image
+        molecule = Molecule.from_filepath(thiol2_image)
 
-        # Patch sys.modules to inject our mocked modules
-        with patch.dict(
-            sys.modules, {"DECIMER": mock_decimer, "PIL": mock_pil}
-        ):
-            # Read molecule from image
-            molecule = Molecule.from_filepath(str(image_path))
-
-            # Verify the molecule was created correctly
-            assert isinstance(molecule, Molecule)
-            assert molecule.chemical_formula == "C6H6"
-            assert molecule.num_atoms == 12  # 6 carbons + 6 hydrogens
-
-    def test_read_image_file_unsupported_without_decimer(self, tmp_path):
-        """Test that reading image files without DECIMER raises ImportError."""
-        from unittest.mock import patch
-
-        # Create a temporary image file
-        image_path = tmp_path / "molecule.png"
-        image_path.write_bytes(b"fake image data")
-
-        # Mock the import to fail
-        def mock_import(name, *args, **kwargs):
-            if name in ("DECIMER", "PIL"):
-                raise ImportError(f"No module named '{name}'")
-            # Use the real __import__ for other modules
-            import builtins
-
-            return builtins.__import__(name, *args, **kwargs)
-
-        # Patch the import function
-        with patch("builtins.__import__", side_effect=mock_import):
-            # Try to read the image file - should raise ImportError
-            # Now it's a classmethod, so we call it with the class
-            with pytest.raises(
-                ImportError, match="DECIMER and Pillow are required"
-            ):
-                Molecule._read_image_file(str(image_path))
+        # Verify the molecule was created correctly
+        assert isinstance(molecule, Molecule)
+        assert molecule.chemical_formula == "C10H16S"
+        assert molecule.num_atoms == 27
