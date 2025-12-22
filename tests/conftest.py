@@ -1203,9 +1203,9 @@ def complex_molecule_cdxml_file(chemdraw_directory):
 
 ############ CIF File Fixtures ##################
 @pytest.fixture()
-def cif_test_directory(test_data_directory):
+def cif_test_directory(structure_test_directory):
     """Directory containing CIF test files."""
-    return os.path.join(test_data_directory, "StructuresTests", "cif")
+    return os.path.join(structure_test_directory, "cif")
 
 
 @pytest.fixture()

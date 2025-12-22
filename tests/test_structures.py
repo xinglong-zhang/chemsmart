@@ -1820,9 +1820,7 @@ class TestCCDCIntegration:
         assert callable(Molecule.from_ccdc)
 
     @patch("chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc")
-    def test_from_ccdc_basic_mock(
-        self, mock_fetch
-    ):
+    def test_from_ccdc_basic_mock(self, mock_fetch):
         """Test from_ccdc with mocked download."""
         # Create a temporary CIF file for testing
         test_cif_content = """data_test
