@@ -796,6 +796,9 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff")):
+            return cls._read_image_file(filepath)
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -935,6 +938,59 @@ class Molecule:
     #     trr_output = GroTrrOutput(filename=filepath)
     #     return trr_output.get_atoms(index=index)
 
+    @classmethod
+    def _read_image_file(cls, filepath):
+        """
+        Read molecular structure from an image file using DECIMER.
+
+        Converts chemical structure images (PNG, JPG, JPEG, TIF, TIFF) to
+        molecular structures by first extracting SMILES representation using
+        DECIMER, then converting to a Molecule object via RDKit.
+
+        Args:
+            filepath (str): Path to the image file containing chemical structure
+
+        Returns:
+            Molecule: Molecule object created from the image
+
+        Raises:
+            ImportError: If DECIMER or Pillow is not installed
+            ValueError: If the image cannot be processed or converted
+        """
+        try:
+            import cv2
+            from DECIMER import predict_SMILES
+        except ImportError as e:
+            raise ImportError(
+                "DECIMER and opencv-python are required to read image files. "
+                "Install them with: `pip install decimer opencv-python`"
+            ) from e
+
+        # Load the image
+        # Light pre-processing often helps (binarize + resize)
+        img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise FileNotFoundError(filepath)
+
+        img = cv2.resize(
+            img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC
+        )
+        _, img = cv2.threshold(
+            img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+
+        # Write a temp preprocessed image (DECIMER takes a path)
+        tmp = filepath + ".pre.png"
+        cv2.imwrite(tmp, img)
+
+        smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
+        if smiles is None:
+            raise ValueError(
+                f"Image {filepath} cannot be converted to SMILES."
+            )
+
+        return cls.from_smiles(smiles)
+
     @staticmethod
     @file_cache()
     def _read_other(filepath, index, **kwargs):
@@ -1072,6 +1128,31 @@ class Molecule:
         rdkit_mol.num_atoms = rdMol.GetNumAtoms()
 
         return rdkit_mol
+
+    @classmethod
+    def from_smiles(cls, smiles):
+        # Convert SMILES to RDKit molecule
+        rdkit_mol = Chem.MolFromSmiles(smiles)
+        if rdkit_mol is None:
+            raise ValueError(
+                f"Failed to create valid molecule from SMILES: {smiles}"
+            )
+
+        # Generate 3D coordinates
+        from rdkit.Chem import AllChem
+
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+        AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+        AllChem.MMFFOptimizeMolecule(rdkit_mol)
+
+        # Convert RDKit molecule to Molecule object using the classmethod
+        molecule = cls.from_rdkit_mol(rdkit_mol)
+
+        logger.info(
+            f"Successfully created molecule from image with formula: "
+            f"{molecule.chemical_formula}"
+        )
+        return molecule
 
     def write_coordinates(self, f, program=None):
         """

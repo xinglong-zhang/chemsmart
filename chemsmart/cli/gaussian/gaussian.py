@@ -482,7 +482,16 @@ def gaussian(
         )
 
     if pubchem:
-        molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
+        try:
+            molecules = Molecule.from_smiles(pubchem)
+        except ValueError as err:
+            logger.error(
+                f"Could not obtain molecule from {pubchem}: {err}\n"
+                f"Searching structure from pubchem using id: {pubchem}."
+            )
+            molecules = Molecule.from_pubchem(
+                identifier=pubchem, return_list=True
+            )
         assert (
             molecules is not None
         ), f"Could not obtain molecule from PubChem {pubchem}!"
