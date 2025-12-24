@@ -226,13 +226,13 @@ def thermochemistry(
     files = []
 
     if directory:
-        if filetype.lower() not in ["gaussian", "orca"]:
+        if filetype.lower() not in {"gaussian", "orca"}:
             raise ValueError(
-                f"Unsupported filetype {filetype} for thermochemistry.\n "
+                f"Unsupported filetype {filetype} for thermochemistry.\n"
                 f"Please choose one of ['gaussian', 'orca']."
             )
         files = find_output_files_in_directory(
-            directory=directory, program=filetype
+            directory=directory, program=filetype.lower()
         )
         for file in files:
             job = ThermochemistryJob.from_filename(
