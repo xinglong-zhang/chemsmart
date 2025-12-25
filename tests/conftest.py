@@ -1202,6 +1202,11 @@ def complex_molecule_cdxml_file(chemdraw_directory):
 
 
 @pytest.fixture()
+def metal_ligand_molecules_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "metal_ligands.cdxml")
+
+
+@pytest.fixture()
 def utils_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "YAMLTests")
 

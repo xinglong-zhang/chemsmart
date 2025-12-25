@@ -4,6 +4,10 @@ import re
 import numpy as np
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.io import (
+    attach_one_bond_per_cp_ring,
+    fix_cyclopentadienyl_aromaticity,
+)
 from chemsmart.utils.mixins import FileMixin
 
 logger = logging.getLogger(__name__)
@@ -91,17 +95,22 @@ class CDXFile(FileMixin):
         from pathlib import Path
 
         from rdkit import Chem
-        from rdkit.Chem import AllChem
 
         suffix = Path(self.filename).suffix.lower()
 
         rdkit_mols = []
         try:
             # NOTE: RDKit's MolsFromCDXMLFile always supports CDXML.
-            # CDX files are only supported if RDKit was built with
-            # ChemDraw CDX support.
+            # CDX files are only supported if RDKit was built with ChemDraw CDX support.
+            # Use sanitize=False to avoid kekulization errors during parsing
+            # of organometallic complexes. We'll handle sanitization later.
+            logger.debug(
+                f"Generating rdkit mols from {self.filename} using RDKit"
+            )
             rdkit_mols = list(
-                Chem.MolsFromCDXMLFile(self.filename, removeHs=False)
+                Chem.MolsFromCDXMLFile(
+                    self.filename, sanitize=False, removeHs=False
+                )
             )
         except Exception as e:
             logger.debug(
@@ -117,6 +126,9 @@ class CDXFile(FileMixin):
             try:
                 from chemsmart.utils.io import obtain_mols_from_cdx_via_obabel
 
+                logger.debug(
+                    f"Generating rdkit mols from {self.filename} using obabel"
+                )
                 rdkit_mols = obtain_mols_from_cdx_via_obabel(self.filename)
             except Exception as e:
                 logger.debug(
@@ -128,43 +140,31 @@ class CDXFile(FileMixin):
                 f"No molecules could be read from ChemDraw file: {self.filename}"
             )
 
+        # Update property cache for all molecules read from CDXML
+        # This is necessary to avoid "Pre-condition Violation" errors
+        # when checking atom properties like GetTotalNumHs()
+        for mol in rdkit_mols:
+            if mol is not None:
+                mol.UpdatePropertyCache(strict=False)
+
+        # Combine metal fragments with their aromatic ligands
+        # ChemDraw sometimes draws metal complexes as separate fragments
+        logger.debug("Combining metal fragments with ligands")
+        rdkit_mols = self._combine_metal_and_ligand_fragments(rdkit_mols)
+
         molecules = []
         for rdkit_mol in rdkit_mols:
             if rdkit_mol is None:
                 continue
 
-            # Add explicit hydrogens for proper structure
-            rdkit_mol = Chem.AddHs(rdkit_mol)
-
-            # Generate 3D coordinates
+            # Process molecule (handle organometallic complexes, add H, generate 3D coords)
             try:
-                # Try to embed the molecule to get 3D coordinates
-                result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
-                if result == -1:
-                    # Embedding failed, try with random coordinates
-                    result = AllChem.EmbedMolecule(
-                        rdkit_mol,
-                        useRandomCoords=True,
-                        randomSeed=42,
-                    )
-                    if result == -1:
-                        logger.warning(
-                            f"Could not generate 3D coordinates for a molecule "
-                            f"in {self.filename}. Skipping this molecule."
-                        )
-                        continue
-
-                # Optimize the geometry (may fail for exotic atom types)
-                try:
-                    AllChem.MMFFOptimizeMolecule(rdkit_mol)
-                except Exception as e:
-                    logger.debug(
-                        f"MMFF optimization failed for a molecule in {self.filename}: {e}"
-                    )
-
+                logger.debug(f"Processing rdkit mol: {rdkit_mol}")
+                rdkit_mol = self._process_cdx_molecule(rdkit_mol)
             except Exception as e:
                 logger.warning(
-                    f"Error generating 3D coordinates for molecule in {self.filename}: {e}"
+                    f"Error processing molecule in {self.filename}: {e}. "
+                    f"Skipping this molecule."
                 )
                 continue
 
@@ -179,6 +179,180 @@ class CDXFile(FileMixin):
             )
 
         return molecules
+
+    def _process_cdx_molecule(self, rdkit_mol):
+        """
+        Process a molecule from ChemDraw file, handling organometallic complexes.
+
+        This method normalizes metal bonds and sanitizes the molecule appropriately
+        for both organic and organometallic structures. It then adds hydrogens and
+        generates 3D coordinates.
+
+        Args:
+            rdkit_mol (rdkit.Chem.Mol): RDKit molecule to process.
+
+        Returns:
+            rdkit.Chem.Mol: Processed molecule with hydrogens and 3D coordinates.
+
+        Raises:
+            Exception: If molecule processing fails.
+        """
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        from chemsmart.utils.io import normalize_metal_bonds, safe_sanitize
+        from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+        # Check if molecule contains metals
+        has_metals = any(
+            atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+            for atom in rdkit_mol.GetAtoms()
+        )
+        logger.debug(
+            f"The molecule: {rdkit_mol} has {has_metals} metal atoms."
+        )
+
+        logger.debug(f"Building metal indices for {rdkit_mol}.")
+        metal_idxs = {
+            a.GetIdx()
+            for a in rdkit_mol.GetAtoms()
+            if a.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+        }
+
+        # Normalize metal bonds first (removes aromatic flags from metal bonds)
+        logger.debug(f"Normalize metal bonds in {rdkit_mol}.")
+        rdkit_mol = normalize_metal_bonds(rdkit_mol)
+
+        if has_metals:
+            logger.debug(f"Fix cyclopentadienyl aromaticity in {rdkit_mol}.")
+            rdkit_mol = fix_cyclopentadienyl_aromaticity(rdkit_mol)
+            logger.debug(f"Attach one bond per Cp ring in {rdkit_mol}.")
+            rdkit_mol = attach_one_bond_per_cp_ring(rdkit_mol, metal_idxs)
+
+        # Sanitize with or without kekulization based on metal presence
+        logger.debug(f"Sanitize metal bonds in {rdkit_mol}.")
+        rdkit_mol = safe_sanitize(rdkit_mol, skip_kekulize=has_metals)
+
+        # Add explicit hydrogens for proper structure
+        logger.debug(f"Adding explicit hydrogens in {rdkit_mol}.")
+        rdkit_mol = Chem.AddHs(rdkit_mol)
+
+        # Generate 3D coordinates
+        # Try to embed the molecule to get 3D coordinates
+        logger.debug(f"Embed molecule in {rdkit_mol}.")
+        result = AllChem.EmbedMolecule(rdkit_mol, randomSeed=42)
+        if result == -1:
+            # Embedding failed, try with random coordinates
+            logger.debug(f"Failed to embed molecule in {rdkit_mol}.")
+            result = AllChem.EmbedMolecule(
+                rdkit_mol,
+                useRandomCoords=True,
+                randomSeed=42,
+            )
+            if result == -1:
+                raise ValueError(
+                    "Could not generate 3D coordinates for molecule"
+                )
+
+        # Optimize the geometry (may fail for exotic atom types)
+        try:
+            logger.debug(f"Optimize molecule {rdkit_mol} using MMFF.")
+            AllChem.MMFFOptimizeMolecule(rdkit_mol)
+        except Exception as e:
+            logger.debug(
+                f"MMFF optimization failed for a molecule in {self.filename}: {e}"
+            )
+
+        return rdkit_mol
+
+    def _combine_metal_and_ligand_fragments(self, rdkit_mols):
+        """
+        Combine metal fragments with their aromatic ligand fragments.
+
+        ChemDraw sometimes draws organometallic complexes as separate fragments
+        (e.g., a metal center with coordinated aromatic rings as separate fragments).
+        This method detects such cases and combines them into single molecules.
+
+        The heuristic used:
+        - A small metal-containing fragment (< 10 atoms) followed by aromatic ring
+          fragments (6-atom benzene rings) are combined.
+
+        Args:
+            rdkit_mols (list[rdkit.Chem.Mol]): List of RDKit molecules (fragments).
+
+        Returns:
+            list[rdkit.Chem.Mol]: List of combined molecules.
+        """
+        from rdkit import Chem
+
+        from chemsmart.utils.periodictable import NON_METALS_AND_METALLOIDS
+
+        def has_metal(mol):
+            """Check if molecule contains metal atoms."""
+            if mol is None:
+                return False
+            return any(
+                atom.GetAtomicNum() not in NON_METALS_AND_METALLOIDS
+                for atom in mol.GetAtoms()
+            )
+
+        def is_small_ligand_ring(mol):
+            """Check if molecule is a small aromatic ring (e.g., benzene, Cp)."""
+            if mol is None:
+                return False
+            # Check for aromatic 5-member carbon ring (Cp) or 6-member carbon ring (benzene)
+            ri = mol.GetRingInfo()
+            if ri.NumRings() != 1:
+                return False
+            for ring in ri.AtomRings():
+                if len(ring) in (5, 6):
+                    ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
+                    if all(a.GetSymbol() == "C" for a in ring_atoms):
+                        return True
+            return False
+
+        combined_mols = []
+        i = 0
+        while i < len(rdkit_mols):
+            mol = rdkit_mols[i]
+
+            if mol is None:
+                i += 1
+                continue
+
+            # Check if this is a small metal-containing fragment
+            if has_metal(mol) and mol.GetNumAtoms() < 10:
+                # Look ahead for aromatic ligand fragments
+                ligands = []
+                j = i + 1
+                while j < len(rdkit_mols) and is_small_ligand_ring(
+                    rdkit_mols[j]
+                ):
+                    ligands.append(rdkit_mols[j])
+                    j += 1
+
+                # If we found ligands, combine them with the metal fragment
+                if ligands:
+                    logger.debug(
+                        f"Combining metal fragment {i} with {len(ligands)} ligand(s)"
+                    )
+                    combined = Chem.CombineMols(mol, ligands[0])
+                    for k in range(1, len(ligands)):
+                        combined = Chem.CombineMols(combined, ligands[k])
+
+                    # Update property cache after combining molecules
+                    # This is critical to avoid "Pre-condition Violation" errors
+                    combined.UpdatePropertyCache(strict=False)
+                    combined_mols.append(combined)
+                    i = j  # Skip the ligands we just combined
+                else:
+                    combined_mols.append(mol)
+                    i += 1
+            else:
+                combined_mols.append(mol)
+                i += 1
+
+        return combined_mols
 
     def get_molecules(self, index="-1", return_list=False):
         """
