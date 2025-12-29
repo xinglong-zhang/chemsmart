@@ -6,10 +6,10 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
-from chemsmart.chemsmart.io.xtb.output import XTBOutput
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
     R,
     atm_to_pa,

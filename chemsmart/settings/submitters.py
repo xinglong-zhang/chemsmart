@@ -7,6 +7,7 @@ from chemsmart.settings.executable import (
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
+    XTBExecutable,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -233,7 +234,7 @@ class Submitter(RegistryMixin):
 
         Returns:
             Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, or NCIPLOTExecutable)
+            (GaussianExecutable, ORCAExecutable, NCIPLOTExecutable, or XTBExecutable)
             based on `job.PROGRAM`.
 
         Raises:
@@ -245,6 +246,8 @@ class Submitter(RegistryMixin):
             executable = ORCAExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "xtb":
+            executable = XTBExecutable.from_servername(self.server.name)
 
         else:
             # Need to add programs here to be supported for other types of programs
@@ -423,6 +426,14 @@ class Submitter(RegistryMixin):
             f.write("# Writing program specific environment variables\n")
             for key, value in self.executable.env.items():
                 f.write(f"export {key}={value}\n")
+            f.write("\n")
+
+        if self.job.PROGRAM.lower() == "xtb":
+            f.write("# XTB specific environment variables\n")
+            f.write(f"export MKL_NUM_THREADS={self.server.num_cores}\n")
+            f.write(f"export OMP_NUM_THREADS={self.server.num_cores},1\n")
+            f.write("export OMP_STACKSIZE=4G\n")
+            f.write("ulimit -s unlimited\n")
             f.write("\n")
 
     @abstractmethod

@@ -35,6 +35,12 @@ class XTBJob(Job):
 
     @classmethod
     def settings_class(cls) -> Type[XTBJobSettings]:
+        """
+        Return the settings class for this job type.
+
+        Returns:
+            XTBJobSettings class
+        """
         return XTBJobSettings
 
     @property
@@ -44,11 +50,23 @@ class XTBJob(Job):
 
     @property
     def outputfile(self):
+        """
+        Get the output file path for the xTB job.
+
+        Returns:
+            str: Absolute path to the output file
+        """
         outputfile = self.label + ".out"
         return os.path.join(self.folder, outputfile)
 
     @property
     def errfile(self):
+        """
+        Get the error file path for the xTB job.
+
+        Returns:
+            str: Absolute path to the error file
+        """
         errfile = self.label + ".err"
         return os.path.join(self.folder, errfile)
 
@@ -113,11 +131,11 @@ class XTBJob(Job):
         cls, jobtype, molecule, settings=None, label=None, **kwargs
     ):
         if jobtype.lower() == "opt":
-            from chemsmart.jobs.gaussian.opt import GaussianOptJob
+            from chemsmart.jobs.xtb.opt import XTBOptJob
 
-            logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
+            logger.debug(f"Creating XTBOptJob from jobtype: {jobtype}")
 
-            return GaussianOptJob(
+            return XTBOptJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
@@ -125,3 +143,27 @@ class XTBJob(Job):
             )
         else:
             raise ValueError(f"Invalid job type: {jobtype}")
+
+    def _determine_folder(self):
+        """
+        Determine the folder based on the current working directory
+        where the job is submitted.
+        """
+        # Get the current working directory at runtime
+        cwd = os.getcwd()
+        folder = os.path.abspath(cwd)
+
+        # XTB jobs must be run in their own directory
+        if self.label:
+            folder = os.path.join(folder, self.label)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+
+        return folder
+
+    def base_folder(self):
+        """
+        Base folder for the job, where input and output files are located.
+        This is typically the folder where the job was submitted from.
+        """
+        return self._determine_folder()
