@@ -1,3 +1,12 @@
+"""
+xTB Command Line Interface
+
+This module provides the main CLI interface for xTB semiempirical quantum chemistry
+calculations. It defines common options, settings configurations, and the
+main xTB command group that serves as the entry point for all xTB-related
+operations.
+"""
+
 import functools
 import logging
 import os
@@ -12,7 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 def click_xtb_options(f):
-    """Common click options for XTB jobs."""
+    """
+    Common click options decorator for xTB jobs.
+
+    This decorator adds common command-line options that are shared across
+    different xTB job types, specifically project settings.
+    """
 
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
@@ -25,14 +39,20 @@ def click_xtb_options(f):
 
 
 def click_xtb_settings_options(f):
-    """Common click options for XTB Settings."""
+    """
+    Common click options decorator for xTB computational settings.
+
+    This decorator adds comprehensive command-line options for configuring
+    xTB calculations including file I/O, molecular properties, computational
+    methods, basis sets, and various semiempirical parameters.
+    """
 
     @click.option(
         "-f",
         "--filename",
         type=str,
         default=None,
-        help="filename from which new XTB input is prepared.",
+        help="filename from which new xTB input is prepared.",
     )
     @click.option(
         "-l",
@@ -49,7 +69,7 @@ def click_xtb_settings_options(f):
         help="name to be appended to file for the job",
     )
     @click.option(
-        "-t", "--title", type=str, default=None, help="XTB job title."
+        "-t", "--title", type=str, default=None, help="xTB job title."
     )
     @click.option(
         "-c", "--charge", type=int, default=None, help="charge of the molecule"
@@ -114,7 +134,7 @@ def click_xtb_settings_options(f):
         "--dieze-tag",
         type=str,
         default=None,
-        help="dieze tag for xtb job; possible options include "
+        help="dieze tag for xTB job; possible options include "
         '"n", "p", "t" to get "#n", "#p", "#t", respectively',
     )
     @click.option(
@@ -130,14 +150,14 @@ def click_xtb_settings_options(f):
 
 
 def click_xtb_jobtype_options(f):
-    """Common click options for XTB link/crest jobs."""
+    """Common click options for xTB link/crest jobs."""
 
     @click.option(
         "-j",
         "--jobtype",
         type=str,
         default=None,
-        help='XTB job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='xTB job type. Options: ["opt", "sp"]',
     )
     @click.option(
         "-c",
@@ -165,7 +185,7 @@ def click_xtb_jobtype_options(f):
 
 
 def click_xtb_solvent_options(f):
-    """Common click solvent options for XTB jobs."""
+    """Common click solvent options for xTB jobs."""
 
     @click.option(
         "--remove-solvent/--no-remove-solvent",
@@ -269,6 +289,7 @@ def xtb(
     forces,
     pubchem,
 ):
+    """CLI subcommand for running xTB jobs using the chemsmart framework."""
 
     from chemsmart.jobs.xtb.settings import XTBJobSettings
     from chemsmart.settings.xtb import XTBProjectSettings
@@ -276,13 +297,13 @@ def xtb(
     # get project settings
     project_settings = XTBProjectSettings.from_project(project)
 
-    # obtain XTB Settings from filename, if supplied; otherwise return defaults
+    # obtain xTB Settings from filename, if supplied; otherwise return defaults
 
     if filename is None:
         # for cases where filename is not supplied, eg, get structure from pubchem
         job_settings = XTBJobSettings.default()
         logger.info(
-            f"No filename is supplied and XTB default settings are used:\n{job_settings.__dict__} "
+            f"No filename is supplied and xTB default settings are used:\n{job_settings.__dict__} "
         )
     elif filename.endswith((".com", ".inp", ".out", ".log")):
         job_settings = XTBJobSettings.from_filepath(filename)
@@ -330,7 +351,7 @@ def xtb(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give XTB input filename or name to be be appended, but not both!"
+            "Only give xTB input filename or name to be be appended, but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
@@ -360,7 +381,7 @@ def xtb(
         ), f"Could not obtain molecule from {filename}!"
         logger.debug(f"Obtained molecule {molecules} from {filename}")
 
-        # # create input file as .xyz for xtb jobs
+        # # create input file as .xyz for xTB jobs
         # if filename.endswith(".xyz"):
         #     # if xyz file, then copy this to label.xyz
         #     from shutil import copy

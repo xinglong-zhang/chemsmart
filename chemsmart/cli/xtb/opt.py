@@ -1,3 +1,12 @@
+"""
+xTB Geometry Optimization CLI Module
+
+This module provides the command-line interface for xTB geometry
+optimization calculations. It supports both unconstrained and constrained
+optimizations with options for freezing specific atoms during the
+optimization process.
+"""
+
 import logging
 
 import click
@@ -20,6 +29,18 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, skip_completed, **kwargs):
+    """
+    Run xTB geometry optimization calculations.
+
+    This command performs geometry optimization using xTB with support
+    for both unconstrained and constrained optimizations. Users can
+    specify atoms to freeze during optimization and configure various
+    optimization parameters.
+
+    The optimization uses settings from the project configuration merged
+    with any command-line overrides. Charge and multiplicity are validated
+    before running the calculation.
+    """
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     opt_settings = project_settings.opt_settings()
