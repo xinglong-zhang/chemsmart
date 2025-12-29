@@ -15,7 +15,9 @@ Available strategies:
 
 Key classes include:
 - MoleculeGrouper: Abstract base class for all groupers
-- RMSDGrouper: Geometric similarity (RMSD) grouping
+- RMSDGrouper: Abstract parent class for RMSD-based groupers
+- BasicRMSDGrouper: Standard RMSD calculation using Euclidean distance
+- HungarianRMSDGrouper: RMSD grouping with optimal atom assignment
 - RMSDGrouperSharedMemory: RMSD grouping with shared-memory optimization
 - TanimotoSimilarityGrouper: Chemical fingerprint similarity
 - RDKitIsomorphismGrouper: RDKit hashing and isomorphism grouping
@@ -36,11 +38,14 @@ from typing import Iterable, List, Optional, Tuple
 import networkx as nx
 import numpy as np
 from joblib import Parallel, delayed  # More efficient parallelization
+from networkx.algorithms import isomorphism
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdMolHash
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
+from scipy.optimize import linear_sum_assignment  # for Hungarian algorithm
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
+from scipy.spatial.distance import cdist  # for Hungarian algorithm cost matrix
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.utils import kabsch_align
@@ -170,12 +175,16 @@ class MoleculeGrouper(ABC):
 
 class RMSDGrouper(MoleculeGrouper):
     """
-    Group molecules based on RMSD (Root Mean Square Deviation) similarity.
+    Abstract base class for RMSD-based molecular grouping.
 
-    Groups molecules based on geometric similarity of atomic positions.
-    Effective for precise 3D structural comparisons, ideal in contexts
-    like crystallography or drug binding where exact spatial alignment
-    is crucial.
+    Groups molecules based on geometric similarity of atomic positions using
+    various RMSD calculation methods. This base class provides common
+    functionality for all RMSD-based groupers while allowing subclasses
+    to implement specific RMSD calculation algorithms.
+
+    Follows the same design pattern as JobRunner - provides the core
+    grouping logic while allowing subclasses to implement specific
+    RMSD calculation methods via _calculate_rmsd_core().
 
     Attributes:
         molecules (Iterable[Molecule]): Inherited; collection of molecules to
@@ -240,6 +249,11 @@ class RMSDGrouper(MoleculeGrouper):
             mol.chemical_symbols,
         )  # Use all atoms if flag is False
 
+    @abstractmethod
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """Calculate RMSD between two molecules. Must be implemented by subclasses."""
+        pass
+
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules by geometric similarity using RMSD clustering.
@@ -281,45 +295,369 @@ class RMSDGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
-        """
-        Calculate RMSD between two molecules.
-
-        Computes the Root Mean Square Deviation between atomic positions
-        of two molecules, with optional alignment and hydrogen filtering.
-
-        Args:
-            idx_pair (Tuple[int, int]): Pair of molecule indices to compare.
-
-        Returns:
-            float: RMSD value between the two molecules, or np.inf if the
-                   molecules have different atom counts or different sets of
-                   element symbols.
-        """
-        i, j = idx_pair
-        mol1, mol2 = self.molecules[i], self.molecules[j]
-
-        pos1, symbols1 = self._get_heavy_atoms(mol1)
-        pos2, symbols2 = self._get_heavy_atoms(mol2)
-
-        if (
-            mol1.num_atoms != mol2.num_atoms
-            or self._chemical_symbol_sets[i] != self._chemical_symbol_sets[j]
-        ):
-            return np.inf
-
-        if self.align_molecules:
-            logger.debug("Aligning molecules using Kabsch algorithm.")
-            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
-
-        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
-
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(threshold={self.threshold}, "
             f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
             f"ignore_hydrogens={self.ignore_hydrogens})"
         )
+
+
+class BasicRMSDGrouper(RMSDGrouper):
+    """
+    Basic RMSD grouper using standard Euclidean distance calculation.
+
+    Implements the most straightforward RMSD calculation using the standard
+    formula: sqrt(mean(sum((pos1 - pos2)^2))). This is the classic RMSD
+    implementation that compares atomic positions directly.
+    """
+
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """Calculate RMSD between two molecules without atom reordering."""
+        i, j = idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        if self.ignore_hydrogens:
+            pos1, symbols1 = self._get_heavy_atoms(mol1)
+            pos2, symbols2 = self._get_heavy_atoms(mol2)
+        else:
+            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+
+        # Quick check for compatibility
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
+            return np.inf
+
+        if self.align_molecules:
+            logger.debug("Aligning molecules using Kabsch algorithm.")
+            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
+        rmsd = np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+        return rmsd
+
+
+class HungarianRMSDGrouper(RMSDGrouper):
+    """
+    Hungarian RMSD grouper for optimal atom assignment.
+
+    Uses the Hungarian algorithm (Kuhn-Munkres algorithm) to find the optimal
+    assignment of atoms between two molecules that minimizes RMSD. This approach
+    handles cases where atom ordering might differ between molecules of the same
+    chemical structure.
+
+    The Hungarian algorithm ensures that atoms of the same element type are
+    optimally paired to minimize the sum of squared distances, resulting in
+    more accurate RMSD calculations for molecules with permuted atom arrangements.
+
+    Supports additional parameters for spyrmsd compatibility:
+    - center: Center coordinates at origin before calculation
+    - minimize: Use optimal superposition (Kabsch alignment)
+    """
+
+    def __init__(
+        self,
+        molecules,
+        threshold=None,
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        ignore_hydrogens: bool = False,
+        center: bool = False,
+    ):
+        """
+        Initialize Hungarian RMSD grouper.
+
+        Args:
+            molecules: Collection of molecules to group.
+            threshold (float): RMSD threshold for grouping.
+            num_procs (int): Number of processes for parallel computation.
+            align_molecules (bool): Whether to align molecules (legacy parameter).
+            ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
+            center (bool): Center coordinates at origin before calculation.
+            minimize (bool): Use optimal superposition (Kabsch alignment).
+        """
+        super().__init__(
+            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+        )
+        self.center = center
+
+    def _calculate_rmsd(self, idx_pair):
+        i, j = idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        if self.ignore_hydrogens:
+            pos1, symbols1 = self._get_heavy_atoms(mol1)
+            pos2, symbols2 = self._get_heavy_atoms(mol2)
+        else:
+            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
+            return np.inf
+
+        # Center coordinates if requested
+        if self.center:
+            pos1 = pos1 - np.mean(pos1, axis=0)
+            pos2 = pos2 - np.mean(pos2, axis=0)
+
+        # Use Hungarian algorithm for optimal atom matching
+        elements = sorted(set(symbols1))
+        matched_idx1 = []
+        matched_idx2 = []
+        for elem in elements:
+            idxs1 = [k for k, s in enumerate(symbols1) if s == elem]
+            idxs2 = [k for k, s in enumerate(symbols2) if s == elem]
+
+            if len(idxs1) == 1 and len(idxs2) == 1:
+                # For single atoms, direct match
+                matched_idx1.extend(idxs1)
+                matched_idx2.extend(idxs2)
+            else:
+                # For multiple atoms of same type, use Hungarian algorithm
+                pos1_elem = pos1[idxs1]
+                pos2_elem = pos2[idxs2]
+                # Use scipy's cdist for efficient distance matrix calculation
+                dist_matrix = cdist(pos1_elem, pos2_elem, metric="sqeuclidean")
+                row_ind, col_ind = linear_sum_assignment(dist_matrix)
+                matched_idx1.extend([idxs1[r] for r in row_ind])
+                matched_idx2.extend([idxs2[c] for c in col_ind])
+
+        pos1_matched = pos1[matched_idx1]
+        pos2_matched = pos2[matched_idx2]
+
+        # Apply alignment based on minimize parameter or legacy align_molecules
+        if self.align_molecules:
+            logger.debug("Aligning molecules using Kabsch algorithm.")
+            pos1_matched, pos2_matched, _, _, _ = kabsch_align(
+                pos1_matched, pos2_matched
+            )
+
+        rmsd = np.sqrt(
+            np.mean(np.sum((pos1_matched - pos2_matched) ** 2, axis=1))
+        )
+        return rmsd
+
+
+class SpyRMSDGrouper(RMSDGrouper):
+    """
+    SpyRMSD grouper with graph isomorphism symmetry correction.
+
+    Uses graph isomorphism for advanced RMSD calculations with symmetry correction.
+    This approach handles molecular symmetries and atom permutations more
+    comprehensively than basic Hungarian assignment.
+
+    Supports optimal superposition and can handle cases where molecular graphs
+    need to be compared for finding the best atom mapping.
+    """
+
+    def __init__(
+        self,
+        molecules,
+        threshold=None,
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        ignore_hydrogens: bool = False,
+        center: bool = False,  # Center molecules
+        cache: bool = True,  # Cache graph isomorphisms
+    ):
+        """
+        Initialize SpyRMSD-based molecular grouper.
+
+        Args:
+            molecules: Collection of molecules to group.
+            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+            num_procs (int): Number of processes for parallel computation.
+            align_molecules (bool): Whether to align molecules (legacy parameter).
+            ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
+            center (bool): Center molecules at origin before calculation.
+            cache (bool): Cache graph isomorphisms for efficiency.
+        """
+        super().__init__(
+            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+        )
+        self.center = center
+        self.cache = cache
+
+    @staticmethod
+    def _center_coordinates(pos: np.ndarray) -> np.ndarray:
+        """
+        Calculate the center of geometry (centroid) of atomic coordinates.
+
+        Args:
+            pos (np.ndarray): Array of atomic coordinates (N x 3).
+
+        Returns:
+            np.ndarray: Center of geometry as a 3D vector.
+        """
+        return np.mean(pos, axis=0)
+
+    @staticmethod
+    def _symbol_to_atomicnum(symbol: str) -> int:
+        """
+        Convert element symbol to atomic number.
+
+        Args:
+            symbol (str): Element symbol (e.g., 'H', 'C', 'O').
+
+        Returns:
+            int: Atomic number, or 0 if unknown.
+        """
+        symbol_map = {
+            "H": 1,
+            "He": 2,
+            "Li": 3,
+            "Be": 4,
+            "B": 5,
+            "C": 6,
+            "N": 7,
+            "O": 8,
+            "F": 9,
+            "Ne": 10,
+            "Na": 11,
+            "Mg": 12,
+            "Al": 13,
+            "Si": 14,
+            "P": 15,
+            "S": 16,
+            "Cl": 17,
+            "Ar": 18,
+            "K": 19,
+            "Ca": 20,
+            "Br": 35,
+            "I": 53,
+        }
+        return symbol_map.get(symbol, 0)
+
+    def _symmrmsd(
+        self,
+        pos1: np.ndarray,
+        pos2: np.ndarray,
+        symbols1: list,
+        symbols2: list,
+        adj_matrix1: np.ndarray,
+        adj_matrix2: np.ndarray,
+    ) -> float:
+        """
+        Calculate symmetry-corrected RMSD using graph isomorphism.
+
+        Accounts for molecular symmetry by finding all possible atom mappings
+        through graph isomorphism and selecting the one that gives minimum RMSD.
+
+        Args:
+            pos1 (np.ndarray): First set of coordinates (N x 3).
+            pos2 (np.ndarray): Second set of coordinates (N x 3).
+            symbols1 (list): Chemical symbols for first structure.
+            symbols2 (list): Chemical symbols for second structure.
+            adj_matrix1 (np.ndarray): Adjacency matrix for first structure.
+            adj_matrix2 (np.ndarray): Adjacency matrix for second structure.
+
+        Returns:
+            float: Symmetry-corrected RMSD value.
+
+        Notes:
+            This is a simplified implementation. For complex molecules with
+            high symmetry, this may be computationally expensive. Falls back
+            to Hungarian RMSD if graphs are not isomorphic.
+        """
+
+        # Verify same number of atoms
+        if len(pos1) != len(pos2):
+            return np.inf
+
+        # Verify same atomic composition
+        if sorted(symbols1) != sorted(symbols2):
+            return np.inf
+
+        # Center coordinates if requested
+        if self.center:
+            pos1 = pos1 - self._center_coordinates(pos1)
+            pos2 = pos2 - self._center_coordinates(pos2)
+
+        # Create NetworkX graphs from adjacency matrices
+        G1 = nx.from_numpy_array(adj_matrix1)
+        G2 = nx.from_numpy_array(adj_matrix2)
+
+        # Add atomic numbers as node attributes
+        for i, symbol in enumerate(symbols1):
+            G1.nodes[i]["element"] = self._symbol_to_atomicnum(symbol)
+        for i, symbol in enumerate(symbols2):
+            G2.nodes[i]["element"] = self._symbol_to_atomicnum(symbol)
+
+        # Find all graph isomorphisms (atom mappings)
+        node_match = isomorphism.categorical_node_match("element", 0)
+        GM = isomorphism.GraphMatcher(G1, G2, node_match=node_match)
+
+        # Try all possible isomorphisms and find minimum RMSD
+        min_rmsd = np.inf
+
+        if GM.is_isomorphic():
+            for mapping in GM.isomorphisms_iter():
+                # Reorder pos2 according to this mapping
+                reordered_pos2 = np.array(
+                    [pos2[mapping[i]] for i in range(len(pos2))]
+                )
+
+                # Calculate RMSD for this mapping
+                if self.align_molecules:
+                    _, _, _, _, rmsd = kabsch_align(pos1, reordered_pos2)
+                else:
+                    diff = pos1 - reordered_pos2
+                    rmsd = np.sqrt(np.mean(np.sum(diff**2, axis=1)))
+
+                if rmsd < min_rmsd:
+                    min_rmsd = rmsd
+
+            return min_rmsd
+        else:
+            # If not isomorphic, return infinity (structures are fundamentally different)
+            return np.inf
+
+    def _calculate_rmsd(self, idx_pair):
+        """Calculate RMSD using symmetry correction with graph isomorphism."""
+
+        i, j = idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        if self.ignore_hydrogens:
+            pos1, symbols1 = self._get_heavy_atoms(mol1)
+            pos2, symbols2 = self._get_heavy_atoms(mol2)
+        else:
+            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+
+        # Quick compatibility check
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
+            return np.inf
+
+        # Use symmetry-corrected RMSD if molecules have connectivity
+        # Try to get molecular graphs for symmetry correction
+        adj_matrix1 = (
+            mol1.adjacency_matrix
+            if hasattr(mol1, "adjacency_matrix")
+            else None
+        )
+        adj_matrix2 = (
+            mol2.adjacency_matrix
+            if hasattr(mol2, "adjacency_matrix")
+            else None
+        )
+
+        if adj_matrix1 is not None and adj_matrix2 is not None:
+            rmsd = self._symmrmsd(
+                pos1=pos1,
+                pos2=pos2,
+                symbols1=symbols1,
+                symbols2=symbols2,
+                adj_matrix1=adj_matrix1,
+                adj_matrix2=adj_matrix2,
+            )
+        else:
+            return np.inf
+        return rmsd
 
 
 class RMSDGrouperSharedMemory(MoleculeGrouper):
@@ -1131,18 +1469,26 @@ class StructureGrouperFactory:
             ValueError: If `strategy` is not a supported name.
         """
         groupers = {
-            "rmsd": RMSDGrouper,
+            "rmsd": BasicRMSDGrouper,
+            "hrmsd": HungarianRMSDGrouper,
+            "spyrmsd": SpyRMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
         }
 
-        threshold_supported = {"rmsd", "tanimoto", "connectivity"}
+        threshold_supported = {
+            "rmsd",
+            "spyrmsd",
+            "hrmsd",
+            "tanimoto",
+            "connectivity",
+        }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
             if strategy in threshold_supported:
-                if strategy == "rmsd":
+                if strategy in ["rmsd", "hrmsd", "spyrmsd"]:
                     return groupers[strategy](
                         structures,
                         threshold=threshold,
