@@ -1,3 +1,10 @@
+"""
+xTB job settings implementation.
+
+This module contains the XTBJobSettings class for configuring xTB jobs.
+It manages parameters such as GFN version, optimization level, and solvent models.
+"""
+
 import copy
 import logging
 import os
@@ -12,6 +19,18 @@ logger = logging.getLogger(__name__)
 
 
 class XTBJobSettings(MolecularJobSettings):
+    """
+    Settings for xTB jobs.
+
+    Manages configuration parameters for xTB calculations, including
+    GFN version, optimization level, charge, and solvent settings.
+
+    Attributes:
+        gfn_version (str): GFN-xTB version (e.g., 'gfn2').
+        optimization_level (str): Optimization level (e.g., 'vtight').
+        uhf (int): Number of unpaired electrons.
+    """
+
     def __init__(
         self,
         gfn_version="gfn2",  # use gfn2 by default
@@ -25,8 +44,20 @@ class XTBJobSettings(MolecularJobSettings):
         solvent_id=None,
         **kwargs,
     ):
-        """Initialize XTB job settings.
-        uhf(int): Number of unpaired electrons.
+        """
+        Initialize xTB job settings.
+
+        Args:
+            gfn_version (str, optional): GFN-xTB version. Defaults to "gfn2".
+            optimization_level (str, optional): Optimization level.
+            charge (int, optional): Molecular charge.
+            uhf (int, optional): Number of unpaired electrons.
+            job_type (str, optional): Type of job.
+            title (str, optional): Job title.
+            freq (bool, optional): Whether to calculate frequencies. Defaults to False.
+            solvent_model (str, optional): Solvent model to use.
+            solvent_id (str, optional): Solvent identifier.
+            **kwargs: Additional arguments.
         """
         super().__init__(
             charge=charge,
@@ -42,6 +73,12 @@ class XTBJobSettings(MolecularJobSettings):
         self.uhf = uhf
 
     def copy(self):
+        """
+        Create a deep copy of the settings object.
+
+        Returns:
+            XTBJobSettings: A new instance with copied settings object.
+        """
         return copy.deepcopy(self)
 
     def __getitem__(self, key):
@@ -63,17 +100,20 @@ class XTBJobSettings(MolecularJobSettings):
         if not is_equal:
             import dictdiffer
 
-            logger.info("Gaussian job settings are not equal.")
+            logger.info("xTB job settings are not equal.")
             for diff in list(dictdiffer.diff(self_dict, other_dict)):
                 logger.info(f"Difference: {diff}")
         return self_dict == other_dict
 
     @classmethod
     def from_comfile(cls, filename):
-        """Return Gaussian settings object from a given gaussian.com file.
+        """Return xTB job settings from Gaussian .com file.
 
         Args:
-            filename (str): file path of the .com file string to be supplied.
+            filename (str): Path to the Gaussian .com file.
+
+        Returns:
+            XTBJobSettings: Settings object from com file.
         """
         from chemsmart.io.gaussian.input import Gaussian16Input
 
@@ -88,10 +128,13 @@ class XTBJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_inpfile(cls, filename):
-        """Return Gaussian settings object from a given orca.inp file.
+        """Return xTB job settings from ORCA .inp file.
 
         Args:
-            filename (str): file path of the .inp file string to be supplied.
+            filename (str): Path to the ORCA .inp file.
+
+        Returns:
+            XTBJobSettings: Settings object from inp file.
         """
         from chemsmart.io.orca.input import ORCAInput
 
@@ -107,10 +150,13 @@ class XTBJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_logfile(cls, filename):
-        """Return Gaussian settings object from a given gaussian.log file.
+        """Return xTB job settings from Gaussian .log file.
 
         Args:
-            filename (str): file path of the .log file to be supplied.
+            filename (str): Path to the Gaussian .log file.
+
+        Returns:
+            XTBJobSettings: Settings object from log file.
         """
         log_path = os.path.abspath(filename)
         from chemsmart.io.gaussian.output import (
@@ -131,7 +177,15 @@ class XTBJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_outfile(cls, filename):
-        """Return Gaussian job settings from ORCA output file."""
+        """
+        Return xTB job settings from ORCA .out file.
+
+        Args:
+            filename (str): Path to the ORCA .out file.
+
+        Returns:
+            XTBJobSettings: Settings object from out file.
+        """
         from chemsmart.io.orca.output import ORCAOutput
 
         out_path = os.path.abspath(filename)
@@ -148,6 +202,12 @@ class XTBJobSettings(MolecularJobSettings):
 
     @classmethod
     def default(cls):
+        """
+        Get default xTB job settings.
+
+        Returns:
+            XTBJobSettings: Default settings object.
+        """
         return cls(
             gfn_version="gfn2",
             optimization_level="vtight",
@@ -162,6 +222,19 @@ class XTBJobSettings(MolecularJobSettings):
 
     @classmethod
     def from_filepath(cls, filepath, **kwargs):
+        """
+        Create settings from any supported file type.
+
+        Args:
+            filepath (str): Path to the input file (.com, .gjf, .inp, .log, .out, .xyz).
+            **kwargs: Additional arguments.
+
+        Returns:
+            XTBJobSettings: The created settings object.
+
+        Raises:
+            ValueError: If the file extension is not supported.
+        """
         if filepath.endswith((".com", ".gjf")):
             return cls.from_comfile(filepath)
         if filepath.endswith(".inp"):

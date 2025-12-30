@@ -1,37 +1,37 @@
 """
-xTB geometry optimization job implementation.
+xTB single point job implementation.
 
-This module provides the XTBOptJob class for performing
-molecular geometry optimization calculations using xTB.
+This module provides the XTBSinglePointJob class for performing
+single point energy calculations using xTB.
 """
 
 from chemsmart.jobs.xtb.job import XTBJob
 
 
-class XTBOptJob(XTBJob):
+class XTBSinglePointJob(XTBJob):
     """
-    xTB geometry optimization job.
+    xTB single point energy calculation job.
 
-    This class handles molecular geometry optimizations to find energy
-    minima on the potential energy surface.
+    This class handles single point energy calculations at fixed geometries
+    without geometry optimization.
 
     Attributes:
-        TYPE (str): Job type identifier ('xtbopt').
-        molecule (Molecule): Molecular structure to optimize.
+        TYPE (str): Job type identifier ('xtbsp').
+        molecule (Molecule): Molecular structure for calculation.
         settings (XTBJobSettings): Calculation configuration options.
         label (str): Job identifier used for file naming.
         jobrunner (JobRunner): Execution backend that runs the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
 
-    TYPE = "xtbopt"
+    TYPE = "xtbsp"
 
     def __init__(self, molecule, settings, label, jobrunner=None, **kwargs):
         """
-        Initialize XTBOptJob.
+        Initialize XTBSinglePointJob.
 
         Args:
-            molecule: Molecule object for the optimization
+            molecule: Molecule object for the calculation
             settings: XTBJobSettings instance
             label: Job label for identification
             jobrunner: Job runner instance
