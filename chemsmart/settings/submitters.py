@@ -67,8 +67,8 @@ class RunScript:
         """
         contents = f"""\
         #!/usr/bin/env python
-        import os
-        os.environ['OMP_NUM_THREADS'] = '1'
+        # import os
+        # os.environ['OMP_NUM_THREADS'] = '1'
         
         from chemsmart.cli.run import run
 
@@ -430,10 +430,39 @@ class Submitter(RegistryMixin):
 
         if self.job.PROGRAM.lower() == "xtb":
             f.write("# XTB specific environment variables\n")
-            f.write(f"export MKL_NUM_THREADS={self.server.num_cores}\n")
-            f.write(f"export OMP_NUM_THREADS={self.server.num_cores},1\n")
-            f.write("export OMP_STACKSIZE=4G\n")
-            f.write("ulimit -s unlimited\n")
+            # MKL_NUM_THREADS
+            if self.job.settings.mkl_threads is not None:
+                f.write(
+                    f"export MKL_NUM_THREADS={self.job.settings.mkl_threads}\n"
+                )
+            else:
+                f.write(f"export MKL_NUM_THREADS={self.server.num_cores}\n")
+            # OMP_NUM_THREADS
+            if self.job.settings.omp_threads is not None:
+                f.write(
+                    f"export OMP_NUM_THREADS={self.job.settings.omp_threads}\n"
+                )
+            else:
+                f.write(f"export OMP_NUM_THREADS={self.server.num_cores}\n")
+            # OMP_MAX_ACTIVE_LEVELS
+            f.write(
+                "export OMP_MAX_ACTIVE_LEVELS=1  # deactivate nested OMP constructs\n"
+            )
+            # OMP_STACKSIZE
+            if self.job.settings.omp_stacksize is not None:
+                f.write(
+                    f"export OMP_STACKSIZE={self.job.settings.omp_stacksize}\n"
+                )
+            else:
+                stack_size = min(
+                    4, max(1, self.server.mem_gb // self.server.num_cores)
+                )
+                f.write(f"export OMP_STACKSIZE={stack_size}G\n")
+            # ulimit -s unlimited
+            if self.job.settings.stack_unlimited is False:
+                pass
+            else:
+                f.write("ulimit -s unlimited\n")
             f.write("\n")
 
     @abstractmethod

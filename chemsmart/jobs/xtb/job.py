@@ -13,8 +13,16 @@ logger = logging.getLogger(__name__)
 class XTBJob(Job):
     PROGRAM = "xtb"
 
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(molecule=molecule, label=label, **kwargs)
+    def __init__(
+        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+    ):
+        if label is None:
+            label = molecule.get_chemical_formula(empirical=True)
+        self.label = label
+
+        super().__init__(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )
         if not isinstance(settings, XTBJobSettings):
             raise ValueError(
                 f"Settings must be instance of {XTBJobSettings} for {self}, but is {settings} instead!"
@@ -25,9 +33,6 @@ class XTBJob(Job):
             )
         molecule = molecule.copy()
         settings = settings.copy()
-
-        if label is None:
-            label = molecule.get_chemical_formula(empirical=True)
 
         self.settings = settings
         self.molecule = molecule
@@ -82,13 +87,13 @@ class XTBJob(Job):
         try:
             from chemsmart.io.xtb.output import XTBOutput
 
-            return XTBOutput(filename=self.outputfile)
+            return XTBOutput(folder=self.folder)
         except Exception:
             logger.error(f"Error reading output file: {self.outputfile}")
             return None
 
-    def _run(self, jobrunner, **kwargs):
-        jobrunner.run(self, **kwargs)
+    def _run(self, **kwargs):
+        self.jobrunner.run(self, **kwargs)
 
     @classmethod
     def from_filename(

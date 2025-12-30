@@ -346,10 +346,54 @@ def nciplot(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/bin/nciplot", folder)
 
 
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    required=False,
+    help="Path to the xTB folder. If not provided, attempts to find xTB in PATH.",
+)
+def xtb(ctx, folder):
+    """
+    Configure paths to the xTB folder.
+
+    Replaces '~/bin/xtb' with the specified folder in YAML files.
+    If folder is not provided, tries to find xTB in the system PATH.
+
+    Examples:
+        chemsmart config xtb --folder <XTBFOLDER>
+        chemsmart config xtb
+    """
+    cfg = ctx.obj["cfg"]
+
+    if folder is None:
+        logger.info("No folder provided. Locating xTB in PATH...")
+        xtb_path = shutil.which("xtb")
+        if xtb_path:
+            folder = os.path.dirname(xtb_path)
+            logger.info(f"Found xTB at: {xtb_path}")
+        else:
+            logger.warning(
+                "Could not find xTB in PATH. Please specify --folder."
+            )
+            return
+
+    if "~" in folder:
+        xtb_folder = os.path.expanduser(folder)
+        assert os.path.exists(
+            os.path.abspath(xtb_folder)
+        ), f"xTB folder not found: {xtb_folder}"
+    logger.info(f"Configuring xTB with folder: {folder}")
+    update_yaml_files(cfg.chemsmart_server, "~/bin/xtb", folder)
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
 config.add_command(nciplot)
+config.add_command(xtb)
 
 if __name__ == "__main__":
     config()

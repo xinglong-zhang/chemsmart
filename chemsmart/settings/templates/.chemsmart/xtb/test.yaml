@@ -1,0 +1,11 @@
+# Default XTB settings for calculations
+gas:
+  gfn_version: gfn2
+  optimization_level: vtight
+  freq: True
+solv:
+  gfn_version: gfn2
+  freq: False
+  solvent_model: alpb
+  solvent_id: water
+

@@ -49,6 +49,29 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Print the generated command.",
 )
+@click.option(
+    "--mkl-threads",
+    type=int,
+    default=None,
+    help="Number of MKL threads (xTB only).",
+)
+@click.option(
+    "--omp-threads",
+    type=int,
+    default=None,
+    help="Number of OMP threads (xTB only).",
+)
+@click.option(
+    "--omp-stacksize",
+    type=str,
+    default=None,
+    help="OMP stack size (xTB only).",
+)
+@click.option(
+    "--stack-unlimited/--no-stack-unlimited",
+    default=True,
+    help="Whether to set ulimit -s unlimited (xTB only).",
+)
 def sub(
     ctx,
     server,
@@ -65,6 +88,10 @@ def sub(
     verbose,
     test,
     print_command,
+    mkl_threads,
+    omp_threads,
+    omp_stacksize,
+    stack_unlimited,
     **kwargs,
 ):
     """
@@ -105,6 +132,14 @@ def sub(
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
 
+    # Store xTB specific options
+    ctx.obj["xtb_options"] = {
+        "mkl_threads": mkl_threads,
+        "omp_threads": omp_threads,
+        "omp_stacksize": omp_stacksize,
+        "stack_unlimited": stack_unlimited,
+    }
+
 
 @sub.result_callback(replace=True)
 @click.pass_context
@@ -144,6 +179,10 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "verbose",
             "test",
             "print_command",
+            "mkl_threads",
+            "omp_threads",
+            "omp_stacksize",
+            "stack_unlimited",
         ]
 
         for keyword in keywords_not_in_run:
@@ -171,6 +210,18 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     def _process_single_job(job):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
+
+        # Apply xTB options from sub command if present and job is xTB
+        if job.PROGRAM.lower() == "xtb":
+            xtb_opts = ctx.obj.get("xtb_options", {})
+            if xtb_opts.get("mkl_threads") is not None:
+                job.settings.mkl_threads = xtb_opts["mkl_threads"]
+            if xtb_opts.get("omp_threads") is not None:
+                job.settings.omp_threads = xtb_opts["omp_threads"]
+            if xtb_opts.get("omp_stacksize") is not None:
+                job.settings.omp_stacksize = xtb_opts["omp_stacksize"]
+            if xtb_opts.get("stack_unlimited") is not None:
+                job.settings.stack_unlimited = xtb_opts["stack_unlimited"]
 
         cli_args = _reconstruct_cli_args(ctx, job)
 

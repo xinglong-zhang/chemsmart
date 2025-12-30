@@ -42,6 +42,15 @@ class XTBJobRunner(JobRunner):
         """Executable class object for XTB."""
         try:
             executable_path = XTBExecutable().get_executable()
+            if executable_path is None:
+                import shutil
+
+                executable_path = shutil.which("xtb")
+                if executable_path is None:
+                    raise TypeError(
+                        "xtb executable not found in path or settings."
+                    )
+
             executable_path = os.path.dirname(executable_path)
             executable = XTBExecutable(executable_path)
             logger.debug(f"Obtained xtb executable: {executable}")
@@ -92,10 +101,10 @@ class XTBJobRunner(JobRunner):
 
     def _write_input(self, job):
         """Write the input file as .xyz for xtb jobs."""
-        logger.info(f"Writting input file to: {job.label}.xyz")
-        job.molecule.write_xyz(f"{job.label}.xyz")
+        logger.info(f"Writting input file to: {self.job_inputfile}")
+        job.molecule.write_xyz(self.job_inputfile, mode="w")
 
-    def _get_command(self, **kwargs):
+    def _get_command(self, job=None, **kwargs):
         exe = self._get_executable()
         command = f"{exe} {self.job_inputfile} "
         return command
@@ -107,14 +116,14 @@ class XTBJobRunner(JobRunner):
             and settings.solvent_id is not None
         ):
             command += (
-                f" --{settings.gfn_version} "
-                f"--{settings.job_type} {settings.optimization_level}  --chrg {settings.charge} "
+                f"--{settings.gfn_version} "
+                f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
                 f"--uhf {settings.uhf} --{settings.solvent_model} {settings.solvent_id}"
             )
         else:
             command += (
-                f" --{settings.gfn_version} "
-                f"--{settings.job_type} {settings.optimization_level}  --chrg {settings.charge} "
+                f"--{settings.gfn_version} "
+                f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
                 f"--uhf {settings.uhf}"
             )
 
@@ -137,7 +146,7 @@ class XTBJobRunner(JobRunner):
             )
 
     def _get_executable(self):
-        """Get executable for Gaussian."""
+        """Get executable for xTB."""
         exe = self.executable.get_executable()
         logger.info(f"XTB executable: {exe}")
         return exe
