@@ -35,6 +35,9 @@ make env
 ```
 to create a running environment.
 
+**Note (HPC users):** Some dependencies (e.g. `pyvoro`) require a C++ compiler.
+On HPC systems, you may need to load a compiler module (e.g. `module load gcc`) before running `make env`.
+
 By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
 If conda is not installed, one can run
