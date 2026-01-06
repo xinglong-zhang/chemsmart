@@ -34,9 +34,9 @@ class XTBRefs:
         "write",
     ]
 
-    XTB_METHODS = ["GFN0", "GFN1", "GFN2", "GFNFF"]
+    XTB_METHODS = ["gfn0", "gfn1", "gfn2", "gfnff"]
 
-    XTB_OPT_LEVEL = [
+    XTB_OPT_LEVELS = [
         "crude",
         "sloppy",
         "loose",
@@ -47,15 +47,57 @@ class XTBRefs:
         "extreme",
     ]
 
-    XTB_OPT_ENGINE = [
+    XTB_OPT_ENGINES = [
         "rf",  # Approximate Normal Coordinate Rational Function optimizer
         "lbfgs",  # L-BFGS Approximate Normal Coordinate optimizer
         "inertial",  # Fast Inertial Relaxation Engine
     ]
 
+    XTB_JOB_TYPES = [
+        "sp",  # single point energy
+        "opt",  # geometry optimization
+        "hess",  # vibrational frequency
+        "md",  # molecular dynamics
+        "path",  # metadynamics reaction path search
+        "modef",  # mode following
+    ]
+
     XTB_SOLVENT_MODELS = [
-        "gbsa",  # Generalized born model with solvent accessable surface area contributions
-        "alpb",  # analytical linearized Poisson-Boltzmann model
+        "gbsa",  # generalized born (GB) model with solvent accessable surface (SASA) model
+        "alpb",  # analytical linearized Poisson-Boltzmann (ALPB) model
+        "cosmo",  # domain decomposition conductor-like screening model (ddCOSMO)
+        "tmcosmo",  # TM convention for COSMO
+        "cpcmx",  # extended conduction-like polarizable continuum solvation model (CPCM-X)
+    ]
+
+    XTB_SOLVENT_IDS = [
+        "acetone",
+        "acetonitrile",
+        "aniline",
+        "benzaldehyde",
+        "benzene",
+        "ch2cl2",
+        "chcl3",
+        "cs2",
+        "dioxane",
+        "dmf",
+        "dmso",
+        "ethanol",
+        "ether",
+        "ethylacetate",
+        "furane",
+        "hexandecane",
+        "hexane",
+        "h2o",  # Alias for water in GBSA
+        "methanol",
+        "n-hexane",  # GFN2-xTB only in GBSA
+        "nitromethane",
+        "octanol",
+        "woctanol",
+        "phenol",
+        "thf",
+        "toluene",
+        "water",
     ]
 
     @property
@@ -86,7 +128,7 @@ class XTBRefs:
         Returns:
             list: Available optimization levels in lowercase
         """
-        return [level.lower() for level in self.XTB_OPT_LEVEL]
+        return [level.lower() for level in self.XTB_OPT_LEVELS]
 
     @property
     def xtb_opt_engines(self):
@@ -96,7 +138,17 @@ class XTBRefs:
         Returns:
             list: Available optimization engines in lowercase
         """
-        return [engine.lower() for engine in self.XTB_OPT_ENGINE]
+        return [engine.lower() for engine in self.XTB_OPT_ENGINES]
+
+    @property
+    def xtb_job_types(self):
+        """
+        Get xTB job types.
+
+        Returns:
+            list: Available job types in lowercase
+        """
+        return [job_type.lower() for job_type in self.XTB_JOB_TYPES]
 
     @property
     def xtb_solvent_models(self):
@@ -108,6 +160,16 @@ class XTBRefs:
         """
         return [model.lower() for model in self.XTB_SOLVENT_MODELS]
 
+    @property
+    def xtb_solvent_ids(self):
+        """
+        Get xTB solvent identifiers for implicit solvation models.
+
+        Returns:
+            list: Available solvent IDs in lowercase
+        """
+        return [solvent_id.lower() for solvent_id in self.XTB_SOLVENT_IDS]
+
 
 # Global constants for convenient access to xTB reference data
 xtb_ref = XTBRefs()
@@ -115,4 +177,6 @@ XTB_ALL_GROUPS = xtb_ref.xtb_groups
 XTB_ALL_METHODS = xtb_ref.xtb_methods
 XTB_ALL_OPT_LEVELS = xtb_ref.xtb_opt_levels
 XTB_ALL_OPT_ENGINES = xtb_ref.xtb_opt_engines
+XTB_ALL_JOB_TYPES = xtb_ref.xtb_job_types
 XTB_ALL_SOLVENT_MODELS = xtb_ref.xtb_solvent_models
+XTB_ALL_SOLVENT_IDS = xtb_ref.xtb_solvent_ids
