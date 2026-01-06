@@ -1307,7 +1307,7 @@ class XTBFileMixin(FileMixin):
         Extract the primary job type from the route.
 
         Returns:
-            str: Job type ('opt' or 'sp')
+            str: Job type (e.g. 'sp', 'opt', 'hess', 'md')
         """
         return self.route_object.job_type
 
@@ -1327,7 +1327,7 @@ class XTBFileMixin(FileMixin):
         Extract GFN version from route string.
 
         Returns:
-            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfn-ff')
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
         """
         return self.route_object.gfn_version
 

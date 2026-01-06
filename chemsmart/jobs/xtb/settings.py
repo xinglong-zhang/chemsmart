@@ -28,7 +28,6 @@ class XTBJobSettings(MolecularJobSettings):
     Attributes:
         gfn_version (str): GFN-xTB version (e.g., 'gfn2').
         optimization_level (str): Optimization level (e.g., 'vtight').
-        uhf (int): Number of unpaired electrons.
     """
 
     def __init__(
@@ -36,7 +35,7 @@ class XTBJobSettings(MolecularJobSettings):
         gfn_version="gfn2",  # use gfn2 by default
         optimization_level=None,
         charge=None,
-        uhf=None,
+        multiplicity=None,
         job_type=None,
         title=None,
         freq=False,
@@ -51,7 +50,7 @@ class XTBJobSettings(MolecularJobSettings):
             gfn_version (str, optional): GFN-xTB version. Defaults to "gfn2".
             optimization_level (str, optional): Optimization level.
             charge (int, optional): Molecular charge.
-            uhf (int, optional): Number of unpaired electrons.
+            multiplicity (int, optional): Spin multiplicity.
             job_type (str, optional): Type of job.
             title (str, optional): Job title.
             freq (bool, optional): Whether to calculate frequencies. Defaults to False.
@@ -61,6 +60,7 @@ class XTBJobSettings(MolecularJobSettings):
         """
         super().__init__(
             charge=charge,
+            multiplicity=multiplicity,
             freq=freq,
             job_type=job_type,
             title=title,
@@ -70,7 +70,6 @@ class XTBJobSettings(MolecularJobSettings):
         )
         self.gfn_version = gfn_version
         self.optimization_level = optimization_level
-        self.uhf = uhf
 
     def copy(self):
         """
@@ -212,7 +211,7 @@ class XTBJobSettings(MolecularJobSettings):
             gfn_version="gfn2",
             optimization_level="vtight",
             charge=None,
-            uhf=None,
+            multiplicity=None,
             job_type=None,
             title="xtb job with default settings",
             freq=False,

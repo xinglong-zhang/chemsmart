@@ -202,6 +202,8 @@ class XTBJobRunner(JobRunner):
             subprocess.Popen: The process object.
         """
         settings = job.settings
+        # Convert multiplicity to uhf for xTB command line
+        uhf = settings.multiplicity - 1
         if (
             settings.solvent_model is not None
             and settings.solvent_id is not None
@@ -209,13 +211,13 @@ class XTBJobRunner(JobRunner):
             command += (
                 f"--{settings.gfn_version} "
                 f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
-                f"--uhf {settings.uhf} --{settings.solvent_model} {settings.solvent_id}"
+                f"--uhf {uhf} --{settings.solvent_model} {settings.solvent_id}"
             )
         else:
             command += (
                 f"--{settings.gfn_version} "
                 f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
-                f"--uhf {settings.uhf}"
+                f"--uhf {uhf}"
             )
 
         with (

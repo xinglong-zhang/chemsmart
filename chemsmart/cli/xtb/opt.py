@@ -14,7 +14,7 @@ import click
 from chemsmart.cli.job import click_job_options
 from chemsmart.cli.xtb.xtb import xtb
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.utils import check_charge_and_uhf
+from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
@@ -46,17 +46,14 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     opt_settings = project_settings.opt_settings()
 
     # job setting from filename or default, with updates from user in cli specified in keywords
-    # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
+    # e.g., `sub.py xtb -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project opt settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project opt settings with job settings from cli keywords from cli.xtb.py subcommands
     opt_settings = opt_settings.merge(job_settings, keywords=keywords)
 
-    if opt_settings.multiplicity is not None:
-        opt_settings.uhf = opt_settings.multiplicity - 1
-
-    check_charge_and_uhf(opt_settings)
+    check_charge_and_multiplicity(opt_settings)
 
     # get molecule
     molecules = ctx.obj["molecules"]
