@@ -24,6 +24,7 @@ from ase import units
 
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.xtb.route import XTBRoute
 
 
 class FileMixin:
@@ -1251,6 +1252,84 @@ class ORCAFileMixin(FileMixin):
             custom_solvent=dv.custom_solvent,
             forces=dv.forces,
         )
+
+
+class XTBFileMixin(FileMixin):
+    """
+    Mixin class for xTB computational chemistry files.
+
+    Extends FileMixin with xTB-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles xTB file formats and calculation parameters.
+    """
+
+    @property
+    def route_string(self):
+        """
+        Get the route string from xTB main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Route string for xTB calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get route string from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed xTB route object from route string.
+
+        Creates an XTBRoute object from the route string to
+        provide structured access to calculation parameters.
+
+        Returns:
+            XTBRoute: Parsed xTB route object.
+        """
+        return XTBRoute(route_string=self.route_string)
+
+    @property
+    def job_type(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type ('opt' or 'sp')
+        """
+        return self.route_object.job_type
+
+    @property
+    def freq(self):
+        """
+        Check if frequency calculation is requested.
+
+        Returns:
+            bool: True if frequency calculation is specified
+        """
+        return self.route_object.freq
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfn-ff')
+        """
+        return self.route_object.gfn_version
 
 
 class YAMLFileMixin(FileMixin):
