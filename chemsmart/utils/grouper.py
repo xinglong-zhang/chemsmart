@@ -31,6 +31,8 @@ import logging
 import multiprocessing
 import pickle
 from abc import ABC, abstractmethod
+from collections import defaultdict
+from itertools import product
 from multiprocessing import RawArray, shared_memory
 from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Optional, Tuple
@@ -40,7 +42,7 @@ import numpy as np
 from joblib import Parallel, delayed  # More efficient parallelization
 from networkx.algorithms import isomorphism
 from rdkit import Chem, DataStructs
-from rdkit.Chem import rdMolHash
+from rdkit.Chem import rdMolDescriptors, rdMolHash
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 from scipy.optimize import linear_sum_assignment  # for Hungarian algorithm
 from scipy.sparse import csr_matrix
@@ -374,7 +376,6 @@ class HungarianRMSDGrouper(RMSDGrouper):
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
             center (bool): Center coordinates at origin before calculation.
-            minimize (bool): Use optimal superposition (Kabsch alignment).
         """
         super().__init__(
             molecules, threshold, num_procs, align_molecules, ignore_hydrogens
@@ -660,6 +661,101 @@ class SpyRMSDGrouper(RMSDGrouper):
         return rmsd
 
 
+class IRMSDGrouper(RMSDGrouper):
+
+    def kabsch(P, Q):
+        """
+        Kabsch alignment: minimize || P - R Q ||²
+        P, Q: (N, 3)
+        Returns rotated Q
+        """
+        Pc = P - P.mean(axis=0)
+        Qc = Q - Q.mean(axis=0)
+
+        C = Qc.T @ Pc
+        V, S, Wt = np.linalg.svd(C)
+
+        d = np.sign(np.linalg.det(V @ Wt))
+        D = np.diag([1.0, 1.0, d])
+
+        R = V @ D @ Wt
+        return (Qc @ R.T) + P.mean(axis=0)
+
+    def rmsd(P, Q):
+        return np.sqrt(np.mean(np.sum((P - Q) ** 2, axis=1)))
+
+    def generate_reflections(self):
+        mats = []
+        signs = [-1.0, 1.0]
+        for sx, sy, sz in product(signs, repeat=3):
+            M = np.diag([sx, sy, sz])
+            if abs(np.linalg.det(M)) == 1.0:
+                mats.append(M)
+        return mats
+
+    def element_rank_permutation(P, Q, symbols):
+        """
+        Permutation-invariant matching within same elements
+        """
+        perm = np.arange(len(symbols))
+        groups = defaultdict(list)
+
+        for i, s in enumerate(symbols):
+            groups[s].append(i)
+
+        for s, idx in groups.items():
+            if len(idx) == 1:
+                continue
+
+            A = P[idx]
+            B = Q[idx]
+
+            cost = np.zeros((len(idx), len(idx)))
+            for i in range(len(idx)):
+                for j in range(len(idx)):
+                    cost[i, j] = np.sum((A[i] - B[j]) ** 2)
+
+            row, col = linear_sum_assignment(cost)
+            perm[np.array(idx)[row]] = np.array(idx)[col]
+
+        return perm
+
+    def irmsd(P, Q, symbols):
+        """
+        CREST-style iRMSD
+        P, Q: (N,3)
+        symbols: list of atomic symbols
+        """
+
+        P = np.asarray(P, dtype=float)
+        Q = np.asarray(Q, dtype=float)
+
+        if len(P) != len(Q):
+            raise ValueError("Atom counts differ")
+
+        if sorted(symbols) != sorted(symbols):
+            raise ValueError("Chemical composition mismatch")
+
+        # best = np.inf
+        # reflections = generate_reflections()
+        #
+        # for M in reflections:
+        #     Qm = Q @ M.T
+        #
+        #     # element-wise permutation (rank invariant)
+        #     perm = element_rank_permutation(P, Qm, symbols)
+        #     Qp = Qm[perm]
+        #
+        #     # Kabsch alignment
+        #     Qa = kabsch(P, Qp)
+        #
+        #     val = rmsd(P, Qa)
+        #     if val < rmsd:
+        #         rmsd = val
+
+        # return rmsd
+
+
 class RMSDGrouperSharedMemory(MoleculeGrouper):
     """
     Group molecules based on RMSD using shared memory optimization.
@@ -799,6 +895,16 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
 
+# class PymolAlignGrouper(MoleculeGrouper):
+#
+#     def __init__(
+#         self,
+#         molecules: Iterable[Molecule],
+#         threshold=None,  # Tanimoto similarity threshold
+#         num_procs: int = 1,
+#     ):
+
+
 class TanimotoSimilarityGrouper(MoleculeGrouper):
     """
     Groups molecules based on fingerprint similarity using Tanimoto coefficient.
@@ -806,20 +912,15 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
     This class supports different fingerprint types and uses connected components
     clustering to group structurally similar molecules.
 
-    Tanimoto similarity is a measure of how similar two molecular fingerprints are,
-    ranging from 0 (completely different) to 1 (identical).
-    Default = 0.9 ensures molecules have a strong structural resemblance while
-    allowing minor variations.
-
-    Threshold	Effect	Use Case
-    0.95 - 1.0	Very strict: Only almost identical molecules are grouped.
-                            Ideal for highly similar molecules (e.g., stereoisomers).
-    0.80 - 0.95	Moderately strict: Groups structurally similar molecules.
-                            Useful for clustering molecules with minor functional group differences.
-    0.50 - 0.80	More relaxed: Groups molecules with broad structural similarities.
-                            Good for structural analogs or scaffold-based grouping.
-    < 0.50	Very lenient: Even molecules with weak similarity are grouped.
-                            Not recommended unless looking for very broad chemical families.
+    Supported fingerprint types:
+    - "rdkit": RDKit topological fingerprint (default)
+    - "rdk": Legacy RDKit fingerprint
+    - "morgan": Morgan (circular) fingerprint (radius=2)
+    - "maccs": MACCS keys (166 bits)
+    - "atompair": Atom pair fingerprint
+    - "torsion": Topological torsion fingerprint
+    - "usr": Ultrafast Shape Recognition (3D descriptor)
+    - "usrcat": USR with CREDO Atom Types (3D descriptor)
     """
 
     def __init__(
@@ -827,7 +928,8 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         molecules: Iterable[Molecule],
         threshold=None,  # Tanimoto similarity threshold
         num_procs: int = 1,
-        use_rdkit_fp: bool = True,  # Allows switching between RDKit FP and RDKFingerprint
+        fingerprint_type: str = "rdkit",
+        use_rdkit_fp: bool = None,  # Legacy support
     ):
         """
         Initialize Tanimoto similarity-based molecular grouper.
@@ -836,14 +938,21 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): Tanimoto similarity threshold. Defaults to 0.9.
             num_procs (int): Number of processes for parallel computation.
-            use_rdkit_fp (bool): Whether to use RDKit fingerprints (True) or
-                RDKFingerprint method (False). Defaults to True.
+            fingerprint_type (str): Type of fingerprint to use.
+                Options: "rdkit", "rdk", "morgan", "maccs", "atompair",
+                "torsion", "usr", "usrcat". Defaults to "rdkit".
+            use_rdkit_fp (bool): Legacy parameter. If True, sets fingerprint_type="rdkit".
+                If False, sets fingerprint_type="rdk".
         """
         super().__init__(molecules, num_procs)
         if threshold is None:
             threshold = 0.9
         self.threshold = threshold
-        self.use_rdkit_fp = use_rdkit_fp  # Choose fingerprinting method
+
+        if use_rdkit_fp is not None:
+            self.fingerprint_type = "rdkit" if use_rdkit_fp else "rdk"
+        else:
+            self.fingerprint_type = fingerprint_type.lower()
 
         # Convert valid molecules to RDKit format
         self.rdkit_molecules = [
@@ -851,27 +960,52 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         ]
         self.valid_molecules = [mol for mol in molecules if mol.to_rdkit()]
 
-    def _get_fingerprint(
-        self, rdkit_mol: Chem.Mol
-    ) -> Optional[DataStructs.ExplicitBitVect]:
+    def _get_fingerprint(self, rdkit_mol: Chem.Mol) -> Optional[object]:
         """
-        Generate an RDKit fingerprint for a molecule.
-
-        Creates molecular fingerprints using either RDKit fingerprint
-        generator or RDKFingerprint method based on configuration.
+        Generate a fingerprint for a molecule.
 
         Args:
             rdkit_mol (Chem.Mol): RDKit molecule object.
 
         Returns:
-            Optional[DataStructs.ExplicitBitVect]: Molecular fingerprint
+            Optional[object]: Molecular fingerprint (BitVect or np.ndarray)
                 or None if generation fails.
         """
         try:
-            if self.use_rdkit_fp:
+            if self.fingerprint_type == "rdkit":
                 return GetRDKitFPGenerator().GetFingerprint(rdkit_mol)
+            elif self.fingerprint_type == "rdk":
+                return Chem.RDKFingerprint(rdkit_mol)
+            elif self.fingerprint_type == "morgan":
+                return rdMolDescriptors.GetMorganFingerprintAsBitVect(
+                    rdkit_mol, 2
+                )
+            elif self.fingerprint_type == "maccs":
+                return rdMolDescriptors.GetMACCSKeysFingerprint(rdkit_mol)
+            elif self.fingerprint_type == "atompair":
+                return rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(
+                    rdkit_mol
+                )
+            elif self.fingerprint_type == "torsion":
+                return rdMolDescriptors.GetHashedTopologicalTorsionFingerprintAsBitVect(
+                    rdkit_mol
+                )
+            elif self.fingerprint_type == "usr":
+                conf = rdkit_mol.GetConformer()
+                return np.array(
+                    rdMolDescriptors.GetUSR(rdkit_mol, confId=conf.GetId())
+                )
+
+            elif self.fingerprint_type == "usrcat":
+                conf = rdkit_mol.GetConformer()
+                return np.array(
+                    rdMolDescriptors.GetUSRCAT(rdkit_mol, confId=conf.GetId())
+                )
             else:
-                return Chem.RDKFingerprint(rdkit_mol)  # Alternative method
+                logger.warning(
+                    f"Unknown fingerprint type: {self.fingerprint_type}, using RDKit default."
+                )
+                return GetRDKitFPGenerator().GetFingerprint(rdkit_mol)
         except Exception as e:
             logger.warning(f"Fingerprint generation failed: {str(e)}")
             return None
@@ -907,19 +1041,46 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         # Compute similarity matrix
         similarity_matrix = np.zeros((num_valid, num_valid), dtype=np.float32)
-        pairs = [
-            (i, j) for i in range(num_valid) for j in range(i + 1, num_valid)
-        ]
 
-        with ThreadPool(self.num_procs) as pool:
-            similarities = pool.starmap(
-                DataStructs.FingerprintSimilarity,
-                [(valid_fps[i], valid_fps[j]) for i, j in pairs],
-            )
+        # Check if we are using numpy arrays (USR/USRCAT)
+        if valid_fps and isinstance(valid_fps[0], np.ndarray):
+            # Calculate Tanimoto for continuous variables (vectors)
+            # T(A, B) = (A . B) / (|A|^2 + |B|^2 - A . B)
+            fps_array = np.array(valid_fps)
 
-        # Fill similarity matrix
-        for (i, j), sim in zip(pairs, similarities):
-            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
+            # Compute pairwise dot products
+            dot_products = np.dot(fps_array, fps_array.T)
+
+            # Compute squared norms
+            norms_sq = np.diag(dot_products)
+
+            # Compute Tanimoto matrix
+            # Denominator: |A|^2 + |B|^2 - A.B
+            # Broadcasting: norms_sq[:, None] + norms_sq[None, :] - dot_products
+            denominator = norms_sq[:, None] + norms_sq[None, :] - dot_products
+
+            # Avoid division by zero
+            denominator[denominator == 0] = 1e-9
+
+            similarity_matrix = dot_products / denominator
+
+        else:
+            # Use RDKit DataStructs for BitVects
+            pairs = [
+                (i, j)
+                for i in range(num_valid)
+                for j in range(i + 1, num_valid)
+            ]
+
+            with ThreadPool(self.num_procs) as pool:
+                similarities = pool.starmap(
+                    DataStructs.FingerprintSimilarity,
+                    [(valid_fps[i], valid_fps[j]) for i, j in pairs],
+                )
+
+            # Fill similarity matrix
+            for (i, j), sim in zip(pairs, similarities):
+                similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
         # Apply threshold and create adjacency matrix
         adj_matrix = csr_matrix(similarity_matrix >= self.threshold)
