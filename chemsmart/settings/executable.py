@@ -79,8 +79,11 @@ class Executable(RegistryMixin):
         server_yaml = YAMLFile(filename=server_yaml_file)
 
         # Extract configuration for the specific program
-        executable_folder = os.path.expanduser(
-            server_yaml.yaml_contents_dict[cls.PROGRAM]["EXEFOLDER"]
+        exe_folder_raw = server_yaml.yaml_contents_dict[cls.PROGRAM][
+            "EXEFOLDER"
+        ]
+        executable_folder = (
+            os.path.expanduser(exe_folder_raw) if exe_folder_raw else None
         )
         local_run = server_yaml.yaml_contents_dict[cls.PROGRAM].get(
             "LOCAL_RUN", False
@@ -291,9 +294,12 @@ class XTBExecutable(Executable):
         Get the full path to the XTB executable.
 
         Returns:
-            str or None: Full path to xtb executable if executable_folder is set,
-                        None otherwise.
+            str: Full path to xtb executable if executable_folder is set,
+                 otherwise just "xtb" to use the one from conda environment.
         """
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "xtb")
             return executable_path
+        else:
+            # Use xtb from conda environment (in PATH)
+            return "xtb"

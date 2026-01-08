@@ -79,18 +79,7 @@ class XTBJobRunner(JobRunner):
             TypeError: If the executable cannot be found.
         """
         try:
-            executable_path = XTBExecutable().get_executable()
-            if executable_path is None:
-                import shutil
-
-                executable_path = shutil.which("xtb")
-                if executable_path is None:
-                    raise TypeError(
-                        "xtb executable not found in path or settings."
-                    )
-
-            executable_path = os.path.dirname(executable_path)
-            executable = XTBExecutable(executable_path)
+            executable = XTBExecutable.from_servername(self.server.name)
             logger.debug(f"Obtained xtb executable: {executable}")
             return executable
         except TypeError as e:

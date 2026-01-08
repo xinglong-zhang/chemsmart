@@ -207,6 +207,16 @@ class ChemsmartUserSettings:
         return glob.glob(os.path.join(self.user_orca_settings_dir, "*.yaml"))
 
     @cached_property
+    def xtb_project_yaml_files(self):
+        """
+        Get list of xTB project YAML configuration files.
+
+        Returns:
+            list: List of paths to xTB project configuration YAML files.
+        """
+        return glob.glob(os.path.join(self.user_xtb_settings_dir, "*.yaml"))
+
+    @cached_property
     def scratch(self):
         """
         Get scratch directory configuration.

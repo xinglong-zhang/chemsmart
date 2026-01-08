@@ -62,3 +62,17 @@ NCIPLOT:
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export NCIPLOT_HOME=~/bin/nciplot
+
+XTB:
+    EXEFOLDER: null  # default uses xtb from conda env; set path only if using custom xtb
+    LOCAL_RUN: True  # local run True to use serial_command
+    SCRATCH: False  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/anaconda3/etc/profile.d/conda.sh
+        conda activate ~/anaconda3/envs/chemsmart
+    MODULES: |
+        module purge
+    ENVARS: |
+        # XTB environment variables (OMP_NUM_THREADS, OMP_STACKSIZE, etc.)
+        # are automatically set in submitters.py based on job settings
+
