@@ -220,6 +220,10 @@ class XTBJobRunner(JobRunner):
                 f"--uhf {uhf}"
             )
 
+        # Add --grad flag if requested
+        if settings.grad:
+            command += " --grad"
+
         with (
             open(self.job_outputfile, "w") as out,
             open(self.job_errfile, "w") as err,
