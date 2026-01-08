@@ -1,11 +1,12 @@
-# Default XTB settings for calculations
-gas:
+# XTB settings for calculations
+sp:
+  job_type: sp
   gfn_version: gfn2
-  optimization_level: vtight
-  freq: True
-solv:
-  gfn_version: gfn2
-  freq: False
   solvent_model: alpb
-  solvent_id: water
-
+  solvent_id: acetone
+hess:
+  job_type: hess
+  gfn_version: gfn2
+  opt: True
+  optimization_level: vtight
+  grad: True
