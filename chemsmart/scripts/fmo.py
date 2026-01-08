@@ -14,7 +14,6 @@ import click
 from chemsmart.cli.logger import logger_options
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.constants import ev_to_kcal_per_mol
 from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 
@@ -56,7 +55,7 @@ def entry_point(filename, unit, debug, stream):
 
     multiplicity = outputfile.multiplicity
     if unit.lower() == "kcal/mol":
-        conversion_factor = ev_to_kcal_per_mol
+        conversion_factor = 23.06054195
         energy_unit = "kcal/mol"
     else:
         conversion_factor = 1.0

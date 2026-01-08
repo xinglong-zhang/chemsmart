@@ -54,17 +54,13 @@ def entry_point(filename, index, single_file):
     except FileNotFoundError as err:
         logger.error(err)
         return
-    if index == "-1":
-        suffix = "_last"
-    else:
-        suffix = f"_idx{index}"
 
     # Extract base filename for output naming
     file_basename = os.path.splitext(filename)[0]
 
     # Write structures to XYZ files
     if len(molecules) == 1:
-        molecules[0].write_xyz(file_basename + suffix + ".xyz")
+        molecules[0].write_xyz(file_basename + "_single.xyz")
     else:
         # Handle multiple structures
         for i, molecule in enumerate(molecules):
