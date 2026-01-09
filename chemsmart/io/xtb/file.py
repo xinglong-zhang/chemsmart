@@ -35,7 +35,6 @@ class XTBMainOut(XTBFileMixin):
                 return True
         return False
 
-    @cached_property
     def _get_route(self):
         """
         Get parsed route information.
@@ -1075,6 +1074,9 @@ class XTBEngradFile(FileMixin):
     Args:
         filename: Path to the xTB .engrad file
     """
+
+    def __init__(self, filename):
+        self.filename = filename
 
     @cached_property
     def num_atoms(self):
