@@ -4,6 +4,7 @@ from functools import cached_property
 from chemsmart.io.xtb.file import XTBEngradFile, XTBMainOut, XTBOptLog
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.utils.io import create_molecule_list
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,34 @@ class XTBOutput:
         """Get final converged energy."""
         if self._main_out:
             return self._main_out.total_energy
+        return None
+
+    @property
+    def rotational_symmetry_number(self):
+        """Get rotational symmetry number from main output."""
+        if self._main_out:
+            return self._main_out.rotational_symmetry_number
+        return None
+
+    @property
+    def job_type(self):
+        """Get job type from main output."""
+        if self._main_out:
+            return self._main_out.job_type
+        return None
+
+    @property
+    def freq(self):
+        """Check if frequency calculation was performed."""
+        if self._main_out:
+            return self._main_out.freq
+        return False
+
+    @property
+    def vibrational_frequencies(self):
+        """Get vibrational frequencies from main output."""
+        if self._main_out:
+            return self._main_out.vibrational_frequencies
         return None
 
     @cached_property
@@ -173,3 +202,10 @@ class XTBOutput:
         if self.all_structures:
             return self.all_structures[-1]
         return None
+
+    def get_molecule(self, index="-1"):
+        """
+        Get a specific molecule structure by index from the xTB folder.
+        """
+        index = string2index_1based(index)
+        return self.all_structures[index]

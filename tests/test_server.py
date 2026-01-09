@@ -1,6 +1,6 @@
 import os
 
-from chemsmart.settings.executable import GaussianExecutable
+from chemsmart.settings.executable import GaussianExecutable, XTBExecutable
 from chemsmart.settings.server import Server
 
 
@@ -70,3 +70,20 @@ export g16root=~/programs/g16
         # assert list(server_yaml.yaml_contents_dict.keys())[2] == "ORCA"
         # assert server_yaml.yaml_contents_dict["GAUSSIAN"]["G16FOLDER"] == "~/programs/g16"
         # assert server_yaml.yaml_contents_dict["ORCA"]["ORCAFOLDER"] == "~/programs/orca_6_0_0"
+
+    def test_xtb_executable(self, server_yaml_file):
+        xtb_executable = XTBExecutable.from_servername(server_yaml_file)
+
+        # EXEFOLDER is null, so executable_folder should be None
+        assert xtb_executable.executable_folder is None
+        assert xtb_executable.local_run is True
+
+        # get_executable() should return "xtb" when executable_folder is None
+        assert xtb_executable.get_executable() == "xtb"
+
+        xtb_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/chemsmart
+"""
+        assert xtb_executable.conda_env == xtb_conda_env
+
+        assert xtb_executable.modules == "module purge\n"

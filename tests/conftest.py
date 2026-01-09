@@ -1159,35 +1159,13 @@ def xtb_outputs_directory(xtb_test_directory):
 
 
 @pytest.fixture()
-def xtb_sp_outfile(xtb_outputs_directory):
-    return os.path.join(xtb_outputs_directory, "water_sp.out")
+def xtb_co2_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_opt")
 
 
 @pytest.fixture()
-def xtb_opt_outfile(xtb_outputs_directory):
-    return os.path.join(xtb_outputs_directory, "water_opt.out")
-
-
-@pytest.fixture()
-def xtb_opt_gbsa_outfile(xtb_outputs_directory):
-    return os.path.join(xtb_outputs_directory, "pyridine_opt_acetonitrile.out")
-
-
-@pytest.fixture()
-def xtb_hess_outfile(xtb_outputs_directory):
-    return os.path.join(
-        xtb_outputs_directory, "pyridine_hess_acetonitrile.out"
-    )
-
-
-@pytest.fixture()
-def xtb_gei_outfile(xtb_outputs_directory):
-    return os.path.join(xtb_outputs_directory, "pyridine_gei.out")
-
-
-@pytest.fixture()
-def xtb_fukui_outfile(xtb_outputs_directory):
-    return os.path.join(xtb_outputs_directory, "pyridine_fukui.out")
+def xtb_water_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_ohess")
 
 
 # test for structure.py

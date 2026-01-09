@@ -57,7 +57,7 @@ class Thermochemistry:
 
     def __init__(
         self,
-        filename,
+        filename=None,
         folder=None,
         temperature=None,
         concentration=None,
@@ -73,7 +73,13 @@ class Thermochemistry:
     ):
         self.filename = filename
         self.folder = folder
-        self.molecule = Molecule.from_filepath(filename)
+
+        # Create molecule from filename or folder
+        if filename is not None:
+            self.molecule = Molecule.from_filepath(filename)
+        else:
+            self.molecule = Molecule.from_directorypath(folder)
+
         self.temperature = temperature
         self.pressure = pressure
         self.use_weighted_mass = use_weighted_mass

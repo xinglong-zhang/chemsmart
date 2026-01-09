@@ -6,6 +6,7 @@ from chemsmart.utils.mixins import (
     GaussianFileMixin,
     ORCAFileMixin,
     RegistryMixin,
+    XTBFileMixin,
 )
 
 
@@ -95,6 +96,29 @@ class TestORCAFileMixin:
         assert dummy.mdci_density == "1e-6"
         assert dummy.solvent_model == "smd"
         assert dummy.solvent_id == "water"
+
+
+class DummyXTBFile(XTBFileMixin):
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def route_string(self):
+        return "xtb p_benzyne.xyz --opt loose --gfn 2 --alpb toluene --chrg 0 --uhf 0 --grad"
+
+
+class TestXTBFileMixin:
+    def test_xtb_file_properties(self):
+        dummy = DummyXTBFile("test.out")
+        assert dummy.job_type == "opt"
+        assert dummy.optimization_level == "loose"
+        assert dummy.gfn_version == "gfn2"
+        assert dummy.solvent_model == "alpb"
+        assert dummy.solvent_id == "toluene"
+        assert dummy.charge == 0
+        assert dummy.uhf == 0
+        assert dummy.freq is False
+        assert dummy.grad is True
 
 
 class TestYAMLFileMixin:

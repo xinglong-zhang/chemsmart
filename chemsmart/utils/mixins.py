@@ -1312,6 +1312,66 @@ class XTBFileMixin(FileMixin):
         return self.route_object.job_type
 
     @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def optimization_level(self):
+        """
+        Extract optimization level from route string.
+
+        Returns:
+            str or None: Optimization level (e.g., 'loose', 'normal', 'tight')
+        """
+        return self.route_object.optimization_level
+
+    @property
+    def solvent_model(self):
+        """
+        Extract solvent model from route string.
+
+        Returns:
+            str or None: Solvent model (e.g., 'alpb', 'gbsa', 'cosmo')
+        """
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """
+        Extract solvent identity from route string.
+
+        Returns:
+            str or None: Solvent identity (e.g., 'water', 'toluene')
+        """
+        return self.route_object.solvent_id
+
+    @property
+    def charge(self):
+        """
+        Extract molecular charge from route string.
+
+        Returns:
+            int or None: Molecular charge
+        """
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """
+        Extract number of unpaired electrons from route string.
+
+        Returns:
+            int or None: Number of unpaired electrons (Nalpha - Nbeta)
+        """
+        return self.route_object.uhf
+
+    @property
     def freq(self):
         """
         Check if frequency calculation is requested.
@@ -1322,14 +1382,14 @@ class XTBFileMixin(FileMixin):
         return self.route_object.freq
 
     @property
-    def gfn_version(self):
+    def grad(self):
         """
-        Extract GFN version from route string.
+        Check if gradient calculation is requested.
 
         Returns:
-            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
+            bool: True if gradient calculation is specified
         """
-        return self.route_object.gfn_version
+        return self.route_object.grad
 
 
 class YAMLFileMixin(FileMixin):

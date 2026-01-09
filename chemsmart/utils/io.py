@@ -321,6 +321,45 @@ def find_output_files_in_directory(directory, program):
     return matched_files
 
 
+def is_program_calculation_directory(directory, program):
+    """
+    Check if a directory contains output files from a specific program.
+
+    This function checks whether a directory is a calculation directory for
+    a given quantum chemistry program by looking for output files with the
+    appropriate suffix and verifying their content.
+
+    Args:
+        directory (str): Path to the directory to check.
+        program (str): Target QC program, e.g., "xtb", "crest".
+
+    Returns:
+        bool: True if the directory contains at least one output file from
+              the specified program, False otherwise.
+    """
+    PROGRAM_SUFFIXES = {
+        "xtb": [".out"],
+        "crest": [".out"],
+    }
+    if not os.path.isdir(directory):
+        return False
+    suffixes = PROGRAM_SUFFIXES.get(program.lower())
+    # Find candidate output files in the directory
+    candidate_files = [
+        f
+        for f in os.listdir(directory)
+        if any(f.endswith(suffix) for suffix in suffixes)
+    ]
+    if not candidate_files:
+        return False
+    # Verify at least one file is from the specified program
+    for filename in candidate_files:
+        filepath = os.path.join(directory, filename)
+        if get_program_type_from_file(filepath) == program.lower():
+            return True
+    return False
+
+
 def load_molecules_from_paths(
     file_paths,
     index,
