@@ -878,7 +878,7 @@ class Gaussian16Output(GaussianFileMixin):
                 oniom_energies.append(float(match[1]))
         return oniom_energies
 
-    @cached_property
+    @property
     def energies(self):
         """
         Return energies of the system.
