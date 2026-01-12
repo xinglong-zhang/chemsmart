@@ -162,12 +162,12 @@ else
 	else \
 		$(ECHO) "Skipping NCIPLOT configuration."; \
 	fi; \
-	read -p "Enter the path to the XTB folder (or press Enter to use xtb from conda env): " xtb_folder; \
+	read -p "Enter the path to the xTB folder (or press Enter to use xTB from conda env): " xtb_folder; \
 	if [ -n "$$xtb_folder" ]; then \
-		$(ECHO) "Configuring XTB with custom folder: $$xtb_folder"; \
+		$(ECHO) "Configuring xTB with custom folder: $$xtb_folder"; \
 		$(ENV_PREFIX)python $(CHEMSMART_PATH) config xtb --folder "$$xtb_folder"; \
 	else \
-		$(ECHO) "Using xtb from chemsmart conda environment (default)."; \
+		$(ECHO) "Using xTB from chemsmart conda environment (default)."; \
 	fi
 endif
 

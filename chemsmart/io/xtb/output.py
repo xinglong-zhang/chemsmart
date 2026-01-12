@@ -11,16 +11,16 @@ logger = logging.getLogger(__name__)
 
 class XTBOutput:
     """
-    Comprehensive parser and coordinator for XTB calculation outputs.
+    Comprehensive parser and coordinator for xTB calculation outputs.
 
-    This class discovers and parses multiple XTB output files, then integrates
+    This class discovers and parses multiple xTB output files, then integrates
     data from different sources to construct complete Molecule objects with:
     - Coordinates and energies from xtbopt.log
     - Charge and multiplicity from main output file
     - Forces from .engrad file
 
     Args:
-        folder: Path to folder containing XTB output files, or XTBFolder instance
+        folder: Path to folder containing xTB output files, or XTBFolder instance
     """
 
     def __init__(self, folder):
@@ -60,7 +60,7 @@ class XTBOutput:
     @property
     def multiplicity(self):
         """Get spin multiplicity from main output."""
-        if self._main_out:
+        if self._main_out and self._main_out.unpaired_electrons is not None:
             return self._main_out.unpaired_electrons + 1
         return None
 
@@ -141,7 +141,7 @@ class XTBOutput:
 
         # Extract data from base molecules
         orientations = [mol.positions for mol in base_molecules]
-        symbols = base_molecules[0].symbols
+        symbols = list(base_molecules[0].symbols)
         energies = [
             mol.energy for mol in base_molecules
         ]  # Already extracted from comment lines!
@@ -150,18 +150,18 @@ class XTBOutput:
             f"Extracted {len(energies)} energies from xtbopt.log comment lines"
         )
 
-        # 2. PBC conditions (XTB doesn't use PBC for optimizations)
+        # 2. PBC conditions (xTB doesn't use PBC for optimizations)
         orientations_pbc = [None] * n
 
         # 3. Get forces from .engrad file (usually only final structure)
-        forces = [None] * n
+        has_final_forces = False
+        final_forces = None
         if self._engrad_file and self._engrad_file.force is not None:
             logger.debug(
                 "Found gradient in .engrad file, assigning to last structure"
             )
-            # The .engrad file typically contains only the final gradient
-            # Assign it to the last structure
-            forces[-1] = self._engrad_file.force
+            has_final_forces = True
+            final_forces = self._engrad_file.force
         else:
             logger.debug("No .engrad file or gradient data found")
 
@@ -171,8 +171,8 @@ class XTBOutput:
         molecules = create_molecule_list(
             orientations=orientations,
             orientations_pbc=orientations_pbc,
-            energies=energies,  # From xtbopt.log comment lines!
-            forces=forces,
+            energies=energies,  # From xtbopt.log comment lines
+            forces=None,
             symbols=symbols,
             charge=self.charge,  # From main output
             multiplicity=self.multiplicity,  # From main output
@@ -180,20 +180,27 @@ class XTBOutput:
             pbc_conditions=None,
         )
 
+        # Assign forces to the final structure if available
+        if has_final_forces and molecules:
+            molecules[-1].forces = final_forces
+
         return molecules
 
     @cached_property
     def optimized_structure(self):
         """
-        Get the final optimized structure (only if calculation converged).
+        Get the final optimized structure (only if geometry optimization converged).
 
-        Returns the last structure if calculation terminated normally,
-        otherwise None.
+        Returns the last structure if calculation terminated normally and
+        geometry optimization converged, otherwise None.
 
         Returns:
             Molecule or None: Final optimized structure with all properties
         """
-        if self.normal_termination:
+        if (
+            self.normal_termination
+            and self._main_out.geometry_optimization_converged
+        ):
             return self.all_structures[-1]
         return None
 

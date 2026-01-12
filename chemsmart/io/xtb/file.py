@@ -754,8 +754,8 @@ class XTBMainOut(XTBFileMixin):
     # """
 
     @cached_property
-    def vibrational_frequencies(self):
-        """Read the vibrational frequencies from the XTB output file.
+    def all_vibrational_frequencies(self):
+        """Read the vibrational frequencies from the xTB output file.
         The first six (for non-linear molecules) or five (for linear molecules)
         frequencies correspond to translations (3x) or rotations (3x/2x) of the molecule.
         """
@@ -776,6 +776,13 @@ class XTBMainOut(XTBFileMixin):
                         frequencies.append(float(freq))
                 return frequencies
         return None
+
+    @property
+    def vibrational_frequencies(self):
+        """Return vibrational frequencies without translational and rotational modes."""
+        if self.all_vibrational_frequencies is None:
+            return []
+        return [x for x in self.all_vibrational_frequencies if x != 0.0]
 
     @cached_property
     def reduced_masses(self):
