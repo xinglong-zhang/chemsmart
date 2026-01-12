@@ -238,6 +238,8 @@ def click_gaussian_grouper_options(f):
                 "rmsd",
                 "hrmsd",
                 "spyrmsd",
+                "irmsd",
+                "pymolalign",
                 "tanimoto",
                 "isomorphism",
                 "formula",
@@ -262,6 +264,12 @@ def click_gaussian_grouper_options(f):
         is_flag=True,
         default=False,
         help="Whether to ignore hydrogens in grouping.",
+    )
+    @click.option(
+        "--cache/--no-cache",
+        type=bool,
+        default=True,
+        help="Use cache graph isomorphism or not, default=Ture (for spyrmsd).",
     )
     @click.option(
         "-p",

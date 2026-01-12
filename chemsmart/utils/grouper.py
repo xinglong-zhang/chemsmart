@@ -18,6 +18,8 @@ Key classes include:
 - RMSDGrouper: Abstract parent class for RMSD-based groupers
 - BasicRMSDGrouper: Standard RMSD calculation using Euclidean distance
 - HungarianRMSDGrouper: RMSD grouping with optimal atom assignment
+- SpyRMSDGrouper: Symmetry-corrected RMSD using spyrmsd algorithms
+- PymolAlignGrouper: PyMOL-based structural alignment and RMSD calculation
 - RMSDGrouperSharedMemory: RMSD grouping with shared-memory optimization
 - TanimotoSimilarityGrouper: Chemical fingerprint similarity
 - RDKitIsomorphismGrouper: RDKit hashing and isomorphism grouping
@@ -50,6 +52,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import cdist  # for Hungarian algorithm cost matrix
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.utils import kabsch_align
 
 logger = logging.getLogger(__name__)
@@ -161,18 +164,98 @@ class MoleculeGrouper(ABC):
         """
         pass
 
-    def unique(self) -> List[Molecule]:
+    def unique(
+        self, output_dir: str = ".", prefix: str = "group"
+    ) -> List[Molecule]:
         """
         Get unique representative molecules from each group.
 
-        Returns the first molecule from each group as a representative
-        of that structural family.
+        Returns the lowest energy molecule from each group as a representative
+        of that structural family. Also generates XYZ files for each group,
+        sorted by energy, in a dedicated subfolder named 'group_result'.
+
+        Args:
+            output_dir (str): Base directory for output. Default is current directory.
+            prefix (str): Prefix for output XYZ files. Default is "group".
 
         Returns:
-            List[Molecule]: List of unique representative molecules.
+            List[Molecule]: List of unique representative molecules (lowest energy from each group).
         """
-        groups, _ = self.group()
-        return [group[0] for group in groups]
+        import os
+
+        groups, group_indices = self.group()
+        unique_molecules = []
+
+        # Create dedicated subfolder for XYZ files
+        result_folder = "group_result"
+        full_output_path = os.path.join(output_dir, result_folder)
+        os.makedirs(full_output_path, exist_ok=True)
+
+        logger.info(f"Creating XYZ files in folder: {full_output_path}")
+
+        for i, (group, indices) in enumerate(zip(groups, group_indices)):
+            # Create tuples of (molecule, original_index) for tracking
+            mol_index_pairs = list(zip(group, indices))
+
+            # Filter molecules that have energy information and sort by energy
+            molecules_with_energy = [
+                (mol, idx)
+                for mol, idx in mol_index_pairs
+                if mol.energy is not None
+            ]
+            molecules_without_energy = [
+                (mol, idx)
+                for mol, idx in mol_index_pairs
+                if mol.energy is None
+            ]
+
+            # Sort molecules with energy by energy (ascending - lowest first)
+            if molecules_with_energy:
+                sorted_pairs = sorted(
+                    molecules_with_energy, key=lambda pair: pair[0].energy
+                )
+                # Add molecules without energy at the end
+                sorted_pairs.extend(molecules_without_energy)
+            else:
+                # If no molecules have energy, use original group order
+                sorted_pairs = mol_index_pairs
+
+            # Write group XYZ file with all molecules sorted by energy
+            group_filename = os.path.join(
+                full_output_path, f"{prefix}_{i+1}.xyz"
+            )
+            with open(group_filename, "w") as f:
+                for j, (mol, original_idx) in enumerate(sorted_pairs):
+                    # Write the molecule coordinates
+                    f.write(f"{mol.num_atoms}\n")
+
+                    # Create comment line with energy info and original molecule index
+                    if mol.energy is not None:
+                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_idx+1} Energy(Hartree): {mol.energy:.8f}"
+                    else:
+                        comment = f"Group {i+1} Molecule {j+1} Original_Index: {original_idx+1} Energy: N/A"
+
+                    f.write(f"{comment}\n")
+
+                    # Write coordinates
+                    for symbol, position in zip(
+                        mol.chemical_symbols, mol.positions
+                    ):
+                        f.write(
+                            f"{symbol:2s} {position[0]:15.10f} {position[1]:15.10f} {position[2]:15.10f}\n"
+                        )
+
+            logger.info(
+                f"Written group {i+1} with {len(sorted_pairs)} molecules to {group_filename}"
+            )
+
+            # Add the lowest energy molecule (first in sorted pairs) as representative
+            unique_molecules.append(sorted_pairs[0][0])
+
+        logger.info(
+            f"Generated {len(groups)} group XYZ files in {full_output_path}"
+        )
+        return unique_molecules
 
 
 class RMSDGrouper(MoleculeGrouper):
@@ -351,10 +434,6 @@ class HungarianRMSDGrouper(RMSDGrouper):
     The Hungarian algorithm ensures that atoms of the same element type are
     optimally paired to minimize the sum of squared distances, resulting in
     more accurate RMSD calculations for molecules with permuted atom arrangements.
-
-    Supports additional parameters for spyrmsd compatibility:
-    - center: Center coordinates at origin before calculation
-    - minimize: Use optimal superposition (Kabsch alignment)
     """
 
     def __init__(
@@ -364,7 +443,6 @@ class HungarianRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
-        center: bool = False,
     ):
         """
         Initialize Hungarian RMSD grouper.
@@ -375,12 +453,10 @@ class HungarianRMSDGrouper(RMSDGrouper):
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
-            center (bool): Center coordinates at origin before calculation.
         """
         super().__init__(
             molecules, threshold, num_procs, align_molecules, ignore_hydrogens
         )
-        self.center = center
 
     def _calculate_rmsd(self, idx_pair):
         i, j = idx_pair
@@ -397,11 +473,6 @@ class HungarianRMSDGrouper(RMSDGrouper):
             symbols2
         ):
             return np.inf
-
-        # Center coordinates if requested
-        if self.center:
-            pos1 = pos1 - np.mean(pos1, axis=0)
-            pos2 = pos2 - np.mean(pos2, axis=0)
 
         # Use Hungarian algorithm for optimal atom matching
         elements = sorted(set(symbols1))
@@ -428,7 +499,6 @@ class HungarianRMSDGrouper(RMSDGrouper):
         pos1_matched = pos1[matched_idx1]
         pos2_matched = pos2[matched_idx2]
 
-        # Apply alignment based on minimize parameter or legacy align_molecules
         if self.align_molecules:
             logger.debug("Aligning molecules using Kabsch algorithm.")
             pos1_matched, pos2_matched, _, _, _ = kabsch_align(
@@ -460,7 +530,6 @@ class SpyRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
-        center: bool = False,  # Center molecules
         cache: bool = True,  # Cache graph isomorphisms
     ):
         """
@@ -472,14 +541,15 @@ class SpyRMSDGrouper(RMSDGrouper):
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
-            center (bool): Center molecules at origin before calculation.
             cache (bool): Cache graph isomorphisms for efficiency.
         """
         super().__init__(
             molecules, threshold, num_procs, align_molecules, ignore_hydrogens
         )
-        self.center = center
         self.cache = cache
+        self.periodic_table = PeriodicTable()
+        # Store best isomorphisms for each molecule pair
+        self.best_isomorphisms = {}
 
     @staticmethod
     def _center_coordinates(pos: np.ndarray) -> np.ndarray:
@@ -494,10 +564,9 @@ class SpyRMSDGrouper(RMSDGrouper):
         """
         return np.mean(pos, axis=0)
 
-    @staticmethod
-    def _symbol_to_atomicnum(symbol: str) -> int:
+    def _symbol_to_atomicnum(self, symbol: str) -> int:
         """
-        Convert element symbol to atomic number.
+        Convert element symbol to atomic number using PeriodicTable.
 
         Args:
             symbol (str): Element symbol (e.g., 'H', 'C', 'O').
@@ -505,31 +574,11 @@ class SpyRMSDGrouper(RMSDGrouper):
         Returns:
             int: Atomic number, or 0 if unknown.
         """
-        symbol_map = {
-            "H": 1,
-            "He": 2,
-            "Li": 3,
-            "Be": 4,
-            "B": 5,
-            "C": 6,
-            "N": 7,
-            "O": 8,
-            "F": 9,
-            "Ne": 10,
-            "Na": 11,
-            "Mg": 12,
-            "Al": 13,
-            "Si": 14,
-            "P": 15,
-            "S": 16,
-            "Cl": 17,
-            "Ar": 18,
-            "K": 19,
-            "Ca": 20,
-            "Br": 35,
-            "I": 53,
-        }
-        return symbol_map.get(symbol, 0)
+        try:
+            return self.periodic_table.to_atomic_number(symbol)
+        except (ValueError, IndexError):
+            logger.warning(f"Unknown element symbol: {symbol}")
+            return 0
 
     def _symmrmsd(
         self,
@@ -539,12 +588,14 @@ class SpyRMSDGrouper(RMSDGrouper):
         symbols2: list,
         adj_matrix1: np.ndarray,
         adj_matrix2: np.ndarray,
+        mol_idx_pair: Tuple[int, int] = None,
     ) -> float:
         """
         Calculate symmetry-corrected RMSD using graph isomorphism.
 
-        Accounts for molecular symmetry by finding all possible atom mappings
-        through graph isomorphism and selecting the one that gives minimum RMSD.
+        Computes RMSD and internally stores the best isomorphism mapping.
+        This provides essential chemical information while keeping the interface
+        consistent with other RMSD methods.
 
         Args:
             pos1 (np.ndarray): First set of coordinates (N x 3).
@@ -553,28 +604,28 @@ class SpyRMSDGrouper(RMSDGrouper):
             symbols2 (list): Chemical symbols for second structure.
             adj_matrix1 (np.ndarray): Adjacency matrix for first structure.
             adj_matrix2 (np.ndarray): Adjacency matrix for second structure.
+            mol_idx_pair (Tuple[int, int], optional): Molecule pair indices for storing mapping.
 
         Returns:
             float: Symmetry-corrected RMSD value.
 
         Notes:
-            This is a simplified implementation. For complex molecules with
-            high symmetry, this may be computationally expensive. Falls back
-            to Hungarian RMSD if graphs are not isomorphic.
+            Returns np.inf if graphs are not isomorphic, indicating
+            fundamentally different molecular structures. Best isomorphism
+            is stored internally for later retrieval.
         """
 
         # Verify same number of atoms
         if len(pos1) != len(pos2):
+            if mol_idx_pair:
+                self.best_isomorphisms[mol_idx_pair] = None
             return np.inf
 
         # Verify same atomic composition
         if sorted(symbols1) != sorted(symbols2):
+            if mol_idx_pair:
+                self.best_isomorphisms[mol_idx_pair] = None
             return np.inf
-
-        # Center coordinates if requested
-        if self.center:
-            pos1 = pos1 - self._center_coordinates(pos1)
-            pos2 = pos2 - self._center_coordinates(pos2)
 
         # Create NetworkX graphs from adjacency matrices
         G1 = nx.from_numpy_array(adj_matrix1)
@@ -592,12 +643,17 @@ class SpyRMSDGrouper(RMSDGrouper):
 
         # Try all possible isomorphisms and find minimum RMSD
         min_rmsd = np.inf
+        best_isomorphism = None
 
         if GM.is_isomorphic():
             for mapping in GM.isomorphisms_iter():
+                # Create index arrays for this mapping
+                idx1 = list(range(len(symbols1)))
+                idx2 = [mapping[i] for i in range(len(symbols2))]
+
                 # Reorder pos2 according to this mapping
                 reordered_pos2 = np.array(
-                    [pos2[mapping[i]] for i in range(len(pos2))]
+                    [pos2[idx2[i]] for i in range(len(pos2))]
                 )
 
                 # Calculate RMSD for this mapping
@@ -609,14 +665,25 @@ class SpyRMSDGrouper(RMSDGrouper):
 
                 if rmsd < min_rmsd:
                     min_rmsd = rmsd
+                    best_isomorphism = (idx1, idx2)
+
+            # Store the best isomorphism if molecule indices provided
+            if mol_idx_pair:
+                self.best_isomorphisms[mol_idx_pair] = best_isomorphism
 
             return min_rmsd
         else:
-            # If not isomorphic, return infinity (structures are fundamentally different)
+            # If not isomorphic, store None and return infinity
+            if mol_idx_pair:
+                self.best_isomorphisms[mol_idx_pair] = None
             return np.inf
 
     def _calculate_rmsd(self, idx_pair):
-        """Calculate RMSD using symmetry correction with graph isomorphism."""
+        """Calculate RMSD using symmetry correction with graph isomorphism.
+
+        Maintains compatibility with parent class by returning only RMSD value,
+        while internally storing best isomorphism mappings for chemical analysis.
+        """
 
         i, j = idx_pair
         mol1, mol2 = self.molecules[i], self.molecules[j]
@@ -625,13 +692,15 @@ class SpyRMSDGrouper(RMSDGrouper):
             pos1, symbols1 = self._get_heavy_atoms(mol1)
             pos2, symbols2 = self._get_heavy_atoms(mol2)
         else:
-            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
-            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+            pos1, symbols1 = mol1.positions, list(mol1.symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.symbols)
 
         # Quick compatibility check
         if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
             symbols2
         ):
+            # Store no mapping for incompatible molecules
+            self.best_isomorphisms[(i, j)] = None
             return np.inf
 
         # Use symmetry-corrected RMSD if molecules have connectivity
@@ -647,18 +716,91 @@ class SpyRMSDGrouper(RMSDGrouper):
             else None
         )
 
+        # If no adjacency matrices exist, try to generate them from molecular graphs
+        if adj_matrix1 is None or adj_matrix2 is None:
+            try:
+                # Generate graph and adjacency matrix for mol1
+                if adj_matrix1 is None:
+                    graph1 = mol1.to_graph()
+                    adj_matrix1 = nx.adjacency_matrix(graph1).toarray()
+
+                # Generate graph and adjacency matrix for mol2
+                if adj_matrix2 is None:
+                    graph2 = mol2.to_graph()
+                    adj_matrix2 = nx.adjacency_matrix(graph2).toarray()
+
+                logger.debug(
+                    "Generated adjacency matrices from molecular graphs"
+                )
+
+            except Exception as e:
+                logger.warning(f"Failed to generate adjacency matrices: {e}")
+
         if adj_matrix1 is not None and adj_matrix2 is not None:
-            rmsd = self._symmrmsd(
-                pos1=pos1,
-                pos2=pos2,
-                symbols1=symbols1,
-                symbols2=symbols2,
-                adj_matrix1=adj_matrix1,
-                adj_matrix2=adj_matrix2,
-            )
+            try:
+                rmsd = self._symmrmsd(
+                    pos1=pos1,
+                    pos2=pos2,
+                    symbols1=symbols1,
+                    symbols2=symbols2,
+                    adj_matrix1=adj_matrix1,
+                    adj_matrix2=adj_matrix2,
+                    mol_idx_pair=(i, j),  # Pass indices for mapping storage
+                )
+                return rmsd
+            except Exception as e:
+                # If symmetry-corrected RMSD fails, store no mapping and return infinity
+                logger.warning(f"Symmetry-corrected RMSD failed: {e}")
+                self.best_isomorphisms[(i, j)] = None
+                return np.inf
+
+        # If no adjacency matrices available, store no mapping and return infinity
+        self.best_isomorphisms[(i, j)] = None
+        return np.inf
+
+    def get_best_isomorphism(
+        self, mol_idx1: int, mol_idx2: int
+    ) -> Optional[Tuple[List[int], List[int]]]:
+        """
+        Get the best isomorphism mapping between two molecules.
+
+        Args:
+            mol_idx1 (int): Index of the first molecule
+            mol_idx2 (int): Index of the second molecule
+
+        Returns:
+            tuple[list, list] | None: Best isomorphism as (indices1, indices2)
+                                     or None if molecules are not isomorphic
+
+        Notes:
+            This method provides access to the atom correspondence information
+            computed during RMSD calculation, which is essential for understanding
+            molecular similarity from a chemical perspective.
+        """
+        # Check both orientations as the dictionary might store (i,j) or (j,i)
+        if (mol_idx1, mol_idx2) in self.best_isomorphisms:
+            return self.best_isomorphisms[(mol_idx1, mol_idx2)]
+        elif (mol_idx2, mol_idx1) in self.best_isomorphisms:
+            # Return the reverse mapping
+            mapping = self.best_isomorphisms[(mol_idx2, mol_idx1)]
+            if mapping is not None:
+                return mapping[1], mapping[0]  # Swap the indices
+            return None
         else:
-            return np.inf
-        return rmsd
+            # Mapping not computed yet
+            return None
+
+    def get_all_best_isomorphisms(self) -> dict:
+        """
+        Get all computed best isomorphism mappings.
+
+        Returns:
+            dict: Dictionary mapping molecule pair indices to their best isomorphisms
+
+        Notes:
+            Useful for analyzing all computed atom correspondences in the dataset.
+        """
+        return self.best_isomorphisms.copy()
 
 
 class IRMSDGrouper(RMSDGrouper):
@@ -895,14 +1037,419 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
 
-# class PymolAlignGrouper(MoleculeGrouper):
-#
-#     def __init__(
-#         self,
-#         molecules: Iterable[Molecule],
-#         threshold=None,  # Tanimoto similarity threshold
-#         num_procs: int = 1,
-#     ):
+class PymolAlignGrouper(MoleculeGrouper):
+    """
+    Group molecules using PyMOL's align command and RMSD calculation.
+
+    This grouper uses PyMOL's structural alignment algorithm following
+    the same approach as the existing PyMOL job runner. It creates
+    individual XYZ files for each molecule, uses PyMOL's command-line
+    interface to perform alignments, and extracts RMSD values from
+    the output for grouping.
+
+    The implementation follows the pattern used in:
+    - /chemsmart/jobs/mol/runner.py (PyMOLAlignJobRunner)
+    - /chemsmart/jobs/mol/align.py (PyMOLAlignJob)
+
+    Attributes:
+        molecules (List[Molecule]): Collection of molecules to group.
+        threshold (float): RMSD threshold for grouping molecules.
+        num_procs (int): Number of processes (currently supports only 1).
+        temp_dir (str): Temporary directory for PyMOL operations.
+        pymol_executable (str): Path to PyMOL executable.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = 0.5,
+        num_procs: int = 1,
+        temp_dir: str = None,
+        pymol_executable: str = "pymol",
+    ):
+        """
+        Initialize PyMOL align grouper following runner pattern.
+
+        Args:
+            molecules (Iterable[Molecule]): Collection of molecules to group.
+            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+            num_procs (int): Number of processes. Currently only supports 1.
+            temp_dir (str): Directory for temporary files. If None, uses system temp.
+            pymol_executable (str): Path to PyMOL executable. Defaults to "pymol".
+        """
+        super().__init__(molecules, num_procs)
+        self.threshold = threshold
+        self.temp_dir = temp_dir or "/tmp"
+        self.pymol_executable = pymol_executable
+        # Convert to list for indexing operations
+        self.molecules = list(self.molecules)
+
+        # Ensure temp directory exists
+        import os
+
+        os.makedirs(self.temp_dir, exist_ok=True)
+
+        # Validate that PyMOL is available
+        self._validate_pymol()
+
+    def _validate_pymol(self) -> None:
+        """
+        Validate that PyMOL is available and accessible.
+
+        Raises:
+            RuntimeError: If PyMOL is not found or not executable.
+        """
+        import shutil
+
+        if not shutil.which(self.pymol_executable):
+            raise RuntimeError(
+                f"PyMOL executable '{self.pymol_executable}' not found in PATH. "
+                "Please ensure PyMOL is installed and accessible."
+            )
+
+    def _prepare_molecules(self) -> Tuple[List[str], List[str]]:
+        """
+        Write molecules to individual XYZ files following PyMOL runner pattern.
+
+        Returns:
+            Tuple[List[str], List[str]]: Lists of XYZ file paths and molecule names.
+        """
+        import os
+        import uuid
+
+        xyz_paths = []
+        mol_names = []
+
+        unique_id = str(uuid.uuid4())[:8]
+
+        for i, molecule in enumerate(self.molecules):
+            # Generate unique name for this molecule (following runner pattern)
+            mol_name = f"mol_{unique_id}_{i:04d}"
+            xyz_path = os.path.join(self.temp_dir, f"{mol_name}.xyz")
+
+            # Write molecule to XYZ file
+            molecule.write(xyz_path, format="xyz", mode="w")
+
+            xyz_paths.append(xyz_path)
+            mol_names.append(mol_name)
+
+            logger.debug(f"Wrote molecule {i} to {xyz_path} as {mol_name}")
+
+        return xyz_paths, mol_names
+
+    def _create_pymol_alignment_script(
+        self, xyz_paths: List[str], mol_names: List[str]
+    ) -> str:
+        """
+        Create PyMOL script for pairwise alignment following runner pattern.
+
+        Args:
+            xyz_paths (List[str]): List of XYZ file paths.
+            mol_names (List[str]): List of molecule names.
+
+        Returns:
+            str: PyMOL script content.
+        """
+        # Following the pattern from PyMOLAlignJobRunner._align_command
+        script_lines = [
+            "# PyMOL alignment script generated by PymolAlignGrouper"
+        ]
+
+        # Load all molecules (similar to _get_visualization_command)
+        for xyz_path, mol_name in zip(xyz_paths, mol_names):
+            script_lines.append(f"load {xyz_path}, {mol_name}")
+
+        # Perform pairwise alignments and capture RMSD values
+        script_lines.append("")
+        script_lines.append("# Perform pairwise alignments")
+
+        n_molecules = len(mol_names)
+        for i in range(n_molecules):
+            for j in range(i + 1, n_molecules):
+                ref_name = mol_names[i]
+                mobile_name = mol_names[j]
+
+                # Use PyMOL's align command and capture the result
+                script_lines.append(f"# Align {mobile_name} to {ref_name}")
+                script_lines.append("try:")
+                script_lines.append(
+                    f"    result = cmd.align('{mobile_name}', '{ref_name}')"
+                )
+                script_lines.append(
+                    "    rmsd_val = result[0] if result else 999.0"
+                )
+                script_lines.append(
+                    f"    print 'RMSD_RESULT_{i}_{j}:', rmsd_val"
+                )
+                script_lines.append("except:")
+                script_lines.append(f"    print 'RMSD_RESULT_{i}_{j}: 999.0'")
+                script_lines.append("")
+
+        script_lines.append("# Quit PyMOL")
+        script_lines.append("quit")
+
+        return "\n".join(script_lines)
+
+    def _run_pymol_command(self, script_path: str) -> str:
+        """
+        Execute PyMOL with the alignment script following runner pattern.
+
+        Args:
+            script_path (str): Path to PyMOL script file.
+
+        Returns:
+            str: PyMOL stdout output.
+        """
+        import subprocess
+
+        from chemsmart.utils.utils import quote_path
+
+        # Build PyMOL command following the runner pattern
+        exe = quote_path(self.pymol_executable)
+        script = quote_path(script_path)
+
+        # Use command-line mode (-c) and quiet mode (-q) for batch processing
+        # Following PyMOLAlignJobRunner._get_visualization_command pattern
+        command = f"{exe} -c -q -r {script}"
+
+        logger.debug(f"Executing PyMOL command: {command}")
+
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout
+                cwd=self.temp_dir,
+            )
+
+            if result.returncode != 0:
+                logger.warning(
+                    f"PyMOL command failed with return code {result.returncode}"
+                )
+                logger.warning(f"stderr: {result.stderr}")
+
+            return result.stdout
+
+        except subprocess.TimeoutExpired:
+            logger.error("PyMOL command timed out")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to execute PyMOL command: {e}")
+            raise
+
+    def _parse_rmsd_matrix(self, output: str, n_molecules: int) -> np.ndarray:
+        """
+        Parse RMSD matrix from PyMOL output following the expected format.
+
+        Args:
+            output (str): PyMOL stdout output.
+            n_molecules (int): Number of molecules.
+
+        Returns:
+            np.ndarray: Symmetric RMSD matrix.
+        """
+        import re
+
+        rmsd_matrix = np.zeros((n_molecules, n_molecules))
+
+        # Parse RMSD results in format: "RMSD_RESULT_i_j: X.XXX"
+        pattern = r"RMSD_RESULT_(\d+)_(\d+):\s*([\d.]+)"
+        matches = re.findall(pattern, output)
+
+        logger.debug(f"Found {len(matches)} RMSD matches in PyMOL output")
+
+        for match in matches:
+            i, j, rmsd_val = int(match[0]), int(match[1]), float(match[2])
+            if i < n_molecules and j < n_molecules:
+                rmsd_matrix[i, j] = rmsd_val
+                rmsd_matrix[j, i] = rmsd_val  # Make symmetric
+                logger.debug(f"RMSD[{i},{j}] = {rmsd_val:.3f}")
+
+        return rmsd_matrix
+
+    def _cleanup_temp_files(self, file_paths: List[str]) -> None:
+        """
+        Clean up temporary files.
+
+        Args:
+            file_paths (List[str]): List of file paths to remove.
+        """
+        import os
+
+        for filepath in file_paths:
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                    logger.debug(f"Removed temporary file: {filepath}")
+                except OSError as e:
+                    logger.warning(f"Failed to remove {filepath}: {e}")
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """
+        Group molecules using PyMOL alignment and RMSD thresholding.
+
+        This method follows the PyMOL runner pattern:
+        1. Writes molecules to individual XYZ files
+        2. Creates a PyMOL script for pairwise alignments
+        3. Executes PyMOL in command-line mode
+        4. Parses RMSD values from output
+        5. Groups molecules using connected components clustering
+
+        Returns:
+            Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
+                - List of molecule groups (each group is a list of molecules)
+                - List of index groups (corresponding indices for each group)
+        """
+        molecules = list(self.molecules)
+        n_molecules = len(molecules)
+
+        if n_molecules == 0:
+            return [], []
+
+        if n_molecules == 1:
+            return [molecules], [[0]]
+
+        logger.info(
+            f"Grouping {n_molecules} molecules using PyMOL alignment (threshold={self.threshold})"
+        )
+
+        import os
+        import uuid
+
+        # Generate unique identifiers for this run
+        unique_id = str(uuid.uuid4())[:8]
+        script_path = os.path.join(
+            self.temp_dir, f"alignment_script_{unique_id}.pml"
+        )
+
+        temp_files = []
+
+        try:
+            # Step 1: Prepare molecules (write to XYZ files)
+            xyz_paths, mol_names = self._prepare_molecules()
+            temp_files.extend(xyz_paths)
+
+            # Step 2: Create PyMOL alignment script
+            script_content = self._create_pymol_alignment_script(
+                xyz_paths, mol_names
+            )
+
+            with open(script_path, "w") as f:
+                f.write(script_content)
+            temp_files.append(script_path)
+
+            logger.debug(f"Created PyMOL script: {script_path}")
+
+            # Step 3: Execute PyMOL command
+            output = self._run_pymol_command(script_path)
+
+            # Step 4: Parse RMSD matrix from output
+            rmsd_matrix = self._parse_rmsd_matrix(output, n_molecules)
+
+            # Step 5: Create adjacency matrix based on RMSD threshold
+            adjacency_matrix = (rmsd_matrix <= self.threshold).astype(int)
+
+            # Step 6: Use connected components to find groups
+            adjacency_sparse = csr_matrix(adjacency_matrix)
+            n_components, labels = connected_components(
+                adjacency_sparse, directed=False, return_labels=True
+            )
+
+            # Step 7: Organize molecules into groups
+            groups = [[] for _ in range(n_components)]
+            group_indices = [[] for _ in range(n_components)]
+
+            for i, label in enumerate(labels):
+                groups[label].append(molecules[i])
+                group_indices[label].append(i)
+
+            logger.info(f"Created {n_components} groups using PyMOL alignment")
+            for i, group in enumerate(groups):
+                logger.debug(
+                    f"Group {i}: {len(group)} molecules (indices: {group_indices[i]})"
+                )
+
+            return groups, group_indices
+
+        except Exception as e:
+            logger.error(f"PyMOL alignment failed: {e}")
+            # Fallback to basic RMSD grouping
+            logger.warning("Falling back to basic coordinate RMSD")
+            return self._fallback_grouping(molecules)
+
+        finally:
+            # Clean up temporary files
+            self._cleanup_temp_files(temp_files)
+
+    def _fallback_grouping(
+        self, molecules: List[Molecule]
+    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """
+        Fallback grouping using basic coordinate RMSD when PyMOL fails.
+
+        Args:
+            molecules (List[Molecule]): List of molecules to group.
+
+        Returns:
+            Tuple[List[List[Molecule]], List[List[int]]]: Groups and indices.
+        """
+        logger.debug("Using fallback basic RMSD grouping")
+
+        n_molecules = len(molecules)
+        rmsd_matrix = np.zeros((n_molecules, n_molecules))
+
+        for i in range(n_molecules):
+            for j in range(i + 1, n_molecules):
+                rmsd = self._calculate_basic_rmsd(molecules[i], molecules[j])
+                rmsd_matrix[i, j] = rmsd
+                rmsd_matrix[j, i] = rmsd
+
+        # Use the same clustering approach
+        adjacency_matrix = (rmsd_matrix <= self.threshold).astype(int)
+        adjacency_sparse = csr_matrix(adjacency_matrix)
+        n_components, labels = connected_components(
+            adjacency_sparse, directed=False, return_labels=True
+        )
+
+        groups = [[] for _ in range(n_components)]
+        group_indices = [[] for _ in range(n_components)]
+
+        for i, label in enumerate(labels):
+            groups[label].append(molecules[i])
+            group_indices[label].append(i)
+
+        logger.info(f"Created {n_components} groups using fallback RMSD")
+        return groups, group_indices
+
+    def _calculate_basic_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
+        """
+        Calculate basic RMSD between two molecules for fallback.
+
+        Args:
+            mol1 (Molecule): First molecule.
+            mol2 (Molecule): Second molecule.
+
+        Returns:
+            float: Basic RMSD value.
+        """
+        try:
+            pos1 = mol1.positions
+            pos2 = mol2.positions
+
+            if len(pos1) != len(pos2):
+                return float("inf")
+
+            # Center coordinates
+            pos1 = pos1 - np.mean(pos1, axis=0)
+            pos2 = pos2 - np.mean(pos2, axis=0)
+
+            # Calculate basic RMSD
+            return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+
+        except Exception:
+            return float("inf")
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
@@ -1592,7 +2139,10 @@ class StructureGrouperFactory:
 
     Provides a unified entry point to construct groupers by name. Supported
     strategies (case-insensitive):
-    - "rmsd": RMSDGrouper
+    - "rmsd": BasicRMSDGrouper
+    - "hrmsd": HungarianRMSDGrouper
+    - "spyrmsd": SpyRMSDGrouper
+    - "pymol" or "pymol_align": PymolAlignGrouper
     - "tanimoto" or "fingerprint": TanimotoSimilarityGrouper
     - "isomorphism" or "rdkit": RDKitIsomorphismGrouper
     - "formula": FormulaGrouper
@@ -1616,9 +2166,9 @@ class StructureGrouperFactory:
 
         Args:
             structures: Iterable of `Molecule` to group.
-            strategy (str): One of "rmsd", "tanimoto"/"fingerprint",
-                "isomorphism"/"rdkit", "formula", or "connectivity".
-                Defaults to "rdkit" (alias of RDKitIsomorphismGrouper).
+            strategy (str): One of "rmsd", "hrmsd", "spyrmsd", "pymol"/"pymol_align",
+                "tanimoto"/"fingerprint", "isomorphism"/"rdkit", "formula", or "connectivity".
+                Defaults to "rmsd".
             num_procs (int): Number of workers for parallel computation.
             **kwargs: Extra options forwarded to the grouper constructor
                 (e.g., `threshold`, `align_molecules`, `adjust_H`).
@@ -1633,6 +2183,8 @@ class StructureGrouperFactory:
             "rmsd": BasicRMSDGrouper,
             "hrmsd": HungarianRMSDGrouper,
             "spyrmsd": SpyRMSDGrouper,
+            "irmsd": IRMSDGrouper,
+            "pymolalign": PymolAlignGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
@@ -1643,13 +2195,21 @@ class StructureGrouperFactory:
             "rmsd",
             "spyrmsd",
             "hrmsd",
+            "irmsd",
+            "pymolalign",
             "tanimoto",
             "connectivity",
         }
         if strategy in groupers:
             logger.info(f"Using {strategy} grouping strategy.")
             if strategy in threshold_supported:
-                if strategy in ["rmsd", "hrmsd", "spyrmsd"]:
+                if strategy in [
+                    "rmsd",
+                    "hrmsd",
+                    "spyrmsd",
+                    "irmsd",
+                    "pymolalign",
+                ]:
                     return groupers[strategy](
                         structures,
                         threshold=threshold,
