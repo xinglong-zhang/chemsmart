@@ -51,29 +51,29 @@ Job Type and Theory Level
       -  Choice
       -  Multiscale calculation type: QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM
 
-   -  -  ``-qx, --qm-functional``
+   -  -  ``-hx, --high-level-functional``
       -  string
-      -  DFT functional for QM region (e.g., B3LYP, PBE0)
+      -  DFT functional for high-level (QM) region (e.g., B3LYP, PBE0)
 
-   -  -  ``-qb, --qm-basis``
+   -  -  ``-hb, --high-level-basis``
       -  string
-      -  Basis set for QM region (e.g., def2-SVP, def2-TZVP)
+      -  Basis set for high-level (QM) region (e.g., def2-SVP, def2-TZVP)
 
-   -  -  ``-qx2, --qm2-functional``
+   -  -  ``-mx, --medium-level-functional``
       -  string
-      -  DFT functional for QM2 region
+      -  DFT functional for medium-level (QM2) region
 
-   -  -  ``-qb2, --qm2-basis``
+   -  -  ``-mb, --medium-level-basis``
       -  string
-      -  Basis set for QM2 region
+      -  Basis set for medium-level (QM2) region
 
-   -  -  ``-qm2m, --qm2-methods``
+   -  -  ``-mm, --medium-level-method``
       -  string
-      -  Built-in method for QM2 region (XTB, HF-3C, PBEH-3C)
+      -  Built-in method for medium-level (QM2) region (XTB, HF-3C, PBEH-3C)
 
-   -  -  ``-mf, --mm-force-field``
+   -  -  ``-lf, --low-level-force-field``
       -  string
-      -  Force field for MM region (MMFF, AMBER, CHARMM)
+      -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
 
 Atom Partitioning
 =================
@@ -86,13 +86,13 @@ Atom Partitioning
       -  Type
       -  Description
 
-   -  -  ``-qa, --qm-atoms``
+   -  -  ``-ha, --high-level-atoms``
       -  string
-      -  QM atom indices (e.g., '1-15,20' or '1:15 20')
+      -  High-level atom indices (e.g., '1-15,20' or '1:15 20')
 
-   -  -  ``-qa2, --qm2-atoms``
+   -  -  ``-ma, --medium-level-atoms``
       -  string
-      -  QM2 atom indices (e.g., '16-30')
+      -  Medium-level atom indices (e.g., '16-30')
 
    -  -  ``-a, --active-atoms``
       -  string
@@ -109,13 +109,13 @@ Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``-cq, --charge-qm``
+   -  -  ``-ch, --charge-high``
       -  int
-      -  QM region charge
+      -  High-level region charge
 
-   -  -  ``-mq, --mult-qm``
+   -  -  ``-mh, --mult-high``
       -  string
-      -  QM region multiplicity
+      -  High-level region multiplicity
 
    -  -  ``-cm, --charge-medium``
       -  int
@@ -144,17 +144,17 @@ Advanced QM/MM Options
       -  Type
       -  Description
 
-   -  -  ``-s, --qm2-solvation``
+   -  -  ``-s, --medium-level-solvation``
       -  string
-      -  Solvation model for QM2 region (CPCM, SMD)
+      -  Solvation model for medium-level region (CPCM, SMD)
 
    -  -  ``-e, --embedding-type``
       -  string
       -  Embedding type: electronic or mechanical
 
-   -  -  ``-h, --qm-h-bond-length``
+   -  -  ``-h, --high-level-h-bond-length``
       -  dict
-      -  Custom QM-H bond lengths
+      -  Custom high-level-H bond lengths
 
    -  -  ``-d, --delete-la-double-counting``
       -  bool
@@ -237,7 +237,7 @@ Basic additive QM/MM calculation with B3LYP for QM region and AMBER force field:
 
 .. code:: console
 
-   chemsmart sub orca -p protein_qmmm -f protein.pdb qmmm -j QMMM -qx B3LYP -qb def2-SVP -mf amber99 -qa 1-20 -cq 0 -mq 1 -ct 0 -mt 1
+   chemsmart sub orca -p protein_qmmm -f protein.pdb qmmm -j QMMM -hx B3LYP -hb def2-SVP -lf amber99 -ha 1-20 -ch 0 -mh 1 -ct 0 -mt 1
 
 Subtractive QM/QM2 ONIOM
 ========================
@@ -246,7 +246,7 @@ Two-layer ONIOM calculation with DFT for high level and semi-empirical for low l
 
 .. code:: console
 
-   chemsmart sub orca -p enzyme_oniom -f enzyme.xyz qmmm -j QM/QM2 -qx B3LYP -qb def2-TZVP -qx2 HF -qb2 STO-3G -qa 1-15 -qa2 16-50 -cq 0 -mq 1 -cm 0 -mm 1
+   chemsmart sub orca -p enzyme_oniom -f enzyme.xyz qmmm -j QM/QM2 -hx B3LYP -hb def2-TZVP -mx HF -mb STO-3G -ha 1-15 -ma 16-50 -ch 0 -mh 1 -cm 0 -mm 1
 
 Three-Layer QM/QM2/MM ONIOM
 ===========================
@@ -255,7 +255,7 @@ Three-layer ONIOM with DFT, semi-empirical, and MM:
 
 .. code:: console
 
-   chemsmart sub orca -p complex_system -f system.pdb qmmm -j QM/QM2/MM -qx B3LYP -qb def2-SVP -qm2m HF-3C -mf amber99 -qa 1-10 -qa2 11-30 -cq 0 -mq 1 -cm 0 -mm 1 -ct 0 -mt 1
+   chemsmart sub orca -p complex_system -f system.pdb qmmm -j QM/QM2/MM -hx B3LYP -hb def2-SVP -mm HF-3C -lf amber99 -ha 1-10 -ma 11-30 -ch 0 -mh 1 -cm 0 -mm 1 -ct 0 -mt 1
 
 Crystal QM/MM for Molecular Crystals
 ====================================
@@ -264,7 +264,7 @@ QM/MM calculation for a molecular crystal:
 
 .. code:: console
 
-   chemsmart sub orca -p molecular_crystal -f crystal.cif qmmm -j MOL-CRYSTAL-QMMM -qx PBE -qb def2-SVP -qa 1-20 -cq 0 -mq 1 -nc 50 -cc true -xn 30
+   chemsmart sub orca -p molecular_crystal -f crystal.cif qmmm -j MOL-CRYSTAL-QMMM -hx PBE -hb def2-SVP -ha 1-20 -ch 0 -mh 1 -nc 50 -cc true -xn 30
 
 Advanced QM/MM with Custom Settings
 ===================================
@@ -273,7 +273,7 @@ QM/MM with custom bond lengths and embedding options:
 
 .. code:: console
 
-   chemsmart sub orca -p advanced_qmmm -f system.xyz qmmm -j QMMM -qx M06-2X -qb def2-TZVP -mf charmm36 -qa 1-25 -cq -1 -mq 2 -ct -1 -mt 2 -e electronic -h "{'C_H': 1.09, 'N_H': 1.01}" -d true
+   chemsmart sub orca -p advanced_qmmm -f system.xyz qmmm -j QMMM -hx M06-2X -hb def2-TZVP -lf charmm36 -ha 1-25 -ch -1 -mh 2 -ct -1 -mt 2 -e electronic -h "{'C_H': 1.09, 'N_H': 1.01}" -d true
 
 ***********************
  Project Configuration
@@ -284,9 +284,9 @@ You can also configure QM/MM settings in your project YAML file. Create a ``qmmm
 .. code:: yaml
 
    # ~/.chemsmart/orca/qmmm.yaml
-   qm_functional: B3LYP
-   qm_basis: def2-SVP
-   mm_force_field: amber99
+   high_level_functional: B3LYP
+   high_level_basis: def2-SVP
+   low_level_force_field: amber99
    job_type: opt
    embedding_type: electronic
    delete_la_double_counting: true
@@ -295,7 +295,7 @@ Then use it with the project flag:
 
 .. code:: console
 
-   chemsmart sub orca -p qmmm -f system.pdb qmmm -qa 1-20 -cq 0 -mq 1 -ct 0 -mt 1
+   chemsmart sub orca -p qmmm -f system.pdb qmmm -ha 1-20 -ch 0 -mh 1 -ct 0 -mt 1
 
 ************
  Next Steps
@@ -343,29 +343,29 @@ Job Type and Methods
       -  str
       -  Calculation type (QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM)
 
-   -  -  ``qm_functional``
+   -  -  ``high_level_functional``
       -  str
-      -  DFT functional for QM region (B3LYP, PBE0, etc.)
+      -  DFT functional for high-level (QM) region (B3LYP, PBE0, etc.)
 
-   -  -  ``qm_basis``
+   -  -  ``high_level_basis``
       -  str
-      -  Basis set for QM region (def2-SVP, def2-TZVP, etc.)
+      -  Basis set for high-level (QM) region (def2-SVP, def2-TZVP, etc.)
 
-   -  -  ``qm2_functional``
+   -  -  ``medium_level_functional``
       -  str
-      -  DFT functional for QM2 intermediate layer
+      -  DFT functional for medium-level (QM2) intermediate layer
 
-   -  -  ``qm2_basis``
+   -  -  ``medium_level_basis``
       -  str
-      -  Basis set for QM2 intermediate layer
+      -  Basis set for medium-level (QM2) intermediate layer
 
-   -  -  ``qm2_method``
+   -  -  ``medium_level_method``
       -  str
-      -  Built-in method for QM2 (XTB, HF-3C, PBEH-3C)
+      -  Built-in method for medium-level (XTB, HF-3C, PBEH-3C)
 
-   -  -  ``mm_force_field``
+   -  -  ``low_level_force_field``
       -  str
-      -  Force field for MM region (MMFF, AMBER, CHARMM)
+      -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
 
 Settings Atom Partitioning
 --------------------------
@@ -378,13 +378,13 @@ Settings Atom Partitioning
       -  Type
       -  Description
 
-   -  -  ``qm_atoms``
+   -  -  ``high_level_atoms``
       -  list/str
-      -  QM region atom indices (e.g., [1,2,3] or "1-10,15")
+      -  High-level region atom indices (e.g., [1,2,3] or "1-10,15")
 
-   -  -  ``qm2_atoms``
+   -  -  ``medium_level_atoms``
       -  list/str
-      -  QM2 region atom indices
+      -  Medium-level region atom indices
 
    -  -  ``active_atoms``
       -  list/str
@@ -401,13 +401,13 @@ Settings Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``charge_qm``
+   -  -  ``charge_high``
       -  int
-      -  Charge of QM region
+      -  Charge of high-level (QM) region
 
-   -  -  ``mult_qm``
+   -  -  ``mult_high``
       -  int
-      -  Multiplicity of QM region
+      -  Multiplicity of high-level (QM) region
 
    -  -  ``charge_medium``
       -  int
@@ -443,9 +443,9 @@ Embedding and Interactions
       -  str
       -  Electronic (default) or mechanical embedding
 
-   -  -  ``qm2_solvation``
+   -  -  ``medium_level_solvation``
       -  str
-      -  Solvation model for QM2 (CPCM, SMD, etc.)
+      -  Solvation model for medium-level (CPCM, SMD, etc.)
 
    -  -  ``delete_la_double_counting``
       -  bool
@@ -466,9 +466,9 @@ Custom Bond Parameters
       -  Type
       -  Description
 
-   -  -  ``qm_h_bond_length``
+   -  -  ``high_level_h_bond_length``
       -  dict
-      -  Custom QM-H bond lengths {(atom1, atom2): length}
+      -  Custom high-level-H bond lengths {(atom1, atom2): length}
 
 Settings Optimization Controls
 ------------------------------

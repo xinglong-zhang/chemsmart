@@ -2680,22 +2680,22 @@ class TestORCAQMMMJobSettings:
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
         s = ORCAQMMMJobSettings()
-        s.qm_atoms = "1-15,37,39"
+        s.high_level_atoms = "1-15,37,39"
         out = s._get_partition_string()
         assert out.strip() == "QMAtoms {1:15 37 39} end"
 
         # list input should produce the same output
-        s.qm_atoms = [1, *range(2, 16), 37, 39]
+        s.high_level_atoms = [1, *range(2, 16), 37, 39]
         out2 = s._get_partition_string()
         assert out2.strip() == "QMAtoms {1:15 37 39} end"
 
     def test_partition_string_qm_and_qm2(self):
-        """When both qm_atoms and qm2_atoms provided, both lines should be returned."""
+        """When both high_level_atoms and medium_level_atoms provided, both lines should be returned."""
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
         s = ORCAQMMMJobSettings()
-        s.qm_atoms = "1-3,5"
-        s.qm2_atoms = "7-9,12"
+        s.high_level_atoms = "1-3,5"
+        s.medium_level_atoms = "7-9,12"
         out = s._get_partition_string()
         # order: QMAtoms then QM2Atoms
         lines = [ln for ln in out.splitlines() if ln.strip()]
@@ -2703,18 +2703,18 @@ class TestORCAQMMMJobSettings:
         assert lines[1].strip() == "QM2Atoms {7:9 12} end"
 
     def test_charge_and_multiplicity_population(self):
-        """ORCAQMMMJobSettings should populate .charge and .multiplicity from medium or qm fields."""
+        """ORCAQMMMJobSettings should populate .charge and .multiplicity from medium or high fields."""
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
-        # when both QM and medium specified, QM-region takes precedence
+        # when both high and medium specified, high-region takes precedence
         s1 = ORCAQMMMJobSettings(
-            charge_medium=0, mult_medium=1, charge_qm=2, mult_qm=3
+            charge_medium=0, mult_medium=1, charge_high=2, mult_high=3
         )
         assert s1.charge == 2
         assert s1.multiplicity == 3
 
-        # medium missing -> fall back to qm
-        s2 = ORCAQMMMJobSettings(charge_qm=-1, mult_qm=2)
+        # medium missing -> fall back to high
+        s2 = ORCAQMMMJobSettings(charge_high=-1, mult_high=2)
         assert s2.charge == -1
         assert s2.multiplicity == 2
 
@@ -2723,8 +2723,8 @@ class TestORCAQMMMJobSettings:
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
         s = ORCAQMMMJobSettings()
-        s.qm_atoms = ""
+        s.high_level_atoms = ""
         assert s._get_partition_string() == ""
 
-        s.qm_atoms = None
+        s.high_level_atoms = None
         assert s._get_partition_string() == ""

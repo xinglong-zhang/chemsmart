@@ -20,7 +20,7 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     Sets the parent class charge and multiplicity attributes from
     layer-specific values following the preference order:
     1. medium (charge_medium, mult_medium)
-    2. qm (charge_qm, mult_qm)
+    2. high (charge_high, mult_high)
     3. total (charge_total, mult_total)
 
     This ensures proper charge/multiplicity values are available
@@ -32,7 +32,7 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     charge = getattr(qs, "charge", None)
     mult = getattr(qs, "multiplicity", None)
 
-    # Preference: medium -> qm -> total
+    # Preference: medium -> high -> total
     if (
         getattr(qs, "charge_medium", None) is not None
         and getattr(qs, "mult_medium", None) is not None
@@ -40,11 +40,11 @@ def _populate_charge_and_multiplicity_on_settings(qs):
         charge = qs.charge_medium
         mult = qs.mult_medium
     elif (
-        getattr(qs, "charge_qm", None) is not None
-        and getattr(qs, "mult_qm", None) is not None
+        getattr(qs, "charge_high", None) is not None
+        and getattr(qs, "mult_high", None) is not None
     ):
-        charge = qs.charge_qm
-        mult = qs.mult_qm
+        charge = qs.charge_high
+        mult = qs.mult_high
     elif (
         getattr(qs, "charge_total", None) is not None
         and getattr(qs, "mult_total", None) is not None
@@ -76,52 +76,52 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     help="Multiscale calculation type",
 )
 @click.option(
-    "-qx",
-    "--qm-functional",
+    "-hx",
+    "--high-level-functional",
     type=str,
-    help="DFT functional for QM region",
+    help="DFT functional for high-level (QM) region",
 )
 @click.option(
-    "-qb",
-    "--qm-basis",
+    "-hb",
+    "--high-level-basis",
     type=str,
-    help="Basis set for QM region",
+    help="Basis set for high-level (QM) region",
 )
 @click.option(
-    "-qx2",
-    "--qm2-functional",
+    "-mx",
+    "--medium-level-functional",
     type=str,
-    help="DFT functional for QM2 region",
+    help="DFT functional for medium-level (QM2) region",
 )
 @click.option(
-    "-qb2",
-    "--qm2-basis",
+    "-mb",
+    "--medium-level-basis",
     type=str,
-    help="Basis set for QM2 region",
+    help="Basis set for medium-level (QM2) region",
 )
 @click.option(
-    "-qm2m",
-    "--qm2-methods",
+    "-mm",
+    "--medium-level-method",
     type=str,
-    help="Built-in method for QM2 region",
+    help="Built-in method for medium-level region",
 )
 @click.option(
-    "-mf",
-    "--mm-force-field",
+    "-lf",
+    "--low-level-force-field",
     type=str,
-    help="Force field for MM region",
+    help="Force field for low-level (MM) region",
 )
 @click.option(
-    "-qa",
-    "--qm-atoms",
+    "-ha",
+    "--high-level-atoms",
     type=str,
-    help="QM atom indices (e.g., '1-15,20')",
+    help="High-level atom indices (e.g., '1-15,20')",
 )
 @click.option(
-    "-qa2",
-    "--qm2-atoms",
+    "-ma",
+    "--medium-level-atoms",
     type=str,
-    help="QM2 atom indices (e.g., '16-30')",
+    help="Medium-level atom indices (e.g., '16-30')",
 )
 @click.option(
     "-ct",
@@ -148,22 +148,22 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     help="Medium layer multiplicity",
 )
 @click.option(
-    "-cq",
-    "--charge-qm",
+    "-ch",
+    "--charge-high",
     type=int,
-    help="QM region charge",
+    help="High-level region charge",
 )
 @click.option(
-    "-mq",
-    "--mult-qm",
+    "-mh",
+    "--mult-high",
     type=str,
-    help="QM region multiplicity",
+    help="High-level region multiplicity",
 )
 @click.option(
     "-s",
-    "--qm2-solvation",
+    "--medium-level-solvation",
     type=str,
-    help="Solvation model for QM2 region",
+    help="Solvation model for medium-level region",
 )
 @click.option(
     "-a",
@@ -185,9 +185,9 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 )
 @click.option(
     "-h",
-    "--qm-h-bond-length",
+    "--high-level-h-bond-length",
     type=dict,
-    help="Custom QM-H bond lengths",
+    help="Custom high-level-H bond lengths",
 )
 @click.option(
     "-d",
@@ -259,25 +259,25 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 def qmmm(
     ctx,
     job_type,
-    qm_functional,
-    qm_basis,
-    qm2_functional,
-    qm2_basis,
-    qm2_methods,
-    mm_force_field,
-    qm_atoms,
-    qm2_atoms,
+    high_level_functional,
+    high_level_basis,
+    medium_level_functional,
+    medium_level_basis,
+    medium_level_method,
+    low_level_force_field,
+    high_level_atoms,
+    medium_level_atoms,
     charge_total,
     mult_total,
     charge_medium,
     mult_medium,
-    charge_qm,
-    mult_qm,
-    qm2_solvation,
+    charge_high,
+    mult_high,
+    medium_level_solvation,
     active_atoms,
     use_active_info_from_pbc,
     optregion_fixed_atoms,
-    qm_h_bond_length,
+    high_level_h_bond_length,
     delete_la_double_counting,
     delete_la_bond_double_counting_atoms,
     embedding_type,
@@ -355,22 +355,22 @@ def qmmm(
     # Update settings with CLI-provided options (only if specified)
     if job_type is not None:
         qmmm_settings.jobtype = job_type
-    if qm_functional is not None:
-        qmmm_settings.qm_functional = qm_functional
-    if qm_basis is not None:
-        qmmm_settings.qm_basis = qm_basis
-    if qm2_functional is not None:
-        qmmm_settings.qm2_functional = qm2_functional
-    if qm2_basis is not None:
-        qmmm_settings.qm2_basis = qm2_basis
-    if qm2_methods is not None:
-        qmmm_settings.qm2_methods = qm2_methods
-    if mm_force_field is not None:
-        qmmm_settings.mm_force_field = mm_force_field
-    if qm_atoms is not None:
-        qmmm_settings.qm_atoms = qm_atoms
-    if qm2_atoms is not None:
-        qmmm_settings.qm2_atoms = qm2_atoms
+    if high_level_functional is not None:
+        qmmm_settings.high_level_functional = high_level_functional
+    if high_level_basis is not None:
+        qmmm_settings.high_level_basis = high_level_basis
+    if medium_level_functional is not None:
+        qmmm_settings.medium_level_functional = medium_level_functional
+    if medium_level_basis is not None:
+        qmmm_settings.medium_level_basis = medium_level_basis
+    if medium_level_method is not None:
+        qmmm_settings.medium_level_method = medium_level_method
+    if low_level_force_field is not None:
+        qmmm_settings.low_level_force_field = low_level_force_field
+    if high_level_atoms is not None:
+        qmmm_settings.high_level_atoms = high_level_atoms
+    if medium_level_atoms is not None:
+        qmmm_settings.medium_level_atoms = medium_level_atoms
     if charge_total is not None:
         qmmm_settings.charge_total = charge_total
     if mult_total is not None:
@@ -379,20 +379,20 @@ def qmmm(
         qmmm_settings.charge_medium = charge_medium
     if mult_medium is not None:
         qmmm_settings.mult_medium = mult_medium
-    if charge_qm is not None:
-        qmmm_settings.charge_qm = charge_qm
-    if mult_qm is not None:
-        qmmm_settings.mult_qm = mult_qm
-    if qm2_solvation is not None:
-        qmmm_settings.qm2_solvation = qm2_solvation
+    if charge_high is not None:
+        qmmm_settings.charge_high = charge_high
+    if mult_high is not None:
+        qmmm_settings.mult_high = mult_high
+    if medium_level_solvation is not None:
+        qmmm_settings.medium_level_solvation = medium_level_solvation
     if active_atoms is not None:
         qmmm_settings.active_atoms = active_atoms
     if use_active_info_from_pbc is not None:
         qmmm_settings.use_active_info_from_pbc = use_active_info_from_pbc
     if optregion_fixed_atoms is not None:
         qmmm_settings.optregion_fixed_atoms = optregion_fixed_atoms
-    if qm_h_bond_length is not None:
-        qmmm_settings.qm_h_bond_length = qm_h_bond_length
+    if high_level_h_bond_length is not None:
+        qmmm_settings.high_level_h_bond_length = high_level_h_bond_length
     if delete_la_double_counting is not None:
         qmmm_settings.delete_la_double_counting = delete_la_double_counting
     if delete_la_bond_double_counting_atoms is not None:
@@ -428,15 +428,19 @@ def qmmm(
     molecule = molecules[-1]
     logger.info(f"QMMM job settings from project: {qmmm_settings.__dict__}")
 
-    if qm_atoms is not None:
-        qm_atoms = convert_string_to_slices(qm_atoms)
-        molecule.high_level_atoms = qm_atoms
-    if qm2_atoms is not None:
-        qm2_atoms = convert_string_to_slices(qm2_atoms)
-        molecule.medium_level_atoms = qm2_atoms
-    if qm_h_bond_length is not None:
-        qm_h_bond_length = ast.literal_eval(qm_h_bond_length)
-        molecule.scale_factors = qm_h_bond_length
+    if high_level_atoms is not None:
+        high_level_atoms_converted = convert_string_to_slices(high_level_atoms)
+        molecule.high_level_atoms = high_level_atoms_converted
+    if medium_level_atoms is not None:
+        medium_level_atoms_converted = convert_string_to_slices(
+            medium_level_atoms
+        )
+        molecule.medium_level_atoms = medium_level_atoms_converted
+    if high_level_h_bond_length is not None:
+        high_level_h_bond_length_dict = ast.literal_eval(
+            high_level_h_bond_length
+        )
+        molecule.scale_factors = high_level_h_bond_length_dict
 
     from chemsmart.jobs.orca.qmmm import ORCAQMMMJob
 
