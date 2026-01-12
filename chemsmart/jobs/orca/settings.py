@@ -983,19 +983,19 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         jobtype (str): Multiscale calculation type
         high_level_functional (str): DFT functional for high-level (QM) region
         high_level_basis (str): Basis set for high-level (QM) region
-        medium_level_functional (str): DFT functional for medium-level (QM2) region
-        medium_level_basis (str): Basis set for medium-level (QM2) region
-        medium_level_method (str): Built-in method for medium-level (XTB, HF-3C, etc.)
+        intermediate_level_functional (str): DFT functional for intermediate-level (QM2) region
+        intermediate_level_basis (str): Basis set for intermediate-level (QM2) region
+        intermediate_level_method (str): Built-in method for intermediate-level (XTB, HF-3C, etc.)
         low_level_force_field (str): Force field for low-level (MM) region
         high_level_atoms (list): Atom indices for high-level (QM) region
-        medium_level_atoms (list): Atom indices for medium-level (QM2) region
+        intermediate_level_atoms (list): Atom indices for intermediate-level (QM2) region
         charge_total (int): Total system charge
         mult_total (int): Total system multiplicity
-        charge_medium (int): Medium layer charge
-        mult_medium (int): Medium layer multiplicity
+        charge_intermediate (int): Intermediate layer charge
+        mult_intermediate (int): Intermediate layer multiplicity
         charge_high (int): High-level region charge
         mult_high (int): High-level region multiplicity
-        medium_level_solvation (str): Solvation model for medium-level region
+        intermediate_level_solvation (str): Solvation model for intermediate-level region
         active_atoms (list): Active atoms for optimization
         use_active_info_from_pbc (bool): Use PDB active atom info
         optregion_fixed_atoms (list): Fixed atoms in optimization
@@ -1018,19 +1018,19 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         jobtype=None,  # corresponding to the 5 types of jobs mentioned above
         high_level_functional=None,
         high_level_basis=None,
-        medium_level_functional=None,
-        medium_level_basis=None,
-        medium_level_method=None,
+        intermediate_level_functional=None,
+        intermediate_level_basis=None,
+        intermediate_level_method=None,
         low_level_force_field=None,  # level-of-theory for MM
         high_level_atoms=None,
-        medium_level_atoms=None,
+        intermediate_level_atoms=None,
         charge_total=None,
         mult_total=None,
-        charge_medium=None,
-        mult_medium=None,
+        charge_intermediate=None,
+        mult_intermediate=None,
         charge_high=None,
         mult_high=None,
-        medium_level_solvation=None,
+        intermediate_level_solvation=None,
         active_atoms=None,
         use_active_info_from_pbc=False,
         optregion_fixed_atoms=None,
@@ -1057,19 +1057,19 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             jobtype: Type of multiscale calculation (QMMM, QM/QM2, QM/QM2/MM, etc.)
             high_level_functional: DFT functional for high-level (QM) region
             high_level_basis: Basis set for high-level (QM) region
-            medium_level_functional: DFT functional for medium-level (QM2) region
-            medium_level_basis: Basis set for medium-level (QM2) region
-            medium_level_method: Built-in method for medium-level (XTB, HF-3C, PBEH-3C, etc.)
+            intermediate_level_functional: DFT functional for intermediate-level (QM2) region
+            intermediate_level_basis: Basis set for intermediate-level (QM2) region
+            intermediate_level_method: Built-in method for intermediate-level (XTB, HF-3C, PBEH-3C, etc.)
             low_level_force_field: Force field for low-level (MM) region (MMFF, AMBER, CHARMM, etc.)
             high_level_atoms: Atom indices for high-level (QM) region
-            medium_level_atoms: Atom indices for medium-level (QM2) region
+            intermediate_level_atoms: Atom indices for intermediate-level (QM2) region
             charge_total: Total system charge
             mult_total: Total system multiplicity
-            charge_medium: Medium layer charge (QM2)
-            mult_medium: Medium layer multiplicity (QM2)
+            charge_intermediate: Intermediate layer charge (QM2)
+            mult_intermediate: Intermediate layer multiplicity (QM2)
             charge_high: High-level region charge
             mult_high: High-level region multiplicity
-            medium_level_solvation: Solvation model for medium-level (CPCM, SMD, etc.)
+            intermediate_level_solvation: Solvation model for intermediate-level (CPCM, SMD, etc.)
             active_atoms: Active atom indices (default: whole system)
             optregion_fixed_atoms: Fixed atom indices in optimization
             high_level_h_bond_length: Custom bond lengths {(atom1, atom2): length}
@@ -1089,19 +1089,19 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self.jobtype = jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
-        self.medium_level_functional = medium_level_functional
-        self.medium_level_basis = medium_level_basis
-        self.medium_level_method = medium_level_method
+        self.intermediate_level_functional = intermediate_level_functional
+        self.intermediate_level_basis = intermediate_level_basis
+        self.intermediate_level_method = intermediate_level_method
         self.low_level_force_field = low_level_force_field
         self.high_level_atoms = high_level_atoms
-        self.medium_level_atoms = medium_level_atoms
+        self.intermediate_level_atoms = intermediate_level_atoms
         self.charge_total = charge_total
         self.mult_total = mult_total
-        self.charge_medium = charge_medium
-        self.mult_medium = mult_medium
+        self.charge_intermediate = charge_intermediate
+        self.mult_intermediate = mult_intermediate
         self.charge_high = charge_high
         self.mult_high = mult_high
-        self.medium_level_solvation = medium_level_solvation
+        self.intermediate_level_solvation = intermediate_level_solvation
         self.active_atoms = active_atoms
         self.use_active_info_from_pbc = use_active_info_from_pbc
         self.optregion_fixed_atoms = optregion_fixed_atoms
@@ -1126,15 +1126,18 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self.functional = self.high_level_functional
         self.basis = self.high_level_basis
 
-        # Set charge/multiplicity with fallback priority: high -> medium -> total
+        # Set charge/multiplicity with fallback priority: high -> intermediate -> total
         if self.charge_high is not None and self.mult_high is not None:
             self.charge = self.charge_high
             self.multiplicity = self.mult_high
-        elif self.charge_medium is not None and self.mult_medium is not None:
-            # the charge/multiplicity of the medium system corresponds to the
+        elif (
+            self.charge_intermediate is not None
+            and self.mult_intermediate is not None
+        ):
+            # the charge/multiplicity of the intermediate system corresponds to the
             # sum of the charge/multiplicity of the high level and low level regions
-            self.charge = self.charge_medium
-            self.multiplicity = self.mult_medium
+            self.charge = self.charge_intermediate
+            self.multiplicity = self.mult_intermediate
         elif self.charge_total is not None and self.mult_total is not None:
             self.charge = self.charge_total
             self.multiplicity = self.mult_total
@@ -1154,13 +1157,13 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         self, functional, basis, built_in_method, level_name
     ):
         """
-        Validate and assign level of theory for high/medium/low-level layers.
+        Validate and assign level of theory for high/intermediate/low-level layers.
 
         Args:
             functional: DFT functional
             basis: Basis set
             built_in_method: Built-in ORCA method (XTB, HF-3C, etc.)
-            level_name: Layer name (high_level, medium_level, low_level)
+            level_name: Layer name (high_level, intermediate_level, low_level)
 
         Returns:
             str: Validated level of theory string
@@ -1168,7 +1171,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Raises:
             ValueError: If incompatible options are specified
         """
-        medium_level_built_in_list = [
+        intermediate_level_built_in_list = [
             "XTB",
             "XTB0",
             "XTB1",
@@ -1189,12 +1192,12 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 f"functional and basis should not be provided!"
             )
             if (
-                level_name == "medium_level"
-                and built_in_method.upper() in medium_level_built_in_list
+                level_name == "intermediate_level"
+                and built_in_method.upper() in intermediate_level_built_in_list
             ):
                 level_of_theory = built_in_method
         elif functional and basis:
-            if level_name == "medium_level":
+            if level_name == "intermediate_level":
                 level_of_theory = "QM2"
             else:
                 level_of_theory = f"{functional} {basis}"
@@ -1217,7 +1220,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if job_type in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
             assert (
                 self.mult_high is None
-                and self.mult_medium is None
+                and self.mult_intermediate is None
                 and self.mult_total is None
             ), f"Multiplicity should not be specified for {job_type} job!"
             self.multiplicity = 0  # avoid conflicts from parent class
@@ -1257,17 +1260,19 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 None,
                 level_name="high_level",
             )
-            self.medium_level_level_of_theory = self.validate_and_assign_level(
-                self.medium_level_functional,
-                self.medium_level_basis,
-                self.medium_level_method,
-                level_name="medium_level",
+            self.intermediate_level_level_of_theory = (
+                self.validate_and_assign_level(
+                    self.intermediate_level_functional,
+                    self.intermediate_level_basis,
+                    self.intermediate_level_method,
+                    level_name="intermediate_level",
+                )
             )
             self.low_level_level_of_theory = self.validate_and_assign_level(
                 None, None, self.low_level_force_field, level_name="low_level"
             )
             # only "!QMMM" will be used for additive QMMM
-            level_of_theory += f"/{self.medium_level_level_of_theory}"
+            level_of_theory += f"/{self.intermediate_level_level_of_theory}"
             if self.low_level_level_of_theory is not None:
                 if self.jobtype.upper() == "QMMM":
                     level_of_theory = "!QMMM"  # Additive QM/MM
@@ -1275,22 +1280,24 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                     level_of_theory += f"/{self.low_level_level_of_theory}"
             if self.solvent_model is not None:
                 level_of_theory += f" {self.solvent_model}"
-            self.medium_level_method = (self.medium_level_method or "").lower()
+            self.intermediate_level_method = (
+                self.intermediate_level_method or ""
+            ).lower()
             if (
-                self.medium_level_method.lower() == "xtb"
-                and self.medium_level_solvation
+                self.intermediate_level_method.lower() == "xtb"
+                and self.intermediate_level_solvation
                 in [
                     "ALPB(Water)",
                     "DDCOSMO(Water)",
                     "CPCMX(Water)",
                 ]
             ):
-                level_of_theory += f" {self.medium_level_solvation}"
+                level_of_theory += f" {self.intermediate_level_solvation}"
             elif (
-                self.medium_level_level_of_theory != "QM2"
-                and self.medium_level_solvation == "CPCM(Water)"
+                self.intermediate_level_level_of_theory != "QM2"
+                and self.intermediate_level_solvation == "CPCM(Water)"
             ):
-                level_of_theory += f" {self.medium_level_solvation}"
+                level_of_theory += f" {self.intermediate_level_solvation}"
         return level_of_theory
 
     def _get_h_bond_length(self):
@@ -1349,16 +1356,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         """
         Generate charge and multiplicity lines for %qmmm block.
 
-        Returns charge/multiplicity for total system (QM/MM) or medium system (QM/QM2/MM).
-        ORCA specifies total/medium charge/multiplicity in %qmmm block while
+        Returns charge/multiplicity for total system (QM/MM) or intermediate system (QM/QM2/MM).
+        ORCA specifies total/intermediate charge/multiplicity in %qmmm block while
         high-level charge/multiplicity are specified in the coordinate section.
 
         Returns:
             tuple: (charge_str, mult_str) for %qmmm block
         """
-        if self.medium_level_atoms is not None:
-            charge = f"Charge_Medium {self.charge_medium}"
-            mult = f"Mult_Medium {self.mult_medium}"
+        if self.intermediate_level_atoms is not None:
+            charge = f"Charge_Intermediate {self.charge_intermediate}"
+            mult = f"Mult_Intermediate {self.mult_intermediate}"
         else:
             charge = f"Charge_Total {self.charge_total}"
             mult = f"Mult_Total {self.mult_total}"
@@ -1366,7 +1373,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
 
     def _get_partition_string(self):
         """
-        Generate atom partition specifications for high-level and medium-level regions.
+        Generate atom partition specifications for high-level and intermediate-level regions.
 
         Returns:
             str: Partition block with QMAtoms and QM2Atoms directives
@@ -1380,11 +1387,11 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         high_fmt = self._get_formatted_partition_strings(self.high_level_atoms)
         if high_fmt is not None:
             partition_string += f"QMAtoms {{{high_fmt}}} end\n"
-        medium_fmt = self._get_formatted_partition_strings(
-            self.medium_level_atoms
+        intermediate_fmt = self._get_formatted_partition_strings(
+            self.intermediate_level_atoms
         )
-        if medium_fmt is not None:
-            partition_string += f"QM2Atoms {{{medium_fmt}}} end\n"
+        if intermediate_fmt is not None:
+            partition_string += f"QM2Atoms {{{intermediate_fmt}}} end\n"
         return partition_string
 
     def _get_formatted_partition_strings(self, atom_id):
@@ -1498,39 +1505,39 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         if mult_str and "None" not in str(mult_str):
             full_qm_block += f"{mult_str}\n"
 
-        # Add medium-level solvation if specified
-        if self.medium_level_solvation is not None:
-            full_qm_block += f"solv_scheme {self.medium_level_solvation}\n"
+        # Add intermediate-level solvation if specified
+        if self.intermediate_level_solvation is not None:
+            full_qm_block += (
+                f"solv_scheme {self.intermediate_level_solvation}\n"
+            )
 
         # Add active atoms specification
         active_fmt = self._get_formatted_partition_strings(self.active_atoms)
         if active_fmt is not None:
             full_qm_block += f"ActiveAtoms {{{active_fmt}}} end\n"
 
-        # Add medium-level method/basis specifications
+        # Add intermediate-level method/basis specifications
         if (
-            self.medium_level_method is not None
-            and self.medium_level_method.strip()
+            self.intermediate_level_method is not None
+            and self.intermediate_level_method.strip()
         ):
-            # medium-level method provided via external file
+            # intermediate-level method provided via external file
             full_qm_block += (
-                f'QM2CustomFile "{self.medium_level_method}" end\n'
+                f'QM2CustomFile "{self.intermediate_level_method}" end\n'
             )
         else:
-            # If custom medium-level functional/basis provided, include them
+            # If custom intermediate-level functional/basis provided, include them
             if (
-                self.medium_level_functional is not None
-                and self.medium_level_functional.strip()
+                self.intermediate_level_functional is not None
+                and self.intermediate_level_functional.strip()
+            ):
+                full_qm_block += f'QM2CUSTOMMETHOD "{self.intermediate_level_functional}" end\n'
+            if (
+                self.intermediate_level_basis is not None
+                and self.intermediate_level_basis.strip()
             ):
                 full_qm_block += (
-                    f'QM2CUSTOMMETHOD "{self.medium_level_functional}" end\n'
-                )
-            if (
-                self.medium_level_basis is not None
-                and self.medium_level_basis.strip()
-            ):
-                full_qm_block += (
-                    f'QM2CUSTOMBASIS "{self.medium_level_basis}" end\n'
+                    f'QM2CUSTOMBASIS "{self.intermediate_level_basis}" end\n'
                 )
 
         # Add force field for specific job types

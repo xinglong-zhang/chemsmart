@@ -669,18 +669,18 @@ class ORCAInputWriter(InputWriter):
         multiplicity = getattr(self.settings, "multiplicity", None)
 
         # If missing, attempt to populate from common QMMM-related fields.
-        # Common names across settings: charge_qm, charge_medium, charge_total
-        # and mult_qm, mult_medium, mult_total.
+        # Common names across settings: charge_qm, charge_intermediate, charge_total
+        # and mult_qm, mult_intermediate, mult_total.
         if charge is None or multiplicity is None:
-            # order of preference: medium (QM2) -> qm -> total
+            # order of preference: intermediate (QM2) -> qm -> total
             candidate_charge_attrs = [
-                "charge_medium",
+                "charge_intermediate",
                 "charge_qm",
                 "charge_total",
                 "charge",
             ]
             candidate_mult_attrs = [
-                "mult_medium",
+                "mult_intermediate",
                 "mult_qm",
                 "mult_total",
                 "multiplicity",

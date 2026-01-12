@@ -2703,17 +2703,20 @@ class TestORCAQMMMJobSettings:
         assert lines[1].strip() == "QM2Atoms {7:9 12} end"
 
     def test_charge_and_multiplicity_population(self):
-        """ORCAQMMMJobSettings should populate .charge and .multiplicity from medium or high fields."""
+        """ORCAQMMMJobSettings should populate .charge and .multiplicity from intermediate or high fields."""
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
-        # when both high and medium specified, high-region takes precedence
+        # when both high and intermediate specified, high-region takes precedence
         s1 = ORCAQMMMJobSettings(
-            charge_medium=0, mult_medium=1, charge_high=2, mult_high=3
+            charge_intermediate=0,
+            mult_intermediate=1,
+            charge_high=2,
+            mult_high=3,
         )
         assert s1.charge == 2
         assert s1.multiplicity == 3
 
-        # medium missing -> fall back to high
+        # intermediate missing -> fall back to high
         s2 = ORCAQMMMJobSettings(charge_high=-1, mult_high=2)
         assert s2.charge == -1
         assert s2.multiplicity == 2

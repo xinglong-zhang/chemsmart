@@ -19,7 +19,7 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 
     Sets the parent class charge and multiplicity attributes from
     layer-specific values following the preference order:
-    1. medium (charge_medium, mult_medium)
+    1. intermediate (charge_intermediate, mult_intermediate)
     2. high (charge_high, mult_high)
     3. total (charge_total, mult_total)
 
@@ -32,13 +32,13 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     charge = getattr(qs, "charge", None)
     mult = getattr(qs, "multiplicity", None)
 
-    # Preference: medium -> high -> total
+    # Preference: intermediate -> high -> total
     if (
-        getattr(qs, "charge_medium", None) is not None
-        and getattr(qs, "mult_medium", None) is not None
+        getattr(qs, "charge_intermediate", None) is not None
+        and getattr(qs, "mult_intermediate", None) is not None
     ):
-        charge = qs.charge_medium
-        mult = qs.mult_medium
+        charge = qs.charge_intermediate
+        mult = qs.mult_intermediate
     elif (
         getattr(qs, "charge_high", None) is not None
         and getattr(qs, "mult_high", None) is not None
@@ -88,22 +88,22 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     help="Basis set for high-level (QM) region",
 )
 @click.option(
-    "-mx",
-    "--medium-level-functional",
+    "-ix",
+    "--intermediate-level-functional",
     type=str,
-    help="DFT functional for medium-level (QM2) region",
+    help="DFT functional for intermediate-level (QM2) region",
 )
 @click.option(
-    "-mb",
-    "--medium-level-basis",
+    "-ib",
+    "--intermediate-level-basis",
     type=str,
-    help="Basis set for medium-level (QM2) region",
+    help="Basis set for intermediate-level (QM2) region",
 )
 @click.option(
-    "-mm",
-    "--medium-level-method",
+    "-im",
+    "--intermediate-level-method",
     type=str,
-    help="Built-in method for medium-level region",
+    help="Built-in method for intermediate-level region",
 )
 @click.option(
     "-lf",
@@ -118,10 +118,10 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     help="High-level atom indices (e.g., '1-15,20')",
 )
 @click.option(
-    "-ma",
-    "--medium-level-atoms",
+    "-ia",
+    "--intermediate-level-atoms",
     type=str,
-    help="Medium-level atom indices (e.g., '16-30')",
+    help="Intermediate-level atom indices (e.g., '16-30')",
 )
 @click.option(
     "-ct",
@@ -136,16 +136,16 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     help="Total system multiplicity",
 )
 @click.option(
-    "-cm",
-    "--charge-medium",
+    "-ci",
+    "--charge-intermediate",
     type=int,
-    help="Medium layer charge",
+    help="Intermediate layer charge",
 )
 @click.option(
-    "-mm",
-    "--mult-medium",
+    "-mi",
+    "--mult-intermediate",
     type=str,
-    help="Medium layer multiplicity",
+    help="Intermediate layer multiplicity",
 )
 @click.option(
     "-ch",
@@ -161,9 +161,9 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 )
 @click.option(
     "-s",
-    "--medium-level-solvation",
+    "--intermediate-level-solvation",
     type=str,
-    help="Solvation model for medium-level region",
+    help="Solvation model for intermediate-level region",
 )
 @click.option(
     "-a",
@@ -261,19 +261,19 @@ def qmmm(
     job_type,
     high_level_functional,
     high_level_basis,
-    medium_level_functional,
-    medium_level_basis,
-    medium_level_method,
+    intermediate_level_functional,
+    intermediate_level_basis,
+    intermediate_level_method,
     low_level_force_field,
     high_level_atoms,
-    medium_level_atoms,
+    intermediate_level_atoms,
     charge_total,
     mult_total,
-    charge_medium,
-    mult_medium,
+    charge_intermediate,
+    mult_intermediate,
     charge_high,
     mult_high,
-    medium_level_solvation,
+    intermediate_level_solvation,
     active_atoms,
     use_active_info_from_pbc,
     optregion_fixed_atoms,
@@ -359,32 +359,36 @@ def qmmm(
         qmmm_settings.high_level_functional = high_level_functional
     if high_level_basis is not None:
         qmmm_settings.high_level_basis = high_level_basis
-    if medium_level_functional is not None:
-        qmmm_settings.medium_level_functional = medium_level_functional
-    if medium_level_basis is not None:
-        qmmm_settings.medium_level_basis = medium_level_basis
-    if medium_level_method is not None:
-        qmmm_settings.medium_level_method = medium_level_method
+    if intermediate_level_functional is not None:
+        qmmm_settings.intermediate_level_functional = (
+            intermediate_level_functional
+        )
+    if intermediate_level_basis is not None:
+        qmmm_settings.intermediate_level_basis = intermediate_level_basis
+    if intermediate_level_method is not None:
+        qmmm_settings.intermediate_level_method = intermediate_level_method
     if low_level_force_field is not None:
         qmmm_settings.low_level_force_field = low_level_force_field
     if high_level_atoms is not None:
         qmmm_settings.high_level_atoms = high_level_atoms
-    if medium_level_atoms is not None:
-        qmmm_settings.medium_level_atoms = medium_level_atoms
+    if intermediate_level_atoms is not None:
+        qmmm_settings.intermediate_level_atoms = intermediate_level_atoms
     if charge_total is not None:
         qmmm_settings.charge_total = charge_total
     if mult_total is not None:
         qmmm_settings.mult_total = mult_total
-    if charge_medium is not None:
-        qmmm_settings.charge_medium = charge_medium
-    if mult_medium is not None:
-        qmmm_settings.mult_medium = mult_medium
+    if charge_intermediate is not None:
+        qmmm_settings.charge_intermediate = charge_intermediate
+    if mult_intermediate is not None:
+        qmmm_settings.mult_intermediate = mult_intermediate
     if charge_high is not None:
         qmmm_settings.charge_high = charge_high
     if mult_high is not None:
         qmmm_settings.mult_high = mult_high
-    if medium_level_solvation is not None:
-        qmmm_settings.medium_level_solvation = medium_level_solvation
+    if intermediate_level_solvation is not None:
+        qmmm_settings.intermediate_level_solvation = (
+            intermediate_level_solvation
+        )
     if active_atoms is not None:
         qmmm_settings.active_atoms = active_atoms
     if use_active_info_from_pbc is not None:
@@ -431,11 +435,11 @@ def qmmm(
     if high_level_atoms is not None:
         high_level_atoms_converted = convert_string_to_slices(high_level_atoms)
         molecule.high_level_atoms = high_level_atoms_converted
-    if medium_level_atoms is not None:
-        medium_level_atoms_converted = convert_string_to_slices(
-            medium_level_atoms
+    if intermediate_level_atoms is not None:
+        intermediate_level_atoms_converted = convert_string_to_slices(
+            intermediate_level_atoms
         )
-        molecule.medium_level_atoms = medium_level_atoms_converted
+        molecule.intermediate_level_atoms = intermediate_level_atoms_converted
     if high_level_h_bond_length is not None:
         high_level_h_bond_length_dict = ast.literal_eval(
             high_level_h_bond_length
