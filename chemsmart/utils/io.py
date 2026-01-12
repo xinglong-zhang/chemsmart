@@ -35,6 +35,44 @@ logger = logging.getLogger(__name__)
 
 SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
+PROGRAM_INFO = {
+    "crest": {
+        "keywords": [
+            "C R E S T",
+            "Conformer-Rotamer Ensemble Sampling Tool",
+            "https://crest-lab.github.io/crest-docs/",
+            "$ crest",
+        ],
+        "suffixes": [".out"],
+    },
+    "gaussian": {
+        "keywords": [
+            "Entering Gaussian System",
+            "Gaussian, Inc.",
+            "Gaussian(R)",
+        ],
+        "suffixes": [".log", ".out"],
+    },
+    "orca": {
+        "keywords": [
+            "* O   R   C   A *",
+            "Your ORCA version",
+            "ORCA versions",
+        ],
+        "suffixes": [".out"],
+    },
+    "xtb": {
+        "keywords": ["x T B", "xtb version", "xtb is free software:"],
+        "suffixes": [".out"],
+    },
+}
+SUPPORTED_PROGRAMS = set(PROGRAM_INFO.keys())
+ALL_SUFFIXES = tuple(
+    suffix for info in PROGRAM_INFO.values() for suffix in info["suffixes"]
+)
+# Folder-level detection is currently supported only for these programs
+PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
+
 
 def create_molecule_list(
     orientations,
@@ -222,27 +260,8 @@ def match_outfile_pattern(line) -> str | None:
     Returns:
         str | None: Program name ("gaussian", "orca", "xtb", "crest") if matched, else None.
     """
-    patterns = {
-        "crest": [
-            "C R E S T",
-            "Conformer-Rotamer Ensemble Sampling Tool",
-            "https://crest-lab.github.io/crest-docs/",
-            "$ crest",
-        ],
-        "gaussian": [
-            "Entering Gaussian System",
-            "Gaussian, Inc.",
-            "Gaussian(R)",
-        ],
-        "orca": [
-            "* O   R   C   A *",
-            "Your ORCA version",
-            "ORCA versions",
-        ],
-        "xtb": ["x T B", "xtb version", "xtb is free software:"],
-    }
-    for program, keywords in patterns.items():
-        if any(keyword in line for keyword in keywords):
+    for program, info in PROGRAM_INFO.items():
+        if any(keyword in line for keyword in info["keywords"]):
             return program
     return None
 
@@ -258,8 +277,8 @@ def get_program_type_from_file(filepath) -> str:
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name, one of: "gaussian", "orca", "xtb", "crest",
-        or "unknown" if the format cannot be detected.
+        str: Program name ("gaussian", "orca", "xtb", "crest") or "unknown"
+             if the format cannot be detected.
     """
     max_lines = 200
     try:
@@ -285,39 +304,48 @@ def get_program_type_from_file(filepath) -> str:
     return "unknown"
 
 
-def find_output_files_in_directory(directory, program):
+def find_output_files_in_directory(directory, program=None, recursive=True):
     """
     Find quantum chemistry output files in a directory by program.
 
     Args:
         directory (str): Path to the directory to search.
-        program (str): Target QC program, e.g., "gaussian", "orca", "xtb", "crest".
+        program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                              If None, searches for all supported programs.
+        recursive (bool): If True, searches recursively in subdirectories.
+                         Defaults to True.
 
     Returns:
         list[str]: List of file paths matching the specified program.
     """
-    PROGRAM_SUFFIXES = {
-        "gaussian": [".log", ".out"],
-        "orca": [".out"],
-        "xtb": [".out"],
-        "crest": [".out"],
-    }
-
     directory = os.path.abspath(directory)
-    logger.info(f"Obtaining {program} output files in directory: {directory}")
-    suffixes = PROGRAM_SUFFIXES.get(program)
-
-    outfiles = []
-    for subdir, _dirs, files in os.walk(directory):
+    candidate_files = []
+    if recursive:
+        for subdir, _, files in os.walk(directory):
+            for file in files:
+                if program is None:
+                    if file.endswith(ALL_SUFFIXES):
+                        candidate_files.append(os.path.join(subdir, file))
+                else:
+                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                        candidate_files.append(os.path.join(subdir, file))
+    else:
+        files = os.listdir(directory)
         for file in files:
-            if file.endswith(tuple(suffixes)):
-                outfiles.append(os.path.join(subdir, file))
+            if program is None:
+                if file.endswith(ALL_SUFFIXES):
+                    candidate_files.append(os.path.join(directory, file))
+            else:
+                if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                    candidate_files.append(os.path.join(directory, file))
 
-    matched_files = [
-        file
-        for file in outfiles
-        if get_program_type_from_file(file) == program
-    ]
+    matched_files = []
+    for file in candidate_files:
+        detected_program = get_program_type_from_file(file)
+        if detected_program == "unknown":
+            continue
+        if program is None or detected_program == program:
+            matched_files.append(file)
     return matched_files
 
 
@@ -325,39 +353,36 @@ def is_program_calculation_directory(directory, program):
     """
     Check if a directory contains output files from a specific program.
 
-    This function checks whether a directory is a calculation directory for
-    a given quantum chemistry program by looking for output files with the
-    appropriate suffix and verifying their content.
-
     Args:
         directory (str): Path to the directory to check.
-        program (str): Target QC program, e.g., "xtb", "crest".
+        program (str): Target QC program (e.g., "xtb", "crest").
 
     Returns:
         bool: True if the directory contains at least one output file from
               the specified program, False otherwise.
     """
-    PROGRAM_SUFFIXES = {
-        "xtb": [".out"],
-        "crest": [".out"],
-    }
     if not os.path.isdir(directory):
         return False
-    suffixes = PROGRAM_SUFFIXES.get(program.lower())
-    # Find candidate output files in the directory
-    candidate_files = [
-        f
-        for f in os.listdir(directory)
-        if any(f.endswith(suffix) for suffix in suffixes)
-    ]
-    if not candidate_files:
-        return False
-    # Verify at least one file is from the specified program
-    for filename in candidate_files:
-        filepath = os.path.join(directory, filename)
-        if get_program_type_from_file(filepath) == program.lower():
-            return True
-    return False
+    return bool(
+        find_output_files_in_directory(directory, program, recursive=False)
+    )
+
+
+def get_program_type_from_folder(directory) -> str:
+    """
+    Detect the type of quantum chemistry calculation folder.
+
+    Args:
+        directory (str): Path to the directory to check.
+
+    Returns:
+        str: Program name ("xtb", "crest") or "unknown"
+             if the format cannot be detected.
+    """
+    for program in PROGRAMS_WITH_FOLDER_DETECTION:
+        if is_program_calculation_directory(directory, program):
+            return program
+    return "unknown"
 
 
 def load_molecules_from_paths(

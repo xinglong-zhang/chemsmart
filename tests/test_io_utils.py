@@ -11,6 +11,7 @@ from chemsmart.utils.io import (
     clean_label,
     convert_string_indices_to_pymol_id_indices,
     get_program_type_from_file,
+    get_program_type_from_folder,
     increment_numbers,
     match_outfile_pattern,
     remove_keyword,
@@ -107,7 +108,7 @@ class TestMatchOutfilePattern:
 
 
 class TestGetOutfileFormat:
-    """Tests for the get_outfile_format function."""
+    """Tests for the get_program_type_from_file function."""
 
     def test_gaussian_output_detection(self, gaussian_singlet_opt_outfile):
         """Test detection of Gaussian output file."""
@@ -128,6 +129,24 @@ class TestGetOutfileFormat:
         result = get_program_type_from_file(temp_name)
         assert result == "unknown"
         os.unlink(f.name)
+
+
+class TestGetOutFolderFormat:
+    """Tests for the get_program_type_from_folder function."""
+
+    def test_xtb_output_detection(self, xtb_water_outfolder):
+        """Test detection of xTB calculation folder."""
+        result = get_program_type_from_folder(xtb_water_outfolder)
+        assert result == "xtb"
+
+    def test_unknown_folder(self):
+        """Test unknown folder type."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create some random files
+            with open(os.path.join(temp_dir, "random.txt"), "w") as f:
+                f.write("Random content\n")
+            result = get_program_type_from_folder(temp_dir)
+            assert result == "unknown"
 
 
 class TestCleanDuplicateStructure:

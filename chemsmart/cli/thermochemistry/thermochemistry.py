@@ -252,14 +252,18 @@ def thermochemistry(
     if directory:
         if filetype.lower() == "xtb":
             # First check if the directory itself is an xTB calculation folder
-            if is_program_calculation_directory(directory, "xtb"):
+            if is_program_calculation_directory(
+                directory=directory, program=filetype.lower()
+            ):
                 # Single xTB calculation directory provided
                 folders.append(directory)
             else:
                 # Directory containing multiple xTB calculation subdirectories
                 for entry in os.listdir(directory):
                     subdir = os.path.join(directory, entry)
-                    if is_program_calculation_directory(subdir, "xtb"):
+                    if is_program_calculation_directory(
+                        directory=subdir, program=filetype.lower()
+                    ):
                         folders.append(subdir)
             if not folders:
                 raise click.UsageError(

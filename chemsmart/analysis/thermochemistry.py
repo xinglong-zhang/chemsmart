@@ -16,7 +16,10 @@ from chemsmart.utils.constants import (
     energy_conversion,
     hartree_to_joules,
 )
-from chemsmart.utils.io import get_program_type_from_file
+from chemsmart.utils.io import (
+    get_program_type_from_file,
+    get_program_type_from_folder,
+)
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -146,7 +149,10 @@ class Thermochemistry:
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        program = get_program_type_from_file(self.filename)
+        if self.filename is None:
+            program = get_program_type_from_folder(self.folder)
+        else:
+            program = get_program_type_from_file(self.filename)
         if program == "gaussian":
             output = Gaussian16Output(self.filename)
         elif program == "orca":
@@ -157,8 +163,11 @@ class Thermochemistry:
             # can be added in future to parse other formats
             raise ValueError("Unsupported format.")
         if not output.normal_termination:
+            target = (
+                self.filename if self.filename is not None else self.folder
+            )
             raise ValueError(
-                f"File '{self.filename}' did not terminate normally. "
+                f"Calculation '{target}' did not terminate normally. "
                 "Skipping thermochemistry calculation for this file."
             )
         return output

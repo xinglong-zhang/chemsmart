@@ -90,9 +90,9 @@ class TestXTBInput:
 
 class TestXTBOutput:
 
-    def test_opt_output(self, xtb_co2_outfile):
-        assert os.path.exists(xtb_co2_outfile)
-        xtb_output = XTBOutput(folder=xtb_co2_outfile)
+    def test_opt_output(self, xtb_co2_outfolder):
+        assert os.path.exists(xtb_co2_outfolder)
+        xtb_output = XTBOutput(folder=xtb_co2_outfolder)
         assert xtb_output.normal_termination
 
     # def test_sp_output(self, xtb_sp_outfile):
