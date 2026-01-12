@@ -1013,6 +1013,18 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         scale_formal_charge_ecp_atom (float): ECP charge scaling factor
     """
 
+    # Class attribute: Built-in methods supported for intermediate level (QM2)
+    INTERMEDIATE_LEVEL_BUILT_IN_METHODS = [
+        "XTB",
+        "XTB0",
+        "XTB1",
+        "HF-3C",
+        "PBEH-3C",
+        "R2SCAN-3C",
+        "PM3",
+        "AM1",
+    ]
+
     def __init__(
         self,
         jobtype=None,  # corresponding to the 5 types of jobs mentioned above
@@ -1171,16 +1183,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Raises:
             ValueError: If incompatible options are specified
         """
-        intermediate_level_built_in_list = [
-            "XTB",
-            "XTB0",
-            "XTB1",
-            "HF-3C",
-            "PBEH-3C",
-            "R2SCAN-3C",
-            "PM3",
-            "AM1",
-        ]
         level_of_theory = ""
         if functional and basis and built_in_method:
             raise ValueError(
@@ -1193,7 +1195,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             )
             if (
                 level_name == "intermediate_level"
-                and built_in_method.upper() in intermediate_level_built_in_list
+                and built_in_method.upper()
+                in self.INTERMEDIATE_LEVEL_BUILT_IN_METHODS
             ):
                 level_of_theory = built_in_method
         elif functional and basis:
@@ -1521,10 +1524,15 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.intermediate_level_method is not None
             and self.intermediate_level_method.strip()
         ):
-            # intermediate-level method provided via external file
-            full_qm_block += (
-                f'QM2CustomFile "{self.intermediate_level_method}" end\n'
-            )
+            # Only write QM2CustomFile if method is NOT in the built-in list
+            if (
+                self.intermediate_level_method.upper()
+                not in self.INTERMEDIATE_LEVEL_BUILT_IN_METHODS
+            ):
+                # intermediate-level method provided via external file
+                full_qm_block += (
+                    f'QM2CustomFile "{self.intermediate_level_method}" end\n'
+                )
         else:
             # If custom intermediate-level functional/basis provided, include them
             if (
