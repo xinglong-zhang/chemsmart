@@ -213,6 +213,7 @@ class TestORCAOutput:
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"
         assert orca_out.basis == "def2-svp"
+        assert orca_out.spin == "restricted"
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
         assert orca_out.spin == "restricted"
@@ -797,6 +798,7 @@ class TestORCAOutput:
     def test_he_freq_output(self, orca_he_output_freq):
         orca_out = ORCAOutput(filename=orca_he_output_freq)
         assert isinstance(orca_out.molecule, Molecule)
+        assert orca_out.spin == "restricted"
         assert orca_out.rotational_symmetry_number == 1
         assert orca_out.rotational_constants_in_wavenumbers == [0, 0, 0]
         assert orca_out.rotational_constants_in_MHz == [0, 0, 0]
@@ -807,6 +809,7 @@ class TestORCAOutput:
 
     def test_read_sp_output(self, water_sp_gas_path):
         orca_out = ORCAOutput(filename=water_sp_gas_path)
+        assert orca_out.spin == "restricted"
         assert (
             orca_out.route_string
             == "!  DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
@@ -853,6 +856,7 @@ class TestORCAOutput:
             orca_out.route_string
             == "! CPCM DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
         )
+        assert orca_out.spin == "restricted"
         assert orca_out.functional is None
         assert orca_out.basis is None
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
@@ -894,6 +898,7 @@ class TestORCAOutput:
     def test_read_hirshfeld_full_print_output(self, hirshfeld_full_print):
         orca_out = ORCAOutput(filename=hirshfeld_full_print)
         assert orca_out.route_string == "! Hirshfeld".lower()
+        assert orca_out.spin == "restricted"
         assert orca_out.functional is None
         assert orca_out.basis is None
         assert orca_out.ab_initio is None
@@ -1850,6 +1855,7 @@ class TestORCAOutput:
 
     def test_sn2_ts_orca_output(self, orca_sn2_ts_output):
         orca_out = ORCAOutput(filename=orca_sn2_ts_output)
+        assert orca_out.spin == "restricted"
         assert orca_out.forces is not None
         optimized_geometry = orca_out.get_optimized_parameters()
         assert isinstance(optimized_geometry, dict)

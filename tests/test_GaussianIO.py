@@ -419,6 +419,7 @@ class TestGaussian16Output:
             g16_output.route_string
             == "# cam-b3lyp gen td(singlets,nstates=50,root=1)"
         )
+        assert g16_output.spin == "unrestricted"
         assert g16_output.num_atoms == 49
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
@@ -517,6 +518,7 @@ class TestGaussian16Output:
         assert g16_output.version == "G16RevB.01"
         assert g16_output.date == "2024-06-20 18:09:26"
         assert g16_output.normal_termination
+        assert g16_output.spin == "restricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116
         assert g16_output.alpha_occ_eigenvalues[0] == -25.29096 * units.Hartree
@@ -642,6 +644,7 @@ class TestGaussian16Output:
         assert os.path.exists(gaussian_triplet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_triplet_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.spin == "unrestricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 215
         assert (
@@ -674,6 +677,7 @@ class TestGaussian16Output:
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        assert g16_output.spin == "unrestricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 216
         assert (
