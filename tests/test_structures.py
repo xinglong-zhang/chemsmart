@@ -875,8 +875,6 @@ class TestMoleculeAdvanced:
 
     def test_write_pdb_file(self, single_molecule_xyz_file, tmpdir):
         """Test writing Molecule to PDB file."""
-        import os
-
         # Load a molecule
         mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
 
@@ -898,8 +896,6 @@ class TestMoleculeAdvanced:
         self, single_molecule_xyz_file, tmpdir
     ):
         """Test generic write() method with PDB format."""
-        import os
-
         # Load a molecule
         mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
 
@@ -949,9 +945,13 @@ class TestMoleculeAdvanced:
         assert len(pdb_no_bonds) > 0
         assert "HETATM" in pdb_no_bonds or "ATOM" in pdb_no_bonds
 
-        # Should not have CONECT records when bonds are not added
-        # Actually, flavor=0 (default) will still try to write CONECT but there won't be any
-        # So we just verify the conversion succeeded
+        # When bonds are not added, CONECT records will be empty
+        # We verify the PDB is valid without expecting specific CONECT content
+        lines = pdb_no_bonds.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
 
 
 class TestCoordinateBlockAdvanced:

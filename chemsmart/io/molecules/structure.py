@@ -1415,11 +1415,11 @@ class Molecule:
         except (
             Chem.rdchem.AtomKekulizeException,
             Chem.rdchem.KekulizeException,
-        ) as e:
+        ) as kekulize_error:
             # If kekulization fails, retry without bonds
             if add_bonds:
                 logger.warning(
-                    f"Bond detection failed with kekulization error: {e}. "
+                    f"Bond detection failed with kekulization error: {kekulize_error}. "
                     "Retrying PDB conversion without bonds."
                 )
                 rdkit_mol = self.to_rdkit(add_bonds=False)
