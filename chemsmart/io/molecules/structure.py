@@ -1179,7 +1179,17 @@ class Molecule:
             self.write_coordinates(f, program="gaussian")
             f.write("\n")
 
-    def write_pdb(self, filename, mode="w", confId=-1, flavor=0, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True, **kwargs):
+    def write_pdb(
+        self,
+        filename,
+        mode="w",
+        confId=-1,
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+        **kwargs,
+    ):
         """
         Write molecule to PDB format file.
 
@@ -1204,7 +1214,7 @@ class Molecule:
             flavor=flavor,
             add_bonds=add_bonds,
             bond_cutoff_buffer=bond_cutoff_buffer,
-            adjust_H=adjust_H
+            adjust_H=adjust_H,
         )
         with open(filename, mode) as f:
             logger.info(f"Writing PDB file to {filename}")
@@ -1362,7 +1372,14 @@ class Molecule:
         # Convert RDKit molecule to SMILES
         return Chem.MolToSmiles(rdkit_mol)
 
-    def to_pdb(self, confId=-1, flavor=0, add_bonds=True, bond_cutoff_buffer=0.05, adjust_H=True):
+    def to_pdb(
+        self,
+        confId=-1,
+        flavor=0,
+        add_bonds=True,
+        bond_cutoff_buffer=0.05,
+        adjust_H=True,
+    ):
         """
         Convert molecule to PDB format string.
 
@@ -1392,10 +1409,13 @@ class Molecule:
             rdkit_mol = self.to_rdkit(
                 add_bonds=add_bonds,
                 bond_cutoff_buffer=bond_cutoff_buffer,
-                adjust_H=adjust_H
+                adjust_H=adjust_H,
             )
             return Chem.MolToPDBBlock(rdkit_mol, confId=confId, flavor=flavor)
-        except (Chem.rdchem.AtomKekulizeException, Chem.rdchem.KekulizeException) as e:
+        except (
+            Chem.rdchem.AtomKekulizeException,
+            Chem.rdchem.KekulizeException,
+        ) as e:
             # If kekulization fails, retry without bonds
             if add_bonds:
                 logger.warning(
@@ -1403,7 +1423,9 @@ class Molecule:
                     "Retrying PDB conversion without bonds."
                 )
                 rdkit_mol = self.to_rdkit(add_bonds=False)
-                return Chem.MolToPDBBlock(rdkit_mol, confId=confId, flavor=flavor)
+                return Chem.MolToPDBBlock(
+                    rdkit_mol, confId=confId, flavor=flavor
+                )
             else:
                 raise
 

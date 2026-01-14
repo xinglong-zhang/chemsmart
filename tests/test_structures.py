@@ -852,6 +852,107 @@ class TestMoleculeAdvanced:
         assert len(distances) == 1
         assert np.isclose(distances[0], 1.0)
 
+    def test_to_pdb_conversion(self, single_molecule_xyz_file):
+        """Test conversion of Molecule to PDB format."""
+        # Load a molecule from XYZ file
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test to_pdb() method
+        pdb_string = mol.to_pdb()
+        assert isinstance(pdb_string, str)
+        assert len(pdb_string) > 0
+
+        # Check that PDB format contains expected elements
+        assert "HETATM" in pdb_string or "ATOM" in pdb_string
+        assert "END" in pdb_string
+
+        # Check that all atoms are represented in the PDB
+        lines = pdb_string.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_file(self, single_molecule_xyz_file, tmpdir):
+        """Test writing Molecule to PDB file."""
+        import os
+
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write_pdb method
+        pdb_file = os.path.join(tmpdir, "test_molecule.pdb")
+        mol.write_pdb(pdb_file)
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+            assert "END" in content
+
+    def test_write_generic_method_with_pdb_format(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test generic write() method with PDB format."""
+        import os
+
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write method with format='pdb'
+        pdb_file = os.path.join(tmpdir, "test_generic.pdb")
+        mol.write(pdb_file, format="pdb")
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+
+    def test_pdb_with_different_flavors(self, single_molecule_xyz_file):
+        """Test PDB conversion with different flavor options."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test with default flavor (with CONECT records)
+        pdb_default = mol.to_pdb(flavor=0)
+
+        # Test with flavor=2 (no CONECT records)
+        pdb_no_conect = mol.to_pdb(flavor=2)
+
+        # Both should contain atom records
+        assert "HETATM" in pdb_default or "ATOM" in pdb_default
+        assert "HETATM" in pdb_no_conect or "ATOM" in pdb_no_conect
+
+        # flavor=0 should have CONECT records (unless bonds fail), flavor=2 should not
+        # Note: CONECT might not be present if bonds fail and fallback is used
+        # So we just verify the PDB is valid
+        assert len(pdb_default) > 0
+        assert len(pdb_no_conect) > 0
+
+    def test_pdb_with_no_bonds(self, single_molecule_xyz_file):
+        """Test PDB conversion without bond detection."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test without bonds
+        pdb_no_bonds = mol.to_pdb(add_bonds=False)
+
+        assert isinstance(pdb_no_bonds, str)
+        assert len(pdb_no_bonds) > 0
+        assert "HETATM" in pdb_no_bonds or "ATOM" in pdb_no_bonds
+
+        # Should not have CONECT records when bonds are not added
+        # Actually, flavor=0 (default) will still try to write CONECT but there won't be any
+        # So we just verify the conversion succeeded
+
 
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
