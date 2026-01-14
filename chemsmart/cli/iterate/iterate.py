@@ -18,7 +18,7 @@ from chemsmart.utils.iterate import generate_template
 
 logger = logging.getLogger(__name__)
 
-# Define allowed keys for YAML configuration validation
+# Define allowed keys for configuration (YAML format) validation
 ALLOWED_TOP_LEVEL_KEYS = {"skeletons", "substituents"}
 ALLOWED_SKELETON_KEYS = {
     "file_path",
@@ -47,11 +47,11 @@ def click_iterate_options(f):
         "--generate-template",
         "generate_template_path",
         is_flag=False,
-        flag_value="iterate_template.yaml",
+        flag_value="iterate_template.cfg",
         default=None,
         type=str,
-        help="Generate a template YAML configuration file and exit. "
-        "Optionally specify output path (default: iterate_template.yaml).",
+        help="Generate a template configuration file and exit. "
+        "Optionally specify output path (default: iterate_template.cfg).",
     )
     @click.option(
         "-P",
@@ -140,19 +140,19 @@ def iterate(
 
     Examples:
 
-    `chemsmart run iterate -f config.yaml`
-    will generate structures based on the YAML configuration file.
+    `chemsmart run iterate -f config.cfg`
+    will generate structures based on the configuration file.
 
-    `chemsmart run iterate -f config.yaml -P 4`
+    `chemsmart run iterate -f config.cfg -P 4`
     will use 4 processes for parallel execution.
 
-    `chemsmart run iterate -f config.yaml -o ./output`
+    `chemsmart run iterate -f config.cfg -o ./output`
     will save generated structures to ./output directory.
 
     `chemsmart run iterate -g`
-    will generate a template YAML configuration file (iterate_template.yaml).
+    will generate a template configuration file (iterate_template.cfg).
 
-    `chemsmart run iterate -g my_config.yaml`
+    `chemsmart run iterate -g my_config.cfg`
     will generate a template at the specified path.
     """
     # Handle -g option: generate template and exit
@@ -163,10 +163,10 @@ def iterate(
         click.echo(f"Generated template: {template_path}")
         ctx.exit(0)
 
-    # Validate filename - expect a single YAML config file
+    # Validate filename - expect a single YAML/CFG config file
     if not filename:
         raise click.BadParameter(
-            "YAML configuration file is required.",
+            "A configuration file is required.",
             param_hint="'-f' / '--filename'",
         )
 
@@ -176,9 +176,9 @@ def iterate(
             param_hint="'-f' / '--filename'",
         )
 
-    if not filename.endswith((".yaml", ".yml")):
+    if not filename.endswith(".cfg"):
         raise click.BadParameter(
-            f"File '{filename}' must be a YAML file (ending with .yaml or .yml).",
+            f"File '{filename}' must be a configuration file (ending with .cfg).",
             param_hint="'-f' / '--filename'",
         )
 
@@ -186,7 +186,7 @@ def iterate(
     with open(filename, "r") as f:
         raw_config = yaml.safe_load(f)
 
-    # Handle empty YAML file
+    # Handle empty configuration file
     if raw_config is None:
         raw_config = {}
 
