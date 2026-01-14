@@ -1413,8 +1413,8 @@ class Molecule:
             )
             return Chem.MolToPDBBlock(rdkit_mol, confId=confId, flavor=flavor)
         except (
-            Chem.rdchem.AtomKekulizeException,
-            Chem.rdchem.KekulizeException,
+            Chem.AtomKekulizeException,
+            Chem.KekulizeException,
         ) as kekulize_error:
             # If kekulization fails, retry without bonds
             if add_bonds:
