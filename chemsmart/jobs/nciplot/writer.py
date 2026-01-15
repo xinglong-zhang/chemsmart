@@ -120,20 +120,23 @@ class NCIPLOTInputWriter(InputWriter):
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
-                    logger.debug(f"Writing filename: {file}.")
+                    # Extract basename for use in scratch directory
+                    # Files are copied to scratch with only their basename
+                    file_basename = os.path.basename(file)
+                    logger.debug(f"Writing filename: {file_basename}.")
 
                     # Use the running directory from jobrunner
                     file_path = self.jobrunner.running_directory
                     logger.info(f"Running in directory: {file_path}")
 
-                    # Validate file existence
-                    full_path = os.path.join(file_path, file)
+                    # Validate file existence using basename
+                    full_path = os.path.join(file_path, file_basename)
                     if not os.path.exists(full_path):
                         raise FileNotFoundError(
                             f"File {os.path.abspath(full_path)} does not "
                             f"exist. Please check the file path."
                         )
-                    f.write(f"{file}\n")
+                    f.write(f"{file_basename}\n")
 
     def _write_rthres(self, f):
         """
