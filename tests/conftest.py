@@ -1160,7 +1160,7 @@ def xtb_outputs_directory(xtb_test_directory):
 
 @pytest.fixture()
 def xtb_co2_outfolder(xtb_outputs_directory):
-    return os.path.join(xtb_outputs_directory, "co2_opt")
+    return os.path.join(xtb_outputs_directory, "co2_ohess")
 
 
 @pytest.fixture()

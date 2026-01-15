@@ -93,16 +93,15 @@ class TestXTBMainOut:
     """Tests for XTBMainOut class."""
 
     def test_main_out_opt(self, xtb_co2_outfolder):
-        """Test parsing main output from CO2 opt calculation."""
-        xtb_main_out_file = os.path.join(xtb_co2_outfolder, "co2.out")
+        """Test parsing main output from CO2 ohess calculation."""
+        xtb_main_out_file = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
         assert os.path.exists(xtb_main_out_file)
         co2_main_out = XTBMainOut(xtb_main_out_file)
         assert co2_main_out.xtb_version == "6.7.1"
         assert co2_main_out.normal_termination
         assert (
             co2_main_out.route_string
-            == "/Users/xinglongzhang/miniconda3/envs/chemsmart/bin/xtb /Users/xinglongzhang/chemsmart_test/xtb/co2.xyz "
-            "--gfn2 --opt vtight --chrg 0 --uhf 0"
+            == "xtb co2.xyz --ohess vtight --grad --copy"
         )
         assert co2_main_out.num_basis_functions == 12
         assert co2_main_out.num_atomic_orbital == 12
@@ -110,9 +109,9 @@ class TestXTBMainOut:
         assert co2_main_out.num_electrons == 16
         assert co2_main_out.max_iter == 250
         assert co2_main_out.hamiltonian == "GFN2-xTB"
-        assert co2_main_out.restart is True
-        assert co2_main_out.solvent_on is False
-        assert co2_main_out.pc_potential is False
+        assert not co2_main_out.restart
+        assert not co2_main_out.solvent_on
+        assert not co2_main_out.pc_potential
         assert co2_main_out.electronic_temperature == 300.0
         assert co2_main_out.accuracy == 1.0
         assert co2_main_out.integral_cutoff == 25.0
@@ -123,18 +122,20 @@ class TestXTBMainOut:
         assert co2_main_out.net_charge == 0
         assert co2_main_out.unpaired_electrons == 0
         assert co2_main_out.optimization_level == "verytight"
-        # assert xtb_output.max_optcycles is None
-        # assert xtb_output.anc_microcycles is None
-        # assert xtb_output.degrees_of_freedom is None
-        # assert xtb_output.rf_solver is None
-        # assert not xtb_output.write_all_intermediate_geometries
-        # assert not xtb_output.is_linear
-        # assert xtb_output.energy_convergence is None
-        # assert xtb_output.gradient_convergence is None
-        # assert xtb_output.max_rf_displacement is None
-        # assert xtb_output.low_frequency_cutoff is None
-        # assert xtb_output.max_frequency_cutoff is None
-        # assert xtb_output.s6_in_model_hessian is None
+        assert co2_main_out.max_optcycles == 200
+        assert co2_main_out.anc_microcycles == 20
+        assert co2_main_out.degrees_of_freedom == 4
+        assert co2_main_out.rf_solver == "davidson"
+        assert co2_main_out.write_all_intermediate_geometries
+        assert co2_main_out.is_linear
+        assert co2_main_out.energy_convergence == 1.0e-7
+        assert co2_main_out.gradient_convergence == 2.0e-4
+        assert co2_main_out.max_rf_displacement == 1.0
+        assert co2_main_out.low_frequency_cutoff == 0.01
+        assert co2_main_out.max_frequency_cutoff == 5.0
+        assert co2_main_out.s6_in_model_hessian == 20.0
+        assert co2_main_out.geometry_optimization_converged
+
         # assert xtb_output.homo_energy == -12.1467
         # assert xtb_output.lumo_energy == 2.2442
         # assert xtb_output.c6_coefficient == 44.535326
@@ -196,13 +197,6 @@ class TestXTBMainOut:
         # assert xtb_output.rf_solver == "davidson"
         # assert xtb_output.write_all_intermediate_geometries
         # assert not xtb_output.is_linear
-        # assert xtb_output.energy_convergence == 5.0e-6
-        # assert xtb_output.gradient_convergence == 1.0e-3
-        # assert xtb_output.max_rf_displacement == 1.0
-        # assert xtb_output.low_frequency_cutoff == 0.01
-        # assert xtb_output.max_frequency_cutoff == 5.0
-        # assert xtb_output.s6_in_model_hessian == 20.0
-        # assert xtb_output.geometry_optimization_converged
         # assert xtb_output.route_string == "xtb coord --opt"
         # assert xtb_output.homo_energy == -12.1467
         # assert xtb_output.lumo_energy == 2.2442
@@ -244,7 +238,7 @@ class TestXTBChargesFile:
     """Tests for XTBChargesFile class."""
 
     def test_partial_charges_opt(self, xtb_co2_outfolder):
-        """Test parsing charges from CO2 opt calculation."""
+        """Test parsing charges from CO2 ohess calculation."""
         charges_file = os.path.join(xtb_co2_outfolder, "charges")
         assert os.path.exists(charges_file)
         co2_charges = XTBChargesFile(charges_file)
@@ -270,7 +264,7 @@ class TestXTBChargesFile:
 
 class TestXTBOutput:
 
-    def test_opt_output(self, xtb_co2_outfolder):
+    def test_ohess_output(self, xtb_co2_outfolder):
         assert os.path.exists(xtb_co2_outfolder)
         xtb_co2_output = XTBOutput(folder=xtb_co2_outfolder)
         assert xtb_co2_output.normal_termination

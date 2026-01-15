@@ -2,6 +2,7 @@ import logging
 from functools import cached_property
 
 import numpy as np
+from ase import units
 
 from chemsmart.utils.mixins import FileMixin, XTBFileMixin
 
@@ -1193,7 +1194,76 @@ class XTBEngradFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for energy and gradient.
+    @cached_property
+    def num_atoms(self):
+        """Obtain the number of atoms in the system."""
+        for i, line in enumerate(self.contents):
+            if "Number of atoms" in line:
+                # check following lines for the number
+                for content in self.contents[i + 1 : i + 4]:
+                    try:
+                        return int(content.split()[0])
+                    except (ValueError, IndexError):
+                        pass
+        return None
+
+    @cached_property
+    def energy(self):
+        """Obtain the energy in eV."""
+        energy_hartree = self._get_energy()
+        if energy_hartree is not None:
+            return energy_hartree * units.Hartree
+        return None
+
+    def _get_energy(self):
+        """Get the total energy in Hartree."""
+        for i, line in enumerate(self.contents):
+            if "current total energy" in line:
+                # check following lines for the energy value
+                for content in self.contents[i + 1 : i + 4]:
+                    try:
+                        energy_in_hartree = float(content.split()[0])
+                        return energy_in_hartree
+                    except (ValueError, IndexError):
+                        pass
+        return None
+
+    @cached_property
+    def forces(self):
+        """Obtain forces on the atoms in eV/Å."""
+        grad = self._get_gradient()
+        if grad is not None and grad.shape == (self.num_atoms, 3):
+            # Convert gradient to forces: F = -grad
+            # Convert units: Hartree/Bohr -> eV/Angstrom
+            forces = -grad * units.Hartree / units.Bohr
+            return forces
+        return None
+
+    def _get_gradient(self):
+        """Get the gradient in Hartree/Bohr."""
+        if self.num_atoms is None:
+            return None
+        for i, line in enumerate(self.contents):
+            if "current gradient" in line:
+                # Read 3N gradient components
+                grad_data = []
+                for content in self.contents[
+                    i + 1 : i + 3 * self.num_atoms + 4
+                ]:
+                    try:
+                        grad_value = float(
+                            content.split()[0]
+                        )  # in Hartree/Bohr
+                        grad_data.append(grad_value)
+                    except (ValueError, IndexError):
+                        pass
+                # Validate we have the correct number of gradient components
+                if len(grad_data) == 3 * self.num_atoms:
+                    gradient_array = np.array(grad_data).reshape(
+                        (self.num_atoms, 3)
+                    )
+                    return gradient_array
+        return None
 
 
 class XTBG98File(FileMixin):
