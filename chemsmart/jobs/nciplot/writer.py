@@ -120,8 +120,9 @@ class NCIPLOTInputWriter(InputWriter):
                     if not file.endswith((".xyz", ".wfn", ".wfx")):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
-                    # Extract basename for use in scratch directory
-                    # Files are copied to scratch with only their basename
+                    # Extract basename for validation and writing
+                    # The runner copies files to scratch using only their basename,
+                    # so we must use basename here to find them
                     file_basename = os.path.basename(file)
                     logger.debug(f"Writing filename: {file_basename}.")
 
