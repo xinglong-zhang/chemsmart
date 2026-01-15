@@ -121,8 +121,9 @@ class NCIPLOTInputWriter(InputWriter):
                         file = file.rsplit(".", 1)[0] + "_promolecular.xyz"
 
                     # Extract basename for validation and writing
-                    # The runner copies files to scratch using only their basename,
-                    # so we must use basename here to find them
+                    # The runner copies all files to scratch using only their basename.
+                    # For converted files, _promolecular suffix is added to the basename.
+                    # We must use basename here to find files in scratch directory.
                     file_basename = os.path.basename(file)
                     logger.debug(f"Writing filename: {file_basename}.")
 

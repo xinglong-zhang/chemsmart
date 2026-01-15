@@ -25,11 +25,12 @@ class TestNCIPLOTPathHandling:
         single_molecule_xyz_file,
         nciplot_jobrunner_scratch,
     ):
-        """Test that NCIPLOT handles full file paths correctly.
+        """Test that NCIPLOT correctly handles full file paths.
 
-        This test reproduces the bug where providing a full path to a .xyz file
-        causes a FileNotFoundError because the writer tries to use the full path
-        instead of just the basename when validating file existence in scratch.
+        This test verifies the fix for a bug where providing a full path to a 
+        .xyz file caused a FileNotFoundError because the writer tried to use 
+        the full path instead of just the basename when validating file 
+        existence in scratch.
         """
         job_settings = NCIPLOTJobSettings()
 
@@ -84,10 +85,11 @@ class TestNCIPLOTPathHandling:
         tmpdir,
         nciplot_jobrunner_scratch,
     ):
-        """Test NCIPLOT handles non-.xyz files with full paths correctly.
+        """Test NCIPLOT correctly handles non-.xyz files with full paths.
 
-        When a non-supported file (e.g., .log) is converted to .xyz,
-        the writer should use the basename with _promolecular suffix.
+        This test verifies that when a non-supported file (e.g., .log) is 
+        converted to .xyz, the writer correctly uses the basename with 
+        _promolecular suffix for both validation and writing to the .nci file.
         """
         job_settings = NCIPLOTJobSettings()
 
