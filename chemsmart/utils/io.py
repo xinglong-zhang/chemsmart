@@ -352,7 +352,7 @@ def load_molecules_from_paths(
     # Default index to "-1" (last structure) if not specified
     if index is None:
         index = "-1"
-    
+
     loaded = []
 
     for i, file_path in enumerate(file_paths):
