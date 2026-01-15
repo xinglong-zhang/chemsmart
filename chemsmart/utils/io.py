@@ -348,6 +348,10 @@ def load_molecules_from_paths(
         FileNotFoundError: If `check_exists` is True and a file does not exist.
         Exception: If an error occurs during molecule loading from a file.
     """
+    # Default index to "-1" (last structure) if not specified
+    if index is None:
+        index = "-1"
+    
     loaded = []
 
     for i, file_path in enumerate(file_paths):
