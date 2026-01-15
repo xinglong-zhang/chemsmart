@@ -1205,8 +1205,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 level_of_theory = "QM2"
             else:
                 level_of_theory = f"{functional} {basis}"
-        else:
-            level_of_theory = None
+        if level_name == "low_level":
+            level_of_theory = "MM"
         logger.debug(f"Level of theory for {level_name}: {level_of_theory}")
         return level_of_theory
 
@@ -1278,6 +1278,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             # only "!QMMM" will be used for additive QMMM
             level_of_theory += f"/{self.intermediate_level_level_of_theory}"
             if self.low_level_level_of_theory is not None:
+                print(f"{self.low_level_level_of_theory}\n")
                 if self.jobtype.upper() == "QMMM":
                     level_of_theory = "!QMMM"  # Additive QM/MM
                 else:
@@ -1608,7 +1609,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Returns:
             str: Crystal QM/MM parameter block
         """
-        crystal_qmmm_subblock = " "
+        crystal_qmmm_subblock = ""
         if not self.conv_charges:
             crystal_qmmm_subblock += "Conv_Charges False \n"
             crystal_qmmm_subblock += (

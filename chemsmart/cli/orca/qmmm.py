@@ -132,7 +132,7 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 @click.option(
     "-mt",
     "--mult-total",
-    type=str,
+    type=int,
     help="Total system multiplicity",
 )
 @click.option(
@@ -144,7 +144,7 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 @click.option(
     "-mi",
     "--mult-intermediate",
-    type=str,
+    type=int,
     help="Intermediate layer multiplicity",
 )
 @click.option(
@@ -156,7 +156,7 @@ def _populate_charge_and_multiplicity_on_settings(qs):
 @click.option(
     "-mh",
     "--mult-high",
-    type=str,
+    type=int,
     help="High-level region multiplicity",
 )
 @click.option(
