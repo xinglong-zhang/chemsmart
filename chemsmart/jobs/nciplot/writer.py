@@ -133,7 +133,7 @@ class NCIPLOTInputWriter(InputWriter):
                             f"File {os.path.abspath(full_path)} does not "
                             f"exist. Please check the file path."
                         )
-                    f.write(f"{file}\n")
+                    f.write(f"{os.path.basename(file)}\n")
 
     def _write_rthres(self, f):
         """
