@@ -336,7 +336,8 @@ def load_molecules_from_paths(
 
     Args:
         file_paths (list of str or Path): List of file paths to load molecules from.
-        index (int or str): Index or slice to select specific structures from each file.
+        index (int or str or None): Index or slice to select specific structures from each file.
+            If None, defaults to "-1" (last structure).
         add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
             the molecule name even if only a single structure is loaded from a file.
         check_exists (bool, optional): If True, checks that each file exists before loading.
