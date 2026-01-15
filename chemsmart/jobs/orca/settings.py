@@ -1044,6 +1044,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         charge_high=None,
         mult_high=None,
         intermediate_level_solvation=None,
+        intermediate_solv_scheme=None,
         active_atoms=None,
         use_active_info_from_pbc=False,
         optregion_fixed_atoms=None,
@@ -1099,6 +1100,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             scale_formal_charge_ecp_atom: ECP atomic charge scaling factor
         """
         super().__init__(**kwargs)
+        self.intermediate_solv_scheme = intermediate_solv_scheme
         self.jobtype = jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
@@ -1288,20 +1290,17 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.intermediate_level_method = (
                 self.intermediate_level_method or ""
             ).lower()
-            if (
-                self.intermediate_level_method.lower() == "xtb"
-                and self.intermediate_level_solvation
-                in [
-                    "ALPB(Water)",
-                    "DDCOSMO(Water)",
-                    "CPCMX(Water)",
-                ]
-            ):
+            if self.intermediate_level_solvation in [
+                "alpb(water)",
+                "ddcosmo(water)",
+                "cpcmx(water)",
+            ]:
+                assert self.intermediate_level_method.lower() == "xtb", (
+                    "The intermediate-level solvation models ALPB, DDCOSMO, CPCMX are only "
+                    "compatible with XTB method!"
+                )
                 level_of_theory += f" {self.intermediate_level_solvation}"
-            elif (
-                self.intermediate_level_level_of_theory != "QM2"
-                and self.intermediate_level_solvation == "CPCM(Water)"
-            ):
+            elif self.intermediate_level_solvation.lower() == "cpcm(water)":
                 level_of_theory += f" {self.intermediate_level_solvation}"
         return level_of_theory
 
@@ -1511,10 +1510,8 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             full_qm_block += f"{mult_str}\n"
 
         # Add intermediate-level solvation if specified
-        if self.intermediate_level_solvation is not None:
-            full_qm_block += (
-                f"solv_scheme {self.intermediate_level_solvation}\n"
-            )
+        if self.intermediate_solv_scheme is not None:
+            full_qm_block += f"solv_scheme {self.intermediate_solv_scheme}\n"
 
         # Add active atoms specification
         active_fmt = self._get_formatted_partition_strings(self.active_atoms)

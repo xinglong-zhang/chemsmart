@@ -4,6 +4,7 @@ import os
 from chemsmart.jobs.orca.settings import (
     ORCAIRCJobSettings,
     ORCAJobSettings,
+    ORCAQMMMJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.settings.user import ChemsmartUserSettings
@@ -188,7 +189,8 @@ class ORCAProjectSettings(RegistryMixin):
     def qmmm_settings(self):
         """ORCA default settings for QMMM job."""
         settings = self.main_settings().copy()
-        settings.job_type = "qmmm"
+        settings = ORCAQMMMJobSettings(**settings.__dict__)
+        settings.jobtype = "qmmm"
         settings.freq = False
         return settings
 
@@ -564,7 +566,11 @@ class YamlORCAProjectSettingsBuilder:
             RuntimeError: If configuration for the job type is not found.
         """
         # Map job types to their specific settings classes
-        settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
+        settings_mapping = {
+            "irc": ORCAIRCJobSettings,
+            "ts": ORCATSJobSettings,
+            "qmmm": ORCAQMMMJobSettings,
+        }
 
         try:
             job_type_config = self._read_config().get(job_type)

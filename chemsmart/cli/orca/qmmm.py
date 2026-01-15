@@ -166,6 +166,14 @@ def _populate_charge_and_multiplicity_on_settings(qs):
     help="Solvation model for intermediate-level region",
 )
 @click.option(
+    "-s",
+    "--intermediate-solv-sheme",
+    type=click.Choice(["CMCM_B", "CPCM_C"], case_sensitive=False),
+    default="CMCM_B",
+    show_default=True,
+    help="Solvation model for intermediate-level region",
+)
+@click.option(
     "-a",
     "--active-atoms",
     type=str,
