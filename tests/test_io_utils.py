@@ -12,6 +12,7 @@ from chemsmart.utils.io import (
     convert_string_indices_to_pymol_id_indices,
     get_program_type_from_file,
     increment_numbers,
+    load_molecules_from_paths,
     match_outfile_pattern,
     remove_keyword,
 )
@@ -239,3 +240,30 @@ class TestConvertStringIndicesToPymolIdIndices:
         """Test whitespace-only string raises error."""
         with pytest.raises(ValueError):
             convert_string_indices_to_pymol_id_indices("   ")
+
+
+class TestLoadMoleculesFromPaths:
+    """Tests for the load_molecules_from_paths function."""
+
+    def test_load_with_none_index(self, gaussian_singlet_opt_outfile):
+        """Test loading molecules with None index defaults to '-1'."""
+        # This test ensures that index=None doesn't cause a TypeError
+        molecules = load_molecules_from_paths(
+            [gaussian_singlet_opt_outfile],
+            index=None,
+            add_index_suffix_for_single=False,
+            check_exists=True
+        )
+        assert len(molecules) > 0
+        assert all(mol is not None for mol in molecules)
+
+    def test_load_with_explicit_index(self, gaussian_singlet_opt_outfile):
+        """Test loading molecules with explicit index."""
+        molecules = load_molecules_from_paths(
+            [gaussian_singlet_opt_outfile],
+            index="-1",
+            add_index_suffix_for_single=False,
+            check_exists=True
+        )
+        assert len(molecules) > 0
+        assert all(mol is not None for mol in molecules)
