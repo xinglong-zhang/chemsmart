@@ -252,7 +252,7 @@ class TestLoadMoleculesFromPaths:
             [gaussian_singlet_opt_outfile],
             index=None,
             add_index_suffix_for_single=False,
-            check_exists=True
+            check_exists=True,
         )
         assert len(molecules) > 0
         assert all(mol is not None for mol in molecules)
@@ -263,7 +263,7 @@ class TestLoadMoleculesFromPaths:
             [gaussian_singlet_opt_outfile],
             index="-1",
             add_index_suffix_for_single=False,
-            check_exists=True
+            check_exists=True,
         )
         assert len(molecules) > 0
         assert all(mol is not None for mol in molecules)
