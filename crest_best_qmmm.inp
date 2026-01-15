@@ -1,0 +1,5 @@
+!QM/AM1
+# Number of processors
+%pal nprocs 12 end
+# Memory per core
+%maxcore 2500

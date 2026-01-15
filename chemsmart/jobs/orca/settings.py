@@ -571,11 +571,12 @@ class ORCAJobSettings(MolecularJobSettings):
             self, "jobtype", None
         )
         is_qmmm = False
-        if job_type_val:
+        if job_type_val and (
+            "qm" in str(job_type_val).lower()
+            and "mm" in str(job_type_val).lower()
+        ):
             try:
-                is_qmmm = str(job_type_val).lower().startswith("qmmm") or (
-                    "qmmm" in str(job_type_val).lower()
-                )
+                is_qmmm = True
             except Exception:
                 is_qmmm = False
 
@@ -1549,8 +1550,11 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                 )
 
         # Add force field for specific job types
+        # assert (
+        #         self.low_level_force_field is not None
+        # ), f"Force field file missing for {self.jobtype} job!"
         if self.jobtype and self.jobtype.upper() in [
-            "QM/MM",
+            "QMMM" "QM/MM",
             "QM/QM2/MM",
             "IONIC-CRYSTAL-QMMM",
         ]:
