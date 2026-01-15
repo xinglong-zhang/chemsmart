@@ -133,6 +133,10 @@ class MoleculeGrouper(ABC):
         self.molecules = molecules
         self.num_procs = int(max(1, num_procs))
 
+        # Cache for avoiding repeated grouping calculations
+        self._cached_groups = None
+        self._cached_group_indices = None
+
         self._validate_inputs()
 
     def _validate_inputs(self) -> None:
@@ -183,7 +187,25 @@ class MoleculeGrouper(ABC):
         """
         import os
 
-        groups, group_indices = self.group()
+        # Use cached results if available, otherwise compute and cache
+        if (
+            self._cached_groups is not None
+            and self._cached_group_indices is not None
+        ):
+            print(f"[{self.__class__.__name__}] Using cached grouping results")
+            groups, group_indices = (
+                self._cached_groups,
+                self._cached_group_indices,
+            )
+        else:
+            print(
+                f"[{self.__class__.__name__}] Computing groups for unique method"
+            )
+            groups, group_indices = self.group()
+            # Cache the results
+            self._cached_groups = groups
+            self._cached_group_indices = group_indices
+
         unique_molecules = []
 
         # Create dedicated subfolder for XYZ files
@@ -286,7 +308,8 @@ class RMSDGrouper(MoleculeGrouper):
         threshold=None,  # RMSD threshold for grouping
         num_procs: int = 1,
         align_molecules: bool = True,
-        ignore_hydrogens: bool = False,  # Option to ignore H atoms for grouping
+        ignore_hydrogens: bool = False,
+        **kwargs,  # Option to ignore H atoms for grouping
     ):
         """
         Initialize RMSD-based molecular grouper.
@@ -345,7 +368,7 @@ class RMSDGrouper(MoleculeGrouper):
 
         Computes pairwise RMSD values between all molecules and groups
         those within the specified threshold using connected components
-        clustering.
+        clustering. Automatically saves RMSD matrix to group_result folder.
 
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
@@ -354,12 +377,42 @@ class RMSDGrouper(MoleculeGrouper):
         """
         n = len(self.molecules)
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        total_pairs = len(indices)
 
-        # Use map instead of imap_unordered for better parallelism
-        with multiprocessing.Pool(self.num_procs) as pool:
-            rmsd_values = pool.map(self._calculate_rmsd, indices)
+        print(
+            f"[{self.__class__.__name__}] Starting calculation for {n} molecules ({total_pairs} pairs)"
+        )
 
-        # Build adjacency matrix
+        # For real-time output, calculate one by one instead of using multiprocessing
+        rmsd_values = []
+        for idx, (i, j) in enumerate(indices):
+            rmsd = self._calculate_rmsd((i, j))
+            rmsd_values.append(rmsd)
+            print(
+                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, RMSD= {rmsd:.6f}"
+            )
+
+        # Build full RMSD matrix for output
+        rmsd_matrix = np.zeros((n, n))
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            rmsd_matrix[i, j] = rmsd_matrix[j, i] = rmsd
+
+        # Save RMSD matrix to group_result folder
+        import os
+
+        output_dir = "group_result"
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Create filename based on grouper type and threshold
+        matrix_filename = os.path.join(
+            output_dir,
+            f"{self.__class__.__name__}_rmsd_matrix_t{self.threshold}.txt",
+        )
+
+        # Save full matrix
+        self._save_rmsd_matrix(rmsd_matrix, matrix_filename)
+
+        # Build adjacency matrix for clustering
         adj_matrix = np.zeros((n, n), dtype=bool)
         for (i, j), rmsd in zip(indices, rmsd_values):
             if rmsd < self.threshold:
@@ -378,6 +431,10 @@ class RMSDGrouper(MoleculeGrouper):
             list(np.where(labels == label)[0]) for label in unique_labels
         ]
 
+        # Cache the results to avoid recomputation
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+
         return groups, index_groups
 
     def __repr__(self):
@@ -386,6 +443,126 @@ class RMSDGrouper(MoleculeGrouper):
             f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
             f"ignore_hydrogens={self.ignore_hydrogens})"
         )
+
+    def calculate_full_rmsd_matrix(
+        self, output_file: Optional[str] = None
+    ) -> np.ndarray:
+        """
+        Calculate the full RMSD matrix for all molecule pairs.
+
+        Args:
+            output_file (str, optional): Path to save RMSD matrix as text file
+
+        Returns:
+            np.ndarray: Symmetric RMSD matrix (n x n)
+        """
+        n = len(self.molecules)
+        rmsd_matrix = np.zeros((n, n))
+
+        logger.info(f"Calculating full RMSD matrix for {n} molecules")
+
+        # Calculate upper triangular matrix (symmetric)
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+
+        # Use multiprocessing for efficiency
+        with multiprocessing.Pool(self.num_procs) as pool:
+            rmsd_values = pool.map(self._calculate_rmsd, indices)
+
+        # Fill the matrix
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            rmsd_matrix[i, j] = rmsd_matrix[j, i] = rmsd
+
+        # Output results to console
+        print(f"\nFull RMSD Matrix ({n}x{n}):")
+        print("=" * 60)
+
+        # Print header
+        print(f"{'':>6}", end="")
+        for j in range(n):
+            print(f"{j:>8}", end="")
+        print()
+
+        # Print matrix rows
+        for i in range(n):
+            print(f"{i:>6}", end="")
+            for j in range(n):
+                if np.isinf(rmsd_matrix[i, j]):
+                    print(f"{'∞':>8}", end="")
+                else:
+                    print(f"{rmsd_matrix[i, j]:>8.3f}", end="")
+            print()
+
+        # Save to file if requested
+        if output_file:
+            import os
+
+            # Create directory if it doesn't exist
+            os.makedirs(
+                (
+                    os.path.dirname(output_file)
+                    if os.path.dirname(output_file)
+                    else "."
+                ),
+                exist_ok=True,
+            )
+
+            with open(output_file, "w") as f:
+                f.write(f"Full RMSD Matrix ({n}x{n})\n")
+                f.write("=" * 80 + "\n")
+                f.write("Values in Angstroms (Å)\n")
+                f.write("∞ indicates non-comparable molecules\n")
+                f.write("-" * 80 + "\n\n")
+
+                # Write header
+                f.write(f"{'Mol':>6}")
+                for j in range(n):
+                    f.write(f"{j:>10}")
+                f.write("\n")
+                f.write("-" * 80 + "\n")
+
+                # Write matrix
+                for i in range(n):
+                    f.write(f"{i:>6}")
+                    for j in range(n):
+                        if np.isinf(rmsd_matrix[i, j]):
+                            f.write(f"{'∞':>10}")
+                        else:
+                            f.write(f"{rmsd_matrix[i, j]:>10.4f}")
+                    f.write("\n")
+
+            logger.info(f"RMSD matrix saved to {output_file}")
+
+        return rmsd_matrix
+
+    def _save_rmsd_matrix(self, rmsd_matrix: np.ndarray, filename: str):
+        """Save RMSD matrix to file."""
+        n = rmsd_matrix.shape[0]
+        with open(filename, "w") as f:
+            f.write(
+                f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}\n"
+            )
+            f.write(f"Threshold: {self.threshold} Å\n")
+            f.write("=" * 80 + "\n")
+            f.write("Values in Angstroms (Å)\n")
+            f.write("∞ indicates non-comparable molecules\n")
+            f.write("-" * 80 + "\n\n")
+
+            # Write header
+            f.write(f"{'Mol':>6}")
+            for j in range(n):
+                f.write(f"{j:>10}")
+            f.write("\n")
+            f.write("-" * 80 + "\n")
+
+            # Write matrix
+            for i in range(n):
+                f.write(f"{i:>6}")
+                for j in range(n):
+                    if np.isinf(rmsd_matrix[i, j]):
+                        f.write(f"{'∞':>10}")
+                    else:
+                        f.write(f"{rmsd_matrix[i, j]:>10.4f}")
+                f.write("\n")
 
 
 class BasicRMSDGrouper(RMSDGrouper):
@@ -443,6 +620,7 @@ class HungarianRMSDGrouper(RMSDGrouper):
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
+        **kwargs,
     ):
         """
         Initialize Hungarian RMSD grouper.
@@ -641,42 +819,45 @@ class SpyRMSDGrouper(RMSDGrouper):
         node_match = isomorphism.categorical_node_match("element", 0)
         GM = isomorphism.GraphMatcher(G1, G2, node_match=node_match)
 
-        # Try all possible isomorphisms and find minimum RMSD
-        min_rmsd = np.inf
-        best_isomorphism = None
-
-        if GM.is_isomorphic():
-            for mapping in GM.isomorphisms_iter():
-                # Create index arrays for this mapping
-                idx1 = list(range(len(symbols1)))
-                idx2 = [mapping[i] for i in range(len(symbols2))]
-
-                # Reorder pos2 according to this mapping
-                reordered_pos2 = np.array(
-                    [pos2[idx2[i]] for i in range(len(pos2))]
-                )
-
-                # Calculate RMSD for this mapping
-                if self.align_molecules:
-                    _, _, _, _, rmsd = kabsch_align(pos1, reordered_pos2)
-                else:
-                    diff = pos1 - reordered_pos2
-                    rmsd = np.sqrt(np.mean(np.sum(diff**2, axis=1)))
-
-                if rmsd < min_rmsd:
-                    min_rmsd = rmsd
-                    best_isomorphism = (idx1, idx2)
-
-            # Store the best isomorphism if molecule indices provided
-            if mol_idx_pair:
-                self.best_isomorphisms[mol_idx_pair] = best_isomorphism
-
-            return min_rmsd
-        else:
+        if not GM.is_isomorphic():
             # If not isomorphic, store None and return infinity
             if mol_idx_pair:
                 self.best_isomorphisms[mol_idx_pair] = None
             return np.inf
+
+        # Get all isomorphisms at once
+        all_isomorphisms = list(GM.isomorphisms_iter())
+
+        # Find minimum RMSD among all isomorphisms
+        min_rmsd = np.inf
+        best_isomorphism = None
+
+        for mapping in all_isomorphisms:
+            # Create index arrays for this mapping
+            idx1 = list(range(len(symbols1)))
+            idx2 = [mapping[i] for i in range(len(symbols2))]
+
+            # Reorder pos2 according to this mapping
+            reordered_pos2 = np.array(
+                [pos2[idx2[i]] for i in range(len(pos2))]
+            )
+
+            # Calculate RMSD for this mapping
+            if self.align_molecules:
+                _, _, _, _, rmsd = kabsch_align(pos1, reordered_pos2)
+            else:
+                diff = pos1 - reordered_pos2
+                rmsd = np.sqrt(np.mean(np.sum(diff**2, axis=1)))
+
+            if rmsd < min_rmsd:
+                min_rmsd = rmsd
+                best_isomorphism = (idx1, idx2)
+
+        # Store the best isomorphism if molecule indices provided
+        if mol_idx_pair:
+            self.best_isomorphisms[mol_idx_pair] = best_isomorphism
+
+        return min_rmsd
 
     def _calculate_rmsd(self, idx_pair):
         """Calculate RMSD using symmetry correction with graph isomorphism.
@@ -987,6 +1168,10 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
             mask = labels == label
             groups.append([self.molecules[i] for i in np.where(mask)[0]])
             index_groups.append(list(np.where(mask)[0]))
+
+        # Cache the results to avoid recomputation
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
 
         return groups, index_groups
 
@@ -1768,6 +1953,10 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
             index_groups.append(matches)
             indices = [i for i in indices if i not in matches]
 
+        # Cache the results to avoid recomputation
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+
         return groups, index_groups
 
     def _check_isomorphism(self, mol1: Molecule, mol2: Molecule) -> bool:
@@ -1961,6 +2150,10 @@ class ConnectivityGrouper(MoleculeGrouper):
         index_groups = [
             list(np.where(labels == label)[0]) for label in unique_labels
         ]
+
+        # Cache the results to avoid recomputation
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
 
         return groups, index_groups
 
