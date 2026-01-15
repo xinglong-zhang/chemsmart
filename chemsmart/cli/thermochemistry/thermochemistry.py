@@ -286,7 +286,7 @@ def thermochemistry(
                 logger.debug(f"Job settings: {job_settings.__dict__}")
         elif filetype.lower() in {"gaussian", "orca"}:
             files = find_output_files_in_directory(
-                directory=directory, program=filetype.lower()
+                directory=directory, program=filetype.lower(), recursive=False
             )
             for file in files:
                 job = ThermochemistryJob.from_filename(

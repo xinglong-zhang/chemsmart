@@ -2,15 +2,27 @@ import logging
 from functools import cached_property
 
 import numpy as np
-from ase import units
 
-from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.mixins import FileMixin, XTBFileMixin
 
 logger = logging.getLogger(__name__)
 
 
 class XTBMainOut(XTBFileMixin):
+    """
+    Parse xTB main output file (*.out) containing calculation results.
+
+    This is the primary output file from xTB calculations, containing:
+    - Setup information (charge, multiplicity, basis functions, etc.)
+    - SCF convergence data
+    - Molecular properties (dipole, quadrupole moments)
+    - Thermodynamic properties (if frequency calculation)
+    - Optimization trajectory (if geometry optimization)
+    - Timing information
+
+    Args:
+        filename (str): Path to the xTB output file (e.g., xtb.out, water_ohess.out)
+    """
 
     def __init__(self, filename):
         self.filename = filename
@@ -1074,139 +1086,268 @@ class XTBMainOut(XTBFileMixin):
         return None
 
 
-class XTBEngradFile(FileMixin):
+class XTBChargesFile(FileMixin):
     """
-    Class for parsing xTB energy and gradient files (.engrad).
+    Parse xTB charges file containing atomic partial charges.
+
+    File format:
+        -0.56472698
+         0.28236349
+         0.28236349
+
+    Each line contains one floating point number representing the partial charge
+    of an atom, in the order atoms appear in the structure.
 
     Args:
-        filename: Path to the xTB .engrad file
+        filename (str): Path to the charges file
     """
 
     def __init__(self, filename):
         self.filename = filename
 
     @cached_property
-    def num_atoms(self):
-        """
-        Obtain the number of atoms in the system.
-        """
-        return self._get_num_atoms()
+    def partial_charges(self):
+        """Get atomic partial charges from the file."""
+        charges = []
+        for line in self.contents:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                charges.append(float(line))
+            except ValueError:
+                continue
+        return charges if charges else None
 
-    def _get_num_atoms(self):
-        """
-        Get the number of atoms from the .engrad file.
-        """
-        for i, line in enumerate(self.contents):
-            if "Number of atoms" in line:
-                # check following lines for the number
-                for content in self.contents[i + 1 : i + 4]:
-                    try:
-                        return int(content.split()[0])
-                    except (ValueError, IndexError):
-                        pass
-        return None
-
-    @cached_property
-    def energy(self):
-        """
-        Obtain the energy in eV.
-        """
-        energy_hartree = self._get_energy()
-        if energy_hartree is not None:
-            return energy_hartree * units.Hartree
-        return None
-
-    def _get_energy(self):
-        """
-        Get the total energy from the .engrad file, in Hartree.
-        """
-        for i, line in enumerate(self.contents):
-            if "current total energy" in line:
-                # check following lines for the energy value
-                for content in self.contents[i + 1 : i + 4]:
-                    try:
-                        energy_in_hartree = float(content.split()[0])
-                        return energy_in_hartree
-                    except (ValueError, IndexError):
-                        pass
-        return None
-
-    @cached_property
-    def force(self):
-        """
-        Obtain forces on the atoms in eV/Å.
-        """
-        grad = self._get_gradient()
-        if grad is not None and grad.shape == (self.num_atoms, 3):
-            # Convert gradient to forces: F = -grad
-            # Convert units: Hartree/Bohr -> eV/Angstrom
-            forces = -grad * units.Hartree / units.Bohr
-            return forces
-        return None
-
-    def _get_gradient(self):
-        """
-        Get the gradient from the .engrad file, in Hartree/Bohr.
-        """
-        if self.num_atoms is None:
-            return None
-
-        for i, line in enumerate(self.contents):
-            if "current gradient" in line:
-                # Read 3N gradient components
-                grad_data = []
-                for content in self.contents[
-                    i + 1 : i + 3 * self.num_atoms + 4
-                ]:
-                    try:
-                        grad_value = float(
-                            content.split()[0]
-                        )  # in Hartree/Bohr
-                        grad_data.append(grad_value)
-                    except (ValueError, IndexError):
-                        pass
-
-                # Validate we have the correct number of gradient components
-                if len(grad_data) == 3 * self.num_atoms:
-                    gradient_array = np.array(grad_data).reshape(
-                        (self.num_atoms, 3)
-                    )
-                    return gradient_array
+    @property
+    def total_charge(self):
+        """Calculate total molecular charge from partial charges."""
+        if self.partial_charges is not None:
+            return sum(self.partial_charges)
         return None
 
 
-class XTBOptLog(XYZFile):
+class XTBEnergyFile(FileMixin):
     """
-    Class for parsing xTB optimization log file (xtbopt.log).
+    Parse xTB energy file containing total energies from calculation.
 
-    This file contains the optimization trajectory in XYZ format.
+    File format::
+
+        $energy
+             1    -5.07054444346    -5.07054444346    -5.07054444346
+        $end
+
+    The file uses Turbomole-style format with $energy/$end delimiters.
+    Each line contains: step_number, energy1, energy2, energy3 (all in Hartree).
+    For single-point calculations, all three energy values are identical.
 
     Args:
-        filename: Path to xtbopt.log file
+        filename (str): Path to the energy file
     """
 
-    @property
-    def molecules(self):
-        xyz = XYZFile(filename=self.filename)
-        return xyz.get_molecules(index=":", return_list=True)
+    def __init__(self, filename):
+        self.filename = filename
 
-    @property
-    def orientations(self):
-        """
-        Extract all Cartesian coordinate blocks from the trajectory.
-        """
-        return [mol.positions for mol in self.molecules]
+    # TODO: Add parsing methods for energy.
 
-    @property
-    def symbols(self):
-        """
-        Get atomic symbols from the first structure.
-        """
-        return self.molecules[0].symbols
 
-    @property
-    def num_structures(self):
-        """
-        Get the number of structures in the trajectory.
-        """
-        return len(self.molecules)
+class XTBEngradFile(FileMixin):
+    """
+    Parse xTB energy and gradient file (.engrad).
+
+    File format::
+
+        #
+        # Number of atoms
+        #
+                 3
+        #
+        # The current total energy in Eh
+        #
+             -5.070544443465
+        #
+        # The current gradient in Eh/bohr
+        #
+               0.000000000130
+              -0.000000000000
+               0.000057137032
+              -0.000019065816
+              ...
+        #
+        # The atomic numbers and current coordinates in Bohr
+        #
+           8    -0.0000025   -0.0000013   -0.7167751
+           1     1.4592625   -0.0000070    0.3583826
+           1    -1.4592600    0.0000083    0.3583928
+
+    The file contains:
+    - Number of atoms
+    - Total energy in Hartree (Eh)
+    - Gradient components (3N values) in Eh/bohr
+    - Atomic numbers and Cartesian coordinates in Bohr
+
+    Args:
+        filename (str): Path to the .engrad file
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    # TODO: Add parsing methods for energy and gradient.
+
+
+class XTBG98File(FileMixin):
+    """
+    Parse xTB Gaussian 98 format vibrational analysis output (g98.out).
+
+    This file contains vibrational frequencies and normal modes in Gaussian 98
+    format, compatible with visualization programs like GaussView, Molden, etc.
+
+    File format::
+
+        Entering Gaussian System
+        *********************************************
+        Gaussian 98:
+        frequency output generated by the xtb code
+        *********************************************
+                             Standard orientation:
+        --------------------------------------------------------------------
+         Center     Atomic     Atomic              Coordinates (Angstroms)
+         Number     Number      Type              X           Y           Z
+        --------------------------------------------------------------------
+           1          8             0       -0.000001   -0.000001   -0.379301
+           2          1             0        0.772209   -0.000004    0.189648
+           3          1             0       -0.772207    0.000004    0.189653
+        --------------------------------------------------------------------
+        ...
+        Harmonic frequencies (cm**-1), IR intensities (km*mol⁻¹),
+        ...
+                             1                      2                      3
+                               a                      a                      a
+        Frequencies --  1539.3017              3643.5149              3651.7072
+        Red. masses --     2.1457                 1.5477                 2.1398
+        Frc consts  --     0.0000                 0.0000                 0.0000
+        IR Inten    --   133.2648                 6.7667                16.6406
+        ...
+        Atom AN      X      Y      Z        X      Y      Z        X      Y      Z
+          1   8     0.00   0.00   0.28    -0.00  -0.00  -0.19     0.27  -0.00  -0.00
+          2   1     0.40  -0.00  -0.55     0.58  -0.00   0.38    -0.55   0.00  -0.40
+          3   1    -0.40   0.00  -0.55    -0.58   0.00   0.38    -0.55   0.00   0.40
+
+    Args:
+        filename (str): Path to the g98.out file
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    # TODO: Add parsing methods for frequencies, normal modes, etc.
+
+
+class XTBGradientFile(FileMixin):
+    """
+    Parse XTB gradient file containing energy gradient information.
+
+    File format:
+        $grad
+          cycle =      1    SCF energy =    -5.07054444346   |dE/dxyz| =  0.000075
+           -0.00000250190431     -0.00000125099553     -0.71677514611431      O
+            1.45926248160647     -0.00000701517601      0.35838257371508      H
+           -1.45925997970150      0.00000826617187      0.35839276137184      H
+           1.2982149851656E-10  -3.3293838441823E-18   5.7137032470948E-05
+          -1.9065815509550E-05  -1.9010909790127E-17  -2.8568564065665E-05
+           1.9065685688053E-05   2.2340293634309E-17  -2.8568468405277E-05
+        $end
+
+    Contains coordinates and gradient for each atom.
+
+    Args:
+        filename (str): Path to the gradient file
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    # TODO: Add parsing methods for gradient.
+
+
+class XTBHessianFile(FileMixin):
+    """
+    Parse xTB Hessian file containing the Cartesian Hessian matrix.
+
+    File format::
+
+        $hessian
+                0.6095802844  -0.0000031918  -0.0000007369  -0.3047915657   0.0000012039
+               -0.2245646512  -0.3047887187   0.0000019878   0.2245653880
+               -0.0000031918   0.0000000000   0.0000006951   0.0000012763  -0.0000000000
+                0.0000008283   0.0000019155  -0.0000000000  -0.0000015234
+               ...
+
+    The Hessian matrix (second derivatives of energy with respect to Cartesian
+    coordinates) is written as a continuous stream of floating point numbers
+    in Hartree/Bohr². The matrix is symmetric with size (3N × 3N) where N is
+    the number of atoms.
+
+    Args:
+        filename (str): Path to the hessian file
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    # TODO: Add parsing methods for hessian.
+
+
+class XTBVibSpectrumFile(FileMixin):
+    """
+    Parse xTB vibrational spectrum file containing frequencies and IR intensities.
+
+    File format::
+
+        $vibrational spectrum
+        #  mode     symmetry     wave number   IR intensity    selection rules
+        #                         cm**(-1)      (km*mol⁻¹)        IR
+             1                      -0.00         0.00000          -
+             2                      -0.00         0.00000          -
+             3                       0.00         0.00000          -
+             4                       0.00         0.00000          -
+             5                       0.00         0.00000          -
+             6                       0.00         0.00000          -
+             7        a           1539.30       133.26477         YES
+             8        a           3643.51         6.76672         YES
+             9        a           3651.71        16.64059         YES
+        $end
+
+    The first 6 modes (5 for linear molecules) are translations and rotations
+    with zero frequency. Real vibrational modes have positive frequencies.
+
+    Args:
+        filename (str): Path to the vibspectrum file
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    # TODO: Add parsing methods for vibrational spectrum.
+
+
+class XTBWibergBondOrderFile(FileMixin):
+    """
+    Parse XTB Wiberg bond order (wbo) file.
+
+    File format (simple, no header):
+        1           2  0.92021379026732564
+        1           3  0.92021379039282269
+
+    Each line contains:
+        atom1_index  atom2_index  bond_order_value
+
+    Args:
+        filename (str): Path to the wbo file
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    # TODO: Add parsing methods for bond order.
