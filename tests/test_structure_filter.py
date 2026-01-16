@@ -20,6 +20,14 @@ from chemsmart.scripts.structure_filter import entry_point
 class TestStructureFilterAutoDetection:
     """Test suite for automatic file type detection in structure_filter."""
 
+    @staticmethod
+    def assert_error_contains(result, expected_message):
+        """Helper method to check if error message appears in result."""
+        assert result.exit_code != 0
+        assert expected_message in result.output or (
+            result.exception and expected_message in str(result.exception)
+        )
+
     @pytest.fixture
     def temp_dir(self):
         """Create a temporary directory for test files."""
@@ -93,11 +101,7 @@ class TestStructureFilterAutoDetection:
             entry_point,
             ["-d", temp_dir, "-g", "rmsd"],
         )
-        assert result.exit_code != 0
-        assert "No .log or .out files found" in result.output or (
-            result.exception
-            and "No .log or .out files found" in str(result.exception)
-        )
+        self.assert_error_contains(result, "No .log or .out files found")
 
     def test_auto_detect_unknown_file_type(self, temp_dir, unknown_file):
         """Test error handling for unknown file types."""
@@ -106,11 +110,7 @@ class TestStructureFilterAutoDetection:
             entry_point,
             ["-d", temp_dir, "-g", "rmsd"],
         )
-        assert result.exit_code != 0
-        assert "Could not determine file type" in result.output or (
-            result.exception
-            and "Could not determine file type" in str(result.exception)
-        )
+        self.assert_error_contains(result, "Could not determine file type")
 
     def test_auto_detect_unsupported_program(self, temp_dir, xtb_file):
         """Test error handling for unsupported programs like xTB."""
@@ -119,10 +119,8 @@ class TestStructureFilterAutoDetection:
             entry_point,
             ["-d", temp_dir, "-g", "rmsd"],
         )
-        assert result.exit_code != 0
-        assert "only Gaussian and ORCA are supported" in result.output or (
-            result.exception
-            and "only Gaussian and ORCA are supported" in str(result.exception)
+        self.assert_error_contains(
+            result, "only Gaussian and ORCA are supported"
         )
 
     def test_manual_type_specification(self, temp_dir, gaussian_log_file):
@@ -146,8 +144,6 @@ class TestStructureFilterAutoDetection:
             entry_point,
             ["-d", temp_dir, "-t", "xyz", "-g", "rmsd"],
         )
-        assert result.exit_code != 0
-        assert "No files with extension '.xyz' found" in result.output or (
-            result.exception
-            and "No files with extension '.xyz' found" in str(result.exception)
+        self.assert_error_contains(
+            result, "No files with extension '.xyz' found"
         )

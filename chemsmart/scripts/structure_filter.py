@@ -199,7 +199,9 @@ def entry_point(
     f = open(output_file, "w")
 
     f.write(f"Initial number of structures to filter: {len(molecules)}\n")
-    f.write(f"Final unique number of structures to filter: {len(molecules)}\n")
+    f.write(
+        f"Final unique number of structures to filter: {len(unique_structures)}\n"
+    )
 
     # Convert to 1-indexed to be consistent with conformer naming
     group_indices_one = []
