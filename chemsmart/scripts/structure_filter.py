@@ -5,6 +5,10 @@ Molecular structure filtering script.
 This script filters and groups molecular structures based on various
 criteria such as similarity, energy, or structural features, helping
 to organize and analyze large sets of molecular conformations.
+
+The script supports automatic file type detection based on file content
+using Gaussian or ORCA specifications, eliminating the need for manual
+file type specification.
 """
 
 import glob
@@ -15,6 +19,7 @@ import click
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.grouper import StructureGrouperFactory
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.logger import create_logger
 from chemsmart.utils.utils import extract_number
 
@@ -35,7 +40,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
     "--type",
     type=str,
     default=None,
-    help="Type of files to filter (e.g., 'log', 'out').",
+    help="Type of files to filter (e.g., 'log', 'out'). "
+    "If not provided, the script will attempt to auto-detect the file type "
+    "based on file content for Gaussian and ORCA output files.",
 )
 @click.option(
     "-g",
@@ -76,20 +83,81 @@ def entry_point(
 ):
     """
     Filter molecular structures to remove duplicates.
+
+    This script automatically detects file types based on content if not
+    explicitly provided. Supports Gaussian (.log, .out) and ORCA (.out)
+    output files.
     """
     create_logger()
     directory = os.path.abspath(directory)
 
-    # Set default file type if not provided
+    # Auto-detect file type if not provided
     if type is None:
         logger.info(
-            "Type of files is not provided! Assuming .log file type "
-            "for filtering."
+            "File type not provided. Attempting to auto-detect from directory contents..."
         )
-        type = "log"
+        try:
+            # Get all potential output files
+            candidate_files = []
+            for ext in ["*.log", "*.out"]:
+                candidate_files.extend(glob.glob(f"{directory}/{ext}"))
+
+            if not candidate_files:
+                raise FileNotFoundError(
+                    f"No .log or .out files found in directory: {directory}"
+                )
+
+            # Try to detect file type from the first file
+            first_file = candidate_files[0]
+            program = get_program_type_from_file(first_file)
+
+            if program == "gaussian":
+                # Determine file extension based on the first file
+                type = os.path.splitext(first_file)[1][
+                    1:
+                ]  # Remove leading dot
+                logger.info(
+                    f"Auto-detected Gaussian output files with extension '.{type}'"
+                )
+            elif program == "orca":
+                type = "out"
+                logger.info(
+                    "Auto-detected ORCA output files with extension '.out'"
+                )
+            elif program == "unknown":
+                raise ValueError(
+                    f"Could not determine file type for: {first_file}. "
+                    "The file does not appear to be a supported Gaussian or ORCA output file. "
+                    "Please specify the file type manually using the --type option."
+                )
+            else:
+                # Program detected but not Gaussian or ORCA
+                raise ValueError(
+                    f"Detected {program} output file, but only Gaussian and ORCA "
+                    "are supported for structure filtering. "
+                    "Please specify the file type manually using the --type option."
+                )
+
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            raise
+        except ValueError as e:
+            logger.error(str(e))
+            raise
+        except Exception as e:
+            logger.error(
+                f"Error during file type auto-detection: {e}. "
+                "Please specify the file type manually using the --type option."
+            )
+            raise
 
     # Obtain all structures from files in the directory
     filenames = glob.glob(f"{directory}/*.{type}")
+
+    if not filenames:
+        error_msg = f"No files with extension '.{type}' found in directory: {directory}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
 
     # Sort filenames based on numeric part
     sorted_filenames = sorted(filenames, key=extract_number)
@@ -98,7 +166,12 @@ def entry_point(
     base_filename = os.path.basename(sorted_filenames[0])[:-7]
 
     # Load molecular structures from files
-    molecules = [Molecule.from_filepath(file) for file in sorted_filenames]
+    logger.info(f"Loading {len(sorted_filenames)} molecular structures...")
+    try:
+        molecules = [Molecule.from_filepath(file) for file in sorted_filenames]
+    except Exception as e:
+        logger.error(f"Error loading molecular structures: {e}")
+        raise
 
     # Create grouper based on the specified grouping strategy
     try:
@@ -126,7 +199,9 @@ def entry_point(
     f = open(output_file, "w")
 
     f.write(f"Initial number of structures to filter: {len(molecules)}\n")
-    f.write(f"Final unique number of structures to filter: {len(molecules)}\n")
+    f.write(
+        f"Final unique number of structures to filter: {len(unique_structures)}\n"
+    )
 
     # Convert to 1-indexed to be consistent with conformer naming
     group_indices_one = []
