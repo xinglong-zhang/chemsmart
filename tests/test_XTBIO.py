@@ -1,6 +1,9 @@
 import os.path
 
-from chemsmart.io.xtb.file import XTBChargesFile, XTBMainOut
+import numpy as np
+
+from chemsmart.io.xtb.file import XTBChargesFile, XTBEnergyFile, XTBMainOut
+from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
 
@@ -92,7 +95,7 @@ class TestXTBInput:
 class TestXTBMainOut:
     """Tests for XTBMainOut class."""
 
-    def test_main_out_opt(self, xtb_co2_outfolder):
+    def test_main_out_co2(self, xtb_co2_outfolder):
         """Test parsing main output from CO2 ohess calculation."""
         xtb_main_out_file = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
         assert os.path.exists(xtb_main_out_file)
@@ -103,6 +106,8 @@ class TestXTBMainOut:
             co2_main_out.route_string
             == "xtb co2.xyz --ohess vtight --grad --copy"
         )
+        assert not co2_main_out.solvent_on
+        # GFN2-xTB Setup
         assert co2_main_out.num_basis_functions == 12
         assert co2_main_out.num_atomic_orbital == 12
         assert co2_main_out.num_shells == 6
@@ -121,6 +126,7 @@ class TestXTBMainOut:
         assert co2_main_out.broyden_damping == 0.4
         assert co2_main_out.net_charge == 0
         assert co2_main_out.unpaired_electrons == 0
+        # Geometry Optimization Setup
         assert co2_main_out.optimization_level == "verytight"
         assert co2_main_out.max_optcycles == 200
         assert co2_main_out.anc_microcycles == 20
@@ -134,110 +140,142 @@ class TestXTBMainOut:
         assert co2_main_out.low_frequency_cutoff == 0.01
         assert co2_main_out.max_frequency_cutoff == 5.0
         assert co2_main_out.s6_in_model_hessian == 20.0
+        # Geometry Optimization Results
         assert co2_main_out.geometry_optimization_converged
-
-        # assert xtb_output.homo_energy == -12.1467
-        # assert xtb_output.lumo_energy == 2.2442
-        # assert xtb_output.c6_coefficient == 44.535326
-        # assert xtb_output.c8_coefficient == 795.739567
-        # assert xtb_output.alpha_coefficient == 9.429122
-        # assert xtb_output.total_energy_without_gsasa_hb is None
-        # assert xtb_output.scc_energy == -5.104925504312
-        # assert xtb_output.isotropic_es == 0.031459394051
-        # assert xtb_output.anisotropic_es == 0.000394673573
-        # assert xtb_output.anisotropic_xc == -0.000882256681
-        # assert xtb_output.dispersion_energy == -0.000141082937
-        # assert xtb_output.solvation_energy_gsolv is None
-        # assert xtb_output.electronic_solvation_energy_gelec is None
-        # assert xtb_output.surface_area_solvation_energy_gsasa is None
-        # assert xtb_output.hydrogen_bonding_solvation_energy_ghb is None
-        # assert xtb_output.empirical_shift_correction_gshift is None
-        # assert xtb_output.repulsion_energy == 0.034381060848
-        # assert xtb_output.additional_restraining_energy == 0.0
-        # assert not xtb_output.numfreq
-        # assert xtb_output.hessian_step_length is None
-        # assert xtb_output.scc_accuracy is None
-        # assert xtb_output.hessian_scale_factor is None
-        # assert xtb_output.rms_gradient is None
-        # assert xtb_output.total_charge == 0
-        # assert np.allclose(
-        #     xtb_output.qonly_molecular_dipole, [-0.0, 0.0, 0.607]
-        # )
-        # assert np.allclose(
-        #     xtb_output.full_molecular_dipole, [-0.0, -0.0, 0.872]
-        # )
-        # assert xtb_output.total_molecular_dipole_moment == 2.217
-        # assert np.allclose(
-        #     xtb_output.qonly_molecular_quadrupole,
-        #     [[1.311, 0.0, 0.0], [0.0, -0.492, 0.0], [0.0, 0.0, -0.819]],
-        # )
-        # assert np.allclose(
-        #     xtb_output.q_dip_molecular_quadrupole,
-        #     [[1.747, 0.0, 0.0], [0.0, -0.572, 0.0], [0.0, 0.0, -1.176]],
-        # )
-        # assert np.allclose(
-        #     xtb_output.full_molecular_quadrupole,
-        #     [[1.951, 0.0, 0.0], [0.0, -0.831, 0.0], [0.0, 0.0, -1.121]],
-        # )
-        # assert xtb_output.total_energy == -5.070544443464
-        # assert xtb_output.gradient_norm == 0.000075164743
-        # assert xtb_output.fmo_gap == 14.390891673350
-        # assert xtb_output.accuracy == 1.0
-        # assert xtb_output.integral_cutoff == 25.0
-        # assert xtb_output.integral_neglect == 1e-8
-        # assert xtb_output.scf_convergence == 1.0e-6
-        # assert xtb_output.wf_convergence == 1.0e-4
-        # assert xtb_output.broyden_damping == 0.4
-        # assert xtb_output.net_charge == 0
-        # assert xtb_output.unpaired_electrons == 0
-        # assert xtb_output.optimization_level == "normal"
-        # assert xtb_output.max_optcycles == 200
-        # assert xtb_output.anc_microcycles == 20
-        # assert xtb_output.degrees_of_freedom == 3
-        # assert xtb_output.rf_solver == "davidson"
-        # assert xtb_output.write_all_intermediate_geometries
-        # assert not xtb_output.is_linear
-        # assert xtb_output.route_string == "xtb coord --opt"
-        # assert xtb_output.homo_energy == -12.1467
-        # assert xtb_output.lumo_energy == 2.2442
-        # assert xtb_output.optimization_level == "normal"
-        # assert xtb_output.degrees_of_freedom == 3
-        # assert xtb_output.optimized_structure_block == [
-        #     "$coord",
-        #     "0.00000000011942       -0.00000000000000       -0.71677520925432      o",
-        #     "1.45926122846511       -0.00000000000000        0.35838760458144      h",
-        #     "-1.45926122858453        0.00000000000000        0.35838760467288      h",
-        #     "$end",
-        #     "",
-        # ]
-        # assert xtb_output.molecular_mass == 18.0152864
-        # assert xtb_output.center_of_mass == [0.0, 0.0, -0.3156364]
-        # assert xtb_output.moments_of_inertia == [
-        #     0.5795334e00,
-        #     0.1202080e01,
-        #     0.1781614e01,
-        # ]
-        # assert xtb_output.rotational_constants == [
-        #     0.2908828e02,
-        #     0.1402372e02,
-        #     0.9462003e01,
-        # ]
-        # assert xtb_output.total_energy == -5.070544443465
-        # assert xtb_output.gradient_norm == 0.000074994303
-        # assert xtb_output.fmo_gap == 14.390898452735
-        #
-        # all_summary_blocks = xtb_output.get_all_summary_blocks()
-        # assert len(all_summary_blocks) == 2
-        # assert len(all_summary_blocks[0]) == 11
-        #
-        # assert not xtb_output.solvent_on
-        # assert xtb_output.total_energy_without_gsasa_hb is None
+        assert co2_main_out.optimized_structure_block == [
+            "3",
+            "xtb: 6.7.1 (edcfbbe)",
+            "O           -1.14365140481883        0.00000000000000        0.00000000000000",
+            "O            1.14365140481883       -0.00000000000000        0.00000000000000",
+            "C            0.00000000000000       -0.00000000000000       -0.00000000000000",
+            "",
+        ]
+        assert co2_main_out.scc_energy == -10.430605117263
+        assert co2_main_out.isotropic_es == 0.032324567807
+        assert co2_main_out.anisotropic_es == 0.003405663023
+        assert co2_main_out.anisotropic_xc == 0.000432280404
+        assert co2_main_out.dispersion_energy == -0.000687152300
+        assert co2_main_out.solvation_energy_gsolv is None
+        assert co2_main_out.electronic_solvation_energy_gelec is None
+        assert co2_main_out.surface_area_solvation_energy_gsasa is None
+        assert co2_main_out.hydrogen_bonding_solvation_energy_ghb is None
+        assert co2_main_out.empirical_shift_correction_gshift is None
+        assert co2_main_out.repulsion_energy == 0.122152828089
+        assert co2_main_out.additional_restraining_energy == 0.0
+        assert co2_main_out.total_charge == 0
+        assert co2_main_out.energies == [
+            -10.2973989,
+            -10.3084470,
+            -10.3084521,
+            -10.3084522,
+            -10.3084523,
+        ]
+        # Hessian Setup
+        assert co2_main_out.numfreq
+        assert co2_main_out.hessian_step_length == 0.00500
+        assert co2_main_out.scc_accuracy == 0.30000
+        assert co2_main_out.hessian_scale_factor == 1.00000
+        assert co2_main_out.rms_gradient == 0.00000
+        # Hessian Results
+        assert co2_main_out.homo_energy == -14.5428
+        assert co2_main_out.lumo_energy == -6.0942
+        assert co2_main_out.c6_coefficient == 174.800200
+        assert co2_main_out.c8_coefficient == 4029.884814
+        assert co2_main_out.alpha_coefficient == 19.088396
+        assert np.allclose(
+            co2_main_out.qonly_molecular_dipole, [0.0, -0.0, -0.0]
+        )
+        assert np.allclose(
+            co2_main_out.full_molecular_dipole, [0.0, 0.0, -0.0]
+        )
+        assert co2_main_out.total_molecular_dipole_moment == 0.0
+        assert np.allclose(
+            co2_main_out.qonly_molecular_quadrupole,
+            [[-2.169, 0.0, 0.0], [0.0, 1.084, -0.0], [0.0, -0.0, 1.084]],
+        )
+        assert np.allclose(
+            co2_main_out.q_dip_molecular_quadrupole,
+            [[-3.107, 0.0, 0.0], [0.0, 1.553, -0.0], [0.0, -0.0, 1.553]],
+        )
+        assert np.allclose(
+            co2_main_out.full_molecular_quadrupole,
+            [[-4.360, 0.0, 0.0], [0.0, 2.180, -0.0], [0.0, -0.0, 2.180]],
+        )
+        assert co2_main_out.molecular_mass == 44.0095457
+        assert co2_main_out.center_of_mass == [-0.0, 0.0, 0.0]
+        assert co2_main_out.moments_of_inertia == [
+            -0.3040259e-14,
+            0.4185248e02,
+            0.4185248e02,
+        ]
+        assert co2_main_out.rotational_constants == [
+            -0.5544801e16,
+            0.4027869,
+            0.4027869,
+        ]
+        assert co2_main_out.all_vibrational_frequencies == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            600.31,
+            600.31,
+            1424.78,
+            2593.07,
+        ]
+        assert co2_main_out.vibrational_frequencies == [
+            600.31,
+            600.31,
+            1424.78,
+            2593.07,
+        ]
+        assert co2_main_out.ir_intensities == [
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            68.69,
+            68.69,
+            0.00,
+        ]
+        assert co2_main_out.raman_intensities == [
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+            0.00,
+        ]
+        # Thermodynamic Setup
+        assert co2_main_out.num_frequencies == 4
+        assert co2_main_out.num_imaginary_frequencies == 0
+        assert not co2_main_out.only_rot_calc
+        assert co2_main_out.symmetry == "din"
+        assert co2_main_out.rotational_symmetry_number == 2
+        assert co2_main_out.scaling_factor == 1.0
+        assert co2_main_out.rotor_cutoff == 50.0
+        assert co2_main_out.imaginary_frequency_cutoff == -20.0
+        # Thermodynamic Results
+        assert co2_main_out.zero_point_energy == 0.011888572359
+        assert co2_main_out.grrho_without_zpve == -0.020688920356
+        assert co2_main_out.grrho_contribution == -0.008800347997
+        assert co2_main_out.total_energy_without_gsasa_hb is None
+        assert co2_main_out.total_energy == -10.308452289174
+        assert co2_main_out.total_enthalpy == -10.292932643737
+        assert co2_main_out.total_free_energy == -10.317252637172
+        assert co2_main_out.gradient_norm == 0.000000274582
+        assert co2_main_out.fmo_gap == 8.448655866329
 
 
 class TestXTBChargesFile:
     """Tests for XTBChargesFile class."""
 
-    def test_partial_charges_opt(self, xtb_co2_outfolder):
+    def test_charges_co2(self, xtb_co2_outfolder):
         """Test parsing charges from CO2 ohess calculation."""
         charges_file = os.path.join(xtb_co2_outfolder, "charges")
         assert os.path.exists(charges_file)
@@ -247,19 +285,202 @@ class TestXTBChargesFile:
             -0.23213972,
             0.46427944,
         ]
-        assert co2_charges.total_charge == 0
+        assert np.isclose(co2_charges.total_charge, 0, atol=1e-8)
 
-    def test_charges_ohess(self, xtb_water_outfolder):
-        """Test parsing charges from water ohess calculation."""
-        charges_file = os.path.join(xtb_water_outfolder, "charges")
+    def test_charges_cyclopentadienyl_anion(
+        self, xtb_cyclopentadienyl_anion_outfolder
+    ):
+        """Test parsing charges from cyclopentadienyl anion opt calculation."""
+        charges_file = os.path.join(
+            xtb_cyclopentadienyl_anion_outfolder, "charges"
+        )
         assert os.path.exists(charges_file)
-        water_charges = XTBChargesFile(charges_file)
-        assert water_charges.partial_charges == [
-            -0.56472698,
-            0.28236349,
-            0.28236349,
+        cyclopentadienyl_anion_charges = XTBChargesFile(charges_file)
+        assert cyclopentadienyl_anion_charges.partial_charges == [
+            -0.10690174,
+            -0.10686507,
+            -0.10690237,
+            -0.10686693,
+            -0.10687190,
+            -0.09313128,
+            -0.09311500,
+            -0.09310077,
+            -0.09314340,
+            -0.09310154,
         ]
-        assert water_charges.total_charge == 0
+        assert np.isclose(
+            cyclopentadienyl_anion_charges.total_charge, -1, atol=1e-8
+        )
+
+    def test_charges_p_benzyne_sp(self, xtb_p_benzyne_sp_outfolder):
+        """Test parsing charges from p-benzyne sp calculation."""
+        charges_file = os.path.join(xtb_p_benzyne_sp_outfolder, "charges")
+        assert os.path.exists(charges_file)
+        p_benzyne_sp_charges = XTBChargesFile(charges_file)
+        assert p_benzyne_sp_charges.partial_charges == [
+            -0.06012030,
+            -0.01778337,
+            -0.01766299,
+            -0.06009510,
+            -0.01770971,
+            -0.01769064,
+            0.04789461,
+            0.04763761,
+            0.04779053,
+            0.04773936,
+        ]
+        assert np.isclose(p_benzyne_sp_charges.total_charge, 0, atol=1e-8)
+
+
+class TestXTBEnergyFile:
+    """Tests for XTBEnergyFile class."""
+
+    def test_energy_co2(self, xtb_co2_outfolder):
+        """Test parsing energy from CO2 ohess calculation."""
+        energy_file = os.path.join(xtb_co2_outfolder, "energy")
+        assert os.path.exists(energy_file)
+        co2_energy = XTBEnergyFile(energy_file)
+        assert co2_energy.last_energy == -10.30845228917
+
+    def test_energy_water(self, xtb_water_outfolder):
+        """Test parsing energy from water ohess calculation."""
+        energy_file = os.path.join(xtb_water_outfolder, "energy")
+        assert os.path.exists(energy_file)
+        water_energy = XTBEnergyFile(energy_file)
+        assert water_energy.last_energy == -5.07054444346
+
+    def test_energy_p_benzyne_opt(self, xtb_p_benzyne_opt_outfolder):
+        """Test parsing energy from p-benzyne opt calculation."""
+        energy_file = os.path.join(xtb_p_benzyne_opt_outfolder, "energy")
+        assert os.path.exists(energy_file)
+        p_benzyne_opt_energy = XTBEnergyFile(energy_file)
+        assert p_benzyne_opt_energy.last_energy == -14.66185695901
+
+
+class TestXTBFolder:
+    """Tests for XTBFolder class."""
+
+    def test_folder_co2(self, xtb_co2_outfolder):
+        """Test XTBFolder with CO2 ohess calculation output."""
+        assert os.path.exists(xtb_co2_outfolder)
+        co2_folder = XTBFolder(xtb_co2_outfolder)
+
+        assert co2_folder._xtb_out() is not None
+        assert os.path.basename(co2_folder._xtb_out()) == "co2_ohess.out"
+
+        assert co2_folder._xtbopt_log() is not None
+        assert os.path.basename(co2_folder._xtbopt_log()) == "xtbopt.log"
+
+        assert co2_folder._charges() is not None
+        assert os.path.basename(co2_folder._charges()) == "charges"
+
+        assert co2_folder._energy() is not None
+        assert os.path.basename(co2_folder._energy()) == "energy"
+
+        assert co2_folder._engrad() is not None
+        assert os.path.basename(co2_folder._engrad()) == "co2.engrad"
+
+        assert co2_folder._g98_out() is not None
+        assert os.path.basename(co2_folder._g98_out()) == "g98.out"
+
+        assert co2_folder._gradient() is not None
+        assert os.path.basename(co2_folder._gradient()) == "gradient"
+
+        assert co2_folder._hessian() is not None
+        assert os.path.basename(co2_folder._hessian()) == "hessian"
+
+        assert co2_folder._vibspectrum() is not None
+        assert os.path.basename(co2_folder._vibspectrum()) == "vibspectrum"
+
+        assert co2_folder._wbo() is not None
+        assert os.path.basename(co2_folder._wbo()) == "wbo"
+
+        assert co2_folder._xtbopt_geometry() is not None
+        assert os.path.basename(co2_folder._xtbopt_geometry()) == "xtbopt.xyz"
+
+        assert co2_folder._xtbtopo_mol() is not None
+        assert os.path.basename(co2_folder._xtbtopo_mol()) == "xtbtopo.mol"
+
+    def test_folder_cyclopentadienyl_anion(
+        self, xtb_cyclopentadienyl_anion_outfolder
+    ):
+        """Test XTBFolder with cyclopentadienyl anion opt calculation output."""
+        assert os.path.exists(xtb_cyclopentadienyl_anion_outfolder)
+        cyclopentadienyl_anion_folder = XTBFolder(
+            xtb_cyclopentadienyl_anion_outfolder
+        )
+
+        assert cyclopentadienyl_anion_folder._xtb_out() is not None
+        assert (
+            os.path.basename(cyclopentadienyl_anion_folder._xtb_out())
+            == "cyclopentadienyl_anion_opt.out"
+        )
+
+        assert cyclopentadienyl_anion_folder._xtbopt_log() is not None
+        assert cyclopentadienyl_anion_folder._charges() is not None
+        assert (
+            cyclopentadienyl_anion_folder._energy() is None
+        )  # --grad calculation is not enabled
+        assert (
+            cyclopentadienyl_anion_folder._engrad() is None
+        )  # --grad calculation is not enabled
+        assert (
+            cyclopentadienyl_anion_folder._g98_out() is None
+        )  # --hess calculation is not enabled
+        assert (
+            cyclopentadienyl_anion_folder._gradient() is None
+        )  # --grad calculation is not enabled
+        assert (
+            cyclopentadienyl_anion_folder._hessian() is None
+        )  # --hess calculation is not enabled
+        assert (
+            cyclopentadienyl_anion_folder._vibspectrum() is None
+        )  # --hess calculation is not enabled
+        assert cyclopentadienyl_anion_folder._wbo() is not None
+        assert (
+            os.path.basename(cyclopentadienyl_anion_folder._xtbopt_geometry())
+            == "xtbopt.coord"
+        )
+        assert cyclopentadienyl_anion_folder._xtbtopo_mol() is not None
+
+    def test_folder_p_benzyne_sp(self, xtb_p_benzyne_sp_outfolder):
+        """Test XTBFolder with p-benzyne sp calculation output."""
+        assert os.path.exists(xtb_p_benzyne_sp_outfolder)
+        p_benzyne_sp_folder = XTBFolder(xtb_p_benzyne_sp_outfolder)
+
+        assert p_benzyne_sp_folder._xtb_out() is not None
+        assert (
+            os.path.basename(p_benzyne_sp_folder._xtb_out())
+            == "p_benzyne_sp_alpb_toluene.out"
+        )
+
+        assert (
+            p_benzyne_sp_folder._xtbopt_log() is None
+        )  # no optimization performed
+        assert p_benzyne_sp_folder._charges() is not None
+        assert (
+            p_benzyne_sp_folder._energy() is None
+        )  # --grad calculation is not enabled
+        assert (
+            p_benzyne_sp_folder._engrad() is None
+        )  # --grad calculation is not enabled
+        assert (
+            p_benzyne_sp_folder._g98_out() is None
+        )  # --hess calculation is not enabled
+        assert (
+            p_benzyne_sp_folder._gradient() is None
+        )  # --grad calculation is not enabled
+        assert (
+            p_benzyne_sp_folder._hessian() is None
+        )  # --hess calculation is not enabled
+        assert (
+            p_benzyne_sp_folder._vibspectrum() is None
+        )  # --hess calculation is not enabled
+        assert p_benzyne_sp_folder._wbo() is not None
+        assert (
+            p_benzyne_sp_folder._xtbopt_geometry() is None
+        )  # no optimization performed
+        assert p_benzyne_sp_folder._xtbtopo_mol() is not None
 
 
 class TestXTBOutput:

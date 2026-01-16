@@ -89,14 +89,14 @@ class XTBFolder(BaseFolder):
         Return the path to optimized geometry file (xtbopt.*).
 
         XTB outputs the optimized geometry in the same format as the input.
-        This method searches for xtbopt.* files in order of priority, returning
-        only files in formats that chemsmart can currently parse.
+        This method returns a parseable xtbopt.* file if available, otherwise
+        falls back to an unsupported format with a warning.
 
         Search priority (parseable formats only):
             1. xtbopt.xyz     → XYZ format (supported)
             2. xtbopt.sdf     → SDF format (supported)
 
-        Unsupported formats (will be skipped with warning):
+        Unsupported formats (will show warning):
             - xtbopt.coord   → Turbomole coord format
             - xtbopt.pdb     → PDB format
             - xtbopt.poscar  → VASP POSCAR format
@@ -104,9 +104,8 @@ class XTBFolder(BaseFolder):
             - xtbopt.EIn     → Gaussian External format
 
         Returns:
-            str | None: Path to parseable optimized geometry file, or None if:
-                       - No xtbopt.* file exists
-                       - Only unsupported format exists
+            str | None: Path to optimized geometry file, or None if
+                        no xtbopt.* file exists
         """
         # Formats chemsmart can currently parse
         parseable_extensions = [".xyz", ".sdf"]
@@ -118,15 +117,15 @@ class XTBFolder(BaseFolder):
             if os.path.exists(filepath):
                 logger.debug(f"Found optimized geometry file: {filepath}")
                 return filepath
-        # Check if unsupported format exists (for informative warning)
+        # Check if unsupported format exists
         for ext in unsupported_extensions:
             filepath = os.path.join(self.folder, f"xtbopt{ext}")
             if os.path.exists(filepath):
                 logger.warning(
                     f"Found optimized geometry file {filepath}, but format {ext} "
-                    "is not yet supported by chemsmart. Will use trajectory fallback."
+                    "is not yet supported by chemsmart."
                 )
-                return None
+                return filepath
         # No xtbopt.* file found
         return None
 

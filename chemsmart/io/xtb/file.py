@@ -502,6 +502,7 @@ class XTBMainOut(XTBFileMixin):
             for line in self.numerical_hessian_block:
                 if "step length" in line:
                     return float(line.split()[-1])
+        return None
 
     @property
     def scc_accuracy(self):
@@ -513,6 +514,7 @@ class XTBMainOut(XTBFileMixin):
             for line in self.numerical_hessian_block:
                 if "SCC accuracy" in line:
                     return float(line.split()[-1])
+        return None
 
     @property
     def hessian_scale_factor(self):
@@ -521,6 +523,7 @@ class XTBMainOut(XTBFileMixin):
             for line in self.numerical_hessian_block:
                 if "Hessian scale factor" in line:
                     return float(line.split()[-1])
+        return None
 
     @property
     def rms_gradient(self):
@@ -532,6 +535,7 @@ class XTBMainOut(XTBFileMixin):
             for line in self.numerical_hessian_block:
                 if "RMS gradient" in line:
                     return float(line.split()[-1])
+        return None
 
     @property
     def molecular_dipole_lines(self):
@@ -553,6 +557,7 @@ class XTBMainOut(XTBFileMixin):
             for line in self.molecular_dipole_lines:
                 if line.startswith("q only:"):
                     return np.array([float(x) for x in line.split()[-3:]])
+        return None
 
     @property
     def full_molecular_dipole(self):
@@ -562,6 +567,7 @@ class XTBMainOut(XTBFileMixin):
             for line in self.molecular_dipole_lines:
                 if line.startswith("full:"):
                     return np.array([float(x) for x in line.split()[1:4]])
+        return None
 
     @property
     def total_molecular_dipole_moment(self):
@@ -570,14 +576,14 @@ class XTBMainOut(XTBFileMixin):
             for line in self.molecular_dipole_lines:
                 if line.startswith("full:"):
                     return float(line.split()[-1])
+        return None
 
     @property
     def molecular_quadrupole_lines(self):
         quadrupole_lines = []
         for i, line in enumerate(self.contents):
             if line.startswith("molecular quadrupole (traceless):"):
-                for j_line in self.contents[i + 2 : i + 5]:
-                    # only get 3 lines
+                for j_line in self.contents[i + 1 : i + 9]:
                     quadrupole_lines.append(j_line)
         if len(quadrupole_lines) == 0:
             return None
@@ -594,6 +600,7 @@ class XTBMainOut(XTBFileMixin):
                     ]
                     # convert to tensor
                     return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+        return None
 
     @property
     def q_dip_molecular_quadrupole(self):
@@ -606,6 +613,7 @@ class XTBMainOut(XTBFileMixin):
                     ]
                     # convert to tensor
                     return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+        return None
 
     @property
     def full_molecular_quadrupole(self):
@@ -619,6 +627,7 @@ class XTBMainOut(XTBFileMixin):
                     ]
                     # convert to tensor
                     return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+        return None
 
     @property
     def dielectric_constant(self):
@@ -778,7 +787,7 @@ class XTBMainOut(XTBFileMixin):
                 found_frequency_printout = True
                 continue
             if found_frequency_printout and line.startswith(
-                "projected vibrational frequencies"
+                "vibrational frequencies"
             ):
                 frequencies = []
                 for j_line in self.contents[i + 1 :]:
@@ -1138,9 +1147,8 @@ class XTBEnergyFile(FileMixin):
              1    -5.07054444346    -5.07054444346    -5.07054444346
         $end
 
-    The file uses Turbomole-style format with $energy/$end delimiters.
-    Each line contains: step_number, energy1, energy2, energy3 (all in Hartree).
-    For single-point calculations, all three energy values are identical.
+    The three energy values are identical and correspond to the final total
+    energy in Hartree.
 
     Args:
         filename (str): Path to the energy file
@@ -1149,7 +1157,14 @@ class XTBEnergyFile(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for energy.
+    @cached_property
+    def last_energy(self):
+        """Final total energy in Hartree."""
+        for line in self.contents:
+            if line.strip().startswith("$") or not line.strip():
+                continue
+            return float(line.split()[1])
+        return None
 
 
 class XTBEngradFile(FileMixin):
