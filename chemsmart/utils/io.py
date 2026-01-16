@@ -304,7 +304,7 @@ def get_program_type_from_file(filepath) -> str:
     return "unknown"
 
 
-def find_output_files_in_directory(directory, program=None, recursive=True):
+def find_output_files_in_directory(directory, program=None, recursive=False):
     """
     Find quantum chemistry output files in a directory by program.
 
