@@ -1,1049 +1,382 @@
 import logging
 from functools import cached_property
 
-import numpy as np
-
-from chemsmart.utils.mixins import FileMixin
+from chemsmart.io.file import SDFFile
+from chemsmart.io.xtb.file import (
+    XTBChargesFile,
+    XTBEnergyFile,
+    XTBEngradFile,
+    XTBG98File,
+    XTBGradientFile,
+    XTBHessianFile,
+    XTBMainOut,
+    XTBVibSpectrumFile,
+    XTBWibergBondOrderFile,
+)
+from chemsmart.io.xtb.folder import XTBFolder
+from chemsmart.io.xyz.xyzfile import XYZFile
+from chemsmart.utils.io import create_molecule_list
+from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
 
 
-class XTBOutput(FileMixin):
-    def __init__(self, filename):
-        self.filename = filename
+class XTBOutput:
+    """
+    Comprehensive parser and coordinator for xTB calculation outputs.
 
-    @property
-    def xtb_version(self):
-        """xtb version used for the calculation."""
-        for line in self.contents:
-            if "xtb version" in line:
-                return line.split()[3]
-        return None
+    This class discovers and parses multiple xTB output files, then integrates
+    data from different sources to construct complete Molecule objects with:
+    - Coordinates and energies from xtbopt.log
+    - Charge and multiplicity from main output file
+    - Forces from .engrad file
 
-    @property
-    def normal_termination(self):
-        """Check if the xtb output file is terminated by checking each output file line from the last line onwards."""
-        for line in reversed(self.contents):
-            if "[ERROR]" in line:
-                logger.info(f"File {self.filename} has error termination.")
-                return False
-            if "* finished run" in line:
-                logger.info(f"File {self.filename} terminated normally.")
-                return True
-        return False
+    Args:
+        folder: Path to folder containing xTB output files, or XTBFolder instance
+    """
 
-    def _get_route(self):
-        for line in self.contents:
-            if "program call" in line:
-                return line.split(":")[-1].strip()
-        return None
+    def __init__(self, folder):
+        self.folder = (
+            folder if isinstance(folder, XTBFolder) else XTBFolder(folder)
+        )
 
-    @property
-    def route_string(self):
-        return self._get_route()
-
-    #           ...................................................
-    #           :                      SETUP                      :
-    #           :.................................................:
-    def _get_setup_information(self, keyword):
-        """Get xtb setup information."""
-        # restrict to SETUP block
-        for i, line in enumerate(self.contents):
-            if "SETUP" in line:
-                for j_line in self.contents[i + 2 :]:
-                    if len(j_line) == 0:
-                        break
-                    if keyword in j_line:
-                        return (
-                            j_line.split(keyword)[-1]
-                            .strip()
-                            .split()[0]
-                            .strip()
-                        )
-        return None
-
-    @property
-    def num_basis_functions(self):
-        num_basis_functions = self._get_setup_information("# basis functions")
-        return int(num_basis_functions)
-
-    @property
-    def num_atomic_orbital(self):
-        num_atomic_orbital = self._get_setup_information("# atomic orbitals")
-        return int(num_atomic_orbital)
-
-    @property
-    def num_shells(self):
-        num_shells = self._get_setup_information("# shells")
-        return int(num_shells)
-
-    @property
-    def num_electrons(self):
-        num_electrons = self._get_setup_information("# electrons")
-        return int(num_electrons)
-
-    @property
-    def max_iter(self):
-        max_iter = self._get_setup_information("max. iterations")
-        return int(max_iter)
-
-    @property
-    def hamiltonian(self):
-        return self._get_setup_information("Hamiltonian")
-
-    @property
-    def restart(self):
-        restart = self._get_setup_information("restarted?")
-        return restart.lower() == "true"
-
-    @property
-    def solvent_on(self):
-        # instead of checking for GBSA solvation,
-        # we will search for the actual solvent model and solvent ID
-        solvation = self._get_setup_information("GBSA solvation")
-        return solvation.lower() == "true"
-
-    # solvation model and solvent ID
-    @property
-    def solvent_model(self):
-        for line in self.contents:
-            if "Solvation model:" in line:
-                return line.split()[-1]
-        return None
-
-    @property
-    def solvent_id(self):
-        for line in self.contents:
-            if "Solvent" in line and len(line.split()) == 2:
-                return line.split()[-1]
-        return None
-
-    @property
-    def pc_potential(self):
-        """Point Charge Potential, an external electrostatic potential
-        applied to the system using classical point charges"""
-        pc_pot = self._get_setup_information("PC potential")
-        return pc_pot.lower() == "true"
-
-    @property
-    def electronic_temperature(self):
-        electronic_temp = self._get_setup_information("electronic temp.")
-        return float(electronic_temp)
-
-    @property
-    def accuracy(self):
-        accuracy = self._get_setup_information("accuracy")
-        return float(accuracy)
-
-    @property
-    def integral_cutoff(self):
-        integral_cutoff = self._get_setup_information("integral cutoff")
-        return float(integral_cutoff)
-
-    @property
-    def integral_neglect(self):
-        integral_neglect = self._get_setup_information("integral neglect")
-        return float(integral_neglect)
-
-    @property
-    def scf_convergence(self):
-        scf_convergence = self._get_setup_information("SCF convergence")
-        return float(scf_convergence)
-
-    @property
-    def wf_convergence(self):
-        wf_convergence = self._get_setup_information("wf. convergence")
-        return float(wf_convergence)
-
-    @property
-    def broyden_damping(self):
-        broyden_damping = self._get_setup_information("Broyden damping")
-        return float(broyden_damping)
-
-    @property
-    def net_charge(self):
-        net_charge = self._get_setup_information("net charge")
-        return int(net_charge)
-
-    @property
-    def unpaired_electrons(self):
-        unpaired_electrons = self._get_setup_information("unpaired electrons")
-        return int(unpaired_electrons)
-
-    @property
-    def optimization_level(self):
-        """Optimization level."""
-        opt_level = self._get_setup_information("optimization level")
-        return opt_level
-
-    @property
-    def max_optcycles(self):
-        max_optcycles = self._get_setup_information("max. optcycles")
-        if max_optcycles:
-            return int(max_optcycles)
-
-    @property
-    def anc_microcycles(self):
-        """ANC micro-cycles: Advanced Newton–Raphson Convergence (ANC) micro-iterations
-        used in the Self-Consistent Field (SCF) algorithm to improve convergence
+    def __getattr__(self, name):
         """
-        anc_microcycles = self._get_setup_information("ANC micro-cycles")
-        if anc_microcycles:
-            return int(anc_microcycles)
+        Delegate attribute access to internal file parsers if not found in XTBOutput.
 
-    @property
-    def degrees_of_freedom(self):
-        dof = self._get_setup_information("degrees of freedom")
-        if dof:
-            return int(dof)
+        This allows XTBOutput to transparently expose all properties and methods
+        from XTBMainOut, XTBEngradFile, XTBChargesFile, XTBWibergBondOrderFile,
+        XTBHessianFile, XTBGradientFile, and any future parsers.
 
-    @property
-    def rf_solver(self):
-        """In xtb, the RF solver refers to the Relaxed Fock (RF) solver,
-        an alternative approach for solving the Self-Consistent Field (SCF) equations.
-        It is designed to improve SCF convergence, particularly for challenging
-        systems where standard methods struggle."""
-        return self._get_setup_information("RF solver")
+        The search order is:
+        1. main_out (XTBMainOut) - main output file
+        2. charges_file (XTBChargesFile) - atomic partial charges
+        3. wbo_file (XTBWibergBondOrderFile) - Wiberg bond orders
+        4. hessian_file (XTBHessianFile) - Hessian matrix
+        5. engrad_file (XTBEngradFile) - energy and gradient file
+        6. gradient_file (XTBGradientFile) - gradient file
+        7. energy_file (XTBEnergyFile) - energy file
+        8. g98_file (XTBG98File) - Gaussian 98 format vibrational analysis
+        9. vibspectrum_file (XTBVibSpectrumFile) - vibrational spectrum
 
-    @property
-    def write_all_intermediate_geometries(self):
-        write_all = self._get_setup_information("write xtbopt.log")
-        if write_all:
-            return write_all.lower() == "true"
+        Args:
+            name: Attribute name being accessed
 
-    @property
-    def is_linear(self):
-        """Determine if molecule is linear."""
-        linear = self._get_setup_information("linear?")
-        if linear:
-            return linear.lower() == "true"
+        Returns:
+            The attribute value from the first parser that has it
 
-    @property
-    def energy_convergence(self):
-        energy_conv = self._get_setup_information("energy convergence")
-        if energy_conv:
-            return float(energy_conv)
-
-    @property
-    def gradient_convergence(self):
-        """Gradient convergence threshold, in Eh/alpha."""
-        gradient_conv = self._get_setup_information("grad. convergence")
-        if gradient_conv:
-            return float(gradient_conv)
-
-    @property
-    def max_rf_displacement(self):
-        """Maximum displacement in the Relaxed Fock (RF) solver."""
-        max_rf_disp = self._get_setup_information("maxmium RF displ.")
-        if max_rf_disp:
-            return float(max_rf_disp)
-
-    @property
-    def low_frequency_cutoff(self):
-        """Low frequency cutoff in cm^-1."""
-        low_freq_cutoff = self._get_setup_information("Hlow (freq-cutoff)")
-        if low_freq_cutoff:
-            return float(low_freq_cutoff)
-
-    @property
-    def max_frequency_cutoff(self):
-        """Maximum frequency cutoff in cm^-1."""
-        max_freq_cutoff = self._get_setup_information("Hmax (freq-cutoff)")
-        if max_freq_cutoff:
-            return float(max_freq_cutoff)
-
-    @property
-    def s6_in_model_hessian(self):
-        """S6 parameter in the model Hessian. S6 is a scaling factor used for
-        dispersion correction in GFN-xTB. It is part of D3 dispersion correction
-        and related to the dispersion energy scaling.
-        S6 is a global scaling factor that determines strength of dispersion correction
-        applied in the model Hessian calculation, to account for long-range van der Waals
-        interactions.
-        The model Hessian is an approximate way to compute vibrational frequencies in xtb.
-        Since dispersion affects intermolecular forces and bond stiffness, S6 influences
-        force constants used in Hessian construction.
-        Proper dispersion scaling ensures realistic vibrational spectra and thermodynamic properties.
+        Raises:
+            AttributeError: If the attribute doesn't exist in XTBOutput or any parser
         """
-        s6 = self._get_setup_information("S6 in model hess.")
-        if s6:
-            return float(s6)
-
-    @property
-    def homo_energy(self):
-        """Obtain HOMO energy of last optimized structure, in eV."""
-        for line in reversed(self.contents):
-            if "(HOMO)" in line:
-                homo_energy = line.split()[-2]
-                return float(homo_energy)
-        return None
-
-    @property
-    def lumo_energy(self):
-        """Obtain LUMO energy of last optimized structure, in eV."""
-        for line in reversed(self.contents):
-            if "(LUMO)" in line:
-                lumo_energy = line.split()[-2]  # lumo energy in eV
-                return float(lumo_energy)
-        return None
-
-    @property
-    def c6_coefficient(self):
-        """C6 dispersion coefficient in au·bohr⁶."""
-        for line in reversed(self.contents):
-            if "Mol. C6AA" in line:
-                c6_coefficient = line.split()[-1]
-                return float(c6_coefficient)
-        return None
-
-    @property
-    def c8_coefficient(self):
-        """C8 dispersion coefficient in au·bohr⁸."""
-        for line in reversed(self.contents):
-            if "Mol. C8AA" in line:
-                c8_coefficient = line.split()[-1]
-                return float(c8_coefficient)
-        return None
-
-    @property
-    def alpha_coefficient(self):
-        """Alpha coefficient α(0)."""
-        for line in reversed(self.contents):
-            if "Mol. α(0)" in line:
-                alpha_coefficient = line.split()[-1]
-                return float(alpha_coefficient)
-        return None
-
-    def get_all_summary_blocks(self):
-        """Obtain all SUMMARY blocks from the output file."""
-        summary_blocks = []
-        for i, line in enumerate(self.contents):
-            if "SUMMARY" in line:
-                summary_block = []
-                for j_line in self.contents[i + 2 :]:
-                    if len(j_line) == 0:
-                        break
-                    if "::::::::" in j_line or "........" in j_line:
+        # List of internal parsers to search, in order of priority
+        file_parsers = [
+            "main_out",
+            "charges_file",
+            "wbo_file",
+            "hessian_file",
+            "engrad_file",
+            "gradient_file",
+            "energy_file",
+            "g98_file",
+            "vibspectrum_file",
+        ]
+        # Try to get from each parser in order
+        for file_parser in file_parsers:
+            try:
+                parser = object.__getattribute__(self, file_parser)
+                if parser is not None:
+                    try:
+                        return getattr(parser, name)
+                    except AttributeError:
+                        # This parser doesn't have the attribute, try next one
                         continue
-                    else:
-                        summary_block.append(j_line)
-                summary_blocks.append(summary_block)
-        if len(summary_blocks) == 0:
-            return None
-        return summary_blocks
-
-    @property
-    def vertical_ionization_potential(self):
-        """Vertical Ionization Potential (VIP) in eV, using command line '--vip', '--vipea' or '--vomega'."""
-        for line in reversed(self.contents):
-            if "delta SCC IP (eV)" in line:
-                vertical_ionization_potentials = line.split()[-1]
-                return float(vertical_ionization_potentials)
-        return None
-
-    @property
-    def vertical_electron_affinity(self):
-        """Vertical electron Affinities (EA) in eV, using command line '--ea', '--vipea' or '--vomega'."""
-        for line in reversed(self.contents):
-            if "delta SCC EA (eV)" in line:
-                vertical_electron_affinities = line.split()[-1]
-                return float(vertical_electron_affinities)
-        return None
-
-    @property
-    def global_electrophilicity_index(self):
-        """Global Electrophilicity Indexes (GEI) in eV, using command line '--vomega'."""
-        for line in reversed(self.contents):
-            if "Global electrophilicity index (eV):" in line:
-                global_electrophilicity_index = line.split()[-1]
-                return float(global_electrophilicity_index)
-        return None
-
-    @property
-    def fukui_index(self):
-        """Return Fukui Index block, using command line '--vfukui'."""
-        fukui_block = []
-        for i, line in enumerate(self.contents):
-            if "Fukui functions:" in line:
-                for j_line in self.contents[i + 1 :]:
-                    if "------" in j_line:
-                        break
-                    fukui_block.append(j_line)
-                return fukui_block
-        return None
-
-    def _extract_summary_information(self, keyword):
-        # make sure it only extracts from SUMMARY block
-        last_summary_block = self.get_all_summary_blocks()[-1]
-        if last_summary_block:
-            for line in last_summary_block:
-                if keyword in line:
-                    return float(line.split()[-3])
-        return None
-
-    @property
-    def total_energy_without_gsasa_hb(self):
-        """Total free energy (electronic + thermal) of system without contributions
-        from GSASA (Generalized Solvent Accessible Surface Area) and hydrogen
-        bonding (hb) corrections."""
-        return self._extract_summary_information("total w/o Gsasa/hb")
-
-    @property
-    def scc_energy(self):
-        """Electronic energy from self-consistent charge (SCC) calculation."""
-        return self._extract_summary_information("SCC energy")
-
-    @property
-    def isotropic_es(self):
-        """Coulombic interactions assuming a spherical charge distribution
-        (simplified electrostatics)."""
-        return self._extract_summary_information("-> isotropic ES")
-
-    @property
-    def anisotropic_es(self):
-        """Electrostatic interactions considering directional charge effects
-        (higher-order multipoles)."""
-        return self._extract_summary_information("-> anisotropic ES")
-
-    @property
-    def anisotropic_xc(self):
-        """Direction-dependent exchange-correlation energy contribution,
-        which accounts for electronic interactions beyond spherical approximation.
-        """
-        return self._extract_summary_information("-> anisotropic XC")
-
-    @property
-    def dispersion_energy(self):
-        """Dispersion (van der Waals) correction, capturing weak
-        interactions between non-bonded atoms."""
-        return self._extract_summary_information("-> dispersion")
-
-    @property
-    def solvation_energy_gsolv(self):
-        """Energy correction due to solvation effects (implicit solvent model).
-        Gsolv in xtb."""
-        return self._extract_summary_information("-> Gsolv")
-
-    @property
-    def electronic_solvation_energy_gelec(self):
-        """Electronic solvation energy contribution, Gelec in xtb."""
-        return self._extract_summary_information("-> Gelec")
-
-    @property
-    def surface_area_solvation_energy_gsasa(self):
-        """SASA solvation energy contribution, Gsasa in xtb."""
-        return self._extract_summary_information("-> Gsasa")
-
-    @property
-    def hydrogen_bonding_solvation_energy_ghb(self):
-        """Hydrogen bonding solvation correction."""
-        return self._extract_summary_information("-> Ghb")
-
-    @property
-    def empirical_shift_correction_gshift(self):
-        """Empirical shift correction, Gshift in xtb."""
-        return self._extract_summary_information("-> Gshift")
-
-    @property
-    def repulsion_energy(self):
-        """Pauli repulsion energy between overlapping electron densities."""
-        return self._extract_summary_information("repulsion energy")
-
-    @property
-    def additional_restraining_energy(self):
-        """Additional restraining energy."""
-        return self._extract_summary_information("add. restraining")
-
-    @property
-    def total_charge(self):
-        return self._extract_summary_information("total charge")
-
-    # Numerical Hessian
-    @cached_property
-    def numerical_hessian_block(self):
-        """Information under Numerical Hessian block."""
-        for i, line in enumerate(self.contents):
-            if "Numerical Hessian" in line:
-                numerical_hessian_block = []
-                for j_line in self.contents[i + 2 :]:
-                    if len(j_line) == 0:
-                        break
-                    numerical_hessian_block.append(j_line)
-                return numerical_hessian_block
-        return None
-
-    @property
-    def numfreq(self):
-        """If numerical hessian is turned on."""
-        for line in self.contents:
-            if "Numerical Hessian" in line:
-                return True
-        return False
-
-    @property
-    def hessian_step_length(self):
-        """Finite displacement step size used to compute the numerical Hessian.'
-        A smaller step gives more accurate results but can be computationally expensive.
-        Default is 0.005 Å, which balances accuracy and efficiency."""
-        if self.numerical_hessian_block:
-            for line in self.numerical_hessian_block:
-                if "step length" in line:
-                    return float(line.split()[-1])
-
-    @property
-    def scc_accuracy(self):
-        """SCC accuracy, controls the self-consistent charge (SCC) cycle convergence
-        for the Hessian calculation. Lower values (e.g., 0.10000) indicate stricter
-        convergence, higher values (e.g., 0.50000) speed up calculation but may
-        introduce slight inaccuracies."""
-        if self.numerical_hessian_block:
-            for line in self.numerical_hessian_block:
-                if "SCC accuracy" in line:
-                    return float(line.split()[-1])
-
-    @property
-    def hessian_scale_factor(self):
-        """Hessian scaling factor, applied to adjust vibrational frequencies."""
-        if self.numerical_hessian_block:
-            for line in self.numerical_hessian_block:
-                if "Hessian scale factor" in line:
-                    return float(line.split()[-1])
-
-    @property
-    def rms_gradient(self):
-        """Root mean square (RMS) gradient, a measure of the convergence of the
-        numerical Hessian calculation. Lower values indicate better convergence.
-        Generally, values below 0.001 Eh/a₀ suggest a well-converged structure.
-        """
-        if self.numerical_hessian_block:
-            for line in self.numerical_hessian_block:
-                if "RMS gradient" in line:
-                    return float(line.split()[-1])
-
-    @property
-    def molecular_dipole_lines(self):
-        dipole_lines = []
-        for i, line in enumerate(self.contents):
-            if line.startswith("molecular dipole:"):
-                for j_line in self.contents[i + 2 : i + 4]:
-                    # only get two lines
-                    dipole_lines.append(j_line)
-        if len(dipole_lines) == 0:
-            return None
-        return dipole_lines
-
-    @property
-    def qonly_molecular_dipole(self):
-        """Charge only dipole, computed only from atomic partial charges
-        (electrostatic contribution)."""
-        if self.molecular_dipole_lines is not None:
-            for line in self.molecular_dipole_lines:
-                if line.startswith("q only:"):
-                    return np.array([float(x) for x in line.split()[-3:]])
-
-    @property
-    def full_molecular_dipole(self):
-        """Actual dipole moment including both charge distribution
-        and electronic polarization contributions"""
-        if self.molecular_dipole_lines is not None:
-            for line in self.molecular_dipole_lines:
-                if line.startswith("full:"):
-                    return np.array([float(x) for x in line.split()[1:4]])
-
-    @property
-    def total_molecular_dipole_moment(self):
-        """Total molecular dipole moment, in Debye."""
-        if self.molecular_dipole_lines is not None:
-            for line in self.molecular_dipole_lines:
-                if line.startswith("full:"):
-                    return float(line.split()[-1])
-
-    @property
-    def molecular_quadrupole_lines(self):
-        quadrupole_lines = []
-        for i, line in enumerate(self.contents):
-            if line.startswith("molecular quadrupole (traceless):"):
-                for j_line in self.contents[i + 2 : i + 5]:
-                    # only get 3 lines
-                    quadrupole_lines.append(j_line)
-        if len(quadrupole_lines) == 0:
-            return None
-        return quadrupole_lines
-
-    @property
-    def qonly_molecular_quadrupole(self):
-        """Charge-only quadrupole moment, computed from atomic partial charges."""
-        if self.molecular_quadrupole_lines is not None:
-            for line in self.molecular_quadrupole_lines:
-                if line.startswith("q only:"):
-                    xx, xy, yy, xz, yz, zz = [
-                        float(x) for x in line.split()[-6:]
-                    ]
-                    # convert to tensor
-                    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
-
-    @property
-    def q_dip_molecular_quadrupole(self):
-        """Molecular quadrupole from both charge and dipole moment contributions."""
-        if self.molecular_quadrupole_lines is not None:
-            for line in self.molecular_quadrupole_lines:
-                if line.startswith("q+dip:"):
-                    xx, xy, yy, xz, yz, zz = [
-                        float(x) for x in line.split()[-6:]
-                    ]
-                    # convert to tensor
-                    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
-
-    @property
-    def full_molecular_quadrupole(self):
-        """Full molecular quadrupole moment, including charge, dipole, and quadrupole
-        contributions."""
-        if self.molecular_quadrupole_lines is not None:
-            for line in self.molecular_quadrupole_lines:
-                if line.startswith("full:"):
-                    xx, xy, yy, xz, yz, zz = [
-                        float(x) for x in line.split()[-6:]
-                    ]
-                    # convert to tensor
-                    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
-
-    @property
-    def dielectric_constant(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Dielectric constant" in line:
-                    return float(line.split()[-1])
-        return None
-
-    @property
-    def free_energy_shift(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Free energy shift" in line:
-                    return float(line.split()[-4])  # free energy shift in Eh
-        return None
-
-    @property
-    def temperature(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Temperature" in line:
-                    return float(line.split()[-2])  # temperature in K
-        return None
-
-    @property
-    def density(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Density" in line:
-                    return float(line.split()[-2])  # density in kg/L
-        return None
-
-    @property
-    def solvent_mass(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Solvent mass" in line:
-                    return float(line.split()[-2])  # solvent mass in g/mol
-        return None
-
-    @property
-    def h_bond_correction(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "H-bond correction" in line:
-                    return line.split()[-1] == "true"
-        return None
-
-    @property
-    def ion_screening(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Ion screening" in line:
-                    return line.split()[-1] == "true"
-        return None
-
-    @property
-    def surface_tension(self):
-        if self.solvent_on:
-            for line in self.contents:
-                if "Surface tension" in line:
-                    return float(line.split()[-4])  # surface tension in Eh
-        return None
-
-    """
-    GEOMETRY OPTIMIZATION
-    """
-
-    @cached_property
-    def geometry_optimization_converged(self):
-        for line in self.contents:
-            if "GEOMETRY OPTIMIZATION CONVERGED" in line:
-                return True
-            elif "FAILED TO CONVERGE GEOMETRY OPTIMIZATION" in line:
-                return False
-        return False
-
-    @property
-    def optimized_structure_block(self):
-        """Return optimized structure."""
-        if self.geometry_optimization_converged:
-            coordinates_blocks = []
-            for i, line in enumerate(self.contents):
-                if "final structure:" in line:
-                    for j_line in self.contents[i + 2 :]:
-                        if "Bond Distances (Angstroems)" in j_line:
-                            break
-                        coordinates_blocks.append(j_line)
-            return coordinates_blocks
-        return None
-
-    @property
-    def molecular_mass(self):
-        if not self.geometry_optimization_converged:
-            return None
-        for line in self.contents:
-            if "molecular mass/u" in line:
-                molecular_mass = line.split(":")[1].strip()
-                return float(molecular_mass)
-        return None
-
-    @property
-    def center_of_mass(self):
-        if not self.geometry_optimization_converged:
-            return None
-        for line in self.contents:
-            if "center of mass at/Å" in line:
-                return [float(x) for x in line.split(":")[1].strip().split()]
-        return None
-
-    @property
-    def moments_of_inertia(self):
-        if not self.geometry_optimization_converged:
-            return None
-        for line in self.contents:
-            if "moments of inertia/u·Å²" in line:
-                return [float(x) for x in line.split(":")[1].strip().split()]
-        return None
-
-    @property
-    def rotational_constants(self):
-        if not self.geometry_optimization_converged:
-            return None
-        for line in self.contents:
-            if "rotational constants/cm⁻¹" in line:
-                return [float(x) for x in line.split(":")[1].strip().split()]
-        return None
-
-    @property
-    def optimizer_wall_time(self):
-        if self.elapsed_walltime_by_jobs("ANC optimizer:"):
-            return round(
-                sum(self.elapsed_walltime_by_jobs("ANC optimizer:")), 6
-            )
-        return None
-
-    @property
-    def optimizer_cpu_time(self):
-        if self.cpu_runtime_by_jobs("ANC optimizer:"):
-            return round(sum(self.cpu_runtime_by_jobs("ANC optimizer:")), 6)
-        return None
-
-    # """
-    # CALCULATION OF VIBRATIONAL FREQUENCIES
-    # """
-
-    @cached_property
-    def vibrational_frequencies(self):
-        """Read the vibrational frequencies from the XTB output file.
-        The first six (for non-linear molecules) or five (for linear molecules)
-        frequencies correspond to translations (3x) or rotations (3x/2x) of the molecule.
-        """
-        found_frequency_printout = False
-        for i, line in enumerate(self.contents):
-            if "Frequency Printout" in line:
-                found_frequency_printout = True
+            except Exception as e:
+                logger.debug(f"Failed to access parser {file_parser}: {e}")
                 continue
-            if found_frequency_printout and line.startswith(
-                "projected vibrational frequencies"
-            ):
-                frequencies = []
-                for j_line in self.contents[i + 1 :]:
-                    if "reduced masses (amu)" in j_line:
-                        break
-                    freq_line = j_line.split(":")[-1].strip().split()
-                    for freq in freq_line:
-                        frequencies.append(float(freq))
-                return frequencies
-        return None
+        # If not found in any parser, raise AttributeError
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
     @cached_property
-    def reduced_masses(self):
-        """Obtain list of reduced masses corresponding to the vibrational frequency."""
-        for i, line in enumerate(self.contents):
-            if line.startswith("reduced masses (amu)"):
-                reduced_masses = []
-                for j_line in self.contents[i + 1 :]:
-                    if "IR intensities (km·mol⁻¹)" in j_line:
-                        break
-                    reduced_mass_line = j_line.split()[1::2]
-                    for reduced_mass in reduced_mass_line:
-                        reduced_masses.append(float(reduced_mass))
-                return reduced_masses
-        return None
+    def main_out(self):
+        """Main xTB main output file parser"""
+        path = self.folder._xtb_out()
+        return XTBMainOut(path) if path else None
 
     @cached_property
-    def ir_intensities(self):
-        """Obtain list of IR intensities corresponding to the vibrational frequency."""
-        for i, line in enumerate(self.contents):
-            if line.startswith("IR intensities ("):
-                ir_intensities = []
-                for j_line in self.contents[i + 1 :]:
-                    if "Raman intensities" in j_line:
-                        break
-                    ir_intensity_line = j_line.split()[1::2]
-                    for ir_intensity in ir_intensity_line:
-                        ir_intensities.append(float(ir_intensity))
-                return ir_intensities
-        return None
+    def charges_file(self):
+        """Atomic partial charges file parser"""
+        path = self.folder._charges()
+        return XTBChargesFile(path) if path else None
 
     @cached_property
-    def raman_intensities(self):
-        """Obtain list of Raman intensities corresponding to the vibrational frequency."""
-        for i, line in enumerate(self.contents):
-            if line.startswith("Raman intensities ("):
-                raman_intensities = []
-                for j_line in self.contents[i + 1 :]:
-                    if "output can be read by thermo" in j_line:
-                        break
-                    raman_intensity_line = j_line.split()[1::2]
-                    for raman_intensity in raman_intensity_line:
-                        try:
-                            raman_intensities.append(float(raman_intensity))
-                        except ValueError:
-                            pass
-                return raman_intensities
-        return None
+    def energy_file(self):
+        """Energy file parser"""
+        path = self.folder._energy()
+        return XTBEnergyFile(path) if path else None
 
-    # Hessian SETUP information
-    @property
-    def num_frequencies(self):
-        num_freq = self._get_setup_information("# frequencies")
-        return int(num_freq)
+    @cached_property
+    def engrad_file(self):
+        """Energy and gradient file parser"""
+        path = self.folder._engrad()
+        return XTBEngradFile(path) if path else None
 
-    @property
-    def num_imaginary_frequencies(self):
-        num_im_freq = self._get_setup_information("# imaginary freq.")
-        if num_im_freq:
-            return int(num_im_freq)
+    @cached_property
+    def g98_file(self):
+        """GAUSSIAN-format vibrational frequencies file parser"""
+        path = self.folder._g98_out()
+        return XTBG98File(path) if path else None
 
-    @property
-    def only_rot_calc(self):
-        """compute only rotational contributions to Hessian,
-        rather than the full vibrational analysis."""
-        only_rot = self._get_setup_information("only rotational calc.")
-        if only_rot:
-            return only_rot.lower() == "true"
+    @cached_property
+    def gradient_file(self):
+        """Gradient file parser"""
+        path = self.folder._gradient()
+        return XTBGradientFile(path) if path else None
 
-    @property
-    def symmetry(self):
-        """Molecular symmetry."""
-        return self._get_setup_information("symmetry")
+    @cached_property
+    def hessian_file(self):
+        """Hessian matrix file parser"""
+        path = self.folder._hessian()
+        return XTBHessianFile(path) if path else None
 
-    @property
-    def rotational_symmetry_number(self):
-        rot_num = self._get_setup_information("rotational number")
-        if rot_num:
-            return int(rot_num)
+    @cached_property
+    def vibspectrum_file(self):
+        """Vibrational spectrum file parser"""
+        path = self.folder._vibspectrum()
+        return XTBVibSpectrumFile(path) if path else None
 
-    @property
-    def scaling_factor(self):
-        """Scaling factor used for vibrational frequencies."""
-        scale_factor = self._get_setup_information("scaling factor")
-        if scale_factor:
-            return float(scale_factor)
+    @cached_property
+    def wbo_file(self):
+        """Wiberg bond order file parser"""
+        path = self.folder._wbo()
+        return XTBWibergBondOrderFile(path) if path else None
 
-    @property
-    def rotor_cutoff(self):
-        """Defines threshold below which low-frequency vibrational modes are treated
-        as rotational modes (free internal rotations). Defaults to 50 cm^-1."""
-        rotor_cut = self._get_setup_information("rotor cutoff")
-        if rotor_cut:
-            return float(rotor_cut)
-
-    @property
-    def imaginary_frequency_cutoff(self):
-        """Imaginary frequency cutoff in cm^-1. Defaults to 20 cm^-1."""
-        im_freq_cutoff = self._get_setup_information("imag. cutoff")
-        if im_freq_cutoff:
-            return float(im_freq_cutoff)
-
-    # ^^ Hessian SETUP information
-
-    @property
-    def partition_function(self):
-        partition_function = {}
-        for line in self.contents:
-            if "VIB" in line:
-                partition_function["vibrational"] = float(line.split()[2])
-            elif "ROT" in line:
-                partition_function["rotational"] = float(line.split()[1])
-            elif "INT" in line:
-                partition_function["internal"] = float(line.split()[1])
-            elif "TR" in line:
-                partition_function["translational"] = float(line.split()[1])
-        if partition_function:
-            return partition_function
-        return None
-
-    def _get_thermodynamics_block(self):
-        """Get thermodynamics block."""
-        for i, line in enumerate(self.contents):
-            if "THERMODYNAMIC" in line:
-                thermodynamics_block = []
-                for j_line in self.contents[i + 2 :]:
-                    if len(j_line) == 0:
-                        break
-                    if "::::::::" in j_line or "........" in j_line:
-                        continue
-                    thermodynamics_block.append(j_line)
-                return thermodynamics_block
-        return None
-
-    def _extract_thermodynamics_information(self, keyword):
-        """Extract thermodynamic information from the output file."""
-        thermodynamics_block = self._get_thermodynamics_block()
-        if thermodynamics_block:
-            for line in thermodynamics_block:
-                if keyword in line:
-                    return float(line.split()[-3])
-        return None
-
-    @property
-    def zero_point_energy(self):
-        """Zero point energy in Eh"""
-        return self._extract_thermodynamics_information("zero point energy")
-
-    @property
-    def grrho_without_zpve(self):
-        """Free energy in Eh within the rigid-rotor-harmonic-oscillator (RRHO) approximation,
-        excluding zero-point vibrational energy (ZPVE)"""
-        return self._extract_thermodynamics_information("G(RRHO) w/o ZPVE")
-
-    @property
-    def grrho_contribution(self):
-        """Contribution of RRHO approximation to free energy in Eh"""
-        return self._extract_thermodynamics_information("G(RRHO) contrib.")
-
-    def _extract_final_information(self, keyword):
-        for line in reversed(self.contents):
-            if keyword in line:
-                return float(
-                    line.split(keyword)[-1].strip().split()[0].strip()
+    @cached_property
+    def xtbopt_geometry(self):
+        """Read geometry from xtbopt.* file and return as Molecule object."""
+        path = self.folder._xtbopt_geometry()
+        if not path:
+            return None
+        try:
+            if path.endswith(".xyz"):
+                molecule = XYZFile(path).get_molecules(
+                    index="-1", return_list=False
                 )
+            elif path.endswith(".sdf"):
+                molecule = SDFFile(path).get_molecule()
+            else:
+                return None
+            if molecule is None:
+                return None
+
+            # Enrich molecule with properties from main output
+            if self.charge is not None:
+                molecule.charge = self.charge
+            if self.multiplicity is not None:
+                molecule.multiplicity = self.multiplicity
+            if self.final_energy is not None:
+                molecule.energy = self.final_energy
+            if self.final_forces is not None:
+                molecule.forces = self.final_forces
+            logger.info(f"Successfully read optimized geometry from {path}")
+            return molecule
+
+        except Exception as e:
+            logger.error(f"Error reading optimized geometry from {path}: {e}")
+            return None
+
+    @property
+    def charge(self):
+        """Get molecular charge from main output."""
+        if self.main_out:
+            return self.main_out.net_charge
+        if self.charges_file:
+            return self.charges_file.total_charge
         return None
 
     @property
-    def total_energy(self):
-        return self._extract_final_information(
-            "TOTAL ENERGY"
-        )  # total energy in Eh
+    def multiplicity(self):
+        """Get spin multiplicity from main output."""
+        if self.main_out and self.main_out.unpaired_electrons is not None:
+            return self.main_out.unpaired_electrons + 1
+        return None
 
     @property
-    def gradient_norm(self):
-        return self._extract_final_information(
-            "GRADIENT NORM"
-        )  # gradient norm in Eh/α
+    def final_energy(self):
+        """Get final converged energy."""
+        if self.main_out:
+            return self.main_out.total_energy
+        return None
 
     @property
-    def fmo_gap(self):
-        """Extract HOMO-LUMO gap, in eV"""
-        fmo_gap = self._extract_final_information("HOMO-LUMO GAP")
-        assert np.isclose(
-            self.lumo_energy - self.homo_energy, fmo_gap, atol=1e-3
+    def final_forces(self):
+        """Get final converged forces."""
+        if self.engrad_file:
+            return self.engrad_file.forces
+        return None
+
+    @cached_property
+    def symbols(self):
+        """Get atomic symbols."""
+        if self.xtbopt_geometry:
+            return list(self.xtbopt_geometry.symbols)
+        if self.all_structures:
+            return list(self.all_structures[0].symbols)
+        return None
+
+    @property
+    def partial_charges(self):
+        """Get atomic partial charges."""
+        if (
+            not self.charges_file
+            or self.charges_file.partial_charges is None
+            or self.symbols is None
+        ):
+            return None
+
+        charges = self.charges_file.partial_charges
+        symbols = self.symbols
+
+        assert len(symbols) == len(charges), (
+            f"Mismatch between number of symbols ({len(symbols)}) "
+            f"and charges ({len(charges)})"
         )
-        return fmo_gap
+        # Build dictionary with atom labels
+        element_counts = {}
+        labeled_charges = {}
+        for symbol, charge in zip(symbols, charges):
+            element_counts[symbol] = element_counts.get(symbol, 0) + 1
+            label = f"{symbol}{element_counts[symbol]}"
+            labeled_charges[label] = charge
+        return labeled_charges
 
-    @property
-    def total_enthalpy(self):
-        """Total enthalpy in Eh"""
-        return self._extract_final_information("TOTAL ENTHALPY")
+    @cached_property
+    def all_structures(self):
+        """
+        Build Molecule objects from multiple data sources.
 
-    @property
-    def total_free_energy(self):
-        """Total free energy in Eh"""
-        return self._extract_final_information("TOTAL FREE ENERGY")
+        This is where all data integration happens. Combines:
+        - Coordinates and energies from xtbopt.log
+        - Charge and multiplicity from main output
+        - Forces from gradient file
 
-    def sum_time_hours(self, line):
-        n_days = float(line.split(" d,")[0].split()[-1])
-        n_hours = float(line.split(" h,")[0].split()[-1])
-        n_minutes = float(line.split(" min,")[0].split()[-1])
-        n_seconds = float(line.split(" sec")[0].split()[-1])
-        total_seconds = (
-            n_days * 24 * 60 * 60
-            + n_hours * 60 * 60
-            + n_minutes * 60
-            + n_seconds
+        Returns:
+            list[Molecule]: Molecule objects with all properties
+        """
+        # Get xtbopt.log path
+        opt_log_path = self.folder._xtbopt_log()
+        if not opt_log_path:
+            logger.warning("No xtbopt.log file found")
+            return []
+
+        if not self.main_out:
+            logger.warning("No main output file found")
+            return []
+
+        # 1. Get molecules from xtbopt.log (includes energies from comment lines)
+        opt_log = XYZFile(opt_log_path)
+        base_molecules = opt_log.get_molecules(index=":", return_list=True)
+        n = len(base_molecules)
+
+        if n == 0:
+            logger.warning("No structures found in xtbopt.log")
+            return []
+
+        logger.debug(f"Found {n} structures in optimization trajectory")
+
+        # Extract data from base molecules
+        orientations = [mol.positions for mol in base_molecules]
+        symbols = list(base_molecules[0].symbols)
+        energies = [
+            mol.energy for mol in base_molecules
+        ]  # Already extracted from comment lines!
+
+        logger.debug(
+            f"Extracted {len(energies)} energies from xtbopt.log comment lines"
         )
-        total_hours = round(total_seconds / 3600, 6)
-        return total_hours
 
-    def elapsed_walltime_by_jobs(self, task_name):
-        elapsed_walltime = []
-        for i, line in enumerate(self.contents):
-            if task_name in self.contents[i - 1] and "wall-time:" in line:
-                total_hours = self.sum_time_hours(line)
-                elapsed_walltime.append(total_hours)
-        if elapsed_walltime:
-            return elapsed_walltime
-        return None
+        # 2. PBC conditions (xTB doesn't use PBC for optimizations)
+        orientations_pbc = [None] * n
 
-    def cpu_runtime_by_jobs(self, task_name):
-        cpu_runtime = []
-        for i, line in enumerate(self.contents):
-            if task_name in self.contents[i - 2] and "cpu-time:" in line:
-                total_hours = self.sum_time_hours(line)
-                cpu_runtime.append(total_hours)
-        if cpu_runtime:
-            return cpu_runtime
-        return None
-
-    @property
-    def total_wall_time(self):
-        if self.elapsed_walltime_by_jobs("total:"):
-            return round(sum(self.elapsed_walltime_by_jobs("total:")), 6)
-        return None
-
-    @property
-    def total_cpu_time(self):
-        if self.cpu_runtime_by_jobs("total:"):
-            return round(sum(self.cpu_runtime_by_jobs("total:")), 6)
-        return None
-
-    @property
-    def scf_wall_time(self):
-        if self.elapsed_walltime_by_jobs("SCF:"):
-            return round(sum(self.elapsed_walltime_by_jobs("SCF:")), 6)
-        return None
-
-    @property
-    def scf_cpu_time(self):
-        if self.cpu_runtime_by_jobs("SCF:"):
-            return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
-        return None
-
-    @property
-    def hessian_wall_time(self):
-        if self.elapsed_walltime_by_jobs("analytical hessian:"):
-            return round(
-                sum(self.elapsed_walltime_by_jobs("analytical hessian:")), 6
+        # 3. Get forces from .engrad file (usually only final structure)
+        has_final_forces = False
+        final_forces = None
+        if self.forces is not None:
+            logger.debug(
+                "Found gradient in .engrad file, assigning to last structure"
             )
+            has_final_forces = True
+            final_forces = self.forces
+        else:
+            logger.debug("No .engrad file or gradient data found")
+
+        # 4. Build complete Molecule objects using create_molecule_list
+        # This will override the basic properties and add charge/multiplicity/forces
+        logger.info(f"Creating {n} Molecule objects with complete properties")
+        molecules = create_molecule_list(
+            orientations=orientations,
+            orientations_pbc=orientations_pbc,
+            energies=energies,  # From xtbopt.log comment lines
+            forces=None,
+            symbols=symbols,
+            charge=self.charge,  # From main output
+            multiplicity=self.multiplicity,  # From main output
+            frozen_atoms=None,
+            pbc_conditions=None,
+        )
+        # Assign forces to the final structure if available
+        if has_final_forces and molecules:
+            molecules[-1].forces = final_forces
+        return molecules
+
+    @cached_property
+    def optimized_structure(self):
+        """
+        Get the final optimized structure (only if geometry optimization converged).
+
+        This method attempts to read the optimized structure from multiple sources:
+        1. First, try to read from optimized geometry file (xtbopt.xyz, xtbopt.sdf, etc.)
+
+        2. If xtbopt.* file is not available, fall back to the last structure
+           from the optimization trajectory (xtbopt.log)
+
+        Returns:
+            Molecule | None: Final optimized structure with all properties,
+                            or None if optimization did not converge or no structure available
+        """
+        # Check if optimization converged and terminated normally
+        if not (
+            self.normal_termination
+            and self.main_out
+            and self.main_out.geometry_optimization_converged
+        ):
+            logger.debug("Optimization did not converge or terminate normally")
+            return None
+
+        # Strategy 1: Try to read from optimized geometry file (xtbopt.*)
+        optimized_geometry = self.xtbopt_geometry
+        if optimized_geometry is not None:
+            logger.debug("Using optimized structure from xtbopt.* file")
+            return optimized_geometry
+
+        # Strategy 2: Fall back to last structure from trajectory
+        if self.all_structures:
+            logger.debug("Using last structure from optimization trajectory")
+            return self.all_structures[-1]
+
+        logger.warning("No optimized structure available")
         return None
 
-    @property
-    def hessian_cpu_time(self):
-        if self.cpu_runtime_by_jobs("analytical hessian:"):
-            return round(
-                sum(self.cpu_runtime_by_jobs("analytical hessian:")), 6
-            )
+    @cached_property
+    def last_structure(self):
+        if self.all_structures:
+            return self.all_structures[-1]
         return None
+
+    def get_molecule(self, index="-1"):
+        """
+        Get a specific molecule structure by index from the xTB folder.
+        """
+        index = string2index_1based(index)
+        return self.all_structures[index]

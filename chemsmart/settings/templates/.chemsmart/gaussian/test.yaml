@@ -1,7 +1,9 @@
 # Default Gaussian settings for calculations 
 gas:
+  ab_initio: Null
   functional: m062x  # quotes required for string with spaces
   basis: def2svp
+  semiempirical: Null
   solvent_model: smd
   solvent_id: dichloroethane
 solv: 

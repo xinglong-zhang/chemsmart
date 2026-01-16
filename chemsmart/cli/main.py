@@ -1,4 +1,10 @@
-"""CLI interface for chemsmart project."""
+"""
+CLI interface for chemsmart project.
+
+This module provides the main entry point for the chemsmart command-line
+interface, organizing various subcommands and providing the ASCII art
+banner display.
+"""
 
 import click
 
@@ -14,6 +20,9 @@ from .update import update
 @click.pass_context
 @click.option("--verbose", is_flag=True, default=True)
 def entry_point(ctx, verbose):
+    """
+    Main entry point for the chemsmart CLI.
+    """
     if verbose:
         debug = True
         stream = True
@@ -63,7 +72,7 @@ entry_point.add_command(update)
 def main():  # pragma: no cover
     """
     The main function executes on commands:
-    `python -m chemsmart` and `$ chemsmart `.
+    ``python -m chemsmart`` and ``$ chemsmart``.
 
     This is your program's entry point.
 

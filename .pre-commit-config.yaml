@@ -22,3 +22,21 @@ repos:
         files: ''
         pass_filenames: false
         always_run: true 
+      - id: make-docs-lint
+        name: Run make docs-lint
+        entry: make docs-lint
+        language: system
+        always_run: true  # Run even if no files are staged
+      - id: make-docs-fmt
+        name: Run make docs fmt
+        entry: make docs-fmt
+        language: system
+        always_run: true  
+      - id: make-docs-clean
+        name: Run make docs clean
+        entry: make docs-clean
+        language: system
+        files: ''
+        pass_filenames: false
+        always_run: true 
+

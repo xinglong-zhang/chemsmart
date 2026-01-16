@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Cube file operations script.
+
+This script provides command-line functionality for performing mathematical
+operations on Gaussian cube files, such as addition, subtraction, and
+other mathematical transformations.
+"""
+
 import logging
 import os
 
@@ -42,6 +50,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
     help="outputname of the operated cube file.",
 )
 def entry_point(cube1, cube2, operation, outputname):
+    """
+    Perform mathematical operations on Gaussian cube files.
+    """
     cube_operator = CubeFileOperator(
         cubefile1=cube1,
         cubefile2=cube2,

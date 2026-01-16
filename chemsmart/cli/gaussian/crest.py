@@ -3,6 +3,7 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import (
+    click_gaussian_grouper_options,
     click_gaussian_jobtype_options,
     gaussian,
 )
@@ -19,8 +20,9 @@ logger = logging.getLogger(__name__)
 @gaussian.command(cls=MyCommand)
 @click_job_options
 @click_gaussian_jobtype_options
+@click_gaussian_grouper_options
 @click.option(
-    "-n",
+    "-N",
     "--num-confs-to-run",
     type=int,
     default=None,
@@ -34,10 +36,13 @@ def crest(
     step_size,
     num_steps,
     num_confs_to_run,
+    grouping_strategy,
+    threshold,
+    ignore_hydrogens,
     skip_completed,
     **kwargs,
 ):
-    """CLI for running Gaussian CREST jobs."""
+    """CLI subcommand for running Gaussian CREST jobs."""
 
     # get jobrunner for running Gaussian crest jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -48,7 +53,8 @@ def crest(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
@@ -68,10 +74,12 @@ def crest(
     logger.debug(f"Label for job: {label}")
 
     logger.info(
-        f"Crest {type} settings from project: {crest_settings.__dict__}"
+        f"Crest {jobtype} settings from project: {crest_settings.__dict__}"
     )
 
     from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+
+    logger.debug(f"Creating GaussianCrestJob with {len(molecules)} molecules")
 
     return GaussianCrestJob(
         molecules=molecules,
@@ -79,6 +87,9 @@ def crest(
         label=label,
         jobrunner=jobrunner,
         num_confs_to_run=num_confs_to_run,
+        grouping_strategy=grouping_strategy,
+        ignore_hydrogens=ignore_hydrogens,
+        threshold=threshold,
         skip_completed=skip_completed,
         **kwargs,
     )

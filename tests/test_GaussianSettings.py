@@ -217,6 +217,30 @@ class TestGaussianJobFromLogFile:
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "toluene"
 
+    def test_reads_gaussian_ts_genecp_outfile(
+        self, tmpdir, gaussian_ts_genecp_outfile
+    ):
+        settings = GaussianJobSettings.from_logfile(gaussian_ts_genecp_outfile)
+        assert settings.job_type == "ts"
+        assert settings.functional == "mn15"
+        assert settings.basis == "genecp"
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+
+    def test_reads_gaussian_pm6_outfile(
+        self, tmpdir, gaussian_semiempirical_pm6_output_file
+    ):
+        settings = GaussianJobSettings.from_logfile(
+            gaussian_semiempirical_pm6_output_file
+        )
+        assert settings.job_type == "opt"
+        assert settings.ab_initio is None
+        assert settings.functional is None
+        assert settings.basis is None
+        assert settings.semiempirical == "PM6"
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+
 
 class TestGaussianPBCJob:
     def test_writes_gaussian_input_from_pbc_comfile(

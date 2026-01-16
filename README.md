@@ -4,8 +4,16 @@
 
 [![codecov](https://codecov.io/gh/xinglong-zhang/chemsmart/branch/main/graph/badge.svg?token=chemsmart_token_here)](https://codecov.io/gh/xinglong-zhang/chemsmart)
 [![CI](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml/badge.svg)](https://github.com/xinglong-zhang/chemsmart/actions/workflows/main.yml)
+
 ---
-Chemsmart is a python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
+<p align="center">
+  <img src="docs/source/_static/chemsmart_logo.png" alt="CHEMSMART Logo" width="600"/>
+</p>
+
+---
+Notice: If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
+
+Chemsmart is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
 It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster. 
 
@@ -40,7 +48,7 @@ or
 ```bash
 make virtualenv
 ```
-to install using virtualenv. It is however recommanded that `conda` be used.
+to install using virtualenv. It is, however, recommended that `conda` be used.
 
 Help options are available by typing `make help`.
 
@@ -51,11 +59,18 @@ make install
 ```
 which installs the packages and dependencies required for `chemsmart` package.
 
+For developers, one may run
+
+```bash
+make install-dev
+```
+which installs additional packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing the `chemsmart` package.
+
 Next, run
 ```bash
 make configure
 ```
-to sets up the user-specific directory `~/.chemsmart` automatically. You will be prompt to enter the paths to g16 and ORCA software, which will then be added automatically. The correct `conda` path for the user will also be updated.
+to set up the user-specific directory `~/.chemsmart` automatically. You will be prompted to enter the paths to g16 and ORCA software, which will then be added automatically. The correct `conda` path for the user will also be updated.
 
 The configuration also adds the environment variables for chemsmart to the user `~/.bashrc` file.
 
@@ -173,7 +188,7 @@ This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-S
 ---
 Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
 
-One also need to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in scratch folder), one may do `ls -s /path/to/scratch/ ~/scratch`.
+One also needs to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in a scratch folder). One may do `ln -s /path/to/scratch/ ~/scratch`.
 
 Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
 
@@ -185,7 +200,7 @@ source ~/.bashrc
 
 to effect the changes.
 
----
+<!-- ---
 Once `make configure` is done, one can optionally run 
 ```bash
 make fmt
@@ -208,11 +223,11 @@ Finally one can clean up by running
 
 ```bash
 make clean
-```
+``` -->
 
 ## Testing Installations
 
-Installations is deemed successfully if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
+Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
 
 ```bash
 chemsmart --help
@@ -242,7 +257,7 @@ For example, to submit the geometry optimization job with atoms numbered 1 to 10
 ```bash 
 chemsmart sub -s shared gaussian -p test -f input.com opt -f 1-10
 ```
-Note that 1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.
+Note that 1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization software for molecules is 1-indexed.
 
 ---
 To submit transition state modredundant job (frozen coordinates optimization), do:
@@ -342,7 +357,7 @@ To optimize a fixed number of lowest energy conformers, `n_conformers_to_opt`, d
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j opt -n <n_conformers_to_opt>
 ```
 
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .xyz file. In fact, whenever .xyz file is used as input, the charge and multiplicity should be specified via `-c <charge> -m <multiplicity` via CLI.
+If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue the crest opt job until all `<n_conformers_to_opt>` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .xyz file. In fact, whenever an .xyz file is used as input, the charge and multiplicity should be specified via `-c <charge> -m <multiplicity>` via CLI.
 
 ---
 
@@ -358,7 +373,7 @@ To optimize a fixed number of lowest energy structures, `<num_structures_to_opt>
 ```bash
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj -n <n_conformers_to_opt>
 ```
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
+If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue the crest opt job until all `<n_conformers_to_opt>` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
 
 Two grouper types for determining/clustering unique structures are available from CLI option `-g`:
 
@@ -488,7 +503,7 @@ chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt
 will take the 5th structure (1-indexed, as in chemsmart) from ase database file, `small.db`, to create the input file for geometry optimization.
 
 ---
-Similar commands exists for ORCA job submssions. One can run 
+Similar commands exist for ORCA job submissions. One can run 
 
 ```bash
 chemsmart sub orca --help
@@ -498,3 +513,122 @@ to find out more.
 ## Development
 
 Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
+
+## 📖 Citations
+
+If you use **CHEMSMART** in your work, please follow good scholarly practice and kindly cite our work: [https://arxiv.org/abs/2508.20042](https://arxiv.org/abs/2508.20042). 
+
+### Plain Text (ACS Style)
+
+Zhang, X.; Tan, H.; Liu, J.; Li, Z.; Wang, L.; Chen, B. W. J. CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit for High-Efficiency Computational Chemistry Workflows. arXiv 2025, arXiv:2508.20042. https://doi.org/10.48550/arXiv.2508.20042.
+
+
+### BibTeX
+
+```bibtex
+@misc{zhang2025chemsmartchemistrysimulationmodeling,
+  title        = {CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit for High-Efficiency Computational Chemistry Workflows},
+  author       = {Xinglong Zhang and Huiwen Tan and Jingyi Liu and Zihan Li and Lewen Wang and Benjamin W. J. Chen},
+  year         = {2025},
+  eprint       = {2508.20042},
+  archivePrefix= {arXiv},
+  primaryClass = {physics.chem-ph},
+  url          = {https://arxiv.org/abs/2508.20042}
+}
+```
+
+
+---
+In addition, if you use **ASE** Atoms object in **CHEMSMART**, please cite:
+### Plain Text (ACS Style)
+
+Ask Hjorth Larsen et al The atomic simulation environment—a Python library for working with atoms. J. Phys.: Condens. Matter, 2017, 29, 273002.
+
+### BibTeX
+```bibtex
+@article{Hjorth Larsen_2017,
+doi = {10.1088/1361-648X/aa680e},
+url = {https://dx.doi.org/10.1088/1361-648X/aa680e},
+year = {2017},
+month = {jun},
+publisher = {IOP Publishing},
+volume = {29},
+number = {27},
+pages = {273002},
+author = {Hjorth Larsen, Ask and Jørgen Mortensen, Jens and Blomqvist, Jakob and Castelli, Ivano E and Christensen, Rune and Dułak, Marcin and Friis, Jesper and Groves, Michael N and Hammer, Bjørk and Hargus, Cory and Hermes, Eric D and Jennings, Paul C and Bjerre Jensen, Peter and Kermode, James and Kitchin, John R and Leonhard Kolsbjerg, Esben and Kubal, Joseph and Kaasbjerg, Kristen and Lysgaard, Steen and Bergmann Maronsson, Jón and Maxson, Tristan and Olsen, Thomas and Pastewka, Lars and Peterson, Andrew and Rostgaard, Carsten and Schiøtz, Jakob and Schütt, Ole and Strange, Mikkel and Thygesen, Kristian S and Vegge, Tejs and Vilhelmsen, Lasse and Walter, Michael and Zeng, Zhenhua and Jacobsen, Karsten W},
+title = {The atomic simulation environment—a Python library for working with atoms},
+journal = {Journal of Physics: Condensed Matter},
+abstract = {The atomic simulation environment (ASE) is a software package written in the Python programming language with the aim of setting up, steering, and analyzing atomistic simulations. In ASE, tasks are fully scripted in Python. The powerful syntax of Python combined with the NumPy array library make it possible to perform very complex simulation tasks. For example, a sequence of calculations may be performed with the use of a simple ‘for-loop’ construction. Calculations of energy, forces, stresses and other quantities are performed through interfaces to many external electronic structure codes or force fields using a uniform interface. On top of this calculator interface, ASE provides modules for performing many standard simulation tasks such as structure optimization, molecular dynamics, handling of constraints and performing nudged elastic band calculations.}
+}
+```
+---
+If you use RDKit functionalities in **CHEMSMART**, please cite:
+
+### Plain Text (ACS Style)
+
+ARDKit: Open-source cheminformatics. https://www.rdkit.org
+
+### BibTeX
+```bibtex
+@article{Landrum2016RDKit2016_09_4,
+  added-at = {2017-04-11T06:11:47.000+0200},
+  author = {Landrum, Greg},
+  biburl = {https://www.bibsonomy.org/bibtex/28d01fceeccd6bf2486e47d7c4207b108/salotz},
+  description = {Release 2016_09_4 (Q3 2016) Release · rdkit/rdkit},
+  interhash = {ee9a4ddeff3121aa622cf35709fa6e21},
+  intrahash = {8d01fceeccd6bf2486e47d7c4207b108},
+  keywords = {chemoinformatics drug-design pharmacophores software},
+  timestamp = {2017-04-11T06:11:47.000+0200},
+  title = {RDKit: Open-Source Cheminformatics Software},
+  url = {https://github.com/rdkit/rdkit/releases/tag/Release_2016_09_4},
+  year = 2016
+}
+```
+---
+Our package has minimal dependencies on **pymatgen**, but if you convert **CHEMSMART** molecule into pymatgen **AseAtomsAdaptor**, please cite:
+
+### Plain Text (ACS Style)
+A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek, S. Cholia, D. Gunter, D. Skinner, G. Ceder, K.A. Persson
+The Materials Project: A materials genome approach to accelerating materials innovation.
+*APL Materials*, 2013, 1(1), 011002.
+
+### BibTeX
+```bibtex
+@article{Jain2013,
+author = {Jain, Anubhav and Ong, Shyue Ping and Hautier, Geoffroy and Chen, Wei and Richards, William Davidson and Dacek, Stephen and Cholia, Shreyas and Gunter, Dan and Skinner, David and Ceder, Gerbrand and Persson, Kristin a.},
+doi = {10.1063/1.4812323},
+issn = {2166532X},
+journal = {APL Materials},
+number = {1},
+pages = {011002},
+title = {{The Materials Project: A materials genome approach to accelerating materials innovation}},
+url = {http://link.aip.org/link/AMPADS/v1/i1/p011002/s1\&Agg=doi},
+volume = {1},
+year = {2013}
+}
+```
+
+---
+If you use **scikit-learn**, please cite
+
+### Plain Text (ACS Style)
+
+Pedregosa et al., Scikit-learn: Machine Learning in Python, *J. Mach. Learn. Res* 2011, 12, 2825-2830.
+
+### BibTeX
+```bibtex
+@article{scikit-learn,
+  title={Scikit-learn: Machine Learning in {P}ython},
+  author={Pedregosa, F. and Varoquaux, G. and Gramfort, A. and Michel, V.
+          and Thirion, B. and Grisel, O. and Blondel, M. and Prettenhofer, P.
+          and Weiss, R. and Dubourg, V. and Vanderplas, J. and Passos, A. and
+          Cournapeau, D. and Brucher, M. and Perrot, M. and Duchesnay, E.},
+  journal={Journal of Machine Learning Research},
+  volume={12},
+  pages={2825--2830},
+  year={2011}
+}
+```
+
+---
+**Please also cite other relavant software (e.g., Gaussian, ORCA, NCIPLOT, PyMOL) and DFT functionals and basis sets you use in your research accordingly.**

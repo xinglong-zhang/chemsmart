@@ -11,9 +11,14 @@ from rdkit import Chem
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.mol.runner import (
+    PyMOLAlignJobRunner,
+    PyMOLHybridVisualizationJobRunner,
+    PyMOLIRCMovieJobRunner,
+    PyMOLMOJobRunner,
     PyMOLMovieJobRunner,
     PyMOLVisualizationJobRunner,
 )
+from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
 
@@ -40,6 +45,21 @@ def test_data_directory():
 @pytest.fixture()
 def gaussian_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "GaussianTests")
+
+
+# Gaussian folder for semiempirical calculations
+@pytest.fixture()
+def gaussian_semiempirical_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "semiempirical")
+
+
+@pytest.fixture()
+def gaussian_semiempirical_pm6_output_file(
+    gaussian_semiempirical_test_directory,
+):
+    return os.path.join(
+        gaussian_semiempirical_test_directory, "DBU_PM6_opt.log"
+    )
 
 
 # Gaussian output file from outputs folder
@@ -130,6 +150,114 @@ def modred_genecp_custom_solvent_inputfile(gaussian_inputs_genecp_directory):
     )
 
 
+# Gaussian input files for link jobs
+@pytest.fixture()
+def gaussian_link_inputs_test_directory(gaussian_inputs_test_directory):
+    return os.path.join(gaussian_inputs_test_directory, "link")
+
+
+@pytest.fixture()
+def gaussian_link_opt_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_opt_input_opt_link.com"
+    )
+
+
+@pytest.fixture()
+def gaussian_link_ts_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_ts_input_ts_link.com"
+    )
+
+
+# Gaussian output files for link jobs
+@pytest.fixture()
+def gaussian_link_outputs_test_directory(gaussian_outputs_test_directory):
+    gaussian_link_outputs_test_directory = os.path.join(
+        gaussian_outputs_test_directory, "link"
+    )
+    return gaussian_link_outputs_test_directory
+
+
+@pytest.fixture()
+def gaussian_link_opt_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_ts_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_ts_link.log",
+    )
+    return gaussian_link_ts_outfile
+
+
+@pytest.fixture()
+def gaussian_link_modred_output(gaussian_link_outputs_test_directory):
+    gaussian_link_modred_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "fe_ch_quintet_modred_link.log",
+    )
+    return gaussian_link_modred_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory,
+        "oxygen_openshell_singlet_sp_link.log",
+    )
+
+
+@pytest.fixture()
+def gaussian_dna_link_sp_outputfile(gaussian_link_outputs_test_directory):
+    gaussian_link_outfile = os.path.join(
+        gaussian_link_outputs_test_directory, "dna_link_sp.log"
+    )
+    return gaussian_link_outfile
+
+
+@pytest.fixture()
+def gaussian_dppeFeCl2_link_opt_outputfile(
+    gaussian_link_outputs_test_directory,
+):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "dppeFeCl2_opt_quintet_link_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_dppeFeCl2_link_opt_failed_outputfile(
+    gaussian_link_outputs_test_directory,
+):
+    gaussian_link_failed_outfile = os.path.join(
+        gaussian_link_outputs_test_directory,
+        "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
+    )
+    return gaussian_link_failed_outfile
+
+
+@pytest.fixture()
+def gaussian_failed_link_output(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory, "failed_link_job.log"
+    )
+
+
+@pytest.fixture()
+def gaussian_link_sp_input(gaussian_link_inputs_test_directory):
+    return os.path.join(
+        gaussian_link_inputs_test_directory, "link_sp_input_sp_link.com"
+    )
+
+
 @pytest.fixture()
 def gaussian_qmmm_input_test_directory(gaussian_inputs_test_directory):
     return os.path.join(gaussian_inputs_test_directory, "qmmm")
@@ -173,6 +301,32 @@ def gaussian_quintet_opt_outfile(gaussian_outputs_test_directory):
         gaussian_outputs_test_directory, "iron_neutral_quintet.log"
     )
     return gaussian_quintet_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_sp_outfile(gaussian_outputs_test_directory):
+    gaussian_link_outfile = os.path.join(
+        gaussian_outputs_test_directory, "dna_link_sp.log"
+    )
+    return gaussian_link_outfile
+
+
+@pytest.fixture()
+def gaussian_link_opt_outfile(gaussian_outputs_test_directory):
+    gaussian_link_opt_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "dppeFeCl2_opt_quintet_link_opt_link.log",
+    )
+    return gaussian_link_opt_outfile
+
+
+@pytest.fixture()
+def gaussian_link_failed_outfile(gaussian_outputs_test_directory):
+    gaussian_link_failed_outfile = os.path.join(
+        gaussian_outputs_test_directory,
+        "dppeFeCl2_phenyldioxazolone_opt_triplet_opt_error_termination_link.log",
+    )
+    return gaussian_link_failed_outfile
 
 
 # Gaussian output files for genecp
@@ -433,6 +587,13 @@ def gaussian_written_opt_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
+def gaussian_written_pm6_opt_file(gaussian_written_files_directory):
+    return os.path.join(
+        gaussian_written_files_directory, "gaussian_pm6_opt.com"
+    )
+
+
+@pytest.fixture()
 def gaussian_written_opt_file_with_route(gaussian_written_files_directory):
     return os.path.join(
         gaussian_written_files_directory, "gaussian_opt_with_route.com"
@@ -447,8 +608,33 @@ def gaussian_written_modred_file(gaussian_written_files_directory):
 
 
 @pytest.fixture()
-def gaussian_written_scan_file(gaussian_written_files_directory):
-    return os.path.join(gaussian_written_files_directory, "gaussian_scan.com")
+def gaussian_written_scan_single_degree_of_freedom_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_single_degree_of_freedom.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_multiple_degrees_of_freedom_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_multiple_degrees_of_freedom.com",
+    )
+
+
+@pytest.fixture()
+def gaussian_written_scan_multiple_degrees_of_freedom_with_constraints_file(
+    gaussian_written_files_directory,
+):
+    return os.path.join(
+        gaussian_written_files_directory,
+        "gaussian_scan_multiple_degrees_of_freedom_with_constraints.com",
+    )
 
 
 @pytest.fixture()
@@ -546,6 +732,50 @@ def qmmm_written_xyz_only_file(gaussian_written_files_directory):
     )
 
 
+# Gaussian folder for thermochemistry analysis
+@pytest.fixture()
+def gaussian_thermochem_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "thermochem")
+
+
+@pytest.fixture()
+def gaussian_co2_pressure1p5_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure1p5_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure1p5.log"
+    )
+    return gaussian_co2_pressure1p5_outfile
+
+
+@pytest.fixture()
+def gaussian_co2_pressure3_outfile(gaussian_thermochem_test_directory):
+    gaussian_co2_pressure3_outfile = os.path.join(
+        gaussian_thermochem_test_directory, "co2_pressure3.log"
+    )
+    return gaussian_co2_pressure3_outfile
+
+
+# Gaussian folder for boltzmann weighting
+@pytest.fixture()
+def gaussian_boltzmann_test_directory(gaussian_test_directory):
+    return os.path.join(gaussian_test_directory, "boltzmann")
+
+
+@pytest.fixture()
+def gaussian_conformer1_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer1_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c1.log"
+    )
+    return gaussian_conformer1_outfile
+
+
+@pytest.fixture()
+def gaussian_conformer2_outfile(gaussian_boltzmann_test_directory):
+    gaussian_conformer2_outfile = os.path.join(
+        gaussian_boltzmann_test_directory, "udc3_mCF3_monomer_c4.log"
+    )
+    return gaussian_conformer2_outfile
+
+
 # text path and associated files
 @pytest.fixture()
 def text_directory(gaussian_test_directory):
@@ -612,6 +842,37 @@ def orca_inputs_directory(orca_test_directory):
 
 
 @pytest.fixture()
+def orca_inputs_xyz_directory(orca_inputs_directory):
+    """Returns the absolute path to the orca inputs that specifies xyz files."""
+    orca_inputs_xyz_directory = os.path.join(orca_inputs_directory, "xyz")
+    return os.path.abspath(orca_inputs_xyz_directory)
+
+
+@pytest.fixture()
+def orca_input_nebts_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "neb_TS_rot1.inp")
+
+
+@pytest.fixture()
+def orca_input_nebts_reactant_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "R-1a_opt.xyz")
+
+
+@pytest.fixture()
+def orca_input_nebts_product_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "S-1a_opt.xyz")
+
+
+@pytest.fixture()
+def orca_input_nebts_ts_xyz_file(orca_inputs_xyz_directory):
+    """Returns the absolute path to the orca input file for NEB with TS optimization."""
+    return os.path.join(orca_inputs_xyz_directory, "TS_rot1.xyz")
+
+
+@pytest.fixture()
 def orca_dias_directory(orca_test_directory):
     orca_dias_directory = os.path.join(orca_test_directory, "dias")
     return os.path.abspath(orca_dias_directory)
@@ -671,6 +932,11 @@ def orca_co2_output(orca_outputs_directory):
 
 
 @pytest.fixture()
+def orca_sn2_ts_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "sn2_ts.out")
+
+
+@pytest.fixture()
 def dlpno_ccsdt_sp_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "dlpno_ccsdt_singlepoint_neutral_in_cpcm.out"
@@ -682,6 +948,36 @@ def hirshfeld_full_print(orca_outputs_directory):
     return os.path.join(
         orca_outputs_directory, "udc3_ts1_c15_sp_hirshfeld.out"
     )
+
+
+@pytest.fixture()
+def fe2_singlet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_singlet.out")
+
+
+@pytest.fixture()
+def fe2_triplet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_triplet.out")
+
+
+@pytest.fixture()
+def fe2_quintet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe2_quintet.out")
+
+
+@pytest.fixture()
+def fe3_doublet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_doublet.out")
+
+
+@pytest.fixture()
+def fe3_quartet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_quartet.out")
+
+
+@pytest.fixture()
+def fe3_sextet_output(orca_outputs_directory):
+    return os.path.join(orca_outputs_directory, "fe3_sextet.out")
 
 
 @pytest.fixture()
@@ -744,8 +1040,32 @@ def orca_written_modred_file(orca_written_files_directory):
 
 
 @pytest.fixture()
-def orca_written_scan_file(orca_written_files_directory):
-    return os.path.join(orca_written_files_directory, "orca_scan.inp")
+def orca_written_scan_single_degree_of_freedom_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory, "orca_scan_single_degree_of_freedom.inp"
+    )
+
+
+@pytest.fixture()
+def orca_written_scan_multiple_degrees_of_freedom_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory,
+        "orca_scan_multiple_degrees_of_freedom.inp",
+    )
+
+
+@pytest.fixture()
+def orca_written_scan_multiple_degrees_of_freedom_with_constraints_file(
+    orca_written_files_directory,
+):
+    return os.path.join(
+        orca_written_files_directory,
+        "orca_scan_multiple_degrees_of_freedom_with_constraints.inp",
+    )
 
 
 @pytest.fixture()
@@ -810,6 +1130,59 @@ def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "orca")
 
 
+# master xTB test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    xtb_inputs_directory = os.path.join(xtb_test_directory, "inputs")
+    return os.path.abspath(xtb_inputs_directory)
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "default.inp")
+
+
+@pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "alpb_water.inp")
+
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    xtb_outputs_directory = os.path.join(xtb_test_directory, "outputs")
+    return os.path.abspath(xtb_outputs_directory)
+
+
+@pytest.fixture()
+def xtb_co2_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_ohess")
+
+
+@pytest.fixture()
+def xtb_water_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_ohess")
+
+
+@pytest.fixture()
+def xtb_cyclopentadienyl_anion_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "cyclopentadienyl_anion_opt")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_opt_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_opt_alpb_toluene")
+
+
+@pytest.fixture()
+def xtb_p_benzyne_sp_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "p_benzyne_sp_alpb_toluene")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
@@ -829,6 +1202,56 @@ def single_molecule_xyz_file(xyz_directory):
 @pytest.fixture()
 def multiple_molecules_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "crest_conformers.xyz")
+
+
+@pytest.fixture()
+def xtb_optimized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "ts_xtbopt.xyz")
+
+
+@pytest.fixture()
+def chemsmart_generated_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "frozen_coordinates_opt.xyz")
+
+
+@pytest.fixture()
+def extended_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "crystal.extxyz")
+
+
+@pytest.fixture()
+def dna_hybrid_visualized_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "dna_hybrid.xyz")
+
+
+@pytest.fixture()
+def chemdraw_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "chemdraw")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_benzene(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "benzene.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdxml_file_methane(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "methane.cdxml")
+
+
+@pytest.fixture()
+def multi_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "two_molecules.cdxml")
+
+
+@pytest.fixture()
+def single_molecule_cdx_file_imidazole(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "imidazole.cdx")
+
+
+@pytest.fixture()
+def complex_molecule_cdxml_file(chemdraw_directory):
+    return os.path.join(chemdraw_directory, "complex_molecule.cdxml")
 
 
 @pytest.fixture()
@@ -879,8 +1302,40 @@ def pymol_visualization_jobrunner(pbs_server):
 
 
 @pytest.fixture()
+def pymol_hybrid_visualization_jobrunner(pbs_server):
+    return PyMOLHybridVisualizationJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
 def pymol_movie_jobrunner(pbs_server):
     return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def nciplot_jobrunner_no_scratch(pbs_server):
+    return FakeNCIPLOTJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def nciplot_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeNCIPLOTJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def pymol_align_jobrunner(pbs_server):
+    return PyMOLAlignJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_ircmovie_jobrunner(pbs_server):
+    return PyMOLIRCMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def pymol_mo_jobrunner(pbs_server):
+    return PyMOLMOJobRunner(server=pbs_server, scratch=False)
 
 
 ## conformers for testing
@@ -904,6 +1359,38 @@ def methanol_molecules():
     methanol_molecules = [methanol, methanol_rot1, methanol_rot2]
 
     return methanol_molecules
+
+
+@pytest.fixture()
+def constrained_atoms():
+    """Fixture to create a simple Ar2 dimer with constraints."""
+    from ase import Atoms
+    from ase.calculators.lj import LennardJones
+    from ase.constraints import FixAtoms, FixBondLength
+
+    # Simple Ar2 dimer with a reasonable separation
+    r0 = 3.5  # Å
+    atoms = Atoms(
+        "Ar2", positions=[(0.0, 0.0, 0.0), (r0, 0.0, 0.0)], pbc=False
+    )
+
+    # Light-weight calculator for tests
+    atoms.calc = LennardJones()  # defaults are fine for unit tests
+
+    # Constraints:
+    #  - Fix the first atom in space
+    #  - Keep the Ar–Ar bond length fixed at its initial value
+    constraints = [
+        FixAtoms(indices=[0]),
+        FixBondLength(0, 1),
+    ]
+    # set the constraints on the Atoms object
+    atoms.set_constraint(constraint=constraints)
+
+    # set velocity
+    atoms.set_velocities([[0, 0, 0], [0, 0, 0]])  # Set zero velocities
+
+    return atoms
 
 
 @pytest.fixture()
@@ -966,8 +1453,17 @@ def excel_file(io_test_directory):
     return os.path.join(io_test_directory, "test.xlsx")
 
 
+@pytest.fixture()
+def constrained_pbc_db_file(io_test_directory):
+    """Fixture of a .db file containing constrained PBC database
+    from heterogeneous catalysis."""
+    return os.path.join(
+        io_test_directory, "heterogenous_pbc_constraints_5images.db"
+    )
+
+
 ## fixtures for mixins
-@pytest.fixture
+@pytest.fixture()
 def temp_text_file():
     with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
         tmp.write("Line1\nLine2\n")
@@ -976,7 +1472,7 @@ def temp_text_file():
     os.remove(tmp_name)
 
 
-@pytest.fixture
+@pytest.fixture()
 def dummy_yaml_file():
     class DummyYAMLFile:
         def __init__(self):
@@ -1003,7 +1499,7 @@ def dummy_yaml_file():
     return DummyYAMLFile()
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_folder_with_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         file1 = os.path.join(tmpdir, "test1.txt")
@@ -1016,7 +1512,7 @@ def temp_folder_with_files():
 
 
 # pytest fixtures for Popen
-@pytest.fixture
+@pytest.fixture()
 def mock_popen(mocker):
     """Fixture to mock subprocess.Popen."""
     return mocker.patch("subprocess.Popen")
@@ -1050,67 +1546,13 @@ def tests_logger():
     os.environ.pop("TEST_MODE", None)
 
 
-@pytest.fixture
-def capture_log(caplog, tests_logger):
-    """Fixture to capture log messages."""
-    caplog.set_level(logging.INFO, logger="")  # Capture root logger
-    yield caplog
-
-
-## xtb fixtures
-# master xtb test directory
+# Use built-in caplog fixture for capturing log messages
 @pytest.fixture()
-def xtb_test_directory(test_data_directory):
-    return os.path.join(test_data_directory, "XTBTests")
+def capture_log(caplog):
+    """
+    Fixture to capture log messages.
 
-
-# @pytest.fixture()
-# def xtb_inputs_directory(xtb_test_directory):
-#     return os.path.join(xtb_test_directory, "inputs")
-
-
-@pytest.fixture()
-def xtb_outputs_directory(xtb_test_directory):
-    return os.path.join(xtb_test_directory, "outputs")
-
-
-@pytest.fixture()
-def xtb_sp_outfile(xtb_outputs_directory):
-    xtb_sp_outfile = os.path.join(xtb_outputs_directory, "water_sp.out")
-    return xtb_sp_outfile
-
-
-@pytest.fixture()
-def xtb_opt_outfile(xtb_outputs_directory):
-    xtb_opt_outfile = os.path.join(xtb_outputs_directory, "water_opt.out")
-    return xtb_opt_outfile
-
-
-@pytest.fixture()
-def xtb_opt_gbsa_outfile(xtb_outputs_directory):
-    xtb_opt_gbsa_outfile = os.path.join(
-        xtb_outputs_directory, "pyridine_opt_acetonitrile.out"
-    )
-    return xtb_opt_gbsa_outfile
-
-
-@pytest.fixture()
-def xtb_hess_outfile(xtb_outputs_directory):
-    xtb_hess_outfile = os.path.join(
-        xtb_outputs_directory, "pyridine_hess_acetonitrile.out"
-    )
-    return xtb_hess_outfile
-
-
-@pytest.fixture()
-def xtb_gei_outfile(xtb_outputs_directory):
-    xtb_gei_outfile = os.path.join(xtb_outputs_directory, "pyridine_gei.out")
-    return xtb_gei_outfile
-
-
-@pytest.fixture()
-def xtb_fukui_outfile(xtb_outputs_directory):
-    xtb_fukui_outfile = os.path.join(
-        xtb_outputs_directory, "pyridine_fukui.out"
-    )
-    return xtb_fukui_outfile
+    Captures messages from the root logger at DEBUG level by default.
+    """
+    caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
+    return caplog

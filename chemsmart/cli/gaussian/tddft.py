@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @click_gaussian_td_options
 @click.pass_context
 def td(ctx, states, root, nstates, eqsolv, **kwargs):
-    """CLI for running Gaussian TDDFT jobs."""
+    """CLI subcommand for running Gaussian TDDFT jobs."""
 
     # get jobrunner for running Gaussian TDDFT jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -26,24 +26,26 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
     project_settings = ctx.obj["project_settings"]
     td_settings = project_settings.td_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project settings with job settings from cli keywords from
+    # cli.gaussian.py subcommands
     td_settings = td_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(td_settings)
 
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
-    # convert from GaussianJobSettings instance to GaussianTDJobSettings instance
+    # convert from GaussianJobSettings instance to GaussianTDJobSettings
+    # instance
     td_settings = GaussianTDDFTJobSettings(**td_settings.__dict__)
 
     # populate cli options
@@ -56,10 +58,35 @@ def td(ctx, states, root, nstates, eqsolv, **kwargs):
 
     from chemsmart.jobs.gaussian.tddft import GaussianTDDFTJob
 
-    return GaussianTDDFTJob(
-        molecule=molecule,
-        settings=td_settings,
-        label=label,
-        jobrunner=jobrunner,
-        **kwargs,
-    )
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} TDDFT jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running TDDFT for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = GaussianTDDFTJob(
+                molecule=molecule,
+                settings=td_settings,
+                label=molecule_label,
+                jobrunner=jobrunner,
+                **kwargs,
+            )
+            jobs.append(job)
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        return GaussianTDDFTJob(
+            molecule=molecule,
+            settings=td_settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )

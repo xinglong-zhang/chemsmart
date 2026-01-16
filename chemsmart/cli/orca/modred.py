@@ -1,3 +1,12 @@
+"""
+ORCA Modified Redundant Coordinate (Modred) CLI Module
+
+This module provides the command-line interface for ORCA modified redundant
+coordinate calculations. Modred calculations allow users to constrain or
+modify specific internal coordinates during geometry optimizations, enabling
+controlled structural changes and conformational searches.
+"""
+
 import logging
 
 import click
@@ -17,36 +26,82 @@ logger = logging.getLogger(__name__)
 def modred(
     ctx, jobtype, coordinates, dist_start, dist_end, num_steps, **kwargs
 ):
+    """
+    Run ORCA modified redundant coordinate (modred) calculations.
+
+    This command performs geometry optimizations with modified redundant
+    coordinates, allowing users to constrain or fix specific internal
+    coordinates during the optimization process. This is useful for
+    conformational searches, reaction coordinate analysis, and studying
+    specific structural changes.
+    """
+    # set default job type if not specified
     if jobtype is None:
         jobtype = "modred"
+        logger.debug("Using default jobtype: modred")
 
-    # get settings from project
+    # get modred settings from project configuration based on job type
     project_settings = ctx.obj["project_settings"]
     modred_settings = get_setting_from_jobtype_for_orca(
         project_settings, jobtype, coordinates, dist_start, dist_end, num_steps
     )
+    logger.debug(
+        f"Loaded modred settings for jobtype {jobtype}: {modred_settings}"
+    )
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
-    # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
+    # e.g., `chemsmart sub orca -c <user_charge> -m <user_multiplicity> modred`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project settings with job settings from cli keywords from cli.gaussian.py subcommands
+    # merge project modred settings with job settings from cli keywords
     modred_settings = modred_settings.merge(job_settings, keywords=keywords)
+    logger.info(f"Final modred settings: {modred_settings.__dict__}")
+
+    # validate charge and multiplicity consistency
     check_charge_and_multiplicity(modred_settings)
 
-    # get molecule
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
 
-    # get label for the job
+    # get label for the job output files
     label = ctx.obj["label"]
-    logger.debug(f"Label for job: {label}")
-
-    logger.info(f"Modred settings from project: {modred_settings.__dict__}")
+    logger.debug(f"Job label: {label}")
 
     from chemsmart.jobs.orca.modred import ORCAModredJob
 
-    return ORCAModredJob(
-        molecule=molecule, settings=modred_settings, label=label, **kwargs
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
     )
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} ORCA modred jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = ORCAModredJob(
+                molecule=molecule,
+                settings=modred_settings,
+                label=molecule_label,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA modred jobs")
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        logger.info(f"Running modred calculation on molecule: {molecule}")
+
+        job = ORCAModredJob(
+            molecule=molecule, settings=modred_settings, label=label, **kwargs
+        )
+        logger.debug(f"Created ORCA modred job: {job}")
+        return job

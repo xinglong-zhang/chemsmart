@@ -1,4 +1,16 @@
-"""Utils for cluster-related stuff."""
+"""
+Cluster utilities for job monitoring and connectivity checks.
+
+Helpers for interacting with common HPC schedulers and network services
+used by ChemSmart workflows. Currently supports SLURM (via `squeue`/`sacct`)
+and PBS/Torque (via `qstat`) to discover running Gaussian jobs, along with a
+simple PubChem reachability check.
+
+Key functionality:
+- Detect current username reliably.
+- Query running Gaussian jobs (IDs and names) on SLURM or PBS/Torque.
+- Validate network connectivity to PubChem for external lookups.
+"""
 
 import os
 import shlex
@@ -7,14 +19,32 @@ import subprocess
 
 
 class ClusterHelper:
-    """Class for cluster helper to obtain the running jobs. Currently only works
-    for SLURM and Torque/PBS queuing systems. Can be expanded later to others.
+    """
+    Helper for querying running jobs on HPC schedulers.
+
+    Provides methods to obtain IDs and names of running Gaussian jobs on
+    SLURM and PBS/Torque clusters.
+
+    Attributes:
+        username (str): Current user's username for filtering scheduler output.
     """
 
     def __init__(self):
+        """
+        Initialize cluster helper with current username detection.
+        """
         self.username = self._get_username()
 
     def _get_username(self):
+        """
+        Determine the current username with fallbacks.
+
+        Tries `os.getlogin()` first and falls back to invoking `whoami`
+        if the login name is unavailable (e.g., no controlling TTY).
+
+        Returns:
+            str: Current username.
+        """
         try:
             username = (
                 os.getlogin()
@@ -27,6 +57,16 @@ class ClusterHelper:
         return username
 
     def get_gaussian_running_jobs(self):
+        """
+        Get IDs and names of currently running Gaussian jobs.
+
+        Queries SLURM first and, on failure, falls back to PBS/Torque.
+
+        Returns:
+            tuple[list[int], list[str]]: (job_ids, job_names). Returns two
+            empty lists if no jobs are found or no supported scheduler is
+            available.
+        """
         try:
             running_job_ids = self._get_gaussian_running_job_ids_on_slurm()
             running_job_names = self._get_gaussian_running_job_names_on_slurm()
@@ -40,7 +80,14 @@ class ClusterHelper:
         return running_job_ids, running_job_names
 
     def _get_gaussian_running_job_ids_on_slurm(self):
-        """Function for getting a list of the job ids of gaussian jobs that are running on slurm."""
+        """
+        Collect Gaussian job IDs running on SLURM.
+
+        Invokes `squeue` and filters rows by the current username.
+
+        Returns:
+            list[int]: SLURM job IDs for running Gaussian jobs.
+        """
         running_job_ids = []
         p1 = subprocess.Popen(shlex.split("squeue"), stdout=subprocess.PIPE)
         p2 = subprocess.Popen(
@@ -59,7 +106,16 @@ class ClusterHelper:
         return running_job_ids
 
     def _get_gaussian_running_job_names_on_slurm(self):
-        """Function for getting a list of the job names of gaussian jobs that are running on slurm."""
+        """
+        Collect Gaussian job names running on SLURM.
+
+        Invokes `sacct` and filters by username, then cross-references IDs
+        from `squeue`. Job names are derived from the submit script field and
+        normalized by stripping the `chemsmart_sub_` prefix and file suffix.
+
+        Returns:
+            list[str]: Job names for currently running Gaussian jobs.
+        """
         running_job_ids = self._get_gaussian_running_job_ids_on_slurm()
         running_job_names = []
         cmd = 'sacct --format="User,JobID,JobName%100"'
@@ -70,13 +126,13 @@ class ClusterHelper:
             if self.username in line:
                 line_elem = line.split()
                 job_id = int(line_elem[1])
-                # checks for currently running jobs
+                # Checks for currently running jobs
                 if job_id in running_job_ids:
                     job_name_submitscript = line_elem[-1]
                     job_name_submitscript_no_ext = os.path.splitext(
                         job_name_submitscript
                     )[0]
-                    # gaussian submission script names
+                    # Gaussian submission script names
                     job_name = job_name_submitscript_no_ext.split(
                         "chemsmart_sub_"
                     )[-1]
@@ -84,7 +140,15 @@ class ClusterHelper:
         return running_job_names
 
     def _get_gaussian_running_jobs_on_torque(self):
-        """Function for getting a list of the job ids of gaussian jobs that are running on torque."""
+        """
+        Collect Gaussian job IDs and names on PBS/Torque.
+
+        Invokes `qstat -f`, filters surrounding lines by username, parses
+        job IDs and submit-script-based names (stripping `chemsmart_sub_`).
+
+        Returns:
+            tuple[list[int], list[str]]: (job_ids, job_names).
+        """
         running_job_ids = []
         running_job_names = []
         p1 = subprocess.Popen(shlex.split("qstat -f"), stdout=subprocess.PIPE)
@@ -106,7 +170,7 @@ class ClusterHelper:
                 job_name_submitscript_no_ext = os.path.splitext(
                     job_name_submitscript
                 )[0]
-                # gaussian submission script names
+                # Gaussian submission script names
                 job_name = job_name_submitscript_no_ext.split(
                     "chemsmart_sub_"
                 )[-1]
@@ -115,6 +179,15 @@ class ClusterHelper:
 
 
 def is_pubchem_network_available():
+    """
+    Check PubChem (NCBI) HTTPS connectivity.
+
+    Attempts to open a TCP connection to pubchem.ncbi.nlm.nih.gov:443 with
+    a short timeout to validate reachability.
+
+    Returns:
+        bool: True if reachable, False otherwise.
+    """
     try:
         socket.create_connection(("pubchem.ncbi.nlm.nih.gov", 443), timeout=5)
         return True

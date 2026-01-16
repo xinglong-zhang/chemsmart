@@ -3,8 +3,10 @@ chk: True
 freq: True
 job_type: Null
 title: 'Gaussian job'
+ab_initio: Null  # default value; will get updated by project settings
 functional: Null  # default value; will get updated by project settings
 basis : Null  # default value; will get updated by project settings
+semiempirical: Null  # default value; will get updated by project settings
 charge : Null  # default value; will get updated by user at runtime
 multiplicity : Null  # default value; will get updated by user at runtime
 route_to_be_written : Null  # user-defined route

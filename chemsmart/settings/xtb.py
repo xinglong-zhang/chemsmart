@@ -18,75 +18,39 @@ project_settings_registry: list[str] = []
 
 
 class XTBProjectSettings(RegistryMixin):
-    """Most general XTB settings class with key defaults."""
+    """Most general xTB settings class with key defaults."""
 
     PROJECT_NAME = "general"
-    functional = None
-    small_basis = None
-    large_basis = None
+    gfn_version = "gfn2"
 
     def main_settings(self):
-        """XTB main settings with key default values."""
+        """xTB main settings with key default values."""
         default_xtb_job_settings = XTBJobSettings.default()
-        default_xtb_job_settings.functional = self.functional
-        default_xtb_job_settings.basis = self.small_basis
+        default_xtb_job_settings.gfn_version = self.gfn_version
         return default_xtb_job_settings
 
+    def sp_settings(self):
+        """xTB default settings for sp job."""
+        settings = self.main_settings().copy()
+        settings.job_type = "sp"
+        return settings
+
     def opt_settings(self):
-        """XTB default settings for opt job."""
+        """xTB default settings for opt job."""
         settings = self.main_settings().copy()
         settings.job_type = "opt"
         return settings
 
-    def modred_settings(self):
-        """XTB default settings for modred job."""
+    def hess_settings(self):
+        """xTB default settings for hess job."""
         settings = self.main_settings().copy()
-        settings.job_type = "modred"
+        settings.job_type = "hess"
         return settings
 
-    def ts_settings(self):
-        """XTB default settings for ts job."""
+    def md_settings(self):
+        """xTB default settings for md job."""
         settings = self.main_settings().copy()
-        settings.job_type = "ts"
-        return settings
-
-    # def irc_settings(self):
-    #     """Gaussian default settings for irc job."""
-    #     settings = self.main_settings().copy()
-    #     settings = GaussianIRCJobSettings(
-    #         **settings.__dict__
-    #     )  # convert settings to GaussianIRCJobSettings
-    #     settings.job_type = "irc"
-    #     settings.freq = False
-    #     return settings
-
-    def scan_settings(self):
-        """XTB default settings for scan job."""
-        settings = self.main_settings().copy()
-        settings.job_type = "scan"
-        settings.freq = False
-        return settings
-
-    def nci_settings(self):
-        """XTB default settings for nci job."""
-        settings = self.main_settings().copy()
-        settings.job_type = "nci"
-        settings.freq = False
-        return settings
-
-    def wbi_settings(self):
-        """XTB default settings for WBI job."""
-        settings = self.main_settings().copy()
-        settings.job_type = "wbi"
-        settings.freq = False
-        return settings
-
-    def sp_settings(self):
-        """XTB default settings for sp job."""
-        settings = self.main_settings().copy()
-        settings.job_type = "sp"
-        settings.freq = False  # turn off freq calculation for sp job
-        settings.basis = self.large_basis
+        settings.job_type = "md"
         return settings
 
     @classmethod
@@ -105,7 +69,7 @@ class XTBProjectSettings(RegistryMixin):
         templates_path = os.path.join(os.path.dirname(__file__), "templates")
         raise FileNotFoundError(
             f"No project settings implemented for {project}.\n\n"
-            f"Place new xtb project settings .yaml file in {user_settings.user_xtb_settings_dir}.\n\n"
+            f"Place new xTB project settings .yaml file in {user_settings.user_xtb_settings_dir}.\n\n"
             f"Templates for such settings.yaml files are available at {templates_path}\n\n "
             f"Currently available projects: {user_settings.all_available_xtb_projects}"
         )
@@ -132,77 +96,33 @@ class XTBProjectSettings(RegistryMixin):
         if settings is not None:
             return settings
 
-    # @classmethod
-    # def _from_chemsmart_test_projects(cls, project_name):
-    #     """Get .yaml project settings file from chemsmart test projects."""
-    #     current_file_dir = os.path.dirname(os.path.abspath(__file__))
-    #     test_projects_dir = os.path.join(
-    #         current_file_dir, "../../tests/data/GaussianTests/project_yaml"
-    #     )
-    #
-    #     project_name_yaml_path = os.path.join(
-    #         test_projects_dir, f"{project_name}.yaml"
-    #     )
-    #     project_settings_manager = GaussianProjectSettingsManager(
-    #         filename=project_name_yaml_path
-    #     )
-    #     settings = cls._from_projects_manager(project_settings_manager)
-    #
-    #     if settings is not None:
-    #         return settings
 
-
-class YamXTBProjectSettings(XTBProjectSettings):
+class YamlXTBProjectSettings(XTBProjectSettings):
     PROJECT_NAME = "yaml"
 
     def __init__(
         self,
-        opt_settings,
-        modred_settings,
-        ts_settings,
-        irc_settings,
-        scan_settings,
-        nci_settings,
         sp_settings,
-        td_settings,
-        wbi_settings,
+        opt_settings,
+        hess_settings,
+        md_settings,
     ):
-        self._opt_settings = opt_settings
-        self._modred_settings = modred_settings
-        self._ts_settings = ts_settings
-        self._irc_settings = irc_settings
-        self._scan_settings = scan_settings
-        self._nci_settings = nci_settings
         self._sp_settings = sp_settings
-        self._td_settings = td_settings
-        self._wbi_settings = wbi_settings
-
-    def opt_settings(self):
-        return self._opt_settings
-
-    def modred_settings(self):
-        return self._modred_settings
-
-    def ts_settings(self):
-        return self._ts_settings
-
-    def irc_settings(self):
-        return self._irc_settings
-
-    def scan_settings(self):
-        return self._scan_settings
-
-    def nci_settings(self):
-        return self._nci_settings
+        self._opt_settings = opt_settings
+        self._hess_settings = hess_settings
+        self._md_settings = md_settings
 
     def sp_settings(self):
         return self._sp_settings
 
-    def td_settings(self):
-        return self._td_settings
+    def opt_settings(self):
+        return self._opt_settings
 
-    def wbi_settings(self):
-        return self._wbi_settings
+    def hess_settings(self):
+        return self._hess_settings
+
+    def md_settings(self):
+        return self._md_settings
 
     @classmethod
     def from_yaml(cls, filename):
@@ -215,26 +135,23 @@ class YamlXTBProjectSettingsBuilder:
         self.filename = filename
 
     def build(self):
-        opt_settings = self._project_settings_for_job(job_type="opt")
-        modred_settings = self._project_settings_for_job(job_type="modred")
-        ts_settings = self._project_settings_for_job(job_type="ts")
-        irc_settings = self._project_settings_for_job(job_type="irc")
-        scan_settings = self._project_settings_for_job(job_type="scan")
-        nci_settings = self._project_settings_for_job(job_type="nci")
         sp_settings = self._project_settings_for_job(job_type="sp")
-        td_settings = self._project_settings_for_job(job_type="td")
-        wbi_settings = self._project_settings_for_job(job_type="wbi")
+        opt_settings = self._project_settings_for_job(job_type="opt")
+        hess_settings = self._project_settings_for_job(job_type="hess")
+        md_settings = self._project_settings_for_job(job_type="md")
 
-        project_settings = YamXTBProjectSettings(
-            opt_settings=opt_settings,
-            modred_settings=modred_settings,
-            ts_settings=ts_settings,
-            irc_settings=irc_settings,
-            scan_settings=scan_settings,
-            nci_settings=nci_settings,
+        # Internal job_type promotion based on opt flag
+        if hess_settings.opt:
+            hess_settings.job_type = "ohess"
+
+        if md_settings.opt:
+            md_settings.job_type = "omd"
+
+        project_settings = YamlXTBProjectSettings(
             sp_settings=sp_settings,
-            td_settings=td_settings,
-            wbi_settings=wbi_settings,
+            opt_settings=opt_settings,
+            hess_settings=hess_settings,
+            md_settings=md_settings,
         )
 
         name = self._parse_project_name()
@@ -247,17 +164,24 @@ class YamlXTBProjectSettingsBuilder:
         return read_molecular_job_yaml(self.filename, program="xtb")
 
     def _project_settings_for_job(self, job_type):
-        # Define a dictionary to map job_type to corresponding settings class
-
         try:
             job_type_config = self._read_config().get(job_type)
             if job_type_config is not None:
+                if "job_type" not in job_type_config:
+                    job_type_config["job_type"] = job_type
                 return XTBJobSettings.from_dict(job_type_config)
-        except KeyError as e:
-            raise RuntimeError(
-                f"XTB settings for job {job_type} cannot be found!\n"
-                f"Available XTB jobs with settings are: {self._read_config().keys()}"
-            ) from e
+            # Fallback to default
+            logger.warning(
+                f"No specific configuration found for '{job_type}' in project settings. "
+                f"Using default settings."
+            )
+            settings = XTBJobSettings.default()
+            settings.job_type = job_type
+            return settings
+
+        except KeyError:
+            # Should practically not happen with .get() but if read_config fails structure
+            raise RuntimeError(f"Error reading settings for {job_type}")
 
     def _parse_project_name(self):
         return os.path.basename(self.filename).split(".")[0]
@@ -276,4 +200,4 @@ class XTBProjectSettingsManager:
         self.filename = os.path.abspath(filename)
 
     def create(self):
-        return YamXTBProjectSettings.from_yaml(self.filename)
+        return YamlXTBProjectSettings.from_yaml(self.filename)

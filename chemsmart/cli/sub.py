@@ -1,4 +1,9 @@
-"""Submission of jobs to queuing system via cli."""
+"""
+Submission of jobs to queuing system via cli.
+
+This module provides command-line interface for submitting jobs to
+various queuing systems and cluster schedulers.
+"""
 
 import logging
 
@@ -19,17 +24,53 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
-@click.option("-t", "--time-hours", type=float, default=None)
-@click.option("-q", "--queue", type=str, help="queue")
+@click.option(
+    "-t",
+    "--time-hours",
+    type=float,
+    default=None,
+    help="Time limit in hours for the job (e.g., 48.0).",
+)
+@click.option("-q", "--queue", type=str, help="Queue name for job submission.")
+@click.option(
+    "-v/",
+    "--verbose/--no-verbose",
+    default=False,
+    help="Turn on logging to stream output and debug logging.",
+)
 @click.option(
     "--test/--no-test",
     default=False,
-    help="If true, job will not be submitted; only run and submit scripts will be written.",
+    help="If true, job will not be submitted; only run and submit "
+    "scripts will be written.",
 )
 @click.option(
     "--print-command/--no-print-command",
     default=False,
-    help="print the command generated",
+    help="Print the generated command.",
+)
+@click.option(
+    "--mkl-threads",
+    type=int,
+    default=None,
+    help="Number of MKL threads (xTB only).",
+)
+@click.option(
+    "--omp-threads",
+    type=int,
+    default=None,
+    help="Number of OMP threads (xTB only).",
+)
+@click.option(
+    "--omp-stacksize",
+    type=str,
+    default=None,
+    help="OMP stack size (xTB only).",
+)
+@click.option(
+    "--stack-unlimited/--no-stack-unlimited",
+    default=True,
+    help="Whether to set ulimit -s unlimited (xTB only).",
 )
 def sub(
     ctx,
@@ -39,16 +80,31 @@ def sub(
     mem_gb,
     fake,
     scratch,
+    delete_scratch,
     debug,
     stream,
     time_hours,
     queue,
+    verbose,
     test,
     print_command,
+    mkl_threads,
+    omp_threads,
+    omp_stacksize,
+    stack_unlimited,
     **kwargs,
 ):
+    """
+    Main command for submitting chemsmart jobs to queuing systems.
+
+    This command prepares and submits jobs to cluster schedulers with
+    specified resource requirements and queue parameters.
+    """
     # Set up logging
-    create_logger(debug=debug, stream=stream)
+    if verbose:
+        create_logger(stream=True, debug=True)
+    else:
+        create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
@@ -62,6 +118,7 @@ def sub(
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
+        delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
         num_gpus=num_gpus,
@@ -75,14 +132,33 @@ def sub(
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
 
+    # Store xTB specific options
+    ctx.obj["xtb_options"] = {
+        "mkl_threads": mkl_threads,
+        "omp_threads": omp_threads,
+        "omp_stacksize": omp_stacksize,
+        "stack_unlimited": stack_unlimited,
+    }
+
 
 @sub.result_callback(replace=True)
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
+    """
+    Process the job for submission to queuing system.
+
+    This callback function handles job submission by reconstructing
+    command-line arguments and interfacing with the appropriate
+    scheduler system.
+    """
+
     def _clean_command(ctx):
-        """Remove keywords used in sub.py but not in run.py.
-        Specifically: Some keywords/options (like queue, etc.)
-        are only relevant to sub.py and not applicable to run.py."""
+        """
+        Remove keywords used in sub.py but not in run.py.
+
+        Specifically: Some keywords/options (like queue, verbose, etc.)
+        are only relevant to sub.py and not applicable to run.py.
+        """
         # Get "sub" command and assert that there is exactly one.
         command = next(
             (
@@ -100,8 +176,13 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         keywords_not_in_run = [
             "time_hours",
             "queue",
+            "verbose",
             "test",
             "print_command",
+            "mkl_threads",
+            "omp_threads",
+            "omp_stacksize",
+            "stack_unlimited",
         ]
 
         for keyword in keywords_not_in_run:
@@ -110,7 +191,12 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         return ctx
 
     def _reconstruct_cli_args(ctx, job):
-        """Get cli args that reconstruct the command line."""
+        """
+        Get cli args that reconstruct the command line.
+
+        Rebuilds the command-line arguments from the context object
+        for job submission purposes.
+        """
         commands = ctx.obj["subcommand"]
 
         args = CtxObjArguments(commands, entry_point="sub")
@@ -125,6 +211,18 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
+        # Apply xTB options from sub command if present and job is xTB
+        if job.PROGRAM.lower() == "xtb":
+            xtb_opts = ctx.obj.get("xtb_options", {})
+            if xtb_opts.get("mkl_threads") is not None:
+                job.settings.mkl_threads = xtb_opts["mkl_threads"]
+            if xtb_opts.get("omp_threads") is not None:
+                job.settings.omp_threads = xtb_opts["omp_threads"]
+            if xtb_opts.get("omp_stacksize") is not None:
+                job.settings.omp_stacksize = xtb_opts["omp_stacksize"]
+            if xtb_opts.get("stack_unlimited") is not None:
+                job.settings.stack_unlimited = xtb_opts["stack_unlimited"]
+
         cli_args = _reconstruct_cli_args(ctx, job)
 
         server = Server.from_servername(kwargs.get("server"))
@@ -133,9 +231,16 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
-    job.jobrunner = jobrunner
 
-    _process_single_job(job=job)
+    # Handle list of jobs (when multiple molecules are specified with --index)
+    if isinstance(job, list):
+        logger.info(f"Processing {len(job)} jobs")
+        for single_job in job:
+            single_job.jobrunner = jobrunner
+            _process_single_job(job=single_job)
+    else:
+        job.jobrunner = jobrunner
+        _process_single_job(job=job)
 
 
 for subcommand in subcommands:

@@ -1,6 +1,15 @@
+"""
+Isotope data generation script.
+
+This script generates atomic mass and isotope abundance data for elements,
+including handling of radioactive elements with most stable mass numbers.
+Used for periodic table and molecular weight calculations.
+"""
+
 import re
 from pathlib import Path
 
+# Most stable mass numbers for radioactive elements without natural abundance
 most_stable_mass_numbers = {
     43: 98,  # Tc-98
     61: 145,  # Pm-145
@@ -62,7 +71,7 @@ def parse_isotope_file(filename):
                 "abundance": abundance,
             }
 
-    # Calculate most_abundant and weighted_atomic_mass
+    # Calculate most abundant isotope and weighted atomic mass
     for atomic_number in isotopes:
         isotope_data = isotopes[atomic_number]
         all_isotopes = {}
@@ -70,7 +79,7 @@ def parse_isotope_file(filename):
             if isinstance(mass_number, int):
                 all_isotopes[mass_number] = isotope_data[mass_number]
 
-        # most abundant mass
+        # Find most abundant isotope by natural abundance
         if all_isotopes:
             total_abundance = sum(
                 d["abundance"] for d in all_isotopes.values()
@@ -90,7 +99,7 @@ def parse_isotope_file(filename):
                 "abundance": most_abundant["abundance"],
             }
 
-            # natural abundance weighted mass
+            # Calculate natural abundance weighted atomic mass
             if total_abundance > 0:
                 weighted_mass = (
                     sum(
