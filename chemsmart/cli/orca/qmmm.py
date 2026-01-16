@@ -432,6 +432,9 @@ def qmmm(
             scale_formal_charge_ecp_atom
         )
 
+    # Recompute derived fields and validate final configuration
+    qmmm_settings.re_init_and_validate()
+
     # Set top-level charge/multiplicity from layer-specific values
     _populate_charge_and_multiplicity_on_settings(qmmm_settings)
 

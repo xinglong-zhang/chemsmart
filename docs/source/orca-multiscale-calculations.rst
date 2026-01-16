@@ -32,6 +32,35 @@ The basic command structure for ORCA QM/MM calculations is:
 
    chemsmart sub [OPTIONS] orca [ORCA_OPTIONS] qmmm [QMMM_OPTIONS]
 
+Or using the ``run`` command with project settings:
+
+.. code:: console
+
+   chemsmart run [OPTIONS] orca -p qmmm -f <structure_file> qmmm [QMMM_OPTIONS]
+
+Example with the ``run`` command:
+
+.. code:: bash
+
+   chemsmart run --no-scratch --fake orca \
+     -p qmmm \
+     -f tests/data/StructuresTests/xyz/crest_best.xyz \
+     qmmm \
+     -j QM/QM2/MM \
+     -lf amber \
+     -ct 0 \
+     -mt 1 \
+     -ha 1-15 \
+     -R
+
+**Key Options:**
+
+-  ``--no-scratch``: Don't use scratch directory
+-  ``--fake``: Dry run mode (don't actually submit)
+-  ``-p qmmm``: Load settings from ``~/.chemsmart/orca/qmmm.yaml``
+-  ``-f``: Input structure file
+-  ``-R``: Run the job after setup
+
 ************************
  QM/MM-Specific Options
 ************************
@@ -51,29 +80,29 @@ Job Type and Theory Level
       -  Choice
       -  Multiscale calculation type: QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM
 
-   -  -  ``-qx, --qm-functional``
+   -  -  ``-hx, --high-level-functional``
       -  string
-      -  DFT functional for QM region (e.g., B3LYP, PBE0)
+      -  DFT functional for high-level (QM) region (e.g., B3LYP, PBE0)
 
-   -  -  ``-qb, --qm-basis``
+   -  -  ``-hb, --high-level-basis``
       -  string
-      -  Basis set for QM region (e.g., def2-SVP, def2-TZVP)
+      -  Basis set for high-level (QM) region (e.g., def2-SVP, def2-TZVP)
 
-   -  -  ``-qx2, --qm2-functional``
+   -  -  ``-intx, --intermediate-level-functional``
       -  string
-      -  DFT functional for QM2 region
+      -  DFT functional for intermediate-level (QM2) region
 
-   -  -  ``-qb2, --qm2-basis``
+   -  -  ``-intb, --intermediate-level-basis``
       -  string
-      -  Basis set for QM2 region
+      -  Basis set for intermediate-level (QM2) region
 
-   -  -  ``-qm2m, --qm2-methods``
+   -  -  ``-im, --intermediate-level-method``
       -  string
-      -  Built-in method for QM2 region (XTB, HF-3C, PBEH-3C)
+      -  Built-in method for intermediate-level (QM2) region (XTB, HF-3C, PBEH-3C, R2SCAN-3C, PM3, AM1)
 
-   -  -  ``-mf, --mm-force-field``
+   -  -  ``-lf, --low-level-force-field``
       -  string
-      -  Force field for MM region (MMFF, AMBER, CHARMM)
+      -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
 
 Atom Partitioning
 =================
@@ -86,13 +115,13 @@ Atom Partitioning
       -  Type
       -  Description
 
-   -  -  ``-qa, --qm-atoms``
+   -  -  ``-ha, --high-level-atoms``
       -  string
-      -  QM atom indices (e.g., '1-15,20' or '1:15 20')
+      -  High-level (QM) atom indices (e.g., '1-15,20' or '1:15 20')
 
-   -  -  ``-qa2, --qm2-atoms``
+   -  -  ``-inta, --intermediate-level-atoms``
       -  string
-      -  QM2 atom indices (e.g., '16-30')
+      -  Intermediate-level (QM2) atom indices (e.g., '16-30')
 
    -  -  ``-a, --active-atoms``
       -  string
@@ -109,21 +138,21 @@ Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``-cq, --charge-qm``
+   -  -  ``-ch, --charge-high``
       -  int
-      -  QM region charge
+      -  High-level (QM) region charge
 
-   -  -  ``-mq, --mult-qm``
+   -  -  ``-mh, --mult-high``
       -  string
-      -  QM region multiplicity
+      -  High-level (QM) region multiplicity
 
-   -  -  ``-cm, --charge-medium``
+   -  -  ``-mi, --charge-intermediate``
       -  int
-      -  Medium layer charge (for QM/QM2/MM)
+      -  Intermediate layer charge (for QM/QM2/MM)
 
-   -  -  ``-mm, --mult-medium``
+   -  -  ``-minti, --mult-intermediate``
       -  string
-      -  Medium layer multiplicity
+      -  Intermediate layer multiplicity
 
    -  -  ``-ct, --charge-total``
       -  int
@@ -144,9 +173,9 @@ Advanced QM/MM Options
       -  Type
       -  Description
 
-   -  -  ``-s, --qm2-solvation``
+   -  -  ``-s, --intermediate-level-solvation``
       -  string
-      -  Solvation model for QM2 region (CPCM, SMD)
+      -  Solvation model for intermediate-level (QM2) region (CPCM, SMD, ALPB)
 
    -  -  ``-e, --embedding-type``
       -  string
@@ -235,27 +264,47 @@ Additive QM/MM
 
 Basic additive QM/MM calculation with B3LYP for QM region and AMBER force field:
 
-.. code:: console
+.. code:: bash
 
-   chemsmart sub orca -p protein_qmmm -f protein.pdb qmmm -j QMMM -qx B3LYP -qb def2-SVP -mf amber99 -qa 1-20 -cq 0 -mq 1 -ct 0 -mt 1
+   chemsmart sub orca -p protein_qmmm -f protein.pdb qmmm \
+       -j QMMM \
+       -hx B3LYP -hb def2-SVP \
+       -lf amber99 \
+       -ha 1-20 \
+       -ch 0 -mh 1 \
+       -ct 0 -mt 1
 
 Subtractive QM/QM2 ONIOM
 ========================
 
-Two-layer ONIOM calculation with DFT for high level and semi-empirical for low level:
+Two-layer ONIOM calculation with DFT for high level and semi-empirical for intermediate level:
 
 .. code:: console
 
-   chemsmart sub orca -p enzyme_oniom -f enzyme.xyz qmmm -j QM/QM2 -qx B3LYP -qb def2-TZVP -qx2 HF -qb2 STO-3G -qa 1-15 -qa2 16-50 -cq 0 -mq 1 -cm 0 -mm 1
+   chemsmart sub orca -p enzyme_oniom -f enzyme.xyz qmmm \
+     -j QM/QM2 \
+     -hx B3LYP -hb def2-TZVP \
+     -intx HF -intb STO-3G \
+     -ha 1-15 -inta 16-50 \
+     -ch 0 -mh 1 \
+     -mi 0 -minti 1
 
 Three-Layer QM/QM2/MM ONIOM
 ===========================
 
-Three-layer ONIOM with DFT, semi-empirical, and MM:
+Three-layer ONIOM with DFT, XTB, and MM:
 
 .. code:: console
 
-   chemsmart sub orca -p complex_system -f system.pdb qmmm -j QM/QM2/MM -qx B3LYP -qb def2-SVP -qm2m HF-3C -mf amber99 -qa 1-10 -qa2 11-30 -cq 0 -mq 1 -cm 0 -mm 1 -ct 0 -mt 1
+   chemsmart sub orca -p complex_system -f system.pdb qmmm \
+     -j QM/QM2/MM \
+     -hx B3LYP -hb def2-SVP \
+     -im XTB \
+     -lf amber99 \
+     -ha 1-10 -inta 11-30 \
+     -ch 0 -mh 1 \
+     -mi 0 -minti 1 \
+     -ct 0 -mt 1
 
 Crystal QM/MM for Molecular Crystals
 ====================================
@@ -264,7 +313,12 @@ QM/MM calculation for a molecular crystal:
 
 .. code:: console
 
-   chemsmart sub orca -p molecular_crystal -f crystal.cif qmmm -j MOL-CRYSTAL-QMMM -qx PBE -qb def2-SVP -qa 1-20 -cq 0 -mq 1 -nc 50 -cc true -xn 30
+   chemsmart sub orca -p molecular_crystal -f crystal.cif qmmm \
+     -j MOL-CRYSTAL-QMMM \
+     -hx PBE -hb def2-SVP \
+     -ha 1-20 \
+     -ch 0 -mh 1 \
+     -nc 50 -cc true -xn 30
 
 Advanced QM/MM with Custom Settings
 ===================================
@@ -273,29 +327,167 @@ QM/MM with custom bond lengths and embedding options:
 
 .. code:: console
 
-   chemsmart sub orca -p advanced_qmmm -f system.xyz qmmm -j QMMM -qx M06-2X -qb def2-TZVP -mf charmm36 -qa 1-25 -cq -1 -mq 2 -ct -1 -mt 2 -e electronic -h "{'C_H': 1.09, 'N_H': 1.01}" -d true
+   chemsmart sub orca -p advanced_qmmm -f system.xyz qmmm \
+     -j QMMM \
+     -hx M06-2X -hb def2-TZVP \
+     -lf charmm36 \
+     -ha 1-25 \
+     -ch -1 -mh 2 \
+     -ct -1 -mt 2 \
+     -e electronic \
+     -h "{'C_H': 1.09, 'N_H': 1.01}" \
+     -d true
 
 ***********************
  Project Configuration
 ***********************
 
-You can also configure QM/MM settings in your project YAML file. Create a ``qmmm.yaml`` file in your project directory:
+You can configure QM/MM settings in a YAML file to avoid repetitive CLI options. This is especially useful for running
+multiple jobs with similar settings.
+
+YAML Configuration Location
+===========================
+
+Create a YAML file at ``~/.chemsmart/orca/qmmm.yaml``:
+
+Basic 2-Layer QM/MM Configuration
+=================================
 
 .. code:: yaml
 
-   # ~/.chemsmart/orca/qmmm.yaml
-   qm_functional: B3LYP
-   qm_basis: def2-SVP
-   mm_force_field: amber99
-   job_type: opt
-   embedding_type: electronic
-   delete_la_double_counting: true
+   # ~/.chemsmart/orca/qmmm.yaml - Basic QM/MM setup
+   qmmm:
+     jobtype: "QMMM"
+     high_level_functional: "B3LYP"
+     high_level_basis: "def2-SVP"
+     low_level_force_field: "amber"
+     charge_total: 0
+     mult_total: 1
+     embedding_type: "Electronic"
+     freq: false
 
-Then use it with the project flag:
+3-Layer ONIOM Configuration
+===========================
+
+.. code:: yaml
+
+   # ~/.chemsmart/orca/qmmm.yaml - 3-Layer ONIOM
+   qmmm:
+     jobtype: "QM/QM2/MM"
+
+     # High-level (QM) region
+     high_level_functional: "PBE0"
+     high_level_basis: "def2-TZVP"
+     charge_high: 0
+     mult_high: 1
+
+     # Intermediate-level (QM2) region
+     intermediate_level_functional: "B3LYP"
+     intermediate_level_basis: "def2-SVP"
+     # Or use a built-in method:
+     # intermediate_level_method: "XTB"
+     charge_intermediate: 0
+     mult_intermediate: 1
+
+     # Low-level (MM) region
+     low_level_force_field: "amber"
+
+     # Total system
+     charge_total: 0
+     mult_total: 1
+
+     # Additional options
+     freq: false
+     embedding_type: "Electronic"
+     delete_la_double_counting: true
+
+Using Built-in Methods
+======================
+
+.. code:: yaml
+
+   # ~/.chemsmart/orca/qmmm.yaml - Using XTB for intermediate level
+   qmmm:
+     jobtype: "QM/QM2"
+     high_level_functional: "PBE0"
+     high_level_basis: "def2-TZVP"
+     intermediate_level_method: "XTB"  # Built-in method
+     charge_total: 0
+     mult_total: 1
+
+**Supported Built-in Methods:**
+
+-  ``XTB``, ``XTB0``, ``XTB1`` - xTB semi-empirical methods
+-  ``HF-3C`` - Hartree-Fock with 3 corrections
+-  ``PBEH-3C`` - PBEh-3c composite method
+-  ``R2SCAN-3C`` - r²SCAN-3c composite method
+-  ``PM3``, ``AM1`` - Semi-empirical methods
+
+Using YAML Configuration
+========================
+
+Once you have a YAML file configured, use it with the ``-p`` flag:
 
 .. code:: console
 
-   chemsmart sub orca -p qmmm -f system.pdb qmmm -qa 1-20 -cq 0 -mq 1 -ct 0 -mt 1
+   # Minimal command - all settings from YAML
+   chemsmart run orca -p qmmm -f system.pdb qmmm \
+     -ha 1-20 \
+     -R
+
+   # Override YAML settings with CLI options
+   chemsmart run orca -p qmmm -f system.pdb qmmm \
+     -ha 1-20 \
+     -hx M06-2X \
+     -R
+
+**Settings Priority:**
+
+#. CLI options (highest priority)
+#. YAML configuration file
+#. Default settings (lowest priority)
+
+Complete YAML Example
+=====================
+
+.. code:: yaml
+
+   # ~/.chemsmart/orca/qmmm.yaml - Complete example
+   qmmm:
+     jobtype: "QM/QM2/MM"
+
+     # Theory levels
+     high_level_functional: "PBE0"
+     high_level_basis: "def2-TZVP"
+     intermediate_level_method: "XTB"
+     low_level_force_field: "amber"
+
+     # Charge and multiplicity
+     charge_high: 0
+     mult_high: 1
+     charge_intermediate: 0
+     mult_intermediate: 1
+     charge_total: 0
+     mult_total: 1
+
+     # Atom partitioning (optional, can be set via CLI)
+     # high_level_atoms: [1, 2, 3, 4, 5]
+     # intermediate_level_atoms: [6, 7, 8, 9, 10]
+
+     # QM/MM options
+     embedding_type: "Electronic"
+     intermediate_level_solvation: "CPCM(Water)"
+     delete_la_double_counting: true
+
+     # Job control
+     freq: false
+
+.. code:: console
+
+   chemsmart run orca -p qmmm -f system.pdb qmmm \
+     -ha 1-20 \
+     -ch 0 -mh 1 \
+     -ct 0 -mt 1
 
 ************
  Next Steps
@@ -317,6 +509,72 @@ For more advanced QM/MM workflows, see:
 
    Ensure proper atom partitioning between QM and MM regions. The QM region should include chemically important areas
    like active sites, reaction centers, or defects in crystals.
+
+*****************
+ Quick Reference
+*****************
+
+CLI Option Summary
+==================
+
+Updated CLI options after refactoring from "medium" to "intermediate" naming:
+
+.. list-table:: Key CLI Options
+   :header-rows: 1
+   :widths: 15 30 55
+
+   -  -  Short
+      -  Long
+      -  Description
+
+   -  -  ``-hx``
+      -  ``--high-level-functional``
+      -  High-level (QM) functional
+
+   -  -  ``-hb``
+      -  ``--high-level-basis``
+      -  High-level (QM) basis set
+
+   -  -  ``-ha``
+      -  ``--high-level-atoms``
+      -  High-level atom indices
+
+   -  -  ``-intx``
+      -  ``--intermediate-level-functional``
+      -  Intermediate (QM2) functional
+
+   -  -  ``-intb``
+      -  ``--intermediate-level-basis``
+      -  Intermediate (QM2) basis set
+
+   -  -  ``-im``
+      -  ``--intermediate-level-method``
+      -  Intermediate built-in method
+
+   -  -  ``-inta``
+      -  ``--intermediate-level-atoms``
+      -  Intermediate atom indices
+
+   -  -  ``-mi``
+      -  ``--charge-intermediate``
+      -  Intermediate charge
+
+   -  -  ``-minti``
+      -  ``--mult-intermediate``
+      -  Intermediate multiplicity
+
+   -  -  ``-lf``
+      -  ``--low-level-force-field``
+      -  Low-level (MM) force field
+
+Naming Update Summary
+=====================
+
+**Old → New:** The "medium" terminology has been updated to "intermediate" throughout:
+
+-  CLI options: ``-mx`` → ``-intx``, ``-mm`` → ``-im``, ``-cm`` → ``-mi``
+-  YAML parameters: ``medium_level_*`` → ``intermediate_level_*``
+-  Settings attributes: ``charge_medium`` → ``charge_intermediate``
 
 *******************************
  ORCAQMMMJobSettings Reference
@@ -344,29 +602,29 @@ Job Type and Methods
       -  str
       -  Calculation type (QMMM, QM/QM2, QM/QM2/MM, MOL-CRYSTAL-QMMM, IONIC-CRYSTAL-QMMM)
 
-   -  -  ``qm_functional``
+   -  -  ``high_level_functional``
       -  str
-      -  DFT functional for QM region (B3LYP, PBE0, etc.)
+      -  DFT functional for high-level (QM) region (B3LYP, PBE0, etc.)
 
-   -  -  ``qm_basis``
+   -  -  ``high_level_basis``
       -  str
-      -  Basis set for QM region (def2-SVP, def2-TZVP, etc.)
+      -  Basis set for high-level (QM) region (def2-SVP, def2-TZVP, etc.)
 
-   -  -  ``qm2_functional``
+   -  -  ``intermediate_level_functional``
       -  str
-      -  DFT functional for QM2 intermediate layer
+      -  DFT functional for intermediate-level (QM2) layer
 
-   -  -  ``qm2_basis``
+   -  -  ``intermediate_level_basis``
       -  str
-      -  Basis set for QM2 intermediate layer
+      -  Basis set for intermediate-level (QM2) layer
 
-   -  -  ``qm2_method``
+   -  -  ``intermediate_level_method``
       -  str
-      -  Built-in method for QM2 (XTB, HF-3C, PBEH-3C)
+      -  Built-in method for intermediate-level (QM2) (XTB, HF-3C, PBEH-3C, R2SCAN-3C, PM3, AM1)
 
-   -  -  ``mm_force_field``
+   -  -  ``low_level_force_field``
       -  str
-      -  Force field for MM region (MMFF, AMBER, CHARMM)
+      -  Force field for low-level (MM) region (MMFF, AMBER, CHARMM)
 
 Settings Comparison and Validation
 ----------------------------------
@@ -393,13 +651,13 @@ Settings Atom Partitioning
       -  Type
       -  Description
 
-   -  -  ``qm_atoms``
+   -  -  ``high_level_atoms``
       -  list/str
-      -  QM region atom indices (e.g., [1,2,3] or "1-10,15")
+      -  High-level (QM) region atom indices (e.g., [1,2,3] or "1-10,15")
 
-   -  -  ``qm2_atoms``
+   -  -  ``intermediate_level_atoms``
       -  list/str
-      -  QM2 region atom indices
+      -  Intermediate-level (QM2) region atom indices
 
    -  -  ``active_atoms``
       -  list/str
@@ -416,21 +674,21 @@ Settings Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``charge_qm``
+   -  -  ``charge_high``
       -  int
-      -  QM region charge
+      -  High-level (QM) region charge
 
-   -  -  ``mult_qm``
+   -  -  ``mult_high``
       -  int
-      -  QM region spin multiplicity
+      -  High-level (QM) region spin multiplicity
 
-   -  -  ``charge_medium``
+   -  -  ``charge_intermediate``
       -  int
-      -  Medium layer charge (QM2 layer in 3-layer ONIOM)
+      -  Intermediate layer charge (QM2 layer in 3-layer ONIOM)
 
-   -  -  ``mult_medium``
+   -  -  ``mult_intermediate``
       -  int
-      -  Medium layer multiplicity
+      -  Intermediate layer multiplicity
 
    -  -  ``charge_total``
       -  int

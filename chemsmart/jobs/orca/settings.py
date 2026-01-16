@@ -1160,6 +1160,107 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.charge = None
             self.multiplicity = None
 
+        # Validate intermediate-level parameters match job type
+        self._validate_intermediate_parameters()
+
+    def re_init_and_validate(self):
+        """Recompute derived fields and rerun validation after overrides."""
+        # Update inherited level-of-theory aliases
+        self.functional = self.high_level_functional
+        self.basis = self.high_level_basis
+
+        if self.charge_high is not None and self.mult_high is not None:
+            self.charge = self.charge_high
+            self.multiplicity = self.mult_high
+        elif (
+            self.charge_intermediate is not None
+            and self.mult_intermediate is not None
+        ):
+            self.charge = self.charge_intermediate
+            self.multiplicity = self.mult_intermediate
+        elif self.charge_total is not None and self.mult_total is not None:
+            self.charge = self.charge_total
+            self.multiplicity = self.mult_total
+        else:
+            self.charge = None
+            self.multiplicity = None
+
+        self._validate_intermediate_parameters()
+
+    def _validate_intermediate_parameters(self):
+        """
+        Validate that intermediate-level parameters are provided when needed and not provided when not needed.
+
+        Raises:
+            ValueError: If QM2 layer is required but intermediate parameters are missing,
+                       or if intermediate parameters are provided but QM2 layer is not required.
+        """
+        # Check if intermediate parameters are provided
+        has_intermediate_params = (
+            self.intermediate_level_functional is not None
+            and self.intermediate_level_basis is not None
+        ) or self.intermediate_level_method is not None
+        if has_intermediate_params:
+            missing = [
+                name
+                for name, value in {
+                    "intermediate_level_atoms": self.intermediate_level_atoms,
+                    "charge_intermediate": self.charge_intermediate,
+                    "mult_intermediate": self.mult_intermediate,
+                }.items()
+                if value is None
+            ]
+
+            if missing:
+                raise ValueError(
+                    "When intermediate-level theory is specified, the following "
+                    f"parameters must also be provided: {', '.join(missing)}"
+                )
+
+        # Job types that require QM2 (intermediate) layer
+        qm2_required_jobtypes = ["QM/QM2", "QM/QM2/MM"]
+
+        # Check if this job type requires QM2 layer
+        requires_qm2 = self.jobtype and self.jobtype.upper() in [
+            jt.upper() for jt in qm2_required_jobtypes
+        ]
+
+        if requires_qm2 and not has_intermediate_params:
+            raise ValueError(
+                f"Job type '{self.jobtype}' requires QM2 (intermediate) layer, but no intermediate-level "
+                f"parameters were provided. Please specify at least one of:\n"
+                f"  - intermediate_level_functional and intermediate_level_basis\n"
+                f"  - intermediate_level_method (e.g., 'XTB', 'HF-3C')\n"
+                f"  - intermediate_level_atoms\n"
+                f"  - charge_intermediate and mult_intermediate"
+            )
+
+        if not requires_qm2 and has_intermediate_params:
+            provided_params = []
+            if self.intermediate_level_functional is not None:
+                provided_params.append("intermediate_level_functional")
+            if self.intermediate_level_basis is not None:
+                provided_params.append("intermediate_level_basis")
+            if self.intermediate_level_method is not None:
+                provided_params.append("intermediate_level_method")
+            if self.intermediate_level_atoms is not None:
+                provided_params.append("intermediate_level_atoms")
+            if self.charge_intermediate is not None:
+                provided_params.append("charge_intermediate")
+            if self.mult_intermediate is not None:
+                provided_params.append("mult_intermediate")
+            if self.intermediate_level_solvation is not None:
+                provided_params.append("intermediate_level_solvation")
+
+            raise ValueError(
+                f"Job type '{self.jobtype}' does not require QM2 (intermediate) layer, but "
+                f"intermediate-level parameters were provided: {', '.join(provided_params)}.\n"
+                f"QM2 layer is only used in job types: {', '.join(qm2_required_jobtypes)}.\n"
+                f"Either:\n"
+                f"  - Change job type to 'QM/QM2' or 'QM/QM2/MM', OR\n"
+                f"  - Remove the intermediate-level parameters"
+            )
+
     @property
     def qmmm_route_string(self):
         return self._get_level_of_theory_string()
@@ -1280,7 +1381,6 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             # only "!QMMM" will be used for additive QMMM
             level_of_theory += f"/{self.intermediate_level_level_of_theory}"
             if self.low_level_level_of_theory is not None:
-                print(f"{self.low_level_level_of_theory}\n")
                 if self.jobtype.upper() == "QMMM":
                     level_of_theory = "!QMMM"  # Additive QM/MM
                 else:
@@ -1290,18 +1390,21 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             self.intermediate_level_method = (
                 self.intermediate_level_method or ""
             ).lower()
-            if self.intermediate_level_solvation in [
-                "alpb(water)",
-                "ddcosmo(water)",
-                "cpcmx(water)",
-            ]:
-                assert self.intermediate_level_method.lower() == "xtb", (
-                    "The intermediate-level solvation models ALPB, DDCOSMO, CPCMX are only "
-                    "compatible with XTB method!"
-                )
-                level_of_theory += f" {self.intermediate_level_solvation}"
-            elif self.intermediate_level_solvation.lower() == "cpcm(water)":
-                level_of_theory += f" {self.intermediate_level_solvation}"
+            if self.intermediate_level_solvation:
+                if self.intermediate_level_solvation in [
+                    "alpb(water)",
+                    "ddcosmo(water)",
+                    "cpcmx(water)",
+                ]:
+                    assert self.intermediate_level_method.lower() == "xtb", (
+                        "The intermediate-level solvation models ALPB, DDCOSMO, CPCMX are only "
+                        "compatible with XTB method!"
+                    )
+                    level_of_theory += f" {self.intermediate_level_solvation}"
+                elif (
+                    self.intermediate_level_solvation.lower() == "cpcm(water)"
+                ):
+                    level_of_theory += f" {self.intermediate_level_solvation}"
         return level_of_theory
 
     def _get_h_bond_length(self):
