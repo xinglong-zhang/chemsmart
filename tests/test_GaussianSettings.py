@@ -179,6 +179,18 @@ class TestGaussianJobFromComFile:
         assert com_settings.solvent_model == "smd"
         assert com_settings.solvent_id == "toluene"
 
+    def test_update_solvent_with_options(self, gaussian_opt_inputfile, tmpdir):
+        com_settings = GaussianJobSettings.from_comfile(gaussian_opt_inputfile)
+        assert com_settings.solvent_model is None
+        assert com_settings.solvent_id is None
+        assert com_settings.additional_solvent_options is None
+        com_settings.update_solvent(
+            solvent_model="smd", solvent_id="water", solvent_options="iterative"
+        )
+        assert com_settings.solvent_model == "smd"
+        assert com_settings.solvent_id == "water"
+        assert com_settings.additional_solvent_options == "iterative"
+
     def test_include_solvent(self, gaussian_opt_inputfile, tmpdir):
         com_settings = GaussianJobSettings.from_filepath(
             gaussian_opt_inputfile
