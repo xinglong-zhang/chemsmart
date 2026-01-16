@@ -113,13 +113,17 @@ def entry_point(
 
             if program == "gaussian":
                 # Determine file extension based on the first file
-                type = os.path.splitext(first_file)[1][1:]  # Remove leading dot
+                type = os.path.splitext(first_file)[1][
+                    1:
+                ]  # Remove leading dot
                 logger.info(
                     f"Auto-detected Gaussian output files with extension '.{type}'"
                 )
             elif program == "orca":
                 type = "out"
-                logger.info("Auto-detected ORCA output files with extension '.out'")
+                logger.info(
+                    "Auto-detected ORCA output files with extension '.out'"
+                )
             elif program == "unknown":
                 raise ValueError(
                     f"Could not determine file type for: {first_file}. "
@@ -151,9 +155,7 @@ def entry_point(
     filenames = glob.glob(f"{directory}/*.{type}")
 
     if not filenames:
-        error_msg = (
-            f"No files with extension '.{type}' found in directory: {directory}"
-        )
+        error_msg = f"No files with extension '.{type}' found in directory: {directory}"
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
 
