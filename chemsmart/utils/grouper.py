@@ -479,12 +479,12 @@ class RMSDGrouper(MoleculeGrouper):
         # Print header
         print(f"{'':>6}", end="")
         for j in range(n):
-            print(f"{j:>8}", end="")
+            print(f"{j+1:>8}", end="")
         print()
 
         # Print matrix rows
         for i in range(n):
-            print(f"{i:>6}", end="")
+            print(f"{i+1:>6}", end="")
             for j in range(n):
                 if np.isinf(rmsd_matrix[i, j]):
                     print(f"{'∞':>8}", end="")
@@ -550,13 +550,13 @@ class RMSDGrouper(MoleculeGrouper):
             # Write header
             f.write(f"{'Mol':>6}")
             for j in range(n):
-                f.write(f"{j:>10}")
+                f.write(f"{j+1:>10}")
             f.write("\n")
             f.write("-" * 80 + "\n")
 
             # Write matrix
             for i in range(n):
-                f.write(f"{i:>6}")
+                f.write(f"{i+1:>6}")
                 for j in range(n):
                     if np.isinf(rmsd_matrix[i, j]):
                         f.write(f"{'∞':>10}")
@@ -709,6 +709,7 @@ class SpyRMSDGrouper(RMSDGrouper):
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
         cache: bool = True,  # Cache graph isomorphisms
+        **kwargs,
     ):
         """
         Initialize SpyRMSD-based molecular grouper.
@@ -873,8 +874,8 @@ class SpyRMSDGrouper(RMSDGrouper):
             pos1, symbols1 = self._get_heavy_atoms(mol1)
             pos2, symbols2 = self._get_heavy_atoms(mol2)
         else:
-            pos1, symbols1 = mol1.positions, list(mol1.symbols)
-            pos2, symbols2 = mol2.positions, list(mol2.symbols)
+            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
 
         # Quick compatibility check
         if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
@@ -985,98 +986,265 @@ class SpyRMSDGrouper(RMSDGrouper):
 
 
 class IRMSDGrouper(RMSDGrouper):
+    """
+    Invariant RMSD (iRMSD) Grouper based on CREST implementation.
 
-    def kabsch(P, Q):
+    This implementation follows the CREST algorithm for calculating isomorphism-
+    invariant RMSD that considers both atomic permutations and stereochemistry.
+
+    The algorithm:
+    1. Centers molecules at their centroids (initial alignment)
+    2. Tests multiple reflection matrices (det = ±1) for handling molecular symmetry
+    3. Tests multiple rotational orientations (including 180° and 90° rotations)
+    4. Uses Hungarian algorithm (LSAP) to find optimal atom assignments within element groups
+    5. Applies Kabsch alignment for final optimal superposition
+    6. Optionally tests stereoisomers via complete spatial inversion
+    7. Returns the minimum RMSD among all valid configurations
+
+    Computational cost: LSAP cost × factor (4-32) × 2 (if stereo_check=True)
+
+    Note on stereoisomers: By default, stereoisomer checking is disabled since
+    CREST conformer ensembles typically maintain single stereochemistry and don't
+    generate both R and S enantiomers from a single input structure. Enable
+    stereo_check only when comparing molecules with different stereochemistry.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold=None,
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        ignore_hydrogens: bool = False,
+        stereo_check: bool = False,
+        **kwargs,
+    ):
         """
-        Kabsch alignment: minimize || P - R Q ||²
-        P, Q: (N, 3)
-        Returns rotated Q
+        Initialize iRMSD grouper.
+
+        Args:
+            molecules: Collection of molecules to group
+            threshold: RMSD threshold for grouping
+            num_procs: Number of processes for parallel computation
+            align_molecules: Whether to align molecules (legacy parameter)
+            ignore_hydrogens: Whether to exclude hydrogen atoms
+            stereo_check: Whether to check stereoisomers (mirror images)
         """
-        Pc = P - P.mean(axis=0)
-        Qc = Q - Q.mean(axis=0)
+        super().__init__(
+            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+        )
+        self.stereo_check = stereo_check
 
-        C = Qc.T @ Pc
-        V, S, Wt = np.linalg.svd(C)
-
-        d = np.sign(np.linalg.det(V @ Wt))
-        D = np.diag([1.0, 1.0, d])
-
-        R = V @ D @ Wt
-        return (Qc @ R.T) + P.mean(axis=0)
-
-    def rmsd(P, Q):
+    @staticmethod
+    def _calculate_rmsd_basic(P, Q):
+        """Basic RMSD calculation without alignment."""
         return np.sqrt(np.mean(np.sum((P - Q) ** 2, axis=1)))
 
-    def generate_reflections(self):
-        mats = []
+    @staticmethod
+    def _generate_reflections():
+        """Generate all valid reflection matrices (det = ±1)."""
+        reflections = []
         signs = [-1.0, 1.0]
         for sx, sy, sz in product(signs, repeat=3):
             M = np.diag([sx, sy, sz])
             if abs(np.linalg.det(M)) == 1.0:
-                mats.append(M)
-        return mats
+                reflections.append(M)
+        return reflections
 
-    def element_rank_permutation(P, Q, symbols):
+    @staticmethod
+    def _element_permutation(P, Q, symbols):
         """
-        Permutation-invariant matching within same elements
+        Find optimal permutation within element groups using Hungarian algorithm.
+
+        Args:
+            P, Q: Coordinate arrays
+            symbols: Atomic symbols
+
+        Returns:
+            Permutation array
         """
         perm = np.arange(len(symbols))
-        groups = defaultdict(list)
+        element_groups = defaultdict(list)
 
-        for i, s in enumerate(symbols):
-            groups[s].append(i)
+        # Group atoms by element
+        for i, symbol in enumerate(symbols):
+            element_groups[symbol].append(i)
 
-        for s, idx in groups.items():
-            if len(idx) == 1:
+        # Apply Hungarian algorithm within each element group
+        for element, indices in element_groups.items():
+            if len(indices) <= 1:
                 continue
 
-            A = P[idx]
-            B = Q[idx]
+            # Extract coordinates for this element
+            P_group = P[indices]
+            Q_group = Q[indices]
 
-            cost = np.zeros((len(idx), len(idx)))
-            for i in range(len(idx)):
-                for j in range(len(idx)):
-                    cost[i, j] = np.sum((A[i] - B[j]) ** 2)
+            # Build distance cost matrix
+            n_atoms = len(indices)
+            cost_matrix = np.zeros((n_atoms, n_atoms))
+            for i in range(n_atoms):
+                for j in range(n_atoms):
+                    cost_matrix[i, j] = np.sum((P_group[i] - Q_group[j]) ** 2)
 
-            row, col = linear_sum_assignment(cost)
-            perm[np.array(idx)[row]] = np.array(idx)[col]
+            # Solve assignment problem
+            row_indices, col_indices = linear_sum_assignment(cost_matrix)
+
+            # Apply permutation
+            perm[np.array(indices)[row_indices]] = np.array(indices)[
+                col_indices
+            ]
 
         return perm
 
-    def irmsd(P, Q, symbols):
+    @staticmethod
+    def _get_rotation_matrices():
+        """Get standard rotation matrices for systematic orientation testing."""
+        # Identity
+        Identity = np.eye(3)
+
+        # 180-degree rotations around axes
+        Rx180 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
+        Ry180 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
+        Rz180 = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+
+        # 90-degree rotations
+        Rx90 = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
+        Ry90 = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+        Rz90 = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+
+        return [Identity, Rx180, Ry180, Rz180, Rx90, Ry90, Rz90]
+
+    def _irmsd_core(self, pos1, pos2, symbols):
         """
-        CREST-style iRMSD
-        P, Q: (N,3)
-        symbols: list of atomic symbols
+        Core iRMSD calculation following CREST algorithm.
+
+        The total computational cost is the cost of the LSAP (Hungarian algorithm)
+        times a factor between 4 and 32, depending on the system's rotational
+        ambiguity. Additional factor of 2 when stereoisomer checking is enabled.
+
+        Args:
+            pos1, pos2: Coordinate arrays (N, 3)
+            symbols: List of atomic symbols
+
+        Returns:
+            Minimum RMSD value
         """
+        pos1 = np.asarray(pos1, dtype=np.float64)
+        pos2 = np.asarray(pos2, dtype=np.float64)
 
-        P = np.asarray(P, dtype=float)
-        Q = np.asarray(Q, dtype=float)
+        if len(pos1) != len(pos2):
+            return np.inf
 
-        if len(P) != len(Q):
-            raise ValueError("Atom counts differ")
+        if len(symbols) != len(pos1):
+            return np.inf
 
-        if sorted(symbols) != sorted(symbols):
-            raise ValueError("Chemical composition mismatch")
+        # Check chemical composition - compare against reference molecule
+        # This should be done properly in the calling function by ensuring
+        # molecules have the same composition before calling this method
+        if len(set(symbols)) == 0:  # Empty molecule check
+            return np.inf
 
-        # best = np.inf
-        # reflections = generate_reflections()
-        #
-        # for M in reflections:
-        #     Qm = Q @ M.T
-        #
-        #     # element-wise permutation (rank invariant)
-        #     perm = element_rank_permutation(P, Qm, symbols)
-        #     Qp = Qm[perm]
-        #
-        #     # Kabsch alignment
-        #     Qa = kabsch(P, Qp)
-        #
-        #     val = rmsd(P, Qa)
-        #     if val < rmsd:
-        #         rmsd = val
+        # Initial centroid alignment (as done in CREST)
+        centroid_pos1 = np.mean(pos1, axis=0)
+        centroid_pos2 = np.mean(pos2, axis=0)
+        pos1_centered = pos1 - centroid_pos1
+        pos2_centered = pos2 - centroid_pos2
 
-        # return rmsd
+        best_rmsd = np.inf
+        reflections = self._generate_reflections()
+        rotation_matrices = self._get_rotation_matrices()
+
+        # Test each reflection
+        for reflection in reflections:
+            pos2_reflected = pos2_centered @ reflection.T
+
+            # Test different rotational orientations
+            for rotation in rotation_matrices:
+                pos2_rotated = pos2_reflected @ rotation.T
+
+                # Find optimal atom permutation
+                permutation = self._element_permutation(
+                    pos1_centered, pos2_rotated, symbols
+                )
+                pos2_permuted = pos2_rotated[permutation]
+
+                # Apply Kabsch alignment
+                pos1_aligned, pos2_aligned, _, _, rmsd_val = kabsch_align(
+                    pos1_centered, pos2_permuted
+                )
+
+                if rmsd_val < best_rmsd:
+                    best_rmsd = rmsd_val
+
+                # Early termination if RMSD is very small
+                if best_rmsd < 1e-10:
+                    return best_rmsd
+
+        # Optionally test stereoisomers (mirror images/inversion)
+        if self.stereo_check:
+            # Perform proper inversion (spatial reflection through origin)
+            # This is the "inversion operation" mentioned in CREST algorithm
+            pos2_inverted = (
+                -pos2_centered
+            )  # Complete spatial inversion of centered coords
+
+            for reflection in reflections:
+                pos2_reflected = pos2_inverted @ reflection.T
+
+                for rotation in rotation_matrices:
+                    pos2_rotated = pos2_reflected @ rotation.T
+                    permutation = self._element_permutation(
+                        pos1_centered, pos2_rotated, symbols
+                    )
+                    pos2_permuted = pos2_rotated[permutation]
+                    pos1_aligned, pos2_aligned, _, _, rmsd_val = kabsch_align(
+                        pos1_centered, pos2_permuted
+                    )
+
+                    if rmsd_val < best_rmsd:
+                        best_rmsd = rmsd_val
+
+                    if best_rmsd < 1e-10:
+                        return best_rmsd
+
+        return best_rmsd
+
+    def _calculate_rmsd(self, mol_idx_pair: Tuple[int, int]) -> float:
+        """
+        Calculate iRMSD between two molecules.
+
+        Args:
+            mol_idx_pair: Tuple of molecule indices
+
+        Returns:
+            iRMSD value
+        """
+        try:
+            i, j = mol_idx_pair
+            mol1 = self.molecules[i]
+            mol2 = self.molecules[j]
+
+            # Handle hydrogen filtering if needed
+            if self.ignore_hydrogens:
+                pos1, symbols1 = self._get_heavy_atoms(mol1)
+                pos2, symbols2 = self._get_heavy_atoms(mol2)
+            else:
+                pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+                pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+
+            # Check consistency
+            if len(pos1) != len(pos2):
+                return np.inf
+
+            if sorted(symbols1) != sorted(symbols2):
+                return np.inf
+
+            # Calculate iRMSD
+            return self._irmsd_core(pos1, pos2, symbols1)
+
+        except Exception:
+            # Return infinity for any errors
+            return np.inf
 
 
 class RMSDGrouperSharedMemory(MoleculeGrouper):

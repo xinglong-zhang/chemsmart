@@ -278,6 +278,12 @@ def click_gaussian_grouper_options(f):
         default=1,
         help="Number of processors to use for the grouper.",
     )
+    @click.option(
+        "--stereo-check/--no-stereo-check",
+        type=bool,
+        default=False,
+        help="Whether to check stereoisomers (mirror images) in IRMSD grouper.(default=False)",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
