@@ -189,7 +189,7 @@ Example
  Align Jobs
 ************
 
-Align multiple molecular structures for comparison.
+Align multiple molecular structures for comparison (Alignment reference is the first structure).
 
 .. code:: bash
 
@@ -213,3 +213,13 @@ Align all files of the same type:
 .. note::
 
    When using ``-i n``, ensure every input file contains the nth structure.
+
+Align multiple structures in one file:
+
+.. code:: bash
+
+   chemsmart run mol -f conformers.xyz -i 1,3-6,-1 align
+
+.. note::
+
+   If there is no additional index, align all structures in the file by default.

@@ -384,14 +384,14 @@ class TestPyMOLJobs:
 
         job = PyMOLAlignJob(
             molecule=[mol1, mol2, mol3],
-            label="R-1a_opt_and_2_molecules_align",
+            label="R-1a_opt_and_2_structures_align",
             jobrunner=pymol_align_jobrunner,
         )
         job.set_folder(tmpdir)
         job.run()
 
         style_file = os.path.join(tmpdir, "zhang_group_pymol_style.py")
-        pse_file = os.path.join(tmpdir, "R-1a_opt_and_2_molecules_align.pse")
+        pse_file = os.path.join(tmpdir, "R-1a_opt_and_2_structures_align.pse")
         mol1_xyz = os.path.join(tmpdir, "R-1a_opt.xyz")
         mol2_xyz = os.path.join(tmpdir, "frozen_coordinates_opt.xyz")
         mol3_xyz = os.path.join(tmpdir, "nhc_neutral_singlet.xyz")
@@ -402,7 +402,7 @@ class TestPyMOLJobs:
         assert os.path.exists(mol2_xyz)
         assert os.path.exists(mol3_xyz)
 
-        out_file = os.path.join(tmpdir, "R-1a_opt_and_2_molecules_align.out")
+        out_file = os.path.join(tmpdir, "R-1a_opt_and_2_structures_align.out")
 
         if os.path.exists(out_file):
             with open(out_file, "r") as f:

@@ -374,17 +374,15 @@ def mol(
 
     # if filename is specified, read the file and obtain molecule
     if filenames:
-        if len(filenames) == 1:
-            filenames = filenames[0]
-            molecules = Molecule.from_filepath(
-                filepath=filenames, index=":", return_list=True
-            )
-            assert (
-                molecules is not None
-            ), f"Could not obtain molecule from {filenames}!"
-            logger.debug(f"Obtained molecule {molecules} from {filenames}")
-        else:
-            # Multiple filenames - pass to align command
+        # Check if this is an align task by looking for " align" in command line
+        import sys
+
+        cli_string = " ".join(sys.argv)
+        is_align_task = " align" in cli_string
+        print(f"is_align_task = {is_align_task}")
+
+        if is_align_task:
+            # align task can handle multiple files - pass to align command
             ctx.obj["filenames"] = filenames
             ctx.obj["index"] = index
             ctx.obj["directory"] = None
@@ -392,6 +390,20 @@ def mol(
             ctx.obj["molecules"] = None
             ctx.obj["label"] = label
             return
+        else:
+            if len(filenames) == 1:
+                filenames = filenames[0]
+                molecules = Molecule.from_filepath(
+                    filepath=filenames, index=":", return_list=True
+                )
+                assert (
+                    molecules is not None
+                ), f"Could not obtain molecule from {filenames}!"
+                logger.debug(f"Obtained molecule {molecules} from {filenames}")
+            else:
+                raise ValueError(
+                    f"This task can only process one file, but {len(filenames)} files were provided. "
+                )
 
     # if pubchem is specified, obtain molecule from PubChem
     if pubchem:

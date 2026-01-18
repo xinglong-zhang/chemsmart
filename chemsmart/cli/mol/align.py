@@ -42,6 +42,19 @@ def align(
     filenames = ctx.obj["filenames"]
     directory = ctx.obj["directory"]
     filetype = ctx.obj["filetype"]
+
+    # Set default index values for align task
+    if index is None:
+        if directory is not None and filetype is not None:
+            # Using directory - default to last structure (-1)
+            index = "-1"
+        elif filenames and len(filenames) > 1:
+            # Multiple files - default to last structure (-1)
+            index = "-1"
+        elif filenames and len(filenames) == 1:
+            # Single file - default to all structures (:)
+            index = ":"
+
     molecules = []  # Initialize molecules list
 
     # Variable to store the base file for label generation
@@ -86,12 +99,108 @@ def align(
         if isinstance(filenames, str):
             filenames = [filenames]
 
-        molecules += load_molecules_from_paths(
-            filenames,
-            index=index,
-            add_index_suffix_for_single=True,
-            check_exists=True,
-        )
+        if len(filenames) == 1:
+            # Single file: first load all structures, then apply user's index
+            all_molecules = load_molecules_from_paths(
+                filenames,
+                index=":",  # Load all structures first
+                add_index_suffix_for_single=True,
+                check_exists=True,
+            )
+
+            # Now apply user's index selection if specified
+            if index and index != ":":
+
+                def validate_and_add_index(idx, desc=""):
+                    """Helper function to validate index and check for overlaps"""
+                    if idx < 0 or idx >= len(all_molecules):
+                        raise click.BadParameter(
+                            f"Index{desc} is out of range. File has {len(all_molecules)} structures."
+                        )
+                    if idx in selected_positions:
+                        raise click.BadParameter(
+                            f"Index overlap detected{desc}."
+                        )
+                    selected_positions.add(idx)
+                    selected_molecules.append(all_molecules[idx])
+
+                selected_molecules = []
+                selected_positions = set()  # Track actual 0-based positions
+
+                if "-" in index:
+                    # Handle indices containing negative numbers (both mixed and pure negative)
+                    for part in [p.strip() for p in index.split(",")]:
+                        if part.startswith("-"):
+                            neg_idx = int(part)
+                            if abs(neg_idx) > len(all_molecules):
+                                raise click.BadParameter(
+                                    f"Index '{neg_idx}' is out of range. File has {len(all_molecules)} structures."
+                                )
+                            actual_pos = (
+                                len(all_molecules) + neg_idx
+                            )  # Convert to 0-based
+                            validate_and_add_index(actual_pos, f" '{neg_idx}'")
+                        elif "-" in part:
+                            # Range like '1-3'
+                            start, end = map(int, part.split("-"))
+                            for i in range(start, end + 1):
+                                if i < 1 or i > len(all_molecules):
+                                    raise click.BadParameter(
+                                        f"Index '{i}' is out of range. File has {len(all_molecules)} structures (1-based indexing)."
+                                    )
+                                validate_and_add_index(
+                                    i - 1, f" '{i}'"
+                                )  # Convert to 0-based
+                        else:
+                            # Single positive index
+                            pos_idx = int(part)
+                            if pos_idx < 1 or pos_idx > len(all_molecules):
+                                raise click.BadParameter(
+                                    f"Index '{pos_idx}' is out of range. File has {len(all_molecules)} structures (1-based indexing)."
+                                )
+                            validate_and_add_index(
+                                pos_idx - 1, f" '{pos_idx}'"
+                            )  # Convert to 0-based
+                    molecules += selected_molecules
+                else:
+                    # Standard positive indices only
+                    from chemsmart.utils.utils import (
+                        get_list_from_string_range,
+                    )
+
+                    selected_indices = get_list_from_string_range(index)
+
+                    # Check for duplicates and out-of-range
+                    if len(selected_indices) != len(set(selected_indices)):
+                        duplicates = [
+                            idx
+                            for idx in set(selected_indices)
+                            if selected_indices.count(idx) > 1
+                        ]
+                        raise click.BadParameter(
+                            f"Index overlap detected. Indices {duplicates} are specified multiple times."
+                        )
+
+                    for i in selected_indices:
+                        if i < 1 or i > len(all_molecules):
+                            raise click.BadParameter(
+                                f"Index '{i}' is out of range. File has {len(all_molecules)} structures (1-based indexing)."
+                            )
+
+                    molecules += [
+                        all_molecules[i - 1] for i in selected_indices
+                    ]
+            else:
+                # Use all structures
+                molecules += all_molecules
+        else:
+            # Multiple files: use original logic
+            molecules += load_molecules_from_paths(
+                filenames,
+                index=index,
+                add_index_suffix_for_single=True,
+                check_exists=True,
+            )
 
         logger.debug(
             f"Loaded {len(molecules)} molecules from {len(filenames)} files using align-specific filenames with index={index}"
@@ -99,8 +208,15 @@ def align(
 
         base_file_for_label = filenames[0]
 
-    if not isinstance(molecules, list) or len(molecules) < 2:
-        raise click.BadParameter("Need at least two molecules for alignment")
+    # Check if we have enough molecules for alignment
+    if not isinstance(molecules, list):
+        molecules = list(molecules) if molecules else []
+
+    if len(molecules) < 2:
+        error_msg = f"Need at least 2 molecules for alignment, but only loaded {len(molecules)} molecule(s)."
+        if filenames and len(filenames) == 1 and index and index != ":":
+            error_msg += f" Index '{index}' may not select enough structures."
+        raise click.BadParameter(error_msg)
 
     # Generate align-specific label if user didn't provide one
     if label is not None:
@@ -116,11 +232,20 @@ def align(
             base_label = "molecules"
 
         # Generate align-specific naming
-        n_molecules = len(molecules)
-        if n_molecules > 2:
-            align_label = f"{base_label}_and_{n_molecules-1}_molecules_align"
+        n_structures = len(molecules)
+
+        # Check if it's a single file case
+        if filenames and len(filenames) == 1:
+            # Single file with multiple structures: filename_n_structures_align
+            align_label = f"{n_structures}_structures_in_{base_label}_align"
         else:
-            align_label = f"{base_label}_and_1_molecule_align"
+            # Multiple files: original naming scheme
+            if n_structures > 2:
+                align_label = (
+                    f"{base_label}_and_{n_structures-1}_structures_align"
+                )
+            else:
+                align_label = f"{base_label}_and_1_structure_align"
 
     from chemsmart.jobs.mol.align import PyMOLAlignJob
 
