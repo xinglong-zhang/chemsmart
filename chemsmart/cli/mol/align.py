@@ -86,12 +86,29 @@ def align(
         if isinstance(filenames, str):
             filenames = [filenames]
 
-        molecules += load_molecules_from_paths(
-            filenames,
-            index=index,
-            add_index_suffix_for_single=True,
-            check_exists=True,
-        )
+        # For single file with index specification, allow multiple structures from that file
+        # This enables: chemsmart run mol -f file.xyz -i : align
+        #           or: chemsmart run mol -f file.log -i 1,-1 align
+        if len(filenames) == 1 and index is not None:
+            logger.debug(
+                f"Single file mode with index specification: {index}"
+            )
+            # Load molecules using the index specification
+            # The index can specify multiple structures from the same file
+            molecules += load_molecules_from_paths(
+                filenames,
+                index=index,
+                add_index_suffix_for_single=True,
+                check_exists=True,
+            )
+        else:
+            # Multiple files mode - load with index
+            molecules += load_molecules_from_paths(
+                filenames,
+                index=index,
+                add_index_suffix_for_single=True,
+                check_exists=True,
+            )
 
         logger.debug(
             f"Loaded {len(molecules)} molecules from {len(filenames)} files using align-specific filenames with index={index}"

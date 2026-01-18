@@ -347,10 +347,10 @@ def str_indices_range_to_list(str_indices):
     and converts them to a list of individual indices. All 1-indexed.
 
     Supported formats:
-        '1:9' -> gives [1,2,3,4,5,6,7,8]
+        '1:9' -> gives [1,2,3,4,5,6,7,8] (exclusive end, Python slice style)
         '1,2,4' -> gives [1,2,4]
-        '1-9' -> gives [1,2,3,4,5,6,7,8]
-        '[1-9]' -> gives [1,2,3,4,5,6,7,8]
+        '1-9' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
+        '[1-9]' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
 
     Args:
         str_indices (str): String representation of indices in supported formats.
@@ -358,27 +358,62 @@ def str_indices_range_to_list(str_indices):
     Returns:
         list: List of individual integer indices.
     """
+    # Strip brackets if present
+    str_indices = str_indices.strip()
+    if str_indices.startswith("[") and str_indices.endswith("]"):
+        str_indices = str_indices[1:-1]
+    
     list_indices = []
-    if "[" in str_indices:
-        str_indices = str_indices.replace("[", "")
-    if "]" in str_indices:
-        str_indices = str_indices.replace("]", "")
+    
+    # Check if this is a comma-separated list (handles both single values and ranges)
     if "," in str_indices:
-        str_indices_split = str_indices.split(",")
-        for i in str_indices_split:
-            list_indices.append(int(i))
-    if ":" in str_indices:
+        parts = str_indices.split(",")
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part and not part.startswith("-"):
+                # This is a range like "1-9"
+                range_parts = part.split("-")
+                start = int(range_parts[0])
+                end = int(range_parts[1])
+                list_indices.extend(range(start, end + 1))  # inclusive
+            else:
+                # Single index (could be negative)
+                list_indices.append(int(part))
+    # Check if this is a colon-separated slice like "1:9" or ":"
+    elif ":" in str_indices:
         str_indices_split = str_indices.split(":")
-        start_index = int(str_indices_split[0])
-        end_index = int(str_indices_split[-1])
-        for i in range(start_index, end_index):
-            list_indices.append(i)
-    if "-" in str_indices:
-        str_indices_split = str_indices.split("-")
-        start_index = int(str_indices_split[0])
-        end_index = int(str_indices_split[-1])
-        for i in range(start_index, end_index):
-            list_indices.append(i)
+        # Handle empty parts in slice notation
+        start_str = str_indices_split[0].strip()
+        end_str = str_indices_split[-1].strip() if len(str_indices_split) > 1 else ""
+        
+        # For ":" we return empty list (means all indices, handled by caller)
+        if not start_str and not end_str:
+            return []  # Special case: ":" means all
+        
+        start_index = int(start_str) if start_str else 1
+        # Exclusive end for slice notation
+        if end_str:
+            end_index = int(end_str)
+            list_indices = list(range(start_index, end_index))
+        else:
+            # Open-ended like "5:" - return empty to signal open-ended
+            return []
+    # Check if this is a hyphen-separated range like "1-9" (no commas)
+    elif "-" in str_indices and not str_indices.startswith("-"):
+        # Must check it's not a negative number
+        parts = str_indices.split("-")
+        if len(parts) == 2:
+            start_index = int(parts[0])
+            end_index = int(parts[1])
+            # Inclusive end for range notation
+            list_indices = list(range(start_index, end_index + 1))
+    else:
+        # Single index
+        if str_indices:
+            list_indices.append(int(str_indices))
+    
     return list_indices
 
 
@@ -457,7 +492,7 @@ def convert_string_index_from_1_based_to_0_based(
     Args:
         index (Union[str, int, slice]): String representing an index or slice,
                                        e.g., "1", "2:5", "3:10:2", "-1",
-                                       or user-defined ranges like "1-2,5".
+                                       or user-defined ranges like "1-2,5", "1,-1".
 
     Returns:
         Union[int, slice, list]: Integer, slice, or list adjusted for
@@ -466,31 +501,186 @@ def convert_string_index_from_1_based_to_0_based(
     Raises:
         ValueError: If index is 0 (invalid for 1-based indexing).
     """
-    try:
-        # Try numeric index
-        index_int = int(index)
-    except (TypeError, ValueError):
-        try:
-            index_list = string2index_1based(index)
-        except ValueError:
-            # Last resort: user-defined ranges
-            index_list = get_list_from_string_range(index)
-            # convert back to 0-based indexing
-            index_list = [i - 1 for i in index_list]
-    else:
-        # Only runs if int() succeeded
-        if index_int == 0:
+    # If already an int or slice, handle directly
+    if isinstance(index, int):
+        if index == 0:
             raise ValueError(
-                f"Index {index_int} is out of range, as 1-indexing is used!\n "
+                f"Index {index} is out of range, as 1-indexing is used!\n "
                 f"Please provide a positive integer.\n"
             )
-        elif index_int < 0:
-            # If negative index, return as is
-            return index_int
+        elif index < 0:
+            return index  # Negative indices stay as-is
         else:
-            # Convert to 0-based indexing
-            return index_int - 1  # Convert to 0-based indexing
-    return index_list
+            return index - 1  # Convert to 0-based
+    
+    if isinstance(index, slice):
+        return index  # Already processed
+    
+    # String index - use the new unified parser
+    if isinstance(index, str):
+        return parse_index_specification(index)
+    
+    raise ValueError(f"Invalid index type: {type(index)}")
+
+
+def parse_index_specification(
+    index_spec: str, total_count: int = None
+) -> Union[int, slice, list]:
+    """
+    Parse index specification string and return appropriate Python type.
+    
+    This function integrates both ASE-style index specifications (using colons)
+    and free-format index specifications (using commas and hyphens). It handles
+    1-based indexing and converts to 0-based for Python.
+    
+    Supported formats:
+        ASE-style (colon-based slicing):
+            ':' -> all indices (returns slice(None, None))
+            '1' -> first item (returns 0)
+            '-1' -> last item (returns -1)
+            '1:5' -> items 1-4, exclusive end (returns slice(0, 4))
+            '1:5:2' -> items 1, 3 with step 2 (returns slice(0, 4, 2))
+            '::2' -> every 2nd item (returns slice(None, None, 2))
+            '5:' -> from 5th to end (returns slice(4, None))
+            ':5' -> from start to 4th (returns slice(None, 4))
+        
+        Free-format (comma and hyphen based):
+            '1,3,5' -> specific items (returns [0, 2, 4])
+            '1-5' -> items 1-5, inclusive (returns [0, 1, 2, 3, 4])
+            '1-3,5,7-9' -> mixed ranges (returns [0, 1, 2, 4, 6, 7, 8])
+            '1,-1' -> first and last (returns [0, -1])
+    
+    Args:
+        index_spec (str): String specification of indices.
+        total_count (int, optional): Total number of items, used for resolving
+            negative indices to positive ones if needed.
+    
+    Returns:
+        Union[int, slice, list]: Appropriate Python type for indexing.
+            - int: for single indices
+            - slice: for colon-based ranges
+            - list: for comma-separated or hyphen-range specifications
+    
+    Raises:
+        ValueError: If index is 0 (1-based indexing doesn't allow 0)
+                   or if format is invalid.
+    
+    Examples:
+        >>> parse_index_specification(':')
+        slice(None, None, None)
+        >>> parse_index_specification('1')
+        0
+        >>> parse_index_specification('-1')
+        -1
+        >>> parse_index_specification('1:5')
+        slice(0, 4, None)
+        >>> parse_index_specification('1,3,5')
+        [0, 2, 4]
+        >>> parse_index_specification('1-5')
+        [0, 1, 2, 3, 4]
+        >>> parse_index_specification('1,-1')
+        [0, -1]
+    """
+    if not isinstance(index_spec, str):
+        raise ValueError(f"Index specification must be a string, got {type(index_spec)}")
+    
+    index_spec = index_spec.strip()
+    
+    # Check if this contains commas - if so, it's a free-format list
+    if "," in index_spec:
+        # Parse as free-format list (can include negative indices and ranges)
+        parts = index_spec.split(",")
+        indices = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            
+            # Check if this part is a range like "1-5"
+            if "-" in part and not part.startswith("-"):
+                # Split carefully to handle negative numbers
+                # "1-5" should split to ["1", "5"]
+                # "1--1" should split to ["1", "-1"]
+                range_match = part.split("-", 1)
+                if len(range_match) == 2 and range_match[0]:
+                    try:
+                        start = int(range_match[0])
+                        end = int(range_match[1])
+                        
+                        # Validate 1-based indexing
+                        if start == 0 or end == 0:
+                            raise ValueError("Index cannot be 0 in 1-based indexing")
+                        
+                        # Handle positive ranges
+                        if start > 0 and end > 0:
+                            # Inclusive range, convert to 0-based
+                            indices.extend(range(start - 1, end))
+                        else:
+                            # If either is negative, add them separately
+                            if start == 0:
+                                raise ValueError("Index cannot be 0 in 1-based indexing")
+                            indices.append(start - 1 if start > 0 else start)
+                            if end == 0:
+                                raise ValueError("Index cannot be 0 in 1-based indexing")
+                            indices.append(end - 1 if end > 0 else end)
+                    except ValueError as e:
+                        if "invalid literal" in str(e):
+                            raise ValueError(f"Invalid range format: {part}")
+                        raise
+                else:
+                    # Just a negative number like "-1"
+                    idx = int(part)
+                    if idx == 0:
+                        raise ValueError("Index cannot be 0 in 1-based indexing")
+                    indices.append(idx if idx < 0 else idx - 1)
+            else:
+                # Single index (could be negative)
+                idx = int(part)
+                if idx == 0:
+                    raise ValueError("Index cannot be 0 in 1-based indexing")
+                # Convert to 0-based if positive
+                indices.append(idx if idx < 0 else idx - 1)
+        
+        return indices
+    
+    # Check if this is a colon-based slice (ASE-style)
+    elif ":" in index_spec:
+        return string2index_1based(index_spec)
+    
+    # Check if this is a hyphen-based range (free-format, no commas)
+    elif "-" in index_spec and not index_spec.startswith("-"):
+        # This is a range like "1-5" (inclusive)
+        parts = index_spec.split("-", 1)
+        if len(parts) == 2 and parts[0]:
+            start = int(parts[0])
+            end = int(parts[1])
+            
+            if start == 0 or end == 0:
+                raise ValueError("Index cannot be 0 in 1-based indexing")
+            
+            if start > 0 and end > 0:
+                # Inclusive range, convert to 0-based
+                return list(range(start - 1, end))
+            else:
+                # Handle mixed positive/negative
+                result = []
+                result.append(start - 1 if start > 0 else start)
+                result.append(end - 1 if end > 0 else end)
+                return result
+        else:
+            # Just a negative number
+            idx = int(index_spec)
+            if idx == 0:
+                raise ValueError("Index cannot be 0 in 1-based indexing")
+            return idx
+    
+    # Single index (no special characters)
+    else:
+        idx = int(index_spec)
+        if idx == 0:
+            raise ValueError("Index cannot be 0 in 1-based indexing")
+        # Convert to 0-based if positive
+        return idx if idx < 0 else idx - 1
 
 
 def return_objects_from_string_index(list_of_objects, index):
