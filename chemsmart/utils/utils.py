@@ -586,6 +586,10 @@ def parse_index_specification(
     
     index_spec = index_spec.strip()
     
+    # Strip brackets if present (for compatibility with formats like "[1-3]")
+    if index_spec.startswith("[") and index_spec.endswith("]"):
+        index_spec = index_spec[1:-1].strip()
+    
     # Check if this contains commas - if so, it's a free-format list
     if "," in index_spec:
         # Parse as free-format list (can include negative indices and ranges)
