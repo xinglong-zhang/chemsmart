@@ -373,11 +373,16 @@ def str_indices_range_to_list(str_indices):
             if not part:
                 continue
             if "-" in part and not part.startswith("-"):
-                # This is a range like "1-9"
-                range_parts = part.split("-")
-                start = int(range_parts[0])
-                end = int(range_parts[1])
-                list_indices.extend(range(start, end + 1))  # inclusive
+                # This is a range like "1-9" or "1--1" (1 to -1)
+                # Use split with maxsplit=1 to handle negative end values
+                range_parts = part.split("-", 1)
+                if len(range_parts) == 2 and range_parts[0]:
+                    start = int(range_parts[0])
+                    end = int(range_parts[1])
+                    list_indices.extend(range(start, end + 1))  # inclusive
+                else:
+                    # Just a negative number
+                    list_indices.append(int(part))
             else:
                 # Single index (could be negative)
                 list_indices.append(int(part))
@@ -403,12 +408,17 @@ def str_indices_range_to_list(str_indices):
     # Check if this is a hyphen-separated range like "1-9" (no commas)
     elif "-" in str_indices and not str_indices.startswith("-"):
         # Must check it's not a negative number
-        parts = str_indices.split("-")
-        if len(parts) == 2:
+        # Use split with maxsplit=1 to handle negative end values like "1--1"
+        parts = str_indices.split("-", 1)
+        if len(parts) == 2 and parts[0]:
             start_index = int(parts[0])
             end_index = int(parts[1])
             # Inclusive end for range notation
             list_indices = list(range(start_index, end_index + 1))
+        else:
+            # Just a negative number
+            if str_indices:
+                list_indices.append(int(str_indices))
     else:
         # Single index
         if str_indices:
