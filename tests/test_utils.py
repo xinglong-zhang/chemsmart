@@ -441,6 +441,134 @@ class TestString2Index1Based:
             string2index_1based("1:x:2")
 
 
+class TestParseIndexSpecification:
+    """Tests for the new unified parse_index_specification function."""
+
+    def test_ase_style_single_indices(self):
+        """Test ASE-style single index specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1") == 0
+        assert parse_index_specification("5") == 4
+        assert parse_index_specification("-1") == -1
+        assert parse_index_specification("-2") == -2
+
+    def test_ase_style_slices(self):
+        """Test ASE-style slice specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Basic slices
+        result = parse_index_specification("1:5")
+        assert isinstance(result, slice)
+        assert result == slice(0, 4)
+
+        # All items
+        result = parse_index_specification(":")
+        assert isinstance(result, slice)
+        assert result == slice(None, None)
+
+        # Open-ended slices
+        result = parse_index_specification("5:")
+        assert result == slice(4, None)
+
+        result = parse_index_specification(":5")
+        assert result == slice(None, 4)
+
+        # With step
+        result = parse_index_specification("::2")
+        assert result == slice(None, None, 2)
+
+        result = parse_index_specification("1:10:2")
+        assert result == slice(0, 9, 2)
+
+    def test_free_format_comma_separated(self):
+        """Test free-format comma-separated specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,3,5") == [0, 2, 4]
+        assert parse_index_specification("1,2,4") == [0, 1, 3]
+
+    def test_free_format_with_negative_indices(self):
+        """Test free-format with negative indices."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,-1") == [0, -1]
+        assert parse_index_specification("1,3,-1") == [0, 2, -1]
+        assert parse_index_specification("2,-2") == [1, -2]
+        assert parse_index_specification("-1,-2") == [-1, -2]
+
+    def test_free_format_hyphen_ranges(self):
+        """Test free-format hyphen-based range specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Simple range (inclusive)
+        assert parse_index_specification("1-5") == [0, 1, 2, 3, 4]
+        assert parse_index_specification("2-4") == [1, 2, 3]
+
+        # Range with brackets
+        assert parse_index_specification("[1-5]") == [0, 1, 2, 3, 4]
+
+    def test_free_format_mixed(self):
+        """Test free-format mixed specifications."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Mix of ranges and individual indices
+        assert parse_index_specification("1-3,5") == [0, 1, 2, 4]
+        assert parse_index_specification("1-3,5,7-9") == [0, 1, 2, 4, 6, 7, 8]
+
+        # Mix with negative indices
+        assert parse_index_specification("1-2,-1") == [0, 1, -1]
+        assert parse_index_specification("1,3-5,-1") == [0, 2, 3, 4, -1]
+
+    def test_invalid_inputs(self):
+        """Test that invalid inputs raise ValueError."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Index 0 is not allowed (1-based indexing)
+        with pytest.raises(ValueError):
+            parse_index_specification("0")
+
+        with pytest.raises(ValueError):
+            parse_index_specification("1,0,3")
+
+    def test_with_actual_lists(self):
+        """Test parse_index_specification with actual list indexing."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+
+        # Single index
+        idx = parse_index_specification("1")
+        assert objects[idx] == "a"
+
+        # Negative index
+        idx = parse_index_specification("-1")
+        assert objects[idx] == "h"
+
+        # Slice
+        idx = parse_index_specification("1:4")
+        assert objects[idx] == ["a", "b", "c"]
+
+        # All
+        idx = parse_index_specification(":")
+        assert objects[idx] == objects
+
+        # Comma-separated
+        idx = parse_index_specification("1,3,5")
+        assert [objects[i] for i in idx] == ["a", "c", "e"]
+
+        # Range
+        idx = parse_index_specification("1-3")
+        assert [objects[i] for i in idx] == ["a", "b", "c"]
+
+        # Mixed with negative
+        idx = parse_index_specification("1,-1")
+        assert [objects[i] for i in idx] == ["a", "h"]
+
+        idx = parse_index_specification("1,3,-1")
+        assert [objects[i] for i in idx] == ["a", "c", "h"]
+
+
 class TestIOUtilities:
     def test_clean_duplicate_structure(self):
         orientations = [
