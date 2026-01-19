@@ -241,6 +241,7 @@ def click_gaussian_grouper_options(f):
                 "irmsd",
                 "pymolalign",
                 "tanimoto",
+                "torsion",
                 "isomorphism",
                 "formula",
                 "connectivity",
@@ -302,6 +303,12 @@ def click_gaussian_grouper_options(f):
         ),
         default="rdkit",
         help="Fingerprint type to use for Tanimoto grouping. Options: rdkit (default), rdk, morgan, maccs, atompair, torsion, usr, usrcat.",
+    )
+    @click.option(
+        "--use-weights/--no-use-weights",
+        type=bool,
+        default=True,
+        help="Whether to use torsion weights in TFD calculation for torsion grouping. Default=True.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

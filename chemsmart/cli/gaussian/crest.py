@@ -40,6 +40,7 @@ def crest(
     threshold,
     ignore_hydrogens,
     fingerprint_type,
+    use_weights,
     skip_completed,
     **kwargs,
 ):
@@ -91,6 +92,7 @@ def crest(
         grouping_strategy=grouping_strategy,
         ignore_hydrogens=ignore_hydrogens,
         threshold=threshold,
+        use_weights=use_weights,
         fingerprint_type=fingerprint_type,
         skip_completed=skip_completed,
         **kwargs,

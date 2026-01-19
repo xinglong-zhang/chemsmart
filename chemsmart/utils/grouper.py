@@ -22,6 +22,7 @@ Key classes include:
 - PymolAlignGrouper: PyMOL-based structural alignment and RMSD calculation
 - RMSDGrouperSharedMemory: RMSD grouping with shared-memory optimization
 - TanimotoSimilarityGrouper: Chemical fingerprint similarity
+- TorsionFingerprintGrouper: Torsion angle-based fingerprint similarity (2012 J. Chem. Inf. Model.)
 - RDKitIsomorphismGrouper: RDKit hashing and isomorphism grouping
 - ConnectivityGrouper: Molecular connectivity (graph isomorphism)
 - ConnectivityGrouperSharedMemory: Connectivity grouping with shared memory
@@ -44,7 +45,7 @@ import numpy as np
 from joblib import Parallel, delayed  # More efficient parallelization
 from networkx.algorithms import isomorphism
 from rdkit import Chem, DataStructs
-from rdkit.Chem import rdMolDescriptors, rdMolHash
+from rdkit.Chem import TorsionFingerprints, rdMolDescriptors, rdMolHash
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 from scipy.optimize import linear_sum_assignment  # for Hungarian algorithm
 from scipy.sparse import csr_matrix
@@ -2659,6 +2660,367 @@ class ConnectivityGrouperSharedMemory(MoleculeGrouper):
         return mol_groups, idx_groups
 
 
+class TorsionFingerprintGrouper(MoleculeGrouper):
+    """
+    Groups molecule conformers based on RDKit Torsion Fingerprint Deviation (TFD).
+
+    Implementation based on Schulz-Gasch et al., JCIM, 52, 1499-1512 (2012).
+    Uses RDKit's TorsionFingerprints.GetTFDBetweenConformers() to analyze different
+    conformations of the same molecule and groups similar conformers.
+
+    This grouper follows the same workflow as RMSDGrouper but uses torsion angle
+    patterns instead of atomic positions for similarity assessment.
+
+    Attributes:
+        molecules (Iterable[Molecule]): Collection of molecules to group.
+        threshold (float): TFD threshold for grouping (lower values = more similar).
+        num_procs (int): Number of processes for parallel computation.
+        use_weights (bool): Whether to use torsion weights in TFD calculation.
+        max_dev (str): Normalization method ('equal' or 'spec').
+        symm_radius (int): Radius for calculating atom invariants.
+        ignore_colinear_bonds (bool): Whether to ignore single bonds adjacent to triple bonds.
+    """
+
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = None,
+        num_procs: int = 1,
+        use_weights: bool = True,
+        max_dev: str = "equal",
+        symm_radius: int = 2,
+        ignore_colinear_bonds: bool = True,
+        **kwargs,
+    ):
+        """
+        Initialize TFD-based conformer grouper.
+
+        Args:
+            molecules (Iterable[Molecule]): Collection of molecule conformers to group.
+            threshold (float): TFD threshold for grouping. Lower values indicate more
+                similar torsion patterns. Defaults to 0.1.
+            num_procs (int): Number of processes for parallel computation.
+            use_weights (bool): Whether to use torsion weights in TFD calculation. Defaults to True.
+            max_dev (str): Normalization method:
+                - 'equal': all torsions normalized using 180.0 (default)
+                - 'spec': each torsion normalized using specific maximal deviation
+            symm_radius (int): Radius for calculating atom invariants. Defaults to 2.
+            ignore_colinear_bonds (bool): If True, single bonds adjacent to triple bonds
+                are ignored. Defaults to True.
+        """
+        super().__init__(molecules, num_procs)
+
+        if threshold is None:
+            threshold = 0.1  # TFD threshold (lower = more similar)
+        self.threshold = threshold
+        self.use_weights = use_weights
+        self.max_dev = max_dev
+        self.symm_radius = symm_radius
+        self.ignore_colinear_bonds = ignore_colinear_bonds
+
+        # Prepare molecules for TFD analysis
+        self.molecules = list(molecules)  # Convert to list for indexing
+        self._prepare_conformer_molecule()
+
+    def _prepare_conformer_molecule(self):
+        """
+        Prepare a single RDKit molecule with multiple conformers from input molecules.
+
+        This assumes all input molecules are conformers of the same chemical structure.
+        Creates one RDKit molecule object with multiple conformer IDs.
+        """
+        if not self.molecules:
+            self.rdkit_mol = None
+            self.valid_conformer_ids = []
+            return
+
+        # Use the first molecule as the base structure
+        base_mol = self.molecules[0]
+        self.rdkit_mol = base_mol.to_rdkit()
+
+        if self.rdkit_mol is None:
+            self.valid_conformer_ids = []
+            return
+
+        # Clear existing conformers and add all input molecules as conformers
+        self.rdkit_mol.RemoveAllConformers()
+        self.valid_conformer_ids = []
+
+        for i, mol in enumerate(self.molecules):
+            try:
+                # Convert molecule positions to RDKit conformer
+                conf = Chem.Conformer(mol.num_atoms)
+                for atom_idx, pos in enumerate(mol.positions):
+                    conf.SetAtomPosition(atom_idx, pos)
+
+                # Add conformer to the molecule
+                conf_id = self.rdkit_mol.AddConformer(conf, assignId=True)
+                self.valid_conformer_ids.append(conf_id)
+
+            except Exception as e:
+                logger.warning(f"Failed to add conformer {i}: {str(e)}")
+                continue
+
+        logger.info(
+            f"Prepared molecule with {len(self.valid_conformer_ids)} valid conformers"
+        )
+
+    def _calculate_tfd(self, conf_pair: Tuple[int, int]) -> float:
+        """
+        Calculate TFD between two conformers.
+
+        Args:
+            conf_pair (Tuple[int, int]): Indices of conformers to compare.
+
+        Returns:
+            float: TFD value between the conformers.
+        """
+        if self.rdkit_mol is None or len(self.valid_conformer_ids) == 0:
+            return float("inf")
+
+        i, j = conf_pair
+
+        try:
+            conf_id1 = self.valid_conformer_ids[i]
+            conf_id2 = self.valid_conformer_ids[j]
+
+            # Use GetTFDBetweenConformers for same molecule different conformers
+            tfd_values = TorsionFingerprints.GetTFDBetweenConformers(
+                self.rdkit_mol,
+                confIds1=[conf_id1],  # Single conformer list
+                confIds2=[conf_id2],  # Single conformer list
+                useWeights=self.use_weights,
+                maxDev=self.max_dev,
+                symmRadius=self.symm_radius,
+                ignoreColinearBonds=self.ignore_colinear_bonds,
+            )
+
+            # GetTFDBetweenConformers returns a list, get the first (and only) value
+            return tfd_values[0] if tfd_values else float("inf")
+
+        except Exception as e:
+            logger.warning(
+                f"TFD calculation failed for conformers {i}, {j}: {str(e)}"
+            )
+            return float("inf")
+
+    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """
+        Group conformers based on TFD similarity using the same workflow as RMSDGrouper.
+
+        Returns:
+            Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
+                - List of molecule groups (each group is a list of molecules)
+                - List of index groups (corresponding indices for each group)
+        """
+        n = len(self.molecules)
+
+        if n == 0:
+            return [], []
+
+        if n == 1:
+            return [self.molecules], [[0]]
+
+        # Check if we have valid conformers
+        if self.rdkit_mol is None or len(self.valid_conformer_ids) == 0:
+            logger.warning(
+                "No valid conformers found, each molecule becomes its own group"
+            )
+            return [[mol] for mol in self.molecules], [[i] for i in range(n)]
+
+        # Generate conformer pairs for TFD calculation (same as RMSD workflow)
+        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        total_pairs = len(indices)
+
+        print(
+            f"[{self.__class__.__name__}] Starting TFD calculation for {n} conformers ({total_pairs} pairs)"
+        )
+        print(f"  - TFD threshold: {self.threshold}")
+        print(f"  - Use weights: {self.use_weights}")
+        print(f"  - Max deviation: {self.max_dev}")
+        print(f"  - Symmetry radius: {self.symm_radius}")
+        print(f"  - Ignore colinear bonds: {self.ignore_colinear_bonds}")
+
+        # Calculate TFD values with real-time output (same as RMSD workflow)
+        tfd_values = []
+        for idx, (i, j) in enumerate(indices):
+            tfd = self._calculate_tfd((i, j))
+            tfd_values.append(tfd)
+            print(
+                f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished, TFD= {tfd:.6f}"
+            )
+
+        # Build full TFD matrix (same as RMSD workflow)
+        tfd_matrix = np.zeros((n, n))
+        for (i, j), tfd in zip(indices, tfd_values):
+            tfd_matrix[i, j] = tfd_matrix[j, i] = tfd
+
+        # Save TFD matrix (same as RMSD workflow)
+        import os
+
+        output_dir = "group_result"
+        os.makedirs(output_dir, exist_ok=True)
+
+        matrix_filename = os.path.join(
+            output_dir,
+            f"{self.__class__.__name__}_tfd_matrix_t{self.threshold}.txt",
+        )
+        self._save_tfd_matrix(tfd_matrix, matrix_filename)
+
+        # Build adjacency matrix for clustering (same logic as RMSD but TFD uses <=)
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), tfd in zip(indices, tfd_values):
+            if tfd <= self.threshold:  # TFD: lower values = more similar
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components (same as RMSD workflow)
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Build groups (same as RMSD workflow)
+        unique_labels = np.unique(labels)
+        groups = [
+            [self.molecules[i] for i in np.where(labels == label)[0]]
+            for label in unique_labels
+        ]
+        index_groups = [
+            list(np.where(labels == label)[0]) for label in unique_labels
+        ]
+
+        # Cache results
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+
+        print(
+            f"[{self.__class__.__name__}] Found {len(groups)} groups using TFD"
+        )
+
+        return groups, index_groups
+
+    def _save_tfd_matrix(self, tfd_matrix: np.ndarray, filename: str):
+        """Save TFD matrix to file (same format as RMSD matrix)."""
+        n = tfd_matrix.shape[0]
+        with open(filename, "w") as f:
+            f.write(f"Full TFD Matrix ({n}x{n}) - {self.__class__.__name__}\n")
+            f.write(
+                "Based on Schulz-Gasch et al., JCIM, 52, 1499-1512 (2012)\n"
+            )
+            f.write(f"Threshold: {self.threshold}\n")
+            f.write(f"Use weights: {self.use_weights}\n")
+            f.write(f"Max deviation: {self.max_dev}\n")
+            f.write(f"Symmetry radius: {self.symm_radius}\n")
+            f.write(f"Ignore colinear bonds: {self.ignore_colinear_bonds}\n")
+            f.write("=" * 80 + "\n")
+            f.write("Lower values indicate higher torsional similarity\n")
+            f.write("∞ indicates calculation failures\n")
+            f.write("-" * 80 + "\n\n")
+
+            # Write header (same format as RMSD)
+            f.write(f"{'Conf':>6}")
+            for j in range(n):
+                f.write(f"{j+1:>10}")
+            f.write("\n")
+            f.write("-" * 80 + "\n")
+
+            # Write matrix (same format as RMSD)
+            for i in range(n):
+                f.write(f"{i+1:>6}")
+                for j in range(n):
+                    if np.isinf(tfd_matrix[i, j]):
+                        f.write(f"{'∞':>10}")
+                    else:
+                        f.write(f"{tfd_matrix[i, j]:>10.4f}")
+                f.write("\n")
+
+    def calculate_full_tfd_matrix(
+        self, output_file: Optional[str] = None
+    ) -> np.ndarray:
+        """
+        Calculate full TFD matrix (same interface as RMSDGrouper).
+
+        Args:
+            output_file (Optional[str]): Path to save TFD matrix.
+
+        Returns:
+            np.ndarray: Symmetric TFD matrix (n x n).
+        """
+        n = len(self.molecules)
+
+        if n == 0:
+            return np.array([])
+
+        if self.rdkit_mol is None or len(self.valid_conformer_ids) == 0:
+            logger.warning(
+                "No valid conformers, returning matrix of infinities"
+            )
+            return np.full((n, n), np.inf)
+
+        logger.info(f"Calculating full TFD matrix for {n} conformers")
+
+        # Use GetTFDMatrix for efficient calculation of all pairs
+        try:
+            # Get the lower triangular matrix from RDKit
+            tfd_lower = TorsionFingerprints.GetTFDMatrix(
+                self.rdkit_mol,
+                useWeights=self.use_weights,
+                maxDev=self.max_dev,
+                symmRadius=self.symm_radius,
+                ignoreColinearBonds=self.ignore_colinear_bonds,
+            )
+
+            # Reconstruct full symmetric matrix
+            tfd_matrix = np.zeros((n, n))
+            idx = 0
+            for i in range(n):
+                for j in range(i + 1, n):
+                    if idx < len(tfd_lower):
+                        tfd_matrix[i, j] = tfd_matrix[j, i] = tfd_lower[idx]
+                        idx += 1
+
+        except Exception as e:
+            logger.warning(
+                f"GetTFDMatrix failed: {e}, using pairwise calculation"
+            )
+            # Fallback to pairwise calculation
+            tfd_matrix = np.zeros((n, n))
+            for i in range(n):
+                for j in range(i + 1, n):
+                    tfd = self._calculate_tfd((i, j))
+                    tfd_matrix[i, j] = tfd_matrix[j, i] = tfd
+
+        # Output results (same format as RMSD)
+        print(f"\nFull TFD Matrix ({n}x{n}):")
+        print("=" * 60)
+
+        # Print header
+        print(f"{'':>6}", end="")
+        for j in range(n):
+            print(f"{j+1:>8}", end="")
+        print()
+
+        # Print matrix rows
+        for i in range(n):
+            print(f"{i+1:>6}", end="")
+            for j in range(n):
+                if np.isinf(tfd_matrix[i, j]):
+                    print(f"{'∞':>8}", end="")
+                else:
+                    print(f"{tfd_matrix[i, j]:>8.3f}", end="")
+            print()
+
+        # Save to file if requested
+        if output_file:
+            self._save_tfd_matrix(tfd_matrix, output_file)
+
+        return tfd_matrix
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
+            f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
+        )
+
+
 class StructureGrouperFactory:
     """
     Factory for creating molecular grouper instances.
@@ -2670,6 +3032,7 @@ class StructureGrouperFactory:
     - "spyrmsd": SpyRMSDGrouper
     - "pymol" or "pymol_align": PymolAlignGrouper
     - "tanimoto" or "fingerprint": TanimotoSimilarityGrouper
+    - "torsion": TorsionFingerprintGrouper
     - "isomorphism" or "rdkit": RDKitIsomorphismGrouper
     - "formula": FormulaGrouper
     - "connectivity": ConnectivityGrouper
@@ -2693,8 +3056,8 @@ class StructureGrouperFactory:
         Args:
             structures: Iterable of `Molecule` to group.
             strategy (str): One of "rmsd", "hrmsd", "spyrmsd", "pymol"/"pymol_align",
-                "tanimoto"/"fingerprint", "isomorphism"/"rdkit", "formula", or "connectivity".
-                Defaults to "rmsd".
+                "tanimoto", "torsion", "isomorphism",
+                "formula", or "connectivity". Defaults to "rmsd".
             num_procs (int): Number of workers for parallel computation.
             **kwargs: Extra options forwarded to the grouper constructor
                 (e.g., `threshold`, `align_molecules`, `adjust_H`).
@@ -2712,6 +3075,7 @@ class StructureGrouperFactory:
             "irmsd": IRMSDGrouper,
             "pymolalign": PymolAlignGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
+            "torsion": TorsionFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
@@ -2724,6 +3088,7 @@ class StructureGrouperFactory:
             "irmsd",
             "pymolalign",
             "tanimoto",
+            "torsion",
             "connectivity",
         }
         if strategy in groupers:
