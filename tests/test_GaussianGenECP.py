@@ -264,7 +264,7 @@ class TestGenGenECPBasisDetermination:
             multiplicity=1,
         )
 
-        # Determine basis should use light elements  since no heavy elements present
+        # Determine basis should use light elements since no heavy elements present
         determined_basis = settings.determine_basis_keyword(h2o_mol)
         assert determined_basis == "def2svp"
 
