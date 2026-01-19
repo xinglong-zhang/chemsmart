@@ -483,6 +483,157 @@ class TestXTBG98File:
         assert co2_g98.num_vib_modes == 4
         assert co2_g98.num_vib_frequencies == 4
 
+    def test_g98_acetaldehyde(self, xtb_acetaldehyde_outfolder):
+        """Test parsing G98 output from acetaldehyde hess calculation."""
+        g98_file = os.path.join(xtb_acetaldehyde_outfolder, "g98.out")
+        assert os.path.exists(g98_file)
+        acetaldehyde_g98 = XTBG98File(g98_file)
+        assert acetaldehyde_g98.vibrational_frequencies == [
+            151.3396,
+            501.8141,
+            769.0542,
+            947.2656,
+            1045.6822,
+            1107.2721,
+            1355.3353,
+            1389.3815,
+            1446.6021,
+            1447.8603,
+            1798.5806,
+            2748.9403,
+            3018.3384,
+            3026.5465,
+            3059.7618,
+        ]
+        assert acetaldehyde_g98.reduced_masses == [
+            3.5771,
+            9.8091,
+            2.4123,
+            7.4606,
+            6.1400,
+            7.7131,
+            3.0566,
+            2.9306,
+            1.7558,
+            1.6047,
+            13.3745,
+            1.6770,
+            1.9421,
+            1.3886,
+            1.8344,
+        ]
+        assert acetaldehyde_g98.force_constants == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]
+        assert acetaldehyde_g98.ir_intensities == [
+            0.0446,
+            11.4541,
+            2.9126,
+            15.1649,
+            16.5191,
+            60.1232,
+            12.4013,
+            46.0938,
+            16.0281,
+            10.9071,
+            300.9390,
+            142.6312,
+            6.5363,
+            3.4114,
+            14.2061,
+        ]
+        assert acetaldehyde_g98.raman_activities == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]
+        assert acetaldehyde_g98.depolarization_ratios == [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]
+        assert acetaldehyde_g98.vibrational_mode_symmetries == [
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+        ]
+        assert np.allclose(
+            acetaldehyde_g98.vibrational_modes[0],
+            [
+                [0.04, -0.09, -0.28],
+                [0.00, -0.00, -0.01],
+                [-0.04, 0.11, 0.32],
+                [-0.05, 0.12, 0.36],
+                [-0.27, -0.40, -0.23],
+                [0.35, 0.20, -0.35],
+                [-0.04, 0.09, 0.28],
+            ],
+        )
+        assert np.allclose(
+            acetaldehyde_g98.vibrational_modes[14],
+            [
+                [0.00, 0.00, -0.00],
+                [-0.07, -0.25, 0.08],
+                [-0.00, -0.01, 0.00],
+                [0.16, 0.89, -0.28],
+                [0.06, -0.03, -0.08],
+                [0.04, 0.03, 0.09],
+                [0.00, 0.02, -0.01],
+            ],
+        )
+        assert acetaldehyde_g98.num_vib_modes == 15
+        assert acetaldehyde_g98.num_vib_frequencies == 15
+
 
 class TestXTBFolder:
     """Tests for XTBFolder class."""
