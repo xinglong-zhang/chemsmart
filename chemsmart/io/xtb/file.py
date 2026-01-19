@@ -224,6 +224,7 @@ class XTBMainOut(XTBFileMixin):
         write_all = self._get_setup_information("write xtbopt.log")
         if write_all:
             return write_all.lower() == "true"
+        return None
 
     @property
     def is_linear(self):
@@ -231,40 +232,36 @@ class XTBMainOut(XTBFileMixin):
         linear = self._get_setup_information("linear?")
         if linear:
             return linear.lower() == "true"
+        return None
 
     @property
     def energy_convergence(self):
         energy_conv = self._get_setup_information("energy convergence")
-        if energy_conv:
-            return float(energy_conv)
+        return float(energy_conv) if energy_conv else None
 
     @property
     def gradient_convergence(self):
         """Gradient convergence threshold, in Eh/alpha."""
         gradient_conv = self._get_setup_information("grad. convergence")
-        if gradient_conv:
-            return float(gradient_conv)
+        return float(gradient_conv) if gradient_conv else None
 
     @property
     def max_rf_displacement(self):
         """Maximum displacement in the Relaxed Fock (RF) solver."""
         max_rf_disp = self._get_setup_information("maxmium RF displ.")
-        if max_rf_disp:
-            return float(max_rf_disp)
+        return float(max_rf_disp) if max_rf_disp else None
 
     @property
     def low_frequency_cutoff(self):
         """Low frequency cutoff in cm^-1."""
         low_freq_cutoff = self._get_setup_information("Hlow (freq-cutoff)")
-        if low_freq_cutoff:
-            return float(low_freq_cutoff)
+        return float(low_freq_cutoff) if low_freq_cutoff else None
 
     @property
     def max_frequency_cutoff(self):
         """Maximum frequency cutoff in cm^-1."""
         max_freq_cutoff = self._get_setup_information("Hmax (freq-cutoff)")
-        if max_freq_cutoff:
-            return float(max_freq_cutoff)
+        return float(max_freq_cutoff) if max_freq_cutoff else None
 
     @property
     def s6_in_model_hessian(self):
@@ -280,8 +277,7 @@ class XTBMainOut(XTBFileMixin):
         Proper dispersion scaling ensures realistic vibrational spectra and thermodynamic properties.
         """
         s6 = self._get_setup_information("S6 in model hess.")
-        if s6:
-            return float(s6)
+        return float(s6) if s6 else None
 
     @property
     def homo_energy(self):
@@ -862,8 +858,7 @@ class XTBMainOut(XTBFileMixin):
     @property
     def num_imaginary_frequencies(self):
         num_im_freq = self._get_setup_information("# imaginary freq.")
-        if num_im_freq:
-            return int(num_im_freq)
+        return int(num_im_freq) if num_im_freq else None
 
     @property
     def only_rot_calc(self):
@@ -872,6 +867,7 @@ class XTBMainOut(XTBFileMixin):
         only_rot = self._get_setup_information("only rotational calc.")
         if only_rot:
             return only_rot.lower() == "true"
+        return None
 
     @property
     def symmetry(self):
@@ -881,30 +877,26 @@ class XTBMainOut(XTBFileMixin):
     @property
     def rotational_symmetry_number(self):
         rot_num = self._get_setup_information("rotational number")
-        if rot_num:
-            return int(rot_num)
+        return int(rot_num) if rot_num else None
 
     @property
     def scaling_factor(self):
         """Scaling factor used for vibrational frequencies."""
         scale_factor = self._get_setup_information("scaling factor")
-        if scale_factor:
-            return float(scale_factor)
+        return float(scale_factor) if scale_factor else None
 
     @property
     def rotor_cutoff(self):
         """Defines threshold below which low-frequency vibrational modes are treated
         as rotational modes (free internal rotations). Defaults to 50 cm^-1."""
         rotor_cut = self._get_setup_information("rotor cutoff")
-        if rotor_cut:
-            return float(rotor_cut)
+        return float(rotor_cut) if rotor_cut else None
 
     @property
     def imaginary_frequency_cutoff(self):
         """Imaginary frequency cutoff in cm^-1. Defaults to 20 cm^-1."""
         im_freq_cutoff = self._get_setup_information("imag. cutoff")
-        if im_freq_cutoff:
-            return float(im_freq_cutoff)
+        return float(im_freq_cutoff) if im_freq_cutoff else None
 
     # ^^ Hessian SETUP information
 
@@ -1020,7 +1012,8 @@ class XTBMainOut(XTBFileMixin):
         """Total free energy in Eh"""
         return self._extract_final_information("TOTAL FREE ENERGY")
 
-    def sum_time_hours(self, line):
+    @staticmethod
+    def sum_time_hours(line):
         n_days = float(line.split(" d,")[0].split()[-1])
         n_hours = float(line.split(" h,")[0].split()[-1])
         n_minutes = float(line.split(" min,")[0].split()[-1])
