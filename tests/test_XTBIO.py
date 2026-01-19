@@ -2,7 +2,13 @@ import os.path
 
 import numpy as np
 
-from chemsmart.io.xtb.file import XTBChargesFile, XTBEnergyFile, XTBMainOut
+from chemsmart.io.xtb.file import (
+    XTBChargesFile,
+    XTBEnergyFile,
+    XTBEngradFile,
+    XTBG98File,
+    XTBMainOut,
+)
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
@@ -232,10 +238,6 @@ class TestXTBMainOut:
         ]
         assert co2_main_out.ir_intensities == [
             0.00,
-            0.00,
-            0.00,
-            0.00,
-            0.00,
             68.69,
             68.69,
             0.00,
@@ -245,14 +247,9 @@ class TestXTBMainOut:
             0.00,
             0.00,
             0.00,
-            0.00,
-            0.00,
-            0.00,
-            0.00,
-            0.00,
         ]
         # Thermodynamic Setup
-        assert co2_main_out.num_frequencies == 4
+        assert co2_main_out.num_vib_frequencies == 4
         assert co2_main_out.num_imaginary_frequencies == 0
         assert not co2_main_out.only_rot_calc
         assert co2_main_out.symmetry == "din"
@@ -355,6 +352,136 @@ class TestXTBEnergyFile:
         assert os.path.exists(energy_file)
         p_benzyne_opt_energy = XTBEnergyFile(energy_file)
         assert p_benzyne_opt_energy.last_energy == -14.66185695901
+
+
+class TestXTBEngradFile:
+    """Tests for XTBEngradFile class."""
+
+    def test_engrad_co2(self, xtb_co2_outfolder):
+        """Test parsing energy gradient from CO2 ohess calculation."""
+        engrad_file = os.path.join(xtb_co2_outfolder, "co2.engrad")
+        assert os.path.exists(engrad_file)
+        co2_engrad = XTBEngradFile(engrad_file)
+        assert co2_engrad.num_atoms == 3
+        assert co2_engrad.total_energy == -10.308452289174
+        assert np.allclose(
+            co2_engrad.forces[0][0],
+            [0.000000194263, -0.000000000000, -0.000000000000],
+        )
+        assert np.allclose(
+            co2_engrad.forces[0][1],
+            [-0.000000194263, 0.000000000000, -0.000000000000],
+        )
+        assert np.allclose(
+            co2_engrad.forces[0][2],
+            [0.000000000000, 0.000000000000, 0.000000000000],
+        )
+
+    def test_engrad_p_benzyne_opt(self, xtb_p_benzyne_opt_outfolder):
+        """Test parsing energy gradient from p-benzyne opt calculation."""
+        engrad_file = os.path.join(
+            xtb_p_benzyne_opt_outfolder, "p_benzyne.engrad"
+        )
+        assert os.path.exists(engrad_file)
+        p_benzyne_opt_engrad = XTBEngradFile(engrad_file)
+        assert p_benzyne_opt_engrad.num_atoms == 10
+        assert p_benzyne_opt_engrad.total_energy == -14.661856959008
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][0],
+            [-0.000151885154, 0.000008080973, -0.000083466044],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][1],
+            [0.000550798511, -0.000200234055, -0.000078750880],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][2],
+            [-0.000344033432, -0.000092282346, 0.000528937526],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][3],
+            [0.000265720803, -0.000032115473, -0.000048689390],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][4],
+            [-0.000041353408, 0.000168583076, 0.000075947816],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][5],
+            [0.000006914570, 0.000063463873, -0.000186368586],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][6],
+            [-0.000446235650, 0.000190941706, 0.000274234357],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][7],
+            [-0.000021789087, -0.000005645447, -0.000313642685],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][8],
+            [0.000151189558, -0.000003081686, -0.000132662651],
+        )
+        assert np.allclose(
+            p_benzyne_opt_engrad.forces[0][9],
+            [0.000030673290, -0.000097710620, -0.000035539462],
+        )
+
+
+class TestXTBG98File:
+    """Tests for XTBG98File class."""
+
+    def test_g98_co2(self, xtb_co2_outfolder):
+        """Test parsing G98 output from co2 ohess calculation."""
+        g98_file = os.path.join(xtb_co2_outfolder, "g98.out")
+        assert os.path.exists(g98_file)
+        co2_g98 = XTBG98File(g98_file)
+        assert co2_g98.vibrational_frequencies == [
+            600.3117,
+            600.3117,
+            1424.7819,
+            2593.0748,
+        ]
+        assert co2_g98.reduced_masses == [13.0986, 13.0986, 15.9994, 13.0994]
+        assert co2_g98.force_constants == [0.0, 0.0, 0.0, 0.0]
+        assert co2_g98.ir_intensities == [68.6947, 68.6947, 0.0, 1046.6649]
+        assert co2_g98.raman_activities == [0.0, 0.0, 0.0, 0.0]
+        assert co2_g98.depolarization_ratios == [0.0, 0.0, 0.0, 0.0]
+        assert co2_g98.vibrational_mode_symmetries == ["a", "a", "a", "a"]
+        assert np.allclose(
+            co2_g98.vibrational_modes[0],
+            [
+                [-0.00, -0.37, -0.00],
+                [-0.00, -0.37, -0.00],
+                [0.00, 0.85, 0.00],
+            ],
+        )
+        assert np.allclose(
+            co2_g98.vibrational_modes[1],
+            [
+                [-0.00, 0.00, -0.37],
+                [-0.00, 0.00, -0.37],
+                [0.00, -0.00, 0.85],
+            ],
+        )
+        assert np.allclose(
+            co2_g98.vibrational_modes[2],
+            [
+                [-0.71, 0.00, 0.00],
+                [0.71, -0.00, -0.00],
+                [-0.00, 0.00, -0.00],
+            ],
+        )
+        assert np.allclose(
+            co2_g98.vibrational_modes[3],
+            [
+                [0.37, -0.00, -0.00],
+                [0.37, -0.00, -0.00],
+                [-0.85, 0.00, 0.00],
+            ],
+        )
+        assert co2_g98.num_vib_modes == 4
+        assert co2_g98.num_vib_frequencies == 4
 
 
 class TestXTBFolder:

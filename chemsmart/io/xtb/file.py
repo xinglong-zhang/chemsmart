@@ -1,10 +1,11 @@
 import logging
+import re
 from functools import cached_property
 
 import numpy as np
-from ase import units
 
 from chemsmart.utils.mixins import FileMixin, XTBFileMixin
+from chemsmart.utils.repattern import normal_mode_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -786,9 +787,7 @@ class XTBMainOut(XTBFileMixin):
             if "Frequency Printout" in line:
                 found_frequency_printout = True
                 continue
-            if found_frequency_printout and line.startswith(
-                "vibrational frequencies"
-            ):
+            if found_frequency_printout and "vibrational frequencies" in line:
                 frequencies = []
                 for j_line in self.contents[i + 1 :]:
                     if "reduced masses (amu)" in j_line:
@@ -818,7 +817,7 @@ class XTBMainOut(XTBFileMixin):
                     reduced_mass_line = j_line.split()[1::2]
                     for reduced_mass in reduced_mass_line:
                         reduced_masses.append(float(reduced_mass))
-                return reduced_masses
+                return reduced_masses[-self.num_vib_frequencies :]
         return None
 
     @cached_property
@@ -833,7 +832,7 @@ class XTBMainOut(XTBFileMixin):
                     ir_intensity_line = j_line.split()[1::2]
                     for ir_intensity in ir_intensity_line:
                         ir_intensities.append(float(ir_intensity))
-                return ir_intensities
+                return ir_intensities[-self.num_vib_frequencies :]
         return None
 
     @cached_property
@@ -851,12 +850,12 @@ class XTBMainOut(XTBFileMixin):
                             raman_intensities.append(float(raman_intensity))
                         except ValueError:
                             pass
-                return raman_intensities
+                return raman_intensities[-self.num_vib_frequencies :]
         return None
 
     # Hessian SETUP information
     @property
-    def num_frequencies(self):
+    def num_vib_frequencies(self):
         num_freq = self._get_setup_information("# frequencies")
         return int(num_freq)
 
@@ -1100,7 +1099,7 @@ class XTBChargesFile(FileMixin):
     """
     Parse xTB charges file containing atomic partial charges.
 
-    File format:
+    File format::
         -0.56472698
          0.28236349
          0.28236349
@@ -1223,15 +1222,8 @@ class XTBEngradFile(FileMixin):
         return None
 
     @cached_property
-    def energy(self):
-        """Obtain the energy in eV."""
-        energy_hartree = self._get_energy()
-        if energy_hartree is not None:
-            return energy_hartree * units.Hartree
-        return None
-
-    def _get_energy(self):
-        """Get the total energy in Hartree."""
+    def total_energy(self):
+        """Obtain the total energy in Hartree."""
         for i, line in enumerate(self.contents):
             if "current total energy" in line:
                 # check following lines for the energy value
@@ -1245,13 +1237,12 @@ class XTBEngradFile(FileMixin):
 
     @cached_property
     def forces(self):
-        """Obtain forces on the atoms in eV/Å."""
+        """Obtain forces on the atoms in Hartree/Bohr."""
         grad = self._get_gradient()
         if grad is not None and grad.shape == (self.num_atoms, 3):
             # Convert gradient to forces: F = -grad
-            # Convert units: Hartree/Bohr -> eV/Angstrom
-            forces = -grad * units.Hartree / units.Bohr
-            return forces
+            forces = -grad
+            return [forces]
         return None
 
     def _get_gradient(self):
@@ -1305,15 +1296,17 @@ class XTBG98File(FileMixin):
            3          1             0       -0.772207    0.000004    0.189653
         --------------------------------------------------------------------
         ...
-        Harmonic frequencies (cm**-1), IR intensities (km*mol⁻¹),
-        ...
+         Harmonic frequencies (cm**-1), IR intensities (km*mol⁻¹),
+         Raman scattering activities (A**4/amu), Raman depolarization ratios,
+         reduced masses (AMU), force constants (mDyne/A) and normal coordinates:
                              1                      2                      3
                                a                      a                      a
         Frequencies --  1539.3017              3643.5149              3651.7072
         Red. masses --     2.1457                 1.5477                 2.1398
         Frc consts  --     0.0000                 0.0000                 0.0000
         IR Inten    --   133.2648                 6.7667                16.6406
-        ...
+        Raman Activ --     0.0000                 0.0000                 0.0000
+        Depolar     --     0.0000                 0.0000                 0.0000
         Atom AN      X      Y      Z        X      Y      Z        X      Y      Z
           1   8     0.00   0.00   0.28    -0.00  -0.00  -0.19     0.27  -0.00  -0.00
           2   1     0.40  -0.00  -0.55     0.58  -0.00   0.38    -0.55   0.00  -0.40
@@ -1326,7 +1319,149 @@ class XTBG98File(FileMixin):
     def __init__(self, filename):
         self.filename = filename
 
-    # TODO: Add parsing methods for frequencies, normal modes, etc.
+    @cached_property
+    def vibrational_frequencies(self):
+        """Obtain list of vibrational frequencies in cm^-1."""
+        frequencies = []
+        for line in self.contents:
+            if line.startswith("Frequencies --"):
+                freq_string = line.split("--")[1].strip()
+                for freq in freq_string.split():
+                    frequencies.append(float(freq))
+        return frequencies
+
+    @cached_property
+    def reduced_masses(self):
+        """Obtain list of reduced masses corresponding to the vibrational frequency, in amu."""
+        reduced_masses = []
+        for line in self.contents:
+            if line.startswith("Red. masses --"):
+                reduced_masses_string = line.split("--")[1].strip()
+                for mass in reduced_masses_string.split():
+                    reduced_masses.append(float(mass))
+        return reduced_masses
+
+    @cached_property
+    def force_constants(self):
+        """Obtain list of force constants corresponding to the vibrational frequency, in mDyne/Å."""
+        force_constants = []
+        for line in self.contents:
+            if line.startswith("Frc consts  --"):
+                force_constants_string = line.split("--")[1].strip()
+                for force in force_constants_string.split():
+                    force_constants.append(float(force))
+        return force_constants
+
+    @cached_property
+    def ir_intensities(self):
+        """Obtain list of IR intensities corresponding to the vibrational frequency, in km/mol."""
+        ir_intensities = []
+        for line in self.contents:
+            if line.startswith("IR Inten    --"):
+                ir_intensities_string = line.split("--")[1].strip()
+                for intensity in ir_intensities_string.split():
+                    ir_intensities.append(float(intensity))
+        return ir_intensities
+
+    @cached_property
+    def raman_activities(self):
+        """Obtain list of Raman activities corresponding to the vibrational frequency, in A^4/amu."""
+        raman_activities = []
+        for line in self.contents:
+            if line.startswith("Raman Activ --"):
+                raman_string = line.split("--")[1].strip()
+                for activity in raman_string.split():
+                    raman_activities.append(float(activity))
+        return raman_activities
+
+    @cached_property
+    def depolarization_ratios(self):
+        """Obtain list of Raman depolarization ratios corresponding to the vibrational frequency."""
+        depolar_ratios = []
+        for line in self.contents:
+            if line.startswith("Depolar     --"):
+                depolar_string = line.split("--")[1].strip()
+                for ratio in depolar_string.split():
+                    depolar_ratios.append(float(ratio))
+        return depolar_ratios
+
+    @cached_property
+    def vibrational_mode_symmetries(self):
+        """Obtain list of vibrational mode symmetries corresponding to the vibrational frequency."""
+        vibrational_mode_symmetries = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Frequencies --"):
+                # go back one line to get the symmetries
+                symmetries = self.contents[i - 1].split()
+                for sym in symmetries:
+                    vibrational_mode_symmetries.append(sym)
+        return vibrational_mode_symmetries
+
+    @cached_property
+    def vibrational_modes(self):
+        """
+        Obtain list of vibrational normal modes corresponding
+        to the vibrational frequency. Returns a list of normal modes,
+        each of num_atoms x 3 (in dx, dy, and dz for each element)
+        vibration.
+        """
+        list_of_vib_modes = []
+        for i, line in enumerate(self.contents):
+            if line.startswith("Frequencies --"):
+                first_col_vib_modes = []
+                second_col_vib_modes = []
+                third_col_vib_modes = []
+                for j_line in self.contents[i + 7 :]:
+                    # if line match normal mode pattern
+                    if re.match(normal_mode_pattern, j_line):
+                        normal_mode = [float(val) for val in j_line.split()]
+                        first_col_vib_mode = normal_mode[2:5]
+                        second_col_vib_mode = normal_mode[5:8]
+                        third_col_vib_mode = normal_mode[8:11]
+                        first_col_vib_modes.append(first_col_vib_mode)
+                        if second_col_vib_mode:
+                            second_col_vib_modes.append(second_col_vib_mode)
+                        if third_col_vib_mode:
+                            third_col_vib_modes.append(third_col_vib_mode)
+                    else:
+                        break
+                if first_col_vib_modes:
+                    list_of_vib_modes.append(np.array(first_col_vib_modes))
+                if second_col_vib_modes:
+                    list_of_vib_modes.append(np.array(second_col_vib_modes))
+                if third_col_vib_modes:
+                    list_of_vib_modes.append(np.array(third_col_vib_modes))
+        return list_of_vib_modes
+
+    @cached_property
+    def num_vib_modes(self):
+        """Number of vibrational modes found."""
+        return len(self.vibrational_modes)
+
+    @cached_property
+    def num_vib_frequencies(self):
+        """Number of vibrational frequencies found."""
+        return len(self.vibrational_frequencies)
+
+    def _attach_vib_metadata(self, mol):
+        """Attach vibrational data to a Molecule object as attributes."""
+        vib = {
+            "frequencies": self.vibrational_frequencies or [],
+            "reduced_masses": self.reduced_masses or [],
+            "force_constants": self.force_constants or [],
+            "ir_intensities": self.ir_intensities or [],
+            "mode_symmetries": self.vibrational_mode_symmetries or [],
+            "modes": self.vibrational_modes or [],
+        }
+
+        setattr(mol, "vibrational_frequencies", vib["frequencies"])
+        setattr(mol, "vibrational_reduced_masses", vib["reduced_masses"])
+        setattr(mol, "vibrational_force_constants", vib["force_constants"])
+        setattr(mol, "vibrational_ir_intensities", vib["ir_intensities"])
+        setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
+        setattr(mol, "vibrational_modes", vib["modes"])
+
+        return mol
 
 
 class XTBGradientFile(FileMixin):
@@ -1421,7 +1556,7 @@ class XTBWibergBondOrderFile(FileMixin):
     """
     Parse XTB Wiberg bond order (wbo) file.
 
-    File format (simple, no header):
+    File format::
         1           2  0.92021379026732564
         1           3  0.92021379039282269
 

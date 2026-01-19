@@ -51,13 +51,13 @@ class XTBOutput:
         The search order is:
         1. main_out (XTBMainOut) - main output file
         2. charges_file (XTBChargesFile) - atomic partial charges
-        3. wbo_file (XTBWibergBondOrderFile) - Wiberg bond orders
-        4. hessian_file (XTBHessianFile) - Hessian matrix
-        5. engrad_file (XTBEngradFile) - energy and gradient file
+        3. energy_file (XTBEnergyFile) - energy file
+        4. engrad_file (XTBEngradFile) - energy and gradient file
+        5. g98_file (XTBG98File) - Gaussian 98 format vibrational analysis
         6. gradient_file (XTBGradientFile) - gradient file
-        7. energy_file (XTBEnergyFile) - energy file
-        8. g98_file (XTBG98File) - Gaussian 98 format vibrational analysis
-        9. vibspectrum_file (XTBVibSpectrumFile) - vibrational spectrum
+        7. hessian_file (XTBHessianFile) - Hessian matrix
+        8. vibspectrum_file (XTBVibSpectrumFile) - vibrational spectrum
+        9. wbo_file (XTBWibergBondOrderFile) - Wiberg bond orders
 
         Args:
             name: Attribute name being accessed
@@ -72,13 +72,13 @@ class XTBOutput:
         file_parsers = [
             "main_out",
             "charges_file",
-            "wbo_file",
-            "hessian_file",
-            "engrad_file",
-            "gradient_file",
             "energy_file",
+            "engrad_file",
             "g98_file",
+            "gradient_file",
+            "hessian_file",
             "vibspectrum_file",
+            "wbo_file",
         ]
         # Try to get from each parser in order
         for file_parser in file_parsers:
@@ -204,16 +204,20 @@ class XTBOutput:
 
     @property
     def final_energy(self):
-        """Get final converged energy."""
+        """Get final converged energy in Hartree."""
         if self.main_out:
             return self.main_out.total_energy
+        if self.energy_file:
+            return self.energy_file.last_energy
+        if self.engrad_file:
+            return self.engrad_file.total_energy
         return None
 
     @property
     def final_forces(self):
         """Get final converged forces."""
         if self.engrad_file:
-            return self.engrad_file.forces
+            return self.engrad_file.forces[-1]
         return None
 
     @cached_property
@@ -307,7 +311,7 @@ class XTBOutput:
                 "Found gradient in .engrad file, assigning to last structure"
             )
             has_final_forces = True
-            final_forces = self.forces
+            final_forces = self.final_forces
         else:
             logger.debug("No .engrad file or gradient data found")
 
