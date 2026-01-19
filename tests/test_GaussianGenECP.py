@@ -242,7 +242,7 @@ class TestGenGenECPBasisDetermination:
         assert determined_basis == "genecp"
 
     def test_determine_basis_keyword_no_heavy_elements(self):
-        """Test that molecules with no heavy elements return original basis."""
+        """Test that molecules with no heavy elements use light elements basis."""
         # Create molecule with only light elements
         h2o_molecule = Atoms(
             "H2O", positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]]
@@ -264,9 +264,9 @@ class TestGenGenECPBasisDetermination:
             multiplicity=1,
         )
 
-        # Determine basis should return original 'genecp' since no heavy elements present
+        # Determine basis should use light elements  since no heavy elements present
         determined_basis = settings.determine_basis_keyword(h2o_mol)
-        assert determined_basis == "genecp"
+        assert determined_basis == "def2svp"
 
     def test_determine_basis_keyword_non_gen_basis(self):
         """Test that non-gen/genecp basis keywords are returned unchanged."""

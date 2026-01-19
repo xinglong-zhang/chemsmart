@@ -853,12 +853,16 @@ class GaussianJobSettings(MolecularJobSettings):
         elements that require ECPs). Elements with atomic number > 36 require
         ECPs and thus need 'genecp', while elements <= 36 only need 'gen'.
 
+        If no heavy elements are present in the molecule, returns the light
+        elements basis keyword (with hyphens removed).
+
         Args:
             molecule: Molecule object containing atomic information.
 
         Returns:
             str: 'gen' if all heavy elements have atomic number <= 36,
                  'genecp' if any heavy element has atomic number > 36,
+                 light_elements_basis (formatted) if no heavy elements present,
                  or the original basis keyword if not using gen/genecp.
         """
         # Only applies when basis is gen or genecp
@@ -868,11 +872,16 @@ class GaussianJobSettings(MolecularJobSettings):
         # Get heavy elements actually present in the molecule
         heavy_elements_in_structure = self.prune_heavy_elements(molecule)
 
-        # If no heavy elements specified or present, return original basis
+        # If no heavy elements specified or present, use light elements basis
         if (
             heavy_elements_in_structure is None
             or len(heavy_elements_in_structure) == 0
         ):
+            # Return light elements basis if available,
+            # otherwise return original basis
+            if self.light_elements_basis is not None:
+                # Remove hyphens for Gaussian compatibility (def2-SVP -> def2svp)
+                return self.light_elements_basis.replace("-", "").lower()
             return self.basis
 
         # Check if any heavy element requires ECP (atomic number > 36)
