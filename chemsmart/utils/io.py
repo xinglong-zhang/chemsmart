@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+from ase import units
 from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
@@ -59,8 +60,10 @@ def create_molecule_list(
             each with shape (N, 3).
         orientations_pbc (list[np.ndarray]): Per-structure translation vectors
             (periodic cell info) aligned with `orientations`.
-        energies (list[float] | None): Per-structure energies (optional).
-        forces (list[np.ndarray] | None): Per-structure forces (optional).
+        energies (list[float] | None): Per-structure energies in Hartree (optional).
+            Will be converted to eV for Molecule objects.
+        forces (list[np.ndarray] | None): Per-structure forces in Hartree/Bohr (optional).
+            Will be converted to eV/Angstrom for Molecule objects.
         symbols (list[str]): Chemical symbols for the atoms.
         charge (int): Molecular charge.
         multiplicity (int): Spin multiplicity.
@@ -70,12 +73,14 @@ def create_molecule_list(
             uses `len(orientations)`.
 
     Returns:
-        list[Molecule]: Molecule objects with specified properties.
+        list[Molecule]: Molecule objects with specified properties in eV and eV/Angstrom.
 
     Notes:
         - `orientations_pbc`, `energies`, and `forces` are indexed by structure;
           when provided, they should be at least `num_structures` long.
         - This function does not validate shapes beyond basic indexing.
+        - Energies are converted from Hartree to eV using ASE units.
+        - Forces are converted from Hartree/Bohr to eV/Angstrom using ASE units.
     """
     num_structures = num_structures or len(orientations)
     logger.debug(f"Number of structures to create: {num_structures}")
@@ -101,8 +106,8 @@ def create_molecule_list(
             multiplicity=multiplicity,
             frozen_atoms=frozen_atoms,
             pbc_conditions=pbc_conditions,
-            energy=energies[i] if energies else None,
-            forces=forces[i] if forces else None,
+            energy=energies[i] * units.Hartree if energies else None,
+            forces=forces[i] * units.Hartree / units.Bohr if forces else None,
         )
         for i in range(num_structures)
     ]
