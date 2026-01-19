@@ -1830,6 +1830,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         num_procs: int = 1,
         fingerprint_type: str = "rdkit",
         use_rdkit_fp: bool = None,  # Legacy support
+        **kwargs,
     ):
         """
         Initialize Tanimoto similarity-based molecular grouper.
@@ -1923,6 +1924,11 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 - List of molecule groups (each group is a list of molecules)
                 - List of index groups (corresponding indices for each group)
         """
+        n = len(self.molecules)
+        print(
+            f"[{self.__class__.__name__}] Starting fingerprint calculation for {n} molecules using {self.fingerprint_type} fingerprints"
+        )
+
         # Compute fingerprints in parallel
         with ThreadPool(self.num_procs) as pool:
             fingerprints = pool.map(
@@ -1938,6 +1944,10 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         if num_valid == 0:
             return [], []  # No valid molecules
+
+        print(
+            f"[{self.__class__.__name__}] Computing Tanimoto similarities for {num_valid} valid molecules"
+        )
 
         # Compute similarity matrix
         similarity_matrix = np.zeros((num_valid, num_valid), dtype=np.float32)
@@ -1988,6 +1998,23 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         # Use connected components clustering
         _, labels = connected_components(adj_matrix)
 
+        # Save Tanimoto matrix to group_result folder
+        import os
+
+        output_dir = "group_result"
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Create filename based on grouper type, fingerprint type and threshold
+        matrix_filename = os.path.join(
+            output_dir,
+            f"{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_t{self.threshold}.txt",
+        )
+
+        # Save full matrix
+        self._save_tanimoto_matrix(
+            similarity_matrix, matrix_filename, valid_indices
+        )
+
         # Build molecule groups
         unique_labels = np.unique(labels)
         mol_groups = [
@@ -2003,6 +2030,144 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         ]
 
         return mol_groups, idx_groups
+
+    def _save_tanimoto_matrix(
+        self,
+        tanimoto_matrix: np.ndarray,
+        filename: str,
+        valid_indices: List[int],
+    ):
+        """Save Tanimoto similarity matrix to file."""
+        n = len(self.molecules)
+        # Create full matrix with invalid molecules marked as NaN
+        full_matrix = np.full((n, n), np.nan)
+
+        # Fill in valid similarities
+        for i, idx_i in enumerate(valid_indices):
+            for j, idx_j in enumerate(valid_indices):
+                full_matrix[idx_i, idx_j] = tanimoto_matrix[i, j]
+
+        with open(filename, "w") as f:
+            f.write(
+                f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}\n"
+            )
+            f.write(f"Fingerprint Type: {self.fingerprint_type}\n")
+            f.write(f"Threshold: {self.threshold}\n")
+            f.write("=" * 80 + "\n")
+            f.write("Values range from 0.0 (dissimilar) to 1.0 (identical)\n")
+            f.write("NaN indicates invalid molecules\n")
+            f.write("-" * 80 + "\n\n")
+
+            # Write header
+            f.write(f"{'Mol':>6}")
+            for j in range(n):
+                f.write(f"{j+1:>10}")
+            f.write("\n")
+            f.write("-" * 80 + "\n")
+
+            # Write matrix
+            for i in range(n):
+                f.write(f"{i+1:>6}")
+                for j in range(n):
+                    if np.isnan(full_matrix[i, j]):
+                        f.write(f"{'NaN':>10}")
+                    else:
+                        f.write(f"{full_matrix[i, j]:>10.4f}")
+                f.write("\n")
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(threshold={self.threshold}, "
+            f"num_procs={self.num_procs}, fingerprint_type={self.fingerprint_type})"
+        )
+
+    def calculate_full_tanimoto_matrix(
+        self, output_file: Optional[str] = None
+    ) -> np.ndarray:
+        """
+        Calculate the full Tanimoto similarity matrix for all molecule pairs.
+
+        Args:
+            output_file (Optional[str]): Optional file path to save the matrix.
+
+        Returns:
+            np.ndarray: Full Tanimoto similarity matrix (n x n).
+        """
+        # Compute fingerprints in parallel
+        with ThreadPool(self.num_procs) as pool:
+            fingerprints = pool.map(
+                self._get_fingerprint, self.rdkit_molecules
+            )
+
+        # Filter valid fingerprints
+        valid_indices = [
+            i for i, fp in enumerate(fingerprints) if fp is not None
+        ]
+        valid_fps = [fingerprints[i] for i in valid_indices]
+        num_valid = len(valid_indices)
+
+        if num_valid == 0:
+            return np.array([])  # No valid molecules
+
+        # Compute similarity matrix
+        similarity_matrix = np.zeros((num_valid, num_valid), dtype=np.float32)
+
+        # Check if we are using numpy arrays (USR/USRCAT)
+        if valid_fps and isinstance(valid_fps[0], np.ndarray):
+            # Calculate Tanimoto for continuous variables (vectors)
+            # T(A, B) = (A . B) / (|A|^2 + |B|^2 - A . B)
+            fps_array = np.array(valid_fps)
+
+            # Compute pairwise dot products
+            dot_products = np.dot(fps_array, fps_array.T)
+
+            # Compute squared norms
+            norms_sq = np.diag(dot_products)
+
+            # Compute Tanimoto matrix
+            # Denominator: |A|^2 + |B|^2 - A.B
+            # Broadcasting: norms_sq[:, None] + norms_sq[None, :] - dot_products
+            denominator = norms_sq[:, None] + norms_sq[None, :] - dot_products
+
+            # Avoid division by zero
+            denominator[denominator == 0] = 1e-9
+
+            similarity_matrix = dot_products / denominator
+
+        else:
+            # Use RDKit DataStructs for BitVects
+            pairs = [
+                (i, j)
+                for i in range(num_valid)
+                for j in range(i + 1, num_valid)
+            ]
+
+            with ThreadPool(self.num_procs) as pool:
+                similarities = pool.starmap(
+                    DataStructs.FingerprintSimilarity,
+                    [(valid_fps[i], valid_fps[j]) for i, j in pairs],
+                )
+
+            # Fill similarity matrix
+            for (i, j), sim in zip(pairs, similarities):
+                similarity_matrix[i, j] = similarity_matrix[j, i] = sim
+
+        # Create full matrix with invalid molecules marked as NaN
+        n = len(self.molecules)
+        full_matrix = np.full((n, n), np.nan)
+
+        # Fill in valid similarities
+        for i, idx_i in enumerate(valid_indices):
+            for j, idx_j in enumerate(valid_indices):
+                full_matrix[idx_i, idx_j] = similarity_matrix[i, j]
+
+        # Save to file if requested
+        if output_file:
+            self._save_tanimoto_matrix(
+                similarity_matrix, output_file, valid_indices
+            )
+
+        return full_matrix
 
 
 class RDKitIsomorphismGrouper(MoleculeGrouper):

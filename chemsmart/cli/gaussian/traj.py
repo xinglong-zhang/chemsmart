@@ -52,6 +52,7 @@ def traj(
     threshold,
     ignore_hydrogens,
     num_procs,
+    fingerprint_type,
     proportion_structures_to_use,
     **kwargs,
 ):
@@ -104,6 +105,7 @@ def traj(
         num_structures_to_run=num_structures_to_run,
         ignore_hydrogens=ignore_hydrogens,
         threshold=threshold,
+        fingerprint_type=fingerprint_type,
         skip_completed=skip_completed,
         **kwargs,
     )

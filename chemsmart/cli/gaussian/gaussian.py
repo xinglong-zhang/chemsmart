@@ -284,6 +284,25 @@ def click_gaussian_grouper_options(f):
         default=False,
         help="Whether to check stereoisomers (mirror images) in IRMSD grouper.(default=False)",
     )
+    @click.option(
+        "-ft",
+        "--fingerprint-type",
+        type=click.Choice(
+            [
+                "rdkit",
+                "rdk",
+                "morgan",
+                "maccs",
+                "atompair",
+                "torsion",
+                "usr",
+                "usrcat",
+            ],
+            case_sensitive=False,
+        ),
+        default="rdkit",
+        help="Fingerprint type to use for Tanimoto grouping. Options: rdkit (default), rdk, morgan, maccs, atompair, torsion, usr, usrcat.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
