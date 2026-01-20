@@ -87,6 +87,7 @@ class MolecularJobSettings:
     def remove_solvent(self):
         self.solvent_model = None
         self.solvent_id = None
+        self.custom_solvent = None
 
     def update_solvent(self, solvent_model=None, solvent_id=None):
         """Update solvent model and solvent identity for implicit solvation.
