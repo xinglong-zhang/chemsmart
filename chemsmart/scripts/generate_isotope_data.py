@@ -124,8 +124,7 @@ if __name__ == "__main__":
     isotopes = parse_isotope_file(input_file)
 
     with open(output_file, "w") as f:
-        f.write(
-            '''"""Isotope data extracted from NIST public website.
+        f.write('''"""Isotope data extracted from NIST public website.
 
     Source data has been compiled by NIST:
 
@@ -154,8 +153,7 @@ if __name__ == "__main__":
         http://amdc.impcas.ac.cn/evaluation/data2012/ame.html
     """
 
-isotopes = {\n'''
-        )
+isotopes = {\n''')
 
         for Z in sorted(isotopes.keys()):
             f.write(f"    {Z}: {{\n")

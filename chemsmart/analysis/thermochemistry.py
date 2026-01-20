@@ -76,6 +76,9 @@ class Thermochemistry:
     ):
         self.filename = filename
         self.folder = folder
+        self.target = (
+            self.filename if self.filename is not None else self.folder
+        )
 
         # Create molecule from filename or folder
         if filename is not None:
@@ -163,11 +166,8 @@ class Thermochemistry:
             # can be added in future to parse other formats
             raise ValueError("Unsupported format.")
         if not output.normal_termination:
-            target = (
-                self.filename if self.filename is not None else self.folder
-            )
             raise ValueError(
-                f"Calculation '{target}' did not terminate normally. "
+                f"Calculation '{self.target}' did not terminate normally. "
                 "Skipping thermochemistry calculation for this file."
             )
         return output
@@ -258,14 +258,23 @@ class Thermochemistry:
                 else:
                     raise ValueError(
                         f"!! ERROR: Detected multiple imaginary frequencies in "
-                        f"TS calculation for {self.filename}. Only one "
+                        f"TS calculation for {self.target}. Only one "
                         f"imaginary frequency is allowed for a valid TS. "
                         f"Please re-optimize the geometry to locate a true TS."
                     )
+            elif self.job_type == "hess":
+                raise ValueError(
+                    f"!! ERROR: Hessian-only job detected for {self.target}. "
+                    f"Thermochemical analysis requires molecular geometry information, "
+                    f"which is not available in a standalone Hessian calculation. "
+                    f"Please run a geometry optimization with Hessian calculation "
+                    f"(e.g. use --ohess) instead. "
+                    f"Parsing of standalone hess jobs is currently not supported."
+                )
             else:
                 raise ValueError(
                     f"!! ERROR: Detected imaginary frequencies in geometry "
-                    f"optimization for {self.filename}. A valid optimized "
+                    f"optimization for {self.target}. A valid optimized "
                     f"geometry should not contain imaginary frequencies. "
                     f"Please re-optimize the geometry to locate a true "
                     f"minimum."
@@ -948,7 +957,7 @@ class Thermochemistry:
 
     def compute_thermochemistry(self):
         """Compute Boltzmann-averaged properties."""
-        logger.debug(f"Computing thermochemistry for {self.filename}...")
+        logger.debug(f"Computing thermochemistry for {self.target}...")
         return self._compute_thermochemistry()
 
     def _compute_thermochemistry(self):
@@ -972,7 +981,10 @@ class Thermochemistry:
         logger.debug(f"Finished converting energies to {self.energy_units}.")
 
         # Log the results to the output file or console
-        structure = os.path.splitext(os.path.basename(self.filename))[0]
+        if self.filename is not None:
+            structure = os.path.splitext(os.path.basename(self.filename))[0]
+        else:
+            structure = os.path.basename(os.path.normpath(self.folder))
         return (
             structure,
             electronic_energy,
@@ -993,19 +1005,28 @@ class Thermochemistry:
                     logger.info(
                         f"Correct Transition State detected: only 1 imaginary "
                         f"frequency\nImaginary frequency excluded for "
-                        f"thermochemistry calculation in {self.filename}."
+                        f"thermochemistry calculation in {self.target}."
                     )
                 else:
                     raise ValueError(
                         f"Invalid number of imaginary frequencies for "
-                        f"{self.filename}. Expected 0 for optimization or 1 "
+                        f"{self.target}. Expected 0 for optimization or 1 "
                         f"for TS, but found "
                         f"{len(self.imaginary_frequencies)} for job: "
                         f"{self.job_type}!"
                     )
+            elif self.job_type == "hess":
+                raise ValueError(
+                    f"!! ERROR: Hessian-only job detected for {self.target}. "
+                    f"Thermochemical analysis requires molecular geometry information, "
+                    f"which is not available in a standalone Hessian calculation. "
+                    f"Please run a geometry optimization with Hessian calculation "
+                    f"(e.g. use --ohess) instead. "
+                    f"Parsing of standalone hess jobs is currently not supported."
+                )
             else:
                 raise ValueError(
-                    f"Invalid geometry optimization for {self.filename}. "
+                    f"Invalid geometry optimization for {self.target}. "
                     f"A valid optimized geometry should not contain "
                     f"imaginary frequencies. Please re-optimize the geometry "
                     f"to locate a true minimum."

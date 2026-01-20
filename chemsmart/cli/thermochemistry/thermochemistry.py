@@ -272,7 +272,7 @@ def thermochemistry(
                 )
             for folder_path in folders:
                 job = ThermochemistryJob.from_folder(
-                    folder=folder_path,
+                    foldername=folder_path,
                     settings=job_settings,
                     skip_completed=skip_completed,
                 )
