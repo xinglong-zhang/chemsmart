@@ -1045,7 +1045,7 @@ class Molecule:
         
         # If DECIMER fails or returns suspicious results when abbreviations are detected
         # (DECIMER typically fails with abbreviations), try to construct SMILES manually
-        decimer_failed = smiles is None or (smiles and len(smiles.strip()) == 0)
+        decimer_failed = smiles is None or not smiles.strip()
         should_use_abbrev = (
             detected_abbrevs 
             and (decimer_failed or len(smiles) < 3)  # Very short SMILES likely wrong
@@ -1057,6 +1057,9 @@ class Molecule:
                 f"Attempting to construct from detected abbreviations: {list(detected_abbrevs.keys())}"
             )
             
+            # Store the original smiles (may be None)
+            constructed_smiles = None
+            
             # Try to construct molecule from abbreviations
             # For simple cases like "Ad-SH", we can combine parts
             if detected_text:
@@ -1066,8 +1069,8 @@ class Molecule:
                 # Pattern: Ad-SH (adamantyl thiol)
                 # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)
                 if 'Ad' in detected_abbrevs and 'SH' in text_upper:
-                    smiles = detected_abbrevs['Ad'] + 'S'
-                    logger.info(f"Constructed SMILES from Ad-SH pattern: {smiles}")
+                    constructed_smiles = detected_abbrevs['Ad'] + 'S'
+                    logger.info(f"Constructed SMILES from Ad-SH pattern: {constructed_smiles}")
                 # Pattern: Ph-X (phenyl with substituent)
                 elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in ['-', '–', '—']):
                     # Try to get the substituent
@@ -1077,17 +1080,21 @@ class Molecule:
                             parts = detected_text.split(sep)
                             break
                     if len(parts) == 2:
-                        substituent = parts[1].strip()
+                        substituent = parts[1].strip().upper()
                         # Map common substituents
-                        if substituent.upper() in ['SH']:
-                            smiles = detected_abbrevs['Ph'] + 'S'
-                        elif substituent.upper() in ['OH']:
-                            smiles = detected_abbrevs['Ph'] + 'O'
-                        elif substituent.upper() in ['NH2', 'NH₂']:
-                            smiles = detected_abbrevs['Ph'] + 'N'
+                        if substituent == 'SH':
+                            constructed_smiles = detected_abbrevs['Ph'] + 'S'
+                        elif substituent == 'OH':
+                            constructed_smiles = detected_abbrevs['Ph'] + 'O'
+                        elif substituent in ['NH2', 'NH₂']:
+                            constructed_smiles = detected_abbrevs['Ph'] + 'N'
                 # If we have an abbreviation but couldn't construct, use it as-is
                 elif len(detected_abbrevs) == 1:
-                    smiles = list(detected_abbrevs.values())[0]
+                    constructed_smiles = list(detected_abbrevs.values())[0]
+            
+            # Use constructed SMILES if we managed to construct one
+            if constructed_smiles:
+                smiles = constructed_smiles
         
         if smiles is None:
             raise ValueError(
