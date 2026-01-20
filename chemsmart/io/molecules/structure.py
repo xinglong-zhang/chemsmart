@@ -1038,31 +1038,42 @@ class Molecule:
         # Get SMILES from DECIMER
         smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
         
-        # If DECIMER fails but we detected abbreviations, try to construct SMILES
-        if smiles is None or (detected_abbrevs and len(smiles) < 5):
+        # If DECIMER fails or returns suspicious results when abbreviations are detected
+        # (DECIMER typically fails with abbreviations), try to construct SMILES manually
+        decimer_failed = smiles is None or (smiles and len(smiles.strip()) == 0)
+        should_use_abbrev = (
+            detected_abbrevs 
+            and (decimer_failed or len(smiles) < 3)  # Very short SMILES likely wrong
+        )
+        
+        if should_use_abbrev:
             logger.warning(
                 f"DECIMER returned incomplete/null SMILES: {smiles}. "
-                f"Attempting to construct from detected abbreviations."
+                f"Attempting to construct from detected abbreviations: {list(detected_abbrevs.keys())}"
             )
             
             # Try to construct molecule from abbreviations
             # For simple cases like "Ad-SH", we can combine parts
-            if detected_abbrevs and detected_text:
+            if detected_text:
                 # Simple heuristic: if we detected abbreviations, try common patterns
                 text_upper = detected_text.upper()
                 
                 # Pattern: Ad-SH (adamantyl thiol)
-                if 'Ad' in detected_abbrevs and ('SH' in text_upper or '-SH' in text_upper):
+                # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)
+                if 'Ad' in detected_abbrevs and ('SH' in text_upper or 'SH' in detected_text):
                     smiles = detected_abbrevs['Ad'] + 'S'
                     logger.info(f"Constructed SMILES from Ad-SH pattern: {smiles}")
                 # Pattern: Ph-X (phenyl with substituent)
-                elif 'Ph' in detected_abbrevs and '-' in detected_text:
+                elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in ['-', '–', '—']):
                     # Try to get the substituent
-                    parts = detected_text.split('-')
+                    for sep in ['-', '–', '—']:
+                        if sep in detected_text:
+                            parts = detected_text.split(sep)
+                            break
                     if len(parts) == 2:
                         substituent = parts[1].strip()
                         # Map common substituents
-                        if substituent.upper() in ['SH', 'SH']:
+                        if substituent.upper() in ['SH']:
                             smiles = detected_abbrevs['Ph'] + 'S'
                         elif substituent.upper() in ['OH']:
                             smiles = detected_abbrevs['Ph'] + 'O'
