@@ -494,6 +494,9 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
 
 def convert_string_index_from_1_based_to_0_based(
     index: Union[str, int, slice],
+    total_count: int = None,
+    allow_duplicates: bool = True,
+    allow_out_of_range: bool = True,
 ) -> Union[int, slice, list]:
     """
     Convert string index from 1-based to 0-based indexing.
@@ -505,6 +508,11 @@ def convert_string_index_from_1_based_to_0_based(
         index (Union[str, int, slice]): String representing an index or slice,
                                        e.g., "1", "2:5", "3:10:2", "-1",
                                        or user-defined ranges like "1-2,5", "1,-1".
+        total_count (int, optional): Total number of items, used for validation.
+        allow_duplicates (bool, optional): If True, allows duplicate indices.
+            Defaults to True.
+        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+            Defaults to True.
 
     Returns:
         Union[int, slice, list]: Integer, slice, or list adjusted for
@@ -530,13 +538,18 @@ def convert_string_index_from_1_based_to_0_based(
 
         # String index - use the new unified parser
     if isinstance(index, str):
-        return parse_index_specification(index)
+        return parse_index_specification(
+            index, total_count, allow_duplicates, allow_out_of_range
+        )
 
     raise ValueError(f"Invalid index type: {type(index)}")
 
 
 def parse_index_specification(
-    index_spec: str, total_count: int = None
+    index_spec: str,
+    total_count: int = None,
+    allow_duplicates: bool = True,
+    allow_out_of_range: bool = True,
 ) -> Union[int, slice, list]:
     """
     Parse index specification string and return appropriate Python type.
@@ -566,6 +579,12 @@ def parse_index_specification(
         index_spec (str): String specification of indices.
         total_count (int, optional): Total number of items, used for resolving
             negative indices to positive ones if needed.
+        allow_duplicates (bool, optional): If True, allows duplicate indices in
+            the result. If False, raises ValueError when duplicates are found.
+            Defaults to True.
+        allow_out_of_range (bool, optional): If True, allows out-of-range indices.
+            If False, raises ValueError when indices are out of bounds.
+            Defaults to True.
 
     Returns:
         Union[int, slice, list]: Appropriate Python type for indexing.
@@ -667,6 +686,16 @@ def parse_index_specification(
                 # Convert to 0-based if positive
                 indices.append(idx if idx < 0 else idx - 1)
 
+        # Apply validation if needed
+        if total_count is not None:
+            _validate_parsed_indices(
+                indices, total_count, allow_duplicates, allow_out_of_range
+            )
+
+            # Apply filtering if out of range is allowed
+            if allow_out_of_range:
+                indices = _filter_out_of_range_indices(indices, total_count)
+
         return indices
 
     # Check if this is a colon-based slice (ASE-style)
@@ -686,18 +715,45 @@ def parse_index_specification(
 
             if start > 0 and end > 0:
                 # Inclusive range, convert to 0-based
-                return list(range(start - 1, end))
+                result = list(range(start - 1, end))
+                if total_count is not None:
+                    _validate_parsed_indices(
+                        result,
+                        total_count,
+                        allow_duplicates,
+                        allow_out_of_range,
+                    )
+                    if allow_out_of_range:
+                        result = _filter_out_of_range_indices(
+                            result, total_count
+                        )
+                return result
             else:
                 # Handle mixed positive/negative
                 result = []
                 result.append(start - 1 if start > 0 else start)
                 result.append(end - 1 if end > 0 else end)
+                if total_count is not None:
+                    _validate_parsed_indices(
+                        result,
+                        total_count,
+                        allow_duplicates,
+                        allow_out_of_range,
+                    )
+                    if allow_out_of_range:
+                        result = _filter_out_of_range_indices(
+                            result, total_count
+                        )
                 return result
         else:
             # Just a negative number
             idx = int(index_spec)
             if idx == 0:
                 raise ValueError("Index cannot be 0 in 1-based indexing")
+            if total_count is not None:
+                _validate_parsed_indices(
+                    idx, total_count, allow_duplicates, allow_out_of_range
+                )
             return idx
 
         # Single index (no special characters)
@@ -707,7 +763,157 @@ def parse_index_specification(
         if idx == 0:
             raise ValueError("Index cannot be 0 in 1-based indexing")
             # Convert to 0-based if positive
-        return idx if idx < 0 else idx - 1
+        result = idx if idx < 0 else idx - 1
+
+        # Apply validation if needed
+        if total_count is not None:
+            _validate_parsed_indices(
+                result, total_count, allow_duplicates, allow_out_of_range
+            )
+
+        return result
+
+
+def _validate_parsed_indices(
+    indices, total_count, allow_duplicates, allow_out_of_range
+):
+    """
+    Helper function to validate parsed indices for duplicates and bounds.
+
+    Args:
+        indices: The parsed indices (int, list, or slice)
+        total_count: Total number of items available
+        allow_duplicates: Whether to allow duplicate indices
+        allow_out_of_range: Whether to allow out-of-range indices
+
+    Raises:
+        ValueError: If validation fails
+    """
+    if isinstance(indices, list):
+        # Check for duplicates - convert negative indices to positive for comparison
+        if not allow_duplicates:
+            # Convert all indices to positive indices for duplicate checking
+            normalized_indices = []
+            for idx in indices:
+                if idx < 0:
+                    # Convert negative index to positive equivalent
+                    normalized_idx = total_count + idx
+                else:
+                    normalized_idx = idx
+                normalized_indices.append(normalized_idx)
+
+            # Check for duplicates in normalized indices
+            if len(normalized_indices) != len(set(normalized_indices)):
+                # Find which original indices are duplicates
+                duplicate_positions = []
+                seen_normalized = {}
+                for i, (orig_idx, norm_idx) in enumerate(
+                    zip(indices, normalized_indices)
+                ):
+                    if norm_idx in seen_normalized:
+                        # Both the current and previously seen indices point to same structure
+                        duplicate_positions.extend(
+                            [seen_normalized[norm_idx], i]
+                        )
+                    seen_normalized[norm_idx] = i
+
+                # Get the original indices that are duplicates (convert back to 1-based for error message)
+                duplicate_indices_1based = []
+                for pos in set(duplicate_positions):
+                    orig_idx = indices[pos]
+                    duplicate_indices_1based.append(
+                        orig_idx + 1 if orig_idx >= 0 else orig_idx
+                    )
+
+                raise ValueError(
+                    f"Index overlap detected. Indices {sorted(set(duplicate_indices_1based))} point to the same structures."
+                )
+
+        # Check bounds for each index in the list
+        if not allow_out_of_range:
+            for idx in indices:
+                _validate_single_index_bounds(idx, total_count)
+
+    elif isinstance(indices, int):
+        # Check bounds for single index
+        if not allow_out_of_range:
+            _validate_single_index_bounds(indices, total_count)
+
+    # Note: slice objects are not validated for bounds as Python handles them gracefully
+
+
+def _filter_out_of_range_indices(indices, total_count):
+    """
+    Filter out indices that are out of range, keeping only valid ones.
+
+    Args:
+        indices: List of indices to filter (or single index)
+        total_count: Total number of items available
+
+    Returns:
+        List of valid indices, or raises error if no valid indices remain
+
+    Raises:
+        ValueError: If all indices are out of range
+    """
+    if isinstance(indices, list):
+        valid_indices = [
+            idx for idx in indices if _is_index_in_bounds(idx, total_count)
+        ]
+        if not valid_indices:
+            raise ValueError(
+                f"All specified indices are out of range. File has {total_count} structures."
+            )
+        return valid_indices
+    else:
+        # Single index
+        if _is_index_in_bounds(indices, total_count):
+            return indices
+        else:
+            raise ValueError(
+                f"Index is out of range. File has {total_count} structures."
+            )
+
+
+def _is_index_in_bounds(idx, total_count):
+    """
+    Helper function to check if an index is within bounds without raising an exception.
+
+    Args:
+        idx: The index to check (0-based)
+        total_count: Total number of items available
+
+    Returns:
+        bool: True if index is valid, False otherwise
+    """
+    if isinstance(idx, int):
+        if idx >= 0:
+            return idx < total_count
+        else:
+            return abs(idx) <= total_count
+    return True  # Non-integer indices are considered valid
+
+
+def _validate_single_index_bounds(idx, total_count):
+    """
+    Helper function to validate a single index against bounds.
+
+    Args:
+        idx: The index to validate (0-based)
+        total_count: Total number of items available
+
+    Raises:
+        ValueError: If index is out of bounds
+    """
+    if isinstance(idx, int):
+        if idx >= 0 and idx >= total_count:
+            raise ValueError(
+                f"Index {idx + 1} is out of range. File has {total_count} structures."
+            )
+        elif idx < 0 and abs(idx) > total_count:
+            raise ValueError(
+                f"Negative index {idx} is out of range. File has {total_count} structures."
+            )
 
 
 def return_objects_from_string_index(list_of_objects, index):
