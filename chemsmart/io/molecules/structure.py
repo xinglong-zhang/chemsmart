@@ -949,6 +949,7 @@ class Molecule:
         
         Handles common chemical abbreviations (e.g., Ad for adamantyl, Ph for phenyl)
         by using OCR to detect text and expanding abbreviations to full structures.
+        Abbreviation expansion requires pytesseract (optional dependency).
 
         Args:
             filepath (str): Path to the image file containing chemical structure
@@ -957,8 +958,12 @@ class Molecule:
             Molecule: Molecule object created from the image
 
         Raises:
-            ImportError: If DECIMER or Pillow is not installed
+            ImportError: If DECIMER or opencv-python is not installed
             ValueError: If the image cannot be processed or converted
+            
+        Note:
+            For better abbreviation support, install pytesseract:
+            ``pip install chemsmart[image]`` or ``pip install pytesseract``
         """
         try:
             import cv2
