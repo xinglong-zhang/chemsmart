@@ -363,11 +363,11 @@ class TestGetListFromStringRange:
 
         s3 = "1-9"
         s3_list = str_indices_range_to_list(str_indices=s3)
-        assert s3_list == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert s3_list == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         s4 = "[1-9]"
         s4_list = str_indices_range_to_list(str_indices=s4)
-        assert s4_list == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert s4_list == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         s6 = "2:3"
         s6_list = str_indices_range_to_list(str_indices=s6)
@@ -549,6 +549,15 @@ class TestParseIndexSpecification:
         idx = parse_index_specification("1:4")
         assert objects[idx] == ["a", "b", "c"]
 
+        idx = parse_index_specification("1:7:2")
+        assert objects[idx] == ["a", "c", "e"]
+
+        idx = parse_index_specification("1:8:2")
+        assert objects[idx] == ["a", "c", "e", "g"]
+
+        idx = parse_index_specification("::2")
+        assert objects[idx] == ["a", "c", "e", "g"]
+
         # All
         idx = parse_index_specification(":")
         assert objects[idx] == objects
@@ -567,6 +576,120 @@ class TestParseIndexSpecification:
 
         idx = parse_index_specification("1,3,-1")
         assert [objects[i] for i in idx] == ["a", "c", "h"]
+
+    def test_duplicate_detection_enabled(self):
+        """Test duplicate detection when allow_duplicates=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test explicit duplicates should fail
+        with pytest.raises(ValueError, match="Index overlap detected"):
+            parse_index_specification(
+                "5,-1", total_count=5, allow_duplicates=False
+            )
+
+    def test_boundary_checking_enabled(self):
+        """Test boundary checking when allow_out_of_range=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test out of range should fail (10 structures, index 11 is out of range)
+        with pytest.raises(
+            ValueError, match="Index 11 is out of range.*10 structures"
+        ):
+            parse_index_specification(
+                "11", total_count=10, allow_out_of_range=False
+            )
+
+        # Test negative out of range should fail (-11 with 10 structures)
+        with pytest.raises(
+            ValueError,
+            match="Negative index -11 is out of range.*10 structures",
+        ):
+            parse_index_specification(
+                "-11", total_count=10, allow_out_of_range=False
+            )
+
+        # Test range extending beyond bounds (8-11 with 10 structures)
+        with pytest.raises(
+            ValueError, match="Index 11 is out of range.*10 structures"
+        ):
+            parse_index_specification(
+                "8-11", total_count=10, allow_out_of_range=False
+            )
+
+    def test_parse_index_duplicate_detection_disabled(self):
+        """Test duplicate detection when allow_duplicates=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test explicit duplicates should fail
+        with pytest.raises(ValueError, match="Index overlap detected"):
+            parse_index_specification(
+                "1,4,-2", total_count=5, allow_duplicates=False
+            )
+
+        # Test negative and positive indices pointing to same structure
+        with pytest.raises(ValueError, match="Index overlap detected"):
+            parse_index_specification(
+                "1,-5", total_count=5, allow_duplicates=False
+            )
+
+    def test_parse_index_duplicate_detection_enabled(self):
+        """Test duplicate detection when allow_duplicates=True."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test duplicates are allowed - should return all indices as specified
+        result = parse_index_specification(
+            "1,4,-2", total_count=5, allow_duplicates=True
+        )
+        assert result == [0, 3, -2]  # 0-based: [1-1, 4-1, -2]
+
+        # Test negative and positive indices pointing to same structure are allowed
+        result = parse_index_specification(
+            "1,-5", total_count=5, allow_duplicates=True
+        )
+        assert result == [0, -5]
+
+    def test_parse_index_boundary_detection_disabled(self):
+        """Test boundary detection when allow_out_of_range=False."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test out-of-range positive index should fail
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "8", total_count=5, allow_out_of_range=False
+            )
+
+        # Test out-of-range negative index should fail
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "-6", total_count=5, allow_out_of_range=False
+            )
+
+        # Test range with out-of-bounds indices should fail
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "3-8", total_count=5, allow_out_of_range=False
+            )
+
+    def test_parse_index_boundary_detection_enabled(self):
+        """Test boundary detection when allow_out_of_range=True."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        # Test out-of-range indices are filtered out, valid ones remain
+        result = parse_index_specification(
+            "3,8,2", total_count=5, allow_out_of_range=True
+        )
+        assert result == [
+            2,
+            1,
+        ]  # Only indices 3 and 2 (0-based: 2, 1) are valid, 8 is filtered
+
+        # Test all out-of-range should raise error
+        with pytest.raises(
+            ValueError, match="All specified indices are out of range"
+        ):
+            parse_index_specification(
+                "8,9,10", total_count=5, allow_out_of_range=True
+            )
 
 
 class TestIOUtilities:
