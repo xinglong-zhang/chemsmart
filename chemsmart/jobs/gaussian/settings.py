@@ -880,7 +880,8 @@ class GaussianJobSettings(MolecularJobSettings):
             # Return light elements basis if available,
             # otherwise return original basis
             if self.light_elements_basis is not None:
-                # Remove hyphens for Gaussian compatibility (def2-SVP -> def2svp)
+                # Remove hyphens for Gaussian compatibility
+                # (def2-SVP -> def2svp)
                 return self.light_elements_basis.replace("-", "").lower()
             return self.basis
 
