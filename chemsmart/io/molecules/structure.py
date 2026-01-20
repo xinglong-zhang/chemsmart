@@ -22,6 +22,34 @@ p = pt()
 
 logger = logging.getLogger(__name__)
 
+# Common chemical abbreviations and their SMILES representations
+# Used for expanding abbreviations in chemical structure images
+_CHEMICAL_ABBREVIATIONS = {
+    'Ad': 'C1C2CC3CC1CC(C2)C3',  # Adamantyl (1-adamantyl)
+    'Ph': 'c1ccccc1',  # Phenyl
+    'Me': 'C',  # Methyl
+    'Et': 'CC',  # Ethyl
+    'nPr': 'CCC',  # n-Propyl
+    'iPr': 'C(C)C',  # Isopropyl
+    'Bu': 'CCCC',  # Butyl
+    'iBu': 'CC(C)C',  # Isobutyl
+    'sBu': 'C(C)CC',  # sec-Butyl
+    'tBu': 'C(C)(C)C',  # tert-Butyl
+    'Bn': 'Cc1ccccc1',  # Benzyl
+    'Ac': 'C(=O)C',  # Acetyl
+    'Bz': 'C(=O)c1ccccc1',  # Benzoyl
+    'Ts': 'S(=O)(=O)c1ccc(C)cc1',  # Tosyl
+    'Ms': 'S(=O)(=O)C',  # Mesyl
+    'Tf': 'S(=O)(=O)C(F)(F)F',  # Triflyl
+    'Cy': 'C1CCCCC1',  # Cyclohexyl
+}
+
+# Dash characters commonly used in chemical drawings
+_DASH_CHARACTERS = ['-', '–', '—']  # hyphen, en-dash, em-dash
+
+# Minimum length for a valid SMILES string
+_MIN_VALID_SMILES_LENGTH = 3
+
 
 class Molecule:
     """Class to represent a molcular structure.
@@ -982,28 +1010,6 @@ class Molecule:
             has_ocr = False
             logger.debug("pytesseract not available, abbreviation expansion disabled")
 
-        # Common chemical abbreviations and their SMILES representations
-        # These are neutral radicals/groups; connection point is implicit
-        abbreviations = {
-            'Ad': 'C1C2CC3CC1CC(C2)C3',  # Adamantyl (1-adamantyl)
-            'Ph': 'c1ccccc1',  # Phenyl
-            'Me': 'C',  # Methyl
-            'Et': 'CC',  # Ethyl
-            'nPr': 'CCC',  # n-Propyl
-            'iPr': 'C(C)C',  # Isopropyl
-            'Bu': 'CCCC',  # Butyl
-            'iBu': 'CC(C)C',  # Isobutyl
-            'sBu': 'C(C)CC',  # sec-Butyl
-            'tBu': 'C(C)(C)C',  # tert-Butyl
-            'Bn': 'Cc1ccccc1',  # Benzyl
-            'Ac': 'C(=O)C',  # Acetyl
-            'Bz': 'C(=O)c1ccccc1',  # Benzoyl
-            'Ts': 'S(=O)(=O)c1ccc(C)cc1',  # Tosyl
-            'Ms': 'S(=O)(=O)C',  # Mesyl
-            'Tf': 'S(=O)(=O)C(F)(F)F',  # Triflyl
-            'Cy': 'C1CCCCC1',  # Cyclohexyl
-        }
-
         # Load the image
         img_orig = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         if img_orig is None:
@@ -1020,7 +1026,7 @@ class Molecule:
                 logger.debug(f"OCR detected text: {detected_text}")
                 
                 # Check for known abbreviations in the detected text
-                for abbrev, smiles in abbreviations.items():
+                for abbrev, smiles in _CHEMICAL_ABBREVIATIONS.items():
                     # Case-sensitive match for chemical abbreviations
                     if abbrev in detected_text:
                         detected_abbrevs[abbrev] = smiles
@@ -1048,7 +1054,7 @@ class Molecule:
         decimer_failed = smiles is None or not smiles.strip()
         should_use_abbrev = (
             detected_abbrevs 
-            and (decimer_failed or len(smiles) < 3)  # Very short SMILES likely wrong
+            and (decimer_failed or len(smiles) < _MIN_VALID_SMILES_LENGTH)
         )
         
         if should_use_abbrev:
@@ -1072,10 +1078,10 @@ class Molecule:
                     constructed_smiles = detected_abbrevs['Ad'] + 'S'
                     logger.info(f"Constructed SMILES from Ad-SH pattern: {constructed_smiles}")
                 # Pattern: Ph-X (phenyl with substituent)
-                elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in ['-', '–', '—']):
+                elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in _DASH_CHARACTERS):
                     # Try to get the substituent
                     parts = []
-                    for sep in ['-', '–', '—']:
+                    for sep in _DASH_CHARACTERS:
                         if sep in detected_text:
                             parts = detected_text.split(sep)
                             break
