@@ -756,16 +756,16 @@ class XTBMainOut(XTBFileMixin):
 
     @property
     def optimizer_wall_time(self):
+        """Wall time spent in the geometry optimization step, in hours."""
         if self.elapsed_walltime_by_jobs("ANC optimizer:"):
-            return round(
-                sum(self.elapsed_walltime_by_jobs("ANC optimizer:")), 6
-            )
+            return sum(self.elapsed_walltime_by_jobs("ANC optimizer:"))
         return None
 
     @property
     def optimizer_cpu_time(self):
+        """CPU time spent in the geometry optimization step, in hours."""
         if self.cpu_runtime_by_jobs("ANC optimizer:"):
-            return round(sum(self.cpu_runtime_by_jobs("ANC optimizer:")), 6)
+            return sum(self.cpu_runtime_by_jobs("ANC optimizer:"))
         return None
 
     # """
@@ -1014,6 +1014,7 @@ class XTBMainOut(XTBFileMixin):
 
     @staticmethod
     def sum_time_hours(line):
+        """Parse a time string from xTB output and return the total time in hours."""
         n_days = float(line.split(" d,")[0].split()[-1])
         n_hours = float(line.split(" h,")[0].split()[-1])
         n_minutes = float(line.split(" min,")[0].split()[-1])
@@ -1024,10 +1025,11 @@ class XTBMainOut(XTBFileMixin):
             + n_minutes * 60
             + n_seconds
         )
-        total_hours = round(total_seconds / 3600, 6)
+        total_hours = total_seconds / 3600
         return total_hours
 
     def elapsed_walltime_by_jobs(self, task_name):
+        """Returns a list of wall times (in hours) for each job matching the given task name."""
         elapsed_walltime = []
         for i, line in enumerate(self.contents):
             if task_name in self.contents[i - 1] and "wall-time:" in line:
@@ -1038,6 +1040,7 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     def cpu_runtime_by_jobs(self, task_name):
+        """Returns a list of CPU times (in hours) for each job matching the given task name."""
         cpu_runtime = []
         for i, line in enumerate(self.contents):
             if task_name in self.contents[i - 2] and "cpu-time:" in line:
@@ -1049,42 +1052,44 @@ class XTBMainOut(XTBFileMixin):
 
     @property
     def total_wall_time(self):
+        """Total wall time for the entire calculation, in hours."""
         if self.elapsed_walltime_by_jobs("total:"):
-            return round(sum(self.elapsed_walltime_by_jobs("total:")), 6)
+            return sum(self.elapsed_walltime_by_jobs("total:"))
         return None
 
     @property
     def total_cpu_time(self):
+        """Total CPU time for the entire calculation, in hours."""
         if self.cpu_runtime_by_jobs("total:"):
-            return round(sum(self.cpu_runtime_by_jobs("total:")), 6)
+            return sum(self.cpu_runtime_by_jobs("total:"))
         return None
 
     @property
     def scf_wall_time(self):
+        """Wall time spent in the self-consistent field calculation, in hours."""
         if self.elapsed_walltime_by_jobs("SCF:"):
-            return round(sum(self.elapsed_walltime_by_jobs("SCF:")), 6)
+            return sum(self.elapsed_walltime_by_jobs("SCF:"))
         return None
 
     @property
     def scf_cpu_time(self):
+        """CPU time spent in the self-consistent field calculation, in hours."""
         if self.cpu_runtime_by_jobs("SCF:"):
-            return round(sum(self.cpu_runtime_by_jobs("SCF:")), 6)
+            return sum(self.cpu_runtime_by_jobs("SCF:"))
         return None
 
     @property
     def hessian_wall_time(self):
+        """Wall time spent in the hessian calculation, in hours."""
         if self.elapsed_walltime_by_jobs("analytical hessian:"):
-            return round(
-                sum(self.elapsed_walltime_by_jobs("analytical hessian:")), 6
-            )
+            return sum(self.elapsed_walltime_by_jobs("analytical hessian:"))
         return None
 
     @property
     def hessian_cpu_time(self):
+        """CPU time spent in the Hessian calculation, in hours."""
         if self.cpu_runtime_by_jobs("analytical hessian:"):
-            return round(
-                sum(self.cpu_runtime_by_jobs("analytical hessian:")), 6
-            )
+            return sum(self.cpu_runtime_by_jobs("analytical hessian:"))
         return None
 
 

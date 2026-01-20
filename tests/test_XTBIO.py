@@ -267,6 +267,56 @@ class TestXTBMainOut:
         assert co2_main_out.total_free_energy == -10.317252637172
         assert co2_main_out.gradient_norm == 0.000000274582
         assert co2_main_out.fmo_gap == 8.448655866329
+        # Time Information
+        assert np.isclose(co2_main_out.total_wall_time * 3600, 0.468)
+        assert np.isclose(co2_main_out.total_cpu_time * 3600, 0.088)
+        assert np.isclose(co2_main_out.scf_wall_time * 3600, 0.094)
+        assert np.isclose(co2_main_out.scf_cpu_time * 3600, 0.015)
+        assert np.isclose(co2_main_out.optimizer_wall_time * 3600, 0.302)
+        assert np.isclose(co2_main_out.optimizer_cpu_time * 3600, 0.047)
+        assert np.isclose(co2_main_out.hessian_wall_time * 3600, 0.040)
+        assert np.isclose(co2_main_out.hessian_cpu_time * 3600, 0.017)
+
+    def test_main_out_p_benzyne_opt(self, xtb_p_benzyne_opt_outfolder):
+        xtb_main_out_file = os.path.join(
+            xtb_p_benzyne_opt_outfolder, "p_benzyne_opt_alpb_toluene.out"
+        )
+        assert os.path.exists(xtb_main_out_file)
+        p_benzyne_opt_main_out = XTBMainOut(xtb_main_out_file)
+        assert p_benzyne_opt_main_out.xtb_version == "6.7.1"
+        assert p_benzyne_opt_main_out.normal_termination
+        assert (
+            p_benzyne_opt_main_out.route_string
+            == "xtb p_benzyne.xyz --opt loose --alpb toluene --uhf 2 --grad --json"
+        )
+        assert p_benzyne_opt_main_out.solvent_on
+        assert p_benzyne_opt_main_out.solvent_model == "ALPB"
+        assert p_benzyne_opt_main_out.solvent_id == "toluene"
+        assert p_benzyne_opt_main_out.dielectric_constant == 7.0
+        assert p_benzyne_opt_main_out.free_energy_shift == 2.2081e-03
+        assert p_benzyne_opt_main_out.temperature == 298.15
+        assert p_benzyne_opt_main_out.density == 0.867
+        assert p_benzyne_opt_main_out.solvent_mass == 78.11
+        assert not p_benzyne_opt_main_out.h_bond_correction
+        assert not p_benzyne_opt_main_out.ion_screening
+        assert p_benzyne_opt_main_out.surface_tension == 1.000e-05
+        assert p_benzyne_opt_main_out.solvation_energy_gsolv == -0.006398930400
+        assert (
+            p_benzyne_opt_main_out.electronic_solvation_energy_gelec
+            == -0.000119108995
+        )
+        assert (
+            p_benzyne_opt_main_out.surface_area_solvation_energy_gsasa
+            == -0.008487964543
+        )
+        assert (
+            p_benzyne_opt_main_out.hydrogen_bonding_solvation_energy_ghb
+            == 0.000000000000
+        )
+        assert (
+            p_benzyne_opt_main_out.empirical_shift_correction_gshift
+            == 0.002208143139
+        )
 
 
 class TestXTBChargesFile:
@@ -767,6 +817,18 @@ class TestXTBOutput:
         assert os.path.exists(xtb_co2_outfolder)
         xtb_co2_output = XTBOutput(folder=xtb_co2_outfolder)
         assert xtb_co2_output.normal_termination
+        assert xtb_co2_output.charge == 0
+        assert xtb_co2_output.multiplicity == 1
+        assert xtb_co2_output.final_energy == -10.308452289174
+        assert np.allclose(
+            xtb_co2_output.final_forces,
+            [
+                [0.000000194263, -0.000000000000, -0.000000000000],
+                [-0.000000194263, 0.000000000000, -0.000000000000],
+                [0.000000000000, 0.000000000000, 0.000000000000],
+            ],
+        )
+        assert xtb_co2_output.symbols == ["O", "O", "C"]
         assert xtb_co2_output.partial_charges == {
             "O1": -0.23213972,
             "O2": -0.23213972,
