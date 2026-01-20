@@ -203,6 +203,13 @@ class XTBOutput:
         return None
 
     @property
+    def mass(self):
+        """Get molecular mass from main output."""
+        if self.main_out:
+            return self.main_out.molecular_mass
+        return None
+
+    @property
     def final_energy(self):
         """Get final converged energy in Hartree."""
         if self.main_out:
@@ -377,6 +384,13 @@ class XTBOutput:
         if self.all_structures:
             return self.all_structures[-1]
         return None
+
+    @property
+    def molecule(self):
+        """
+        Alias for the optimized molecular structure.
+        """
+        return self.optimized_structure
 
     def get_molecule(self, index="-1"):
         """

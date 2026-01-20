@@ -746,7 +746,7 @@ class XTBMainOut(XTBFileMixin):
         return None
 
     @property
-    def rotational_constants(self):
+    def rotational_constants_in_wavenumbers(self):
         if not self.geometry_optimization_converged:
             return None
         for line in self.contents:

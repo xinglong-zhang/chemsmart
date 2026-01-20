@@ -214,7 +214,7 @@ class TestXTBMainOut:
             0.4185248e02,
             0.4185248e02,
         ]
-        assert co2_main_out.rotational_constants == [
+        assert co2_main_out.rotational_constants_in_wavenumbers == [
             -0.5544801e16,
             0.4027869,
             0.4027869,
@@ -819,6 +819,7 @@ class TestXTBOutput:
         assert xtb_co2_output.normal_termination
         assert xtb_co2_output.charge == 0
         assert xtb_co2_output.multiplicity == 1
+        assert xtb_co2_output.mass == 44.0095457
         assert xtb_co2_output.final_energy == -10.308452289174
         assert np.allclose(
             xtb_co2_output.final_forces,
