@@ -989,9 +989,8 @@ class Molecule:
             'Ph': 'c1ccccc1',  # Phenyl
             'Me': 'C',  # Methyl
             'Et': 'CC',  # Ethyl
-            'Pr': 'CCC',  # Propyl
-            'iPr': 'C(C)C',  # Isopropyl
             'nPr': 'CCC',  # n-Propyl
+            'iPr': 'C(C)C',  # Isopropyl
             'Bu': 'CCCC',  # Butyl
             'iBu': 'CC(C)C',  # Isobutyl
             'sBu': 'C(C)CC',  # sec-Butyl
@@ -1016,6 +1015,7 @@ class Molecule:
         if has_ocr:
             try:
                 # Use OCR to detect text in the image
+                # PSM 6: Assume a single uniform block of text (good for chemical labels)
                 detected_text = pytesseract.image_to_string(img_orig, config='--psm 6')
                 logger.debug(f"OCR detected text: {detected_text}")
                 
@@ -1065,12 +1065,13 @@ class Molecule:
                 
                 # Pattern: Ad-SH (adamantyl thiol)
                 # Note: The dash might be a hyphen (-), en-dash (–), or em-dash (—)
-                if 'Ad' in detected_abbrevs and ('SH' in text_upper or 'SH' in detected_text):
+                if 'Ad' in detected_abbrevs and 'SH' in text_upper:
                     smiles = detected_abbrevs['Ad'] + 'S'
                     logger.info(f"Constructed SMILES from Ad-SH pattern: {smiles}")
                 # Pattern: Ph-X (phenyl with substituent)
                 elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in ['-', '–', '—']):
                     # Try to get the substituent
+                    parts = []
                     for sep in ['-', '–', '—']:
                         if sep in detected_text:
                             parts = detected_text.split(sep)
