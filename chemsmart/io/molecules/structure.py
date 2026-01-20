@@ -946,6 +946,9 @@ class Molecule:
         Converts chemical structure images (PNG, JPG, JPEG, TIF, TIFF) to
         molecular structures by first extracting SMILES representation using
         DECIMER, then converting to a Molecule object via RDKit.
+        
+        Handles common chemical abbreviations (e.g., Ad for adamantyl, Ph for phenyl)
+        by using OCR to detect text and expanding abbreviations to full structures.
 
         Args:
             filepath (str): Path to the image file containing chemical structure
@@ -966,14 +969,63 @@ class Molecule:
                 "Install them with: `pip install decimer opencv-python`"
             ) from e
 
+        # Try to import pytesseract for OCR (optional)
+        try:
+            import pytesseract
+            has_ocr = True
+        except ImportError:
+            has_ocr = False
+            logger.debug("pytesseract not available, abbreviation expansion disabled")
+
+        # Common chemical abbreviations and their SMILES representations
+        # These are neutral radicals/groups; connection point is implicit
+        abbreviations = {
+            'Ad': 'C1C2CC3CC1CC(C2)C3',  # Adamantyl (1-adamantyl)
+            'Ph': 'c1ccccc1',  # Phenyl
+            'Me': 'C',  # Methyl
+            'Et': 'CC',  # Ethyl
+            'Pr': 'CCC',  # Propyl
+            'iPr': 'C(C)C',  # Isopropyl
+            'nPr': 'CCC',  # n-Propyl
+            'Bu': 'CCCC',  # Butyl
+            'iBu': 'CC(C)C',  # Isobutyl
+            'sBu': 'C(C)CC',  # sec-Butyl
+            'tBu': 'C(C)(C)C',  # tert-Butyl
+            'Bn': 'Cc1ccccc1',  # Benzyl
+            'Ac': 'C(=O)C',  # Acetyl
+            'Bz': 'C(=O)c1ccccc1',  # Benzoyl
+            'Ts': 'S(=O)(=O)c1ccc(C)cc1',  # Tosyl
+            'Ms': 'S(=O)(=O)C',  # Mesyl
+            'Tf': 'S(=O)(=O)C(F)(F)F',  # Triflyl
+            'Cy': 'C1CCCCC1',  # Cyclohexyl
+        }
+
         # Load the image
-        # Light pre-processing often helps (binarize + resize)
-        img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-        if img is None:
+        img_orig = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        if img_orig is None:
             raise FileNotFoundError(filepath)
 
+        # Detect abbreviations using OCR if available
+        detected_abbrevs = {}
+        detected_text = ""
+        if has_ocr:
+            try:
+                # Use OCR to detect text in the image
+                detected_text = pytesseract.image_to_string(img_orig, config='--psm 6')
+                logger.debug(f"OCR detected text: {detected_text}")
+                
+                # Check for known abbreviations in the detected text
+                for abbrev, smiles in abbreviations.items():
+                    # Case-sensitive match for chemical abbreviations
+                    if abbrev in detected_text:
+                        detected_abbrevs[abbrev] = smiles
+                        logger.info(f"Detected abbreviation '{abbrev}' in image")
+            except Exception as e:
+                logger.debug(f"OCR failed: {e}")
+
+        # Pre-process image for DECIMER (binarize + resize)
         img = cv2.resize(
-            img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC
+            img_orig, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC
         )
         _, img = cv2.threshold(
             img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
@@ -983,7 +1035,43 @@ class Molecule:
         tmp = filepath + ".pre.png"
         cv2.imwrite(tmp, img)
 
+        # Get SMILES from DECIMER
         smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
+        
+        # If DECIMER fails but we detected abbreviations, try to construct SMILES
+        if smiles is None or (detected_abbrevs and len(smiles) < 5):
+            logger.warning(
+                f"DECIMER returned incomplete/null SMILES: {smiles}. "
+                f"Attempting to construct from detected abbreviations."
+            )
+            
+            # Try to construct molecule from abbreviations
+            # For simple cases like "Ad-SH", we can combine parts
+            if detected_abbrevs and detected_text:
+                # Simple heuristic: if we detected abbreviations, try common patterns
+                text_upper = detected_text.upper()
+                
+                # Pattern: Ad-SH (adamantyl thiol)
+                if 'Ad' in detected_abbrevs and ('SH' in text_upper or '-SH' in text_upper):
+                    smiles = detected_abbrevs['Ad'] + 'S'
+                    logger.info(f"Constructed SMILES from Ad-SH pattern: {smiles}")
+                # Pattern: Ph-X (phenyl with substituent)
+                elif 'Ph' in detected_abbrevs and '-' in detected_text:
+                    # Try to get the substituent
+                    parts = detected_text.split('-')
+                    if len(parts) == 2:
+                        substituent = parts[1].strip()
+                        # Map common substituents
+                        if substituent.upper() in ['SH', 'SH']:
+                            smiles = detected_abbrevs['Ph'] + 'S'
+                        elif substituent.upper() in ['OH']:
+                            smiles = detected_abbrevs['Ph'] + 'O'
+                        elif substituent.upper() in ['NH2', 'NH₂']:
+                            smiles = detected_abbrevs['Ph'] + 'N'
+                # If we have an abbreviation but couldn't construct, use it as-is
+                elif len(detected_abbrevs) == 1:
+                    smiles = list(detected_abbrevs.values())[0]
+        
         if smiles is None:
             raise ValueError(
                 f"Image {filepath} cannot be converted to SMILES."
