@@ -1060,10 +1060,11 @@ class Molecule:
         finally:
             # Clean up temporary file
             try:
-                import os
-                os.remove(tmp)
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                    logger.debug(f"Removed temporary file: {tmp}")
             except Exception as e:
-                logger.debug(f"Failed to remove temporary file {tmp}: {e}")
+                logger.warning(f"Failed to remove temporary file {tmp}: {e}")
         
         # If DECIMER fails or returns suspicious results when abbreviations are detected
         # (DECIMER typically fails with abbreviations), try to construct SMILES manually
