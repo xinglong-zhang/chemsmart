@@ -50,6 +50,14 @@ _DASH_CHARACTERS = ['-', '–', '—']  # hyphen, en-dash, em-dash
 # Minimum length for a valid SMILES string
 _MIN_VALID_SMILES_LENGTH = 3
 
+# Mapping of functional group text to SMILES atom
+_SUBSTITUENT_MAPPING = {
+    'SH': 'S',  # Thiol
+    'OH': 'O',  # Hydroxyl
+    'NH2': 'N',  # Amine
+    'NH₂': 'N',  # Amine (with subscript)
+}
+
 
 class Molecule:
     """Class to represent a molcular structure.
@@ -1044,17 +1052,25 @@ class Molecule:
 
         # Write a temp preprocessed image (DECIMER takes a path)
         tmp = filepath + ".pre.png"
-        cv2.imwrite(tmp, img)
+        try:
+            cv2.imwrite(tmp, img)
 
-        # Get SMILES from DECIMER
-        smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
+            # Get SMILES from DECIMER
+            smiles = predict_SMILES(tmp)  # DECIMER returns SMILES
+        finally:
+            # Clean up temporary file
+            try:
+                import os
+                os.remove(tmp)
+            except Exception as e:
+                logger.debug(f"Failed to remove temporary file {tmp}: {e}")
         
         # If DECIMER fails or returns suspicious results when abbreviations are detected
         # (DECIMER typically fails with abbreviations), try to construct SMILES manually
         decimer_failed = smiles is None or not smiles.strip()
         should_use_abbrev = (
             detected_abbrevs 
-            and (decimer_failed or len(smiles) < _MIN_VALID_SMILES_LENGTH)
+            and (decimer_failed or (smiles and len(smiles) < _MIN_VALID_SMILES_LENGTH))
         )
         
         if should_use_abbrev:
@@ -1079,24 +1095,21 @@ class Molecule:
                     logger.info(f"Constructed SMILES from Ad-SH pattern: {constructed_smiles}")
                 # Pattern: Ph-X (phenyl with substituent)
                 elif 'Ph' in detected_abbrevs and any(sep in detected_text for sep in _DASH_CHARACTERS):
-                    # Try to get the substituent
+                    # Try to get the substituent by splitting on the first dash found
+                    # Note: We only handle simple cases with one dash
                     parts = []
                     for sep in _DASH_CHARACTERS:
                         if sep in detected_text:
-                            parts = detected_text.split(sep)
+                            parts = detected_text.split(sep, 1)  # Split only on first occurrence
                             break
                     if len(parts) == 2:
                         substituent = parts[1].strip().upper()
-                        # Map common substituents
-                        if substituent == 'SH':
-                            constructed_smiles = detected_abbrevs['Ph'] + 'S'
-                        elif substituent == 'OH':
-                            constructed_smiles = detected_abbrevs['Ph'] + 'O'
-                        elif substituent in ['NH2', 'NH₂']:
-                            constructed_smiles = detected_abbrevs['Ph'] + 'N'
+                        # Map common substituents using the predefined mapping
+                        if substituent in _SUBSTITUENT_MAPPING:
+                            constructed_smiles = detected_abbrevs['Ph'] + _SUBSTITUENT_MAPPING[substituent]
                 # If we have an abbreviation but couldn't construct, use it as-is
                 elif len(detected_abbrevs) == 1:
-                    constructed_smiles = list(detected_abbrevs.values())[0]
+                    constructed_smiles = next(iter(detected_abbrevs.values()))
             
             # Use constructed SMILES if we managed to construct one
             if constructed_smiles:
