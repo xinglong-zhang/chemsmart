@@ -380,7 +380,7 @@ class XTBOutput:
             )
             orientation = list(self.g98_file.standard_orientation)
             symbols = list(self.g98_file.symbols)
-            return [orientation], symbols, None
+            return [orientation], symbols, [self.final_energy]
 
         # Tier 4: input geometry (sp)
         if self.normal_termination and self.input_geometry:
