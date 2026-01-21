@@ -200,6 +200,17 @@ class XTBOutput:
         """Get molecular mass from main output."""
         if self.main_out:
             return self.main_out.molecular_mass
+        if self.molecule:
+            return self.molecule.mass
+        return None
+
+    @property
+    def num_atoms(self):
+        """Get the number of atoms in the system."""
+        if self.engrad_file:
+            return self.engrad_file.num_atoms
+        if self.molecule:
+            return self.molecule.num_atoms
         return None
 
     @property
@@ -252,6 +263,17 @@ class XTBOutput:
             label = f"{symbol}{element_counts[symbol]}"
             labeled_charges[label] = charge
         return labeled_charges
+
+    @property
+    def vibrational_frequencies(self):
+        """Get vibrational frequencies."""
+        if self.molecule.is_monoatomic:
+            return []
+        if self.main_out:
+            return self.main_out.vibrational_frequencies
+        if self.g98_file:
+            return self.g98_file.vibrational_frequencies
+        return None
 
     @cached_property
     def xtbopt_geometry(self):

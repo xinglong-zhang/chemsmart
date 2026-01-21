@@ -1188,6 +1188,11 @@ def xtb_acetaldehyde_outfolder(xtb_outputs_directory):
     return os.path.join(xtb_outputs_directory, "acetaldehyde_hess")
 
 
+@pytest.fixture()
+def xtb_he_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "he_hess")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):

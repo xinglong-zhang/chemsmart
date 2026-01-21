@@ -1673,6 +1673,48 @@ class TestThermochemistryHe:
         assert mol.is_monoatomic
         assert orca_out.num_vibration_modes == 0
 
+    def test_thermochemistry_he_xtb_output(self, xtb_he_outfolder):
+        """Values from xtb output
+                   -------------------------------------------------
+                  |               Frequency Printout                |
+                   -------------------------------------------------
+         vibrational frequencies (cm⁻¹)
+        eigval :        0.50     0.50     0.50
+        ...
+                   -------------------------------------------------
+                  |             Thermodynamic Functions             |
+                   -------------------------------------------------
+
+        Kh  symmetry found (for desy threshold:  0.10E+00) used in thermo
+
+                  ...................................................
+                  :                      SETUP                      :
+                  :.................................................:
+                  :  # frequencies                           0      :
+                  :  # imaginary freq.                       0      :
+                  :  linear?                              true      :
+                  :  only rotor calc.                     true      :
+                  :  symmetry                               Kh      :
+                  :  rotational number                       1      :
+                  :  scaling factor                  1.0000000      :
+                  :  rotor cutoff                   50.0000000 cm⁻¹ :
+                  :  imag. cutoff                  -20.0000000 cm⁻¹ :
+                  :.................................................:
+        """
+        assert os.path.exists(xtb_he_outfolder)
+        xtb_out = XTBOutput(folder=xtb_he_outfolder)
+        assert xtb_out.normal_termination
+        assert xtb_out.job_type == "hess"
+        assert xtb_out.num_atoms == 1
+        mol = xtb_out.molecule
+        assert mol.empirical_formula == "He"
+        assert xtb_out.multiplicity == 1
+        assert np.isclose(xtb_out.energies[-1], -1.743126632946)
+        assert xtb_out.rotational_symmetry_number == 1
+        assert xtb_out.vibrational_frequencies == []
+        assert mol.is_monoatomic
+        assert xtb_out.num_vib_frequencies == 0
+
     def test_thermochemistry_he_qrrho(self, gaussian_he_opt_outfile):
         """Values from Goodvibes, as a reference:
                 goodvibes -f 1000 -c 0.5 -t 598.15 -q --bav "conf" he.log
