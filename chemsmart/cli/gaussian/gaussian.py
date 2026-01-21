@@ -257,7 +257,7 @@ def click_gaussian_grouper_options(f):
         type=float,
         default=None,
         help="Threshold for grouping. If not specified, uses strategy-specific "
-        "defaults: RMSD=0.5, Tanimoto=0.9, Connectivity=0.0.",
+        "defaults: RMSD=0.5, Tanimoto=0.9, Torsion=0.1, Connectivity=0.0.",
     )
     @click.option(
         "-i",
@@ -267,17 +267,17 @@ def click_gaussian_grouper_options(f):
         help="Whether to ignore hydrogens in grouping.",
     )
     @click.option(
-        "--cache/--no-cache",
-        type=bool,
-        default=True,
-        help="Use cache graph isomorphism or not, default=Ture (for spyrmsd).",
-    )
-    @click.option(
         "-p",
         "--num-procs",
         type=int,
         default=1,
         help="Number of processors to use for the grouper.",
+    )
+    @click.option(
+        "--cache/--no-cache",
+        type=bool,
+        default=True,
+        help="Use cache graph isomorphism or not, default=Ture (for spyrmsd).",
     )
     @click.option(
         "--stereo-check/--no-stereo-check",
@@ -314,7 +314,7 @@ def click_gaussian_grouper_options(f):
         "--use-super/--no-use-super",
         type=bool,
         default=True,
-        help="Use align or super for PymolRMSD grouper. Default=False (align).",
+        help="Use align or super for PymolRMSD grouper. Default=False (use align).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
