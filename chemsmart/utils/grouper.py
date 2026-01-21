@@ -19,7 +19,7 @@ Key classes include:
 - BasicRMSDGrouper: Standard RMSD calculation using Euclidean distance
 - HungarianRMSDGrouper: RMSD grouping with optimal atom assignment
 - SpyRMSDGrouper: Symmetry-corrected RMSD using spyrmsd algorithms
-- PymolAlignGrouper: PyMOL-based structural alignment and RMSD calculation
+- PymolRMSDGrouper: PyMOL-based structural alignment and RMSD calculation
 - RMSDGrouperSharedMemory: RMSD grouping with shared-memory optimization
 - TanimotoSimilarityGrouper: Chemical fingerprint similarity
 - TorsionFingerprintGrouper: Torsion angle-based fingerprint similarity (2012 J. Chem. Inf. Model.)
@@ -1608,374 +1608,575 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
 
 class PymolRMSDGrouper(RMSDGrouper):
     """
-    Group molecules using PyMOL's align command and RMSD calculation.
+    Group molecules using PyMOL-style alignment algorithms without external PyMOL.
 
-    This grouper uses PyMOL's structural alignment algorithm following
-    the same approach as the existing PyMOL job runner. It creates
-    individual XYZ files for each molecule, uses PyMOL's command-line
-    interface to perform alignments, and extracts RMSD values from
-    the output for grouping.
+    This grouper implements both PyMOL align and super algorithms internally:
 
-    The implementation follows the RMSDGrouper pattern used in:
-    - BasicRMSDGrouper: Implements _calculate_rmsd() for pairwise calculation
-    - /chemsmart/jobs/mol/runner.py (PyMOLAlignJobRunner)
-    - /chemsmart/jobs/mol/align.py (PyMOLAlignJob)
+    - **align**: Sequence-based alignment followed by structural refinement
+      - Performs sequence alignment with chemical symbol matching
+      - Good for molecules with decent sequence similarity (>30% identity)
+
+    - **super**: Structure-based dynamic programming alignment
+      - Sequence-independent structural alignment
+      - More robust for molecules with low sequence similarity
+      - Uses 3D structural environment comparison
+
+    Both algorithms include:
+    - Structural superposition using Kabsch algorithm
+    - Iterative outlier rejection for refinement
+    - Final RMSD calculation on aligned atoms
+
+    This provides the same functionality as PyMOL's align/super commands but without
+    requiring an external PyMOL installation, improving performance and
+    eliminating external dependencies.
 
     Attributes:
         molecules (List[Molecule]): Collection of molecules to group.
         threshold (float): RMSD threshold for grouping molecules.
-        num_procs (int): Number of processes (currently supports only 1).
-        temp_dir (str): Temporary directory for PyMOL operations.
-        pymol_executable (str): Path to PyMOL executable.
+        num_groups (int): Number of groups to create (alternative to threshold).
+        cutoff (float): Outlier rejection cutoff in RMS (default: 2.0).
+        cycles (int): Maximum outlier rejection cycles (default: 5).
+        gap (float): Gap penalty for sequence alignment (default: -10.0).
+        extend (float): Gap extension penalty (default: -0.5).
+        use_super (bool): Use super (True) or align (False) algorithm (default: False).
     """
 
-    #
-    # def __init__(
-    #     self,
-    #     molecules: Iterable[Molecule],
-    #     threshold: float = 0.5,
-    #     num_groups=None,
-    #     num_procs: int = 1,
-    #     temp_dir: str = None,
-    #     pymol_executable: str = "pymol",
-    #     align_molecules: bool = True,
-    #     ignore_hydrogens: bool = False,
-    #     **kwargs,
-    # ):
-    #     """
-    #     Initialize PyMOL align grouper following RMSDGrouper pattern.
-    #
-    #     Args:
-    #         molecules (Iterable[Molecule]): Collection of molecules to group.
-    #         threshold (float): RMSD threshold for grouping. Defaults to 0.5.
-    #         num_groups (int): Number of groups to create (alternative to threshold).
-    #         num_procs (int): Number of processes. Currently only supports 1.
-    #         temp_dir (str): Directory for temporary files. If None, uses system temp.
-    #         pymol_executable (str): Path to PyMOL executable. Defaults to "pymol".
-    #         align_molecules (bool): Whether to use PyMOL alignment. Defaults to True.
-    #         ignore_hydrogens (bool): Whether to exclude hydrogens. Defaults to False.
-    #     """
-    #     # Call parent constructor with all required parameters
-    #     super().__init__(
-    #         molecules=molecules,
-    #         threshold=threshold,
-    #         num_groups=num_groups,
-    #         num_procs=num_procs,
-    #         align_molecules=align_molecules,
-    #         ignore_hydrogens=ignore_hydrogens,
-    #         **kwargs,
-    #     )
-    #
-    #     self.temp_dir = temp_dir or "/tmp"
-    #     self.pymol_executable = pymol_executable
-    #
-    #     # Cache for molecule XYZ files to avoid repeated file I/O
-    #     self._molecule_xyz_cache = {}
-    #     self._rmsd_cache = {}
-    #
-    #     # Ensure temp directory exists
-    #     import os
-    #
-    #     os.makedirs(self.temp_dir, exist_ok=True)
-    #
-    #     # Validate that PyMOL is available
-    #     self._validate_pymol()
-    #
-    # def _validate_pymol(self) -> None:
-    #     """
-    #     Validate that PyMOL is available and accessible.
-    #
-    #     Raises:
-    #         RuntimeError: If PyMOL is not found or not executable.
-    #     """
-    #     import shutil
-    #
-    #     if not shutil.which(self.pymol_executable):
-    #         raise RuntimeError(
-    #             f"PyMOL executable '{self.pymol_executable}' not found in PATH. "
-    #             "Please ensure PyMOL is installed and accessible."
-    #         )
-    #
-    # def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
-    #     """
-    #     Calculate RMSD between two molecules using PyMOL alignment.
-    #
-    #     This method follows the RMSDGrouper pattern by implementing pairwise
-    #     RMSD calculation. It uses PyMOL's align command for structural alignment
-    #     and RMSD calculation.
-    #
-    #     Args:
-    #         idx_pair (Tuple[int, int]): Tuple containing indices of two molecules.
-    #
-    #     Returns:
-    #         float: RMSD value between the two molecules.
-    #     """
-    #     i, j = idx_pair
-    #
-    #     # Check cache first for efficiency
-    #     cache_key = tuple(sorted([i, j]))
-    #     if cache_key in self._rmsd_cache:
-    #         return self._rmsd_cache[cache_key]
-    #
-    #     mol1, mol2 = self.molecules[i], self.molecules[j]
-    #
-    #     # Apply hydrogen filtering if enabled (following parent class pattern)
-    #     if self.ignore_hydrogens:
-    #         pos1, symbols1 = self._get_heavy_atoms(mol1)
-    #         pos2, symbols2 = self._get_heavy_atoms(mol2)
-    #     else:
-    #         pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
-    #         pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
-    #
-    #     # Quick compatibility check
-    #     if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
-    #         symbols2
-    #     ):
-    #         rmsd = float("inf")
-    #         self._rmsd_cache[cache_key] = rmsd
-    #         return rmsd
-    #
-    #     try:
-    #         # Use PyMOL for alignment if enabled, otherwise fallback
-    #         if self.align_molecules:
-    #             rmsd = self._calculate_pymol_rmsd(i, j, mol1, mol2)
-    #         else:
-    #             rmsd = self._calculate_basic_rmsd(mol1, mol2)
-    #
-    #     except Exception as e:
-    #         logger.warning(
-    #             f"PyMOL RMSD calculation failed for pair ({i},{j}): {e}"
-    #         )
-    #         # Fallback to basic RMSD calculation
-    #         rmsd = self._calculate_basic_rmsd(mol1, mol2)
-    #
-    #     # Cache the result
-    #     self._rmsd_cache[cache_key] = rmsd
-    #     return rmsd
-    #
-    # def _calculate_pymol_rmsd(
-    #     self, i: int, j: int, mol1: Molecule, mol2: Molecule
-    # ) -> float:
-    #     """
-    #     Calculate RMSD using PyMOL alignment for a specific pair of molecules.
-    #
-    #     Args:
-    #         i (int): Index of first molecule.
-    #         j (int): Index of second molecule.
-    #         mol1 (Molecule): First molecule.
-    #         mol2 (Molecule): Second molecule.
-    #
-    #     Returns:
-    #         float: RMSD value from PyMOL alignment.
-    #     """
-    #     import os
-    #     import subprocess
-    #     import uuid
-    #
-    #     from chemsmart.utils.utils import quote_path
-    #
-    #     # Generate unique identifiers for this pair
-    #     unique_id = str(uuid.uuid4())[:8]
-    #
-    #     # Prepare molecule files (use cache if available)
-    #     xyz_path1 = self._get_molecule_xyz_file(i, mol1, unique_id)
-    #     xyz_path2 = self._get_molecule_xyz_file(j, mol2, unique_id)
-    #
-    #     mol_name1 = f"mol_{i:04d}"
-    #     mol_name2 = f"mol_{j:04d}"
-    #
-    #     # Create PyMOL script for this specific pair
-    #     script_path = os.path.join(
-    #         self.temp_dir, f"pair_align_{unique_id}_{i}_{j}.pml"
-    #     )
-    #     script_content = self._create_pairwise_pymol_script(
-    #         xyz_path1, xyz_path2, mol_name1, mol_name2
-    #     )
-    #
-    #     temp_files = [script_path]
-    #     if xyz_path1 not in self._molecule_xyz_cache.values():
-    #         temp_files.append(xyz_path1)
-    #     if xyz_path2 not in self._molecule_xyz_cache.values():
-    #         temp_files.append(xyz_path2)
-    #
-    #     try:
-    #         # Write script
-    #         with open(script_path, "w") as f:
-    #             f.write(script_content)
-    #
-    #         # Execute PyMOL command
-    #         exe = quote_path(self.pymol_executable)
-    #         script = quote_path(script_path)
-    #         command = f"{exe} -c -q -r {script}"
-    #
-    #         result = subprocess.run(
-    #             command,
-    #             shell=True,
-    #             capture_output=True,
-    #             text=True,
-    #             timeout=60,  # 1 minute timeout for pairwise alignment
-    #             cwd=self.temp_dir,
-    #         )
-    #
-    #         if result.returncode != 0:
-    #             logger.debug(
-    #                 f"PyMOL command failed for pair ({i},{j}): {result.stderr}"
-    #             )
-    #             return float("inf")
-    #
-    #         # Parse RMSD from output
-    #         rmsd = self._parse_pairwise_rmsd(result.stdout)
-    #         return rmsd
-    #
-    #     except Exception as e:
-    #         logger.debug(f"PyMOL execution failed for pair ({i},{j}): {e}")
-    #         return float("inf")
-    #
-    #     finally:
-    #         # Clean up temporary script (keep molecule files in cache)
-    #         if os.path.exists(script_path):
-    #             try:
-    #                 os.remove(script_path)
-    #             except OSError:
-    #                 pass
-    #
-    # def _get_molecule_xyz_file(
-    #     self, idx: int, molecule: Molecule, unique_id: str
-    # ) -> str:
-    #     """
-    #     Get XYZ file path for a molecule, using cache if available.
-    #
-    #     Args:
-    #         idx (int): Molecule index.
-    #         molecule (Molecule): Molecule object.
-    #         unique_id (str): Unique identifier for this calculation.
-    #
-    #     Returns:
-    #         str: Path to XYZ file.
-    #     """
-    #     if idx in self._molecule_xyz_cache:
-    #         return self._molecule_xyz_cache[idx]
-    #
-    #     import os
-    #
-    #     mol_name = f"mol_{unique_id}_{idx:04d}"
-    #     xyz_path = os.path.join(self.temp_dir, f"{mol_name}.xyz")
-    #
-    #     # Write molecule to XYZ file
-    #     molecule.write(xyz_path, format="xyz", mode="w")
-    #     self._molecule_xyz_cache[idx] = xyz_path
-    #
-    #     logger.debug(f"Created XYZ file for molecule {idx}: {xyz_path}")
-    #     return xyz_path
-    #
-    # def _create_pairwise_pymol_script(
-    #     self, xyz_path1: str, xyz_path2: str, mol_name1: str, mol_name2: str
-    # ) -> str:
-    #     """
-    #     Create PyMOL script for pairwise alignment.
-    #
-    #     Args:
-    #         xyz_path1 (str): Path to first molecule XYZ file.
-    #         xyz_path2 (str): Path to second molecule XYZ file.
-    #         mol_name1 (str): Name for first molecule in PyMOL.
-    #         mol_name2 (str): Name for second molecule in PyMOL.
-    #
-    #     Returns:
-    #         str: PyMOL script content.
-    #     """
-    #     script_lines = [
-    #         "# PyMOL pairwise alignment script",
-    #         f"load {xyz_path1}, {mol_name1}",
-    #         f"load {xyz_path2}, {mol_name2}",
-    #         "",
-    #         "# Perform alignment and capture RMSD",
-    #         "try:",
-    #         f"    result = cmd.align('{mol_name2}', '{mol_name1}')",
-    #         "    rmsd_val = result[0] if result else 999.0",
-    #         "    print 'PAIRWISE_RMSD:', rmsd_val",
-    #         "except:",
-    #         "    print 'PAIRWISE_RMSD: 999.0'",
-    #         "",
-    #         "quit",
-    #     ]
-    #     return "\n".join(script_lines)
-    #
-    # def _parse_pairwise_rmsd(self, output: str) -> float:
-    #     """
-    #     Parse RMSD value from PyMOL pairwise alignment output.
-    #
-    #     Args:
-    #         output (str): PyMOL stdout output.
-    #
-    #     Returns:
-    #         float: RMSD value.
-    #     """
-    #     import re
-    #
-    #     pattern = r"PAIRWISE_RMSD:\s*([\d.]+)"
-    #     match = re.search(pattern, output)
-    #
-    #     if match:
-    #         rmsd_val = float(match.group(1))
-    #         logger.debug(f"Parsed RMSD: {rmsd_val:.3f}")
-    #         return rmsd_val
-    #     else:
-    #         logger.debug("Could not parse RMSD from PyMOL output")
-    #         return float("inf")
-    #
-    # def _calculate_basic_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
-    #     """
-    #     Calculate basic RMSD between two molecules for fallback.
-    #
-    #     Args:
-    #         mol1 (Molecule): First molecule.
-    #         mol2 (Molecule): Second molecule.
-    #
-    #     Returns:
-    #         float: Basic RMSD value.
-    #     """
-    #     try:
-    #         pos1 = mol1.positions
-    #         pos2 = mol2.positions
-    #
-    #         if len(pos1) != len(pos2):
-    #             return float("inf")
-    #
-    #         # Center coordinates
-    #         pos1 = pos1 - np.mean(pos1, axis=0)
-    #         pos2 = pos2 - np.mean(pos2, axis=0)
-    #
-    #         # Calculate basic RMSD
-    #         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
-    #
-    #     except Exception:
-    #         return float("inf")
-    #
-    # def cleanup_cache(self) -> None:
-    #     """
-    #     Clean up cached XYZ files and RMSD values.
-    #
-    #     This method should be called when the grouper is no longer needed
-    #     to free up temporary files and memory.
-    #     """
-    #     import os
-    #
-    #     # Clean up cached XYZ files
-    #     for idx, xyz_path in self._molecule_xyz_cache.items():
-    #         if os.path.exists(xyz_path):
-    #             try:
-    #                 os.remove(xyz_path)
-    #                 logger.debug(f"Removed cached XYZ file: {xyz_path}")
-    #             except OSError as e:
-    #                 logger.warning(
-    #                     f"Failed to remove cached file {xyz_path}: {e}"
-    #                 )
-    #
-    #     # Clear caches
-    #     self._molecule_xyz_cache.clear()
-    #     self._rmsd_cache.clear()
-    #
-    #     logger.debug("Cleaned up PyMOL grouper caches")
+    def __init__(
+        self,
+        molecules: Iterable[Molecule],
+        threshold: float = 0.5,
+        num_groups=None,
+        num_procs: int = 1,
+        align_molecules: bool = True,
+        ignore_hydrogens: bool = False,
+        cutoff: float = 2.0,
+        cycles: int = 5,
+        gap: float = -10.0,
+        extend: float = -0.5,
+        use_super: bool = False,
+        **kwargs,
+    ):
+        """
+        Initialize PyMOL-style alignment grouper.
+
+        Args:
+            molecules (Iterable[Molecule]): Collection of molecules to group.
+            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+            num_groups (int): Number of groups to create (alternative to threshold).
+            num_procs (int): Number of processes. Currently supports 1.
+            align_molecules (bool): Whether to use alignment. Defaults to True.
+            ignore_hydrogens (bool): Whether to exclude hydrogens. Defaults to False.
+            cutoff (float): Outlier rejection cutoff in RMS. Defaults to 2.0.
+            cycles (int): Maximum outlier rejection cycles. Defaults to 5.
+            gap (float): Gap penalty for sequence alignment. Defaults to -10.0.
+            extend (float): Gap extension penalty. Defaults to -0.5.
+            use_super (bool): Use super (True) or align (False) algorithm. Defaults to False.
+        """
+        super().__init__(
+            molecules=molecules,
+            threshold=threshold,
+            num_groups=num_groups,
+            num_procs=num_procs,
+            align_molecules=align_molecules,
+            ignore_hydrogens=ignore_hydrogens,
+            **kwargs,
+        )
+
+        self.cutoff = cutoff
+        self.cycles = cycles
+        self.gap = gap
+        self.extend = extend
+        self.use_super = use_super
+
+        # Cache for alignment results
+        self._alignment_cache = {}
+
+    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+        """
+        Calculate RMSD between two molecules using PyMOL-style alignment.
+
+        Args:
+            idx_pair (Tuple[int, int]): Tuple containing indices of two molecules.
+
+        Returns:
+            float: RMSD value between the two molecules.
+        """
+        i, j = idx_pair
+
+        # Check cache
+        cache_key = tuple(sorted([i, j]))
+        if cache_key in self._alignment_cache:
+            return self._alignment_cache[cache_key]
+
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        # Apply hydrogen filtering if enabled
+        if self.ignore_hydrogens:
+            pos1, symbols1 = self._get_heavy_atoms(mol1)
+            pos2, symbols2 = self._get_heavy_atoms(mol2)
+        else:
+            pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+            pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+
+        # Quick compatibility check
+        if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+            symbols2
+        ):
+            rmsd = float("inf")
+            self._alignment_cache[cache_key] = rmsd
+            return rmsd
+
+        try:
+            if self.align_molecules:
+                rmsd = self._pymol_style_align(pos1, pos2, symbols1, symbols2)
+            else:
+                # Simple RMSD without alignment
+                rmsd = np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+        except Exception as e:
+            logger.warning(
+                f"PyMOL-style alignment failed for pair ({i},{j}): {e}"
+            )
+            rmsd = float("inf")
+
+        self._alignment_cache[cache_key] = rmsd
+        return rmsd
+
+    def _pymol_style_align(
+        self,
+        pos1: np.ndarray,
+        pos2: np.ndarray,
+        symbols1: list,
+        symbols2: list,
+    ) -> float:
+        """
+        Perform PyMOL-style alignment with sequence alignment and outlier rejection.
+
+        Args:
+            pos1, pos2: Atomic coordinates
+            symbols1, symbols2: Chemical symbols
+
+        Returns:
+            float: Final RMSD after refinement
+        """
+        if self.use_super:
+            # Use super algorithm: structure-based dynamic programming
+            return self._super_align(pos1, pos2, symbols1, symbols2)
+        else:
+            # Use align algorithm: sequence-based alignment
+            return self._align_algorithm(pos1, pos2, symbols1, symbols2)
+
+    def _align_algorithm(
+        self,
+        pos1: np.ndarray,
+        pos2: np.ndarray,
+        symbols1: list,
+        symbols2: list,
+    ) -> float:
+        """
+        PyMOL align algorithm: sequence alignment followed by refinement.
+        """
+        # Step 1: Sequence alignment to find corresponding atoms
+        alignment = self._sequence_align(symbols1, symbols2)
+
+        if not alignment:
+            return float("inf")
+
+        # Step 2: Extract aligned positions
+        aligned_pos1, aligned_pos2 = self._extract_aligned_positions(
+            pos1, pos2, alignment
+        )
+
+        if len(aligned_pos1) < 3:  # Need at least 3 points for alignment
+            return float("inf")
+
+        # Step 3: Iterative refinement with outlier rejection
+        return self._iterative_refinement(aligned_pos1, aligned_pos2)
+
+    def _super_align(
+        self,
+        pos1: np.ndarray,
+        pos2: np.ndarray,
+        symbols1: list,
+        symbols2: list,
+    ) -> float:
+        """
+        PyMOL super algorithm: structure-based dynamic programming alignment.
+
+        This is more robust than align for molecules with low sequence similarity
+        as it doesn't rely on sequence alignment but on structural similarity.
+        """
+        # Step 1: Structure-based dynamic programming alignment
+        alignment = self._structure_based_alignment(
+            pos1, pos2, symbols1, symbols2
+        )
+
+        if not alignment:
+            return float("inf")
+
+        # Step 2: Extract aligned positions
+        aligned_pos1, aligned_pos2 = self._extract_aligned_positions(
+            pos1, pos2, alignment
+        )
+
+        if len(aligned_pos1) < 3:
+            return float("inf")
+
+        # Step 3: Iterative refinement with outlier rejection (same as align)
+        return self._iterative_refinement(aligned_pos1, aligned_pos2)
+
+    def _structure_based_alignment(
+        self,
+        pos1: np.ndarray,
+        pos2: np.ndarray,
+        symbols1: list,
+        symbols2: list,
+    ) -> list:
+        """
+        Structure-based dynamic programming alignment for super algorithm.
+
+        This aligns atoms based on 3D structural similarity rather than sequence.
+        """
+        n, m = len(symbols1), len(symbols2)
+
+        if n == 0 or m == 0:
+            return []
+
+        # Create distance matrices for both structures
+        dist_matrix1 = self._calculate_distance_matrix(pos1)
+        dist_matrix2 = self._calculate_distance_matrix(pos2)
+
+        # Dynamic programming matrix for structure alignment
+        score_matrix = np.full((n + 1, m + 1), -np.inf)
+        traceback = np.zeros((n + 1, m + 1), dtype=int)
+
+        # Initialize
+        score_matrix[0][0] = 0.0
+
+        # Fill the matrix
+        for i in range(1, n + 1):
+            for j in range(1, m + 1):
+                # Check if atoms can be matched (same element type)
+                if symbols1[i - 1] == symbols2[j - 1]:
+                    # Calculate structural similarity score
+                    struct_score = self._calculate_structural_similarity_score(
+                        i - 1,
+                        j - 1,
+                        dist_matrix1,
+                        dist_matrix2,
+                        symbols1,
+                        symbols2,
+                    )
+
+                    # Match score
+                    match_score = score_matrix[i - 1][j - 1] + struct_score
+
+                    # Gap penalties
+                    gap1_score = score_matrix[i - 1][j] + self.gap
+                    gap2_score = score_matrix[i][j - 1] + self.gap
+
+                    max_score = max(
+                        match_score, gap1_score, gap2_score, 0.0
+                    )  # Local alignment
+                    score_matrix[i][j] = max_score
+
+                    if max_score == match_score:
+                        traceback[i][j] = 0  # Diagonal (match)
+                    elif max_score == gap1_score:
+                        traceback[i][j] = 1  # Up (gap in seq2)
+                    elif max_score == gap2_score:
+                        traceback[i][j] = 2  # Left (gap in seq1)
+                    else:
+                        traceback[i][j] = -1  # Start new alignment
+                else:
+                    # Different element types - only gaps allowed
+                    gap1_score = score_matrix[i - 1][j] + self.gap
+                    gap2_score = score_matrix[i][j - 1] + self.gap
+                    max_score = max(gap1_score, gap2_score, 0.0)
+                    score_matrix[i][j] = max_score
+
+                    if max_score == gap1_score:
+                        traceback[i][j] = 1
+                    elif max_score == gap2_score:
+                        traceback[i][j] = 2
+                    else:
+                        traceback[i][j] = -1
+
+        # Find the best score position for local alignment
+        max_score = -np.inf
+        best_i, best_j = 0, 0
+        for i in range(n + 1):
+            for j in range(m + 1):
+                if score_matrix[i][j] > max_score:
+                    max_score = score_matrix[i][j]
+                    best_i, best_j = i, j
+
+        # Traceback to get alignment
+        alignment = []
+        i, j = best_i, best_j
+
+        while i > 0 and j > 0 and score_matrix[i][j] > 0:
+            if traceback[i][j] == 0:  # Match
+                alignment.append((i - 1, j - 1))
+                i -= 1
+                j -= 1
+            elif traceback[i][j] == 1:  # Gap in seq2
+                i -= 1
+            elif traceback[i][j] == 2:  # Gap in seq1
+                j -= 1
+            else:  # traceback[i][j] == -1, start of alignment
+                break
+
+        return list(reversed(alignment))
+
+    def _calculate_distance_matrix(self, positions: np.ndarray) -> np.ndarray:
+        """Calculate pairwise distance matrix for a set of positions."""
+        n = len(positions)
+        dist_matrix = np.zeros((n, n))
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                dist = np.linalg.norm(positions[i] - positions[j])
+                dist_matrix[i][j] = dist_matrix[j][i] = dist
+
+        return dist_matrix
+
+    def _calculate_structural_similarity_score(
+        self,
+        i: int,
+        j: int,
+        dist_matrix1: np.ndarray,
+        dist_matrix2: np.ndarray,
+        symbols1: list,
+        symbols2: list,
+    ) -> float:
+        """
+        Calculate structural similarity score for aligning atom i with atom j.
+
+        This compares the local structural environment of the two atoms.
+        """
+        n1, n2 = len(symbols1), len(symbols2)
+
+        # Base score for matching atom types
+        if symbols1[i] != symbols2[j]:
+            return -10.0  # Penalty for different atom types
+
+        base_score = 5.0  # Reward for same atom type
+
+        # Compare local structural environments
+        environment_score = 0.0
+        comparisons = 0
+
+        # Look at distances to other atoms of the same type
+        for k1 in range(n1):
+            if k1 == i:
+                continue
+
+            for k2 in range(n2):
+                if k2 == j:
+                    continue
+
+                # Only compare distances to atoms of the same type
+                if symbols1[k1] == symbols2[k2]:
+                    dist1 = dist_matrix1[i][k1]
+                    dist2 = dist_matrix2[j][k2]
+
+                    # Score based on distance similarity
+                    dist_diff = abs(dist1 - dist2)
+                    if dist_diff < 0.5:  # Very similar distances
+                        environment_score += 2.0
+                    elif dist_diff < 1.0:  # Somewhat similar
+                        environment_score += 1.0
+                    elif dist_diff < 2.0:  # Moderately different
+                        environment_score += 0.0
+                    else:  # Very different
+                        environment_score -= 1.0
+
+                    comparisons += 1
+
+        # Normalize by number of comparisons
+        if comparisons > 0:
+            environment_score /= comparisons
+
+        return base_score + environment_score
+
+    def _sequence_align(self, symbols1: list, symbols2: list) -> list:
+        """
+        Perform sequence alignment between two molecules based on chemical symbols.
+
+        This is a simplified version of sequence alignment that works on chemical symbols
+        rather than amino acid sequences.
+
+        Returns:
+            list: List of (i1, i2) pairs indicating aligned atom indices
+        """
+        # For molecules with identical sequences, create direct mapping
+        if symbols1 == symbols2:
+            return [(i, i) for i in range(len(symbols1))]
+
+        # For different sequences, use dynamic programming alignment
+        return self._dp_sequence_align(symbols1, symbols2)
+
+    def _dp_sequence_align(self, seq1: list, seq2: list) -> list:
+        """
+        Dynamic programming sequence alignment for chemical symbols.
+        """
+        n, m = len(seq1), len(seq2)
+
+        # Initialize scoring matrix
+        score_matrix = np.zeros((n + 1, m + 1))
+        traceback = np.zeros((n + 1, m + 1), dtype=int)
+
+        # Initialize gaps
+        for i in range(1, n + 1):
+            score_matrix[i][0] = score_matrix[i - 1][0] + self.gap
+            traceback[i][0] = 1  # Up
+        for j in range(1, m + 1):
+            score_matrix[0][j] = score_matrix[0][j - 1] + self.gap
+            traceback[0][j] = 2  # Left
+
+        # Fill the matrix
+        for i in range(1, n + 1):
+            for j in range(1, m + 1):
+                match_score = score_matrix[i - 1][
+                    j - 1
+                ] + self._symbol_match_score(seq1[i - 1], seq2[j - 1])
+                gap1_score = score_matrix[i - 1][j] + self.gap
+                gap2_score = score_matrix[i][j - 1] + self.gap
+
+                max_score = max(match_score, gap1_score, gap2_score)
+                score_matrix[i][j] = max_score
+
+                if max_score == match_score:
+                    traceback[i][j] = 0  # Diagonal
+                elif max_score == gap1_score:
+                    traceback[i][j] = 1  # Up
+                else:
+                    traceback[i][j] = 2  # Left
+
+        # Traceback to get alignment
+        alignment = []
+        i, j = n, m
+
+        while i > 0 and j > 0:
+            if traceback[i][j] == 0:  # Match/mismatch
+                if seq1[i - 1] == seq2[j - 1]:  # Only include matches
+                    alignment.append((i - 1, j - 1))
+                i -= 1
+                j -= 1
+            elif traceback[i][j] == 1:  # Gap in seq2
+                i -= 1
+            else:  # Gap in seq1
+                j -= 1
+
+        return list(reversed(alignment))
+
+    def _symbol_match_score(self, sym1: str, sym2: str) -> float:
+        """
+        Score for matching chemical symbols.
+        """
+        if sym1 == sym2:
+            return 10.0  # High score for exact match
+        else:
+            return -5.0  # Penalty for mismatch
+
+    def _extract_aligned_positions(
+        self, pos1: np.ndarray, pos2: np.ndarray, alignment: list
+    ) -> tuple:
+        """
+        Extract positions of aligned atoms.
+        """
+        if not alignment:
+            return np.array([]), np.array([])
+
+        indices1, indices2 = zip(*alignment)
+        return pos1[list(indices1)], pos2[list(indices2)]
+
+    def _iterative_refinement(
+        self, pos1: np.ndarray, pos2: np.ndarray
+    ) -> float:
+        """
+        Perform iterative refinement with outlier rejection.
+
+        This mimics PyMOL's align algorithm:
+        1. Superimpose structures
+        2. Calculate per-atom RMSD
+        3. Remove outliers above cutoff
+        4. Repeat until convergence or max cycles
+        """
+        current_pos1 = pos1.copy()
+        current_pos2 = pos2.copy()
+
+        for cycle in range(self.cycles):
+            if len(current_pos1) < 3:
+                break
+
+            # Superimpose using Kabsch algorithm
+            try:
+                from chemsmart.utils.utils import kabsch_align
+
+                (
+                    aligned_pos1,
+                    aligned_pos2,
+                    rotation_matrix,
+                    translation,
+                    rmsd,
+                ) = kabsch_align(current_pos1, current_pos2)
+            except ImportError:
+                # Fallback to simple centering if kabsch_align not available
+                aligned_pos1 = current_pos1 - np.mean(current_pos1, axis=0)
+                aligned_pos2 = current_pos2 - np.mean(current_pos2, axis=0)
+
+            # Calculate per-atom distances
+            distances = np.sqrt(
+                np.sum((aligned_pos1 - aligned_pos2) ** 2, axis=1)
+            )
+
+            # Find outliers
+            outliers = distances > self.cutoff
+
+            if not np.any(outliers):
+                # No outliers found, converged
+                break
+
+            # Remove outliers for next iteration
+            current_pos1 = current_pos1[~outliers]
+            current_pos2 = current_pos2[~outliers]
+
+            logger.debug(
+                f"Cycle {cycle + 1}: Removed {np.sum(outliers)} outliers, "
+                f"{len(current_pos1)} atoms remaining"
+            )
+
+        # Final RMSD calculation
+        if len(current_pos1) < 1:
+            return float("inf")
+
+        try:
+            from chemsmart.utils.utils import kabsch_align
+
+            _, _, _, _, final_rmsd = kabsch_align(current_pos1, current_pos2)
+            return final_rmsd
+        except ImportError:
+            # Fallback calculation
+            centered_pos1 = current_pos1 - np.mean(current_pos1, axis=0)
+            centered_pos2 = current_pos2 - np.mean(current_pos2, axis=0)
+            return np.sqrt(
+                np.mean(np.sum((centered_pos1 - centered_pos2) ** 2, axis=1))
+            )
+
+    def __repr__(self):
+        """String representation of PymolRMSDGrouper."""
+        algorithm = "super" if self.use_super else "align"
+        if self.num_groups is not None:
+            return (
+                f"{self.__class__.__name__}(num_groups={self.num_groups}, "
+                f"algorithm={algorithm}, cutoff={self.cutoff}, cycles={self.cycles})"
+            )
+        else:
+            return (
+                f"{self.__class__.__name__}(threshold={self.threshold}, "
+                f"algorithm={algorithm}, cutoff={self.cutoff}, cycles={self.cycles})"
+            )
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
@@ -3591,7 +3792,7 @@ class StructureGrouperFactory:
     - "rmsd": BasicRMSDGrouper
     - "hrmsd": HungarianRMSDGrouper
     - "spyrmsd": SpyRMSDGrouper
-    - "pymol" or "pymol_align": PymolAlignGrouper
+    - "pymol" or "pymol_align": PymolRMSDGrouper
     - "tanimoto" or "fingerprint": TanimotoSimilarityGrouper
     - "torsion": TorsionFingerprintGrouper
     - "isomorphism" or "rdkit": RDKitIsomorphismGrouper
