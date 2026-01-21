@@ -54,6 +54,12 @@ def click_iterate_options(f):
         "Optionally specify output path (default: iterate_template.cfg).",
     )
     @click.option(
+        "--separate-outputs/--no-separate-outputs",
+        default=False,
+        show_default=True,
+        help="Save each structure as a separate XYZ file.",
+    )
+    @click.option(
         "-P",
         "--nprocs",
         default=1,
@@ -101,12 +107,19 @@ def click_iterate_options(f):
         help="Number of axial rotations per sphere point.",
     )
     @click.option(
+        "-d",
+        "--directory",
+        default=None,
+        type=click.Path(file_okay=False, dir_okay=True),
+        help="Directory to save output files. Use only with --separate-outputs.",
+    )
+    @click.option(
         "-o",
         "--outputfile",
         default="iterate_out",
         type=str,
         show_default=True,
-        help="Output filename (without .xyz extension) for generated structures.",
+        help="Output filename (without .xyz extension) for generated structures. Use only with --no-separate-outputs.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -130,6 +143,8 @@ def iterate(
     generate_template_path,
     sphere_direction_samples_num,
     axial_rotations_sample_num,
+    directory,
+    separate_outputs,
     **kwargs,
 ):
     """
@@ -162,6 +177,28 @@ def iterate(
         )
         click.echo(f"Generated template: {template_path}")
         ctx.exit(0)
+
+    # Validate arguments based on separate_outputs flag
+    source_output = ctx.get_parameter_source("outputfile")
+    source_directory = ctx.get_parameter_source("directory")
+
+    if separate_outputs:
+        # If writing separate files, -o is forbidden
+        if source_output == click.core.ParameterSource.COMMANDLINE:
+            raise click.UsageError(
+                "Option '-o' / '--outputfile' is not allowed when '--separate-outputs' "
+                "is enabled. Please use '-d' / '--directory' to specify the output location."
+            )
+        # Set default directory if not provided
+        if directory is None:
+            directory = os.getcwd()
+    else:
+        # If writing single file (default), -d is forbidden
+        if source_directory == click.core.ParameterSource.COMMANDLINE:
+            raise click.UsageError(
+                "Option '-d' / '--directory' is not allowed when '--no-separate-outputs' "
+                "(default) is active. Please use '-o' / '--outputfile' to specify the output file."
+            )
 
     # Validate filename - expect a single YAML/CFG config file
     if not filename:
@@ -217,6 +254,8 @@ def iterate(
         nprocs=nprocs,
         timeout=timeout,
         outputfile=outputfile,
+        separate_outputs=separate_outputs,
+        output_directory=directory,
     )
 
     logger.debug(f"Created IterateJob with {nprocs} process(es)")

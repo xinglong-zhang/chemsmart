@@ -308,7 +308,7 @@ class IterateJobRunner(JobRunner):
 
     def _load_molecule(
         self, mol_config: dict, mol_type: str, idx: int
-    ) -> Optional[Molecule]:
+    ) -> tuple[Optional[Molecule], str]:
         """
         Load a Molecule from configuration dict.
 
@@ -323,10 +323,10 @@ class IterateJobRunner(JobRunner):
 
         Returns
         -------
-        Molecule or None
-            Loaded molecule or None if loading fails
+        tuple[Molecule | None, str]
+            (Loaded molecule or None if loading fails, label)
         """
-        label = mol_config.get("label") or f"{mol_type}_{idx + 1}"
+        label = mol_config.get("label") or f"{mol_type}{idx + 1}"
         file_path = mol_config.get("file_path")
         smiles = mol_config.get("smiles")
         pubchem = mol_config.get("pubchem")
@@ -352,11 +352,11 @@ class IterateJobRunner(JobRunner):
                     f"{mol_type.capitalize()} '{label}' has no valid source "
                     f"(file_path, smiles, or pubchem), skipping."
                 )
-                return None
-            return molecule
+                return None, label
+            return molecule, label
         except Exception as e:
             logger.error(f"Failed to load {mol_type} '{label}': {e}")
-            return None
+            return None, label
 
     def _generate_combinations(
         self, job: "IterateJob"
@@ -385,11 +385,13 @@ class IterateJobRunner(JobRunner):
         axial_rotations_sample_num = job.settings.axial_rotations_sample_num
 
         for skel_idx, skel_config in enumerate(skeleton_list):
-            skeleton = self._load_molecule(skel_config, "skeleton", skel_idx)
+            skeleton, skel_label = self._load_molecule(
+                skel_config, "skeleton", skel_idx
+            )
             if skeleton is None:
                 continue
 
-            skel_label = skel_config.get("label") or f"skeleton_{skel_idx + 1}"
+            # skel_label is returned by _load_molecule
             skel_link_indices = skel_config.get(
                 "link_index"
             )  # list[int], 1-based
@@ -404,15 +406,13 @@ class IterateJobRunner(JobRunner):
                 continue
 
             for sub_idx, sub_config in enumerate(substituent_list):
-                substituent = self._load_molecule(
+                substituent, sub_label = self._load_molecule(
                     sub_config, "substituent", sub_idx
                 )
                 if substituent is None:
                     continue
 
-                sub_label = (
-                    sub_config.get("label") or f"substituent_{sub_idx + 1}"
-                )
+                # sub_label is returned by _load_molecule
                 sub_link_index = sub_config.get(
                     "link_index"
                 )  # list[int], 1-based
@@ -445,48 +445,79 @@ class IterateJobRunner(JobRunner):
 
         return combinations
 
-    def _write_output_xyz(
-        self, results: list[tuple[str, Optional[Molecule]]], outputfile: str
+    def _write_outputs(
+        self, results: list[tuple[str, Optional[Molecule]]], job: "IterateJob"
     ) -> None:
         """
-        Write all successful molecules to a single xyz file.
-
-        Format:
-        - First line: number of atoms
-        - Second line: label of the combination
-        - Following lines: atom coordinates
+        Write execution results to output file(s).
 
         Parameters
         ----------
         results : list[tuple[str, Molecule | None]]
             List of (label, molecule) tuples from run_combinations
-        outputfile : str
-            Path to the output xyz file
+        job : IterateJob
+             The job instance with configuration options
         """
-        # Ensure output directory exists
-        output_dir = os.path.dirname(outputfile)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-
         successful_count = 0
-        with open(outputfile, "w") as f:
+        
+        if job.separate_outputs:
+            # Separate files mode
+            output_dir = job.output_directory
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            else:
+                # Should have been validated by CLI, but fallback
+                output_dir = "."
+            
+            logger.info(f"Writing separate output files to directory: {output_dir}")
+            
             for label, mol in results:
                 if mol is not None:
-                    # Build xyz string manually
-                    # First line: number of atoms
-                    f.write(f"{mol.num_atoms}\n")
-                    # Second line: label as comment
-                    f.write(f"       {label}\n")
-                    # Following lines: atom symbol and coordinates
-                    for symbol, pos in zip(
-                        mol.chemical_symbols, mol.positions
-                    ):
-                        f.write(
-                            f"{symbol:2s}  {pos[0]:15.10f}  {pos[1]:15.10f}  {pos[2]:15.10f}\n"
-                        )
-                    successful_count += 1
+                    # Construct filename: directory + label + .xyz
+                    filename = os.path.join(output_dir, f"{label}.xyz")
+                    try:
+                        with open(filename, "w") as f:
+                            f.write(f"{mol.num_atoms}\n")
+                            f.write(f"       {label}\n")
+                            for symbol, pos in zip(
+                                mol.chemical_symbols, mol.positions
+                            ):
+                                f.write(
+                                    f"{symbol:2s}  {pos[0]:15.10f}  {pos[1]:15.10f}  {pos[2]:15.10f}\n"
+                                )
+                        successful_count += 1
+                        logger.debug(f"Wrote {filename}")
+                    except Exception as e:
+                        logger.error(f"Failed to write {filename}: {e}")
+                        
+            logger.info(f"Wrote {successful_count} separate molecule files to {output_dir}")
 
-        logger.info(f"Wrote {successful_count} molecule(s) to {outputfile}")
+        else:
+            # Single merged output file mode
+            outputfile = job.outputfile
+            # Ensure output directory exists
+            output_dir = os.path.dirname(outputfile)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+
+            with open(outputfile, "w") as f:
+                for label, mol in results:
+                    if mol is not None:
+                        # Build xyz string manually
+                        # First line: number of atoms
+                        f.write(f"{mol.num_atoms}\n")
+                        # Second line: label as comment
+                        f.write(f"       {label}\n")
+                        # Following lines: atom symbol and coordinates
+                        for symbol, pos in zip(
+                            mol.chemical_symbols, mol.positions
+                        ):
+                            f.write(
+                                f"{symbol:2s}  {pos[0]:15.10f}  {pos[1]:15.10f}  {pos[2]:15.10f}\n"
+                            )
+                        successful_count += 1
+
+            logger.info(f"Wrote {successful_count} molecule(s) to {outputfile}")
 
     def run(self, job: "IterateJob", **kwargs) -> None:
         """
@@ -524,7 +555,7 @@ class IterateJobRunner(JobRunner):
             combinations, nprocs=job.nprocs, timeout=job.timeout
         )
 
-        # Write output xyz file
-        self._write_output_xyz(results, job.outputfile)
+        # Write output results
+        self._write_outputs(results, job)
 
         logger.info("IterateJobRunner completed job")

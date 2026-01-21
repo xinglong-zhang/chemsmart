@@ -25,6 +25,8 @@ class IterateJob(Job):
         nprocs=1,
         timeout=120,
         outputfile="iterate_out",
+        separate_outputs=False,
+        output_directory=None,
         **kwargs,
     ):
         """
@@ -42,6 +44,10 @@ class IterateJob(Job):
             Timeout in seconds for each worker process. Default 120 (2 minutes).
         outputfile : str, optional
             Output filename (without .xyz extension). Default is 'iterate_out'.
+        separate_outputs : bool, optional
+            If True, save each structure as a separate file. Default False.
+        output_directory : str, optional
+            Directory for output files if separate_outputs is True.
         **kwargs
             Additional keyword arguments
         """
@@ -61,6 +67,8 @@ class IterateJob(Job):
         self.nprocs = nprocs
         self.timeout = timeout
         self._outputfile = outputfile
+        self.separate_outputs = separate_outputs
+        self.output_directory = output_directory
 
     @classmethod
     def settings_class(cls) -> Type[IterateJobSettings]:
