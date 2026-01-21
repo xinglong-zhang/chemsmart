@@ -92,6 +92,11 @@ def crest(
         grouping_strategy=grouping_strategy,
         ignore_hydrogens=ignore_hydrogens,
         threshold=threshold,
+        num_groups=(
+            num_confs_to_run
+            if (grouping_strategy is not None and num_confs_to_run is not None)
+            else None
+        ),
         use_weights=use_weights,
         fingerprint_type=fingerprint_type,
         skip_completed=skip_completed,

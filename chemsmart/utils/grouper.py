@@ -278,6 +278,7 @@ class MoleculeGrouper(ABC):
         logger.info(
             f"Generated {len(groups)} group XYZ files in {full_output_path}"
         )
+
         return unique_molecules
 
 
@@ -307,6 +308,7 @@ class RMSDGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         threshold=None,  # RMSD threshold for grouping
+        num_groups=None,  # Number of groups to create (alternative to threshold)
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
@@ -318,6 +320,9 @@ class RMSDGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+                Ignored if num_groups is specified.
+            num_groups (int): Number of groups to create. When specified,
+                automatically determines threshold to create this many groups.
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules using Kabsch
                 algorithm before RMSD calculation. Defaults to True.
@@ -325,9 +330,17 @@ class RMSDGrouper(MoleculeGrouper):
                 RMSD calculation. Defaults to False.
         """
         super().__init__(molecules, num_procs)
-        if threshold is None:
+
+        # Validate that threshold and num_groups are mutually exclusive
+        if threshold is not None and num_groups is not None:
+            raise ValueError(
+                "Cannot specify both threshold (-t) and num_groups (-N). Please use only one."
+            )
+
+        if threshold is None and num_groups is None:
             threshold = 0.5
         self.threshold = threshold  # RMSD threshold for grouping
+        self.num_groups = num_groups  # Number of groups to create
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
         # Cache sorted chemical symbols as sets for faster comparison
@@ -369,7 +382,9 @@ class RMSDGrouper(MoleculeGrouper):
 
         Computes pairwise RMSD values between all molecules and groups
         those within the specified threshold using connected components
-        clustering. Automatically saves RMSD matrix to group_result folder.
+        clustering, or automatically determines threshold to create
+        the specified number of groups. Automatically saves RMSD matrix
+        to group_result folder.
 
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
@@ -404,14 +419,40 @@ class RMSDGrouper(MoleculeGrouper):
         output_dir = "group_result"
         os.makedirs(output_dir, exist_ok=True)
 
-        # Create filename based on grouper type and threshold
-        matrix_filename = os.path.join(
-            output_dir,
-            f"{self.__class__.__name__}_rmsd_matrix_t{self.threshold}.txt",
-        )
+        # Create filename based on grouper type and threshold/num_groups
+        if self.num_groups is not None:
+            matrix_filename = os.path.join(
+                output_dir,
+                f"{self.__class__.__name__}_rmsd_matrix_n{self.num_groups}.txt",
+            )
+        else:
+            matrix_filename = os.path.join(
+                output_dir,
+                f"{self.__class__.__name__}_rmsd_matrix_t{self.threshold}.txt",
+            )
 
-        # Save full matrix
+        # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
+        if self.num_groups is not None:
+            groups, index_groups = self._group_by_num_groups(
+                rmsd_matrix, rmsd_values, indices
+            )
+        else:
+            groups, index_groups = self._group_by_threshold(
+                rmsd_values, indices
+            )
+
+        # Save full matrix (after grouping to include auto-determined threshold)
         self._save_rmsd_matrix(rmsd_matrix, matrix_filename)
+
+        # Cache the results to avoid recomputation
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+
+        return groups, index_groups
+
+    def _group_by_threshold(self, rmsd_values, indices):
+        """Traditional threshold-based grouping."""
+        n = len(self.molecules)
 
         # Build adjacency matrix for clustering
         adj_matrix = np.zeros((n, n), dtype=bool)
@@ -432,18 +473,156 @@ class RMSDGrouper(MoleculeGrouper):
             list(np.where(labels == label)[0]) for label in unique_labels
         ]
 
-        # Cache the results to avoid recomputation
-        self._cached_groups = groups
-        self._cached_group_indices = index_groups
+        return groups, index_groups
+
+    def _group_by_num_groups(self, rmsd_matrix, rmsd_values, indices):
+        """Automatic grouping to create specified number of groups."""
+        n = len(self.molecules)
+
+        if self.num_groups >= n:
+            # If requesting more groups than molecules, each molecule is its own group
+            print(
+                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
+            )
+            groups = [[mol] for mol in self.molecules]
+            index_groups = [[i] for i in range(n)]
+            return groups, index_groups
+
+        # Find appropriate threshold to create desired number of groups
+        threshold = self._find_optimal_threshold(rmsd_values, indices, n)
+
+        # Store the auto-determined threshold for summary reporting
+        self._auto_threshold = threshold
+
+        print(
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.6f} to create {self.num_groups} groups"
+        )
+
+        # Build adjacency matrix with the determined threshold
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), rmsd in zip(indices, rmsd_values):
+            if rmsd < threshold:
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Group molecules and get the first (lowest energy) from each group
+        unique_labels = np.unique(labels)
+        actual_groups = len(unique_labels)
+
+        print(
+            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
+        )
+
+        if actual_groups > self.num_groups:
+            # If we have too many groups, merge the smallest ones
+            groups, index_groups = self._merge_smallest_groups(
+                labels, actual_groups
+            )
+        else:
+            # Use the groups as they are
+            groups = [
+                [self.molecules[i] for i in np.where(labels == label)[0]]
+                for label in unique_labels
+            ]
+            index_groups = [
+                list(np.where(labels == label)[0]) for label in unique_labels
+            ]
+
+        return groups, index_groups
+
+    def _find_optimal_threshold(self, rmsd_values, indices, n):
+        """Find threshold that creates approximately the desired number of groups using binary search."""
+        # Sort RMSD values to try different thresholds
+        sorted_rmsd = sorted(
+            [rmsd for rmsd in rmsd_values if not np.isinf(rmsd)]
+        )
+
+        if not sorted_rmsd:
+            return 0.0
+
+        # Binary search for optimal threshold
+        low, high = 0, len(sorted_rmsd) - 1
+        best_threshold = sorted_rmsd[-1]
+
+        while low <= high:
+            mid = (low + high) // 2
+            threshold = sorted_rmsd[mid]
+
+            # Build adjacency matrix with this threshold
+            adj_matrix = np.zeros((n, n), dtype=bool)
+            for (idx_i, idx_j), rmsd in zip(indices, rmsd_values):
+                if rmsd < threshold:
+                    adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
+
+            # Count connected components
+            _, labels = connected_components(csr_matrix(adj_matrix))
+            num_groups_found = len(np.unique(labels))
+
+            if num_groups_found == self.num_groups:
+                # Found exact match
+                return threshold
+            elif num_groups_found > self.num_groups:
+                # Too many groups, need higher threshold (more permissive)
+                low = mid + 1
+            else:
+                # Too few groups, need lower threshold (more restrictive)
+                best_threshold = threshold
+                high = mid - 1
+
+        return best_threshold
+
+    def _merge_smallest_groups(self, labels, actual_groups):
+        """Merge smallest groups to reach target number of groups."""
+        # This is a simplified approach - in practice you might want more sophisticated merging
+        unique_labels = np.unique(labels)
+        group_sizes = [
+            (label, len(np.where(labels == label)[0]))
+            for label in unique_labels
+        ]
+        group_sizes.sort(key=lambda x: x[1])  # Sort by size
+
+        # Keep largest groups, merge smallest ones into the largest
+        groups_to_keep = group_sizes[-self.num_groups :]
+        groups_to_merge = group_sizes[: -self.num_groups]
+
+        # Create final groups
+        groups = []
+        index_groups = []
+
+        # Add the groups we're keeping
+        for label, _ in groups_to_keep:
+            indices = list(np.where(labels == label)[0])
+            groups.append([self.molecules[i] for i in indices])
+            index_groups.append(indices)
+
+        # Merge remaining groups into the largest group
+        if groups_to_merge:
+            merge_indices = []
+            for label, _ in groups_to_merge:
+                merge_indices.extend(list(np.where(labels == label)[0]))
+
+            # Add to the largest group
+            if groups:
+                groups[0].extend([self.molecules[i] for i in merge_indices])
+                index_groups[0].extend(merge_indices)
 
         return groups, index_groups
 
     def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(threshold={self.threshold}, "
-            f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
-            f"ignore_hydrogens={self.ignore_hydrogens})"
-        )
+        if self.num_groups is not None:
+            return (
+                f"{self.__class__.__name__}(num_groups={self.num_groups}, "
+                f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
+                f"ignore_hydrogens={self.ignore_hydrogens})"
+            )
+        else:
+            return (
+                f"{self.__class__.__name__}(threshold={self.threshold}, "
+                f"num_procs={self.num_procs}, align_molecules={self.align_molecules}, "
+                f"ignore_hydrogens={self.ignore_hydrogens})"
+            )
 
     def calculate_full_rmsd_matrix(
         self, output_file: Optional[str] = None
@@ -508,7 +687,9 @@ class RMSDGrouper(MoleculeGrouper):
             )
 
             with open(output_file, "w") as f:
-                f.write(f"Full RMSD Matrix ({n}x{n})\n")
+                f.write(
+                    f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}\n"
+                )
                 f.write("=" * 80 + "\n")
                 f.write("Values in Angstroms (Å)\n")
                 f.write("∞ indicates non-comparable molecules\n")
@@ -542,7 +723,20 @@ class RMSDGrouper(MoleculeGrouper):
             f.write(
                 f"Full RMSD Matrix ({n}x{n}) - {self.__class__.__name__}\n"
             )
-            f.write(f"Threshold: {self.threshold} Å\n")
+
+            # Add grouping information
+            if hasattr(self, "num_groups") and self.num_groups is not None:
+                f.write(f"Requested Groups (-N): {self.num_groups}\n")
+                if (
+                    hasattr(self, "_auto_threshold")
+                    and self._auto_threshold is not None
+                ):
+                    f.write(
+                        f"Auto-determined Threshold: {self._auto_threshold:.6f} Å\n"
+                    )
+            else:
+                f.write(f"Threshold: {self.threshold} Å\n")
+
             f.write("=" * 80 + "\n")
             f.write("Values in Angstroms (Å)\n")
             f.write("∞ indicates non-comparable molecules\n")
@@ -618,6 +812,7 @@ class HungarianRMSDGrouper(RMSDGrouper):
         self,
         molecules,
         threshold=None,
+        num_groups=None,
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
@@ -629,12 +824,18 @@ class HungarianRMSDGrouper(RMSDGrouper):
         Args:
             molecules: Collection of molecules to group.
             threshold (float): RMSD threshold for grouping.
+            num_groups (int): Number of groups to create (alternative to threshold).
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
         """
         super().__init__(
-            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+            molecules,
+            threshold,
+            num_groups,
+            num_procs,
+            align_molecules,
+            ignore_hydrogens,
         )
 
     def _calculate_rmsd(self, idx_pair):
@@ -706,6 +907,7 @@ class SpyRMSDGrouper(RMSDGrouper):
         self,
         molecules,
         threshold=None,
+        num_groups=None,
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
@@ -718,13 +920,19 @@ class SpyRMSDGrouper(RMSDGrouper):
         Args:
             molecules: Collection of molecules to group.
             threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+            num_groups (int): Number of groups to create (alternative to threshold).
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules (legacy parameter).
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms.
             cache (bool): Cache graph isomorphisms for efficiency.
         """
         super().__init__(
-            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+            molecules,
+            threshold,
+            num_groups,
+            num_procs,
+            align_molecules,
+            ignore_hydrogens,
         )
         self.cache = cache
         self.periodic_table = PeriodicTable()
@@ -1014,6 +1222,7 @@ class IRMSDGrouper(RMSDGrouper):
         self,
         molecules: Iterable[Molecule],
         threshold=None,
+        num_groups=None,
         num_procs: int = 1,
         align_molecules: bool = True,
         ignore_hydrogens: bool = False,
@@ -1026,13 +1235,19 @@ class IRMSDGrouper(RMSDGrouper):
         Args:
             molecules: Collection of molecules to group
             threshold: RMSD threshold for grouping
+            num_groups (int): Number of groups to create (alternative to threshold)
             num_procs: Number of processes for parallel computation
             align_molecules: Whether to align molecules (legacy parameter)
             ignore_hydrogens: Whether to exclude hydrogen atoms
             stereo_check: Whether to check stereoisomers (mirror images)
         """
         super().__init__(
-            molecules, threshold, num_procs, align_molecules, ignore_hydrogens
+            molecules,
+            threshold,
+            num_groups,
+            num_procs,
+            align_molecules,
+            ignore_hydrogens,
         )
         self.stereo_check = stereo_check
 
@@ -1391,7 +1606,7 @@ class RMSDGrouperSharedMemory(MoleculeGrouper):
         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
 
 
-class PymolAlignGrouper(MoleculeGrouper):
+class PymolRMSDGrouper(RMSDGrouper):
     """
     Group molecules using PyMOL's align command and RMSD calculation.
 
@@ -1401,7 +1616,8 @@ class PymolAlignGrouper(MoleculeGrouper):
     interface to perform alignments, and extracts RMSD values from
     the output for grouping.
 
-    The implementation follows the pattern used in:
+    The implementation follows the RMSDGrouper pattern used in:
+    - BasicRMSDGrouper: Implements _calculate_rmsd() for pairwise calculation
     - /chemsmart/jobs/mol/runner.py (PyMOLAlignJobRunner)
     - /chemsmart/jobs/mol/align.py (PyMOLAlignJob)
 
@@ -1413,397 +1629,353 @@ class PymolAlignGrouper(MoleculeGrouper):
         pymol_executable (str): Path to PyMOL executable.
     """
 
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        threshold: float = 0.5,
-        num_procs: int = 1,
-        temp_dir: str = None,
-        pymol_executable: str = "pymol",
-    ):
-        """
-        Initialize PyMOL align grouper following runner pattern.
-
-        Args:
-            molecules (Iterable[Molecule]): Collection of molecules to group.
-            threshold (float): RMSD threshold for grouping. Defaults to 0.5.
-            num_procs (int): Number of processes. Currently only supports 1.
-            temp_dir (str): Directory for temporary files. If None, uses system temp.
-            pymol_executable (str): Path to PyMOL executable. Defaults to "pymol".
-        """
-        super().__init__(molecules, num_procs)
-        self.threshold = threshold
-        self.temp_dir = temp_dir or "/tmp"
-        self.pymol_executable = pymol_executable
-        # Convert to list for indexing operations
-        self.molecules = list(self.molecules)
-
-        # Ensure temp directory exists
-        import os
-
-        os.makedirs(self.temp_dir, exist_ok=True)
-
-        # Validate that PyMOL is available
-        self._validate_pymol()
-
-    def _validate_pymol(self) -> None:
-        """
-        Validate that PyMOL is available and accessible.
-
-        Raises:
-            RuntimeError: If PyMOL is not found or not executable.
-        """
-        import shutil
-
-        if not shutil.which(self.pymol_executable):
-            raise RuntimeError(
-                f"PyMOL executable '{self.pymol_executable}' not found in PATH. "
-                "Please ensure PyMOL is installed and accessible."
-            )
-
-    def _prepare_molecules(self) -> Tuple[List[str], List[str]]:
-        """
-        Write molecules to individual XYZ files following PyMOL runner pattern.
-
-        Returns:
-            Tuple[List[str], List[str]]: Lists of XYZ file paths and molecule names.
-        """
-        import os
-        import uuid
-
-        xyz_paths = []
-        mol_names = []
-
-        unique_id = str(uuid.uuid4())[:8]
-
-        for i, molecule in enumerate(self.molecules):
-            # Generate unique name for this molecule (following runner pattern)
-            mol_name = f"mol_{unique_id}_{i:04d}"
-            xyz_path = os.path.join(self.temp_dir, f"{mol_name}.xyz")
-
-            # Write molecule to XYZ file
-            molecule.write(xyz_path, format="xyz", mode="w")
-
-            xyz_paths.append(xyz_path)
-            mol_names.append(mol_name)
-
-            logger.debug(f"Wrote molecule {i} to {xyz_path} as {mol_name}")
-
-        return xyz_paths, mol_names
-
-    def _create_pymol_alignment_script(
-        self, xyz_paths: List[str], mol_names: List[str]
-    ) -> str:
-        """
-        Create PyMOL script for pairwise alignment following runner pattern.
-
-        Args:
-            xyz_paths (List[str]): List of XYZ file paths.
-            mol_names (List[str]): List of molecule names.
-
-        Returns:
-            str: PyMOL script content.
-        """
-        # Following the pattern from PyMOLAlignJobRunner._align_command
-        script_lines = [
-            "# PyMOL alignment script generated by PymolAlignGrouper"
-        ]
-
-        # Load all molecules (similar to _get_visualization_command)
-        for xyz_path, mol_name in zip(xyz_paths, mol_names):
-            script_lines.append(f"load {xyz_path}, {mol_name}")
-
-        # Perform pairwise alignments and capture RMSD values
-        script_lines.append("")
-        script_lines.append("# Perform pairwise alignments")
-
-        n_molecules = len(mol_names)
-        for i in range(n_molecules):
-            for j in range(i + 1, n_molecules):
-                ref_name = mol_names[i]
-                mobile_name = mol_names[j]
-
-                # Use PyMOL's align command and capture the result
-                script_lines.append(f"# Align {mobile_name} to {ref_name}")
-                script_lines.append("try:")
-                script_lines.append(
-                    f"    result = cmd.align('{mobile_name}', '{ref_name}')"
-                )
-                script_lines.append(
-                    "    rmsd_val = result[0] if result else 999.0"
-                )
-                script_lines.append(
-                    f"    print 'RMSD_RESULT_{i}_{j}:', rmsd_val"
-                )
-                script_lines.append("except:")
-                script_lines.append(f"    print 'RMSD_RESULT_{i}_{j}: 999.0'")
-                script_lines.append("")
-
-        script_lines.append("# Quit PyMOL")
-        script_lines.append("quit")
-
-        return "\n".join(script_lines)
-
-    def _run_pymol_command(self, script_path: str) -> str:
-        """
-        Execute PyMOL with the alignment script following runner pattern.
-
-        Args:
-            script_path (str): Path to PyMOL script file.
-
-        Returns:
-            str: PyMOL stdout output.
-        """
-        import subprocess
-
-        from chemsmart.utils.utils import quote_path
-
-        # Build PyMOL command following the runner pattern
-        exe = quote_path(self.pymol_executable)
-        script = quote_path(script_path)
-
-        # Use command-line mode (-c) and quiet mode (-q) for batch processing
-        # Following PyMOLAlignJobRunner._get_visualization_command pattern
-        command = f"{exe} -c -q -r {script}"
-
-        logger.debug(f"Executing PyMOL command: {command}")
-
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minute timeout
-                cwd=self.temp_dir,
-            )
-
-            if result.returncode != 0:
-                logger.warning(
-                    f"PyMOL command failed with return code {result.returncode}"
-                )
-                logger.warning(f"stderr: {result.stderr}")
-
-            return result.stdout
-
-        except subprocess.TimeoutExpired:
-            logger.error("PyMOL command timed out")
-            raise
-        except Exception as e:
-            logger.error(f"Failed to execute PyMOL command: {e}")
-            raise
-
-    def _parse_rmsd_matrix(self, output: str, n_molecules: int) -> np.ndarray:
-        """
-        Parse RMSD matrix from PyMOL output following the expected format.
-
-        Args:
-            output (str): PyMOL stdout output.
-            n_molecules (int): Number of molecules.
-
-        Returns:
-            np.ndarray: Symmetric RMSD matrix.
-        """
-        import re
-
-        rmsd_matrix = np.zeros((n_molecules, n_molecules))
-
-        # Parse RMSD results in format: "RMSD_RESULT_i_j: X.XXX"
-        pattern = r"RMSD_RESULT_(\d+)_(\d+):\s*([\d.]+)"
-        matches = re.findall(pattern, output)
-
-        logger.debug(f"Found {len(matches)} RMSD matches in PyMOL output")
-
-        for match in matches:
-            i, j, rmsd_val = int(match[0]), int(match[1]), float(match[2])
-            if i < n_molecules and j < n_molecules:
-                rmsd_matrix[i, j] = rmsd_val
-                rmsd_matrix[j, i] = rmsd_val  # Make symmetric
-                logger.debug(f"RMSD[{i},{j}] = {rmsd_val:.3f}")
-
-        return rmsd_matrix
-
-    def _cleanup_temp_files(self, file_paths: List[str]) -> None:
-        """
-        Clean up temporary files.
-
-        Args:
-            file_paths (List[str]): List of file paths to remove.
-        """
-        import os
-
-        for filepath in file_paths:
-            if os.path.exists(filepath):
-                try:
-                    os.remove(filepath)
-                    logger.debug(f"Removed temporary file: {filepath}")
-                except OSError as e:
-                    logger.warning(f"Failed to remove {filepath}: {e}")
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """
-        Group molecules using PyMOL alignment and RMSD thresholding.
-
-        This method follows the PyMOL runner pattern:
-        1. Writes molecules to individual XYZ files
-        2. Creates a PyMOL script for pairwise alignments
-        3. Executes PyMOL in command-line mode
-        4. Parses RMSD values from output
-        5. Groups molecules using connected components clustering
-
-        Returns:
-            Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
-                - List of molecule groups (each group is a list of molecules)
-                - List of index groups (corresponding indices for each group)
-        """
-        molecules = list(self.molecules)
-        n_molecules = len(molecules)
-
-        if n_molecules == 0:
-            return [], []
-
-        if n_molecules == 1:
-            return [molecules], [[0]]
-
-        logger.info(
-            f"Grouping {n_molecules} molecules using PyMOL alignment (threshold={self.threshold})"
-        )
-
-        import os
-        import uuid
-
-        # Generate unique identifiers for this run
-        unique_id = str(uuid.uuid4())[:8]
-        script_path = os.path.join(
-            self.temp_dir, f"alignment_script_{unique_id}.pml"
-        )
-
-        temp_files = []
-
-        try:
-            # Step 1: Prepare molecules (write to XYZ files)
-            xyz_paths, mol_names = self._prepare_molecules()
-            temp_files.extend(xyz_paths)
-
-            # Step 2: Create PyMOL alignment script
-            script_content = self._create_pymol_alignment_script(
-                xyz_paths, mol_names
-            )
-
-            with open(script_path, "w") as f:
-                f.write(script_content)
-            temp_files.append(script_path)
-
-            logger.debug(f"Created PyMOL script: {script_path}")
-
-            # Step 3: Execute PyMOL command
-            output = self._run_pymol_command(script_path)
-
-            # Step 4: Parse RMSD matrix from output
-            rmsd_matrix = self._parse_rmsd_matrix(output, n_molecules)
-
-            # Step 5: Create adjacency matrix based on RMSD threshold
-            adjacency_matrix = (rmsd_matrix <= self.threshold).astype(int)
-
-            # Step 6: Use connected components to find groups
-            adjacency_sparse = csr_matrix(adjacency_matrix)
-            n_components, labels = connected_components(
-                adjacency_sparse, directed=False, return_labels=True
-            )
-
-            # Step 7: Organize molecules into groups
-            groups = [[] for _ in range(n_components)]
-            group_indices = [[] for _ in range(n_components)]
-
-            for i, label in enumerate(labels):
-                groups[label].append(molecules[i])
-                group_indices[label].append(i)
-
-            logger.info(f"Created {n_components} groups using PyMOL alignment")
-            for i, group in enumerate(groups):
-                logger.debug(
-                    f"Group {i}: {len(group)} molecules (indices: {group_indices[i]})"
-                )
-
-            return groups, group_indices
-
-        except Exception as e:
-            logger.error(f"PyMOL alignment failed: {e}")
-            # Fallback to basic RMSD grouping
-            logger.warning("Falling back to basic coordinate RMSD")
-            return self._fallback_grouping(molecules)
-
-        finally:
-            # Clean up temporary files
-            self._cleanup_temp_files(temp_files)
-
-    def _fallback_grouping(
-        self, molecules: List[Molecule]
-    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """
-        Fallback grouping using basic coordinate RMSD when PyMOL fails.
-
-        Args:
-            molecules (List[Molecule]): List of molecules to group.
-
-        Returns:
-            Tuple[List[List[Molecule]], List[List[int]]]: Groups and indices.
-        """
-        logger.debug("Using fallback basic RMSD grouping")
-
-        n_molecules = len(molecules)
-        rmsd_matrix = np.zeros((n_molecules, n_molecules))
-
-        for i in range(n_molecules):
-            for j in range(i + 1, n_molecules):
-                rmsd = self._calculate_basic_rmsd(molecules[i], molecules[j])
-                rmsd_matrix[i, j] = rmsd
-                rmsd_matrix[j, i] = rmsd
-
-        # Use the same clustering approach
-        adjacency_matrix = (rmsd_matrix <= self.threshold).astype(int)
-        adjacency_sparse = csr_matrix(adjacency_matrix)
-        n_components, labels = connected_components(
-            adjacency_sparse, directed=False, return_labels=True
-        )
-
-        groups = [[] for _ in range(n_components)]
-        group_indices = [[] for _ in range(n_components)]
-
-        for i, label in enumerate(labels):
-            groups[label].append(molecules[i])
-            group_indices[label].append(i)
-
-        logger.info(f"Created {n_components} groups using fallback RMSD")
-        return groups, group_indices
-
-    def _calculate_basic_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
-        """
-        Calculate basic RMSD between two molecules for fallback.
-
-        Args:
-            mol1 (Molecule): First molecule.
-            mol2 (Molecule): Second molecule.
-
-        Returns:
-            float: Basic RMSD value.
-        """
-        try:
-            pos1 = mol1.positions
-            pos2 = mol2.positions
-
-            if len(pos1) != len(pos2):
-                return float("inf")
-
-            # Center coordinates
-            pos1 = pos1 - np.mean(pos1, axis=0)
-            pos2 = pos2 - np.mean(pos2, axis=0)
-
-            # Calculate basic RMSD
-            return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
-
-        except Exception:
-            return float("inf")
+    #
+    # def __init__(
+    #     self,
+    #     molecules: Iterable[Molecule],
+    #     threshold: float = 0.5,
+    #     num_groups=None,
+    #     num_procs: int = 1,
+    #     temp_dir: str = None,
+    #     pymol_executable: str = "pymol",
+    #     align_molecules: bool = True,
+    #     ignore_hydrogens: bool = False,
+    #     **kwargs,
+    # ):
+    #     """
+    #     Initialize PyMOL align grouper following RMSDGrouper pattern.
+    #
+    #     Args:
+    #         molecules (Iterable[Molecule]): Collection of molecules to group.
+    #         threshold (float): RMSD threshold for grouping. Defaults to 0.5.
+    #         num_groups (int): Number of groups to create (alternative to threshold).
+    #         num_procs (int): Number of processes. Currently only supports 1.
+    #         temp_dir (str): Directory for temporary files. If None, uses system temp.
+    #         pymol_executable (str): Path to PyMOL executable. Defaults to "pymol".
+    #         align_molecules (bool): Whether to use PyMOL alignment. Defaults to True.
+    #         ignore_hydrogens (bool): Whether to exclude hydrogens. Defaults to False.
+    #     """
+    #     # Call parent constructor with all required parameters
+    #     super().__init__(
+    #         molecules=molecules,
+    #         threshold=threshold,
+    #         num_groups=num_groups,
+    #         num_procs=num_procs,
+    #         align_molecules=align_molecules,
+    #         ignore_hydrogens=ignore_hydrogens,
+    #         **kwargs,
+    #     )
+    #
+    #     self.temp_dir = temp_dir or "/tmp"
+    #     self.pymol_executable = pymol_executable
+    #
+    #     # Cache for molecule XYZ files to avoid repeated file I/O
+    #     self._molecule_xyz_cache = {}
+    #     self._rmsd_cache = {}
+    #
+    #     # Ensure temp directory exists
+    #     import os
+    #
+    #     os.makedirs(self.temp_dir, exist_ok=True)
+    #
+    #     # Validate that PyMOL is available
+    #     self._validate_pymol()
+    #
+    # def _validate_pymol(self) -> None:
+    #     """
+    #     Validate that PyMOL is available and accessible.
+    #
+    #     Raises:
+    #         RuntimeError: If PyMOL is not found or not executable.
+    #     """
+    #     import shutil
+    #
+    #     if not shutil.which(self.pymol_executable):
+    #         raise RuntimeError(
+    #             f"PyMOL executable '{self.pymol_executable}' not found in PATH. "
+    #             "Please ensure PyMOL is installed and accessible."
+    #         )
+    #
+    # def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
+    #     """
+    #     Calculate RMSD between two molecules using PyMOL alignment.
+    #
+    #     This method follows the RMSDGrouper pattern by implementing pairwise
+    #     RMSD calculation. It uses PyMOL's align command for structural alignment
+    #     and RMSD calculation.
+    #
+    #     Args:
+    #         idx_pair (Tuple[int, int]): Tuple containing indices of two molecules.
+    #
+    #     Returns:
+    #         float: RMSD value between the two molecules.
+    #     """
+    #     i, j = idx_pair
+    #
+    #     # Check cache first for efficiency
+    #     cache_key = tuple(sorted([i, j]))
+    #     if cache_key in self._rmsd_cache:
+    #         return self._rmsd_cache[cache_key]
+    #
+    #     mol1, mol2 = self.molecules[i], self.molecules[j]
+    #
+    #     # Apply hydrogen filtering if enabled (following parent class pattern)
+    #     if self.ignore_hydrogens:
+    #         pos1, symbols1 = self._get_heavy_atoms(mol1)
+    #         pos2, symbols2 = self._get_heavy_atoms(mol2)
+    #     else:
+    #         pos1, symbols1 = mol1.positions, list(mol1.chemical_symbols)
+    #         pos2, symbols2 = mol2.positions, list(mol2.chemical_symbols)
+    #
+    #     # Quick compatibility check
+    #     if len(symbols1) != len(symbols2) or sorted(symbols1) != sorted(
+    #         symbols2
+    #     ):
+    #         rmsd = float("inf")
+    #         self._rmsd_cache[cache_key] = rmsd
+    #         return rmsd
+    #
+    #     try:
+    #         # Use PyMOL for alignment if enabled, otherwise fallback
+    #         if self.align_molecules:
+    #             rmsd = self._calculate_pymol_rmsd(i, j, mol1, mol2)
+    #         else:
+    #             rmsd = self._calculate_basic_rmsd(mol1, mol2)
+    #
+    #     except Exception as e:
+    #         logger.warning(
+    #             f"PyMOL RMSD calculation failed for pair ({i},{j}): {e}"
+    #         )
+    #         # Fallback to basic RMSD calculation
+    #         rmsd = self._calculate_basic_rmsd(mol1, mol2)
+    #
+    #     # Cache the result
+    #     self._rmsd_cache[cache_key] = rmsd
+    #     return rmsd
+    #
+    # def _calculate_pymol_rmsd(
+    #     self, i: int, j: int, mol1: Molecule, mol2: Molecule
+    # ) -> float:
+    #     """
+    #     Calculate RMSD using PyMOL alignment for a specific pair of molecules.
+    #
+    #     Args:
+    #         i (int): Index of first molecule.
+    #         j (int): Index of second molecule.
+    #         mol1 (Molecule): First molecule.
+    #         mol2 (Molecule): Second molecule.
+    #
+    #     Returns:
+    #         float: RMSD value from PyMOL alignment.
+    #     """
+    #     import os
+    #     import subprocess
+    #     import uuid
+    #
+    #     from chemsmart.utils.utils import quote_path
+    #
+    #     # Generate unique identifiers for this pair
+    #     unique_id = str(uuid.uuid4())[:8]
+    #
+    #     # Prepare molecule files (use cache if available)
+    #     xyz_path1 = self._get_molecule_xyz_file(i, mol1, unique_id)
+    #     xyz_path2 = self._get_molecule_xyz_file(j, mol2, unique_id)
+    #
+    #     mol_name1 = f"mol_{i:04d}"
+    #     mol_name2 = f"mol_{j:04d}"
+    #
+    #     # Create PyMOL script for this specific pair
+    #     script_path = os.path.join(
+    #         self.temp_dir, f"pair_align_{unique_id}_{i}_{j}.pml"
+    #     )
+    #     script_content = self._create_pairwise_pymol_script(
+    #         xyz_path1, xyz_path2, mol_name1, mol_name2
+    #     )
+    #
+    #     temp_files = [script_path]
+    #     if xyz_path1 not in self._molecule_xyz_cache.values():
+    #         temp_files.append(xyz_path1)
+    #     if xyz_path2 not in self._molecule_xyz_cache.values():
+    #         temp_files.append(xyz_path2)
+    #
+    #     try:
+    #         # Write script
+    #         with open(script_path, "w") as f:
+    #             f.write(script_content)
+    #
+    #         # Execute PyMOL command
+    #         exe = quote_path(self.pymol_executable)
+    #         script = quote_path(script_path)
+    #         command = f"{exe} -c -q -r {script}"
+    #
+    #         result = subprocess.run(
+    #             command,
+    #             shell=True,
+    #             capture_output=True,
+    #             text=True,
+    #             timeout=60,  # 1 minute timeout for pairwise alignment
+    #             cwd=self.temp_dir,
+    #         )
+    #
+    #         if result.returncode != 0:
+    #             logger.debug(
+    #                 f"PyMOL command failed for pair ({i},{j}): {result.stderr}"
+    #             )
+    #             return float("inf")
+    #
+    #         # Parse RMSD from output
+    #         rmsd = self._parse_pairwise_rmsd(result.stdout)
+    #         return rmsd
+    #
+    #     except Exception as e:
+    #         logger.debug(f"PyMOL execution failed for pair ({i},{j}): {e}")
+    #         return float("inf")
+    #
+    #     finally:
+    #         # Clean up temporary script (keep molecule files in cache)
+    #         if os.path.exists(script_path):
+    #             try:
+    #                 os.remove(script_path)
+    #             except OSError:
+    #                 pass
+    #
+    # def _get_molecule_xyz_file(
+    #     self, idx: int, molecule: Molecule, unique_id: str
+    # ) -> str:
+    #     """
+    #     Get XYZ file path for a molecule, using cache if available.
+    #
+    #     Args:
+    #         idx (int): Molecule index.
+    #         molecule (Molecule): Molecule object.
+    #         unique_id (str): Unique identifier for this calculation.
+    #
+    #     Returns:
+    #         str: Path to XYZ file.
+    #     """
+    #     if idx in self._molecule_xyz_cache:
+    #         return self._molecule_xyz_cache[idx]
+    #
+    #     import os
+    #
+    #     mol_name = f"mol_{unique_id}_{idx:04d}"
+    #     xyz_path = os.path.join(self.temp_dir, f"{mol_name}.xyz")
+    #
+    #     # Write molecule to XYZ file
+    #     molecule.write(xyz_path, format="xyz", mode="w")
+    #     self._molecule_xyz_cache[idx] = xyz_path
+    #
+    #     logger.debug(f"Created XYZ file for molecule {idx}: {xyz_path}")
+    #     return xyz_path
+    #
+    # def _create_pairwise_pymol_script(
+    #     self, xyz_path1: str, xyz_path2: str, mol_name1: str, mol_name2: str
+    # ) -> str:
+    #     """
+    #     Create PyMOL script for pairwise alignment.
+    #
+    #     Args:
+    #         xyz_path1 (str): Path to first molecule XYZ file.
+    #         xyz_path2 (str): Path to second molecule XYZ file.
+    #         mol_name1 (str): Name for first molecule in PyMOL.
+    #         mol_name2 (str): Name for second molecule in PyMOL.
+    #
+    #     Returns:
+    #         str: PyMOL script content.
+    #     """
+    #     script_lines = [
+    #         "# PyMOL pairwise alignment script",
+    #         f"load {xyz_path1}, {mol_name1}",
+    #         f"load {xyz_path2}, {mol_name2}",
+    #         "",
+    #         "# Perform alignment and capture RMSD",
+    #         "try:",
+    #         f"    result = cmd.align('{mol_name2}', '{mol_name1}')",
+    #         "    rmsd_val = result[0] if result else 999.0",
+    #         "    print 'PAIRWISE_RMSD:', rmsd_val",
+    #         "except:",
+    #         "    print 'PAIRWISE_RMSD: 999.0'",
+    #         "",
+    #         "quit",
+    #     ]
+    #     return "\n".join(script_lines)
+    #
+    # def _parse_pairwise_rmsd(self, output: str) -> float:
+    #     """
+    #     Parse RMSD value from PyMOL pairwise alignment output.
+    #
+    #     Args:
+    #         output (str): PyMOL stdout output.
+    #
+    #     Returns:
+    #         float: RMSD value.
+    #     """
+    #     import re
+    #
+    #     pattern = r"PAIRWISE_RMSD:\s*([\d.]+)"
+    #     match = re.search(pattern, output)
+    #
+    #     if match:
+    #         rmsd_val = float(match.group(1))
+    #         logger.debug(f"Parsed RMSD: {rmsd_val:.3f}")
+    #         return rmsd_val
+    #     else:
+    #         logger.debug("Could not parse RMSD from PyMOL output")
+    #         return float("inf")
+    #
+    # def _calculate_basic_rmsd(self, mol1: Molecule, mol2: Molecule) -> float:
+    #     """
+    #     Calculate basic RMSD between two molecules for fallback.
+    #
+    #     Args:
+    #         mol1 (Molecule): First molecule.
+    #         mol2 (Molecule): Second molecule.
+    #
+    #     Returns:
+    #         float: Basic RMSD value.
+    #     """
+    #     try:
+    #         pos1 = mol1.positions
+    #         pos2 = mol2.positions
+    #
+    #         if len(pos1) != len(pos2):
+    #             return float("inf")
+    #
+    #         # Center coordinates
+    #         pos1 = pos1 - np.mean(pos1, axis=0)
+    #         pos2 = pos2 - np.mean(pos2, axis=0)
+    #
+    #         # Calculate basic RMSD
+    #         return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
+    #
+    #     except Exception:
+    #         return float("inf")
+    #
+    # def cleanup_cache(self) -> None:
+    #     """
+    #     Clean up cached XYZ files and RMSD values.
+    #
+    #     This method should be called when the grouper is no longer needed
+    #     to free up temporary files and memory.
+    #     """
+    #     import os
+    #
+    #     # Clean up cached XYZ files
+    #     for idx, xyz_path in self._molecule_xyz_cache.items():
+    #         if os.path.exists(xyz_path):
+    #             try:
+    #                 os.remove(xyz_path)
+    #                 logger.debug(f"Removed cached XYZ file: {xyz_path}")
+    #             except OSError as e:
+    #                 logger.warning(
+    #                     f"Failed to remove cached file {xyz_path}: {e}"
+    #                 )
+    #
+    #     # Clear caches
+    #     self._molecule_xyz_cache.clear()
+    #     self._rmsd_cache.clear()
+    #
+    #     logger.debug("Cleaned up PyMOL grouper caches")
 
 
 class TanimotoSimilarityGrouper(MoleculeGrouper):
@@ -1828,6 +2000,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         threshold=None,  # Tanimoto similarity threshold
+        num_groups=None,  # Number of groups to create (alternative to threshold)
         num_procs: int = 1,
         fingerprint_type: str = "rdkit",
         use_rdkit_fp: bool = None,  # Legacy support
@@ -1839,6 +2012,9 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): Tanimoto similarity threshold. Defaults to 0.9.
+                Ignored if num_groups is specified.
+            num_groups (int): Number of groups to create. When specified,
+                automatically determines threshold to create this many groups.
             num_procs (int): Number of processes for parallel computation.
             fingerprint_type (str): Type of fingerprint to use.
                 Options: "rdkit", "rdk", "morgan", "maccs", "atompair",
@@ -1847,9 +2023,17 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 If False, sets fingerprint_type="rdk".
         """
         super().__init__(molecules, num_procs)
-        if threshold is None:
+
+        # Validate that threshold and num_groups are mutually exclusive
+        if threshold is not None and num_groups is not None:
+            raise ValueError(
+                "Cannot specify both threshold (-t) and num_groups (-N). Please use only one."
+            )
+
+        if threshold is None and num_groups is None:
             threshold = 0.9
         self.threshold = threshold
+        self.num_groups = num_groups
 
         if use_rdkit_fp is not None:
             self.fingerprint_type = "rdkit" if use_rdkit_fp else "rdk"
@@ -1993,11 +2177,15 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             for (i, j), sim in zip(pairs, similarities):
                 similarity_matrix[i, j] = similarity_matrix[j, i] = sim
 
-        # Apply threshold and create adjacency matrix
-        adj_matrix = csr_matrix(similarity_matrix >= self.threshold)
-
-        # Use connected components clustering
-        _, labels = connected_components(adj_matrix)
+        # Choose grouping strategy based on parameters
+        if self.num_groups is not None:
+            groups, index_groups = self._group_by_num_groups(
+                similarity_matrix, valid_indices
+            )
+        else:
+            groups, index_groups = self._group_by_threshold(
+                similarity_matrix, valid_indices
+            )
 
         # Save Tanimoto matrix to group_result folder
         import os
@@ -2005,16 +2193,32 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         output_dir = "group_result"
         os.makedirs(output_dir, exist_ok=True)
 
-        # Create filename based on grouper type, fingerprint type and threshold
-        matrix_filename = os.path.join(
-            output_dir,
-            f"{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_t{self.threshold}.txt",
-        )
+        # Create filename based on grouper type, fingerprint type and threshold/num_groups
+        if self.num_groups is not None:
+            matrix_filename = os.path.join(
+                output_dir,
+                f"{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_n{self.num_groups}.txt",
+            )
+        else:
+            matrix_filename = os.path.join(
+                output_dir,
+                f"{self.__class__.__name__}_tanimoto_matrix_{self.fingerprint_type}_t{self.threshold}.txt",
+            )
 
         # Save full matrix
         self._save_tanimoto_matrix(
             similarity_matrix, matrix_filename, valid_indices
         )
+
+        return groups, index_groups
+
+    def _group_by_threshold(self, similarity_matrix, valid_indices):
+        """Traditional threshold-based grouping for Tanimoto similarity."""
+        # Apply threshold and create adjacency matrix
+        adj_matrix = csr_matrix(similarity_matrix >= self.threshold)
+
+        # Use connected components clustering
+        _, labels = connected_components(adj_matrix)
 
         # Build molecule groups
         unique_labels = np.unique(labels)
@@ -2031,6 +2235,160 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         ]
 
         return mol_groups, idx_groups
+
+    def _group_by_num_groups(self, similarity_matrix, valid_indices):
+        """Automatic grouping to create specified number of groups for Tanimoto similarity."""
+        n = len(valid_indices)
+
+        if self.num_groups >= n:
+            # If requesting more groups than molecules, each molecule is its own group
+            print(
+                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
+            )
+            groups = [[self.valid_molecules[i]] for i in valid_indices]
+            index_groups = [[idx] for idx in valid_indices]
+            return groups, index_groups
+
+        # Extract similarity values for threshold finding
+        similarity_values = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                similarity_values.append(similarity_matrix[i, j])
+
+        # Find appropriate threshold to create desired number of groups
+        threshold = self._find_optimal_similarity_threshold(
+            similarity_values, similarity_matrix, n
+        )
+
+        # Store the auto-determined threshold for summary reporting
+        self._auto_threshold = threshold
+
+        print(
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.6f} to create {self.num_groups} groups"
+        )
+
+        # Build adjacency matrix with the determined threshold
+        adj_matrix = csr_matrix(similarity_matrix >= threshold)
+
+        # Use connected components clustering
+        _, labels = connected_components(adj_matrix)
+
+        # Build molecule groups
+        unique_labels = np.unique(labels)
+        actual_groups = len(unique_labels)
+
+        print(
+            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
+        )
+
+        if actual_groups > self.num_groups:
+            # If we have too many groups, merge the smallest ones
+            groups, index_groups = self._merge_smallest_tanimoto_groups(
+                labels, actual_groups, valid_indices
+            )
+        else:
+            # Use the groups as they are
+            groups = [
+                [
+                    self.valid_molecules[valid_indices[i]]
+                    for i in np.where(labels == label)[0]
+                ]
+                for label in unique_labels
+            ]
+            index_groups = [
+                list(np.array(valid_indices)[np.where(labels == label)[0]])
+                for label in unique_labels
+            ]
+
+        return groups, index_groups
+
+    def _find_optimal_similarity_threshold(
+        self, similarity_values, similarity_matrix, n
+    ):
+        """Find similarity threshold that creates approximately the desired number of groups using binary search."""
+        # Sort similarity values (higher similarity = more similar for Tanimoto)
+        sorted_similarities = sorted(
+            [sim for sim in similarity_values if not np.isnan(sim)],
+            reverse=True,
+        )
+
+        if not sorted_similarities:
+            return 1.0
+
+        # Binary search for optimal threshold
+        low, high = 0, len(sorted_similarities) - 1
+        best_threshold = sorted_similarities[0]
+
+        while low <= high:
+            mid = (low + high) // 2
+            threshold = sorted_similarities[mid]
+
+            # Build adjacency matrix with this threshold
+            adj_matrix = csr_matrix(similarity_matrix >= threshold)
+
+            # Count connected components
+            _, labels = connected_components(adj_matrix)
+            num_groups_found = len(np.unique(labels))
+
+            if num_groups_found == self.num_groups:
+                # Found exact match
+                return threshold
+            elif num_groups_found > self.num_groups:
+                # Too many groups, need lower threshold (less restrictive)
+                high = mid - 1
+            else:
+                # Too few groups, need higher threshold (more restrictive)
+                best_threshold = threshold
+                low = mid + 1
+
+        return best_threshold
+
+    def _merge_smallest_tanimoto_groups(
+        self, labels, actual_groups, valid_indices
+    ):
+        """Merge smallest groups to reach target number of groups."""
+        unique_labels = np.unique(labels)
+        group_sizes = [
+            (label, len(np.where(labels == label)[0]))
+            for label in unique_labels
+        ]
+        group_sizes.sort(key=lambda x: x[1])  # Sort by size
+
+        # Keep largest groups, merge smallest ones into the largest
+        groups_to_keep = group_sizes[-self.num_groups :]
+        groups_to_merge = group_sizes[: -self.num_groups]
+
+        # Create final groups
+        groups = []
+        index_groups = []
+
+        # Add the groups we're keeping
+        for label, _ in groups_to_keep:
+            indices = list(np.where(labels == label)[0])
+            groups.append(
+                [self.valid_molecules[valid_indices[i]] for i in indices]
+            )
+            index_groups.append([valid_indices[i] for i in indices])
+
+        # Merge remaining groups into the largest group
+        if groups_to_merge:
+            merge_indices = []
+            for label, _ in groups_to_merge:
+                merge_indices.extend(list(np.where(labels == label)[0]))
+
+            # Add to the largest group
+            if groups:
+                groups[0].extend(
+                    [
+                        self.valid_molecules[valid_indices[i]]
+                        for i in merge_indices
+                    ]
+                )
+                index_groups[0].extend(
+                    [valid_indices[i] for i in merge_indices]
+                )
+
+        return groups, index_groups
 
     def _save_tanimoto_matrix(
         self,
@@ -2053,7 +2411,20 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 f"Full Tanimoto Similarity Matrix ({n}x{n}) - {self.__class__.__name__}\n"
             )
             f.write(f"Fingerprint Type: {self.fingerprint_type}\n")
-            f.write(f"Threshold: {self.threshold}\n")
+
+            # Add grouping information
+            if hasattr(self, "num_groups") and self.num_groups is not None:
+                f.write(f"Requested Groups (-N): {self.num_groups}\n")
+                if (
+                    hasattr(self, "_auto_threshold")
+                    and self._auto_threshold is not None
+                ):
+                    f.write(
+                        f"Auto-determined Threshold: {self._auto_threshold:.6f}\n"
+                    )
+            else:
+                f.write(f"Threshold: {self.threshold}\n")
+
             f.write("=" * 80 + "\n")
             f.write("Values range from 0.0 (dissimilar) to 1.0 (identical)\n")
             f.write("NaN indicates invalid molecules\n")
@@ -2077,10 +2448,16 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 f.write("\n")
 
     def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(threshold={self.threshold}, "
-            f"num_procs={self.num_procs}, fingerprint_type={self.fingerprint_type})"
-        )
+        if self.num_groups is not None:
+            return (
+                f"{self.__class__.__name__}(num_groups={self.num_groups}, "
+                f"num_procs={self.num_procs}, fingerprint_type={self.fingerprint_type})"
+            )
+        else:
+            return (
+                f"{self.__class__.__name__}(threshold={self.threshold}, "
+                f"num_procs={self.num_procs}, fingerprint_type={self.fingerprint_type})"
+            )
 
     def calculate_full_tanimoto_matrix(
         self, output_file: Optional[str] = None
@@ -2674,6 +3051,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
     Attributes:
         molecules (Iterable[Molecule]): Collection of molecules to group.
         threshold (float): TFD threshold for grouping (lower values = more similar).
+        num_groups (int): Number of groups to create (alternative to threshold).
         num_procs (int): Number of processes for parallel computation.
         use_weights (bool): Whether to use torsion weights in TFD calculation.
         max_dev (str): Normalization method ('equal' or 'spec').
@@ -2685,6 +3063,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         self,
         molecules: Iterable[Molecule],
         threshold: float = None,
+        num_groups: int = None,
         num_procs: int = 1,
         use_weights: bool = True,
         max_dev: str = "equal",
@@ -2698,7 +3077,9 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecule conformers to group.
             threshold (float): TFD threshold for grouping. Lower values indicate more
-                similar torsion patterns. Defaults to 0.1.
+                similar torsion patterns. Defaults to 0.1. Ignored if num_groups is specified.
+            num_groups (int): Number of groups to create. When specified,
+                automatically determines threshold to create this many groups.
             num_procs (int): Number of processes for parallel computation.
             use_weights (bool): Whether to use torsion weights in TFD calculation. Defaults to True.
             max_dev (str): Normalization method:
@@ -2710,9 +3091,16 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         """
         super().__init__(molecules, num_procs)
 
-        if threshold is None:
+        # Validate that threshold and num_groups are mutually exclusive
+        if threshold is not None and num_groups is not None:
+            raise ValueError(
+                "Cannot specify both threshold (-t) and num_groups (-N). Please use only one."
+            )
+
+        if threshold is None and num_groups is None:
             threshold = 0.1  # TFD threshold (lower = more similar)
         self.threshold = threshold
+        self.num_groups = num_groups
         self.use_weights = use_weights
         self.max_dev = max_dev
         self.symm_radius = symm_radius
@@ -2804,6 +3192,159 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             )
             return float("inf")
 
+    def _group_by_threshold(self, tfd_values, indices, n):
+        """Traditional threshold-based grouping for TFD."""
+        # Build adjacency matrix for clustering (TFD uses <=)
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), tfd in zip(indices, tfd_values):
+            if tfd <= self.threshold:  # TFD: lower values = more similar
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Build groups
+        unique_labels = np.unique(labels)
+        groups = [
+            [self.molecules[i] for i in np.where(labels == label)[0]]
+            for label in unique_labels
+        ]
+        index_groups = [
+            list(np.where(labels == label)[0]) for label in unique_labels
+        ]
+
+        return groups, index_groups
+
+    def _group_by_num_groups(self, tfd_values, indices, n):
+        """Automatic grouping to create specified number of groups for TFD."""
+        if self.num_groups >= n:
+            # If requesting more groups than molecules, each molecule is its own group
+            print(
+                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
+            )
+            groups = [[mol] for mol in self.molecules]
+            index_groups = [[i] for i in range(n)]
+            return groups, index_groups
+
+        # Find appropriate threshold to create desired number of groups
+        threshold = self._find_optimal_tfd_threshold(tfd_values, indices, n)
+
+        # Store the auto-determined threshold for summary reporting
+        self._auto_threshold = threshold
+
+        print(
+            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.6f} to create {self.num_groups} groups"
+        )
+
+        # Build adjacency matrix with the determined threshold
+        adj_matrix = np.zeros((n, n), dtype=bool)
+        for (i, j), tfd in zip(indices, tfd_values):
+            if tfd <= threshold:  # TFD: lower values = more similar
+                adj_matrix[i, j] = adj_matrix[j, i] = True
+
+        # Find connected components
+        _, labels = connected_components(csr_matrix(adj_matrix))
+
+        # Build groups
+        unique_labels = np.unique(labels)
+        actual_groups = len(unique_labels)
+
+        print(
+            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
+        )
+
+        if actual_groups > self.num_groups:
+            # If we have too many groups, merge the smallest ones
+            groups, index_groups = self._merge_smallest_tfd_groups(
+                labels, actual_groups
+            )
+        else:
+            # Use the groups as they are
+            groups = [
+                [self.molecules[i] for i in np.where(labels == label)[0]]
+                for label in unique_labels
+            ]
+            index_groups = [
+                list(np.where(labels == label)[0]) for label in unique_labels
+            ]
+
+        return groups, index_groups
+
+    def _find_optimal_tfd_threshold(self, tfd_values, indices, n):
+        """Find threshold that creates approximately the desired number of groups using binary search."""
+        # Sort TFD values (lower = more similar for TFD, so ascending order)
+        sorted_tfd = sorted([tfd for tfd in tfd_values if not np.isinf(tfd)])
+
+        if not sorted_tfd:
+            return 0.0
+
+        # Binary search for optimal threshold
+        low, high = 0, len(sorted_tfd) - 1
+        best_threshold = sorted_tfd[-1]
+
+        while low <= high:
+            mid = (low + high) // 2
+            threshold = sorted_tfd[mid]
+
+            # Build adjacency matrix with this threshold
+            adj_matrix = np.zeros((n, n), dtype=bool)
+            for (idx_i, idx_j), tfd in zip(indices, tfd_values):
+                if tfd <= threshold:  # TFD: lower values = more similar
+                    adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
+
+            # Count connected components
+            _, labels = connected_components(csr_matrix(adj_matrix))
+            num_groups_found = len(np.unique(labels))
+
+            if num_groups_found == self.num_groups:
+                # Found exact match
+                return threshold
+            elif num_groups_found > self.num_groups:
+                # Too many groups, need higher threshold (more permissive)
+                low = mid + 1
+            else:
+                # Too few groups, need lower threshold (more restrictive)
+                best_threshold = threshold
+                high = mid - 1
+
+        return best_threshold
+
+    def _merge_smallest_tfd_groups(self, labels, actual_groups):
+        """Merge smallest groups to reach target number of groups."""
+        unique_labels = np.unique(labels)
+        group_sizes = [
+            (label, len(np.where(labels == label)[0]))
+            for label in unique_labels
+        ]
+        group_sizes.sort(key=lambda x: x[1])  # Sort by size
+
+        # Keep largest groups, merge smallest ones into the largest
+        groups_to_keep = group_sizes[-self.num_groups :]
+        groups_to_merge = group_sizes[: -self.num_groups]
+
+        # Create final groups
+        groups = []
+        index_groups = []
+
+        # Add the groups we're keeping
+        for label, _ in groups_to_keep:
+            indices = list(np.where(labels == label)[0])
+            groups.append([self.molecules[i] for i in indices])
+            index_groups.append(indices)
+
+        # Merge remaining groups into the largest group
+        if groups_to_merge:
+            merge_indices = []
+            for label, _ in groups_to_merge:
+                merge_indices.extend(list(np.where(labels == label)[0]))
+
+            # Add to the largest group
+            if groups:
+                groups[0].extend([self.molecules[i] for i in merge_indices])
+                index_groups[0].extend(merge_indices)
+
+        return groups, index_groups
+
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group conformers based on TFD similarity using the same workflow as RMSDGrouper.
@@ -2861,30 +3402,30 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         output_dir = "group_result"
         os.makedirs(output_dir, exist_ok=True)
 
-        matrix_filename = os.path.join(
-            output_dir,
-            f"{self.__class__.__name__}_tfd_matrix_t{self.threshold}.txt",
-        )
+        # Create filename based on threshold or num_groups
+        if self.num_groups is not None:
+            matrix_filename = os.path.join(
+                output_dir,
+                f"{self.__class__.__name__}_tfd_matrix_n{self.num_groups}.txt",
+            )
+        else:
+            matrix_filename = os.path.join(
+                output_dir,
+                f"{self.__class__.__name__}_tfd_matrix_t{self.threshold}.txt",
+            )
+
+        # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
+        if self.num_groups is not None:
+            groups, index_groups = self._group_by_num_groups(
+                tfd_values, indices, n
+            )
+        else:
+            groups, index_groups = self._group_by_threshold(
+                tfd_values, indices, n
+            )
+
+        # Save TFD matrix (after grouping to include auto-determined threshold)
         self._save_tfd_matrix(tfd_matrix, matrix_filename)
-
-        # Build adjacency matrix for clustering (same logic as RMSD but TFD uses <=)
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), tfd in zip(indices, tfd_values):
-            if tfd <= self.threshold:  # TFD: lower values = more similar
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        # Find connected components (same as RMSD workflow)
-        _, labels = connected_components(csr_matrix(adj_matrix))
-
-        # Build groups (same as RMSD workflow)
-        unique_labels = np.unique(labels)
-        groups = [
-            [self.molecules[i] for i in np.where(labels == label)[0]]
-            for label in unique_labels
-        ]
-        index_groups = [
-            list(np.where(labels == label)[0]) for label in unique_labels
-        ]
 
         # Cache results
         self._cached_groups = groups
@@ -2904,7 +3445,20 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             f.write(
                 "Based on Schulz-Gasch et al., JCIM, 52, 1499-1512 (2012)\n"
             )
-            f.write(f"Threshold: {self.threshold}\n")
+
+            # Add grouping information
+            if hasattr(self, "num_groups") and self.num_groups is not None:
+                f.write(f"Requested Groups (-N): {self.num_groups}\n")
+                if (
+                    hasattr(self, "_auto_threshold")
+                    and self._auto_threshold is not None
+                ):
+                    f.write(
+                        f"Auto-determined Threshold: {self._auto_threshold:.6f}\n"
+                    )
+            else:
+                f.write(f"Threshold: {self.threshold}\n")
+
             f.write(f"Use weights: {self.use_weights}\n")
             f.write(f"Max deviation: {self.max_dev}\n")
             f.write(f"Symmetry radius: {self.symm_radius}\n")
@@ -3014,11 +3568,18 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         return tfd_matrix
 
     def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(threshold={self.threshold}, "
-            f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
-            f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
-        )
+        if self.num_groups is not None:
+            return (
+                f"{self.__class__.__name__}(num_groups={self.num_groups}, "
+                f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
+                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
+            )
+        else:
+            return (
+                f"{self.__class__.__name__}(threshold={self.threshold}, "
+                f"num_procs={self.num_procs}, use_weights={self.use_weights}, "
+                f"max_dev='{self.max_dev}', symm_radius={self.symm_radius})"
+            )
 
 
 class StructureGrouperFactory:
@@ -3047,6 +3608,7 @@ class StructureGrouperFactory:
         strategy="rmsd",
         num_procs=1,
         threshold=None,
+        num_groups=None,
         ignore_hydrogens=None,
         **kwargs,
     ):
@@ -3059,8 +3621,11 @@ class StructureGrouperFactory:
                 "tanimoto", "torsion", "isomorphism",
                 "formula", or "connectivity". Defaults to "rmsd".
             num_procs (int): Number of workers for parallel computation.
+            threshold (float): Threshold for grouping (strategy dependent).
+            num_groups (int): Number of groups to create (alternative to threshold
+                for RMSD-based strategies).
             **kwargs: Extra options forwarded to the grouper constructor
-                (e.g., `threshold`, `align_molecules`, `adjust_H`).
+                (e.g., `align_molecules`, `adjust_H`).
 
         Returns:
             MoleculeGrouper: An instance of the selected grouper subclass.
@@ -3073,7 +3638,7 @@ class StructureGrouperFactory:
             "hrmsd": HungarianRMSDGrouper,
             "spyrmsd": SpyRMSDGrouper,
             "irmsd": IRMSDGrouper,
-            "pymolalign": PymolAlignGrouper,
+            "pymolrmsd": PymolRMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
             "torsion": TorsionFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
@@ -3086,7 +3651,7 @@ class StructureGrouperFactory:
             "spyrmsd",
             "hrmsd",
             "irmsd",
-            "pymolalign",
+            "pymolrmsd",
             "tanimoto",
             "torsion",
             "connectivity",
@@ -3099,13 +3664,22 @@ class StructureGrouperFactory:
                     "hrmsd",
                     "spyrmsd",
                     "irmsd",
-                    "pymolalign",
+                    "pymolrmsd",
                 ]:
                     return groupers[strategy](
                         structures,
                         threshold=threshold,
+                        num_groups=num_groups,
                         num_procs=num_procs,
                         ignore_hydrogens=ignore_hydrogens,
+                        **kwargs,
+                    )
+                elif strategy in ["tanimoto", "torsion"]:
+                    return groupers[strategy](
+                        structures,
+                        threshold=threshold,
+                        num_groups=num_groups,
+                        num_procs=num_procs,
                         **kwargs,
                     )
                 return groupers[strategy](
