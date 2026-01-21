@@ -262,15 +262,6 @@ class Thermochemistry:
                         f"imaginary frequency is allowed for a valid TS. "
                         f"Please re-optimize the geometry to locate a true TS."
                     )
-            elif self.job_type == "hess":
-                raise ValueError(
-                    f"!! ERROR: Hessian-only job detected for {self.target}. "
-                    f"Thermochemical analysis requires molecular geometry information, "
-                    f"which is not available in a standalone Hessian calculation. "
-                    f"Please run a geometry optimization with Hessian calculation "
-                    f"(e.g. use --ohess) instead. "
-                    f"Parsing of standalone hess jobs is currently not supported."
-                )
             else:
                 raise ValueError(
                     f"!! ERROR: Detected imaginary frequencies in geometry "
@@ -1015,15 +1006,6 @@ class Thermochemistry:
                         f"{len(self.imaginary_frequencies)} for job: "
                         f"{self.job_type}!"
                     )
-            elif self.job_type == "hess":
-                raise ValueError(
-                    f"!! ERROR: Hessian-only job detected for {self.target}. "
-                    f"Thermochemical analysis requires molecular geometry information, "
-                    f"which is not available in a standalone Hessian calculation. "
-                    f"Please run a geometry optimization with Hessian calculation "
-                    f"(e.g. use --ohess) instead. "
-                    f"Parsing of standalone hess jobs is currently not supported."
-                )
             else:
                 raise ValueError(
                     f"Invalid geometry optimization for {self.target}. "

@@ -5,7 +5,10 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.utils.mixins import FileMixin, XTBFileMixin
+from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.repattern import normal_mode_pattern
+
+p = pt()
 
 logger = logging.getLogger(__name__)
 
@@ -1316,6 +1319,34 @@ class XTBG98File(FileMixin):
 
     def __init__(self, filename):
         self.filename = filename
+
+    @property
+    def standard_orientation(self):
+        """Obtain list of standard orientations as numpy arrays."""
+        standard_orientation, _ = self._get_standard_orientation_and_symbols()
+        return standard_orientation
+
+    @property
+    def symbols(self):
+        """Obtain list of atomic symbols in the standard orientation."""
+        _, symbols = self._get_standard_orientation_and_symbols()
+        return symbols
+
+    def _get_standard_orientation_and_symbols(self):
+        for i, line in enumerate(self.contents):
+            if line.startswith("Standard orientation:"):
+                standard_orientation = []
+                symbols = []
+                for j_line in self.contents[i + 5 :]:
+                    if "-----------------" in j_line:
+                        break
+                    standard_orientation.append(
+                        [float(val) for val in j_line.split()[3:6]]
+                    )
+                    atomic_number = int(j_line.split()[1])
+                    symbols.append(p.to_symbol(atomic_number=atomic_number))
+                return standard_orientation, symbols
+        return None, None
 
     @cached_property
     def vibrational_frequencies(self):

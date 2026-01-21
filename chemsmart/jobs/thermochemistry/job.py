@@ -308,7 +308,6 @@ class ThermochemistryJob(Job):
         Returns:
             ThermochemistryJob: Configured thermochemistry job instance
         """
-        logger.info(f"Reading molecule from folder: {foldername}")
         molecule = Molecule.from_directorypath(foldername, program="xtb")
 
         # Use default settings if not provided

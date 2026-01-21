@@ -32,6 +32,15 @@ class XTBFolder(BaseFolder):
         └─ ...              → other auxiliary files
     """
 
+    PARSEABLE_GEOMETRY_EXTENSIONS = (".xyz", ".sdf")
+    UNSUPPORTED_GEOMETRY_EXTENSIONS = (
+        ".coord",
+        ".pdb",
+        ".poscar",
+        ".gen",
+        ".EIn",
+    )
+
     def _xtb_out(self):
         """Return the path to the main XTB output file."""
         xtbout = find_output_files_in_directory(
@@ -84,6 +93,34 @@ class XTBFolder(BaseFolder):
         wbo = os.path.join(self.folder, "wbo")
         return wbo if os.path.exists(wbo) else None
 
+    def _input_geometry(self):
+        """Return the path to input geometry file used in the XTB calculation."""
+        # Try parseable formats first
+        for ext in self.PARSEABLE_GEOMETRY_EXTENSIONS:
+            geometry_files = self.get_all_files_in_current_folder_by_suffix(
+                ext
+            )
+            for filepath in geometry_files:
+                basename = os.path.basename(filepath)
+                if not basename.startswith("xtbopt"):
+                    logger.debug(f"Found input geometry file: {filepath}")
+                    return filepath
+        # Check if unsupported format exists
+        for ext in self.UNSUPPORTED_GEOMETRY_EXTENSIONS:
+            geometry_files = self.get_all_files_in_current_folder_by_suffix(
+                ext
+            )
+            for filepath in geometry_files:
+                basename = os.path.basename(filepath)
+                if not basename.startswith("xtbopt"):
+                    logger.warning(
+                        f"Found input geometry file {filepath}, but format {ext} "
+                        "is not yet supported by chemsmart."
+                    )
+                    return filepath
+        # No input geometry file found
+        return None
+
     def _xtbopt_geometry(self):
         """
         Return the path to optimized geometry file (xtbopt.*).
@@ -107,18 +144,14 @@ class XTBFolder(BaseFolder):
             str | None: Path to optimized geometry file, or None if
                         no xtbopt.* file exists
         """
-        # Formats chemsmart can currently parse
-        parseable_extensions = [".xyz", ".sdf"]
-        # Formats not yet supported
-        unsupported_extensions = [".coord", ".pdb", ".poscar", ".gen", ".EIn"]
         # Try parseable formats first
-        for ext in parseable_extensions:
+        for ext in self.PARSEABLE_GEOMETRY_EXTENSIONS:
             filepath = os.path.join(self.folder, f"xtbopt{ext}")
             if os.path.exists(filepath):
                 logger.debug(f"Found optimized geometry file: {filepath}")
                 return filepath
         # Check if unsupported format exists
-        for ext in unsupported_extensions:
+        for ext in self.UNSUPPORTED_GEOMETRY_EXTENSIONS:
             filepath = os.path.join(self.folder, f"xtbopt{ext}")
             if os.path.exists(filepath):
                 logger.warning(

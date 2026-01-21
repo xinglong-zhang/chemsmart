@@ -1567,6 +1567,16 @@ class FolderMixin:
             set this attribute (e.g., via BaseFolder or a subclass).
     """
 
+    @property
+    def folderpath(self):
+        """
+        Get the absolute path of the folder.
+
+        Returns:
+            str: Absolute folder path.
+        """
+        return os.path.abspath(self.folder)
+
     def get_all_files_in_current_folder_by_suffix(self, filetype):
         """
         Obtain a list of files of specified type in the current folder.

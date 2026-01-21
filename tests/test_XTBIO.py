@@ -486,6 +486,11 @@ class TestXTBG98File:
         g98_file = os.path.join(xtb_co2_outfolder, "g98.out")
         assert os.path.exists(g98_file)
         co2_g98 = XTBG98File(g98_file)
+        assert co2_g98.standard_orientation == [
+            [-1.143652, 0.000006, 0.000004],
+            [1.143652, -0.000006, -0.000004],
+            [0.000000, -0.000000, -0.000000],
+        ]
         assert co2_g98.vibrational_frequencies == [
             600.3117,
             600.3117,
@@ -538,6 +543,16 @@ class TestXTBG98File:
         g98_file = os.path.join(xtb_acetaldehyde_outfolder, "g98.out")
         assert os.path.exists(g98_file)
         acetaldehyde_g98 = XTBG98File(g98_file)
+        assert acetaldehyde_g98.standard_orientation == [
+            [4.238362, 0.515099, 0.187252],
+            [1.871052, 0.670294, -0.172258],
+            [3.153451, 0.008898, 0.220004],
+            [2.046523, 1.693345, -0.493507],
+            [1.187651, 0.658353, 0.675123],
+            [1.407937, 0.102450, -0.977432],
+            [3.022239, -1.038528, 0.560754],
+        ]
+        assert acetaldehyde_g98.symbols == ["O", "C", "C", "H", "H", "H", "H"]
         assert acetaldehyde_g98.vibrational_frequencies == [
             151.3396,
             501.8141,
@@ -723,6 +738,9 @@ class TestXTBFolder:
         assert co2_folder._wbo() is not None
         assert os.path.basename(co2_folder._wbo()) == "wbo"
 
+        assert co2_folder._input_geometry() is not None
+        assert os.path.basename(co2_folder._input_geometry()) == "co2.xyz"
+
         assert co2_folder._xtbopt_geometry() is not None
         assert os.path.basename(co2_folder._xtbopt_geometry()) == "xtbopt.xyz"
 
@@ -766,6 +784,10 @@ class TestXTBFolder:
         )  # --hess calculation is not enabled
         assert cyclopentadienyl_anion_folder._wbo() is not None
         assert (
+            os.path.basename(cyclopentadienyl_anion_folder._input_geometry())
+            == "cyclopentadienyl_anion.coord"
+        )
+        assert (
             os.path.basename(cyclopentadienyl_anion_folder._xtbopt_geometry())
             == "xtbopt.coord"
         )
@@ -808,6 +830,7 @@ class TestXTBFolder:
         assert (
             p_benzyne_sp_folder._xtbopt_geometry() is None
         )  # no optimization performed
+        assert p_benzyne_sp_folder._input_geometry() is not None
         assert p_benzyne_sp_folder._xtbtopo_mol() is not None
 
 
@@ -817,6 +840,7 @@ class TestXTBOutput:
         assert os.path.exists(xtb_co2_outfolder)
         xtb_co2_output = XTBOutput(folder=xtb_co2_outfolder)
         assert xtb_co2_output.normal_termination
+        assert xtb_co2_output.geometry_optimization_converged
         assert xtb_co2_output.charge == 0
         assert xtb_co2_output.multiplicity == 1
         assert xtb_co2_output.mass == 44.0095457
