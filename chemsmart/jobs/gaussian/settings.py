@@ -844,6 +844,62 @@ class GaussianJobSettings(MolecularJobSettings):
             set(molecule.chemical_symbols).intersection(self.heavy_elements)
         )
 
+    def determine_basis_keyword(self, molecule):
+        """
+        Determine the appropriate basis keyword (gen or genecp) for the molecule.
+
+        Based on the heavy elements present in the molecule, determines whether
+        to use 'gen' (for elements that don't require ECPs) or 'genecp' (for
+        elements that require ECPs). Elements with atomic number > 36 require
+        ECPs and thus need 'genecp', while elements <= 36 only need 'gen'.
+
+        If no heavy elements are present in the molecule, returns the light
+        elements basis keyword (with hyphens removed).
+
+        Args:
+            molecule: Molecule object containing atomic information.
+
+        Returns:
+            str: 'gen' if all heavy elements have atomic number <= 36,
+                 'genecp' if any heavy element has atomic number > 36,
+                 light_elements_basis (formatted) if no heavy elements present,
+                 or the original basis keyword if not using gen/genecp.
+        """
+        # Only applies when basis is gen or genecp
+        if self.basis not in ["gen", "genecp"]:
+            return self.basis
+
+        # Get heavy elements actually present in the molecule
+        heavy_elements_in_structure = self.prune_heavy_elements(molecule)
+
+        # If no heavy elements specified or present, use light elements basis
+        if (
+            heavy_elements_in_structure is None
+            or len(heavy_elements_in_structure) == 0
+        ):
+            # Return light elements basis if available,
+            # otherwise return original basis
+            if self.light_elements_basis is not None:
+                # Remove hyphens for Gaussian compatibility
+                # (def2-SVP -> def2svp)
+                return self.light_elements_basis.replace("-", "").lower()
+            return self.basis
+
+        # Check if any heavy element requires ECP (atomic number > 36)
+        for element in heavy_elements_in_structure:
+            if pt.requires_ecp(element):
+                logger.debug(
+                    f"Element {element} requires ECP (Z > 36), using 'genecp'"
+                )
+                return "genecp"
+
+        # All heavy elements have atomic number <= 36, use 'gen'
+        logger.debug(
+            f"All heavy elements {heavy_elements_in_structure} have Z <= 36, "
+            f"using 'gen'"
+        )
+        return "gen"
+
     def _check_solvent(self, solvent_model):
         """
         Validate that the specified solvent model is supported.

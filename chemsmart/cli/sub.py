@@ -24,13 +24,19 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
-@click.option("-t", "--time-hours", type=float, default=None)
-@click.option("-q", "--queue", type=str, help="queue")
+@click.option(
+    "-t",
+    "--time-hours",
+    type=float,
+    default=None,
+    help="Time limit in hours for the job (e.g., 48.0).",
+)
+@click.option("-q", "--queue", type=str, help="Queue name for job submission.")
 @click.option(
     "-v/",
     "--verbose/--no-verbose",
     default=False,
-    help="Turns on logging to stream output and debug logging.",
+    help="Turn on logging to stream output and debug logging.",
 )
 @click.option(
     "--test/--no-test",
@@ -41,7 +47,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--print-command/--no-print-command",
     default=False,
-    help="print the command generated",
+    help="Print the generated command.",
 )
 def sub(
     ctx,
@@ -174,9 +180,16 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
-    job.jobrunner = jobrunner
 
-    _process_single_job(job=job)
+    # Handle list of jobs (when multiple molecules are specified with --index)
+    if isinstance(job, list):
+        logger.info(f"Processing {len(job)} jobs")
+        for single_job in job:
+            single_job.jobrunner = jobrunner
+            _process_single_job(job=single_job)
+    else:
+        job.jobrunner = jobrunner
+        _process_single_job(job=job)
 
 
 for subcommand in subcommands:

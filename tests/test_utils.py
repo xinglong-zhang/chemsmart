@@ -7,6 +7,8 @@ from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
 from chemsmart.utils.io import (
     clean_duplicate_structure,
+    clean_label,
+    convert_string_indices_to_pymol_id_indices,
     create_molecule_list,
     line_of_all_integers,
     line_of_integer_followed_by_floats,
@@ -19,6 +21,7 @@ from chemsmart.utils.utils import (
     is_float,
     iterative_compare,
     naturally_sorted,
+    return_objects_and_indices_from_string_index,
     run_command,
     str_indices_range_to_list,
     string2index_1based,
@@ -547,6 +550,76 @@ class TestIOUtilities:
             line_of_integer_followed_by_floats("2 3e0") is True
         )  # exponent present
 
+    def test_clean_label(self):
+        # spaces -> "_"
+        assert clean_label("label with space") == "label_with_space"
+
+        # commas -> "_"
+        assert clean_label("label,with,comma") == "label_with_comma"
+
+        # periods and parentheses -> "_"
+        assert clean_label("Fig. 1(a)") == "Fig_1_a"
+
+        # apostrophe -> "_prime_"
+        assert clean_label("O'Hara") == "O_prime_Hara"
+
+        # asterisk -> "_star_"
+        assert clean_label("label*") == "label_star"
+
+        # combination of several special characters
+        assert (
+            clean_label("O'Hara* test, v1.0") == "O_prime_Hara_star_test_v1_0"
+        )
+
+        # --- edge cases around underscore collapsing/stripping ---
+        # 1) Empty string input
+        assert clean_label("") == ""
+
+        # 2) String with only special characters
+        # "***" -> "_star__star__star_" -> collapse + strip -> "star_star_star"
+        assert clean_label("***") == "star_star_star"
+
+        # 3) Leading/trailing underscores after conversion
+        # "*label*" -> "_star_label_star_" -> collapse + strip -> "star_label_star"
+        assert clean_label("*label*") == "star_label_star"
+
+        # 4) Multiple consecutive special characters
+        # "label...test" -> "label___test" -> collapse -> "label_test"
+        assert clean_label("label...test") == "label_test"
+
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            ("1-10", "id 1-10"),
+            ("11", "id 11"),
+            ("1-10,11", "id 1-10 or id 11"),
+            ("1-10,11,14,19-30", "id 1-10 or id 11 or id 14 or id 19-30"),
+        ],
+    )
+    def test_basic_conversion(self, input_str, expected):
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    def test_conversion_strips_whitespace(self):
+        input_str = " 1-10,  11 ,14 ,  19-30  "
+        expected = "id 1-10 or id 11 or id 14 or id 19-30"
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    def test_trailing_comma_is_ignored(self):
+        input_str = "1-10,"
+        expected = "id 1-10"
+        assert (
+            convert_string_indices_to_pymol_id_indices(input_str) == expected
+        )
+
+    @pytest.mark.parametrize("bad_input", ["", "   ", ",,,", ",  ,"])
+    def test_raises_value_error_on_empty_or_invalid_input(self, bad_input):
+        with pytest.raises(ValueError):
+            convert_string_indices_to_pymol_id_indices(bad_input)
+
 
 class TestNaturallySorted:
     def test_empty_list(self):
@@ -686,3 +759,178 @@ class TestRunCommand:
             "Invalid command type: <class 'int'>. Expected str or list."
             in capture_log.text
         )
+
+
+class TestReturnObjectsAndIndicesFromStringIndex:
+    """Tests for the return_objects_and_indices_from_string_index utility function."""
+
+    def test_single_index_string(self):
+        """Test single index as a string (1-based)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1")
+        )
+        assert result_objects == "a"
+        assert result_indices == 1
+
+    def test_single_index_middle(self):
+        """Test single index in middle of list."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "3")
+        )
+        assert result_objects == "c"
+        assert result_indices == 3
+
+    def test_single_index_last(self):
+        """Test single index at end of list."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "5")
+        )
+        assert result_objects == "e"
+        assert result_indices == 5
+
+    def test_single_negative_index(self):
+        """Test negative index (last item)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "-1")
+        )
+        assert result_objects == "e"
+        assert result_indices == 5
+
+    def test_slice_range(self):
+        """Test slice with start and stop (1-based, exclusive stop)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "2:4")
+        )
+        assert result_objects == ["b", "c"]
+        assert result_indices == [2, 3]
+
+    def test_slice_from_start(self):
+        """Test slice from beginning."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1:3")
+        )
+        assert result_objects == ["a", "b"]
+        assert result_indices == [1, 2]
+
+    def test_slice_to_end(self):
+        """Test slice to end using open-ended slice."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "3:")
+        )
+        assert result_objects == ["c", "d", "e"]
+        assert result_indices == [3, 4, 5]
+
+    def test_slice_from_beginning(self):
+        """Test slice from beginning to index."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, ":3")
+        )
+        assert result_objects == ["a", "b"]
+        assert result_indices == [1, 2]
+
+    def test_slice_all(self):
+        """Test slice selecting all elements using ':'."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, ":")
+        )
+        assert result_objects == ["a", "b", "c", "d", "e"]
+        assert result_indices == [1, 2, 3, 4, 5]
+
+    def test_slice_with_step(self):
+        """Test slice with step parameter."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1:8:2")
+        )
+        assert result_objects == ["a", "c", "e", "g"]
+        assert result_indices == [1, 3, 5, 7]
+
+    def test_user_defined_range(self):
+        """Test user-defined range format (comma-separated)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1,3,5")
+        )
+        assert result_objects == ["a", "c", "e"]
+        assert result_indices == [1, 3, 5]
+
+    def test_user_defined_range_with_hyphen(self):
+        """Test user-defined range with hyphen notation."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1-3")
+        )
+        assert result_objects == ["a", "b", "c"]
+        assert result_indices == [1, 2, 3]
+
+    def test_user_defined_range_complex(self):
+        """Test complex user-defined range."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1-3,5,7-8")
+        )
+        assert result_objects == ["a", "b", "c", "e", "g", "h"]
+        assert result_indices == [1, 2, 3, 5, 7, 8]
+
+    def test_range_with_brackets(self):
+        """Test user-defined range with brackets."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "[1-3]")
+        )
+        assert result_objects == ["a", "b", "c"]
+        assert result_indices == [1, 2, 3]
+
+    def test_with_integer_objects(self):
+        """Test with list of integers as objects."""
+        objects = [10, 20, 30, 40, 50]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "2:4")
+        )
+        assert result_objects == [20, 30]
+        assert result_indices == [2, 3]
+
+    def test_with_mixed_objects(self):
+        """Test with list of mixed types as objects."""
+        objects = [1, "two", 3.0, [4], {"five": 5}]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1,3,5")
+        )
+        assert result_objects == [1, 3.0, {"five": 5}]
+        assert result_indices == [1, 3, 5]
+
+    def test_specified_indices_5_to_8(self):
+        """Test that specified indices are preserved (e.g., 5:8 gives indices 5,6,7)."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "5:8")
+        )
+        assert result_objects == ["e", "f", "g"]
+        assert result_indices == [5, 6, 7]
+
+    def test_empty_list_raises_index_error(self):
+        """Test that accessing empty list raises IndexError."""
+        objects = []
+        with pytest.raises(IndexError):
+            return_objects_and_indices_from_string_index(objects, "1")
+
+    def test_index_zero_raises_value_error(self):
+        """Test that index 0 raises ValueError (1-based indexing required)."""
+        objects = ["a", "b", "c"]
+        with pytest.raises(ValueError):
+            return_objects_and_indices_from_string_index(objects, "0")
+
+    def test_out_of_range_raises_index_error(self):
+        """Test that out-of-range index raises IndexError."""
+        objects = ["a", "b", "c"]
+        with pytest.raises(IndexError):
+            return_objects_and_indices_from_string_index(objects, "10")

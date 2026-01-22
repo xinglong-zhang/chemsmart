@@ -1,7 +1,7 @@
 import logging
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
-from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()

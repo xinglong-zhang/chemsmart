@@ -62,10 +62,8 @@ def modred(
     # validate charge and multiplicity consistency
     check_charge_and_multiplicity(modred_settings)
 
-    # get molecule from context (use the last molecule if multiple)
+    # get molecules from context
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
-    logger.info(f"Running modred calculation on molecule: {molecule}")
 
     # get label for the job output files
     label = ctx.obj["label"]
@@ -73,8 +71,37 @@ def modred(
 
     from chemsmart.jobs.orca.modred import ORCAModredJob
 
-    job = ORCAModredJob(
-        molecule=molecule, settings=modred_settings, label=label, **kwargs
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj.get(
+        "molecule_indices", list(range(1, len(molecules) + 1))
     )
-    logger.debug(f"Created ORCA modred job: {job}")
-    return job
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} ORCA modred jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = ORCAModredJob(
+                molecule=molecule,
+                settings=modred_settings,
+                label=molecule_label,
+                **kwargs,
+            )
+            jobs.append(job)
+        logger.debug(f"Created {len(jobs)} ORCA modred jobs")
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        logger.info(f"Running modred calculation on molecule: {molecule}")
+
+        job = ORCAModredJob(
+            molecule=molecule, settings=modred_settings, label=label, **kwargs
+        )
+        logger.debug(f"Created ORCA modred job: {job}")
+        return job

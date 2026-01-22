@@ -432,11 +432,78 @@ class TestORCAOutput:
         assert np.allclose(
             orca_out.orbital_energies, orbital_energies, rtol=1e-6
         )
-        assert orca_out.homo_energy == -10.252651603489042
-        assert orca_out.lumo_energy == 2.419962981919028
-        assert np.isclose(orca_out.fmo_gap, 12.6726145854, rtol=1e-6)
-
-        # test HOMO LUMO
+        assert orca_out.alpha_occ_eigenvalues == [
+            -19.612911 * units.Hartree,
+            -1.095421 * units.Hartree,
+            -0.585668 * units.Hartree,
+            -0.449226 * units.Hartree,
+            -0.376778 * units.Hartree,
+        ]
+        assert orca_out.beta_occ_eigenvalues == [
+            -19.612911 * units.Hartree,
+            -1.095421 * units.Hartree,
+            -0.585668 * units.Hartree,
+            -0.449226 * units.Hartree,
+            -0.376778 * units.Hartree,
+        ]
+        assert orca_out.alpha_virtual_eigenvalues == [
+            0.088932 * units.Hartree,
+            0.166094 * units.Hartree,
+            0.619581 * units.Hartree,
+            0.688090 * units.Hartree,
+            0.992526 * units.Hartree,
+            1.002028 * units.Hartree,
+            1.072543 * units.Hartree,
+            1.150532 * units.Hartree,
+            1.395583 * units.Hartree,
+            1.446410 * units.Hartree,
+            1.590115 * units.Hartree,
+            1.830301 * units.Hartree,
+            2.278882 * units.Hartree,
+            2.321601 * units.Hartree,
+            3.028276 * units.Hartree,
+            3.067006 * units.Hartree,
+            3.248959 * units.Hartree,
+            3.542159 * units.Hartree,
+            3.864433 * units.Hartree,
+        ]
+        assert orca_out.beta_virtual_eigenvalues == [
+            0.088932 * units.Hartree,
+            0.166094 * units.Hartree,
+            0.619581 * units.Hartree,
+            0.688090 * units.Hartree,
+            0.992526 * units.Hartree,
+            1.002028 * units.Hartree,
+            1.072543 * units.Hartree,
+            1.150532 * units.Hartree,
+            1.395583 * units.Hartree,
+            1.446410 * units.Hartree,
+            1.590115 * units.Hartree,
+            1.830301 * units.Hartree,
+            2.278882 * units.Hartree,
+            2.321601 * units.Hartree,
+            3.028276 * units.Hartree,
+            3.067006 * units.Hartree,
+            3.248959 * units.Hartree,
+            3.542159 * units.Hartree,
+            3.864433 * units.Hartree,
+        ]
+        assert orca_out.num_unpaired_electrons == 0
+        # For closed-shell systems, somo_energies should be None
+        assert orca_out.somo_energies is None
+        assert orca_out.lowest_somo_energy is None
+        assert orca_out.highest_somo_energy is None
+        assert orca_out.alpha_homo_energy == -0.376778 * units.Hartree
+        assert orca_out.beta_homo_energy == -0.376778 * units.Hartree
+        assert orca_out.alpha_lumo_energy == 0.088932 * units.Hartree
+        assert orca_out.beta_lumo_energy == 0.088932 * units.Hartree
+        assert orca_out.homo_energy == -0.376778 * units.Hartree
+        assert orca_out.lumo_energy == 0.088932 * units.Hartree
+        assert np.isclose(
+            orca_out.fmo_gap,
+            (0.088932 - (-0.376778)) * units.Hartree,
+            rtol=1e-6,
+        )
 
         assert orca_out.mulliken_atomic_charges == {
             "O1": -0.32926,
@@ -2299,6 +2366,207 @@ class TestORCAOutput:
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
+
+    def test_fe2_singlet_orbital_properties(self, fe2_singlet_output):
+        """Test HOMO/LUMO properties for Fe2 singlet state."""
+        orca_out = ORCAOutput(filename=fe2_singlet_output)
+        assert orca_out.multiplicity == 1  # Singlet state
+        assert orca_out.spin == "restricted"
+        assert orca_out.num_unpaired_electrons == 0
+
+        # SOMO properties (should be None for closed-shell)
+        assert orca_out.somo_energies is None
+        assert orca_out.lowest_somo_energy is None
+        assert orca_out.highest_somo_energy is None
+
+        # HOMO/LUMO properties
+        assert orca_out.homo_energy == -0.738698 * units.Hartree
+        assert orca_out.lumo_energy == -0.403510 * units.Hartree
+        assert orca_out.fmo_gap == (-0.403510 - (-0.738698)) * units.Hartree
+
+    def test_fe2_triplet_orbital_properties(self, fe2_triplet_output):
+        """Test HOMO/LUMO/SOMO properties for Fe2 triplet state."""
+        orca_out = ORCAOutput(filename=fe2_triplet_output)
+        assert orca_out.multiplicity == 3  # Triplet state
+        assert orca_out.spin == "unrestricted"
+        assert orca_out.num_unpaired_electrons == 2
+
+        # SOMO properties
+        assert orca_out.somo_energies == [
+            -0.767986 * units.Hartree,
+            -0.761816 * units.Hartree,
+        ]
+        assert len(orca_out.somo_energies) == 2  # 2 unpaired electrons
+        assert orca_out.lowest_somo_energy == -0.767986 * units.Hartree
+        assert orca_out.highest_somo_energy == -0.761816 * units.Hartree
+
+        # HOMO/LUMO properties for open-shell
+        assert orca_out.alpha_homo_energy == -0.761816 * units.Hartree
+        assert orca_out.beta_homo_energy == -0.721020 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.346513 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.381082 * units.Hartree
+        assert (
+            orca_out.fmo_gap
+            == (min(-0.346513, -0.381082) - (-0.761816)) * units.Hartree
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.346513 - (-0.761816)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.381082 - (-0.721020)) * units.Hartree,
+            rtol=1e-6,
+        )
+
+    def test_fe2_quintet_orbital_properties(self, fe2_quintet_output):
+        """Test HOMO/LUMO/SOMO properties for Fe2 quintet state."""
+        orca_out = ORCAOutput(filename=fe2_quintet_output)
+        assert orca_out.multiplicity == 5  # Quintet state
+        assert orca_out.spin == "unrestricted"
+        assert orca_out.num_unpaired_electrons == 4
+
+        # SOMO properties
+        assert orca_out.somo_energies == [
+            -0.819921 * units.Hartree,
+            -0.806437 * units.Hartree,
+            -0.802013 * units.Hartree,
+            -0.705655 * units.Hartree,
+        ]
+        assert len(orca_out.somo_energies) == 4  # 4 unpaired electrons
+        assert orca_out.lowest_somo_energy == -0.819921 * units.Hartree
+        assert orca_out.highest_somo_energy == -0.705655 * units.Hartree
+
+        # HOMO/LUMO properties
+        assert orca_out.alpha_homo_energy == -0.705655 * units.Hartree
+        assert orca_out.beta_homo_energy == -0.688110 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.336304 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.328840 * units.Hartree
+        assert np.isclose(
+            orca_out.fmo_gap,
+            (min(-0.336304, -0.328840) - (-0.705655)) * units.Hartree,
+            # 0.369351
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.336304 - (-0.705655)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.328840 - (-0.688110)) * units.Hartree,
+            rtol=1e-6,
+        )
+
+    def test_fe3_doublet_orbital_properties(self, fe3_doublet_output):
+        """Test HOMO/LUMO/SOMO properties for Fe3 doublet state."""
+        orca_out = ORCAOutput(filename=fe3_doublet_output)
+        assert orca_out.multiplicity == 2  # Doublet state
+        assert orca_out.spin == "unrestricted"
+        assert orca_out.num_unpaired_electrons == 1
+
+        # SOMO properties
+        assert orca_out.somo_energies == [-1.060149 * units.Hartree]
+        assert len(orca_out.somo_energies) == 1  # 1 unpaired electron
+        assert orca_out.lowest_somo_energy == -1.060149 * units.Hartree
+        assert orca_out.highest_somo_energy == -1.060149 * units.Hartree
+
+        # HOMO/LUMO properties
+        assert orca_out.alpha_homo_energy == -1.060149 * units.Hartree
+        assert orca_out.beta_homo_energy == -1.061789 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.764634 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.744986 * units.Hartree
+        assert np.isclose(
+            orca_out.fmo_gap,
+            (min(-0.764634, -0.744986) - (-1.060149)) * units.Hartree,
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.764634 - (-1.060149)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.744986 - (-1.061789)) * units.Hartree,
+            rtol=1e-6,
+        )
+
+    def test_fe3_quartet_orbital_properties(self, fe3_quartet_output):
+        """Test HOMO/LUMO/SOMO properties for Fe3 quartet state."""
+        orca_out = ORCAOutput(filename=fe3_quartet_output)
+        assert orca_out.multiplicity == 4  # Quartet state
+        assert orca_out.spin == "unrestricted"
+        assert orca_out.num_unpaired_electrons == 3
+
+        # SOMO properties
+        assert orca_out.somo_energies == [
+            -1.040564 * units.Hartree,
+            -1.037095 * units.Hartree,
+            -1.034892 * units.Hartree,
+        ]
+        assert len(orca_out.somo_energies) == 3  # 3 unpaired electrons
+        assert orca_out.lowest_somo_energy == -1.040564 * units.Hartree
+        assert orca_out.highest_somo_energy == -1.034892 * units.Hartree
+
+        # HOMO/LUMO properties
+        assert orca_out.alpha_homo_energy == -1.034892 * units.Hartree
+        assert orca_out.beta_homo_energy == -1.024711 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.749293 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.721360 * units.Hartree
+        assert np.isclose(
+            orca_out.fmo_gap,
+            (min(-0.749293, -0.721360) - (-1.034892)) * units.Hartree,
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.749293 - (-1.034892)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.721360 - (-1.024711)) * units.Hartree,
+            rtol=1e-6,
+        )
+
+    def test_fe3_sextet_orbital_properties(self, fe3_sextet_output):
+        """Test HOMO/LUMO/SOMO properties for Fe3 sextet state."""
+        orca_out = ORCAOutput(filename=fe3_sextet_output)
+        assert orca_out.multiplicity == 6  # Sextet state
+        assert orca_out.spin == "unrestricted"
+        assert orca_out.num_unpaired_electrons == 5
+
+        # SOMO properties
+        assert orca_out.somo_energies == [
+            -1.114592 * units.Hartree,
+            -1.093714 * units.Hartree,
+            -1.080409 * units.Hartree,
+            -1.066772 * units.Hartree,
+            -1.030076 * units.Hartree,
+        ]
+        assert len(orca_out.somo_energies) == 5  # 5 unpaired electrons
+        assert orca_out.lowest_somo_energy == -1.114592 * units.Hartree
+        assert orca_out.highest_somo_energy == -1.030076 * units.Hartree
+
+        # HOMO/LUMO properties
+        assert orca_out.alpha_homo_energy == -1.030076 * units.Hartree
+        assert orca_out.beta_homo_energy == -1.045382 * units.Hartree
+        assert orca_out.alpha_lumo_energy == -0.553561 * units.Hartree
+        assert orca_out.beta_lumo_energy == -0.775129 * units.Hartree
+        assert np.isclose(
+            orca_out.fmo_gap,
+            (min(-0.553561, -0.775129) - (-1.030076)) * units.Hartree,
+        )
+        assert np.isclose(
+            orca_out.alpha_fmo_gap,
+            (-0.553561 - (-1.030076)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            orca_out.beta_fmo_gap,
+            (-0.775129 - (-1.045382)) * units.Hartree,
+            rtol=1e-6,
+        )
 
 
 class TestORCAEngrad:

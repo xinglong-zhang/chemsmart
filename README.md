@@ -11,7 +11,9 @@
 </p>
 
 ---
-Chemsmart is a python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
+Notice: If you have cloned this package before and find something that did not work, updating this repo via `git pull` will likely fix it. If you need additional features, please do not hesitate to get in touch!
+
+Chemsmart is a Python-based toolkit for the automatic creation of input and submission script files, the submission and the analysis of quantum chemistry simulation jobs.
 
 It uses the same submission command regardless of the queueing systems (SLURM, Torque or SLF) used by any High Performance Computing (HPC) cluster. 
 
@@ -33,6 +35,9 @@ make env
 ```
 to create a running environment.
 
+**Note (HPC users):** Some dependencies (e.g. `pyvoro`) require a C++ compiler.
+On HPC systems, you may need to load a compiler module (e.g. `module load gcc`) before running `make env`.
+
 By default, this will create a conda environment named `chemsmart`, which installs all the required python packages for this toolkit.
 
 If conda is not installed, one can run
@@ -46,7 +51,7 @@ or
 ```bash
 make virtualenv
 ```
-to install using virtualenv. It is however recommanded that `conda` be used.
+to install using virtualenv. It is, however, recommended that `conda` be used.
 
 Help options are available by typing `make help`.
 
@@ -62,13 +67,13 @@ For developers, one may run
 ```bash
 make install-dev
 ```
-which installs additoinal packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing `chemsmart` package.
+which installs additional packages and dependencies (dev, test, docs dependencies in pyproject.toml) required for developing the `chemsmart` package.
 
 Next, run
 ```bash
 make configure
 ```
-to sets up the user-specific directory `~/.chemsmart` automatically. You will be prompt to enter the paths to g16 and ORCA software, which will then be added automatically. The correct `conda` path for the user will also be updated.
+to set up the user-specific directory `~/.chemsmart` automatically. You will be prompted to enter the paths to g16 and ORCA software, which will then be added automatically. The correct `conda` path for the user will also be updated.
 
 The configuration also adds the environment variables for chemsmart to the user `~/.bashrc` file.
 
@@ -158,6 +163,14 @@ gas: Null
 ```
 Then all jobs will use settings specified in `solv`, i.e., all calculations will be run in implicit solvation model.
 
+**Note on GEN/GENECP basis sets**: When using `basis: genecp` with `heavy_elements` specified, CHEMSMART automatically determines whether to use the `gen` or `genecp` keyword in the Gaussian input file based on the elements present:
+- If no heavy elements are present in the molecule, the `light_elements_basis` is used directly
+- If all heavy elements have atomic number ≤ 36 (up to Kr), the `gen` keyword is used  
+- If any heavy element has atomic number > 36 (Rb and beyond), the `genecp` keyword is used
+
+For example, with `heavy_elements: ['I', 'Br']`, a molecule containing only Br (Z=35) will use `gen`, while a molecule containing I (Z=53) will use `genecp`.
+This is useful when simulating different structures using one single project settings .yaml file.
+
 ---
 The `~/.chemsmart/orca/` directory contains files related to ORCA project settings, which contain DFT functional and basis set etc, that is required to write the input file for running an ORCA job. For example, we can specify a test project settings in `~/.chemsmart/orca/test.yaml` with the following information:
 
@@ -186,7 +199,7 @@ This will run jobs in the gas phase (geometry and TS opt etc) using M062X/def2-S
 ---
 Although `make configure` would set up `~/.chemsmart` mostly correctly, a user should check the contents in `~/.chemsmart` to make sure that these match the **server configurations** on which chemsmart is to be used (e.g., modules, scratch directories etc). Depending on the server queue system you are using (e.g., SLURM or TORQUE), one may copy e.g., `~/.chemsmart/server/SLURM.yaml` to your own customised server `~/.chemsmart/server/custom.yaml` and modify it accordingly, such that the submission becomes `chemsmart sub -s custom <other commands>`.
 
-One also need to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in scratch folder), one may do `ls -s /path/to/scratch/ ~/scratch`.
+One also needs to set up scratch directories where scratch jobs may be run (for Gaussian and ORCA jobs, by default, these are run in a scratch folder). One may do `ln -s /path/to/scratch/ ~/scratch`.
 
 Note also that a user can modify the contents in `~/.chemsmart` files freely without affecting or needing to know the `chemsmart` source code.
 
@@ -225,7 +238,7 @@ make clean
 
 ## Testing Installations
 
-Installations is deemed successfully if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
+Installation is deemed successful if the commands `make install` and `make configure` do not return any errors. Installation will also create a `~/.chemsmart` directory containing the required files. In addition, the paths for chemsmart packages should be correctly added to the user `~/.bashrc` file. Finally, one should be able to run 
 
 ```bash
 chemsmart --help
@@ -255,7 +268,7 @@ For example, to submit the geometry optimization job with atoms numbered 1 to 10
 ```bash 
 chemsmart sub -s shared gaussian -p test -f input.com opt -f 1-10
 ```
-Note that 1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization softwares for moleculare are 1-indexed.
+Note that 1-indexed numbers are used, instead of 0-indexed numbers in Python language, since most visualization software for molecules is 1-indexed.
 
 ---
 To submit transition state modredundant job (frozen coordinates optimization), do:
@@ -355,7 +368,7 @@ To optimize a fixed number of lowest energy conformers, `n_conformers_to_opt`, d
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> crest -j opt -n <n_conformers_to_opt>
 ```
 
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .xyz file. In fact, whenever .xyz file is used as input, the charge and multiplicity should be specified via `-c <charge> -m <multiplicity` via CLI.
+If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue the crest opt job until all `<n_conformers_to_opt>` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .xyz file. In fact, whenever an .xyz file is used as input, the charge and multiplicity should be specified via `-c <charge> -m <multiplicity>` via CLI.
 
 ---
 
@@ -371,7 +384,7 @@ To optimize a fixed number of lowest energy structures, `<num_structures_to_opt>
 ```bash
 chemsmart sub -s <server_name> gaussian -p <project> -f <input_file> -c <system_charge> -m <system_multiplicity> traj -n <n_conformers_to_opt>
 ```
-If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue crest opt job until all `<n_conformers_to_opt>`are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
+If the job terminates before `<n_conformers_to_opt>` are all optimized, perhaps due to walltime limit, resubmitting the job will continue the crest opt job until all `<n_conformers_to_opt>` are optimized. Charge and multiplicity need to be specified, as these cannot be obtained from the supplied .traj file. 
 
 Two grouper types for determining/clustering unique structures are available from CLI option `-g`:
 
@@ -501,7 +514,7 @@ chemsmart sub -s shared gaussian -p test -f small.db -i 5 -c 0 -m 1 opt
 will take the 5th structure (1-indexed, as in chemsmart) from ase database file, `small.db`, to create the input file for geometry optimization.
 
 ---
-Similar commands exists for ORCA job submssions. One can run 
+Similar commands exist for ORCA job submissions. One can run 
 
 ```bash
 chemsmart sub orca --help

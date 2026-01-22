@@ -169,6 +169,228 @@ class FileMixin:
         """
         return len(self.energies)
 
+    # -------------------------------------------------------------------------
+    # Frontier orbital properties (common to Gaussian and ORCA output parsers)
+    # These depend on subclasses providing: multiplicity, alpha_occ_eigenvalues,
+    # beta_occ_eigenvalues, alpha_virtual_eigenvalues, beta_virtual_eigenvalues
+    # -------------------------------------------------------------------------
+
+    @cached_property
+    def num_unpaired_electrons(self):
+        """Get the number of unpaired electrons.
+
+        The number of unpaired electrons equals multiplicity - 1.
+        For closed-shell systems (multiplicity == 1), returns 0.
+
+        Returns:
+            int: Number of unpaired electrons.
+        """
+        return self.multiplicity - 1
+
+    @cached_property
+    def somo_energies(self):
+        """Returns a list of all SOMO energies for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), these are the
+        singly occupied molecular orbitals (SOMOs) in the α spin channel.
+
+        For a triplet (S=1), there are 2 SOMOs.
+        For a quintet (S=2), there are 4 SOMOs.
+
+        The list is ordered from lowest to highest energy.
+
+        Returns:
+            list or None: List of SOMO energies, or None for closed-shell.
+        """
+        if self.multiplicity != 1:
+            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
+        return None
+
+    @cached_property
+    def lowest_somo_energy(self):
+        """Returns the lowest SOMO energy for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), this returns the
+        lowest-energy singly occupied molecular orbital (SOMO), which is
+        the first α orbital above the doubly-occupied manifold.
+
+        For closed-shell systems (multiplicity == 1), returns None.
+        For a complete picture of all SOMOs, use `somo_energies` property.
+
+        Returns:
+            float or None: Lowest SOMO energy, or None for closed-shell.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[0]
+        return None
+
+    @cached_property
+    def highest_somo_energy(self):
+        """Returns the highest SOMO energy for open-shell systems.
+
+        This is equivalent to HOMOα (the highest occupied α orbital)
+        for high-spin states. It represents the highest-energy singly
+        occupied molecular orbital.
+
+        For a complete picture of all SOMOs, use `somo_energies` property.
+
+        Returns:
+            float or None: Highest SOMO energy, or None for closed-shell.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[-1]
+        return None
+
+    @cached_property
+    def alpha_homo_energy(self):
+        """Returns the HOMO energy for α spin orbitals.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest occupied α orbital,
+        which is also the highest SOMO.
+
+        Returns:
+            float or None: α-spin HOMO energy.
+        """
+        if self.alpha_occ_eigenvalues:
+            return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def beta_homo_energy(self):
+        """Returns the HOMO energy for β spin orbitals.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest doubly-occupied
+        orbital energy.
+
+        Returns:
+            float or None: β-channel HOMO energy.
+        """
+        if self.beta_occ_eigenvalues:
+            return self.beta_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def alpha_lumo_energy(self):
+        """Returns the LUMO energy for α spin orbitals.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied α orbital.
+
+        Returns:
+            float or None: α-channel LUMO energy.
+        """
+        if self.alpha_virtual_eigenvalues:
+            return self.alpha_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def beta_lumo_energy(self):
+        """Returns the LUMO energy for β spin orbitals.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied β orbital.
+
+        Returns:
+            float or None: β-channel LUMO energy.
+        """
+        if self.beta_virtual_eigenvalues:
+            return self.beta_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def homo_energy(self):
+        """Returns the HOMO (Highest Occupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy
+        of the highest doubly-occupied orbital. For open-shell systems,
+        returns None (use homo_alpha_energy or beta_homo_energy or
+        somo_energies instead).
+
+        Returns:
+            float or None: HOMO energy for closed-shell systems.
+        """
+        if self.multiplicity == 1:
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def lumo_energy(self):
+        """Returns the LUMO (Lowest Unoccupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy
+        of the lowest unoccupied orbital. For open-shell systems,
+        returns None (use alpha_lumo_energy or beta_lumo_energy instead).
+
+        Returns:
+            float or None: LUMO energy for closed-shell systems.
+        """
+        if self.multiplicity == 1:
+            if self.alpha_virtual_eigenvalues:
+                return self.alpha_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def fmo_gap(self):
+        """Returns the frontier molecular orbital (FMO) gap.
+
+        For closed-shell systems, this is the HOMO-LUMO gap.
+        For open-shell systems, this is the gap between the highest SOMO
+        and the lowest LUMO (min of α and β channels).
+
+        Returns:
+            float or None: FMO gap in eV.
+        """
+        if self.multiplicity == 1:
+            if self.homo_energy is not None and self.lumo_energy is not None:
+                return self.lumo_energy - self.homo_energy
+        else:
+            # radical systems
+            if (
+                self.alpha_lumo_energy is not None
+                and self.beta_lumo_energy is not None
+                and self.highest_somo_energy is not None
+            ):
+                return (
+                    min(self.alpha_lumo_energy, self.beta_lumo_energy)
+                    - self.highest_somo_energy
+                )
+        return None
+
+    @cached_property
+    def alpha_fmo_gap(self):
+        """Returns the frontier molecular orbital (FMO) gap for alpha-spin orbitals,
+        for open-shell systems.
+        For closed-shell systems (multiplicity == 1), returns fmo_gap.
+        Returns:
+            float or None: alpha FMO gap in eV."""
+
+        if (
+            self.alpha_lumo_energy is not None
+            and self.alpha_homo_energy is not None
+        ):
+            return self.alpha_lumo_energy - self.alpha_homo_energy
+        else:
+            return None
+
+    @cached_property
+    def beta_fmo_gap(self):
+        """Returns the frontier molecular orbital (FMO) gap for beta-spin orbitals,
+        for open-shell systems.
+        For closed-shell systems (multiplicity == 1), under restricted KS, beta
+        orbitals are not printed, and this returns None.
+        Returns:
+            float or None: beta FMO gap in eV."""
+        if (
+            self.beta_lumo_energy is not None
+            and self.beta_homo_energy is not None
+        ):
+            return self.beta_lumo_energy - self.beta_homo_energy
+        else:
+            return None
+
 
 class GaussianFileMixin(FileMixin):
     """
@@ -324,18 +546,22 @@ class GaussianFileMixin(FileMixin):
             "modred" in self.route_string
             and self.modredundant_group is not None
         ):
+            # Check if any line is a scan coordinate
+            is_scan = False
             for line in self.modredundant_group:
-                if "F" in line or "f" in line:
-                    modred = self._get_modred_frozen_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "modred"
-                elif "S" in line or "s" in line:
-                    modred = self._get_modred_scan_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "scan"
-                return modred
+                if "S" in line or "s" in line:
+                    is_scan = True
+                    break
+
+            if is_scan:
+                modred = self._get_modred_scan_coords(self.modredundant_group)
+                self.job_type = "scan"
+            else:
+                modred = self._get_modred_frozen_coords(
+                    self.modredundant_group
+                )
+                self.job_type = "modred"
+            return modred
 
     @staticmethod
     def _get_modred_frozen_coords(modred_list_of_string):
@@ -381,6 +607,8 @@ class GaussianFileMixin(FileMixin):
         coords = []
         # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
         for raw_line in modred_list_of_string:
+            if "S" not in raw_line and "s" not in raw_line:
+                continue
             line = raw_line.strip()[2:]
             line_elems = line.split("S")
 
@@ -1356,22 +1584,3 @@ class FolderMixin:
             if re.match(regex, file):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
-
-
-class BaseFolder(FolderMixin):
-    """
-    Base class for folder management with path operations.
-
-    Provides basic folder initialization and validation functionality.
-    Combines folder path management with file discovery capabilities
-    from the FolderMixin class.
-    """
-
-    def __init__(self, folder):
-        """
-        Initialize the BaseFolder with a specified path.
-
-        Args:
-            folder (str): Path to the folder to be managed.
-        """
-        self.folder = folder

@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
     "--fragment-indices",
     required=True,
     type=str,
-    help="Indices of one fragment for DI-AS analysis.",
+    help="Indices of one fragment for DI-AS analysis. 1-indexed.",
 )
 @click.option(
     "-n",
     "--every-n-points",
     type=int,
     default=3,
-    help="Every nth points along the IRC file to prepare for DI-AS analysis.",
+    help="Every nth point along the IRC file to prepare for DI-AS analysis.",
 )
 @click.option(
     "-s",
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
     "--mode",
     type=click.Choice(["irc", "ts"], case_sensitive=False),
     default="irc",
-    help="Mode of DI-AS analysis. Default is IRC.",
+    help="Mode of DI-AS analysis. Defaults to IRC.",
 )
 @click.option(
     "-c1",
@@ -82,7 +82,7 @@ def dias(
     multiplicity_of_fragment2=None,
     **kwargs,
 ):
-    """CLI for running Gaussian DI-AS jobs."""
+    """CLI subcommand for running Gaussian DI-AS jobs."""
 
     # get jobrunner for running Gaussian DI-AS jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -110,8 +110,7 @@ def dias(
     label = ctx.obj["label"]
 
     if not solv:
-        sp_settings.solvent_model = None
-        sp_settings.solvent_id = None
+        sp_settings.remove_solvent()
 
     logger.info(f"DI-AS settings from project: {sp_settings.__dict__}")
 
