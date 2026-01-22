@@ -391,6 +391,11 @@ class RMSDGrouper(MoleculeGrouper):
                 - List of molecule groups (each group is a list of molecules)
                 - List of index groups (corresponding indices for each group)
         """
+        import time
+
+        # Record start time for grouping process
+        grouping_start_time = time.time()
+
         n = len(self.molecules)
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
         total_pairs = len(indices)
@@ -441,8 +446,12 @@ class RMSDGrouper(MoleculeGrouper):
                 rmsd_values, indices
             )
 
+        # Calculate total grouping time
+        grouping_end_time = time.time()
+        grouping_time = grouping_end_time - grouping_start_time
+
         # Save full matrix (after grouping to include auto-determined threshold)
-        self._save_rmsd_matrix(rmsd_matrix, matrix_filename)
+        self._save_rmsd_matrix(rmsd_matrix, matrix_filename, grouping_time)
 
         # Cache the results to avoid recomputation
         self._cached_groups = groups
@@ -716,7 +725,12 @@ class RMSDGrouper(MoleculeGrouper):
 
         return rmsd_matrix
 
-    def _save_rmsd_matrix(self, rmsd_matrix: np.ndarray, filename: str):
+    def _save_rmsd_matrix(
+        self,
+        rmsd_matrix: np.ndarray,
+        filename: str,
+        grouping_time: float = None,
+    ):
         """Save RMSD matrix to file."""
         n = rmsd_matrix.shape[0]
         with open(filename, "w") as f:
@@ -736,6 +750,10 @@ class RMSDGrouper(MoleculeGrouper):
                     )
             else:
                 f.write(f"Threshold: {self.threshold} Å\n")
+
+            # Add grouping time information if available
+            if grouping_time is not None:
+                f.write(f"RMSD Grouping Time: {grouping_time:.2f} seconds\n")
 
             f.write("=" * 80 + "\n")
             f.write("Values in Angstroms (Å)\n")
@@ -1224,7 +1242,7 @@ class IRMSDGrouper(RMSDGrouper):
         threshold=None,
         num_groups=None,
         num_procs: int = 1,
-        align_molecules: bool = True,
+        align_molecules: bool = False,
         ignore_hydrogens: bool = False,
         stereo_check: bool = False,
         **kwargs,
@@ -2310,6 +2328,11 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 - List of molecule groups (each group is a list of molecules)
                 - List of index groups (corresponding indices for each group)
         """
+        import time
+
+        # Record start time for grouping process
+        grouping_start_time = time.time()
+
         n = len(self.molecules)
         print(
             f"[{self.__class__.__name__}] Starting fingerprint calculation for {n} molecules using {self.fingerprint_type} fingerprints"
@@ -2388,6 +2411,10 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 similarity_matrix, valid_indices
             )
 
+        # Calculate total grouping time
+        grouping_end_time = time.time()
+        grouping_time = grouping_end_time - grouping_start_time
+
         # Save Tanimoto matrix to group_result folder
         import os
 
@@ -2408,7 +2435,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         # Save full matrix
         self._save_tanimoto_matrix(
-            similarity_matrix, matrix_filename, valid_indices
+            similarity_matrix, matrix_filename, valid_indices, grouping_time
         )
 
         return groups, index_groups
@@ -2596,6 +2623,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         tanimoto_matrix: np.ndarray,
         filename: str,
         valid_indices: List[int],
+        grouping_time: float = None,
     ):
         """Save Tanimoto similarity matrix to file."""
         n = len(self.molecules)
@@ -2625,6 +2653,12 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                     )
             else:
                 f.write(f"Threshold: {self.threshold}\n")
+
+            # Add grouping time information if available
+            if grouping_time is not None:
+                f.write(
+                    f"Tanimoto Grouping Time: {grouping_time:.2f} seconds\n"
+                )
 
             f.write("=" * 80 + "\n")
             f.write("Values range from 0.0 (dissimilar) to 1.0 (identical)\n")
@@ -2743,7 +2777,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         # Save to file if requested
         if output_file:
             self._save_tanimoto_matrix(
-                similarity_matrix, output_file, valid_indices
+                similarity_matrix, output_file, valid_indices, None
             )
 
         return full_matrix
@@ -3555,6 +3589,11 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 - List of molecule groups (each group is a list of molecules)
                 - List of index groups (corresponding indices for each group)
         """
+        import time
+
+        # Record start time for grouping process
+        grouping_start_time = time.time()
+
         n = len(self.molecules)
 
         if n == 0:
@@ -3625,8 +3664,12 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
                 tfd_values, indices, n
             )
 
+        # Calculate total grouping time
+        grouping_end_time = time.time()
+        grouping_time = grouping_end_time - grouping_start_time
+
         # Save TFD matrix (after grouping to include auto-determined threshold)
-        self._save_tfd_matrix(tfd_matrix, matrix_filename)
+        self._save_tfd_matrix(tfd_matrix, matrix_filename, grouping_time)
 
         # Cache results
         self._cached_groups = groups
@@ -3638,7 +3681,12 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _save_tfd_matrix(self, tfd_matrix: np.ndarray, filename: str):
+    def _save_tfd_matrix(
+        self,
+        tfd_matrix: np.ndarray,
+        filename: str,
+        grouping_time: float = None,
+    ):
         """Save TFD matrix to file (same format as RMSD matrix)."""
         n = tfd_matrix.shape[0]
         with open(filename, "w") as f:
@@ -3664,6 +3712,11 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             f.write(f"Max deviation: {self.max_dev}\n")
             f.write(f"Symmetry radius: {self.symm_radius}\n")
             f.write(f"Ignore colinear bonds: {self.ignore_colinear_bonds}\n")
+
+            # Add grouping time information if available
+            if grouping_time is not None:
+                f.write(f"TFD Grouping Time: {grouping_time:.2f} seconds\n")
+
             f.write("=" * 80 + "\n")
             f.write("Lower values indicate higher torsional similarity\n")
             f.write("∞ indicates calculation failures\n")

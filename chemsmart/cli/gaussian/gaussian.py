@@ -239,7 +239,7 @@ def click_gaussian_grouper_options(f):
                 "hrmsd",
                 "spyrmsd",
                 "irmsd",
-                "pymolalign",
+                "pymolrmsd",
                 "tanimoto",
                 "torsion",
                 "isomorphism",

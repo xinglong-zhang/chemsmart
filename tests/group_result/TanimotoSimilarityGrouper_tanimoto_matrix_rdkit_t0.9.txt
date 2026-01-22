@@ -1,0 +1,13 @@
+Full Tanimoto Similarity Matrix (2x2) - TanimotoSimilarityGrouper
+Fingerprint Type: rdkit
+Threshold: 0.9
+Tanimoto Grouping Time: 0.00 seconds
+================================================================================
+Values range from 0.0 (dissimilar) to 1.0 (identical)
+NaN indicates invalid molecules
+--------------------------------------------------------------------------------
+
+   Mol         1         2
+--------------------------------------------------------------------------------
+     1    0.0000    0.2299
+     2    0.2299    0.0000

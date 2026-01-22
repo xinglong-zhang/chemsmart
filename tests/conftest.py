@@ -1152,6 +1152,11 @@ def multiple_molecules_xyz_file(xyz_directory):
 
 
 @pytest.fixture()
+def two_rotated_molecules_xyz_file(xyz_directory):
+    return os.path.join(xyz_directory, "two_rotated_molecules.xyz")
+
+
+@pytest.fixture()
 def xtb_optimized_xyz_file(xyz_directory):
     return os.path.join(xyz_directory, "ts_xtbopt.xyz")
 
