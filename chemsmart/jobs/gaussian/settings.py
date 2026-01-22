@@ -1303,7 +1303,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     - Multiple charge/multiplicity specifications per layer
 
     Attributes:
-        jobtype (str): Type of ONIOM calculation ('sp', 'opt', 'freq', 'ts', 'irc')
+        jobtype (str, optional): Type of ONIOM calculation ('sp', 'opt', 'freq', 'ts', 'irc',
+            'modred', 'scan'). When using CLI commands, this is automatically inferred from
+            the parent command (e.g., 'chemsmart sub gaussian opt qmmm' sets jobtype='opt').
 
         Level-specific theory parameters:
             high_level_functional (str): DFT functional for high layer (e.g., 'B3LYP', 'M06-2X')
@@ -1402,9 +1404,14 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         Initialize Gaussian QM/MM job settings for ONIOM calculations.
 
         Args:
-            jobtype (str): Type of ONIOM calculation to perform.
+            jobtype (str, optional): Type of ONIOM calculation to perform.
                 Options: 'sp' (single-point), 'opt' (optimization), 'freq' (frequency),
-                'ts' (transition state), 'irc' (intrinsic reaction coordinate)
+                'ts' (transition state), 'irc' (intrinsic reaction coordinate),
+                'modred' (redundant coordinates), 'scan' (coordinate scan)
+
+                Note: When using the CLI with `chemsmart sub gaussian <jobtype> qmmm`,
+                the jobtype is automatically inferred from the parent command and does
+                not need to be specified manually.
 
             Theory level parameters:
                 high_level_functional (str): DFT functional for high QM layer
@@ -1451,7 +1458,6 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
             - The parent class 'functional' and 'basis' attributes are set to high_level values
         """
         super().__init__(**kwargs)
-        self.jobtype = jobtype
         self.high_level_functional = high_level_functional
         self.high_level_basis = high_level_basis
         self.high_level_force_field = high_level_force_field
@@ -1538,17 +1544,19 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
     def _get_route_string_from_jobtype(self):
         """Generate QM/MM route string with job type, freq, and ONIOM specification."""
         route_string = "#"
+        if self.dieze_tag:
+            route_string += self.dieze_tag
 
         # Add job type
-        jobtype = self.jobtype.lower() if self.jobtype else None
+        jobtype = self.job_type.lower() if self.job_type else None
         if jobtype == "opt":
             route_string += " opt"
+        elif jobtype == "scan" or jobtype == "modred":
+            route_string += " opt=modredundant"
         elif jobtype == "ts":
             route_string += " opt=(ts,calcfc,noeigentest)"
         elif jobtype == "irc":
             route_string += " irc"
-        elif jobtype == "freq":
-            route_string += " freq"
         # sp doesn't add any keyword
 
         # Add freq if enabled (and not already a freq job)
@@ -1610,10 +1618,15 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         """Get ONIOM level of theory for route string.
 
         Deprecated: Use _get_route_string_from_jobtype instead.
+
+        Note: jobtype is now inferred from the parent command when using CLI,
+        so it should always be set. If not set, defaults to basic ONIOM route.
         """
-        assert (
-            self.jobtype is not None
-        ), "Job type must be specified for ONIOM job!"
+        if self.job_type is None:
+            logger.warning(
+                "Job type not specified for ONIOM job. "
+                "Using basic route string without job-specific keywords."
+            )
         return self._get_route_string_from_jobtype()
 
     def _get_charge_and_multiplicity(self):

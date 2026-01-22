@@ -3,14 +3,17 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+
+# Import and register qmmm subcommand
+from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("opt", cls=MyCommand)
+@gaussian.group("opt", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click.option(
     "-f",
@@ -20,7 +23,15 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def opt(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI subcommand for running Gaussian optimization calculation."""
+    """CLI subcommand for running Gaussian optimization calculation.
+
+    Can be used standalone for regular optimization or with the 'qmmm'
+    subcommand for QM/MM optimization jobs.
+
+    Examples:
+        chemsmart sub gaussian opt              # Regular optimization
+        chemsmart sub gaussian opt qmmm         # QM/MM optimization
+    """
 
     # get jobrunner for optimization
     jobrunner = ctx.obj["jobrunner"]
@@ -50,7 +61,6 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
     label = ctx.obj["label"]
 
     # Set atoms to freeze
-
     from chemsmart.utils.utils import (
         convert_list_to_gaussian_frozen_list,
         get_list_from_string_range,
@@ -65,13 +75,24 @@ def opt(ctx, freeze_atoms, skip_completed, **kwargs):
 
     logger.info(f"Opt job settings from project: {opt_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian.opt import GaussianOptJob
+    # Store parent context for potential qmmm subcommand
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = freeze_atoms
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = opt_settings
 
-    return GaussianOptJob(
-        molecule=molecule,
-        settings=opt_settings,
-        label=label,
-        jobrunner=jobrunner,
-        skip_completed=skip_completed,
-        **kwargs,
-    )
+    # If no subcommand invoked, run regular optimization
+    if ctx.invoked_subcommand is None:
+        from chemsmart.jobs.gaussian.opt import GaussianOptJob
+
+        return GaussianOptJob(
+            molecule=molecule,
+            settings=opt_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+
+
+create_qmmm_subcommand(opt)

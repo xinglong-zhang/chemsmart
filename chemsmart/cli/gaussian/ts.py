@@ -3,14 +3,15 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("ts", cls=MyCommand)
+@gaussian.group("ts", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click.option(
     "-f",
@@ -20,7 +21,15 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def ts(ctx, freeze_atoms, skip_completed, **kwargs):
-    """CLI subcommand for running Gaussian transition state calculation."""
+    """CLI subcommand for running Gaussian transition state calculation.
+
+    Can be used standalone for regular TS search or with the 'qmmm'
+    subcommand for QM/MM TS calculations.
+
+    Examples:
+        chemsmart sub gaussian ts              # Regular TS search
+        chemsmart sub gaussian ts qmmm         # QM/MM TS search
+    """
 
     # get jobrunner for transition state calculation
     jobrunner = ctx.obj["jobrunner"]
@@ -42,20 +51,13 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
 
     # get molecule
     molecules = ctx.obj["molecules"]
-    molecule = molecules[
-        -1
-    ]  # get last molecule from list of molecules from cli.gaussian.py subcommands
-    # index = '-1' would access the right structure from the list of molecule
-    # returned from cli.gaussian.py subcommands
-    # user specified index was used there to return the right molecule and
-    # store it as a list of single element/itself
+    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]
     logger.debug(f"Label for job: {label}")
 
     # Set atoms to freeze
-
     from chemsmart.utils.utils import (
         convert_list_to_gaussian_frozen_list,
         get_list_from_string_range,
@@ -70,13 +72,24 @@ def ts(ctx, freeze_atoms, skip_completed, **kwargs):
 
     logger.info(f"TS job settings from project: {ts_settings.__dict__}")
 
-    from chemsmart.jobs.gaussian.ts import GaussianTSJob
+    # Store parent context for potential qmmm subcommand
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = freeze_atoms
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = ts_settings
 
-    return GaussianTSJob(
-        molecule=molecule,
-        settings=ts_settings,
-        label=label,
-        jobrunner=jobrunner,
-        skip_completed=skip_completed,
-        **kwargs,
-    )
+    # If no subcommand invoked, run regular TS search
+    if ctx.invoked_subcommand is None:
+        from chemsmart.jobs.gaussian.ts import GaussianTSJob
+
+        return GaussianTSJob(
+            molecule=molecule,
+            settings=ts_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+
+
+create_qmmm_subcommand(ts)
