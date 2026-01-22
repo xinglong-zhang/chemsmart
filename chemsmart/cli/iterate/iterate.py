@@ -15,6 +15,7 @@ from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.iterate import generate_template
+from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,7 @@ def iterate(
         raw_config = {}
 
     # Validate and normalize configuration
-    config = validate_yaml_config(raw_config, filename)
+    config = validate_config(raw_config, filename)
 
     logger.info(f"Loaded configuration from '{filename}'")
     logger.info(f"  Skeletons: {len(config['skeletons'])}")
@@ -304,34 +305,24 @@ def _parse_index_string(
     value, entry_type: str, idx: int, field_name: str
 ) -> list[int] | None:
     """
-    Parse index string into a list of integers.
-
-    Supports formats:
-    - Single integer: 5 or "5"
-    - Comma-separated: "1, 2, 3" or "1,2,3"
-    - Ranges: "1-5" (expands to [1, 2, 3, 4, 5])
-    - Mixed: "1, 3-5, 8" (expands to [1, 3, 4, 5, 8])
+    Parse index string into a list of integers using utility function.
+    Wrapper to handle empty values and single integers.
 
     Parameters
     ----------
     value : int, str, or None
         The value to parse
     entry_type : str
-        "skeleton" or "substituent" (for error messages)
+        "skeleton" or "substituent" (for error messages context, though currently unused for errors)
     idx : int
-        Entry index (for error messages)
+        Entry index
     field_name : str
-        Field name like "link_index" or "skeleton_indices" (for error messages)
+        Field name
 
     Returns
     -------
     list[int] | None
         List of 1-based indices, or None if value is empty/null
-
-    Raises
-    ------
-    click.BadParameter
-        If the format is invalid
     """
     # Handle empty/null values
     if value is None or value == "" or value == "null":
@@ -341,78 +332,34 @@ def _parse_index_string(
     if isinstance(value, int):
         return [value]
 
-    # Handle string
-    if not isinstance(value, str):
+    # Use utility function for string parsing
+    try:
+        if isinstance(value, str):
+            return get_list_from_string_range(value)
+    except Exception:
         raise click.BadParameter(
-            f"{entry_type.capitalize()} entry {idx + 1}: '{field_name}' must be an integer or string, "
-            f"got {type(value).__name__}",
+            f"{entry_type.capitalize()} entry {idx + 1}: Invalid format '{value}' in '{field_name}'. "
+            f"Expected integer, comma-separated list, or range (e.g. '1-5').",
             param_hint="'-f' / '--filename'",
         )
 
-    result = []
-    # Split by comma and process each part
-    parts = value.split(",")
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-
-        # Check if it's a range (contains '-')
-        if "-" in part:
-            # Handle range like "3-7"
-            range_parts = part.split("-")
-            if len(range_parts) != 2:
-                raise click.BadParameter(
-                    f"{entry_type.capitalize()} entry {idx + 1}: Invalid range format '{part}' in '{field_name}'. "
-                    f"Expected format like '3-7'.",
-                    param_hint="'-f' / '--filename'",
-                )
-            try:
-                start = int(range_parts[0].strip())
-                end = int(range_parts[1].strip())
-            except ValueError:
-                raise click.BadParameter(
-                    f"{entry_type.capitalize()} entry {idx + 1}: Invalid range '{part}' in '{field_name}'. "
-                    f"Expected integers.",
-                    param_hint="'-f' / '--filename'",
-                )
-
-            if start > end:
-                raise click.BadParameter(
-                    f"{entry_type.capitalize()} entry {idx + 1}: Invalid range '{part}' in '{field_name}'. "
-                    f"Start ({start}) must be <= end ({end}).",
-                    param_hint="'-f' / '--filename'",
-                )
-
-            result.extend(range(start, end + 1))
-        else:
-            # Handle single integer
-            try:
-                result.append(int(part))
-            except ValueError:
-                raise click.BadParameter(
-                    f"{entry_type.capitalize()} entry {idx + 1}: Invalid value '{part}' in '{field_name}'. "
-                    f"Expected an integer.",
-                    param_hint="'-f' / '--filename'",
-                )
-
-    if not result:
-        return None
-
-    # Remove duplicates and sort
-    return sorted(set(result))
+    # If it's not None, not Int, and not String (or string parsing failed silently elsewhere)
+    raise click.BadParameter(
+        f"{entry_type.capitalize()} entry {idx + 1}: '{field_name}' has invalid type {type(value).__name__}.",
+        param_hint="'-f' / '--filename'",
+    )
 
 
-def validate_yaml_config(config: dict, filename: str) -> dict:
+def validate_config(config: dict, filename: str) -> dict:
     """
-    Validate YAML configuration and normalize values.
+    Validate configuration (from .cfg file in YAML format) and normalize values.
 
     Parameters
     ----------
     config : dict
-        Raw configuration dictionary from YAML
+        Raw configuration dictionary from parsed file
     filename : str
-        Path to YAML file (for error messages)
+        Path to configuration file (for error messages)
 
     Returns
     -------
@@ -428,7 +375,7 @@ def validate_yaml_config(config: dict, filename: str) -> dict:
     unknown_top_keys = set(config.keys()) - ALLOWED_TOP_LEVEL_KEYS
     if unknown_top_keys:
         raise click.BadParameter(
-            f"Unknown top-level key(s) in YAML: {unknown_top_keys}. "
+            f"Unknown top-level key(s) in configuration: {unknown_top_keys}. "
             f"Allowed keys: {ALLOWED_TOP_LEVEL_KEYS}",
             param_hint="'-f' / '--filename'",
         )

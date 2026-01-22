@@ -1409,37 +1409,3 @@ class IterateAnalyzer:
         return optimal_sub
 
 
-if __name__ == "__main__":
-    test_path = "/Users/wanglewen/Desktop/Project/test/ase"
-    skeleton_path = f"{test_path}/skeleton.xyz"
-    sub1_path = f"{test_path}/sub1.xyz"
-    skeleton_index = 5  # 1-based index
-    sub_index = 1  # 1-based index
-
-    # Load molecules from xyz files
-    skeleton = Molecule.from_filepath(skeleton_path)
-    sub1 = Molecule.from_filepath(sub1_path)
-
-    print(f"Skeleton: {skeleton.num_atoms} atoms")
-    print(f"Substituent: {sub1.num_atoms} atoms")
-
-    # Create analyzer and run
-    analyzer = IterateAnalyzer(
-        skeleton=skeleton,
-        substituent=sub1,
-        skeleton_link_index=skeleton_index,
-        substituent_link_index=sub_index,
-        sphere_direction_samples_num=96,
-        axial_rotations_sample_num=6,
-    )
-
-    combined = analyzer.run()
-
-    print(f"Combined: {combined.num_atoms} atoms")
-    print(f"Combined formula: {combined.chemical_formula}")
-
-    # Write output
-    output_path = f"{test_path}/skeleton_with_sub1_test.xyz"
-    with open(output_path, "w") as f:
-        combined.write_coordinates(f)
-    print(f"Output written to: {output_path}")

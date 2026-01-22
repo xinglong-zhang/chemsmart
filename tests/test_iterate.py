@@ -3,7 +3,7 @@ import os
 import numpy as np
 import yaml
 
-from chemsmart.cli.iterate.iterate import validate_yaml_config
+from chemsmart.cli.iterate.iterate import validate_config
 from chemsmart.jobs.iterate.job import IterateJob
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
@@ -30,7 +30,7 @@ def test_iterate_workflow(
         with open(iterate_config_file, "r") as f:
             raw_config = yaml.safe_load(f)
 
-        config = validate_yaml_config(raw_config, iterate_config_file)
+        config = validate_config(raw_config, iterate_config_file)
 
         # 2. Setup Job Settings
         job_settings = IterateJobSettings(
@@ -95,6 +95,11 @@ def test_iterate_workflow(
 
         generated_structures = parse_multi_xyz(generated_output_path)
         expected_structures = parse_multi_xyz(iterate_expected_output_file)
+
+        # Sort structures by label to ensure order-independent comparison
+        # (multiprocessing or config order might vary generation sequence)
+        generated_structures.sort(key=lambda x: x["label"])
+        expected_structures.sort(key=lambda x: x["label"])
 
         assert len(generated_structures) == len(expected_structures), (
             f"Number of generated structures ({len(generated_structures)}) "

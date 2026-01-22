@@ -6,7 +6,7 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
-from chemsmart.cli.subcommands import run_subcommands, subcommands
+from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
@@ -151,9 +151,6 @@ def process_pipeline(ctx, *args, **kwargs):
 for subcommand in subcommands:
     run.add_command(subcommand)
 
-# Add run-only subcommands (not available in 'sub')
-for subcommand in run_subcommands:
-    run.add_command(subcommand)
 
 if __name__ == "__main__":
     obj: dict[str, str] = {}
