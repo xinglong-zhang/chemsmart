@@ -459,7 +459,7 @@ class IterateJobRunner(JobRunner):
              The job instance with configuration options
         """
         successful_count = 0
-        
+
         if job.separate_outputs:
             # Separate files mode
             output_dir = job.output_directory
@@ -468,9 +468,11 @@ class IterateJobRunner(JobRunner):
             else:
                 # Should have been validated by CLI, but fallback
                 output_dir = "."
-            
-            logger.info(f"Writing separate output files to directory: {output_dir}")
-            
+
+            logger.info(
+                f"Writing separate output files to directory: {output_dir}"
+            )
+
             for label, mol in results:
                 if mol is not None:
                     # Construct filename: directory + label + .xyz
@@ -489,8 +491,10 @@ class IterateJobRunner(JobRunner):
                         logger.debug(f"Wrote {filename}")
                     except Exception as e:
                         logger.error(f"Failed to write {filename}: {e}")
-                        
-            logger.info(f"Wrote {successful_count} separate molecule files to {output_dir}")
+
+            logger.info(
+                f"Wrote {successful_count} separate molecule files to {output_dir}"
+            )
 
         else:
             # Single merged output file mode
@@ -517,7 +521,9 @@ class IterateJobRunner(JobRunner):
                             )
                         successful_count += 1
 
-            logger.info(f"Wrote {successful_count} molecule(s) to {outputfile}")
+            logger.info(
+                f"Wrote {successful_count} molecule(s) to {outputfile}"
+            )
 
     def run(self, job: "IterateJob", **kwargs) -> None:
         """

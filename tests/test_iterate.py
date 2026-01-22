@@ -34,7 +34,7 @@ def test_iterate_workflow(
 
         # 2. Setup Job Settings
         job_settings = IterateJobSettings(
-            config_file=iterate_config_file, algorithm="lagrange_multipliers"
+            config_file=iterate_config_file, method="lagrange_multipliers"
         )
         job_settings.skeleton_list = config["skeletons"]
         job_settings.substituent_list = config["substituents"]
@@ -47,7 +47,7 @@ def test_iterate_workflow(
         job = IterateJob(
             settings=job_settings,
             jobrunner=jobrunner,
-            nprocs=1,
+            nprocs=4,
             outputfile=str(output_file),
         )
 
@@ -60,8 +60,8 @@ def test_iterate_workflow(
         ), "Output file was not generated"
 
         # Compare generated output with expected output
-        # We parse both files to compare content semantically (atoms and coordinates)
-        # rather than byte-by-byte, to allow for minor floating point differences
+        # Semantic comparison (atoms and coordinates) is preferred over byte-comparison
+        # to robustly handle floating point formatting differences in XYZ files
 
         # Helper to parse multi-structure XYZ
         def parse_multi_xyz(filepath):
@@ -117,8 +117,13 @@ def test_iterate_workflow(
                 gen["atoms"] == exp["atoms"]
             ), f"Atom symbols mismatch for {gen['label']}"
 
-            # Coordinates check skipped due to random optimization
-            # np.testing.assert_allclose(...)
+            # Check coordinates
+            np.testing.assert_allclose(
+                gen["coords"],
+                exp["coords"],
+                atol=1e-5,
+                err_msg=f"Coordinate mismatch for {gen['label']}",
+            )
 
     finally:
         # Restore CWD
