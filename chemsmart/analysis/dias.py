@@ -8,9 +8,9 @@ import numpy as np
 from ase import units
 from matplotlib import pyplot as plt
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.repattern import (
     gaussian_dias_filename_point_with_fragment1,
     gaussian_dias_filename_point_with_fragment2,

@@ -1,7 +1,7 @@
 import logging
 
+from chemsmart.io.folder import BaseFolder
 from chemsmart.io.orca.output import ORCAOutput
-from chemsmart.utils.mixins import BaseFolder
 from chemsmart.utils.periodictable import PeriodicTable
 
 p = PeriodicTable()

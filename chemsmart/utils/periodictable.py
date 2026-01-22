@@ -167,3 +167,21 @@ class PeriodicTable:
         """
         # obtain the covalent radius of the element
         return covalent_radii[self.to_atomic_number(symbol)]
+
+    def requires_ecp(self, symbol):
+        """
+        Check if an element requires an effective core potential (ECP).
+
+        Elements with atomic number > 36 (i.e., beyond Kr in period 4)
+        typically require ECPs in pseudopotential calculations. This
+        corresponds to elements from Rb (Z=37) onwards.
+
+        Args:
+            symbol (str): Element symbol.
+
+        Returns:
+            bool: True if element requires ECP, False otherwise.
+        """
+        # Elements with atomic number > 36 require genecp (ECP)
+        # Elements with atomic number <= 36 use gen (no ECP)
+        return self.to_atomic_number(symbol) > 36

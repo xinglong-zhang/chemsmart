@@ -1,7 +1,6 @@
 import copy
 import logging
 import os
-import re
 from functools import cached_property, lru_cache
 
 import networkx as nx
@@ -15,9 +14,7 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
-from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.geometry import is_collinear
-from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
 
@@ -285,6 +282,143 @@ class Molecule:
             return list(self.symbols)
 
     @property
+    def atomic_radii_list(self):
+        """Return a list of atomic radii for each atom in the molecule."""
+        return [p.covalent_radius(symbol) for symbol in self.symbols]
+
+    @property
+    def vdw_radii_list(self):
+        """Return a list of van der Waals radii for each atom in the molecule."""
+        return [p.vdw_radius(symbol) for symbol in self.symbols]
+
+    @property
+    def estimated_dispersion(self):
+        """Estimated dispersion parameter for Voronoi tessellation.
+        Returns:
+        - dispersion (float): Estimated maximum distance for adjacent points.
+        """
+        n_points = self.distance_matrix.shape[0]
+        max_distance = np.max(
+            self.distance_matrix[np.triu_indices(n_points, k=1)]
+        )
+
+        max_radii_sum = 0.0
+        radii = np.array(self.vdw_radii_list)
+        if len(radii) != n_points:
+            raise ValueError("Number of radii must match number of points.")
+        for i in range(n_points):
+            for j in range(i + 1, n_points):
+                radii_sum = radii[i] + radii[j]
+                max_radii_sum = max(max_radii_sum, radii_sum)
+
+        # Use a factor of 1.5 to ensure sufficient dispersion for Voronoi tessellation
+        dispersion = max(max_distance, max_radii_sum) * 1.5  # add 50% buffer
+        return dispersion
+
+    @property
+    def voronoi_dirichlet_occupied_volume(self):
+        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet tessellation.
+
+        Note: This method requires the pyvoro package, which can be installed with:
+            pip install chemsmart[voronoi]
+        Note: pyvoro requires Python < 3.12
+        """
+        from chemsmart.utils.geometry import (
+            calculate_voronoi_dirichlet_occupied_volume,
+        )
+
+        return calculate_voronoi_dirichlet_occupied_volume(
+            coords=self.positions,
+            radii=self.vdw_radii_list,
+            dispersion=self.estimated_dispersion,
+        )
+
+    @property
+    def voronoi_dirichlet_polyhedra_occupied_volume(self):
+        """Calculate the occupied volume of the molecule using Voronoi-Dirichlet Polyhedra (VDP)."""
+        from chemsmart.utils.geometry import (
+            calculate_molecular_volume_vdp,
+        )
+
+        return calculate_molecular_volume_vdp(
+            coordinates=self.positions,
+            vdw_radii=self.vdw_radii_list,
+        )
+
+    @property
+    def crude_volume_by_atomic_radii(self):
+        """Calculate the crude occupied volume of the molecule using atomic radii."""
+        from chemsmart.utils.geometry import calculate_crude_occupied_volume
+
+        return calculate_crude_occupied_volume(
+            coords=self.positions, radii=self.atomic_radii_list
+        )
+
+    @property
+    def crude_volume_by_vdw_radii(self):
+        """Calculate the crude occupied volume of the molecule using van der Waals radii."""
+        from chemsmart.utils.geometry import calculate_crude_occupied_volume
+
+        return calculate_crude_occupied_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def vdw_volume(self):
+        """Calculate the occupied volume of the molecule using van der Waals radii.
+
+        Uses pairwise overlap correction. For more accurate results on complex
+        molecules, consider using ``grid_vdw_volume`` instead.
+
+        See Also
+        --------
+        grid_vdw_volume : Grid-based volume (more accurate for complex molecules)
+        vdw_volume_from_rdkit : RDKit's grid-based implementation
+        """
+        from chemsmart.utils.geometry import calculate_vdw_volume
+
+        return calculate_vdw_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def grid_vdw_volume(self):
+        """Calculate the VDW volume using grid-based numerical integration.
+
+        This method places the molecule in a 3D grid and counts grid points
+        that fall inside any atomic VDW sphere. This approach correctly handles
+        all orders of atomic overlaps and provides more accurate volume estimates
+        for complex molecules compared to the pairwise method.
+
+        This implementation is similar to RDKit's DoubleCubicLatticeVolume
+        algorithm.
+
+        Returns
+        -------
+        float
+            Volume in cubic Ångstroms (Å³).
+
+        See Also
+        --------
+        vdw_volume : Faster pairwise overlap method
+        vdw_volume_from_rdkit : RDKit's native implementation
+        """
+        from chemsmart.utils.geometry import calculate_grid_vdw_volume
+
+        return calculate_grid_vdw_volume(
+            coords=self.positions, radii=self.vdw_radii_list
+        )
+
+    @property
+    def vdw_volume_from_rdkit(self):
+        """Calculate the van der Waals volume of the molecule using RDKit."""
+        from rdkit.Chem.rdMolDescriptors import DoubleCubicLatticeVolume
+
+        dclv = DoubleCubicLatticeVolume(self.to_rdkit())
+        volume = dclv.GetVDWVolume()
+        return volume
+
+    @property
     def num_atoms(self):
         """
         Return the number of atoms in the molecule.
@@ -318,7 +452,8 @@ class Molecule:
         """
         Check if molecule is aromatic or not.
         """
-        return Chem.GetAromaticAtoms(self.to_rdkit()) != []
+        mol = self.to_rdkit()
+        return any(atom.GetIsAromatic() for atom in mol.GetAtoms())
 
     @property
     def is_ring(self):
@@ -633,9 +768,9 @@ class Molecule:
             return cls._read_orca_inputfile(filepath, **kwargs)
 
         if basename.endswith(".out"):
-            from chemsmart.utils.io import get_outfile_format
+            from chemsmart.utils.io import get_program_type_from_file
 
-            program = get_outfile_format(filepath)
+            program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
             if program == "gaussian":
@@ -654,6 +789,13 @@ class Molecule:
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
 
+        if basename.endswith((".cdx", ".cdxml")):
+            return cls._read_chemdraw_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -661,6 +803,8 @@ class Molecule:
         """
         Read XYZ format molecular structure file.
         """
+        from chemsmart.io.xyz.xyzfile import XYZFile
+
         xyz_file = XYZFile(filename=filepath)
         molecules = xyz_file.get_molecules(
             index=index, return_list=return_list
@@ -673,6 +817,8 @@ class Molecule:
         """
         Read SDF format molecular structure file.
         """
+        from chemsmart.io.file import SDFFile
+
         sdf_file = SDFFile(filepath)
         return sdf_file.molecule
 
@@ -744,6 +890,33 @@ class Molecule:
 
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.get_molecule(index=index)
+
+    @classmethod
+    def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read ChemDraw file (.cdx or .cdxml) format.
+
+        Args:
+            filepath (str): Path to ChemDraw file (.cdx or .cdxml)
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+            return_list (bool): If True, return a list of molecules.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from ChemDraw file.
+
+        Note:
+            - .cdxml files are XML-based ChemDraw format.
+            - .cdx files are binary ChemDraw format.
+            - RDKit's MolsFromCDXMLFile supports both formats.
+            - 3D coordinates are generated using RDKit's EmbedMolecule.
+        """
+        from chemsmart.io.file import CDXFile
+
+        chemdraw_file = CDXFile(filename=filepath)
+        return chemdraw_file.get_molecules(
+            index=index, return_list=return_list
+        )
 
     # @staticmethod
     # @file_cache()
@@ -1885,41 +2058,3 @@ class CoordinateBlock:
                 return [1, 1, 1]
         else:
             return None
-
-
-class SDFFile(FileMixin):
-    """
-    SDF file object.
-    """
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    @property
-    def molecule(self):
-        return self.get_molecule()
-
-    def get_molecule(self):
-        list_of_symbols = []
-        cart_coords = []
-        # sdf line pattern containing coordinates and element type
-        from chemsmart.utils.repattern import sdf_pattern
-
-        for line in self.contents:
-            match = re.match(sdf_pattern, line)
-            if match:
-                x = float(match.group(1))
-                y = float(match.group(2))
-                z = float(match.group(3))
-                atom_type = str(match.group(4))
-                list_of_symbols.append(atom_type)
-                cart_coords.append((x, y, z))
-
-        cart_coords = np.array(cart_coords)
-
-        if len(list_of_symbols) == 0 or len(cart_coords) == 0:
-            raise ValueError("No coordinates found in the SDF file!")
-
-        return Molecule.from_symbols_and_positions_and_pbc_conditions(
-            list_of_symbols=list_of_symbols, positions=cart_coords
-        )

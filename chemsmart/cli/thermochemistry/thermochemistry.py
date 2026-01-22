@@ -14,7 +14,7 @@ from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import (
     find_output_files_in_directory,
-    get_outfile_format,
+    get_program_type_from_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,7 +165,7 @@ def thermochemistry(
     **kwargs,
 ):
     """
-    CLI for running thermochemistry jobs using the chemsmart framework.
+    CLI subcommand for running thermochemistry jobs using the chemsmart framework.
 
     This command allows you to compute thermochemistry for Gaussian or ORCA
     output files.
@@ -226,20 +226,30 @@ def thermochemistry(
     files = []
 
     if directory:
-        files = find_output_files_in_directory(directory, filetype)
+        if filetype.lower() not in {"gaussian", "orca"}:
+            raise ValueError(
+                f"Unsupported filetype {filetype} for thermochemistry.\n"
+                f"Please choose one of ['gaussian', 'orca']."
+            )
+        files = find_output_files_in_directory(
+            directory=directory, program=filetype.lower()
+        )
         for file in files:
             job = ThermochemistryJob.from_filename(
                 filename=file,
                 settings=job_settings,
                 skip_completed=skip_completed,
             )
+            if outputfile is not None:
+                job_settings.overwrite = False
+                job_settings.write_header = False
             jobs.append(job)
             logger.info(f"Created thermochemistry job for file: {file}")
             logger.debug(f"Job settings: {job_settings.__dict__}")
 
     elif filenames:
         for file in filenames:
-            if get_outfile_format(file) not in {"gaussian", "orca"}:
+            if get_program_type_from_file(file) not in {"gaussian", "orca"}:
                 raise ValueError(
                     f"Unsupported output file type for '{file}'. Use Gaussian or "
                     f"ORCA output files."
@@ -249,6 +259,9 @@ def thermochemistry(
                 settings=job_settings,
                 skip_completed=skip_completed,
             )
+            if outputfile is not None:
+                job_settings.overwrite = False
+                job_settings.write_header = False
             jobs.append(job)
             logger.info(f"Created thermochemistry job for file: {file}")
 

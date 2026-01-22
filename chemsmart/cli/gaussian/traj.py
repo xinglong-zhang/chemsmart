@@ -55,7 +55,7 @@ def traj(
     proportion_structures_to_use,
     **kwargs,
 ):
-    """CLI for running Gaussian set jobs."""
+    """CLI subcommand for running Gaussian set jobs."""
 
     # get jobrunner for running Gaussian set jobs
     jobrunner = ctx.obj["jobrunner"]
@@ -89,7 +89,7 @@ def traj(
     logger.debug(f"Label for job: {label}")
 
     logger.info(
-        f"Simulated annealing {type} settings from project: "
+        f"Simulated annealing {jobtype} settings from project: "
         f"{structure_set_settings.__dict__}"
     )
 

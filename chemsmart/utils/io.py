@@ -14,14 +14,26 @@ Key functionality includes:
 import logging
 import os
 import re
+import shutil
+import string
+import subprocess
+from io import BytesIO
+
+# from rdkit import Chem
+#
+# import tempfile
 from pathlib import Path
+from typing import List
 
 import numpy as np
+from rdkit import Chem
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.repattern import float_pattern_with_exponential
 
 logger = logging.getLogger(__name__)
+
+SAFE_CHARS = set(string.ascii_letters + string.digits + "_-")
 
 
 def create_molecule_list(
@@ -235,7 +247,7 @@ def match_outfile_pattern(line) -> str | None:
     return None
 
 
-def get_outfile_format(filepath) -> str:
+def get_program_type_from_file(filepath) -> str:
     """
     Detect the type of quantum chemistry output file.
 
@@ -246,7 +258,8 @@ def get_outfile_format(filepath) -> str:
         filepath (str): Path to the quantum chemistry output file.
 
     Returns:
-        str: Program name, one of: "gaussian", "orca", "xtb", "crest", or "unknown" if the format cannot be detected.
+        str: Program name, one of: "gaussian", "orca", "xtb", "crest",
+        or "unknown" if the format cannot be detected.
     """
     max_lines = 200
     try:
@@ -301,7 +314,9 @@ def find_output_files_in_directory(directory, program):
                 outfiles.append(os.path.join(subdir, file))
 
     matched_files = [
-        file for file in outfiles if get_outfile_format(file) == program
+        file
+        for file in outfiles
+        if get_program_type_from_file(file) == program
     ]
     return matched_files
 
@@ -321,7 +336,8 @@ def load_molecules_from_paths(
 
     Args:
         file_paths (list of str or Path): List of file paths to load molecules from.
-        index (int or str): Index or slice to select specific structures from each file.
+        index (int or str or None): Index or slice to select specific structures from each file.
+            If None, defaults to "-1" (last structure).
         add_index_suffix_for_single (bool, optional): If True, appends an index suffix to
             the molecule name even if only a single structure is loaded from a file.
         check_exists (bool, optional): If True, checks that each file exists before loading.
@@ -333,6 +349,10 @@ def load_molecules_from_paths(
         FileNotFoundError: If `check_exists` is True and a file does not exist.
         Exception: If an error occurs during molecule loading from a file.
     """
+    # Default index to "-1" (last structure) if not specified
+    if index is None:
+        index = "-1"
+
     loaded = []
 
     for i, file_path in enumerate(file_paths):
@@ -380,3 +400,139 @@ def load_molecules_from_paths(
             raise
 
     return loaded
+
+
+def clean_label(label: str) -> str:
+    """
+    Make a label that is safe for filenames, DB keys, RST labels, etc.
+    - Keeps letters, digits, `_` and `-`.
+    - Replaces spaces, commas, dots, parentheses, etc. with `_`.
+    - Encodes "'" as `_prime_` and "*" as `_star_`.
+    - Collapses multiple underscores and strips leading/trailing `_`.
+    """
+
+    # Preserve your special semantics
+    label = label.replace("'", "_prime_")
+    label = label.replace("*", "_star_")
+
+    out = []
+    for ch in label:
+        if ch in SAFE_CHARS:
+            out.append(ch)
+        else:
+            # includes ch.isspace() or ch in {",", ".", "(", ")", "[", "]", "/", "\\"}
+            # drop any other weird character, or map to "_"
+            out.append("_")
+
+    cleaned = "".join(out)
+    # collapse runs of underscores
+    cleaned = re.sub(r"_+", "_", cleaned)
+    # strip leading/trailing underscores
+    cleaned = cleaned.strip("_")
+    return cleaned
+
+
+def convert_string_indices_to_pymol_id_indices(string_indices: str) -> str:
+    """
+    Convert a comma-separated list of atom index ranges into a PyMOL `id` selection.
+
+    The input is expected to be a string of indices and/or index ranges separated
+    by commas, e.g.:
+
+        "1-10,11,14,19-30"
+
+    This will be converted into a PyMOL selection string where each element is
+    prefixed with `id` and combined with `or`, e.g.:
+
+        "id 1-10 or id 11 or id 14 or id 19-30"
+
+    Note: PyMOL selection:
+    `select mysel, id 1 or id 2 or id 8-10`
+    selects all atoms where (id == 1) OR (id == 2) OR (id is in 8-10)
+    So any atom that satisfies any one of those conditions is included in the selection.
+    That gives you atoms 1, 2, 8, 9, 10.
+    This is proper boolean logic:
+    or -> set union (combine atoms from all conditions)
+
+    Parameters
+    ----------
+    string_indices : str
+        Comma-separated atom indices and/or ranges, as understood by PyMOL.
+
+    Returns
+    -------
+    str
+        A PyMOL selection string using `id` and `or`.
+
+    Raises
+    ------
+    ValueError
+        If the input string is empty or contains no valid indices after stripping.
+    """
+    # Split on commas and normalise whitespace.
+    parts = [
+        part.strip() for part in string_indices.split(",") if part.strip()
+    ]
+
+    if not parts:
+        raise ValueError(
+            "string_indices must contain at least one index or range."
+        )
+
+    if len(parts) == 1:
+        return f"id {parts[0]}"
+
+    return " or ".join(f"id {part}" for part in parts)
+
+
+def obtain_mols_from_cdx_via_obabel(filename: str) -> List[Chem.Mol]:
+    """
+    Use the Open Babel CLI ('obabel') to convert a CDX file to SDF and
+    return a list of RDKit Mol objects.
+
+    This implementation writes no temporary files; it streams SDF from
+    stdout into RDKit, which avoids Windows path issues.
+
+    Args:
+        filename: Path to the .cdx file.
+
+    Returns:
+        List of RDKit Mol objects.
+
+    Raises:
+        ValueError: If 'obabel' is not available or no molecules can be read.
+        RuntimeError: If the obabel subprocess fails.
+    """
+    obabel = shutil.which("obabel")
+    if obabel is None:
+        raise ValueError(
+            "Open Babel CLI ('obabel') is not available on PATH. "
+            "Install Open Babel or save the ChemDraw file as CDXML instead."
+        )
+
+    # Run: obabel -icdx input.cdx -osdf
+    # This writes SDF directly to stdout.
+    result = subprocess.run(
+        [obabel, "-icdx", filename, "-osdf"],
+        check=False,
+        capture_output=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"obabel failed to convert {filename!r} to SDF "
+            f"(exit code {result.returncode}). stderr:\n{result.stderr.decode(errors='replace')}"
+        )
+
+    # Feed stdout bytes directly into RDKit's ForwardSDMolSupplier
+    sdf_stream = BytesIO(result.stdout)
+    suppl = Chem.ForwardSDMolSupplier(sdf_stream, removeHs=False)
+
+    mols = [mol for mol in suppl if mol is not None]
+
+    if not mols:
+        raise ValueError(
+            f"Open Babel produced no valid molecules from CDX file: {filename}"
+        )
+
+    return mols
