@@ -70,9 +70,8 @@ def scan(
         scan_settings.modred["constrained_coordinates"] = (
             constrained_coordinates_info
         )
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]
@@ -82,10 +81,35 @@ def scan(
 
     from chemsmart.jobs.gaussian.scan import GaussianScanJob
 
-    return GaussianScanJob(
-        molecule=molecule,
-        settings=scan_settings,
-        label=label,
-        jobrunner=jobrunner,
-        **kwargs,
-    )
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} scan jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running scan for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = GaussianScanJob(
+                molecule=molecule,
+                settings=scan_settings,
+                label=molecule_label,
+                jobrunner=jobrunner,
+                **kwargs,
+            )
+            jobs.append(job)
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        return GaussianScanJob(
+            molecule=molecule,
+            settings=scan_settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )

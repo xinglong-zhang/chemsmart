@@ -35,6 +35,7 @@ chemistry software.
    :caption: CLI Reference
 
    cli-overview
+   molecule-input-formats
 
 .. toctree::
    :maxdepth: 2

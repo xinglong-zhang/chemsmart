@@ -46,9 +46,8 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
     modred_settings = modred_settings.merge(job_settings, keywords=keywords)
     check_charge_and_multiplicity(modred_settings)
 
-    # get molecule
+    # get molecules
     molecules = ctx.obj["molecules"]
-    molecule = molecules[-1]
 
     # get label for the job
     label = ctx.obj["label"]
@@ -58,10 +57,35 @@ def modred(ctx, jobtype, coordinates, step_size, num_steps, **kwargs):
 
     from chemsmart.jobs.gaussian.modred import GaussianModredJob
 
-    return GaussianModredJob(
-        molecule=molecule,
-        settings=modred_settings,
-        label=label,
-        jobrunner=jobrunner,
-        **kwargs,
-    )
+    # Get the original molecule indices from context
+    molecule_indices = ctx.obj["molecule_indices"]
+
+    # Handle multiple molecules: create one job per molecule
+    if len(molecules) > 1 and molecule_indices is not None:
+        logger.info(f"Creating {len(molecules)} modred jobs")
+        jobs = []
+        for molecule, idx in zip(molecules, molecule_indices):
+            molecule_label = f"{label}_idx{idx}"
+            logger.info(
+                f"Running modred for molecule {idx}: {molecule} with label {molecule_label}"
+            )
+
+            job = GaussianModredJob(
+                molecule=molecule,
+                settings=modred_settings,
+                label=molecule_label,
+                jobrunner=jobrunner,
+                **kwargs,
+            )
+            jobs.append(job)
+        return jobs
+    else:
+        # Single molecule case
+        molecule = molecules[-1]
+        return GaussianModredJob(
+            molecule=molecule,
+            settings=modred_settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )

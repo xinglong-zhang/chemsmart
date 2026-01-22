@@ -12,7 +12,9 @@ from chemsmart.cli.job import (
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
-from chemsmart.utils.utils import return_objects_from_string_index
+from chemsmart.utils.utils import (
+    return_objects_and_indices_from_string_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -502,16 +504,24 @@ def gaussian(
     label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
-    # then return that structure as a list
+    # then return that structure as a list and track the original indices
+    molecule_indices = None
     if index is not None:
-        molecules = return_objects_from_string_index(
-            list_of_objects=molecules, index=index
+        molecules, molecule_indices = (
+            return_objects_and_indices_from_string_index(
+                list_of_objects=molecules, index=index
+            )
         )
 
     if not isinstance(molecules, list):
         molecules = [molecules]
+        if molecule_indices is not None and not isinstance(
+            molecule_indices, list
+        ):
+            molecule_indices = [molecule_indices]
 
     logger.debug(f"Obtained molecules: {molecules}")
+    logger.debug(f"Molecule indices: {molecule_indices}")
 
     # If the user requested the qmmm subcommand, ensure molecules are
     # represented as QMMMMolecule so the subcommand sees QMMM-specific
@@ -543,6 +553,9 @@ def gaussian(
     ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
+    )
+    ctx.obj["molecule_indices"] = (
+        molecule_indices  # Store original 1-based indices
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename

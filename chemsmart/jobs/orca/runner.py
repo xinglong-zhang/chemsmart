@@ -585,11 +585,9 @@ class FakeORCA:
 
         with open(self.output_filepath, "w") as g:
             g.write("\n")
-            g.write(
-                """                                 *****************
+            g.write("""                                 *****************
                                  * O   R   C   A *
-                                 *****************\n"""
-            )
+                                 *****************\n""")
             g.write(
                 "                         Fake Orca version 0.0.0 -  RELEASE  -                \n"
             )

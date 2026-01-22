@@ -17,7 +17,6 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
-from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.geometry import is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
@@ -133,13 +132,6 @@ class Molecule:
             raise ValueError(
                 "The number of symbols and positions should be the same!"
             )
-        # # update partition levels if available
-        # if self.high_level_atoms is not None:
-        #     (
-        #         self.high_level_atoms,
-        #         self.medium_level_atoms,
-        #         self.low_level_atoms,
-        #     ) = self._get_partition_levels()
 
         self.vibrational_frequencies = (
             []
@@ -787,9 +779,9 @@ class Molecule:
             return cls._read_orca_inputfile(filepath, **kwargs)
 
         if basename.endswith(".out"):
-            from chemsmart.utils.io import get_outfile_format
+            from chemsmart.utils.io import get_program_type_from_file
 
-            program = get_outfile_format(filepath)
+            program = get_program_type_from_file(filepath)
             if program == "orca":
                 return cls._read_orca_outfile(filepath, index, **kwargs)
             if program == "gaussian":
@@ -808,6 +800,13 @@ class Molecule:
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
 
+        if basename.endswith((".cdx", ".cdxml")):
+            return cls._read_chemdraw_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -815,6 +814,8 @@ class Molecule:
         """
         Read XYZ format molecular structure file.
         """
+        from chemsmart.io.xyz.xyzfile import XYZFile
+
         xyz_file = XYZFile(filename=filepath)
         molecules = xyz_file.get_molecules(
             index=index, return_list=return_list
@@ -827,6 +828,8 @@ class Molecule:
         """
         Read SDF format molecular structure file.
         """
+        from chemsmart.io.file import SDFFile
+
         sdf_file = SDFFile(filepath)
         return sdf_file.molecule
 
@@ -898,6 +901,33 @@ class Molecule:
 
         orca_output = ORCAOutput(filename=filepath)
         return orca_output.molecule.get_molecule(index=index)
+
+    @classmethod
+    def _read_chemdraw_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read ChemDraw file (.cdx or .cdxml) format.
+
+        Args:
+            filepath (str): Path to ChemDraw file (.cdx or .cdxml)
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+            return_list (bool): If True, return a list of molecules.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from ChemDraw file.
+
+        Note:
+            - .cdxml files are XML-based ChemDraw format.
+            - .cdx files are binary ChemDraw format.
+            - RDKit's MolsFromCDXMLFile supports both formats.
+            - 3D coordinates are generated using RDKit's EmbedMolecule.
+        """
+        from chemsmart.io.file import CDXFile
+
+        chemdraw_file = CDXFile(filename=filepath)
+        return chemdraw_file.get_molecules(
+            index=index, return_list=return_list
+        )
 
     # @staticmethod
     # @file_cache()
@@ -1887,6 +1917,7 @@ class CoordinateBlock:
             if (
                 len(line_elements) < 4 or len(line_elements) == 0
             ):  # skip lines that do not contain coordinates
+                logger.debug(f"Line {line} has less than 4 line elements!")
                 continue
 
             if (

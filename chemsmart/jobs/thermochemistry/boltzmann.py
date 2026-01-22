@@ -227,6 +227,7 @@ class BoltzmannAverageThermochemistryJob(ThermochemistryJob):
                 qrrho_gibbs_free_energy,
                 outputfile=self.settings.outputfile,
                 overwrite=self.settings.overwrite,
+                write_header=self.settings.write_header,
             )
 
         except Exception as e:

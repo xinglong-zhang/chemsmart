@@ -443,6 +443,8 @@ def mol(
             # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
             index = get_list_from_string_range(index)
             molecules = [molecules[i - 1] for i in index]
+    else:
+        molecules = molecules[-1]
 
     logger.debug(f"Obtained molecules: {molecules}")
 

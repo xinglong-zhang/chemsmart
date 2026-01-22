@@ -22,6 +22,7 @@ from chemsmart.utils.utils import (
     is_float,
     iterative_compare,
     naturally_sorted,
+    return_objects_and_indices_from_string_index,
     run_command,
     str_indices_range_to_list,
     string2index_1based,
@@ -831,3 +832,178 @@ class TestRunCommand:
             "Invalid command type: <class 'int'>. Expected str or list."
             in capture_log.text
         )
+
+
+class TestReturnObjectsAndIndicesFromStringIndex:
+    """Tests for the return_objects_and_indices_from_string_index utility function."""
+
+    def test_single_index_string(self):
+        """Test single index as a string (1-based)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1")
+        )
+        assert result_objects == "a"
+        assert result_indices == 1
+
+    def test_single_index_middle(self):
+        """Test single index in middle of list."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "3")
+        )
+        assert result_objects == "c"
+        assert result_indices == 3
+
+    def test_single_index_last(self):
+        """Test single index at end of list."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "5")
+        )
+        assert result_objects == "e"
+        assert result_indices == 5
+
+    def test_single_negative_index(self):
+        """Test negative index (last item)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "-1")
+        )
+        assert result_objects == "e"
+        assert result_indices == 5
+
+    def test_slice_range(self):
+        """Test slice with start and stop (1-based, exclusive stop)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "2:4")
+        )
+        assert result_objects == ["b", "c"]
+        assert result_indices == [2, 3]
+
+    def test_slice_from_start(self):
+        """Test slice from beginning."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1:3")
+        )
+        assert result_objects == ["a", "b"]
+        assert result_indices == [1, 2]
+
+    def test_slice_to_end(self):
+        """Test slice to end using open-ended slice."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "3:")
+        )
+        assert result_objects == ["c", "d", "e"]
+        assert result_indices == [3, 4, 5]
+
+    def test_slice_from_beginning(self):
+        """Test slice from beginning to index."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, ":3")
+        )
+        assert result_objects == ["a", "b"]
+        assert result_indices == [1, 2]
+
+    def test_slice_all(self):
+        """Test slice selecting all elements using ':'."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, ":")
+        )
+        assert result_objects == ["a", "b", "c", "d", "e"]
+        assert result_indices == [1, 2, 3, 4, 5]
+
+    def test_slice_with_step(self):
+        """Test slice with step parameter."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1:8:2")
+        )
+        assert result_objects == ["a", "c", "e", "g"]
+        assert result_indices == [1, 3, 5, 7]
+
+    def test_user_defined_range(self):
+        """Test user-defined range format (comma-separated)."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1,3,5")
+        )
+        assert result_objects == ["a", "c", "e"]
+        assert result_indices == [1, 3, 5]
+
+    def test_user_defined_range_with_hyphen(self):
+        """Test user-defined range with hyphen notation."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1-3")
+        )
+        assert result_objects == ["a", "b", "c"]
+        assert result_indices == [1, 2, 3]
+
+    def test_user_defined_range_complex(self):
+        """Test complex user-defined range."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1-3,5,7-8")
+        )
+        assert result_objects == ["a", "b", "c", "e", "g", "h"]
+        assert result_indices == [1, 2, 3, 5, 7, 8]
+
+    def test_range_with_brackets(self):
+        """Test user-defined range with brackets."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "[1-3]")
+        )
+        assert result_objects == ["a", "b", "c"]
+        assert result_indices == [1, 2, 3]
+
+    def test_with_integer_objects(self):
+        """Test with list of integers as objects."""
+        objects = [10, 20, 30, 40, 50]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "2:4")
+        )
+        assert result_objects == [20, 30]
+        assert result_indices == [2, 3]
+
+    def test_with_mixed_objects(self):
+        """Test with list of mixed types as objects."""
+        objects = [1, "two", 3.0, [4], {"five": 5}]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1,3,5")
+        )
+        assert result_objects == [1, 3.0, {"five": 5}]
+        assert result_indices == [1, 3, 5]
+
+    def test_specified_indices_5_to_8(self):
+        """Test that specified indices are preserved (e.g., 5:8 gives indices 5,6,7)."""
+        objects = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "5:8")
+        )
+        assert result_objects == ["e", "f", "g"]
+        assert result_indices == [5, 6, 7]
+
+    def test_empty_list_raises_index_error(self):
+        """Test that accessing empty list raises IndexError."""
+        objects = []
+        with pytest.raises(IndexError):
+            return_objects_and_indices_from_string_index(objects, "1")
+
+    def test_index_zero_raises_value_error(self):
+        """Test that index 0 raises ValueError (1-based indexing required)."""
+        objects = ["a", "b", "c"]
+        with pytest.raises(ValueError):
+            return_objects_and_indices_from_string_index(objects, "0")
+
+    def test_out_of_range_raises_index_error(self):
+        """Test that out-of-range index raises IndexError."""
+        objects = ["a", "b", "c"]
+        with pytest.raises(IndexError):
+            return_objects_and_indices_from_string_index(objects, "10")
