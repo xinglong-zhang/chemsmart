@@ -1,3 +1,7 @@
+import os
+import shutil
+import tempfile
+
 import numpy as np
 import pytest
 
@@ -17,10 +21,30 @@ from chemsmart.utils.grouper import (
 from chemsmart.utils.utils import kabsch_align
 
 
+@pytest.fixture
+def temp_working_dir():
+    """
+    Pytest fixture to create a temporary directory and change to it for testing.
+    This prevents group_result folders from being created in the project directory.
+    """
+    original_dir = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(original_dir)
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 class Test_BasicRMSD_grouper_and_basic_functionality:
     NUM_PROCS = 4
 
-    def test_rmsd_grouper(self, methanol_molecules, methanol_and_ethanol):
+    def test_rmsd_grouper(
+        self, methanol_molecules, methanol_and_ethanol, temp_working_dir
+    ):
         methanol = methanol_molecules[0]
         methanol_rot1 = methanol_molecules[1]
         assert np.any(
@@ -69,7 +93,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         ), "Molecules should form two groups based on geometry."
 
     def test_rmsd_grouper_for_crest_conformers(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
@@ -138,7 +162,9 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         unique_structures = grouper6.unique()
         assert len(unique_structures) == 3
 
-    def test_num_groups_parameter(self, multiple_molecules_xyz_file):
+    def test_num_groups_parameter(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -153,7 +179,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         assert len(unique_structures) == 17
 
     def test_pick_the_lowestenergy_conformers(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
@@ -174,7 +200,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         assert -126.24909661 in energies
 
     def test_rmsd_grouper_for_crest_conformers_ignore_Hs(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
@@ -262,7 +288,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         assert len(unique_structures) == 1
 
     def test_rmsd_grouper_for_rotated_molecules(
-        self, two_rotated_molecules_xyz_file
+        self, two_rotated_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -288,7 +314,7 @@ class Test_HungarianRMSD_grouper:
     NUM_PROCS = 4
 
     def test_hrmsd_grouper_for_rotated_molecules(
-        self, two_rotated_molecules_xyz_file
+        self, two_rotated_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -310,7 +336,7 @@ class Test_HungarianRMSD_grouper:
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
     def test_hrmsd_grouper_for_crest_molecules(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -340,7 +366,7 @@ class Test_SpyRMSD_grouper:
     NUM_PROCS = 4
 
     def test_spyrmsd_grouper_for_rotated_molecules(
-        self, two_rotated_molecules_xyz_file
+        self, two_rotated_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -362,7 +388,7 @@ class Test_SpyRMSD_grouper:
         assert np.isclose(rmsd, 0.2125, rtol=1e-3)
 
     def test_spyrmsd_grouper_for_crest_molecules(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -404,7 +430,7 @@ class Test_Tanimoto_similarity_grouper:
     NUM_PROCS = 4
 
     def test_tanimoto_similarity_grouper(
-        self, methanol_molecules, methanol_and_ethanol
+        self, methanol_molecules, methanol_and_ethanol, temp_working_dir
     ):
         grouper = TanimotoSimilarityGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
@@ -432,7 +458,7 @@ class Test_Tanimoto_similarity_grouper:
         ), "Molecules should form two groups based on RCM similarity."
 
     def test_tanimoto_grouper_for_crest_conformers(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
@@ -467,7 +493,7 @@ class Test_TorsionFingerprint_grouper:
     NUM_PROCS = 4
 
     def test_torsionfingerprint_grouper_for_rotated_molecules(
-        self, two_rotated_molecules_xyz_file
+        self, two_rotated_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -485,7 +511,7 @@ class Test_TorsionFingerprint_grouper:
         assert len(unique_structures) == 1
 
     def test_torsionfingerprint_grouper_for_crest_molecules(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
@@ -502,7 +528,9 @@ class Test_TorsionFingerprint_grouper:
         unique_structures = grouper.unique()
         assert len(unique_structures) == 8
 
-    def test_use_weights_parameter(self, multiple_molecules_xyz_file):
+    def test_use_weights_parameter(
+        self, multiple_molecules_xyz_file, temp_working_dir
+    ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
         molecules = xyz_file.get_molecules(index=":", return_list=True)
         assert len(molecules) == 18
@@ -524,7 +552,11 @@ class Test_other_groupers:
     NUM_PROCS = 4
 
     def test_formula_grouper(
-        self, methanol_molecules, methanol_and_ethanol, conformers_from_rdkit
+        self,
+        methanol_molecules,
+        methanol_and_ethanol,
+        conformers_from_rdkit,
+        temp_working_dir,
     ):
         grouper = FormulaGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
@@ -556,7 +588,7 @@ class Test_other_groupers:
 
     @pytest.mark.slow
     def test_connectivity_grouper(
-        self, methanol_molecules, methanol_and_ethanol
+        self, methanol_molecules, methanol_and_ethanol, temp_working_dir
     ):
         grouper = ConnectivityGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
@@ -585,7 +617,7 @@ class Test_other_groupers:
         ), "Molecules should form two groups based on connectivity."
 
     def test_connectivity_grouper_for_crest_conformers(
-        self, multiple_molecules_xyz_file
+        self, multiple_molecules_xyz_file, temp_working_dir
     ):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
 
@@ -610,7 +642,7 @@ class Test_other_groupers:
         assert len(unique_structures) == 1
 
     def test_rdkit_isomorphism_grouper(
-        self, methanol_molecules, methanol_and_ethanol
+        self, methanol_molecules, methanol_and_ethanol, temp_working_dir
     ):
         grouper = RDKitIsomorphismGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
@@ -640,7 +672,9 @@ class Test_other_groupers:
 
 class TestRDKitIsomorphismGrouper:
 
-    def test_structure_grouper_factory(self, methanol_molecules):
+    def test_structure_grouper_factory(
+        self, methanol_molecules, temp_working_dir
+    ):
         factory = StructureGrouperFactory()
         rmsd_grouper = factory.create(methanol_molecules, strategy="rmsd")
         assert isinstance(rmsd_grouper, RMSDGrouper)
