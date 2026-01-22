@@ -357,6 +357,138 @@ def click_gaussian_td_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_qmmm_options(f):
+    """Common click options for QMMM jobs."""
+
+    @click.option(
+        "-hx",
+        "--high-level-functional",
+        type=str,
+        help="High-level layer functional.",
+    )
+    @click.option(
+        "-hb",
+        "--high-level-basis",
+        type=str,
+        help="High-level layer basis.",
+    )
+    @click.option(
+        "-hf",
+        "--high-level-force-field",
+        type=str,
+        help="High-level layer force field.",
+    )
+    @click.option(
+        "-mx",
+        "--medium-level-functional",
+        type=str,
+        help="Medium-level layer functional.",
+    )
+    @click.option(
+        "-mb",
+        "--medium-level-basis",
+        type=str,
+        help="Medium-level layer basis.",
+    )
+    @click.option(
+        "-mf",
+        "--Medium-level-force-field",
+        type=str,
+        help="Medium-level layer force field.",
+    )
+    @click.option(
+        "-lx",
+        "--low-level-functional",
+        type=str,
+        help="Low level layer functional.",
+    )
+    @click.option(
+        "-lb",
+        "--low-level-basis",
+        type=str,
+        help="Low level layer basis.",
+    )
+    @click.option(
+        "-lf",
+        "--low-level-force-field",
+        type=str,
+        help="Low level layer force field.",
+    )
+    @click.option(
+        "-cr",
+        "--real-charge",
+        type=int,
+        help="Charge of real system.",
+    )
+    @click.option(
+        "-mr",
+        "--real-multiplicity",
+        type=int,
+        help="Spin multiplicity of real system.",
+    )
+    @click.option(
+        "-ci",
+        "--int-charge",
+        type=int,
+        help="Charge of intermediate system.",
+    )
+    @click.option(
+        "-mi",
+        "--int-multiplicity",
+        type=int,
+        help="Spin multiplicity of intermediate system.",
+    )
+    @click.option(
+        "-cm",
+        "--model-charge",
+        type=int,
+        help="Charge of model system.",
+    )
+    @click.option(
+        "-mm",
+        "--model-multiplicity",
+        type=int,
+        help="Spin multiplicity of model system.",
+    )
+    @click.option(
+        "-ha",
+        "--high-level-atoms",
+        type=str,
+        help="Atom indices for high level.",
+    )
+    @click.option(
+        "-ma",
+        "--medium-level-atoms",
+        type=str,
+        help="Atom indices for medium level.",
+    )
+    @click.option(
+        "-la",
+        "--low-level-atoms",
+        type=str,
+        help="Atom indices for low level.",
+    )
+    @click.option(
+        "-b",
+        "--bonded-atoms",
+        type=str,
+        help="List of tuples of the bonds to be cut, specified by "
+        "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
+    )
+    @click.option(
+        "-s",
+        "--scale-factors",
+        type=dict,
+        help="A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom "
+        "pair indices and the value is a list of scale factors for (low, medium, high).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 @click.group(cls=MyGroup)
 @click_gaussian_options
 @click_filename_options
