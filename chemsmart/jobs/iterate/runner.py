@@ -36,7 +36,7 @@ class IterateCombination:
     substituent: Molecule
     substituent_label: str
     substituent_link_index: int  # 1-based
-    algorithm: str = "lagrange_multipliers"
+    method: str = "lagrange_multipliers"
     sphere_direction_samples_num: int = 96
     axial_rotations_sample_num: int = 6
 
@@ -97,7 +97,7 @@ def _run_combination_worker(
             substituent=processed_substituent,
             skeleton_link_index=new_skeleton_link_index,
             substituent_link_index=new_substituent_link_index,
-            algorithm=combination.algorithm,
+            method=combination.method,
             sphere_direction_samples_num=combination.sphere_direction_samples_num,
             axial_rotations_sample_num=combination.axial_rotations_sample_num,
         )
@@ -378,7 +378,7 @@ class IterateJobRunner(JobRunner):
 
         skeleton_list = job.settings.skeleton_list or []
         substituent_list = job.settings.substituent_list or []
-        algorithm = job.settings.algorithm
+        method = job.settings.method
         sphere_direction_samples_num = (
             job.settings.sphere_direction_samples_num
         )
@@ -438,7 +438,7 @@ class IterateJobRunner(JobRunner):
                         sphere_direction_samples_num=sphere_direction_samples_num,
                         axial_rotations_sample_num=axial_rotations_sample_num,
                         substituent_link_index=sub_link_idx,
-                        algorithm=algorithm,
+                        method=method,
                     )
                     combinations.append(combination)
                     logger.info(f"Created combination: {combination.label}")

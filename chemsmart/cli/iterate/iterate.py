@@ -76,8 +76,8 @@ def click_iterate_options(f):
         help="Timeout in seconds for each worker process.",
     )
     @click.option(
-        "-A",
-        "--algorithm",
+        "-m",
+        "--method",
         default="lagrange_multipliers",
         type=click.Choice(
             [
@@ -86,7 +86,7 @@ def click_iterate_options(f):
             case_sensitive=False,
         ),
         show_default=True,
-        help="Algorithm to use for substituents' position optimization.",
+        help="Mathematical method to use for substituents' position optimization.",
     )
     @click.option(
         "-s",
@@ -136,7 +136,7 @@ def click_iterate_options(f):
 def iterate(
     ctx,
     filename,
-    algorithm,
+    method,
     nprocs,
     timeout,
     outputfile,
@@ -237,7 +237,7 @@ def iterate(
     # Create job settings
     job_settings = IterateJobSettings(
         config_file=filename,
-        algorithm=algorithm,
+        method=method,
         sphere_direction_samples_num=sphere_direction_samples_num,
         axial_rotations_sample_num=axial_rotations_sample_num,
     )

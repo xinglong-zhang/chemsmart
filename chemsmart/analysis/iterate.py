@@ -698,7 +698,7 @@ class IterateAnalyzer:
         skeleton_link_index: int,
         substituent_link_index: int,
         buffer: float = DEFAULT_BUFFER,
-        algorithm: str = "lagrange_multipliers",
+        method: str = "lagrange_multipliers",
         sphere_direction_samples_num: int = 96,
         axial_rotations_sample_num: int = 6,
     ):
@@ -717,8 +717,8 @@ class IterateAnalyzer:
             Index of the link atom in substituent (1-based, will be converted to 0-based internally)
         buffer : float
             Buffer for min distance constraint (default: 0.3 Å)
-        algorithm : str
-            Optimization algorithm to use (default: 'lagrange_multipliers')
+        method : str
+            Optimization method to use (default: 'lagrange_multipliers')
             Supported: 'lagrange_multipliers'
         sphere_direction_samples_num : int
             Number of points to sample on the unit sphere (default: 96)
@@ -731,7 +731,7 @@ class IterateAnalyzer:
         self.skeleton_link_index = skeleton_link_index - 1
         self.substituent_link_index = substituent_link_index - 1
         self.buffer = buffer
-        self.algorithm = algorithm
+        self.method = method
         self.sphere_direction_samples_num = sphere_direction_samples_num
         self.axial_rotations_sample_num = axial_rotations_sample_num
 
@@ -756,7 +756,7 @@ class IterateAnalyzer:
             self.skeleton_link_index,
             self.substituent_link_index,
             self.buffer,
-            self.algorithm,
+            self.method,
             self.sphere_direction_samples_num,
             self.axial_rotations_sample_num,
         )
@@ -917,7 +917,7 @@ class IterateAnalyzer:
         skeleton_link_index: int,
         sub_link_index: int,
         buffer: float = DEFAULT_BUFFER,
-        algorithm: str = "lagrange_multipliers",
+        method: str = "lagrange_multipliers",
         sphere_direction_samples_num: int = 96,
         axial_rotations_sample_num: int = 6,
     ) -> Optional[np.ndarray]:
@@ -942,15 +942,13 @@ class IterateAnalyzer:
             Index of the link atom in sub (0-based)
         buffer : float
             Buffer for min distance constraint (default: 0.3 Å)
-        algorithm : str
-            Optimization algorithm to use (default: 'lagrange_multipliers')
+        method : str
+            Optimization method to use (default: 'lagrange_multipliers')
             Supported: 'lagrange_multipliers'
         sphere_direction_samples_num : int
             Number of points to sample on the unit sphere
         axial_rotations_sample_num : int
             Number of axial rotations per sphere point
-            Optimization algorithm to use (default: 'lagrange_multipliers')
-            Supported: 'lagrange_multipliers'
 
         Returns
         -------
@@ -1015,8 +1013,8 @@ class IterateAnalyzer:
         ineq_mask = np.ones((n_sub, n_skeleton), dtype=bool)
         ineq_mask[sub_link_index, skeleton_link_index] = False
 
-        # Select algorithm
-        if algorithm == "lagrange_multipliers":
+        # Select optimization method
+        if method == "lagrange_multipliers":
             optimal_sub = IterateAnalyzer._optimize_lagrange(
                 sub_coord,
                 skeleton_coords,
@@ -1031,7 +1029,7 @@ class IterateAnalyzer:
             )
         else:
             raise ValueError(
-                f"Unknown algorithm: {algorithm}. Supported: 'lagrange_multipliers'"
+                f"Unknown method: {method}. Supported: 'lagrange_multipliers'"
             )
 
         return optimal_sub
