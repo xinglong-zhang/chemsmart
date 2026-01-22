@@ -5,6 +5,8 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from chemsmart.assembler.records import AssembledRecord
+
 
 class DataExporter:
     """Utility to export assembled records to JSON/CSV/SQLite."""
@@ -24,19 +26,31 @@ class DataExporter:
 
     def _filter_data(self):
         """Filter keys if provided."""
-        if not self.keys:
-            return self.data
         filtered = []
         for d in self.data:
-            entry = {}
-            for k in self.keys:
-                if k in d:
-                    entry[k] = d[k]
-                elif "meta" in d and k in d["meta"]:
-                    entry[k] = d["meta"][k]
-                elif "results" in d and k in d["results"]:
-                    entry[k] = d["results"][k]
-            filtered.append(entry)
+            if isinstance(d, AssembledRecord):
+                d_dict = {
+                    "record_id": d.record_id,
+                    "program": d.program,
+                    "meta": d.meta,
+                    "results": d.results,
+                    "molecules": d.molecules,
+                    "provenance": d.provenance,
+                }
+            else:
+                d_dict = d
+            if not self.keys:
+                filtered.append(d_dict)
+            else:
+                entry = {}
+                for k in self.keys:
+                    if k in d_dict:
+                        entry[k] = d_dict[k]
+                    elif "meta" in d_dict and k in d_dict["meta"]:
+                        entry[k] = d_dict["meta"][k]
+                    elif "results" in d_dict and k in d_dict["results"]:
+                        entry[k] = d_dict["results"][k]
+                filtered.append(entry)
         return filtered
 
     def _convert(self, obj):

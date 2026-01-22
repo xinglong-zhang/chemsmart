@@ -5,8 +5,8 @@ from pathlib import Path
 
 import click
 
-from chemsmart.assembler.assembler import SingleFileAssembler
 from chemsmart.assembler.export import DataExporter
+from chemsmart.assembler.single import SingleFileAssembler
 from chemsmart.utils.cli import MyGroup
 
 logger = logging.getLogger(__name__)
