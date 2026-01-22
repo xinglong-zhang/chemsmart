@@ -6,21 +6,36 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_solvent_options,
     gaussian,
 )
+from chemsmart.cli.gaussian.qmmm_helper import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import MyCommand
+from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("sp", cls=MyCommand)
+@gaussian.group("sp", cls=MyGroup, invoke_without_command=True)
 @click_job_options
 @click_gaussian_solvent_options
 @click.pass_context
 def sp(
-    ctx, remove_solvent, solvent_model, solvent_id, solvent_options, **kwargs
+    ctx,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
+    skip_completed,
+    **kwargs,
 ):
-    """CLI subcommand for running Gaussian single point calculation."""
+    """CLI subcommand for running Gaussian single point calculation.
+
+    Can be used standalone for regular single point or with the 'qmmm'
+    subcommand for QM/MM single point calculations.
+
+    Examples:
+        chemsmart sub gaussian sp              # Regular single point
+        chemsmart sub gaussian sp qmmm         # QM/MM single point
+    """
 
     # get jobrunner for single point
     jobrunner = ctx.obj["jobrunner"]
@@ -82,12 +97,25 @@ def sp(
         f"Single point job settings from project: {sp_settings.__dict__}"
     )
 
-    from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+    # Store parent context for potential qmmm subcommand
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_freeze_atoms"] = None  # sp doesn't have freeze_atoms
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = sp_settings
 
-    return GaussianSinglePointJob(
-        molecule=molecule,
-        settings=sp_settings,
-        label=label,
-        jobrunner=jobrunner,
-        **kwargs,
-    )
+    # If no subcommand invoked, run regular single point
+    if ctx.invoked_subcommand is None:
+        from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
+
+        return GaussianSinglePointJob(
+            molecule=molecule,
+            settings=sp_settings,
+            label=label,
+            jobrunner=jobrunner,
+            skip_completed=skip_completed,
+            **kwargs,
+        )
+
+
+# Register qmmm subcommand
+create_qmmm_subcommand(sp)

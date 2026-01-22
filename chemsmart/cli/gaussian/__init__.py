@@ -8,7 +8,6 @@ from .link import link
 from .modred import modred
 from .nci import nci
 from .opt import opt
-from .qmmm import qmmm  # noqa: F401
 from .qrc import qrc
 from .resp import resp
 from .scan import scan
@@ -37,7 +36,4 @@ __all__ = [
     "td",
     "ts",
     "wbi",
-    "qmmm",
 ]
-# signals to the linter these imports are intentional
-# imports as explicitly used

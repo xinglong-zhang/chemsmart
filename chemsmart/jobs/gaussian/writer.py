@@ -98,7 +98,7 @@ class GaussianInputWriter(InputWriter):
         logger.debug("Starting complete input file generation")
         self._write_gaussian_header(f)
         if isinstance(self.settings, GaussianQMMMJobSettings):
-            self._write_route_string_qmmm(f)
+            self._write_route_section_qmmm(f)
             self._write_gaussian_title(f)
             self._write_charge_and_multiplicity_qmmm(f)
         else:
@@ -281,7 +281,7 @@ class GaussianInputWriter(InputWriter):
             f"Molecular charge: {charge}, multiplicity: {multiplicity}"
         )
 
-    def _write_route_string_qmmm(self, f):
+    def _write_route_section_qmmm(self, f):
         """
         Write ONIOM route string for QM/MM calculations.
 
