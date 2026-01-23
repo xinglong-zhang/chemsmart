@@ -16,6 +16,7 @@ import os.path
 
 from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.utils.io import replace_word
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
@@ -189,9 +190,8 @@ class GaussianInputWriter(InputWriter):
                     self.settings.light_elements_basis.replace("-", "").lower()
                 )
 
-                route_string = route_string.replace(
-                    self.settings.basis,
-                    light_elements_basis,
+                route_string = replace_word(
+                    route_string, self.settings.basis, light_elements_basis
                 )
             else:
                 # Determine the correct basis keyword (gen vs genecp) based on
@@ -204,9 +204,8 @@ class GaussianInputWriter(InputWriter):
                         f"Replacing basis keyword '{self.settings.basis}' with "
                         f"'{determined_basis}' based on heavy elements in molecule"
                     )
-                    route_string = route_string.replace(
-                        self.settings.basis,
-                        determined_basis,
+                    route_string = replace_word(
+                        route_string, self.settings.basis, determined_basis
                     )
         f.write(route_string + "\n")
         f.write("\n")

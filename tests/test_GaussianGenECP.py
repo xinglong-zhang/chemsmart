@@ -341,3 +341,177 @@ class TestGenGenECPBasisDetermination:
         # Should use 'genecp' since I requires ECP (even though Br doesn't)
         determined_basis = settings.determine_basis_keyword(mixed_mol)
         assert determined_basis == "genecp"
+
+
+class TestGenECPReplacementInRoute:
+    """Test that gen/genecp replacement in route strings doesn't affect other keywords."""
+
+    def test_gen_replacement_does_not_affect_noeigentest(self):
+        """Test that 'gen' in 'noeigentest' is not replaced, and case mode behaves correctly."""
+        import re
+
+        from chemsmart.utils.io import replace_word
+
+        # Route strings with lowercase 'gen' (replacement should work in BOTH modes)
+        route_strings = [
+            "# opt=(ts,calcfc,noeigentest) freq mn15 gen",
+            "opt=(calcfc,ts,noeigentest,maxstep=5) freq gen m06",
+            "# opt=(ts,calcfc,noeigentest) freq b3lyp gen",
+            "# opt=(ts,calcfc,noeigentest) freq b3lyp gen",
+        ]
+
+        for case_sensitive in (True, False):
+            for route_string in route_strings:
+                result = replace_word(
+                    route_string,
+                    "gen",
+                    "def2svp",
+                    case_sensitive=case_sensitive,
+                )
+
+                # The word 'noeigentest' should remain unchanged
+                assert "noeigentest" in result
+
+                # If 'gen' appeared as a standalone word, it should be replaced
+                assert re.search(r"\bgen\b", result) is None
+                assert "def2svp" in result
+
+                # Make sure we didn't create 'noeidef2svptest'
+                assert "noeidef2svptest" not in result
+
+        # Extra: include a case-variant route to test the difference explicitly
+        route_string_case = "# opt=(ts,calcfc,noeigentest) freq mn15 Gen"
+
+        # case-insensitive: should replace "Gen"
+        result_ci = replace_word(
+            route_string_case, "gen", "def2svp", case_sensitive=False
+        )
+        assert re.search(r"\bGen\b", result_ci) is None
+        assert "def2svp" in result_ci
+        assert "noeigentest" in result_ci
+
+        # case-sensitive: should NOT replace "Gen" when old_word is "gen"
+        result_cs = replace_word(
+            route_string_case, "gen", "def2svp", case_sensitive=True
+        )
+        assert re.search(r"\bGen\b", result_cs) is not None
+        assert "def2svp" not in result_cs
+        assert "noeigentest" in result_cs
+
+    def test_genecp_replacement_does_not_affect_other_keywords(self):
+        """Test that 'genecp' replacement works correctly in both case modes."""
+        from chemsmart.utils.io import replace_word
+
+        route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 genecp"
+
+        # lowercase genecp -> replacement should work in BOTH modes
+        for case_sensitive in (True, False):
+            result = replace_word(
+                route_string,
+                "genecp",
+                "def2svp",
+                case_sensitive=case_sensitive,
+            )
+            assert "noeigentest" in result
+            assert "genecp" not in result
+            assert "def2svp" in result
+            assert "noeidef2svptest" not in result
+
+        # Extra: case-variant explicitly tests the difference
+        route_string_case = "# opt=(ts,calcfc,noeigentest) freq mn15 GenECP"
+
+        # case-insensitive: should replace
+        result_ci = replace_word(
+            route_string_case, "genecp", "def2svp", case_sensitive=False
+        )
+        assert "GenECP" not in result_ci
+        assert "def2svp" in result_ci
+
+        # case-sensitive: should NOT replace when old_word is "genecp"
+        result_cs = replace_word(
+            route_string_case, "genecp", "def2svp", case_sensitive=True
+        )
+        assert "GenECP" in result_cs
+        assert "def2svp" not in result_cs
+
+    def test_gen_to_genecp_replacement(self):
+        """Test replacing 'gen' with 'genecp' in route strings for both case modes."""
+        import re
+
+        from chemsmart.utils.io import replace_word
+
+        route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 gen"
+
+        # lowercase 'gen' -> replacement should work in BOTH modes
+        for case_sensitive in (True, False):
+            result = replace_word(
+                route_string, "gen", "genecp", case_sensitive=case_sensitive
+            )
+            assert "noeigentest" in result
+            assert re.search(r"\bgen\b", result) is None
+            assert "genecp" in result
+
+        # Extra: case variant shows mode difference
+        route_string_case = "# opt=(ts,calcfc,noeigentest) freq mn15 Gen"
+
+        # case-insensitive: should replace "Gen"
+        result_ci = replace_word(
+            route_string_case, "gen", "genecp", case_sensitive=False
+        )
+        assert re.search(r"\bGen\b", result_ci) is None
+        assert "genecp" in result_ci
+
+        # case-sensitive: should NOT replace "Gen" when old_word is "gen"
+        result_cs = replace_word(
+            route_string_case, "gen", "genecp", case_sensitive=True
+        )
+        assert re.search(r"\bGen\b", result_cs) is not None
+        assert "genecp" not in result_cs
+
+    def test_replacement_with_various_delimiters(self):
+        """Test that replacement works correctly with various delimiters, in both case modes."""
+        from chemsmart.utils.io import replace_word
+
+        # These are all lowercase 'gen' -> should replace in BOTH modes
+        test_cases = [
+            ("gen def2svp", "gen", "6-31g", "6-31g def2svp"),
+            ("def2svp gen", "gen", "6-31g", "def2svp 6-31g"),
+            ("opt gen freq", "gen", "6-31g", "opt 6-31g freq"),
+            ("opt=(gen) freq", "gen", "6-31g", "opt=(6-31g) freq"),
+        ]
+
+        for case_sensitive in (True, False):
+            for route_string, old_basis, new_basis, expected in test_cases:
+                result = replace_word(
+                    route_string,
+                    old_basis,
+                    new_basis,
+                    case_sensitive=case_sensitive,
+                )
+                assert (
+                    result == expected
+                ), f"[case_sensitive={case_sensitive}] Expected '{expected}' but got '{result}'"
+
+        # Should not replace "gen" when it is part of another word (boundary test)
+        # NOTE: this string actually *contains* a standalone "gen" at the end, so it SHOULD replace that one.
+        route_string = "regenerate gen"
+        expected = "regenerate 6-31g"
+        for case_sensitive in (True, False):
+            result = replace_word(
+                route_string, "gen", "6-31g", case_sensitive=case_sensitive
+            )
+            assert (
+                result == expected
+            ), f"[case_sensitive={case_sensitive}] Expected '{expected}' but got '{result}'"
+
+        # Extra: ensure case-sensitive does NOT replace "Gen" if old_word="gen"
+        route_string_case = "opt=(Gen) freq"
+        result_cs = replace_word(
+            route_string_case, "gen", "6-31g", case_sensitive=True
+        )
+        assert result_cs == route_string_case  # unchanged
+
+        result_ci = replace_word(
+            route_string_case, "gen", "6-31g", case_sensitive=False
+        )
+        assert result_ci == "opt=(6-31g) freq"
