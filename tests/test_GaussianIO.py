@@ -21,7 +21,7 @@ class TestRouteString:
         r1a = GaussianRoute(s1a)
         assert r1a.functional == "mn15"
         assert r1a.basis == "def2svp"
-        assert r1a.job_type == "opt"
+        assert r1a.jobtype == "opt"
         assert r1a.solv is False
         assert r1a.dieze_tag is None
         assert r1a.additional_opt_options_in_route is None
@@ -32,7 +32,7 @@ class TestRouteString:
         r1b = GaussianRoute(s1b)
         assert r1b.functional == "b3lyp empiricaldispersion=gd3bj"
         assert r1b.basis == "6-311+g(d,p)"
-        assert r1b.job_type == "ts"
+        assert r1b.jobtype == "ts"
         assert r1b.solv is False
         assert r1b.dieze_tag is None
         assert (
@@ -47,7 +47,7 @@ class TestRouteString:
         r1c = GaussianRoute(s1c)
         assert r1c.functional == "mn15"
         assert r1c.basis == "gen"
-        assert r1c.job_type == "opt"
+        assert r1c.jobtype == "opt"
         assert r1c.solv is False
         assert r1c.dieze_tag is None
         assert r1c.additional_opt_options_in_route is None
@@ -58,7 +58,7 @@ class TestRouteString:
         r1c = GaussianRoute(s1c)
         assert r1c.functional == "mn15"
         assert r1c.basis == "genecp"
-        assert r1c.job_type == "opt"
+        assert r1c.jobtype == "opt"
         assert r1c.solv is False
         assert r1c.dieze_tag is None
         assert r1c.additional_opt_options_in_route is None
@@ -69,7 +69,7 @@ class TestRouteString:
         r1d = GaussianRoute(s1d)
         assert r1d.functional == "mn15"
         assert r1d.basis == "def2qzvp"
-        assert r1d.job_type == "sp"
+        assert r1d.jobtype == "sp"
         assert r1d.solv is True
         assert r1d.solvent_model == "smd"
         assert r1d.solvent_id == "generic,read"
@@ -84,7 +84,7 @@ class TestRouteString:
         assert (
             r1e.basis == "def2tzvp/fit"
         )  # density fitting basis set (for pure functionals)
-        assert r1e.job_type == "modred"
+        assert r1e.jobtype == "modred"
         assert r1e.solv is True
         assert r1e.solvent_model == "cpcm"
         assert r1e.solvent_id == "toluene"
@@ -97,7 +97,7 @@ class TestRouteString:
         r1f = GaussianRoute(s1f)
         assert r1f.functional == "mpw1pw91"
         assert r1f.basis == "6-311+g(2d,p)"
-        assert r1f.job_type == "sp"
+        assert r1f.jobtype == "sp"
         assert r1f.dieze_tag is None
         assert r1f.additional_opt_options_in_route is None
         assert r1f.additional_route_parameters is None
@@ -109,7 +109,7 @@ class TestRouteString:
         r1g = GaussianRoute(s1g)
         assert r1g.functional == "wb97xd"
         assert r1g.basis == "def2svp"
-        assert r1g.job_type == "sp"
+        assert r1g.jobtype == "sp"
         assert r1g.dieze_tag is None
         assert r1g.solv is True
         assert r1g.solvent_model == "pcm"  # default solvet model in Gaussian
@@ -141,7 +141,7 @@ class TestRouteString:
         r2a = GaussianRoute(s2a)
         assert r2a.functional == "mn15"
         assert r2a.basis == "def2svp"
-        assert r2a.job_type == "opt"
+        assert r2a.jobtype == "opt"
         assert r2a.solv is False
         assert r2a.dieze_tag is None
         assert r2a.additional_opt_options_in_route == "recalcfc=5"
@@ -149,7 +149,7 @@ class TestRouteString:
 
         s2b = "# opt=(recalcfc=5,MaxStep=3,MaxCycles=128) freq mn15 def2svp"
         r2b = GaussianRoute(s2b)
-        assert r2b.job_type == "opt"
+        assert r2b.jobtype == "opt"
         assert (
             r2b.additional_opt_options_in_route
             == "recalcfc=5,maxstep=3,maxcycles=128"
@@ -157,7 +157,7 @@ class TestRouteString:
 
         s2c = "# opt=(ts,calcfc,noeigentest,recalcfc=5,MaxStep=3,MaxCycles=128) freq mn15 def2svp"
         r2c = GaussianRoute(s2c)
-        assert r2c.job_type == "ts"
+        assert r2c.jobtype == "ts"
         assert (
             r2c.additional_opt_options_in_route
             == "recalcfc=5,maxstep=3,maxcycles=128"
@@ -166,7 +166,7 @@ class TestRouteString:
     def test_read_additional_route_parameters(self):
         s3a = "# opt=(recalcfc=5) freq=numer pbepbe/def2svp nosymm guess=mix"
         r3a = GaussianRoute(s3a)
-        assert r3a.job_type == "opt"
+        assert r3a.jobtype == "opt"
         assert r3a.additional_opt_options_in_route == "recalcfc=5"
         assert r3a.freq is True
         assert r3a.numfreq is True
@@ -244,7 +244,7 @@ class TestGaussian16Input:
         )
         assert g16_input.additional_opt_options_in_route is None
         assert g16_input.additional_route_parameters is None
-        assert g16_input.job_type == "opt"
+        assert g16_input.jobtype == "opt"
         assert g16_input.functional == "m062x"
         assert g16_input.basis == "def2svp"
         assert g16_input.molecule.frozen_atoms is None
@@ -256,7 +256,7 @@ class TestGaussian16Input:
         assert g16_frozen.molecule.empirical_formula == "C7H5ClO"
         assert g16_frozen.additional_opt_options_in_route is None
         assert g16_frozen.additional_route_parameters is None
-        assert g16_frozen.job_type == "opt"
+        assert g16_frozen.jobtype == "opt"
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
@@ -281,7 +281,7 @@ class TestGaussian16Input:
         assert g16_modred.molecule.empirical_formula == "C3H7NO3"
         assert g16_modred.additional_opt_options_in_route is None
         assert g16_modred.additional_route_parameters is None
-        assert g16_modred.job_type == "modred"
+        assert g16_modred.jobtype == "modred"
         assert g16_modred.modred == [[2, 12], [9, 2]]
         assert g16_modred.functional == "m062x"
         assert g16_modred.basis == "def2svp"
@@ -309,7 +309,7 @@ class TestGaussian16Input:
         assert g16_scan.molecule.empirical_formula == "C3H7NO3"
         assert g16_scan.additional_opt_options_in_route is None
         assert g16_scan.additional_route_parameters is None
-        assert g16_scan.job_type == "modred"
+        assert g16_scan.jobtype == "modred"
         assert g16_scan.modred == {
             "coords": [[2, 12], [9, 2]],
             "num_steps": 10,
@@ -325,7 +325,7 @@ class TestGaussian16Input:
         assert g16_genecp.molecule.empirical_formula == "C4H6O4Pd"
         assert g16_genecp.additional_opt_options_in_route is None
         assert g16_genecp.additional_route_parameters is None
-        assert g16_genecp.job_type == "opt"
+        assert g16_genecp.jobtype == "opt"
         assert g16_genecp.functional == "mn15"
         assert g16_genecp.basis == "genecp"
         assert g16_genecp.genecp_section.genecp_type == "genecp"
@@ -348,7 +348,7 @@ class TestGaussian16Input:
             g16_link_opt.additional_route_parameters == "geom=check guess=read"
         )
         assert g16_link_opt.additional_opt_options_in_route is None
-        assert g16_link_opt.job_type == "opt"
+        assert g16_link_opt.jobtype == "opt"
         assert g16_link_opt.functional == "um062x"
         assert g16_link_opt.basis == "def2svp"
         assert g16_link_opt.molecule.frozen_atoms is None
@@ -366,7 +366,7 @@ class TestGaussian16Input:
             g16_link_ts.additional_route_parameters == "geom=check guess=read"
         )
         assert g16_link_ts.additional_opt_options_in_route is None
-        assert g16_link_ts.job_type == "ts"
+        assert g16_link_ts.jobtype == "ts"
         assert g16_link_ts.functional == "um062x"
         assert g16_link_ts.basis == "def2svp"
         assert g16_link_ts.molecule.frozen_atoms is None
@@ -384,7 +384,7 @@ class TestGaussian16Input:
             g16_link_sp.additional_route_parameters == "geom=check guess=read"
         )
         assert g16_link_sp.additional_opt_options_in_route is None
-        assert g16_link_sp.job_type == "sp"
+        assert g16_link_sp.jobtype == "sp"
         assert g16_link_sp.functional == "um062x"
         assert g16_link_sp.basis == "def2tzvp"
         assert g16_link_sp.molecule.frozen_atoms is None
@@ -403,7 +403,7 @@ class TestGaussian16Input:
         )
         assert g16_pbc_1d.additional_opt_options_in_route is None
         assert g16_pbc_1d.additional_route_parameters == "scf=tight"
-        assert g16_pbc_1d.job_type == "sp"
+        assert g16_pbc_1d.jobtype == "sp"
         assert g16_pbc_1d.modred is None
         assert g16_pbc_1d.functional == "pbepbe"
         assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
@@ -769,7 +769,7 @@ class TestGaussian16Output:
             == "# opt freq um062x def2svp geom=check guess=read"
         )
         assert g16_link_opt.is_link
-        assert g16_link_opt.job_type == "opt"
+        assert g16_link_opt.jobtype == "opt"
         assert g16_link_opt.normal_termination
         assert isinstance(g16_link_opt.molecule, Molecule)
         assert g16_link_opt.tddft_transitions == []
@@ -820,7 +820,7 @@ class TestGaussian16Output:
             == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
         )
         assert g16_link_ts.is_link
-        assert g16_link_ts.job_type == "ts"
+        assert g16_link_ts.jobtype == "ts"
         assert len(g16_link_ts.vibrational_frequencies) == 0
         assert (
             g16_link_ts.num_vib_modes == g16_link_ts.num_vib_frequencies == 0
@@ -868,7 +868,7 @@ class TestGaussian16Output:
             == "# opt=modredundant freq umn15 def2svp geom=check guess=read"
         )
         assert g16_link_modred.is_link
-        assert g16_link_modred.job_type == "modred"
+        assert g16_link_modred.jobtype == "modred"
         assert isinstance(g16_link_modred.molecule, Molecule)
         assert len(g16_link_modred.vibrational_frequencies) == 126
         assert (
@@ -932,7 +932,7 @@ class TestGaussian16Output:
             == "# um062x def2tzvp scrf=(smd,solvent=chloroform) geom=check guess=read"
         )
         assert g16_link_sp.is_link
-        assert g16_link_sp.job_type == "sp"
+        assert g16_link_sp.jobtype == "sp"
         assert len(g16_link_sp.vibrational_frequencies) == 0
         assert (
             g16_link_sp.num_vib_modes == g16_link_sp.num_vib_frequencies == 0
@@ -1358,7 +1358,7 @@ class TestGaussian16Output:
         )
         assert g16_genecp.additional_opt_options_in_route == "maxstep=10"
         assert g16_genecp.additional_route_parameters is None
-        assert g16_genecp.job_type == "ts"
+        assert g16_genecp.jobtype == "ts"
         assert g16_genecp.functional == "mn15"
         assert g16_genecp.basis == "genecp"
         assert g16_genecp.optimized_structure.frozen_atoms is None
@@ -1844,7 +1844,7 @@ class TestGaussian16Output:
         assert g16_pm6.ab_initio is None
         assert g16_pm6.functional is None
         assert g16_pm6.basis is None
-        assert g16_pm6.job_type == "opt"
+        assert g16_pm6.jobtype == "opt"
         assert g16_pm6.route_string == "# opt freq pm6"
         assert g16_pm6.freq
         assert (

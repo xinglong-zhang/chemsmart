@@ -120,7 +120,7 @@ class TestGaussianRoute:
     def test_settings_from_route(self):
         route_object1 = GaussianRoute(route_string=self.gas_route)
         assert isinstance(route_object1, object)
-        assert route_object1.job_type == "ts"
+        assert route_object1.jobtype == "ts"
         assert route_object1.freq is True
         assert route_object1.functional == "m062x"
         assert route_object1.basis == "def2svp"
@@ -130,7 +130,7 @@ class TestGaussianRoute:
     def test_settings_from_route2(self):
         route_object2 = GaussianRoute(route_string=self.gas_route2)
         assert isinstance(route_object2, object)
-        assert route_object2.job_type == "opt"
+        assert route_object2.jobtype == "opt"
         assert route_object2.freq is False
         assert route_object2.functional == "b3lyp empiricaldispersion=gd3bj"
         assert route_object2.basis == "6-31G(d)".lower()
@@ -140,7 +140,7 @@ class TestGaussianRoute:
     def test_settings_from_route3(self):
         route_object3 = GaussianRoute(route_string=self.solv_route)
         assert isinstance(route_object3, object)
-        assert route_object3.job_type == "sp"
+        assert route_object3.jobtype == "sp"
         assert route_object3.freq is False
         assert route_object3.functional == "mn15"
         assert route_object3.basis == "def2svp"
@@ -150,7 +150,7 @@ class TestGaussianRoute:
     def test_settings_from_route4(self):
         route_object4 = GaussianRoute(route_string=self.solv_route2)
         assert isinstance(route_object4, object)
-        assert route_object4.job_type == "ts"
+        assert route_object4.jobtype == "ts"
         assert route_object4.freq is True
         assert route_object4.functional == "m06"
         assert route_object4.basis == "def2svp"
@@ -162,7 +162,7 @@ class TestGaussianJobFromComFile:
     def test_reads_com_file(self, gaussian_opt_inputfile):
         com_settings = GaussianJobSettings.from_comfile(gaussian_opt_inputfile)
         assert com_settings.chk is True
-        assert com_settings.job_type == "opt"
+        assert com_settings.jobtype == "opt"
         assert com_settings.freq is True
         assert com_settings.functional == "m062x"
         assert com_settings.basis == "def2svp"
@@ -221,7 +221,7 @@ class TestGaussianJobFromLogFile:
         self, tmpdir, gaussian_ts_genecp_outfile
     ):
         settings = GaussianJobSettings.from_logfile(gaussian_ts_genecp_outfile)
-        assert settings.job_type == "ts"
+        assert settings.jobtype == "ts"
         assert settings.functional == "mn15"
         assert settings.basis == "genecp"
         assert settings.solvent_model is None
@@ -233,7 +233,7 @@ class TestGaussianJobFromLogFile:
         settings = GaussianJobSettings.from_logfile(
             gaussian_semiempirical_pm6_output_file
         )
-        assert settings.job_type == "opt"
+        assert settings.jobtype == "opt"
         assert settings.ab_initio is None
         assert settings.functional is None
         assert settings.basis is None
@@ -249,7 +249,7 @@ class TestGaussianPBCJob:
         settings = GaussianJobSettings.from_filepath(
             filepath=gaussian_pbc_3d_outputfile
         )
-        assert settings.job_type == "sp"
+        assert settings.jobtype == "sp"
         assert settings.functional.lower() == "pbepbe"
         assert settings.basis.lower() == "6-31g(d,p)/auto"
         assert settings.additional_route_parameters.lower() == "scf=tight"
