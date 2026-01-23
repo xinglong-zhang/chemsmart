@@ -1323,26 +1323,26 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         Raises:
             AssertionError: If required parameters are missing or invalid
         """
-        job_type = self.job_type.upper()
-        if job_type in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
+        jobtype = self.job_type.upper()
+        if jobtype in ["IONIC-CRYSTAL-QMMM", "MOL-CRYSTAL-QMMM"]:
             assert (
                 self.mult_high is None
                 and self.mult_intermediate is None
                 and self.mult_total is None
-            ), f"Multiplicity should not be specified for {job_type} job!"
+            ), f"Multiplicity should not be specified for {jobtype} job!"
             self.multiplicity = 0  # avoid conflicts from parent class
             if self.conv_charges is False:
                 assert (
                     self.low_level_force_field is not None
                 ), "Force field file containing convergence charges is not provided!"
-            if job_type == "MOL-CRYSTAL-QMMM":
+            if jobtype == "MOL-CRYSTAL-QMMM":
                 assert (
                     self.n_unit_cell_atoms
-                ), f"The number of atoms per molecular subunit for {job_type} job is not provided!"
+                ), f"The number of atoms per molecular subunit for {jobtype} job is not provided!"
             else:
                 assert (
                     self.ecp_layer_ecp
-                ), f"cECPs used for the boundary region for {job_type} job must be specified! "
+                ), f"cECPs used for the boundary region for {jobtype} job must be specified! "
                 assert (
                     self.n_unit_cell_atoms is None
                 ), "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
@@ -1360,7 +1360,16 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
         ):
             level_of_theory = f"! {self.jobtype.upper()}"
         else:
-            level_of_theory = "!QM"
+            level_of_theory = "! "
+            if self.job_type in ("opt", "modred", "scan"):
+                level_of_theory += "Opt"
+            elif self.job_type == "ts":
+                level_of_theory += "OptTS"
+            elif self.job_type == "irc":
+                level_of_theory += "IRC"
+            elif self.job_type == "sp":
+                level_of_theory += ""
+            level_of_theory += "QM"
             self.high_level_level_of_theory = self.validate_and_assign_level(
                 self.high_level_functional,
                 self.high_level_basis,
@@ -1385,6 +1394,7 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
                     level_of_theory = "!QMMM"  # Additive QM/MM
                 else:
                     level_of_theory += f"/{self.low_level_level_of_theory}"
+            level_of_theory += f" {self.high_level_level_of_theory}"
             if self.solvent_model is not None:
                 level_of_theory += f" {self.solvent_model}"
             self.intermediate_level_method = (
