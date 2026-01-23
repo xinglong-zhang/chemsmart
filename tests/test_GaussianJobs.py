@@ -149,7 +149,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = None  # Both forward and reverse IRC
 
         # create link IRC job
@@ -161,7 +161,7 @@ class TestGaussianlinkIRCJobs:
         )
 
         assert isinstance(job, GaussianLinkJob)
-        assert job.settings.job_type == "irc"
+        assert job.settings.jobtype == "irc"
         assert job._is_irc_job()
 
     def test_gaussian_link_irc_subjob_creation(
@@ -182,7 +182,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
 
         # create main IRC job
         job = GaussianLinkJob.from_filename(
@@ -195,13 +195,13 @@ class TestGaussianlinkIRCJobs:
         # test forward IRC subjob creation
         ircf_job = job._ircf_link_job()
         assert isinstance(ircf_job, GaussianLinkJob)
-        assert ircf_job.settings.job_type == "ircf"
+        assert ircf_job.settings.jobtype == "ircf"
         assert "irc_test_f" in ircf_job.label
 
         # test reverse IRC subjob creation
         ircr_job = job._ircr_link_job()
         assert isinstance(ircr_job, GaussianLinkJob)
-        assert ircr_job.settings.job_type == "ircr"
+        assert ircr_job.settings.jobtype == "ircr"
         assert "irc_test_r" in ircr_job.label
 
     def test_gaussian_link_irc_job_label_naming(
@@ -222,7 +222,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.flat_irc = False
 
         # create main IRC job with standard link naming
@@ -261,7 +261,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.flat_irc = True
 
         # create main IRC job with flat IRC option
@@ -300,7 +300,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = "forward"
 
         # create forward-only IRC job
@@ -314,7 +314,7 @@ class TestGaussianlinkIRCJobs:
         # test that only forward IRC job is returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 1
-        assert irc_jobs[0].settings.job_type == "ircf"
+        assert irc_jobs[0].settings.jobtype == "ircf"
 
     def test_gaussian_link_irc_job_reverse_only(
         self,
@@ -334,7 +334,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = "reverse"
 
         # create reverse-only IRC job
@@ -348,7 +348,7 @@ class TestGaussianlinkIRCJobs:
         # test that only reverse IRC job is returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 1
-        assert irc_jobs[0].settings.job_type == "ircr"
+        assert irc_jobs[0].settings.jobtype == "ircr"
 
     def test_gaussian_link_irc_job_both_directions(
         self,
@@ -368,7 +368,7 @@ class TestGaussianlinkIRCJobs:
         settings = project_settings.irc_settings()
         settings.charge = -2
         settings.multiplicity = 1
-        settings.job_type = "irc"
+        settings.jobtype = "irc"
         settings.direction = None
 
         # create both-directions IRC job
@@ -382,7 +382,7 @@ class TestGaussianlinkIRCJobs:
         # test that both forward and reverse IRC jobs are returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 2
-        job_types = [j.settings.job_type for j in irc_jobs]
+        job_types = [j.settings.jobtype for j in irc_jobs]
         assert "ircf" in job_types
         assert "ircr" in job_types
 
