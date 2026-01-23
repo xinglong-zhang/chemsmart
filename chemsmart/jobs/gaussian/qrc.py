@@ -77,7 +77,7 @@ class GaussianQRCJob(GaussianJob):
         self.normalize = normalize
         self.return_xyz = return_xyz
 
-        self.jobtype = self.settings.__dict__["job_type"]
+        self.job_type = self.settings.__dict__["job_type"]
 
     @property
     def both_qrc_jobs(self):
@@ -125,8 +125,8 @@ class GaussianQRCJob(GaussianJob):
         jobs = []
         for direction in ["f", "r"]:
             label = f"{self.label}{direction}"
-            if self.jobtype is not None:
-                label += f"_{self.jobtype}"
+            if self.job_type is not None:
+                label += f"_{self.job_type}"
             mol = self.molecule
             if direction == "f":
                 mol = self.qrcf_molecule
