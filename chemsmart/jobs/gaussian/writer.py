@@ -422,19 +422,19 @@ class GaussianInputWriter(InputWriter):
             f (file): Open file object to write to.
         """
         logger.debug("Writing job specific information.")
-        job_type = self.settings.job_type
+        jobtype = self.settings.jobtype
         job_label = self.job.label
-        if job_type == "nci":
+        if jobtype == "nci":
             # Appending wavefunction file specification for NCI job
             logger.debug("Adding NCI-specific wavefunction file")
             f.write(f"{job_label}.wfn\n")
             f.write("\n")
-        elif job_type == "wbi":
+        elif jobtype == "wbi":
             # Appending NBO directive for WBI job
             logger.debug("Adding WBI-specific NBO directive")
             f.write("$nbo bndidx $end\n")
             f.write("\n")
-        elif job_type == "resp":
+        elif jobtype == "resp":
             # Appending electrostatic potential file for RESP job
             logger.debug("Adding RESP-specific potential file")
             f.write(f"{job_label}.gesp\n")
