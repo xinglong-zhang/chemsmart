@@ -168,6 +168,36 @@ def remove_keyword(text, keyword):
     )
 
 
+def replace_word(text, old_word, new_word):
+    """
+    Replace a word in text using word boundary matching.
+
+    Replaces all occurrences of `old_word` with `new_word` using `\b`
+    word-boundary matching to ensure only complete words are replaced,
+    not partial matches within other words.
+
+    Args:
+        text (str): Input text to process.
+        old_word (str): Word to replace.
+        new_word (str): Replacement word.
+
+    Returns:
+        str: Text with the word replaced.
+
+    Example:
+        >>> replace_word("gen test noeigentest", "gen", "def2svp")
+        'def2svp test noeigentest'
+        >>> replace_word("opt=(gen) freq", "gen", "6-31g")
+        'opt=(6-31g) freq'
+
+    Note:
+        This replacement is case-sensitive. For case-insensitive replacement,
+        use re.sub with re.IGNORECASE flag directly.
+    """
+    pattern = r"\b" + re.escape(old_word) + r"\b"
+    return re.sub(pattern, new_word, text)
+
+
 def line_of_all_integers(line: str, allow_sign: bool = True) -> bool:
     """
     Return True iff the line has 1+ whitespace-separated tokens

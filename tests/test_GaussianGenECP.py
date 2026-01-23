@@ -348,7 +348,7 @@ class TestGenECPReplacementInRoute:
 
     def test_gen_replacement_does_not_affect_noeigentest(self):
         """Test that 'gen' in 'noeigentest' is not replaced."""
-        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        from chemsmart.utils.io import replace_word
         import re
 
         # Test with different route strings containing 'noeigentest'
@@ -359,7 +359,7 @@ class TestGenECPReplacementInRoute:
         ]
 
         for route_string in route_strings:
-            result = GaussianInputWriter._replace_basis_keyword(
+            result = replace_word(
                 route_string, "gen", "def2svp"
             )
             # The word 'noeigentest' should remain unchanged
@@ -372,12 +372,12 @@ class TestGenECPReplacementInRoute:
 
     def test_genecp_replacement_does_not_affect_other_keywords(self):
         """Test that 'genecp' replacement doesn't affect keywords containing 'gen' or 'genecp'."""
-        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        from chemsmart.utils.io import replace_word
 
         # Test with route string containing 'genecp' and other keywords
         route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 genecp"
 
-        result = GaussianInputWriter._replace_basis_keyword(
+        result = replace_word(
             route_string, "genecp", "def2svp"
         )
         # The word 'noeigentest' should remain unchanged
@@ -390,12 +390,12 @@ class TestGenECPReplacementInRoute:
 
     def test_gen_to_genecp_replacement(self):
         """Test replacing 'gen' with 'genecp' in route strings."""
-        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        from chemsmart.utils.io import replace_word
         import re
 
         route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 gen"
 
-        result = GaussianInputWriter._replace_basis_keyword(
+        result = replace_word(
             route_string, "gen", "genecp"
         )
         # The word 'noeigentest' should remain unchanged
@@ -406,7 +406,7 @@ class TestGenECPReplacementInRoute:
 
     def test_replacement_with_various_delimiters(self):
         """Test that replacement works correctly with various delimiters."""
-        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        from chemsmart.utils.io import replace_word
 
         # Test with gen at different positions
         test_cases = [
@@ -419,7 +419,7 @@ class TestGenECPReplacementInRoute:
         ]
 
         for route_string, old_basis, new_basis, expected in test_cases:
-            result = GaussianInputWriter._replace_basis_keyword(
+            result = replace_word(
                 route_string, old_basis, new_basis
             )
             assert result == expected, f"Expected '{expected}' but got '{result}'"
