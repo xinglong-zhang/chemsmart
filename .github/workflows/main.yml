@@ -67,6 +67,53 @@ jobs:
           python -m pip install --upgrade pip
           make install-dev  # install in dev mode for all tests and docs
 
+      - name: Set up PBS server configuration
+        shell: bash -l {0}
+        run: |
+          mkdir -p ~/.chemsmart/server
+          cat > ~/.chemsmart/server/PBS.yaml << 'EOF'
+          SERVER:
+              SCHEDULER: PBS
+              QUEUE_NAME: normal
+              NUM_HOURS: 24
+              MEM_GB: 400
+              NUM_CORES: 64
+              NUM_GPUS: 0
+              NUM_THREADS: 64
+              SUBMIT_COMMAND: qsub
+              PROJECT: 13003611
+              SCRATCH_DIR: null
+              USE_HOSTS: true
+              EXTRA_COMMANDS: |
+                  #extra commands to activate chemsmart environment in submission script
+                  export PATH="/home/runner/work/chemsmart/chemsmart:$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/cli:$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/scripts:$PATH"
+                  export PYTHONPATH="/home/runner/work/chemsmart/chemsmart:$PYTHONPATH"
+                  
+          GAUSSIAN:
+              EXEFOLDER: /usr/local/gaussian/g16
+              LOCAL_RUN: True
+              SCRATCH: True
+              CONDA_ENV: |
+                  source /usr/share/miniconda/etc/profile.d/conda.sh
+                  conda activate chemsmart
+              MODULES: |
+                  module purge
+                  module load craype-x86-rome
+                  module load libfabric/1.11.0.4.125
+              SCRIPTS: |
+                  source GAUSS_DIR=/usr/local/gaussian/g16
+              ENVARS: |
+                  export SCRATCH=~/scratch
+                  export GAUSS_EXEDIR=/usr/local/gaussian/g16
+                  export g16root=/usr/local/gaussian/g16
+                     
+          ORCA:
+              EXEFOLDER: /usr/local/orca
+              LOCAL_RUN: False
+          EOF
+
       - name: Test with pytest and calculate coverage
         shell: bash -l {0}
         run: |
@@ -129,6 +176,53 @@ jobs:
         shell: bash -l {0}
         run: make install-dev
 
+      - name: Set up PBS server configuration
+        shell: bash -l {0}
+        run: |
+          mkdir -p ~/.chemsmart/server
+          cat > ~/.chemsmart/server/PBS.yaml << 'EOF'
+          SERVER:
+              SCHEDULER: PBS
+              QUEUE_NAME: normal
+              NUM_HOURS: 24
+              MEM_GB: 400
+              NUM_CORES: 64
+              NUM_GPUS: 0
+              NUM_THREADS: 64
+              SUBMIT_COMMAND: qsub
+              PROJECT: 13003611
+              SCRATCH_DIR: null
+              USE_HOSTS: true
+              EXTRA_COMMANDS: |
+                  #extra commands to activate chemsmart environment in submission script
+                  export PATH="/home/runner/work/chemsmart/chemsmart:$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/cli:$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/scripts:$PATH"
+                  export PYTHONPATH="/home/runner/work/chemsmart/chemsmart:$PYTHONPATH"
+                  
+          GAUSSIAN:
+              EXEFOLDER: /usr/local/gaussian/g16
+              LOCAL_RUN: True
+              SCRATCH: True
+              CONDA_ENV: |
+                  source /usr/share/miniconda/etc/profile.d/conda.sh
+                  conda activate chemsmart
+              MODULES: |
+                  module purge
+                  module load craype-x86-rome
+                  module load libfabric/1.11.0.4.125
+              SCRIPTS: |
+                  source GAUSS_DIR=/usr/local/gaussian/g16
+              ENVARS: |
+                  export SCRATCH=~/scratch
+                  export GAUSS_EXEDIR=/usr/local/gaussian/g16
+                  export g16root=/usr/local/gaussian/g16
+                     
+          ORCA:
+              EXEFOLDER: /usr/local/orca
+              LOCAL_RUN: False
+          EOF
+
       - name: Run tests
         shell: bash -l {0}
         run: make test
@@ -170,6 +264,53 @@ jobs:
       - name: Install project
         shell: bash -l {0}
         run: make install-dev
+
+      - name: Set up PBS server configuration
+        shell: bash -l {0}
+        run: |
+          mkdir -p ~/.chemsmart/server
+          cat > ~/.chemsmart/server/PBS.yaml << 'EOF'
+          SERVER:
+              SCHEDULER: PBS
+              QUEUE_NAME: normal
+              NUM_HOURS: 24
+              MEM_GB: 400
+              NUM_CORES: 64
+              NUM_GPUS: 0
+              NUM_THREADS: 64
+              SUBMIT_COMMAND: qsub
+              PROJECT: 13003611
+              SCRATCH_DIR: null
+              USE_HOSTS: true
+              EXTRA_COMMANDS: |
+                  #extra commands to activate chemsmart environment in submission script
+                  export PATH="/home/runner/work/chemsmart/chemsmart:$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/cli:$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/scripts:$PATH"
+                  export PYTHONPATH="/home/runner/work/chemsmart/chemsmart:$PYTHONPATH"
+                  
+          GAUSSIAN:
+              EXEFOLDER: /usr/local/gaussian/g16
+              LOCAL_RUN: True
+              SCRATCH: True
+              CONDA_ENV: |
+                  source /usr/share/miniconda/etc/profile.d/conda.sh
+                  conda activate chemsmart
+              MODULES: |
+                  module purge
+                  module load craype-x86-rome
+                  module load libfabric/1.11.0.4.125
+              SCRIPTS: |
+                  source GAUSS_DIR=/usr/local/gaussian/g16
+              ENVARS: |
+                  export SCRATCH=~/scratch
+                  export GAUSS_EXEDIR=/usr/local/gaussian/g16
+                  export g16root=/usr/local/gaussian/g16
+                     
+          ORCA:
+              EXEFOLDER: /usr/local/orca
+              LOCAL_RUN: False
+          EOF
 
       - name: Run tests
         shell: bash -l {0}
@@ -220,6 +361,53 @@ jobs:
         run: |
           call "%CONDA%\Scripts\activate.bat" chemsmart
           make install-dev
+
+      - name: Set up PBS server configuration
+        shell: powershell
+        run: |
+          New-Item -Path "$env:USERPROFILE\.chemsmart\server" -ItemType Directory -Force
+          @"
+          SERVER:
+              SCHEDULER: PBS
+              QUEUE_NAME: normal
+              NUM_HOURS: 24
+              MEM_GB: 400
+              NUM_CORES: 64
+              NUM_GPUS: 0
+              NUM_THREADS: 64
+              SUBMIT_COMMAND: qsub
+              PROJECT: 13003611
+              SCRATCH_DIR: null
+              USE_HOSTS: true
+              EXTRA_COMMANDS: |
+                  #extra commands to activate chemsmart environment in submission script
+                  export PATH="/home/runner/work/chemsmart/chemsmart:`$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/cli:`$PATH"
+                  export PATH="/home/runner/work/chemsmart/chemsmart/chemsmart/scripts:`$PATH"
+                  export PYTHONPATH="/home/runner/work/chemsmart/chemsmart:`$PYTHONPATH"
+                  
+          GAUSSIAN:
+              EXEFOLDER: /usr/local/gaussian/g16
+              LOCAL_RUN: True
+              SCRATCH: True
+              CONDA_ENV: |
+                  source /usr/share/miniconda/etc/profile.d/conda.sh
+                  conda activate chemsmart
+              MODULES: |
+                  module purge
+                  module load craype-x86-rome
+                  module load libfabric/1.11.0.4.125
+              SCRIPTS: |
+                  source GAUSS_DIR=/usr/local/gaussian/g16
+              ENVARS: |
+                  export SCRATCH=~/scratch
+                  export GAUSS_EXEDIR=/usr/local/gaussian/g16
+                  export g16root=/usr/local/gaussian/g16
+                     
+          ORCA:
+              EXEFOLDER: /usr/local/orca
+              LOCAL_RUN: False
+          "@ | Out-File -FilePath "$env:USERPROFILE\.chemsmart\server\PBS.yaml" -Encoding utf8
 
       - name: Run tests
         shell: cmd
