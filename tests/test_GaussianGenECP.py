@@ -341,3 +341,85 @@ class TestGenGenECPBasisDetermination:
         # Should use 'genecp' since I requires ECP (even though Br doesn't)
         determined_basis = settings.determine_basis_keyword(mixed_mol)
         assert determined_basis == "genecp"
+
+
+class TestGenECPReplacementInRoute:
+    """Test that gen/genecp replacement in route strings doesn't affect other keywords."""
+
+    def test_gen_replacement_does_not_affect_noeigentest(self):
+        """Test that 'gen' in 'noeigentest' is not replaced."""
+        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        import re
+
+        # Test with different route strings containing 'noeigentest'
+        route_strings = [
+            "# opt=(ts,calcfc,noeigentest) freq mn15 gen",
+            "opt=(calcfc,ts,noeigentest,maxstep=5) freq gen m06",
+            "# opt=(ts,calcfc,noeigentest) freq b3lyp gen",
+        ]
+
+        for route_string in route_strings:
+            result = GaussianInputWriter._replace_basis_keyword(
+                route_string, "gen", "def2svp"
+            )
+            # The word 'noeigentest' should remain unchanged
+            assert "noeigentest" in result
+            # The basis keyword 'gen' should be replaced (check as standalone word)
+            assert re.search(r'\bgen\b', result) is None
+            assert "def2svp" in result
+            # Make sure we didn't create 'noeidef2svptest'
+            assert "noeidef2svptest" not in result
+
+    def test_genecp_replacement_does_not_affect_other_keywords(self):
+        """Test that 'genecp' replacement doesn't affect keywords containing 'gen' or 'genecp'."""
+        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+
+        # Test with route string containing 'genecp' and other keywords
+        route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 genecp"
+
+        result = GaussianInputWriter._replace_basis_keyword(
+            route_string, "genecp", "def2svp"
+        )
+        # The word 'noeigentest' should remain unchanged
+        assert "noeigentest" in result
+        # The basis keyword 'genecp' should be replaced
+        assert "genecp" not in result
+        assert "def2svp" in result
+        # Make sure we didn't create 'noeidef2svptest'
+        assert "noeidef2svptest" not in result
+
+    def test_gen_to_genecp_replacement(self):
+        """Test replacing 'gen' with 'genecp' in route strings."""
+        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+        import re
+
+        route_string = "# opt=(ts,calcfc,noeigentest) freq mn15 gen"
+
+        result = GaussianInputWriter._replace_basis_keyword(
+            route_string, "gen", "genecp"
+        )
+        # The word 'noeigentest' should remain unchanged
+        assert "noeigentest" in result
+        # The basis keyword 'gen' should be replaced with 'genecp' (check as standalone word)
+        assert re.search(r'\bgen\b', result) is None
+        assert "genecp" in result
+
+    def test_replacement_with_various_delimiters(self):
+        """Test that replacement works correctly with various delimiters."""
+        from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+
+        # Test with gen at different positions
+        test_cases = [
+            ("gen def2svp", "gen", "6-31g", "6-31g def2svp"),
+            ("def2svp gen", "gen", "6-31g", "def2svp 6-31g"),
+            ("opt gen freq", "gen", "6-31g", "opt 6-31g freq"),
+            ("opt=(gen) freq", "gen", "6-31g", "opt=(6-31g) freq"),
+            # Should not replace gen when it's part of another word
+            ("regenerate gen", "gen", "6-31g", "regenerate 6-31g"),
+        ]
+
+        for route_string, old_basis, new_basis, expected in test_cases:
+            result = GaussianInputWriter._replace_basis_keyword(
+                route_string, old_basis, new_basis
+            )
+            assert result == expected, f"Expected '{expected}' but got '{result}'"
