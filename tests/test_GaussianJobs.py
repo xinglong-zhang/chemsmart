@@ -382,9 +382,9 @@ class TestGaussianlinkIRCJobs:
         # test that both forward and reverse IRC jobs are returned
         irc_jobs = job._get_irc_jobs()
         assert len(irc_jobs) == 2
-        job_types = [j.settings.jobtype for j in irc_jobs]
-        assert "ircf" in job_types
-        assert "ircr" in job_types
+        jobtypes = [j.settings.jobtype for j in irc_jobs]
+        assert "ircf" in jobtypes
+        assert "ircr" in jobtypes
 
 
 class TestGaussianCrestJobs:

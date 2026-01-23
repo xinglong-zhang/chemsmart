@@ -553,12 +553,12 @@ class YamlORCAProjectSettingsBuilder:
         settings_mapping = {"irc": ORCAIRCJobSettings, "ts": ORCATSJobSettings}
 
         try:
-            job_type_config = self._read_config().get(jobtype)
-            if job_type_config is not None:
+            jobtype_config = self._read_config().get(jobtype)
+            if jobtype_config is not None:
                 # Use specific settings class if available, otherwise default
                 return settings_mapping.get(
                     jobtype, ORCAJobSettings
-                ).from_dict(job_type_config)
+                ).from_dict(jobtype_config)
         except KeyError as e:
             available_jobs = list(self._read_config().keys())
             raise RuntimeError(
