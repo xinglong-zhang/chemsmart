@@ -1,5 +1,7 @@
 import os
+import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import networkx as nx
 import numpy as np
@@ -1738,3 +1740,275 @@ class TestCDXFile:
         assert mol.chemical_formula == "C32H31N5O5"
         assert mol.num_atoms == 73  # benzene with hydrogens
         assert mol.is_aromatic
+
+
+class TestCIFFileReading:
+    """Tests for reading CIF files."""
+
+    def test_from_cif_file_exists(self, benzene_cif_file):
+        """Test that from_cif_file method exists and is callable."""
+        assert hasattr(Molecule, "from_cif_file")
+        assert callable(Molecule.from_cif_file)
+
+    def test_read_cif_file_basic(self, benzene_cif_file):
+        """Test basic CIF file reading."""
+        mol = Molecule.from_cif_file(benzene_cif_file)
+
+        assert mol is not None
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 12
+        assert mol.chemical_formula == "C6H6"
+
+    def test_read_cif_file_return_list(self, benzene_cif_file):
+        """Test CIF file reading with return_list=True."""
+        mols = Molecule.from_cif_file(benzene_cif_file, return_list=True)
+
+        assert isinstance(mols, list)
+        assert len(mols) == 1
+        assert mols[0].chemical_formula == "C6H6"
+
+    def test_from_filepath_recognizes_cif(self, benzene_cif_file):
+        """Test that from_filepath recognizes .cif extension."""
+        mol = Molecule.from_filepath(benzene_cif_file)
+
+        assert mol is not None
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+
+    def test_read_nonexistent_cif_file(self):
+        """Test reading non-existent CIF file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            Molecule.from_cif_file("/nonexistent/path/file.cif")
+
+    def test_read_empty_cif_file(self):
+        """Test reading empty CIF file raises ValueError."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".cif", delete=False
+        ) as f:
+            temp_path = f.name
+
+        try:
+            with pytest.raises(ValueError, match="empty"):
+                Molecule.from_cif_file(temp_path)
+        finally:
+            os.unlink(temp_path)
+
+    def test_cif_molecule_has_positions(self, benzene_cif_file):
+        """Test that molecule from CIF has positions."""
+        mol = Molecule.from_cif_file(benzene_cif_file)
+
+        assert mol.positions is not None
+        assert mol.positions.shape == (12, 3)
+
+    def test_cif_molecule_has_symbols(self, benzene_cif_file):
+        """Test that molecule from CIF has correct symbols."""
+        mol = Molecule.from_cif_file(benzene_cif_file)
+
+        assert mol.symbols is not None
+        assert len(mol.chemical_symbols) == 12
+        # Benzene has 6 carbons and 6 hydrogens
+        assert mol.chemical_symbols.count("C") == 6
+        assert mol.chemical_symbols.count("H") == 6
+
+
+class TestCCDCIntegration:
+    """Tests for CCDC database integration."""
+
+    def test_from_ccdc_exists(self):
+        """Test that from_ccdc method exists and is callable."""
+        assert hasattr(Molecule, "from_ccdc")
+        assert callable(Molecule.from_ccdc)
+
+    @patch("chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc")
+    def test_from_ccdc_basic_mock(self, mock_fetch):
+        """Test from_ccdc with mocked download."""
+        # Create a temporary CIF file for testing
+        test_cif_content = """data_test
+_chemical_name_common 'test'
+_cell_length_a 5.0
+_cell_length_b 5.0
+_cell_length_c 5.0
+_cell_angle_alpha 90.00
+_cell_angle_beta 90.00
+_cell_angle_gamma 90.00
+_space_group_name_H-M_alt 'P 1'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+C1 C 0.0 0.0 0.0
+"""
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".cif", delete=False
+        ) as f:
+            f.write(test_cif_content)
+            temp_path = f.name
+
+        try:
+            mock_fetch.return_value = temp_path
+
+            mol = Molecule.from_ccdc(1428476)
+
+            assert mol is not None
+            assert isinstance(mol, Molecule)
+            mock_fetch.assert_called_once_with(1428476)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    @patch("chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc")
+    def test_from_ccdc_return_list(self, mock_fetch):
+        """Test from_ccdc with return_list=True."""
+        test_cif_content = """data_test
+_chemical_name_common 'test'
+_cell_length_a 5.0
+_cell_length_b 5.0
+_cell_length_c 5.0
+_cell_angle_alpha 90.00
+_cell_angle_beta 90.00
+_cell_angle_gamma 90.00
+_space_group_name_H-M_alt 'P 1'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+C1 C 0.0 0.0 0.0
+"""
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".cif", delete=False
+        ) as f:
+            f.write(test_cif_content)
+            temp_path = f.name
+
+        try:
+            mock_fetch.return_value = temp_path
+
+            mols = Molecule.from_ccdc(1428476, return_list=True)
+
+            assert isinstance(mols, list)
+            assert len(mols) == 1
+            assert isinstance(mols[0], Molecule)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def test_fetch_cif_validates_deposition_number(self):
+        """Test that fetch_cif_from_ccdc validates deposition number."""
+        from chemsmart.io.molecules.ccdc import fetch_cif_from_ccdc
+
+        with pytest.raises(ValueError, match="Invalid CCDC deposition number"):
+            fetch_cif_from_ccdc("invalid")
+
+        with pytest.raises(ValueError, match="Invalid CCDC deposition number"):
+            fetch_cif_from_ccdc("")
+
+        with pytest.raises(ValueError, match="Invalid CCDC deposition number"):
+            fetch_cif_from_ccdc("abc123")
+
+    @patch("chemsmart.io.molecules.ccdc.requests.get")
+    def test_fetch_cif_handles_404(self, mock_get):
+        """Test that fetch_cif_from_ccdc handles 404 errors."""
+        from requests.exceptions import HTTPError
+
+        from chemsmart.io.molecules.ccdc import fetch_cif_from_ccdc
+
+        # Mock a 404 response
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.raise_for_status.side_effect = HTTPError(
+            response=mock_response
+        )
+        mock_get.return_value = mock_response
+
+        with pytest.raises(ValueError, match="not found"):
+            fetch_cif_from_ccdc(9999999)
+
+    @patch("chemsmart.io.molecules.ccdc.requests.get")
+    def test_fetch_cif_caching(self, mock_get):
+        """Test that fetch_cif_from_ccdc caches downloads."""
+        from chemsmart.io.molecules.ccdc import (
+            fetch_cif_from_ccdc,
+            get_ccdc_cache_dir,
+        )
+
+        # Use valid CIF content that ASE can parse
+        test_cif_content = """data_test
+_chemical_name_common 'test'
+_cell_length_a 5.0
+_cell_length_b 5.0
+_cell_length_c 5.0
+_cell_angle_alpha 90.00
+_cell_angle_beta 90.00
+_cell_angle_gamma 90.00
+_space_group_name_H-M_alt 'P 1'
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+C1 C 0.0 0.0 0.0
+"""
+        mock_response = MagicMock()
+        mock_response.text = test_cif_content
+        mock_response.status_code = 200
+        mock_get.return_value = mock_response
+
+        # First call should fetch from network
+        result1 = fetch_cif_from_ccdc(123456, cache=True)
+        assert result1 is not None
+        assert mock_get.call_count == 1
+
+        # Clear the lru_cache to test file caching
+        fetch_cif_from_ccdc.cache_clear()
+
+        # Second call should use cached file (no new network request)
+        result2 = fetch_cif_from_ccdc(123456, cache=True)
+        assert result2 is not None
+        # Still only 1 call because file is cached
+        assert mock_get.call_count == 1
+
+        # Clean up cache file
+        cache_dir = get_ccdc_cache_dir()
+        cache_file = os.path.join(cache_dir, "123456.cif")
+        if os.path.exists(cache_file):
+            os.unlink(cache_file)
+
+
+class TestCIFIntegrationWithExistingCode:
+    """Tests to ensure CIF reading integrates well with existing code."""
+
+    def test_cif_molecule_to_rdkit(self, benzene_cif_file):
+        """Test converting CIF molecule to RDKit."""
+        mol = Molecule.from_cif_file(benzene_cif_file)
+
+        # Should be able to convert to RDKit
+        rdkit_mol = mol.to_rdkit()
+        assert rdkit_mol is not None
+
+    def test_cif_molecule_properties(self, benzene_cif_file):
+        """Test that CIF molecule has expected properties."""
+        mol = Molecule.from_cif_file(benzene_cif_file)
+
+        # Check basic properties
+        assert mol.num_atoms == 12
+        assert mol.mass > 0
+        # Empirical formula reduces to simplest ratio, so benzene C6H6 becomes CH
+        assert mol.empirical_formula == "CH"
+        # But chemical formula should be C6H6
+        assert mol.chemical_formula == "C6H6"
+
+        # Check positions exist and have correct shape
+        assert mol.positions.shape == (12, 3)
+
+        # Check distance matrix can be computed
+        assert mol.distance_matrix.shape == (12, 12)
