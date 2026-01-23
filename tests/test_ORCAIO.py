@@ -207,6 +207,8 @@ class TestORCAInput:
 class TestORCAOutput:
     def test_read_water_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
+        assert orca_out.version == "5.0.3"
+        assert orca_out.date is None
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.route_string == "! opt freq m062x def2-svp"
         assert orca_out.functional == "m062x"
@@ -214,6 +216,7 @@ class TestORCAOutput:
         assert orca_out.spin == "restricted"
         assert orca_out.ab_initio is None
         assert orca_out.aux_basis is None
+        assert orca_out.spin == "restricted"
         assert orca_out.extrapolation_basis is None
         assert orca_out.num_atoms == 3
         assert orca_out.num_basis_functions == 24
@@ -579,6 +582,21 @@ class TestORCAOutput:
             439538.666271,
             282661.493198,
         ]
+        assert orca_out.rotational_constants_in_Hz == [
+            791961336970,
+            439538666271,
+            282661493198,
+        ]
+        # k_B = 1.380649 * 10^-23 J/K
+        # h = 6.62606957 * 10^-34 J s
+        assert np.allclose(
+            orca_out.rotational_temperatures,
+            [
+                6.62606957 * 1e-34 * 791961336970 / (1.380649 * 1e-23),
+                6.62606957 * 1e-34 * 439538666271 / (1.380649 * 1e-23),
+                6.62606957 * 1e-34 * 282661493198 / (1.380649 * 1e-23),
+            ],
+        )
         assert orca_out.vibrational_frequencies == [
             1625.35,
             3875.61,
@@ -675,10 +693,15 @@ class TestORCAOutput:
             0.00141627,
             rel_tol=1e-8,
         )
+        assert math.isclose(
+            orca_out.thermal_energy_correction,
+            0.02441621,
+            rel_tol=1e-8,
+        )
         assert math.isclose(orca_out.enthalpy, -76.29795059, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.00094421,
+            0.00094421 + 0.02441621,
             rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
@@ -697,7 +720,9 @@ class TestORCAOutput:
             144.8035920,
             rel_tol=1e-4,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.02143089, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.entropy_times_temperature, 0.02143089, rel_tol=1e-4
+        )
 
         assert orca_out.mulliken_atomic_charges == {
             "O1": -0.32926,
@@ -828,6 +853,11 @@ class TestORCAOutput:
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -76.31938148, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_gibbs_free_energy_correction,
+            0.00392953,
+            rel_tol=1e-8,
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0
@@ -2269,10 +2299,15 @@ class TestORCAOutput:
             0.00141627,
             rel_tol=1e-8,
         )
+        assert math.isclose(
+            orca_out.thermal_energy_correction,
+            0.04160714,
+            rel_tol=1e-8,
+        )
         assert math.isclose(orca_out.enthalpy, -599.55646959, rel_tol=1e-4)
         assert math.isclose(
             orca_out.thermal_enthalpy_correction,
-            0.00094421,
+            0.00094421 + 0.04160714,
             rel_tol=1e-8,
         )
         assert orca_out.electronic_entropy_no_temperature_in_SI == 0.0
@@ -2291,7 +2326,9 @@ class TestORCAOutput:
             0.01835566 * units.Hartree / (units.J / units.mol),
             rel_tol=1,
         )
-        assert math.isclose(orca_out.entropy_TS, 0.03229008, rel_tol=1e-4)
+        assert math.isclose(
+            orca_out.entropy_times_temperature, 0.03229008, rel_tol=1e-4
+        )
 
         entropy_TS_in_J_per_mol = (
             0.03229008 * units.Hartree / (units.J / units.mol)
@@ -2321,6 +2358,11 @@ class TestORCAOutput:
 
         assert math.isclose(
             orca_out.gibbs_free_energy, -599.58875967, rel_tol=1e-8
+        )
+        assert math.isclose(
+            orca_out.thermal_gibbs_free_energy_correction,
+            0.01026126,
+            rel_tol=1e-8,
         )
         assert isinstance(orca_out.molecule, Molecule)
         assert orca_out.total_elapsed_walltime == 0.0

@@ -103,6 +103,7 @@ def create_molecule_list(
             pbc_conditions=pbc_conditions,
             energy=energies[i] if energies else None,
             forces=forces[i] if forces else None,
+            structure_index_in_file=i + 1,
         )
         for i in range(num_structures)
     ]
